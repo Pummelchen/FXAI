@@ -1,3 +1,4 @@
+// FXAI v1
 #ifndef __FX6_AI_SGD_MQH__
 #define __FX6_AI_SGD_MQH__
 

@@ -1,3 +1,4 @@
+// FXAI v1
 #ifndef __FX6_AI_LIGHTGBM_MQH__
 #define __FX6_AI_LIGHTGBM_MQH__
 

@@ -1,3 +1,4 @@
+// FXAI v1
 #ifndef __FX6_PLUGIN_BASE_MQH__
 #define __FX6_PLUGIN_BASE_MQH__
 

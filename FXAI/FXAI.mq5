@@ -1,3 +1,4 @@
+// FXAI v1
 //+------------------------------------------------------------------+
 //|                                                          FX6.mq5 |
 //| FX6 modular EA: plugin-based AI + equity trailing + equity SL   |
