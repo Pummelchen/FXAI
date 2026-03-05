@@ -51,6 +51,74 @@ The project is designed to keep MT5 execution practical while enabling advanced 
 3. Sync MT5 project state into this GitHub repo for version history.
 4. Repeat with walk-forward validation before live deployment.
 
+## AI Models (A-Z)
+
+### Autoformer
+Autoformer decomposes time series into trend and seasonal components before forecasting. This helps FX workflows where regime drift can hide signal in raw returns. In this project it is useful for separating slower structure from intraday noise before decision scoring. It works best when the training window includes multiple volatility regimes and not only a single market phase.
+
+### CatBoost
+CatBoost is a gradient-boosted decision tree method that handles nonlinear feature interactions well. It is useful in FX because threshold effects in spread, volatility, and session context are often nonlinear. The model is robust with mixed feature scales and can perform strongly on engineered tabular features. Further reading: [Wikipedia - CatBoost](https://en.wikipedia.org/wiki/CatBoost).
+
+### Chronos
+Chronos-style forecasting targets robust sequence modeling across changing temporal patterns. It is useful for FX when intraday behavior shifts with sessions and macro events. In ensemble mode it can add diversity against purely linear or tree-based models. Background on the domain: [Wikipedia - Time series](https://en.wikipedia.org/wiki/Time_series).
+
+### ENHash
+ENHash combines elastic-net regularization with hashed interaction features for sparse online learning. It is useful for FX because it stays CPU-light while still modeling nonlinear feature crosses. This makes it a practical model for frequent M1 updates in MT5 environments. Further reading: [Wikipedia - Elastic net regularization](https://en.wikipedia.org/wiki/Elastic_net_regularization).
+
+### FTRL Logit
+FTRL Logit is designed for streaming optimization with sparse updates and good stability. It is useful for FX because it can adapt quickly bar by bar without full retraining. The approach is strong when feature distributions drift during session transitions. Background: [Wikipedia - Online machine learning](https://en.wikipedia.org/wiki/Online_machine_learning).
+
+### GeodesicAttention
+GeodesicAttention emphasizes relational structure between observations instead of only raw Euclidean distance. It is useful for FX because regime similarity can matter more than absolute price levels. This can improve signal consistency when markets rotate between risk-on and risk-off states. Related concept: [Wikipedia - Attention (machine learning)](https://en.wikipedia.org/wiki/Attention_(machine_learning)).
+
+### LightGBM
+LightGBM is a gradient-boosted tree framework optimized for speed and strong nonlinear modeling. It is useful for FX because it can capture asymmetric responses to volatility and liquidity conditions. The model also provides interpretable split behavior across engineered feature sets. Further reading: [Wikipedia - LightGBM](https://en.wikipedia.org/wiki/LightGBM).
+
+### LSTM
+LSTM is a recurrent neural architecture built to retain useful sequence memory over time. It is useful in FX where momentum, mean reversion, and volatility clustering are path dependent. In this framework it complements tabular models by modeling temporal state dynamics directly. Further reading: [Wikipedia - Long short-term memory](https://en.wikipedia.org/wiki/Long_short-term_memory).
+
+### LSTM-G
+LSTM-G extends recurrent modeling with additional gating refinements for sequence stability. It is useful for FX because better gating can reduce noisy state transitions on fast intraday data. This helps when signal quality changes quickly around session opens and news spikes. Related background: [Wikipedia - Recurrent neural network](https://en.wikipedia.org/wiki/Recurrent_neural_network).
+
+### MLP Tiny
+MLP Tiny is a compact feed-forward neural baseline with low compute overhead. It is useful for FX as a fast nonlinear learner that can run efficiently in MT5. The model also serves as a resilient ensemble member against over-specialized plugins. Further reading: [Wikipedia - Multilayer perceptron](https://en.wikipedia.org/wiki/Multilayer_perceptron).
+
+### PA Linear
+PA Linear uses passive-aggressive updates to react strongly to mistakes and stay conservative otherwise. It is useful for FX streaming where fast adaptation to regime changes is critical. The linear form keeps latency low and behavior easy to diagnose during backtests. Background: [Wikipedia - Online machine learning](https://en.wikipedia.org/wiki/Online_machine_learning).
+
+### PatchTST
+PatchTST processes sequences in patches to improve local pattern extraction efficiency. It is useful for FX because short recurring micro-structures can matter on M1 horizons. This model can complement recurrent and boosting approaches by focusing on patch-level context. Related concept: [Wikipedia - Transformer (deep learning architecture)](https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)).
+
+### Quantile
+Quantile modeling predicts distribution bands instead of only a single directional probability. It is useful for FX because trade quality depends on expected move size and tail risk. In this project it supports cost-aware decision thresholds and skip logic. Further reading: [Wikipedia - Quantile regression](https://en.wikipedia.org/wiki/Quantile_regression).
+
+### S4
+S4 is a state-space sequence model designed for long-context temporal dependencies. It is useful for FX because distant context can still influence current volatility and direction. The architecture is attractive when you want long memory with controlled runtime cost. Related background: [Wikipedia - State-space representation](https://en.wikipedia.org/wiki/State_space_representation).
+
+### SGD Logit
+SGD Logit is a transparent online logistic classifier with very fast incremental updates. It is useful for FX as a stable baseline under strict CPU and latency constraints. The model is easy to calibrate and monitor during long optimization runs. Further reading: [Wikipedia - Logistic regression](https://en.wikipedia.org/wiki/Logistic_regression) and [Wikipedia - Stochastic gradient descent](https://en.wikipedia.org/wiki/Stochastic_gradient_descent).
+
+### STMN
+STMN targets spatio-temporal dynamics by combining time evolution with cross-context structure. It is useful for FX where multi-symbol co-movement and lead-lag effects are common. This helps the ensemble exploit information beyond a single-symbol price stream. Background on the domain: [Wikipedia - Spatiotemporal](https://en.wikipedia.org/wiki/Spatiotemporal).
+
+### TCN
+TCN uses causal dilated convolutions to model long effective history without recurrent loops. It is useful for FX because it can capture multi-scale temporal motifs with good efficiency. The convolutional structure is often stable for online inference in constrained runtimes. Related concepts: [Wikipedia - Convolutional neural network](https://en.wikipedia.org/wiki/Convolutional_neural_network) and [Wikipedia - Dilated convolution](https://en.wikipedia.org/wiki/Dilated_convolution).
+
+### TFT
+TFT combines gating, variable selection, and attention for interpretable sequence forecasting. It is useful for FX because feature relevance shifts across sessions and volatility regimes. This architecture can dynamically reweight inputs instead of relying on static feature importance. Related concept: [Wikipedia - Attention (machine learning)](https://en.wikipedia.org/wiki/Attention_(machine_learning)).
+
+### TimesFM
+TimesFM-style modeling emphasizes broad time-series generalization with strong sequence representations. It is useful for FX as a high-capacity model when market structure changes across periods. In ensemble settings it can contribute robust regime-level forecasts. Background: [Wikipedia - Foundation model](https://en.wikipedia.org/wiki/Foundation_model).
+
+### TST
+TST applies transformer attention directly to time-series tokens. It is useful for FX because attention can detect nonlocal dependencies across the lookback window. This makes it a strong complement to local-window linear or tree-based methods. Further reading: [Wikipedia - Transformer (deep learning architecture)](https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)).
+
+### XGB Fast
+XGB Fast is a speed-optimized boosting variant for low-latency runtime environments. It is useful for FX backtesting and live execution when throughput is a primary constraint. The model retains nonlinear decision power while reducing computational overhead. Related background: [Wikipedia - Gradient boosting](https://en.wikipedia.org/wiki/Gradient_boosting).
+
+### XGBoost
+XGBoost is a widely used gradient-boosted tree method with strong regularization controls. It is useful for FX because it performs well on noisy engineered tabular features. The algorithm is often a strong benchmark for directional and expected-move tasks. Further reading: [Wikipedia - XGBoost](https://en.wikipedia.org/wiki/XGBoost).
+
 ## Feature Set (A-Z)
 
 Engineered model input features currently used by the project:
@@ -102,74 +170,6 @@ Engineered model input features currently used by the project:
 - Spread normalized
 - Weekday (MT5 bar time)
 - Z-score vs rolling mean/std (M1, window 10)
-
-## AI Models (A-Z)
-
-### Autoformer
-Autoformer is strong at separating trend and seasonality, which helps when FX regimes drift over weeks or months. It is useful for time-series prediction because decomposition can reduce noise before forecasting direction or expected move.
-
-### CatBoost
-CatBoost handles nonlinear interactions and mixed feature scales with minimal manual feature engineering. It is useful for FX because tree ensembles often capture threshold effects in volatility and session behavior.
-
-### Chronos
-Chronos-style sequence modeling is designed for robust forecasting over diverse temporal patterns. It is useful for FX prediction because it can transfer structure across changing market states better than purely linear models.
-
-### ENHash
-ENHash combines elastic-net regularization with hashed interactions for a sparse but expressive online model. It is useful for FX because it keeps CPU usage low while still modeling nonlinear feature combinations.
-
-### FTRL Logit
-FTRL is an online optimizer built for sparse, streaming updates and stable incremental learning. It is useful for FX/time-series because it adapts quickly bar by bar without expensive retraining.
-
-### GeodesicAttention
-GeodesicAttention emphasizes relational structure in feature space, not only raw distance in Euclidean terms. It is useful for FX because regime similarity can be more informative than absolute price level proximity.
-
-### LightGBM
-LightGBM-style gradient boosting is effective at handling nonlinear boundaries and feature importance ranking. It is useful for FX prediction because it can model asymmetric responses to volatility, spread, and trend context.
-
-### LSTM
-LSTM captures temporal dependencies and delayed effects in sequential data. It is useful for FX/time-series because momentum, mean reversion, and volatility clustering are often path dependent.
-
-### LSTM-G
-LSTM-G extends recurrent modeling with additional gating refinements for sequence stability. It is useful for FX because improved gating can reduce noisy state transitions in fast-changing intraday data.
-
-### MLP Tiny
-MLP Tiny is a compact neural baseline that is fast to run in MT5 environments. It is useful for FX as a low-latency nonlinear model and as a robust ensemble member against over-specialized models.
-
-### PA Linear
-Passive-Aggressive linear learning updates strongly on mistakes while staying conservative otherwise. It is useful for FX streaming prediction where fast reaction to fresh market shifts is critical.
-
-### PatchTST
-PatchTST processes time-series in patches to improve efficiency and local pattern extraction. It is useful for FX because short recurring micro-structures can matter for near-horizon trade decisions.
-
-### Quantile
-Quantile modeling estimates move distribution rather than only direction. It is useful for FX because risk-aware entries depend on expected range and tail behavior, not just up/down probability.
-
-### S4
-S4 (state-space sequence model) is designed for long-context temporal modeling with efficient recurrence. It is useful for FX/time-series where distant context can still influence current volatility and direction.
-
-### SGD Logit
-SGD logistic regression is a simple, transparent online classifier with fast updates. It is useful for FX as a stable baseline and quick-adapting model under strict CPU constraints.
-
-### STMN
-STMN targets spatio-temporal structure, combining time dynamics with cross-context relationships. It is useful for FX because multi-symbol co-movement and lead-lag effects are naturally spatio-temporal.
-
-### TCN
-TCN uses causal dilated convolutions to model long effective history without recurrent loops. It is useful for FX prediction because it captures multi-scale temporal motifs with good parallel efficiency.
-
-### TFT
-TFT combines gating, variable selection, and attention for interpretable sequence forecasting. It is useful for FX because feature relevance can shift by regime, and TFT can adapt weighting over time.
-
-### TimesFM
-TimesFM-style forecasting emphasizes broad time-series generalization and stable sequence representations. It is useful for FX as a high-capacity model for regime-robust predictions across diverse market conditions.
-
-### TST
-Time-Series Transformer (TST) applies transformer attention directly to temporal tokens. It is useful for FX because attention can detect nonlocal dependencies that fixed-window methods may miss.
-
-### XGB Fast
-XGB Fast is a lightweight boosting variant optimized for speed in constrained runtimes. It is useful for FX backtesting and live execution when you need tree-style nonlinear power with low overhead.
-
-### XGBoost
-XGBoost is a strong gradient-boosted tree framework with robust regularization and split optimization. It is useful for FX/time-series because it often performs well on tabular engineered features and noisy signals.
 
 ## Notes
 
