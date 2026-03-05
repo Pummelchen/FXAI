@@ -227,14 +227,14 @@ input double FTRL_L2    = 0.0100;
 // Importance/Range: clamped 0..1.0; common 0.001..0.05.
 
 // Passive-Aggressive
-input double PA_C       = 0.50;
+input double PA_C       = 4.00;
 // Models: PA only.
 // Purpose: aggressiveness cap on PA correction step size.
-// Importance/Range: clamped 0.01..10; common 0.1..2.0.
-input double PA_Margin  = 1.00;
+// Importance/Range: clamped 0.01..10; common 0.5..6.0.
+input double PA_Margin  = 1.20;
 // Models: PA only.
 // Purpose: target margin before no further PA update is needed.
-// Importance/Range: clamped 0.1..2.0; common 0.5..1.5.
+// Importance/Range: clamped 0.1..2.0; common 0.6..1.6.
 
 // XGB-like split learners
 input double XGB_FastLearningRate = 0.03;
@@ -3271,6 +3271,14 @@ void FXAI_GetModelHyperParams(const int ai_idx, FXAIAIHyperParams &hp)
       hp.xgb_l2 = 4.0000;
       hp.xgb_split = 0.0000;
    }
+   // Recommended PA_LINEAR starting defaults.
+   if(ai_idx == (int)AI_PA_LINEAR)
+   {
+      hp.lr = 0.0600;
+      hp.l2 = 0.0030;
+      hp.pa_c = 4.0000;
+      hp.pa_margin = 1.2000;
+   }
 }
 
 void FXAI_GetModelThresholds(const int ai_idx,
@@ -3372,8 +3380,10 @@ void FXAI_SampleModelHyperParams(const int ai_idx,
          break;
 
       case (int)AI_PA_LINEAR:
-         hp.pa_c = FXAI_RandRange(0.0500, 3.0000);
-         hp.pa_margin = FXAI_RandRange(0.3000, 1.5000);
+         hp.lr = FXAI_RandRange(0.0200, 0.0800);
+         hp.l2 = FXAI_RandRange(0.0010, 0.0100);
+         hp.pa_c = FXAI_RandRange(0.5000, 6.0000);
+         hp.pa_margin = FXAI_RandRange(0.6000, 1.9000);
          break;
 
       case (int)AI_XGB_FAST:
