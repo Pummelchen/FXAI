@@ -9,6 +9,9 @@
 #define FXAI_MLP_CTX 6
 #define FXAI_MLP_CLASSES 3
 #define FXAI_MLP_HIST 8
+#define FXAI_MLP_REPLAY 384
+#define FXAI_MLP_CAL_BINS 12
+#define FXAI_MLP_ECE_BINS 12
 
 class CFXAIAIMLPTiny : public CFXAIAIPlugin
 {
@@ -19,6 +22,7 @@ private:
    int    m_adam_step;
    int    m_hist_len;
    int    m_hist_ptr;
+   double m_symbol_hash;
 
    double m_shadow_decay;
 
@@ -29,6 +33,12 @@ private:
 
    double m_w2[FXAI_MLP_H2][FXAI_MLP_H1];
    double m_b2[FXAI_MLP_H2];
+
+   // Residual gated block (3rd block).
+   double m_w3[FXAI_MLP_H2][FXAI_MLP_H2];
+   double m_w3g[FXAI_MLP_H2][FXAI_MLP_H2];
+   double m_b3[FXAI_MLP_H2];
+   double m_b3g[FXAI_MLP_H2];
 
    // 3-class head.
    double m_w_cls[FXAI_MLP_CLASSES][FXAI_MLP_H2];
@@ -51,6 +61,10 @@ private:
 
    double m_m_w2[FXAI_MLP_H2][FXAI_MLP_H1], m_v_w2[FXAI_MLP_H2][FXAI_MLP_H1];
    double m_m_b2[FXAI_MLP_H2], m_v_b2[FXAI_MLP_H2];
+   double m_m_w3[FXAI_MLP_H2][FXAI_MLP_H2], m_v_w3[FXAI_MLP_H2][FXAI_MLP_H2];
+   double m_m_w3g[FXAI_MLP_H2][FXAI_MLP_H2], m_v_w3g[FXAI_MLP_H2][FXAI_MLP_H2];
+   double m_m_b3[FXAI_MLP_H2], m_v_b3[FXAI_MLP_H2];
+   double m_m_b3g[FXAI_MLP_H2], m_v_b3g[FXAI_MLP_H2];
 
    double m_m_w_cls[FXAI_MLP_CLASSES][FXAI_MLP_H2], m_v_w_cls[FXAI_MLP_CLASSES][FXAI_MLP_H2];
    double m_m_b_cls[FXAI_MLP_CLASSES], m_v_b_cls[FXAI_MLP_CLASSES];
@@ -71,6 +85,10 @@ private:
 
    double m_sw2[FXAI_MLP_H2][FXAI_MLP_H1];
    double m_sb2[FXAI_MLP_H2];
+   double m_sw3[FXAI_MLP_H2][FXAI_MLP_H2];
+   double m_sw3g[FXAI_MLP_H2][FXAI_MLP_H2];
+   double m_sb3[FXAI_MLP_H2];
+   double m_sb3g[FXAI_MLP_H2];
 
    double m_sw_cls[FXAI_MLP_CLASSES][FXAI_MLP_H2];
    double m_sb_cls[FXAI_MLP_CLASSES];
@@ -87,13 +105,70 @@ private:
    // Temporal context ring buffer.
    double m_hist_x[FXAI_MLP_HIST][FXAI_AI_WEIGHTS];
 
+   // Adaptive feature normalization state (RevIN/DAIN-lite style).
+   double m_norm_mean[FXAI_AI_WEIGHTS];
+   double m_norm_var[FXAI_AI_WEIGHTS];
+   double m_norm_median[FXAI_AI_WEIGHTS];
+   double m_norm_iqr[FXAI_AI_WEIGHTS];
+   double m_norm_gain[FXAI_AI_WEIGHTS];
+   double m_norm_bias[FXAI_AI_WEIGHTS];
+   int    m_norm_steps;
+
+   // Context adapter projection.
+   double m_ctx_w[FXAI_MLP_CTX][FXAI_MLP_CTX];
+   double m_ctx_b[FXAI_MLP_CTX];
+
+   // Replay buffer.
+   double   m_replay_x[FXAI_MLP_REPLAY][FXAI_AI_WEIGHTS];
+   int      m_replay_y[FXAI_MLP_REPLAY];
+   double   m_replay_move[FXAI_MLP_REPLAY];
+   double   m_replay_cost[FXAI_MLP_REPLAY];
+   double   m_replay_w[FXAI_MLP_REPLAY];
+   datetime m_replay_time[FXAI_MLP_REPLAY];
+   int      m_replay_session[FXAI_MLP_REPLAY];
+   int      m_replay_head;
+   int      m_replay_size;
+
+   // SWA params (used with EMA in inference).
+   bool   m_swa_ready;
+   int    m_swa_count;
+   double m_swa_w1[FXAI_MLP_H1][FXAI_AI_WEIGHTS];
+   double m_swa_w1c[FXAI_MLP_H1][FXAI_MLP_CTX];
+   double m_swa_b1[FXAI_MLP_H1];
+   double m_swa_w2[FXAI_MLP_H2][FXAI_MLP_H1];
+   double m_swa_b2[FXAI_MLP_H2];
+   double m_swa_w3[FXAI_MLP_H2][FXAI_MLP_H2];
+   double m_swa_w3g[FXAI_MLP_H2][FXAI_MLP_H2];
+   double m_swa_b3[FXAI_MLP_H2];
+   double m_swa_b3g[FXAI_MLP_H2];
+   double m_swa_w_cls[FXAI_MLP_CLASSES][FXAI_MLP_H2];
+   double m_swa_b_cls[FXAI_MLP_CLASSES];
+   double m_swa_w_mu[FXAI_MLP_H2], m_swa_b_mu;
+   double m_swa_w_logv[FXAI_MLP_H2], m_swa_b_logv;
+   double m_swa_w_q25[FXAI_MLP_H2], m_swa_b_q25;
+   double m_swa_w_q75[FXAI_MLP_H2], m_swa_b_q75;
+
    // Class-balance EMA.
    double m_class_ema[FXAI_MLP_CLASSES];
 
-   // Plugin-local directional calibration.
-   double m_dir_scale;
-   double m_dir_bias;
-   double m_dir_temp;
+   // Native 3-class calibration.
+   double m_cal_vs_w[FXAI_MLP_CLASSES][FXAI_MLP_CLASSES];
+   double m_cal_vs_b[FXAI_MLP_CLASSES];
+   double m_cal_iso_pos[FXAI_MLP_CLASSES][FXAI_MLP_CAL_BINS];
+   double m_cal_iso_cnt[FXAI_MLP_CLASSES][FXAI_MLP_CAL_BINS];
+   int    m_cal3_steps;
+
+   // Validation / quality gate.
+   bool   m_val_ready;
+   int    m_val_steps;
+   double m_val_nll_fast, m_val_nll_slow;
+   double m_val_brier_fast, m_val_brier_slow;
+   double m_val_ece_fast, m_val_ece_slow;
+   double m_val_ev_fast, m_val_ev_slow;
+   double m_ece_mass[FXAI_MLP_ECE_BINS];
+   double m_ece_acc[FXAI_MLP_ECE_BINS];
+   double m_ece_conf[FXAI_MLP_ECE_BINS];
+   bool   m_quality_degraded;
 
    int HistIndex(const int back) const
    {
@@ -108,6 +183,41 @@ private:
       while(idx < 0) idx += FXAI_MLP_HIST;
       while(idx >= FXAI_MLP_HIST) idx -= FXAI_MLP_HIST;
       return idx;
+   }
+
+   double BlendShadowSWA(const double base,
+                         const double shadow,
+                         const double swa,
+                         const bool use_shadow) const
+   {
+      if(!use_shadow) return base;
+      if(m_swa_ready) return 0.60 * shadow + 0.40 * swa;
+      return shadow;
+   }
+
+   int SessionBucket(const datetime t) const
+   {
+      MqlDateTime md;
+      TimeToStruct(t, md);
+      int h = md.hour;
+      if(h >= 6 && h <= 12) return 1;   // EU
+      if(h >= 13 && h <= 20) return 2;  // US
+      if(h >= 21 || h <= 2) return 0;   // Asia
+      return 3;                         // transition
+   }
+
+   double SymbolHashNorm(void) const
+   {
+      string s = _Symbol;
+      uint h = 2166136261U;
+      int n = StringLen(s);
+      for(int i=0; i<n; i++)
+      {
+         uint ch = (uint)StringGetCharacter(s, i);
+         h ^= ch;
+         h *= 16777619U;
+      }
+      return (double)(h % 100000U) / 100000.0;
    }
 
    void ResetHistory(void)
@@ -130,13 +240,73 @@ private:
       if(m_hist_len < FXAI_MLP_HIST) m_hist_len++;
    }
 
-   void BuildTemporalContext(const double &x[],
-                             double &ctx[]) const
+   void NormalizeInput(const double &x[],
+                       double &xn[]) const
    {
-      for(int i=0; i<FXAI_MLP_CTX; i++) ctx[i] = 0.0;
+      double inst_mean = 0.0;
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++) inst_mean += x[i];
+      inst_mean /= (double)FXAI_AI_WEIGHTS;
+
+      double inst_var = 0.0;
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         double d = x[i] - inst_mean;
+         inst_var += d * d;
+      }
+      inst_var /= (double)FXAI_AI_WEIGHTS;
+      double inst_std = MathSqrt(inst_var + 1e-9);
+
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         double stdv = MathSqrt(MathMax(1e-8, m_norm_var[i]));
+         double z = (x[i] - m_norm_mean[i]) / stdv;
+
+         double iqr = MathMax(1e-5, m_norm_iqr[i]);
+         double rz = (x[i] - m_norm_median[i]) / iqr;
+
+         double v = 0.70 * z + 0.30 * rz;
+         v = (v - inst_mean) / MathMax(inst_std, 1e-5); // RevIN style
+
+         // DAIN-lite adaptive affine.
+         v = (m_norm_gain[i] * v) + m_norm_bias[i];
+         xn[i] = FXAI_ClipSym(v, 8.0);
+      }
+   }
+
+   void UpdateNormStats(const double &x[])
+   {
+      m_norm_steps++;
+      double a = (m_norm_steps < 256 ? 0.01 : 0.003);
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         double v = x[i];
+         double dm = v - m_norm_mean[i];
+         m_norm_mean[i] += a * dm;
+         m_norm_var[i] = (1.0 - a) * m_norm_var[i] + a * dm * dm;
+         if(m_norm_var[i] < 1e-8) m_norm_var[i] = 1e-8;
+
+         m_norm_median[i] += a * FXAI_ClipSym(v - m_norm_median[i], 5.0);
+         double ad = MathAbs(v - m_norm_median[i]);
+         m_norm_iqr[i] += a * (ad - m_norm_iqr[i]);
+         if(m_norm_iqr[i] < 1e-5) m_norm_iqr[i] = 1e-5;
+
+         // Keep gains stable and adaptive.
+         double stdv = MathSqrt(m_norm_var[i]);
+         double target_gain = FXAI_Clamp(1.0 / MathMax(0.10, stdv), 0.20, 4.00);
+         m_norm_gain[i] = 0.995 * m_norm_gain[i] + 0.005 * target_gain;
+         m_norm_bias[i] = 0.995 * m_norm_bias[i] - 0.005 * m_norm_mean[i] * target_gain;
+         m_norm_gain[i] = FXAI_Clamp(m_norm_gain[i], 0.20, 5.00);
+         m_norm_bias[i] = FXAI_ClipSym(m_norm_bias[i], 5.0);
+      }
+   }
+
+   void BuildTemporalContext(const double &x[],
+                             double &ctx_raw[]) const
+   {
+      for(int i=0; i<FXAI_MLP_CTX; i++) ctx_raw[i] = 0.0;
       if(m_hist_len <= 0)
       {
-         ctx[4] = FXAI_Clamp(MathAbs(x[7]), 0.0, 8.0);
+         ctx_raw[4] = FXAI_Clamp(MathAbs(x[7]), 0.0, 8.0);
          return;
       }
 
@@ -151,9 +321,9 @@ private:
       double x2_prev = m_hist_x[i1][2];
       double x3_prev = m_hist_x[i1][3];
 
-      ctx[0] = x[1] - x1_prev;
-      ctx[1] = x[1] - m_hist_x[i2][1];
-      ctx[2] = x[1] - m_hist_x[i4][1];
+      ctx_raw[0] = x[1] - x1_prev;
+      ctx_raw[1] = x[1] - m_hist_x[i2][1];
+      ctx_raw[2] = x[1] - m_hist_x[i4][1];
 
       double vol = 0.0;
       int cnt = 0;
@@ -166,16 +336,38 @@ private:
          cnt++;
       }
       if(cnt > 0) vol /= (double)cnt;
-      ctx[3] = vol;
+      ctx_raw[3] = vol;
 
-      ctx[4] = MathAbs(x[7]); // spread/cost-aware feature channel.
+      ctx_raw[4] = MathAbs(x[7]); // spread/cost-aware feature channel.
 
       double regime = MathAbs(x[2] - x2_prev) + 0.5 * MathAbs(x[3] - x3_prev);
       regime += 0.35 * MathAbs(x[1] - x1_prev);
-      ctx[5] = regime;
+      ctx_raw[5] = regime;
+
+      datetime t = ResolveContextTime();
+      if(t <= 0) t = TimeCurrent();
+      int sess = SessionBucket(t);
+      double sess_shift = ((double)sess - 1.5) / 1.5;
+      ctx_raw[4] = FXAI_ClipSym(ctx_raw[4] + 0.35 * sess_shift, 8.0);
+      ctx_raw[5] = FXAI_ClipSym(ctx_raw[5] + 0.20 * (m_symbol_hash - 0.5), 8.0);
 
       for(int i=0; i<FXAI_MLP_CTX; i++)
-         ctx[i] = FXAI_ClipSym(ctx[i], 8.0);
+         ctx_raw[i] = FXAI_ClipSym(ctx_raw[i], 8.0);
+   }
+
+   void AdaptContext(const double &ctx_raw[],
+                     double &ctx[],
+                     double &ctx_act[]) const
+   {
+      for(int k=0; k<FXAI_MLP_CTX; k++)
+      {
+         double z = m_ctx_b[k];
+         for(int j=0; j<FXAI_MLP_CTX; j++)
+            z += m_ctx_w[k][j] * ctx_raw[j];
+         double a = FXAI_Tanh(FXAI_ClipSym(z, 8.0));
+         ctx_act[k] = a;
+         ctx[k] = FXAI_ClipSym(a + 0.25 * ctx_raw[k], 8.0);
+      }
    }
 
    int ResolveClass(const int y,
@@ -217,6 +409,48 @@ private:
       probs[0] = e0 / s;
       probs[1] = e1 / s;
       probs[2] = e2 / s;
+   }
+
+   void LayerNormVec(const double &v_in[],
+                     double &v_norm[],
+                     double &mean,
+                     double &inv_std) const
+   {
+      mean = 0.0;
+      for(int i=0; i<FXAI_MLP_H2; i++) mean += v_in[i];
+      mean /= (double)FXAI_MLP_H2;
+
+      double var = 0.0;
+      for(int i=0; i<FXAI_MLP_H2; i++)
+      {
+         double d = v_in[i] - mean;
+         var += d * d;
+      }
+      var /= (double)FXAI_MLP_H2;
+      inv_std = 1.0 / MathSqrt(var + 1e-6);
+
+      for(int i=0; i<FXAI_MLP_H2; i++)
+         v_norm[i] = (v_in[i] - mean) * inv_std;
+   }
+
+   void LayerNormBackward(const double &dy[],
+                          const double &x_norm[],
+                          const double inv_std,
+                          double &dx[]) const
+   {
+      double sum1 = 0.0, sum2 = 0.0;
+      for(int i=0; i<FXAI_MLP_H2; i++)
+      {
+         sum1 += dy[i];
+         sum2 += dy[i] * x_norm[i];
+      }
+      double n = (double)FXAI_MLP_H2;
+      double k = inv_std / n;
+      for(int i=0; i<FXAI_MLP_H2; i++)
+      {
+         double v = (n * dy[i]) - sum1 - x_norm[i] * sum2;
+         dx[i] = k * v;
+      }
    }
 
    double HuberGrad(const double err,
@@ -273,29 +507,258 @@ private:
       return FXAI_Clamp(sw * edge_w * scale, 0.20, 8.00);
    }
 
-   double LocalDirCalibrate(const double p_raw) const
+   void BuildTargetDist(const int cls,
+                        const double move_points,
+                        const double cost_points,
+                        double &target[]) const
    {
-      double p = FXAI_Clamp(p_raw, 0.001, 0.999);
-      double z = FXAI_Logit(p);
-      double t = FXAI_Clamp(m_dir_temp, 0.50, 3.00);
-      double pc = FXAI_Sigmoid((m_dir_scale * z / t) + m_dir_bias);
-      return FXAI_Clamp(pc, 0.001, 0.999);
+      for(int c=0; c<FXAI_MLP_CLASSES; c++) target[c] = 0.0;
+      int y = cls;
+      if(y < 0) y = 0;
+      if(y >= FXAI_MLP_CLASSES) y = (int)FXAI_LABEL_SKIP;
+
+      double edge = MathAbs(move_points) - MathMax(cost_points, 0.0);
+      if(y == (int)FXAI_LABEL_SKIP)
+      {
+         target[(int)FXAI_LABEL_SKIP] = 1.0;
+         return;
+      }
+
+      int dir = (y == (int)FXAI_LABEL_BUY ? (int)FXAI_LABEL_BUY : (int)FXAI_LABEL_SELL);
+      if(edge <= 0.0)
+      {
+         target[dir] = 0.35;
+         target[(int)FXAI_LABEL_SKIP] = 0.65;
+         return;
+      }
+
+      double pdir = FXAI_Clamp(0.74 + 0.10 * edge / MathMax(cost_points, 1.0), 0.74, 0.95);
+      target[dir] = pdir;
+      target[(int)FXAI_LABEL_SKIP] = 1.0 - pdir;
    }
 
-   void UpdateLocalDirCalib(const double p_raw,
-                            const int y_dir,
-                            const double sample_w)
+   int ReplayPos(const int logical_idx) const
    {
-      double p = FXAI_Clamp(p_raw, 0.001, 0.999);
-      double z = FXAI_Logit(p);
-      double t = FXAI_Clamp(m_dir_temp, 0.50, 3.00);
-      double pc = FXAI_Sigmoid((m_dir_scale * z / t) + m_dir_bias);
-      double e = ((double)y_dir - pc);
+      if(m_replay_size <= 0) return 0;
+      int start = m_replay_head - m_replay_size;
+      while(start < 0) start += FXAI_MLP_REPLAY;
+      int p = start + logical_idx;
+      while(p >= FXAI_MLP_REPLAY) p -= FXAI_MLP_REPLAY;
+      return p;
+   }
 
-      double lr = FXAI_Clamp(0.010 * sample_w, 0.0010, 0.0300);
-      m_dir_scale = FXAI_Clamp(m_dir_scale + lr * (e * z / t - 0.001 * (m_dir_scale - 1.0)), 0.20, 6.00);
-      m_dir_bias  = FXAI_Clamp(m_dir_bias + lr * e, -6.0, 6.0);
-      m_dir_temp  = FXAI_Clamp(m_dir_temp + lr * (0.50 * e * (MathAbs(z) - 1.0)), 0.50, 3.00);
+   void PushReplay(const int cls,
+                   const double &x[],
+                   const double move_points,
+                   const double cost_points,
+                   const double sample_w,
+                   const datetime t_sample,
+                   const int sess)
+   {
+      int p = m_replay_head;
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++) m_replay_x[p][i] = x[i];
+      m_replay_y[p] = cls;
+      m_replay_move[p] = move_points;
+      m_replay_cost[p] = cost_points;
+      m_replay_w[p] = sample_w;
+      m_replay_time[p] = t_sample;
+      m_replay_session[p] = sess;
+
+      m_replay_head++;
+      if(m_replay_head >= FXAI_MLP_REPLAY) m_replay_head = 0;
+      if(m_replay_size < FXAI_MLP_REPLAY) m_replay_size++;
+   }
+
+   double ReplayAgeWeight(const datetime t_sample,
+                          const datetime t_now) const
+   {
+      if(t_sample <= 0 || t_now <= 0) return 1.0;
+      double age_min = (double)MathMax(0, (int)(t_now - t_sample)) / 60.0;
+      const double half_life = 24.0 * 60.0;
+      return MathExp(-0.69314718056 * age_min / half_life);
+   }
+
+   void BuildCalLogits(const double &p_raw[],
+                       double &logits[]) const
+   {
+      double lraw[FXAI_MLP_CLASSES];
+      for(int c=0; c<FXAI_MLP_CLASSES; c++)
+         lraw[c] = MathLog(FXAI_Clamp(p_raw[c], 0.0005, 0.9990));
+
+      for(int c=0; c<FXAI_MLP_CLASSES; c++)
+      {
+         double z = m_cal_vs_b[c];
+         for(int j=0; j<FXAI_MLP_CLASSES; j++) z += m_cal_vs_w[c][j] * lraw[j];
+         logits[c] = z;
+      }
+   }
+
+   void Calibrate3(const double &p_raw[],
+                   double &p_cal[]) const
+   {
+      double logits[FXAI_MLP_CLASSES];
+      BuildCalLogits(p_raw, logits);
+      Softmax3(logits, p_cal);
+
+      if(m_cal3_steps < 30) return;
+
+      double p_iso[FXAI_MLP_CLASSES];
+      for(int c=0; c<FXAI_MLP_CLASSES; c++)
+      {
+         double total = 0.0;
+         for(int b=0; b<FXAI_MLP_CAL_BINS; b++) total += m_cal_iso_cnt[c][b];
+         if(total < 40.0)
+         {
+            p_iso[c] = p_cal[c];
+            continue;
+         }
+
+         double mono[FXAI_MLP_CAL_BINS];
+         double prev = 0.01;
+         for(int b=0; b<FXAI_MLP_CAL_BINS; b++)
+         {
+            double r = prev;
+            if(m_cal_iso_cnt[c][b] > 1e-9) r = m_cal_iso_pos[c][b] / m_cal_iso_cnt[c][b];
+            r = FXAI_Clamp(r, 0.001, 0.999);
+            if(r < prev) r = prev;
+            mono[b] = r;
+            prev = r;
+         }
+
+         int bi = (int)MathFloor(p_cal[c] * (double)FXAI_MLP_CAL_BINS);
+         if(bi < 0) bi = 0;
+         if(bi >= FXAI_MLP_CAL_BINS) bi = FXAI_MLP_CAL_BINS - 1;
+         p_iso[c] = mono[bi];
+      }
+
+      for(int c=0; c<FXAI_MLP_CLASSES; c++)
+         p_cal[c] = FXAI_Clamp(0.75 * p_cal[c] + 0.25 * p_iso[c], 0.0005, 0.9990);
+
+      double s = p_cal[0] + p_cal[1] + p_cal[2];
+      if(s <= 0.0) s = 1.0;
+      p_cal[0] /= s;
+      p_cal[1] /= s;
+      p_cal[2] /= s;
+   }
+
+   void UpdateCalibrator3(const double &p_raw[],
+                          const int cls,
+                          const double sample_w,
+                          const double lr)
+   {
+      double logits[FXAI_MLP_CLASSES];
+      BuildCalLogits(p_raw, logits);
+
+      double p_cal[FXAI_MLP_CLASSES];
+      Softmax3(logits, p_cal);
+
+      double lraw[FXAI_MLP_CLASSES];
+      for(int c=0; c<FXAI_MLP_CLASSES; c++)
+         lraw[c] = MathLog(FXAI_Clamp(p_raw[c], 0.0005, 0.9990));
+
+      double w = FXAI_Clamp(sample_w, 0.20, 8.00);
+      double cal_lr = FXAI_Clamp(0.25 * lr * w, 0.0002, 0.0200);
+      double reg_l2 = 0.0005;
+
+      for(int c=0; c<FXAI_MLP_CLASSES; c++)
+      {
+         double target = (c == cls ? 1.0 : 0.0);
+         double e = target - p_cal[c];
+
+         m_cal_vs_b[c] = FXAI_ClipSym(m_cal_vs_b[c] + cal_lr * e, 4.0);
+         for(int j=0; j<FXAI_MLP_CLASSES; j++)
+         {
+            double target_w = (c == j ? 1.0 : 0.0);
+            double grad = e * lraw[j] - reg_l2 * (m_cal_vs_w[c][j] - target_w);
+            m_cal_vs_w[c][j] = FXAI_ClipSym(m_cal_vs_w[c][j] + cal_lr * grad, 4.0);
+         }
+
+         int bi = (int)MathFloor(p_cal[c] * (double)FXAI_MLP_CAL_BINS);
+         if(bi < 0) bi = 0;
+         if(bi >= FXAI_MLP_CAL_BINS) bi = FXAI_MLP_CAL_BINS - 1;
+         m_cal_iso_cnt[c][bi] += w;
+         m_cal_iso_pos[c][bi] += w * target;
+      }
+      m_cal3_steps++;
+   }
+
+   void UpdateValidationMetrics(const int cls,
+                                const double &p_cal[],
+                                const double ev_after_cost)
+   {
+      int y = cls;
+      if(y < 0) y = 0;
+      if(y >= FXAI_MLP_CLASSES) y = (int)FXAI_LABEL_SKIP;
+
+      double ce = -MathLog(FXAI_Clamp(p_cal[y], 1e-6, 1.0));
+      double brier = 0.0;
+      for(int c=0; c<FXAI_MLP_CLASSES; c++)
+      {
+         double t = (c == y ? 1.0 : 0.0);
+         double d = p_cal[c] - t;
+         brier += d * d;
+      }
+      brier /= (double)FXAI_MLP_CLASSES;
+
+      double conf = p_cal[0];
+      int pred = 0;
+      for(int c=1; c<FXAI_MLP_CLASSES; c++) if(p_cal[c] > conf) { conf = p_cal[c]; pred = c; }
+      double acc = (pred == y ? 1.0 : 0.0);
+
+      int bi = (int)MathFloor(conf * (double)FXAI_MLP_ECE_BINS);
+      if(bi < 0) bi = 0;
+      if(bi >= FXAI_MLP_ECE_BINS) bi = FXAI_MLP_ECE_BINS - 1;
+
+      for(int b=0; b<FXAI_MLP_ECE_BINS; b++)
+      {
+         m_ece_mass[b] *= 0.997;
+         m_ece_acc[b] *= 0.997;
+         m_ece_conf[b] *= 0.997;
+      }
+      m_ece_mass[bi] += 1.0;
+      m_ece_acc[bi] += acc;
+      m_ece_conf[bi] += conf;
+
+      double ece_num = 0.0, ece_den = 0.0;
+      for(int b=0; b<FXAI_MLP_ECE_BINS; b++)
+      {
+         if(m_ece_mass[b] <= 1e-9) continue;
+         double ba = m_ece_acc[b] / m_ece_mass[b];
+         double bc = m_ece_conf[b] / m_ece_mass[b];
+         ece_num += m_ece_mass[b] * MathAbs(ba - bc);
+         ece_den += m_ece_mass[b];
+      }
+      double ece = (ece_den > 0.0 ? ece_num / ece_den : 0.0);
+
+      if(!m_val_ready)
+      {
+         m_val_nll_fast = m_val_nll_slow = ce;
+         m_val_brier_fast = m_val_brier_slow = brier;
+         m_val_ece_fast = m_val_ece_slow = ece;
+         m_val_ev_fast = m_val_ev_slow = ev_after_cost;
+         m_val_ready = true;
+      }
+      else
+      {
+         m_val_nll_fast = 0.92 * m_val_nll_fast + 0.08 * ce;
+         m_val_nll_slow = 0.995 * m_val_nll_slow + 0.005 * ce;
+         m_val_brier_fast = 0.92 * m_val_brier_fast + 0.08 * brier;
+         m_val_brier_slow = 0.995 * m_val_brier_slow + 0.005 * brier;
+         m_val_ece_fast = 0.92 * m_val_ece_fast + 0.08 * ece;
+         m_val_ece_slow = 0.995 * m_val_ece_slow + 0.005 * ece;
+         m_val_ev_fast = 0.92 * m_val_ev_fast + 0.08 * ev_after_cost;
+         m_val_ev_slow = 0.995 * m_val_ev_slow + 0.005 * ev_after_cost;
+      }
+
+      m_val_steps++;
+      m_quality_degraded = false;
+      if(m_val_steps > 128)
+      {
+         if(m_val_nll_fast > 1.15 * MathMax(0.05, m_val_nll_slow)) m_quality_degraded = true;
+         if(m_val_brier_fast > 1.20 * MathMax(0.03, m_val_brier_slow)) m_quality_degraded = true;
+         if(m_val_ece_fast > 1.25 * MathMax(0.02, m_val_ece_slow)) m_quality_degraded = true;
+         if(m_val_ev_fast < 0.85 * m_val_ev_slow) m_quality_degraded = true;
+      }
    }
 
    double DropMask(const int idx,
@@ -379,6 +842,10 @@ private:
       {
          m_m_b2[h] = 0.0;
          m_v_b2[h] = 0.0;
+         m_m_b3[h] = 0.0;
+         m_v_b3[h] = 0.0;
+         m_m_b3g[h] = 0.0;
+         m_v_b3g[h] = 0.0;
 
          m_m_w_mu[h] = 0.0;
          m_v_w_mu[h] = 0.0;
@@ -393,6 +860,13 @@ private:
          {
             m_m_w2[h][j] = 0.0;
             m_v_w2[h][j] = 0.0;
+         }
+         for(int j=0; j<FXAI_MLP_H2; j++)
+         {
+            m_m_w3[h][j] = 0.0;
+            m_v_w3[h][j] = 0.0;
+            m_m_w3g[h][j] = 0.0;
+            m_v_w3g[h][j] = 0.0;
          }
       }
 
@@ -440,6 +914,15 @@ private:
             m_w2[h][j] = 0.035 * s * MathCos(0.93 * a);
          }
          m_b2[h] = 0.0;
+
+         for(int j=0; j<FXAI_MLP_H2; j++)
+         {
+            double a3 = (double)((h + 5) * (j + 1));
+            m_w3[h][j] = 0.030 * s * MathSin(0.71 * a3);
+            m_w3g[h][j] = 0.020 * s * MathCos(0.67 * a3);
+         }
+         m_b3[h] = 0.0;
+         m_b3g[h] = 0.1;
       }
 
       for(int c=0; c<FXAI_MLP_CLASSES; c++)
@@ -466,9 +949,73 @@ private:
 
       InitMoments();
 
+      for(int k=0; k<FXAI_MLP_CTX; k++)
+      {
+         m_ctx_b[k] = 0.0;
+         for(int j=0; j<FXAI_MLP_CTX; j++)
+         {
+            if(k == j) m_ctx_w[k][j] = 1.0;
+            else m_ctx_w[k][j] = 0.02 * MathSin((double)((k + 1) * (j + 2)));
+         }
+      }
+
+      m_symbol_hash = SymbolHashNorm();
+
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         m_norm_mean[i] = 0.0;
+         m_norm_var[i] = 1.0;
+         m_norm_median[i] = 0.0;
+         m_norm_iqr[i] = 1.0;
+         m_norm_gain[i] = 1.0;
+         m_norm_bias[i] = 0.0;
+      }
+      m_norm_steps = 0;
+
+      m_replay_head = 0;
+      m_replay_size = 0;
+      for(int i=0; i<FXAI_MLP_REPLAY; i++)
+      {
+         m_replay_y[i] = (int)FXAI_LABEL_SKIP;
+         m_replay_move[i] = 0.0;
+         m_replay_cost[i] = 0.0;
+         m_replay_w[i] = 1.0;
+         m_replay_time[i] = 0;
+         m_replay_session[i] = -1;
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++) m_replay_x[i][k] = 0.0;
+      }
+
+      m_cal3_steps = 0;
+      for(int c=0; c<FXAI_MLP_CLASSES; c++)
+      {
+         m_cal_vs_b[c] = 0.0;
+         for(int j=0; j<FXAI_MLP_CLASSES; j++) m_cal_vs_w[c][j] = (c == j ? 1.0 : 0.0);
+         for(int b=0; b<FXAI_MLP_CAL_BINS; b++)
+         {
+            m_cal_iso_pos[c][b] = 0.0;
+            m_cal_iso_cnt[c][b] = 0.0;
+         }
+      }
+
+      m_val_ready = false;
+      m_val_steps = 0;
+      m_val_nll_fast = m_val_nll_slow = 0.0;
+      m_val_brier_fast = m_val_brier_slow = 0.0;
+      m_val_ece_fast = m_val_ece_slow = 0.0;
+      m_val_ev_fast = m_val_ev_slow = 0.0;
+      for(int b=0; b<FXAI_MLP_ECE_BINS; b++)
+      {
+         m_ece_mass[b] = 0.0;
+         m_ece_acc[b] = 0.0;
+         m_ece_conf[b] = 0.0;
+      }
+      m_quality_degraded = false;
+
       m_shadow_ready = false;
       m_shadow_decay = 0.995;
       SyncShadow(true);
+      m_swa_ready = false;
+      m_swa_count = 0;
 
       m_initialized = true;
    }
@@ -490,6 +1037,8 @@ private:
       for(int h=0; h<FXAI_MLP_H2; h++)
       {
          m_sb2[h] = (hard_copy ? m_b2[h] : a * m_sb2[h] + b * m_b2[h]);
+         m_sb3[h] = (hard_copy ? m_b3[h] : a * m_sb3[h] + b * m_b3[h]);
+         m_sb3g[h] = (hard_copy ? m_b3g[h] : a * m_sb3g[h] + b * m_b3g[h]);
          m_sw_mu[h] = (hard_copy ? m_w_mu[h] : a * m_sw_mu[h] + b * m_w_mu[h]);
          m_sw_logv[h] = (hard_copy ? m_w_logv[h] : a * m_sw_logv[h] + b * m_w_logv[h]);
          m_sw_q25[h] = (hard_copy ? m_w_q25[h] : a * m_sw_q25[h] + b * m_w_q25[h]);
@@ -497,6 +1046,11 @@ private:
 
          for(int j=0; j<FXAI_MLP_H1; j++)
             m_sw2[h][j] = (hard_copy ? m_w2[h][j] : a * m_sw2[h][j] + b * m_w2[h][j]);
+         for(int j=0; j<FXAI_MLP_H2; j++)
+         {
+            m_sw3[h][j] = (hard_copy ? m_w3[h][j] : a * m_sw3[h][j] + b * m_w3[h][j]);
+            m_sw3g[h][j] = (hard_copy ? m_w3g[h][j] : a * m_sw3g[h][j] + b * m_w3g[h][j]);
+         }
       }
 
       for(int c=0; c<FXAI_MLP_CLASSES; c++)
@@ -512,6 +1066,55 @@ private:
       m_sb_q75 = (hard_copy ? m_b_q75 : a * m_sb_q75 + b * m_b_q75);
    }
 
+   void UpdateSWA(void)
+   {
+      if((m_step % 64) != 0) return;
+
+      m_swa_count++;
+      double rho = 1.0 / (double)MathMax(m_swa_count, 1);
+      double k = 1.0 - rho;
+
+      for(int h=0; h<FXAI_MLP_H1; h++)
+      {
+         m_swa_b1[h] = k * m_swa_b1[h] + rho * m_b1[h];
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+            m_swa_w1[h][i] = k * m_swa_w1[h][i] + rho * m_w1[h][i];
+         for(int c=0; c<FXAI_MLP_CTX; c++)
+            m_swa_w1c[h][c] = k * m_swa_w1c[h][c] + rho * m_w1c[h][c];
+      }
+
+      for(int h=0; h<FXAI_MLP_H2; h++)
+      {
+         m_swa_b2[h] = k * m_swa_b2[h] + rho * m_b2[h];
+         m_swa_b3[h] = k * m_swa_b3[h] + rho * m_b3[h];
+         m_swa_b3g[h] = k * m_swa_b3g[h] + rho * m_b3g[h];
+         m_swa_w_mu[h] = k * m_swa_w_mu[h] + rho * m_w_mu[h];
+         m_swa_w_logv[h] = k * m_swa_w_logv[h] + rho * m_w_logv[h];
+         m_swa_w_q25[h] = k * m_swa_w_q25[h] + rho * m_w_q25[h];
+         m_swa_w_q75[h] = k * m_swa_w_q75[h] + rho * m_w_q75[h];
+         for(int j=0; j<FXAI_MLP_H1; j++)
+            m_swa_w2[h][j] = k * m_swa_w2[h][j] + rho * m_w2[h][j];
+         for(int j=0; j<FXAI_MLP_H2; j++)
+         {
+            m_swa_w3[h][j] = k * m_swa_w3[h][j] + rho * m_w3[h][j];
+            m_swa_w3g[h][j] = k * m_swa_w3g[h][j] + rho * m_w3g[h][j];
+         }
+      }
+
+      for(int c=0; c<FXAI_MLP_CLASSES; c++)
+      {
+         m_swa_b_cls[c] = k * m_swa_b_cls[c] + rho * m_b_cls[c];
+         for(int h=0; h<FXAI_MLP_H2; h++)
+            m_swa_w_cls[c][h] = k * m_swa_w_cls[c][h] + rho * m_w_cls[c][h];
+      }
+
+      m_swa_b_mu = k * m_swa_b_mu + rho * m_b_mu;
+      m_swa_b_logv = k * m_swa_b_logv + rho * m_b_logv;
+      m_swa_b_q25 = k * m_swa_b_q25 + rho * m_b_q25;
+      m_swa_b_q75 = k * m_swa_b_q75 + rho * m_b_q75;
+      if(m_swa_count >= 4) m_swa_ready = true;
+   }
+
    void Forward(const double &x[],
                 const double &ctx[],
                 const bool use_shadow,
@@ -519,23 +1122,28 @@ private:
                 double &h1_raw[],
                 double &h1_out[],
                 double &h2_out[],
+                double &h2_norm[],
+                double &h3_tanh[],
+                double &h3_gate[],
+                double &h3_out[],
+                double &ln_inv_std,
                 double &drop_mask[],
                 double &logits[],
                 double &probs[],
                 double &mu,
                 double &logv,
                 double &q25,
-                double &q75) const
+      double &q75) const
    {
       double drop_rate = (training ? 0.10 : 0.0);
 
       for(int h=0; h<FXAI_MLP_H1; h++)
       {
-         double s = (use_shadow ? m_sb1[h] : m_b1[h]);
+         double s = BlendShadowSWA(m_b1[h], m_sb1[h], m_swa_b1[h], use_shadow);
          for(int i=0; i<FXAI_AI_WEIGHTS; i++)
-            s += (use_shadow ? m_sw1[h][i] : m_w1[h][i]) * x[i];
+            s += BlendShadowSWA(m_w1[h][i], m_sw1[h][i], m_swa_w1[h][i], use_shadow) * x[i];
          for(int c=0; c<FXAI_MLP_CTX; c++)
-            s += (use_shadow ? m_sw1c[h][c] : m_w1c[h][c]) * ctx[c];
+            s += BlendShadowSWA(m_w1c[h][c], m_sw1c[h][c], m_swa_w1c[h][c], use_shadow) * ctx[c];
 
          double a = FXAI_Tanh(FXAI_ClipSym(s, 8.0));
          double m = (training ? DropMask(h, 17, drop_rate) : 1.0);
@@ -547,31 +1155,50 @@ private:
 
       for(int h=0; h<FXAI_MLP_H2; h++)
       {
-         double s = (use_shadow ? m_sb2[h] : m_b2[h]);
+         double s = BlendShadowSWA(m_b2[h], m_sb2[h], m_swa_b2[h], use_shadow);
          for(int j=0; j<FXAI_MLP_H1; j++)
-            s += (use_shadow ? m_sw2[h][j] : m_w2[h][j]) * h1_out[j];
+            s += BlendShadowSWA(m_w2[h][j], m_sw2[h][j], m_swa_w2[h][j], use_shadow) * h1_out[j];
          h2_out[h] = FXAI_Tanh(FXAI_ClipSym(s, 8.0));
+      }
+
+      double ln_mean = 0.0;
+      LayerNormVec(h2_out, h2_norm, ln_mean, ln_inv_std);
+
+      for(int h=0; h<FXAI_MLP_H2; h++)
+      {
+         double z = BlendShadowSWA(m_b3[h], m_sb3[h], m_swa_b3[h], use_shadow);
+         double zg = BlendShadowSWA(m_b3g[h], m_sb3g[h], m_swa_b3g[h], use_shadow);
+         for(int j=0; j<FXAI_MLP_H2; j++)
+         {
+            z += BlendShadowSWA(m_w3[h][j], m_sw3[h][j], m_swa_w3[h][j], use_shadow) * h2_norm[j];
+            zg += BlendShadowSWA(m_w3g[h][j], m_sw3g[h][j], m_swa_w3g[h][j], use_shadow) * h2_norm[j];
+         }
+         double t3 = FXAI_Tanh(FXAI_ClipSym(z, 8.0));
+         double g3 = FXAI_Sigmoid(FXAI_ClipSym(zg, 8.0));
+         h3_tanh[h] = t3;
+         h3_gate[h] = g3;
+         h3_out[h] = FXAI_ClipSym(t3 * g3 + 0.50 * h2_out[h], 8.0);
       }
 
       for(int c=0; c<FXAI_MLP_CLASSES; c++)
       {
-         double z = (use_shadow ? m_sb_cls[c] : m_b_cls[c]);
+         double z = BlendShadowSWA(m_b_cls[c], m_sb_cls[c], m_swa_b_cls[c], use_shadow);
          for(int h=0; h<FXAI_MLP_H2; h++)
-            z += (use_shadow ? m_sw_cls[c][h] : m_w_cls[c][h]) * h2_out[h];
+            z += BlendShadowSWA(m_w_cls[c][h], m_sw_cls[c][h], m_swa_w_cls[c][h], use_shadow) * h3_out[h];
          logits[c] = z;
       }
       Softmax3(logits, probs);
 
-      mu = (use_shadow ? m_sb_mu : m_b_mu);
-      logv = (use_shadow ? m_sb_logv : m_b_logv);
-      q25 = (use_shadow ? m_sb_q25 : m_b_q25);
-      q75 = (use_shadow ? m_sb_q75 : m_b_q75);
+      mu = BlendShadowSWA(m_b_mu, m_sb_mu, m_swa_b_mu, use_shadow);
+      logv = BlendShadowSWA(m_b_logv, m_sb_logv, m_swa_b_logv, use_shadow);
+      q25 = BlendShadowSWA(m_b_q25, m_sb_q25, m_swa_b_q25, use_shadow);
+      q75 = BlendShadowSWA(m_b_q75, m_sb_q75, m_swa_b_q75, use_shadow);
       for(int h=0; h<FXAI_MLP_H2; h++)
       {
-         mu += (use_shadow ? m_sw_mu[h] : m_w_mu[h]) * h2_out[h];
-         logv += (use_shadow ? m_sw_logv[h] : m_w_logv[h]) * h2_out[h];
-         q25 += (use_shadow ? m_sw_q25[h] : m_w_q25[h]) * h2_out[h];
-         q75 += (use_shadow ? m_sw_q75[h] : m_w_q75[h]) * h2_out[h];
+         mu += BlendShadowSWA(m_w_mu[h], m_sw_mu[h], m_swa_w_mu[h], use_shadow) * h3_out[h];
+         logv += BlendShadowSWA(m_w_logv[h], m_sw_logv[h], m_swa_w_logv[h], use_shadow) * h3_out[h];
+         q25 += BlendShadowSWA(m_w_q25[h], m_sw_q25[h], m_swa_w_q25[h], use_shadow) * h3_out[h];
+         q75 += BlendShadowSWA(m_w_q75[h], m_sw_q75[h], m_swa_w_q75[h], use_shadow) * h3_out[h];
       }
 
       logv = FXAI_Clamp(logv, -4.0, 4.0);
@@ -587,7 +1214,8 @@ private:
                        const double &x[],
                        const FXAIAIHyperParams &hp,
                        const double sample_w,
-                       const double move_points)
+                       const double move_points,
+                       const bool from_replay)
    {
       EnsureInitialized(hp);
       m_step++;
@@ -602,27 +1230,40 @@ private:
 
       double cost = InputCostProxyPoints(x);
       double sw = FXAI_Clamp(sample_w, 0.25, 4.00);
+      if(from_replay) sw *= 0.85;
       double lr = ScheduledLR(hp, sw);
+      if(m_quality_degraded) lr *= 0.70;
       double wd = FXAI_Clamp(hp.mlp_l2, 0.0, 0.0500);
 
-      double ctx[FXAI_MLP_CTX];
-      BuildTemporalContext(x, ctx);
+      double x_norm[FXAI_AI_WEIGHTS];
+      NormalizeInput(x, x_norm);
 
-      double h1_raw[FXAI_MLP_H1], h1[FXAI_MLP_H1], h2[FXAI_MLP_H2], drop1[FXAI_MLP_H1];
+      double ctx_raw[FXAI_MLP_CTX], ctx_act[FXAI_MLP_CTX], ctx[FXAI_MLP_CTX];
+      BuildTemporalContext(x, ctx_raw);
+      AdaptContext(ctx_raw, ctx, ctx_act);
+
+      double h1_raw[FXAI_MLP_H1], h1[FXAI_MLP_H1], h2[FXAI_MLP_H2], h2_norm[FXAI_MLP_H2];
+      double h3_tanh[FXAI_MLP_H2], h3_gate[FXAI_MLP_H2], h3[FXAI_MLP_H2];
+      double ln_inv_std = 1.0;
+      double drop1[FXAI_MLP_H1];
       double logits[FXAI_MLP_CLASSES], probs[FXAI_MLP_CLASSES];
       double mu = 0.0, logv = 0.0, q25 = 0.0, q75 = 0.0;
-      Forward(x, ctx, false, true, h1_raw, h1, h2, drop1, logits, probs, mu, logv, q25, q75);
+      Forward(x_norm, ctx, false, true, h1_raw, h1, h2, h2_norm, h3_tanh, h3_gate, h3, ln_inv_std, drop1, logits, probs, mu, logv, q25, q75);
 
       double cls_w = ClassWeight(cls, move_points, cost, sw);
       double mv_w = MoveWeight(move_points, cost, sw);
+      if(from_replay) mv_w *= 0.90;
 
       double pt = FXAI_Clamp(probs[cls], 0.001, 0.999);
       double focal = MathPow(FXAI_Clamp(1.0 - pt, 0.02, 1.0), 1.50);
 
+      double target_dist[FXAI_MLP_CLASSES];
+      BuildTargetDist(cls, move_points, cost, target_dist);
+
       double dlogits[FXAI_MLP_CLASSES];
       for(int c=0; c<FXAI_MLP_CLASSES; c++)
       {
-         double yk = (c == cls ? 1.0 : 0.0);
+         double yk = target_dist[c];
          dlogits[c] = (probs[c] - yk) * cls_w * focal;
       }
 
@@ -649,12 +1290,18 @@ private:
 
       double g_w2[FXAI_MLP_H2][FXAI_MLP_H1];
       double g_b2[FXAI_MLP_H2];
+      double g_w3[FXAI_MLP_H2][FXAI_MLP_H2];
+      double g_w3g[FXAI_MLP_H2][FXAI_MLP_H2];
+      double g_b3[FXAI_MLP_H2];
+      double g_b3g[FXAI_MLP_H2];
 
       double g_w_cls[FXAI_MLP_CLASSES][FXAI_MLP_H2];
       double g_b_cls[FXAI_MLP_CLASSES];
 
       double g_w_mu[FXAI_MLP_H2], g_w_logv[FXAI_MLP_H2], g_w_q25[FXAI_MLP_H2], g_w_q75[FXAI_MLP_H2];
       double g_b_mu = dmu, g_b_logv = dlogv, g_b_q25 = dq25, g_b_q75 = dq75;
+      double g_ctx_w[FXAI_MLP_CTX][FXAI_MLP_CTX];
+      double g_ctx_b[FXAI_MLP_CTX];
 
       for(int h=0; h<FXAI_MLP_H1; h++)
       {
@@ -666,34 +1313,78 @@ private:
       for(int h=0; h<FXAI_MLP_H2; h++)
       {
          g_b2[h] = 0.0;
-         g_w_mu[h] = dmu * h2[h];
-         g_w_logv[h] = dlogv * h2[h];
-         g_w_q25[h] = dq25 * h2[h];
-         g_w_q75[h] = dq75 * h2[h];
+         g_b3[h] = 0.0;
+         g_b3g[h] = 0.0;
+         g_w_mu[h] = dmu * h3[h];
+         g_w_logv[h] = dlogv * h3[h];
+         g_w_q25[h] = dq25 * h3[h];
+         g_w_q75[h] = dq75 * h3[h];
 
          for(int j=0; j<FXAI_MLP_H1; j++) g_w2[h][j] = 0.0;
+         for(int j=0; j<FXAI_MLP_H2; j++)
+         {
+            g_w3[h][j] = 0.0;
+            g_w3g[h][j] = 0.0;
+         }
+      }
+      for(int k=0; k<FXAI_MLP_CTX; k++)
+      {
+         g_ctx_b[k] = 0.0;
+         for(int j=0; j<FXAI_MLP_CTX; j++)
+            g_ctx_w[k][j] = 0.0;
       }
 
       for(int c=0; c<FXAI_MLP_CLASSES; c++)
       {
          g_b_cls[c] = dlogits[c];
          for(int h=0; h<FXAI_MLP_H2; h++)
-            g_w_cls[c][h] = dlogits[c] * h2[h];
+            g_w_cls[c][h] = dlogits[c] * h3[h];
       }
 
-      // Backprop to hidden layer 2.
-      double dh2[FXAI_MLP_H2];
+      double dh3[FXAI_MLP_H2];
       for(int h=0; h<FXAI_MLP_H2; h++)
       {
          double d = dmu * m_w_mu[h] + dlogv * m_w_logv[h] + dq25 * m_w_q25[h] + dq75 * m_w_q75[h];
          for(int c=0; c<FXAI_MLP_CLASSES; c++)
             d += dlogits[c] * m_w_cls[c][h];
-         dh2[h] = d;
+         dh3[h] = d;
       }
+
+      double dh2[FXAI_MLP_H2];
+      double dh2_norm[FXAI_MLP_H2];
+      for(int h=0; h<FXAI_MLP_H2; h++)
+      {
+         dh2[h] = 0.5 * dh3[h];
+         dh2_norm[h] = 0.0;
+      }
+
+      for(int h=0; h<FXAI_MLP_H2; h++)
+      {
+         double dtanh = dh3[h] * h3_gate[h];
+         double dgate = dh3[h] * h3_tanh[h];
+         double dz3 = dtanh * (1.0 - h3_tanh[h] * h3_tanh[h]);
+         double dz3g = dgate * h3_gate[h] * (1.0 - h3_gate[h]);
+
+         g_b3[h] += dz3;
+         g_b3g[h] += dz3g;
+         for(int j=0; j<FXAI_MLP_H2; j++)
+         {
+            g_w3[h][j] += dz3 * h2_norm[j];
+            g_w3g[h][j] += dz3g * h2_norm[j];
+            dh2_norm[j] += dz3 * m_w3[h][j] + dz3g * m_w3g[h][j];
+         }
+      }
+
+      double dln_in[FXAI_MLP_H2];
+      LayerNormBackward(dh2_norm, h2_norm, ln_inv_std, dln_in);
+      for(int h=0; h<FXAI_MLP_H2; h++)
+         dh2[h] += dln_in[h];
 
       double dz2[FXAI_MLP_H2];
       double dh1[FXAI_MLP_H1];
+      double dctx[FXAI_MLP_CTX];
       for(int h=0; h<FXAI_MLP_H1; h++) dh1[h] = 0.0;
+      for(int c=0; c<FXAI_MLP_CTX; c++) dctx[c] = 0.0;
 
       for(int h=0; h<FXAI_MLP_H2; h++)
       {
@@ -714,9 +1405,69 @@ private:
          g_b1[h] += dz1;
 
          for(int i=0; i<FXAI_AI_WEIGHTS; i++)
-            g_w1[h][i] += dz1 * x[i];
+            g_w1[h][i] += dz1 * x_norm[i];
          for(int c=0; c<FXAI_MLP_CTX; c++)
+         {
             g_w1c[h][c] += dz1 * ctx[c];
+            dctx[c] += dz1 * m_w1c[h][c];
+         }
+      }
+
+      for(int k=0; k<FXAI_MLP_CTX; k++)
+      {
+         double dz = dctx[k] * (1.0 - ctx_act[k] * ctx_act[k]);
+         g_ctx_b[k] += dz;
+         for(int j=0; j<FXAI_MLP_CTX; j++)
+            g_ctx_w[k][j] += dz * ctx_raw[j];
+      }
+
+      // Gradient centralization for matrix parameters.
+      for(int h=0; h<FXAI_MLP_H1; h++)
+      {
+         double m1 = 0.0;
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++) m1 += g_w1[h][i];
+         m1 /= (double)FXAI_AI_WEIGHTS;
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++) g_w1[h][i] -= m1;
+
+         double m1c = 0.0;
+         for(int c=0; c<FXAI_MLP_CTX; c++) m1c += g_w1c[h][c];
+         m1c /= (double)FXAI_MLP_CTX;
+         for(int c=0; c<FXAI_MLP_CTX; c++) g_w1c[h][c] -= m1c;
+      }
+      for(int h=0; h<FXAI_MLP_H2; h++)
+      {
+         double m2 = 0.0;
+         for(int j=0; j<FXAI_MLP_H1; j++) m2 += g_w2[h][j];
+         m2 /= (double)FXAI_MLP_H1;
+         for(int j=0; j<FXAI_MLP_H1; j++) g_w2[h][j] -= m2;
+
+         double m3 = 0.0, m3g = 0.0;
+         for(int j=0; j<FXAI_MLP_H2; j++)
+         {
+            m3 += g_w3[h][j];
+            m3g += g_w3g[h][j];
+         }
+         m3 /= (double)FXAI_MLP_H2;
+         m3g /= (double)FXAI_MLP_H2;
+         for(int j=0; j<FXAI_MLP_H2; j++)
+         {
+            g_w3[h][j] -= m3;
+            g_w3g[h][j] -= m3g;
+         }
+      }
+      for(int c=0; c<FXAI_MLP_CLASSES; c++)
+      {
+         double mc = 0.0;
+         for(int h=0; h<FXAI_MLP_H2; h++) mc += g_w_cls[c][h];
+         mc /= (double)FXAI_MLP_H2;
+         for(int h=0; h<FXAI_MLP_H2; h++) g_w_cls[c][h] -= mc;
+      }
+      for(int k=0; k<FXAI_MLP_CTX; k++)
+      {
+         double mctx = 0.0;
+         for(int j=0; j<FXAI_MLP_CTX; j++) mctx += g_ctx_w[k][j];
+         mctx /= (double)FXAI_MLP_CTX;
+         for(int j=0; j<FXAI_MLP_CTX; j++) g_ctx_w[k][j] -= mctx;
       }
 
       // Per-layer clipping.
@@ -729,16 +1480,28 @@ private:
       for(int h=0; h<FXAI_MLP_H2; h++)
       {
          g_b2[h] = FXAI_ClipSym(g_b2[h], 3.5);
+         g_b3[h] = FXAI_ClipSym(g_b3[h], 3.5);
+         g_b3g[h] = FXAI_ClipSym(g_b3g[h], 3.5);
          g_w_mu[h] = FXAI_ClipSym(g_w_mu[h], 4.0);
          g_w_logv[h] = FXAI_ClipSym(g_w_logv[h], 4.0);
          g_w_q25[h] = FXAI_ClipSym(g_w_q25[h], 4.0);
          g_w_q75[h] = FXAI_ClipSym(g_w_q75[h], 4.0);
          for(int j=0; j<FXAI_MLP_H1; j++) g_w2[h][j] = FXAI_ClipSym(g_w2[h][j], 3.5);
+         for(int j=0; j<FXAI_MLP_H2; j++)
+         {
+            g_w3[h][j] = FXAI_ClipSym(g_w3[h][j], 3.5);
+            g_w3g[h][j] = FXAI_ClipSym(g_w3g[h][j], 3.5);
+         }
       }
       for(int c=0; c<FXAI_MLP_CLASSES; c++)
       {
          g_b_cls[c] = FXAI_ClipSym(g_b_cls[c], 4.0);
          for(int h=0; h<FXAI_MLP_H2; h++) g_w_cls[c][h] = FXAI_ClipSym(g_w_cls[c][h], 4.0);
+      }
+      for(int c=0; c<FXAI_MLP_CTX; c++)
+      {
+         g_ctx_b[c] = FXAI_ClipSym(g_ctx_b[c], 2.5);
+         for(int j=0; j<FXAI_MLP_CTX; j++) g_ctx_w[c][j] = FXAI_ClipSym(g_ctx_w[c][j], 2.5);
       }
       g_b_mu = FXAI_ClipSym(g_b_mu, 4.0);
       g_b_logv = FXAI_ClipSym(g_b_logv, 4.0);
@@ -755,13 +1518,24 @@ private:
       }
       for(int h=0; h<FXAI_MLP_H2; h++)
       {
-         g2 += g_b2[h] * g_b2[h] + g_w_mu[h] * g_w_mu[h] + g_w_logv[h] * g_w_logv[h] + g_w_q25[h] * g_w_q25[h] + g_w_q75[h] * g_w_q75[h];
+         g2 += g_b2[h] * g_b2[h] + g_b3[h] * g_b3[h] + g_b3g[h] * g_b3g[h];
+         g2 += g_w_mu[h] * g_w_mu[h] + g_w_logv[h] * g_w_logv[h] + g_w_q25[h] * g_w_q25[h] + g_w_q75[h] * g_w_q75[h];
          for(int j=0; j<FXAI_MLP_H1; j++) g2 += g_w2[h][j] * g_w2[h][j];
+         for(int j=0; j<FXAI_MLP_H2; j++)
+         {
+            g2 += g_w3[h][j] * g_w3[h][j];
+            g2 += g_w3g[h][j] * g_w3g[h][j];
+         }
       }
       for(int c=0; c<FXAI_MLP_CLASSES; c++)
       {
          g2 += g_b_cls[c] * g_b_cls[c];
          for(int h=0; h<FXAI_MLP_H2; h++) g2 += g_w_cls[c][h] * g_w_cls[c][h];
+      }
+      for(int c=0; c<FXAI_MLP_CTX; c++)
+      {
+         g2 += g_ctx_b[c] * g_ctx_b[c];
+         for(int j=0; j<FXAI_MLP_CTX; j++) g2 += g_ctx_w[c][j] * g_ctx_w[c][j];
       }
 
       double gnorm = MathSqrt(g2 + 1e-12);
@@ -780,8 +1554,15 @@ private:
       for(int h=0; h<FXAI_MLP_H2; h++)
       {
          AdamWStep(m_b2[h], m_m_b2[h], m_v_b2[h], gscale * g_b2[h], lr, 0.0);
+         AdamWStep(m_b3[h], m_m_b3[h], m_v_b3[h], gscale * g_b3[h], lr, 0.0);
+         AdamWStep(m_b3g[h], m_m_b3g[h], m_v_b3g[h], gscale * g_b3g[h], lr, 0.0);
          for(int j=0; j<FXAI_MLP_H1; j++)
             AdamWStep(m_w2[h][j], m_m_w2[h][j], m_v_w2[h][j], gscale * g_w2[h][j], lr, wd);
+         for(int j=0; j<FXAI_MLP_H2; j++)
+         {
+            AdamWStep(m_w3[h][j], m_m_w3[h][j], m_v_w3[h][j], gscale * g_w3[h][j], lr, wd);
+            AdamWStep(m_w3g[h][j], m_m_w3g[h][j], m_v_w3g[h][j], gscale * g_w3g[h][j], lr, wd);
+         }
 
          AdamWStep(m_w_mu[h],   m_m_w_mu[h],   m_v_w_mu[h],   gscale * g_w_mu[h],   lr, wd);
          AdamWStep(m_w_logv[h], m_m_w_logv[h], m_v_w_logv[h], gscale * g_w_logv[h], lr, wd);
@@ -801,6 +1582,18 @@ private:
       AdamWStep(m_b_q25,  m_m_b_q25,  m_v_b_q25,  gscale * g_b_q25,  lr, 0.0);
       AdamWStep(m_b_q75,  m_m_b_q75,  m_v_b_q75,  gscale * g_b_q75,  lr, 0.0);
 
+      // Lightweight SGD update for context adapter (small block, no moments).
+      for(int k=0; k<FXAI_MLP_CTX; k++)
+      {
+         m_ctx_b[k] -= 0.35 * lr * gscale * g_ctx_b[k];
+         m_ctx_b[k] = FXAI_ClipSym(m_ctx_b[k], 4.0);
+         for(int j=0; j<FXAI_MLP_CTX; j++)
+         {
+            m_ctx_w[k][j] -= 0.35 * lr * (gscale * g_ctx_w[k][j] + wd * m_ctx_w[k][j]);
+            m_ctx_w[k][j] = FXAI_ClipSym(m_ctx_w[k][j], 4.0);
+         }
+      }
+
       m_b_logv = FXAI_Clamp(m_b_logv, -4.0, 4.0);
       if(m_b_q75 < m_b_q25 + 1e-4) m_b_q75 = m_b_q25 + 1e-4;
 
@@ -810,33 +1603,48 @@ private:
          m_w_logv[h] = FXAI_ClipSym(m_w_logv[h], 6.0);
          m_w_q25[h] = FXAI_ClipSym(m_w_q25[h], 6.0);
          m_w_q75[h] = FXAI_ClipSym(m_w_q75[h], 6.0);
+         m_b3[h] = FXAI_ClipSym(m_b3[h], 4.0);
+         m_b3g[h] = FXAI_ClipSym(m_b3g[h], 4.0);
          for(int c=0; c<FXAI_MLP_CLASSES; c++)
             m_w_cls[c][h] = FXAI_ClipSym(m_w_cls[c][h], 6.0);
+         for(int j=0; j<FXAI_MLP_H2; j++)
+         {
+            m_w3[h][j] = FXAI_ClipSym(m_w3[h][j], 6.0);
+            m_w3g[h][j] = FXAI_ClipSym(m_w3g[h][j], 6.0);
+         }
       }
 
       SyncShadow(false);
+      UpdateSWA();
       if(!m_shadow_ready && m_step >= 64)
          m_shadow_ready = true;
 
-      // Directional calibration updates.
-      double den = probs[(int)FXAI_LABEL_BUY] + probs[(int)FXAI_LABEL_SELL];
-      if(den < 1e-9) den = 1e-9;
-      double p_dir_raw = probs[(int)FXAI_LABEL_BUY] / den;
-      int y_dir = (cls == (int)FXAI_LABEL_BUY ? 1 : 0);
-      if(cls == (int)FXAI_LABEL_SKIP)
-         y_dir = (move_points >= 0.0 ? 1 : 0);
+      double p_raw[FXAI_MLP_CLASSES];
+      for(int c=0; c<FXAI_MLP_CLASSES; c++)
+         p_raw[c] = FXAI_Clamp(probs[c], 0.0005, 0.9990);
+      UpdateCalibrator3(p_raw, cls, cls_w, lr);
 
-      UpdateLocalDirCalib(p_dir_raw, y_dir, cls_w);
-      double p_dir_local = LocalDirCalibrate(p_dir_raw);
-      if(cls == (int)FXAI_LABEL_SKIP)
-         UpdateCalibration(p_dir_local, y_dir, 0.25 * cls_w);
-      else
-         UpdateCalibration(p_dir_local, y_dir, cls_w);
+      double p_cal[FXAI_MLP_CLASSES];
+      Calibrate3(p_raw, p_cal);
+      double sigma = MathSqrt(MathMax(MathExp(logv), 1e-6));
+      double iqr = MathAbs(q75 - q25);
+      double amp = MathMax(0.0, 0.55 * MathAbs(mu) + 0.25 * sigma + 0.20 * iqr);
+      double active = FXAI_Clamp(1.0 - p_cal[(int)FXAI_LABEL_SKIP], 0.0, 1.0);
+      double ev_after_cost = amp * active - MathMax(0.0, cost);
+      UpdateValidationMetrics(cls, p_cal, ev_after_cost);
 
       FXAI_UpdateMoveEMA(m_move_ema_abs, m_move_ready, move_points, 0.05);
       UpdateMoveHead(x, move_points, hp, sw);
 
-      PushHistory(x);
+      if(!from_replay)
+      {
+         datetime t_sample = ResolveContextTime();
+         if(t_sample <= 0) t_sample = TimeCurrent();
+         int sess = SessionBucket(t_sample);
+         PushReplay(cls, x, move_points, cost, sw, t_sample, sess);
+         UpdateNormStats(x);
+         PushHistory(x);
+      }
    }
 
 public:
@@ -853,7 +1661,41 @@ public:
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
-      return BuildNativeFromDirectional(x, hp, class_probs, expected_move_points);
+      double x_norm[FXAI_AI_WEIGHTS];
+      NormalizeInput(x, x_norm);
+
+      double ctx_raw[FXAI_MLP_CTX], ctx_act[FXAI_MLP_CTX], ctx[FXAI_MLP_CTX];
+      BuildTemporalContext(x, ctx_raw);
+      AdaptContext(ctx_raw, ctx, ctx_act);
+
+      double h1_raw[FXAI_MLP_H1], h1[FXAI_MLP_H1], h2[FXAI_MLP_H2], h2_norm[FXAI_MLP_H2];
+      double h3_tanh[FXAI_MLP_H2], h3_gate[FXAI_MLP_H2], h3[FXAI_MLP_H2];
+      double ln_inv_std = 1.0, drop1[FXAI_MLP_H1];
+      double logits[FXAI_MLP_CLASSES], probs[FXAI_MLP_CLASSES];
+      double mu = 0.0, logv = 0.0, q25 = 0.0, q75 = 0.0;
+      Forward(x_norm, ctx, m_shadow_ready, false, h1_raw, h1, h2, h2_norm, h3_tanh, h3_gate, h3, ln_inv_std, drop1, logits, probs, mu, logv, q25, q75);
+
+      double p_raw[FXAI_MLP_CLASSES];
+      for(int c=0; c<FXAI_MLP_CLASSES; c++)
+         p_raw[c] = FXAI_Clamp(probs[c], 0.0005, 0.9990);
+      Calibrate3(p_raw, class_probs);
+
+      double sigma = MathSqrt(MathMax(MathExp(logv), 1e-6));
+      double iqr = MathAbs(q75 - q25);
+      double amp = MathMax(0.0, 0.55 * MathAbs(mu) + 0.25 * sigma + 0.20 * iqr);
+      double active = FXAI_Clamp(1.0 - class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0);
+      double ev = amp * active;
+
+      double base_ev = CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      if(ev > 0.0 && base_ev > 0.0) expected_move_points = 0.65 * ev + 0.35 * base_ev;
+      else if(ev > 0.0) expected_move_points = ev;
+      else expected_move_points = base_ev;
+      if(expected_move_points <= 0.0)
+      {
+         expected_move_points = ResolveMinMovePoints();
+         if(expected_move_points <= 0.0) expected_move_points = 0.10;
+      }
+      return true;
    }
 
 
@@ -865,15 +1707,21 @@ public:
       m_step = 0;
       m_adam_step = 0;
       m_shadow_decay = 0.995;
+      m_symbol_hash = 0.0;
+      m_norm_steps = 0;
+      m_replay_head = 0;
+      m_replay_size = 0;
+      m_swa_ready = false;
+      m_swa_count = 0;
+      m_cal3_steps = 0;
+      m_val_ready = false;
+      m_val_steps = 0;
+      m_quality_degraded = false;
 
       ResetHistory();
 
       for(int c=0; c<FXAI_MLP_CLASSES; c++)
          m_class_ema[c] = 1.0;
-
-      m_dir_scale = 1.0;
-      m_dir_bias = 0.0;
-      m_dir_temp = 1.0;
 
       for(int h=0; h<FXAI_MLP_H1; h++)
       {
@@ -888,23 +1736,46 @@ public:
          {
             m_w1c[h][c] = 0.0;
             m_sw1c[h][c] = 0.0;
+            m_swa_w1c[h][c] = 0.0;
          }
+         m_swa_b1[h] = 0.0;
       }
 
       for(int h=0; h<FXAI_MLP_H2; h++)
       {
          m_b2[h] = 0.0;
          m_sb2[h] = 0.0;
+         m_b3[h] = 0.0;
+         m_sb3[h] = 0.0;
+         m_b3g[h] = 0.0;
+         m_sb3g[h] = 0.0;
+         m_swa_b2[h] = 0.0;
+         m_swa_b3[h] = 0.0;
+         m_swa_b3g[h] = 0.0;
 
          m_w_mu[h] = 0.0; m_sw_mu[h] = 0.0;
          m_w_logv[h] = 0.0; m_sw_logv[h] = 0.0;
          m_w_q25[h] = 0.0; m_sw_q25[h] = 0.0;
          m_w_q75[h] = 0.0; m_sw_q75[h] = 0.0;
+         m_swa_w_mu[h] = 0.0;
+         m_swa_w_logv[h] = 0.0;
+         m_swa_w_q25[h] = 0.0;
+         m_swa_w_q75[h] = 0.0;
 
          for(int j=0; j<FXAI_MLP_H1; j++)
          {
             m_w2[h][j] = 0.0;
             m_sw2[h][j] = 0.0;
+            m_swa_w2[h][j] = 0.0;
+         }
+         for(int j=0; j<FXAI_MLP_H2; j++)
+         {
+            m_w3[h][j] = 0.0;
+            m_sw3[h][j] = 0.0;
+            m_swa_w3[h][j] = 0.0;
+            m_w3g[h][j] = 0.0;
+            m_sw3g[h][j] = 0.0;
+            m_swa_w3g[h][j] = 0.0;
          }
       }
 
@@ -912,10 +1783,12 @@ public:
       {
          m_b_cls[c] = 0.0;
          m_sb_cls[c] = 0.0;
+         m_swa_b_cls[c] = 0.0;
          for(int h=0; h<FXAI_MLP_H2; h++)
          {
             m_w_cls[c][h] = 0.0;
             m_sw_cls[c][h] = 0.0;
+            m_swa_w_cls[c][h] = 0.0;
          }
       }
 
@@ -923,6 +1796,59 @@ public:
       m_b_logv = 0.0; m_sb_logv = 0.0;
       m_b_q25 = 0.0; m_sb_q25 = 0.0;
       m_b_q75 = 0.0; m_sb_q75 = 0.0;
+      m_swa_b_mu = 0.0;
+      m_swa_b_logv = 0.0;
+      m_swa_b_q25 = 0.0;
+      m_swa_b_q75 = 0.0;
+
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         m_norm_mean[i] = 0.0;
+         m_norm_var[i] = 1.0;
+         m_norm_median[i] = 0.0;
+         m_norm_iqr[i] = 1.0;
+         m_norm_gain[i] = 1.0;
+         m_norm_bias[i] = 0.0;
+      }
+      for(int c=0; c<FXAI_MLP_CTX; c++)
+      {
+         m_ctx_b[c] = 0.0;
+         for(int j=0; j<FXAI_MLP_CTX; j++)
+            m_ctx_w[c][j] = (c == j ? 1.0 : 0.0);
+      }
+      for(int c=0; c<FXAI_MLP_CLASSES; c++)
+      {
+         m_cal_vs_b[c] = 0.0;
+         for(int j=0; j<FXAI_MLP_CLASSES; j++)
+            m_cal_vs_w[c][j] = (c == j ? 1.0 : 0.0);
+         for(int b=0; b<FXAI_MLP_CAL_BINS; b++)
+         {
+            m_cal_iso_pos[c][b] = 0.0;
+            m_cal_iso_cnt[c][b] = 0.0;
+         }
+      }
+      for(int b=0; b<FXAI_MLP_ECE_BINS; b++)
+      {
+         m_ece_mass[b] = 0.0;
+         m_ece_acc[b] = 0.0;
+         m_ece_conf[b] = 0.0;
+      }
+      m_val_nll_fast = m_val_nll_slow = 0.0;
+      m_val_brier_fast = m_val_brier_slow = 0.0;
+      m_val_ece_fast = m_val_ece_slow = 0.0;
+      m_val_ev_fast = m_val_ev_slow = 0.0;
+
+      for(int r=0; r<FXAI_MLP_REPLAY; r++)
+      {
+         m_replay_y[r] = (int)FXAI_LABEL_SKIP;
+         m_replay_move[r] = 0.0;
+         m_replay_cost[r] = 0.0;
+         m_replay_w[r] = 1.0;
+         m_replay_time[r] = 0;
+         m_replay_session[r] = -1;
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+            m_replay_x[r][i] = 0.0;
+      }
 
       InitMoments();
    }
@@ -948,55 +1874,52 @@ public:
    {
       FXAIAIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
       double w = MoveSampleWeight(x, move_points);
-      UpdateWeighted(y, x, h, w, move_points);
+      datetime cur_t = ResolveContextTime();
+      if(cur_t <= 0) cur_t = TimeCurrent();
+      double cur_cost = ResolveCostPoints(x);
+      double cur_min = ResolveMinMovePoints();
+      int cur_sess = SessionBucket(cur_t);
+
+      UpdateWeighted(y, x, h, w, move_points, false);
+
+      int replay_n = 0;
+      if(m_replay_size >= 96) replay_n = 3;
+      else if(m_replay_size >= 32) replay_n = 2;
+      else if(m_replay_size >= 12) replay_n = 1;
+
+      for(int r=0; r<replay_n; r++)
+      {
+         if(m_replay_size <= 0) break;
+         int li = MathRand() % m_replay_size;
+         int p = ReplayPos(li);
+         double rw = FXAI_Clamp(m_replay_w[p], 0.20, 4.00);
+         rw *= ReplayAgeWeight(m_replay_time[p], cur_t);
+         if(m_replay_session[p] >= 0 && m_replay_session[p] != cur_sess) rw *= 0.85;
+         SetContext(m_replay_time[p], m_replay_cost[p], cur_min);
+         UpdateWeighted(m_replay_y[p], m_replay_x[p], h, rw, m_replay_move[p], true);
+      }
+
+      SetContext(cur_t, cur_cost, cur_min);
    }
 
    virtual double PredictProb(const double &x[],
                               const FXAIAIHyperParams &hp)
    {
-      EnsureInitialized(hp);
-
-      double ctx[FXAI_MLP_CTX];
-      BuildTemporalContext(x, ctx);
-
-      double h1_raw[FXAI_MLP_H1], h1[FXAI_MLP_H1], h2[FXAI_MLP_H2], drop1[FXAI_MLP_H1];
-      double logits[FXAI_MLP_CLASSES], probs[FXAI_MLP_CLASSES];
-      double mu = 0.0, logv = 0.0, q25 = 0.0, q75 = 0.0;
-      Forward(x, ctx, m_shadow_ready, false, h1_raw, h1, h2, drop1, logits, probs, mu, logv, q25, q75);
-
-      double den = probs[(int)FXAI_LABEL_BUY] + probs[(int)FXAI_LABEL_SELL];
-      if(den < 1e-9) den = 1e-9;
-      double p_dir_raw = probs[(int)FXAI_LABEL_BUY] / den;
-      double p_dir_local = LocalDirCalibrate(p_dir_raw);
-      double p_dir_cal = CalibrateProb(p_dir_local);
-
-      double p_up = p_dir_cal * FXAI_Clamp(1.0 - probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0);
-      return FXAI_Clamp(p_up, 0.001, 0.999);
+      double cp[FXAI_MLP_CLASSES];
+      double em = 0.0;
+      PredictNativeClassProbs(x, hp, cp, em);
+      double den = cp[(int)FXAI_LABEL_BUY] + cp[(int)FXAI_LABEL_SELL];
+      if(den <= 1e-9) return 0.5;
+      return FXAI_Clamp(cp[(int)FXAI_LABEL_BUY] / den, 0.001, 0.999);
    }
 
    virtual double PredictExpectedMovePoints(const double &x[],
                                             const FXAIAIHyperParams &hp)
    {
-      EnsureInitialized(hp);
-
-      double ctx[FXAI_MLP_CTX];
-      BuildTemporalContext(x, ctx);
-
-      double h1_raw[FXAI_MLP_H1], h1[FXAI_MLP_H1], h2[FXAI_MLP_H2], drop1[FXAI_MLP_H1];
-      double logits[FXAI_MLP_CLASSES], probs[FXAI_MLP_CLASSES];
-      double mu = 0.0, logv = 0.0, q25 = 0.0, q75 = 0.0;
-      Forward(x, ctx, m_shadow_ready, false, h1_raw, h1, h2, drop1, logits, probs, mu, logv, q25, q75);
-
-      double sigma = MathSqrt(MathMax(MathExp(logv), 1e-6));
-      double iqr = MathAbs(q75 - q25);
-      double amp = MathMax(0.0, 0.55 * MathAbs(mu) + 0.25 * sigma + 0.20 * iqr);
-      double active = FXAI_Clamp(1.0 - probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0);
-      double ev = amp * active;
-
-      double base_ev = CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
-      if(ev > 0.0 && base_ev > 0.0) return 0.65 * ev + 0.35 * base_ev;
-      if(ev > 0.0) return ev;
-      return base_ev;
+      double cp[FXAI_MLP_CLASSES];
+      double em = 0.0;
+      PredictNativeClassProbs(x, hp, cp, em);
+      return em;
    }
 };
 
