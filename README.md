@@ -2,6 +2,26 @@
 
 FXAI is the most advanced, professional, and state-of-the-art AI framework for MetaTrader 5, engineered for serious FX research and deployment. It combines institutional-grade multi-model architecture, online learning, strict risk controls, and high-speed backtesting workflows in one unified MT5-native system. Built with zero external libraries or DLLs, FXAI runs entirely on highly optimized, pure MQL5 CPU code. Fully compatible with backtesting on the MQL5 Cloud Network, it enables massive parallel speedups and much faster optimization results.
 
+## Table of Contents
+
+- [What It Is](#what-it-is)
+- [Core Benefits](#core-benefits)
+- [Project Structure](#project-structure)
+- [Typical Workflow](#typical-workflow)
+- [AI Models (A-Z)](#ai-models-a-z)
+- [Feature Set (A-Z)](#feature-set-a-z)
+- [Price Structure and Return Dynamics](#price-structure-and-return-dynamics)
+- [Trend and Multi-Timeframe Structure](#trend-and-multi-timeframe-structure)
+- [Volatility and Range Regime](#volatility-and-range-regime)
+- [Cross-Symbol Market Context](#cross-symbol-market-context)
+- [Time and Execution Friction Context](#time-and-execution-friction-context)
+- [Normalization Techniques](#normalization-techniques)
+- [Market-Structure and Volatility-Aware Scaling](#market-structure-and-volatility-aware-scaling)
+- [Statistical Distribution and Robust Shape Transforms](#statistical-distribution-and-robust-shape-transforms)
+- [Relative Change and Directional Encodings](#relative-change-and-directional-encodings)
+- [Adaptive Window/Instance Normalization for Deep Models](#adaptive-windowinstance-normalization-for-deep-models)
+- [Notes](#notes)
+
 ## What It Is
 
 FXAI is an MT5 Expert Advisor project that combines:
