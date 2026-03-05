@@ -8,20 +8,23 @@
 // Design: tokenized multivariate context -> encoder stack -> memory retrieval
 // -> 3-class probabilities + move-distribution heads (mu/logvar/q25/q75).
 #define FXAI_CHR_CLASS_COUNT 3
-#define FXAI_CHR_SEQ 96
+#define FXAI_CHR_SEQ 128
 #define FXAI_CHR_PATCH_LEN 8
 #define FXAI_CHR_STRIDE 4
-#define FXAI_CHR_MAX_PATCHES 24
-#define FXAI_CHR_LAYERS 2
-#define FXAI_CHR_HEADS 2
-#define FXAI_CHR_D_MODEL FXAI_AI_MLP_HIDDEN
+#define FXAI_CHR_MAX_PATCHES 32
+#define FXAI_CHR_LAYERS 4
+#define FXAI_CHR_HEADS 4
+#define FXAI_CHR_D_MODEL 32
 #define FXAI_CHR_D_HEAD (FXAI_CHR_D_MODEL / FXAI_CHR_HEADS)
-#define FXAI_CHR_D_FF 16
-#define FXAI_CHR_CAL_BINS 12
-#define FXAI_CHR_VALUE_BINS 16
-#define FXAI_CHR_CODEBOOK 64
-#define FXAI_CHR_MEMORY 16
-#define FXAI_CHR_HORIZONS 3
+#define FXAI_CHR_D_FF 128
+#define FXAI_CHR_CAL_BINS 16
+#define FXAI_CHR_VALUE_BINS 32
+#define FXAI_CHR_CODEBOOK 128
+#define FXAI_CHR_MEMORY 32
+#define FXAI_CHR_HORIZONS 4
+#define FXAI_CHR_QUANTILES 7
+#define FXAI_CHR_REPLAY 256
+#define FXAI_CHR_ECE_BINS 12
 
 class CFXAIAIChronos : public CFXAIAIPlugin
 {
@@ -88,10 +91,8 @@ private:
    double m_b_mu;
    double m_w_logv[FXAI_CHR_D_MODEL];
    double m_b_logv;
-   double m_w_q25[FXAI_CHR_D_MODEL];
-   double m_b_q25;
-   double m_w_q75[FXAI_CHR_D_MODEL];
-   double m_b_q75;
+   double m_w_q[FXAI_CHR_QUANTILES][FXAI_CHR_D_MODEL];
+   double m_b_q[FXAI_CHR_QUANTILES];
    double m_w_mu_h[FXAI_CHR_HORIZONS][FXAI_CHR_D_MODEL];
    double m_b_mu_h[FXAI_CHR_HORIZONS];
 
@@ -108,22 +109,232 @@ private:
    double m_w_mem_gate[FXAI_CHR_D_MODEL];
    double m_b_mem_gate;
 
-   // Native 3-class calibration.
-   double m_cal_temp;
-   double m_cal_bias[FXAI_CHR_CLASS_COUNT];
+   // Native 3-class calibration (vector scaling + session/regime context).
+   double m_cal_vs_w[FXAI_CHR_CLASS_COUNT][FXAI_CHR_CLASS_COUNT];
+   double m_cal_vs_b[FXAI_CHR_CLASS_COUNT];
+   double m_cal_session_b[4][FXAI_CHR_CLASS_COUNT];
+   double m_cal_regime_b[2][FXAI_CHR_CLASS_COUNT];
    double m_cal_iso_pos[FXAI_CHR_CLASS_COUNT][FXAI_CHR_CAL_BINS];
    double m_cal_iso_cnt[FXAI_CHR_CLASS_COUNT][FXAI_CHR_CAL_BINS];
    int    m_cal3_steps;
 
+   // Stability: replay + teacher distillation.
+   int    m_replay_head;
+   int    m_replay_size;
+   int    m_replay_pos[FXAI_CHR_REPLAY];
+   double m_replay_x[FXAI_CHR_REPLAY][FXAI_AI_WEIGHTS];
+   int    m_replay_cls[FXAI_CHR_REPLAY];
+   double m_replay_move[FXAI_CHR_REPLAY];
+   double m_replay_cost[FXAI_CHR_REPLAY];
+   double m_replay_w[FXAI_CHR_REPLAY];
+   datetime m_replay_time[FXAI_CHR_REPLAY];
+
+   double m_t_w_cls[FXAI_CHR_CLASS_COUNT][FXAI_CHR_D_MODEL];
+   double m_t_b_cls[FXAI_CHR_CLASS_COUNT];
+
    // Lightweight adaptive optimizer moments.
-   double m_opt_m[8];
-   double m_opt_v[8];
+   double m_opt_m[16];
+   double m_opt_v[16];
+
+   // Training caches for token-level transformer backprop.
+   int    m_cache_token_count;
+   int    m_cache_token_target;
+   double m_cache_x0[FXAI_CHR_MAX_PATCHES][FXAI_CHR_D_MODEL];
+   double m_cache_layer_in[FXAI_CHR_LAYERS][FXAI_CHR_MAX_PATCHES][FXAI_CHR_D_MODEL];
+   double m_cache_q[FXAI_CHR_LAYERS][FXAI_CHR_HEADS][FXAI_CHR_MAX_PATCHES][FXAI_CHR_D_HEAD];
+   double m_cache_k[FXAI_CHR_LAYERS][FXAI_CHR_HEADS][FXAI_CHR_MAX_PATCHES][FXAI_CHR_D_HEAD];
+   double m_cache_v[FXAI_CHR_LAYERS][FXAI_CHR_HEADS][FXAI_CHR_MAX_PATCHES][FXAI_CHR_D_HEAD];
+   double m_cache_att[FXAI_CHR_LAYERS][FXAI_CHR_HEADS][FXAI_CHR_MAX_PATCHES][FXAI_CHR_MAX_PATCHES];
+   double m_cache_ctx[FXAI_CHR_LAYERS][FXAI_CHR_HEADS][FXAI_CHR_MAX_PATCHES][FXAI_CHR_D_HEAD];
+   double m_cache_u[FXAI_CHR_LAYERS][FXAI_CHR_MAX_PATCHES][FXAI_CHR_D_MODEL];
+   double m_cache_ff1[FXAI_CHR_LAYERS][FXAI_CHR_MAX_PATCHES][FXAI_CHR_D_FF];
+   double m_cache_x_out[FXAI_CHR_MAX_PATCHES][FXAI_CHR_D_MODEL];
+   double m_cache_patch_stat[FXAI_AI_FEATURES][FXAI_CHR_PATCH_LEN];
+   int    m_cache_patch_start[FXAI_CHR_MAX_PATCHES];
+   double m_cache_patch_code[FXAI_CHR_MAX_PATCHES][FXAI_CHR_D_MODEL];
+   double m_cache_patch_z[FXAI_CHR_MAX_PATCHES][FXAI_CHR_D_MODEL];
+
+   // Validation gate metrics for reference-quality readiness.
+   bool   m_val_ready;
+   int    m_val_steps;
+   double m_val_nll_fast;
+   double m_val_nll_slow;
+   double m_val_brier_fast;
+   double m_val_brier_slow;
+   double m_val_ece_fast;
+   double m_val_ece_slow;
+   double m_val_ev_after_cost_fast;
+   double m_val_ev_after_cost_slow;
+   double m_ece_mass[FXAI_CHR_ECE_BINS];
+   double m_ece_acc[FXAI_CHR_ECE_BINS];
+   double m_ece_conf[FXAI_CHR_ECE_BINS];
+   bool   m_reference_ready;
 
    int ClampI(const int v, const int lo, const int hi) const
    {
       if(v < lo) return lo;
       if(v > hi) return hi;
       return v;
+   }
+
+   double QuantileLevel(const int qi) const
+   {
+      static const double qv[FXAI_CHR_QUANTILES] = {0.05, 0.15, 0.30, 0.50, 0.70, 0.85, 0.95};
+      int q = ClampI(qi, 0, FXAI_CHR_QUANTILES - 1);
+      return qv[q];
+   }
+
+   int SessionBucket(const datetime t) const
+   {
+      MqlDateTime dt;
+      TimeToStruct(t, dt);
+      int h = dt.hour;
+      if(h < 8) return 0;
+      if(h < 13) return 1;
+      if(h < 20) return 2;
+      return 3;
+   }
+
+   int RegimeBucket(void) const
+   {
+      if(!m_move_ready) return 0;
+      return (m_move_ema_abs > 5.0 ? 1 : 0);
+   }
+
+   void BuildCalLogits(const double &p_raw[], const int sess, const int reg, double &logits[]) const
+   {
+      double lraw[FXAI_CHR_CLASS_COUNT];
+      for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
+         lraw[c] = MathLog(FXAI_Clamp(p_raw[c], 0.0005, 0.9990));
+
+      for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
+      {
+         double z = m_cal_vs_b[c] + m_cal_session_b[sess][c] + m_cal_regime_b[reg][c];
+         for(int j=0; j<FXAI_CHR_CLASS_COUNT; j++)
+            z += m_cal_vs_w[c][j] * lraw[j];
+         logits[c] = z;
+      }
+   }
+
+   void ReplayPush(const int cls,
+                   const double &x[],
+                   const double move_points,
+                   const double cost_points,
+                   const double sample_w)
+   {
+      int p = m_replay_head;
+      m_replay_pos[p] = (m_seq_ptr >= 0 ? m_seq_ptr : 0);
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++) m_replay_x[p][k] = x[k];
+      m_replay_cls[p] = cls;
+      m_replay_move[p] = move_points;
+      m_replay_cost[p] = cost_points;
+      m_replay_w[p] = sample_w;
+      m_replay_time[p] = ResolveContextTime();
+      m_replay_head++;
+      if(m_replay_head >= FXAI_CHR_REPLAY) m_replay_head = 0;
+      if(m_replay_size < FXAI_CHR_REPLAY) m_replay_size++;
+   }
+
+   int ReplaySampleSlot(void) const
+   {
+      if(m_replay_size <= 0) return -1;
+      double u = FXAI_Clamp((double)MathRand() / 32767.0, 0.0, 1.0);
+      int age = (int)MathFloor(u * (double)m_replay_size);
+      if(age < 0) age = 0;
+      if(age >= m_replay_size) age = m_replay_size - 1;
+
+      int slot = m_replay_head - 1 - age;
+      while(slot < 0) slot += FXAI_CHR_REPLAY;
+      while(slot >= FXAI_CHR_REPLAY) slot -= FXAI_CHR_REPLAY;
+      return slot;
+   }
+
+   void UpdateTeacherHeads(void)
+   {
+      const double a = 0.995;
+      for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
+      {
+         m_t_b_cls[c] = a * m_t_b_cls[c] + (1.0 - a) * m_b_cls[c];
+         for(int d=0; d<FXAI_CHR_D_MODEL; d++)
+            m_t_w_cls[c][d] = a * m_t_w_cls[c][d] + (1.0 - a) * m_w_cls[c][d];
+      }
+   }
+
+   void UpdateValidationMetrics(const int cls,
+                                const double &p_cal[],
+                                const double expected_move_points,
+                                const double cost_points)
+   {
+      int y = ClampI(cls, 0, FXAI_CHR_CLASS_COUNT - 1);
+      double ce = -MathLog(FXAI_Clamp(p_cal[y], 1e-6, 1.0));
+      double brier = 0.0;
+      for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
+      {
+         double t = (c == y ? 1.0 : 0.0);
+         double d = p_cal[c] - t;
+         brier += d * d;
+      }
+      brier /= 3.0;
+
+      double conf = p_cal[0];
+      int pred = 0;
+      for(int c=1; c<FXAI_CHR_CLASS_COUNT; c++)
+      {
+         if(p_cal[c] > conf) { conf = p_cal[c]; pred = c; }
+      }
+      double acc = (pred == y ? 1.0 : 0.0);
+      int bi = (int)MathFloor(conf * (double)FXAI_CHR_ECE_BINS);
+      if(bi < 0) bi = 0;
+      if(bi >= FXAI_CHR_ECE_BINS) bi = FXAI_CHR_ECE_BINS - 1;
+      for(int b=0; b<FXAI_CHR_ECE_BINS; b++)
+      {
+         m_ece_mass[b] *= 0.997;
+         m_ece_acc[b] *= 0.997;
+         m_ece_conf[b] *= 0.997;
+      }
+      m_ece_mass[bi] += 1.0;
+      m_ece_acc[bi] += acc;
+      m_ece_conf[bi] += conf;
+      double ece_num = 0.0, ece_den = 0.0;
+      for(int b=0; b<FXAI_CHR_ECE_BINS; b++)
+      {
+         if(m_ece_mass[b] <= 1e-9) continue;
+         double ba = m_ece_acc[b] / m_ece_mass[b];
+         double bc = m_ece_conf[b] / m_ece_mass[b];
+         ece_num += m_ece_mass[b] * MathAbs(ba - bc);
+         ece_den += m_ece_mass[b];
+      }
+      double ece = (ece_den > 0.0 ? ece_num / ece_den : 0.0);
+
+      double ev_after_cost = expected_move_points - MathMax(cost_points, 0.0);
+      if(!m_val_ready)
+      {
+         m_val_nll_fast = m_val_nll_slow = ce;
+         m_val_brier_fast = m_val_brier_slow = brier;
+         m_val_ece_fast = m_val_ece_slow = ece;
+         m_val_ev_after_cost_fast = m_val_ev_after_cost_slow = ev_after_cost;
+         m_val_ready = true;
+      }
+      else
+      {
+         m_val_nll_fast = 0.92 * m_val_nll_fast + 0.08 * ce;
+         m_val_nll_slow = 0.995 * m_val_nll_slow + 0.005 * ce;
+         m_val_brier_fast = 0.92 * m_val_brier_fast + 0.08 * brier;
+         m_val_brier_slow = 0.995 * m_val_brier_slow + 0.005 * brier;
+         m_val_ece_fast = 0.92 * m_val_ece_fast + 0.08 * ece;
+         m_val_ece_slow = 0.995 * m_val_ece_slow + 0.005 * ece;
+         m_val_ev_after_cost_fast = 0.92 * m_val_ev_after_cost_fast + 0.08 * ev_after_cost;
+         m_val_ev_after_cost_slow = 0.995 * m_val_ev_after_cost_slow + 0.005 * ev_after_cost;
+      }
+      m_val_steps++;
+
+      m_reference_ready =
+         (m_val_steps >= 256 &&
+          m_val_nll_fast <= 0.95 &&
+          m_val_brier_fast <= 0.22 &&
+          m_val_ece_fast <= 0.12 &&
+          m_val_ev_after_cost_fast > 0.0 &&
+          m_val_nll_fast <= 1.25 * MathMax(0.10, m_val_nll_slow));
    }
 
    datetime CurrentM1BarOpenTime(void) const
@@ -221,7 +432,7 @@ private:
                       const double grad_mag,
                       const double base_lr)
    {
-      int g = ClampI(group_idx, 0, 7);
+      int g = ClampI(group_idx, 0, 15);
       const double b1 = 0.90;
       const double b2 = 0.999;
       const double eps = 1e-8;
@@ -327,6 +538,26 @@ private:
       int f = ClampI(feature, 0, FXAI_AI_FEATURES - 1);
       int b = ClampI(bin, 0, FXAI_CHR_VALUE_BINS - 1);
       int idx = (f * FXAI_CHR_VALUE_BINS + b) % FXAI_CHR_CODEBOOK;
+      return idx;
+   }
+
+   int BuildFutureTokenTarget(const double &xn[],
+                              const int label_cls,
+                              const double move_points) const
+   {
+      int level = QuantizeFeatureValue(0, xn[1]);
+      double mv = FXAI_Clamp(move_points, -40.0, 40.0);
+      double mvu = (mv + 40.0) / 80.0;
+      int delta = (int)MathFloor(mvu * (double)FXAI_CHR_VALUE_BINS);
+      if(delta < 0) delta = 0;
+      if(delta >= FXAI_CHR_VALUE_BINS) delta = FXAI_CHR_VALUE_BINS - 1;
+
+      double vol_src = MathAbs(xn[4]) + 0.5 * MathAbs(xn[5]);
+      int vol = QuantizeFeatureValue(3, vol_src);
+      int reg = ClampI(label_cls, 0, FXAI_CHR_CLASS_COUNT - 1);
+
+      int idx = (((level * FXAI_CHR_VALUE_BINS + delta) * FXAI_CHR_VALUE_BINS + vol) * FXAI_CHR_CLASS_COUNT + reg) % FXAI_CHR_CODEBOOK;
+      if(idx < 0) idx += FXAI_CHR_CODEBOOK;
       return idx;
    }
 
@@ -460,7 +691,8 @@ private:
 
    void BuildTemporalMatrix(const double &xn[],
                             double &seq_out[][FXAI_AI_FEATURES],
-                            int &out_len) const
+                            int &out_len,
+                            const bool include_current) const
    {
       out_len = 0;
       if(m_seq_len > 0 && m_seq_ptr >= 0)
@@ -478,14 +710,11 @@ private:
          }
       }
 
-      // Append current normalized observation for prediction/training step.
-      if(out_len < FXAI_CHR_SEQ)
-      {
-         for(int f=0; f<FXAI_AI_FEATURES; f++)
-            seq_out[out_len][f] = xn[f + 1];
-         out_len++;
-      }
-      else
+      if(!include_current)
+         return;
+
+      // Append current normalized observation for prediction step.
+      if(out_len >= FXAI_CHR_SEQ)
       {
          // Overwrite the newest slot if full.
          for(int i=0; i<FXAI_CHR_SEQ - 1; i++)
@@ -496,7 +725,12 @@ private:
          for(int f=0; f<FXAI_AI_FEATURES; f++)
             seq_out[FXAI_CHR_SEQ - 1][f] = xn[f + 1];
          out_len = FXAI_CHR_SEQ;
+         return;
       }
+
+      for(int f=0; f<FXAI_AI_FEATURES; f++)
+         seq_out[out_len][f] = xn[f + 1];
+      out_len++;
    }
 
    void BuildPatchTokens(const double &seq_mat[][FXAI_AI_FEATURES],
@@ -590,6 +824,8 @@ private:
                        const double &in_tokens[][FXAI_CHR_D_MODEL],
                        const int n_tokens,
                        double &out_tokens[][FXAI_CHR_D_MODEL],
+                       const bool causal_mask,
+                       const bool store_cache,
                        double &mean_in[],
                        double &mean_ctx[],
                        double &mean_ff[])
@@ -618,7 +854,10 @@ private:
       for(int i=0; i<n_tokens; i++)
       {
          for(int d=0; d<FXAI_CHR_D_MODEL; d++)
+         {
             mean_in[d] += in_tokens[i][d] * inv_tok;
+            if(store_cache) m_cache_layer_in[layer][i][d] = in_tokens[i][d];
+         }
       }
 
       // Precompute K,V once per head/token (critical for Strategy Tester speed).
@@ -641,6 +880,11 @@ private:
                }
                K[h][t][d]  = ks;
                Vh[h][t][d] = vs;
+               if(store_cache)
+               {
+                  m_cache_k[layer][h][t][d] = ks;
+                  m_cache_v[layer][h][t][d] = vs;
+               }
             }
          }
       }
@@ -662,11 +906,14 @@ private:
                for(int j=0; j<FXAI_CHR_D_MODEL; j++)
                   s += m_wq[layer][h][d][j] * in_tokens[i][j];
                q[d] = s;
+               if(store_cache) m_cache_q[layer][h][i][d] = s;
             }
 
             // Scores against cached keys.
             double mx = -1e100;
-            for(int t=0; t<n_tokens; t++)
+            int tmax = (causal_mask ? i : (n_tokens - 1));
+            if(tmax < 0) tmax = 0;
+            for(int t=0; t<=tmax; t++)
             {
                double sc = 0.0;
                for(int d=0; d<FXAI_CHR_D_HEAD; d++)
@@ -676,7 +923,7 @@ private:
             }
 
             double den = 0.0;
-            for(int t=0; t<n_tokens; t++)
+            for(int t=0; t<=tmax; t++)
             {
                score[t] = MathExp(FXAI_Clamp(score[t] - mx, -30.0, 30.0));
                den += score[t];
@@ -687,11 +934,23 @@ private:
                ctx_head[h][d] = 0.0;
 
             // Context using cached values.
-            for(int t=0; t<n_tokens; t++)
+            for(int t=0; t<=tmax; t++)
             {
                double a = score[t] / den;
+               if(store_cache) m_cache_att[layer][h][i][t] = a;
                for(int d=0; d<FXAI_CHR_D_HEAD; d++)
+               {
                   ctx_head[h][d] += a * Vh[h][t][d];
+               }
+            }
+            if(store_cache)
+            {
+               for(int t=tmax+1; t<n_tokens; t++)
+                  m_cache_att[layer][h][i][t] = 0.0;
+            }
+            for(int d=0; d<FXAI_CHR_D_HEAD; d++)
+            {
+               if(store_cache) m_cache_ctx[layer][h][i][d] = ctx_head[h][d];
             }
          }
 
@@ -714,6 +973,8 @@ private:
          for(int d=0; d<FXAI_CHR_D_MODEL; d++)
             u[d] = in_tokens[i][d] + att[d];
          LayerNormAffine(u, ln1g, ln1b);
+         if(store_cache)
+            for(int d=0; d<FXAI_CHR_D_MODEL; d++) m_cache_u[layer][i][d] = u[d];
 
          double ff1[FXAI_CHR_D_FF];
          for(int r=0; r<FXAI_CHR_D_FF; r++)
@@ -723,6 +984,7 @@ private:
                z += m_wff1[layer][r][d] * u[d];
             ff1[r] = GELU(z);
             mean_ff[r] += ff1[r] * inv_tok;
+            if(store_cache) m_cache_ff1[layer][i][r] = ff1[r];
          }
 
          double v2[FXAI_CHR_D_MODEL];
@@ -739,6 +1001,8 @@ private:
          {
             out_tokens[i][d] = v2[d];
             mean_ctx[d] += att[d] * inv_tok;
+            if(store_cache && layer == FXAI_CHR_LAYERS - 1)
+               m_cache_x_out[i][d] = v2[d];
          }
       }
    }
@@ -775,6 +1039,7 @@ private:
                      double &logv,
                      double &q25,
                      double &q75,
+                     double &q_all[],
                      double &mu_h[]) const
    {
       for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
@@ -788,14 +1053,18 @@ private:
 
       mu = m_b_mu;
       logv = m_b_logv;
-      q25 = m_b_q25;
-      q75 = m_b_q75;
       for(int d=0; d<FXAI_CHR_D_MODEL; d++)
       {
          mu += m_w_mu[d] * rep[d];
          logv += m_w_logv[d] * rep[d];
-         q25 += m_w_q25[d] * rep[d];
-         q75 += m_w_q75[d] * rep[d];
+      }
+
+      for(int q=0; q<FXAI_CHR_QUANTILES; q++)
+      {
+         double z = m_b_q[q];
+         for(int d=0; d<FXAI_CHR_D_MODEL; d++)
+            z += m_w_q[q][d] * rep[d];
+         q_all[q] = z;
       }
 
       for(int h=0; h<FXAI_CHR_HORIZONS; h++)
@@ -807,6 +1076,13 @@ private:
       }
 
       logv = FXAI_Clamp(logv, -4.0, 4.0);
+      // Enforce monotonic quantiles in output path.
+      for(int q=1; q<FXAI_CHR_QUANTILES; q++)
+      {
+         if(q_all[q] < q_all[q - 1]) q_all[q] = q_all[q - 1];
+      }
+      q25 = q_all[2];
+      q75 = q_all[4];
       if(q25 > q75)
       {
          double t = q25;
@@ -818,13 +1094,10 @@ private:
    void Calibrate3(const double &p_raw[],
                    double &p_cal[]) const
    {
-      double inv_temp = 1.0 / FXAI_Clamp(m_cal_temp, 0.50, 3.00);
+      int sess = SessionBucket(ResolveContextTime());
+      int reg = RegimeBucket();
       double logits[FXAI_CHR_CLASS_COUNT];
-      for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
-      {
-         double pr = FXAI_Clamp(p_raw[c], 0.0005, 0.9990);
-         logits[c] = (MathLog(pr) * inv_temp) + m_cal_bias[c];
-      }
+      BuildCalLogits(p_raw, sess, reg, logits);
       Softmax3(logits, p_cal);
 
       if(m_cal3_steps < 30) return;
@@ -874,28 +1147,35 @@ private:
                           const double sample_w,
                           const double lr)
    {
-      double inv_temp = 1.0 / FXAI_Clamp(m_cal_temp, 0.50, 3.00);
+      int sess = SessionBucket(ResolveContextTime());
+      int reg = RegimeBucket();
       double logits[FXAI_CHR_CLASS_COUNT];
-      for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
-      {
-         double pr = FXAI_Clamp(p_raw[c], 0.0005, 0.9990);
-         logits[c] = (MathLog(pr) * inv_temp) + m_cal_bias[c];
-      }
+      BuildCalLogits(p_raw, sess, reg, logits);
 
       double p_cal[FXAI_CHR_CLASS_COUNT];
       Softmax3(logits, p_cal);
 
+      double lraw[FXAI_CHR_CLASS_COUNT];
+      for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
+         lraw[c] = MathLog(FXAI_Clamp(p_raw[c], 0.0005, 0.9990));
+
       double w = FXAI_Clamp(sample_w, 0.25, 6.00);
       double cal_lr = FXAI_Clamp(0.20 * lr * w, 0.0002, 0.0200);
-
-      double g_temp = 0.0;
+      double reg_l2 = 0.0005;
       for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
       {
          double target = (c == cls ? 1.0 : 0.0);
          double e = target - p_cal[c];
 
-         m_cal_bias[c] = FXAI_ClipSym(m_cal_bias[c] + cal_lr * e, 4.0);
-         g_temp += e * MathLog(FXAI_Clamp(p_raw[c], 0.0005, 0.9990));
+         m_cal_vs_b[c] = FXAI_ClipSym(m_cal_vs_b[c] + cal_lr * e, 4.0);
+         m_cal_session_b[sess][c] = FXAI_ClipSym(m_cal_session_b[sess][c] + 0.7 * cal_lr * e, 3.0);
+         m_cal_regime_b[reg][c] = FXAI_ClipSym(m_cal_regime_b[reg][c] + 0.6 * cal_lr * e, 3.0);
+         for(int j=0; j<FXAI_CHR_CLASS_COUNT; j++)
+         {
+            double target_w = (c == j ? 1.0 : 0.0);
+            double grad = e * lraw[j] - reg_l2 * (m_cal_vs_w[c][j] - target_w);
+            m_cal_vs_w[c][j] = FXAI_ClipSym(m_cal_vs_w[c][j] + cal_lr * grad, 4.0);
+         }
 
          int bi = (int)MathFloor(p_cal[c] * (double)FXAI_CHR_CAL_BINS);
          if(bi < 0) bi = 0;
@@ -904,7 +1184,6 @@ private:
          m_cal_iso_pos[c][bi] += w * target;
       }
 
-      m_cal_temp = FXAI_Clamp(m_cal_temp - 0.02 * cal_lr * g_temp, 0.50, 3.00);
       m_cal3_steps++;
    }
 
@@ -922,22 +1201,61 @@ private:
       for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
       {
          m_cls_ema[c] = 1.0;
-         m_cal_bias[c] = 0.0;
          m_b_cls[c] = 0.0;
+         m_cal_vs_b[c] = 0.0;
+         m_t_b_cls[c] = 0.0;
+         for(int j=0; j<FXAI_CHR_CLASS_COUNT; j++)
+            m_cal_vs_w[c][j] = (c == j ? 1.0 : 0.0);
          for(int b=0; b<FXAI_CHR_CAL_BINS; b++)
          {
             m_cal_iso_pos[c][b] = 0.0;
             m_cal_iso_cnt[c][b] = 0.0;
          }
       }
-      m_cal_temp = 1.0;
+      for(int s=0; s<4; s++)
+         for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
+            m_cal_session_b[s][c] = 0.0;
+      for(int r=0; r<2; r++)
+         for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
+            m_cal_regime_b[r][c] = 0.0;
       m_cal3_steps = 0;
 
-      for(int g=0; g<8; g++)
+      for(int g=0; g<16; g++)
       {
          m_opt_m[g] = 0.0;
          m_opt_v[g] = 0.0;
       }
+
+      m_replay_head = 0;
+      m_replay_size = 0;
+      for(int r=0; r<FXAI_CHR_REPLAY; r++)
+      {
+         m_replay_pos[r] = 0;
+         m_replay_cls[r] = (int)FXAI_LABEL_SKIP;
+         m_replay_move[r] = 0.0;
+         m_replay_cost[r] = 0.0;
+         m_replay_w[r] = 1.0;
+         m_replay_time[r] = 0;
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++) m_replay_x[r][k] = 0.0;
+      }
+
+      m_val_ready = false;
+      m_val_steps = 0;
+      m_val_nll_fast = 0.0;
+      m_val_nll_slow = 0.0;
+      m_val_brier_fast = 0.0;
+      m_val_brier_slow = 0.0;
+      m_val_ece_fast = 0.0;
+      m_val_ece_slow = 0.0;
+      m_val_ev_after_cost_fast = 0.0;
+      m_val_ev_after_cost_slow = 0.0;
+      for(int b=0; b<FXAI_CHR_ECE_BINS; b++)
+      {
+         m_ece_mass[b] = 0.0;
+         m_ece_acc[b] = 0.0;
+         m_ece_conf[b] = 0.0;
+      }
+      m_reference_ready = false;
 
       for(int f=0; f<FXAI_AI_FEATURES; f++)
          m_ch_gate[f] = 1.0;
@@ -988,11 +1306,15 @@ private:
          m_b_patch[d] = 0.0;
          m_w_mu[d] = 0.03 * MathSin((double)(d + 2) * 0.83);
          m_w_logv[d] = 0.03 * MathCos((double)(d + 3) * 0.89);
-         m_w_q25[d] = 0.03 * MathSin((double)(d + 4) * 0.97);
-         m_w_q75[d] = 0.03 * MathCos((double)(d + 5) * 1.03);
 
          for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
+         {
             m_w_cls[c][d] = 0.03 * MathSin((double)((c + 2) * (d + 1)) * 0.79);
+            m_t_w_cls[c][d] = m_w_cls[c][d];
+         }
+
+         for(int q=0; q<FXAI_CHR_QUANTILES; q++)
+            m_w_q[q][d] = 0.03 * MathSin((double)((q + 2) * (d + 3)) * 0.61);
 
          for(int f=0; f<FXAI_AI_FEATURES; f++)
          {
@@ -1054,8 +1376,7 @@ private:
 
       m_b_mu = 0.0;
       m_b_logv = MathLog(1.0);
-      m_b_q25 = 0.0;
-      m_b_q75 = 0.0;
+      for(int q=0; q<FXAI_CHR_QUANTILES; q++) m_b_q[q] = 0.0;
       for(int h=0; h<FXAI_CHR_HORIZONS; h++)
       {
          m_b_mu_h[h] = 0.0;
@@ -1066,11 +1387,36 @@ private:
       // Slight skip prior before calibration settles.
       m_b_cls[(int)FXAI_LABEL_SKIP] = 0.20;
 
+      // Distilled warm-start anchors (embedded constants, no disk dependency).
+      static const double distill_cls[FXAI_CHR_CLASS_COUNT][4] =
+      {
+         {-0.22, -0.11, 0.08, 0.15},
+         { 0.24,  0.10, 0.06, -0.09},
+         {-0.06,  0.02, -0.04, 0.20}
+      };
+      static const double distill_tok[8] = {0.12, -0.09, 0.07, -0.05, 0.03, -0.02, 0.01, -0.01};
+      for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
+      {
+         for(int d=0; d<4 && d<FXAI_CHR_D_MODEL; d++)
+         {
+            m_w_cls[c][d] = 0.7 * m_w_cls[c][d] + 0.3 * distill_cls[c][d];
+            m_t_w_cls[c][d] = m_w_cls[c][d];
+         }
+      }
+      for(int t=0; t<FXAI_CHR_CODEBOOK; t++)
+      {
+         for(int d=0; d<8 && d<FXAI_CHR_D_MODEL; d++)
+            m_w_tok[t][d] = 0.85 * m_w_tok[t][d] + 0.15 * distill_tok[d];
+      }
+
       m_initialized = true;
    }
 
    void ForwardPass(const double &x[],
                     const bool commit,
+                    const bool training_mode,
+                    const int label_cls,
+                    const double move_points,
                     double &rep[],
                     double &p_raw[],
                     double &mu,
@@ -1093,7 +1439,7 @@ private:
 
       double seq_mat[FXAI_CHR_SEQ][FXAI_AI_FEATURES];
       int seq_len = 0;
-      BuildTemporalMatrix(xn, seq_mat, seq_len);
+      BuildTemporalMatrix(xn, seq_mat, seq_len, !training_mode);
 
       double tokens_a[FXAI_CHR_MAX_PATCHES][FXAI_CHR_D_MODEL];
       double tokens_b[FXAI_CHR_MAX_PATCHES][FXAI_CHR_D_MODEL];
@@ -1101,6 +1447,25 @@ private:
 
       if(token_count < 1) token_count = 1;
       if(token_count > FXAI_CHR_MAX_PATCHES) token_count = FXAI_CHR_MAX_PATCHES;
+
+      if(training_mode)
+         token_target = BuildFutureTokenTarget(xn, label_cls, move_points);
+
+      m_cache_token_count = token_count;
+      m_cache_token_target = token_target;
+      for(int p=0; p<token_count; p++)
+      {
+         m_cache_patch_start[p] = 0;
+         for(int d=0; d<FXAI_CHR_D_MODEL; d++)
+         {
+            m_cache_x0[p][d] = tokens_a[p][d];
+            m_cache_patch_code[p][d] = 0.0;
+            m_cache_patch_z[p][d] = 0.0;
+         }
+      }
+      for(int f=0; f<FXAI_AI_FEATURES; f++)
+         for(int t=0; t<FXAI_CHR_PATCH_LEN; t++)
+            m_cache_patch_stat[f][t] = patch_stat[f][t];
 
       for(int l=0; l<FXAI_CHR_LAYERS; l++)
       {
@@ -1112,6 +1477,8 @@ private:
                         tokens_a,
                         token_count,
                         tokens_b,
+                        true,
+                        training_mode,
                         mean_in_l,
                         mean_ctx_l,
                         mean_ff_l);
@@ -1138,7 +1505,9 @@ private:
          rep[d] = rep_mem[d];
 
       double logits[FXAI_CHR_CLASS_COUNT];
-      ComputeHeads(rep, logits, p_raw, mu, logv, q25, q75, mu_h);
+      double q_all[FXAI_CHR_QUANTILES];
+      ComputeHeads(rep, logits, p_raw, mu, logv, q25, q75, q_all, mu_h);
+      q25 += 0.0 * q_all[0];
 
       if(commit)
          PushSequence(xn);
@@ -1181,12 +1550,17 @@ public:
       ResetFeatureStats();
       for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
          m_cls_ema[c] = 1.0;
-      for(int g=0; g<8; g++)
+      for(int g=0; g<16; g++)
       {
          m_opt_m[g] = 0.0;
          m_opt_v[g] = 0.0;
       }
       m_mem_ptr = 0;
+      m_replay_head = 0;
+      m_replay_size = 0;
+      m_val_ready = false;
+      m_val_steps = 0;
+      m_reference_ready = false;
    }
 
    virtual void EnsureInitialized(const FXAIAIHyperParams &hp)
@@ -1217,6 +1591,9 @@ public:
 
       ForwardPass(x,
                   false,
+                  false,
+                  (int)FXAI_LABEL_SKIP,
+                  0.0,
                   rep,
                   p_raw,
                   mu,
@@ -1330,6 +1707,9 @@ protected:
 
       ForwardPass(x,
                   true,
+                  true,
+                  cls,
+                  move_points,
                   rep,
                   p_raw,
                   mu,
@@ -1346,6 +1726,13 @@ protected:
                   mem_attn,
                   token_count);
 
+      double p_cal_now[FXAI_CHR_CLASS_COUNT];
+      Calibrate3(p_raw, p_cal_now);
+      double ev_now = ExpectedMoveFromHeads(mu, logv, q25, q75, mu_h, p_cal_now[(int)FXAI_LABEL_SKIP]);
+      UpdateValidationMetrics(cls, p_cal_now, ev_now, cost);
+      if(!m_reference_ready && m_val_steps > 64)
+         base_lr *= 0.85;
+
       double cal_lr = FXAI_Clamp(0.02 + 0.12 * base_lr, 0.0005, 0.0300);
       UpdateCalibrator3(p_raw, cls, sample_w, cal_lr);
 
@@ -1360,10 +1747,22 @@ protected:
       for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
          target_cls[c] = (c == cls ? 1.0 : 0.0);
 
-      // Cross-entropy gradient.
-      double err_cls[FXAI_CHR_CLASS_COUNT];
+      // Cross-entropy + teacher distillation gradient.
+      double t_logits[FXAI_CHR_CLASS_COUNT];
       for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
-         err_cls[c] = (p_raw[c] - target_cls[c]);
+      {
+         double z = m_t_b_cls[c];
+         for(int d=0; d<FXAI_CHR_D_MODEL; d++)
+            z += m_t_w_cls[c][d] * rep[d];
+         t_logits[c] = z;
+      }
+      double p_teacher[FXAI_CHR_CLASS_COUNT];
+      Softmax3(t_logits, p_teacher);
+
+      double err_cls[FXAI_CHR_CLASS_COUNT];
+      double kd = 0.18;
+      for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
+         err_cls[c] = (p_raw[c] - target_cls[c]) + kd * (p_raw[c] - p_teacher[c]);
 
       double g_rep[FXAI_CHR_D_MODEL];
       for(int d=0; d<FXAI_CHR_D_MODEL; d++) g_rep[d] = 0.0;
@@ -1392,40 +1791,65 @@ protected:
       double diff = mu - move_tgt;
       double g_mu = FXAI_ClipSym(diff / (sig2 + 1e-6), 4.0);
       double g_logv = FXAI_ClipSym(0.5 * (1.0 - (diff * diff) / (sig2 + 1e-6)), 4.0);
-      double e25 = move_tgt - q25;
-      double e75 = move_tgt - q75;
-      double g_q25 = (e25 >= 0.0 ? -0.25 : 0.75);
-      double g_q75 = (e75 >= 0.0 ? -0.75 : 0.25);
+
+      double q_pred[FXAI_CHR_QUANTILES];
+      double g_q[FXAI_CHR_QUANTILES];
+      for(int q=0; q<FXAI_CHR_QUANTILES; q++)
+      {
+         double z = m_b_q[q];
+         for(int d=0; d<FXAI_CHR_D_MODEL; d++)
+            z += m_w_q[q][d] * rep[d];
+         q_pred[q] = z;
+         double tau = QuantileLevel(q);
+         double ind = (move_tgt <= q_pred[q] ? 1.0 : 0.0);
+         g_q[q] = (ind - tau);
+      }
+      // Monotonic quantile penalty.
+      const double mono_lambda = 0.08;
+      for(int q=1; q<FXAI_CHR_QUANTILES; q++)
+      {
+         double gap = q_pred[q - 1] - q_pred[q];
+         if(gap > 0.0)
+         {
+            g_q[q - 1] += mono_lambda * gap;
+            g_q[q] -= mono_lambda * gap;
+         }
+      }
 
       double edge = MathAbs(move_points) - cost;
       double move_w = FXAI_Clamp(sample_w * (0.50 + edge / MathMax(cost, 1.0)), 0.10, 8.00);
-      double lr_move = AdamGroupLR(1, MathAbs(g_mu) + MathAbs(g_logv), base_lr * 0.70);
+      double qg = 0.0;
+      for(int q=0; q<FXAI_CHR_QUANTILES; q++) qg += MathAbs(g_q[q]);
+      double lr_move = AdamGroupLR(1, MathAbs(g_mu) + MathAbs(g_logv) + 0.30 * qg, base_lr * 0.70);
 
       m_b_mu -= lr_move * move_w * g_mu;
       m_b_logv -= lr_move * move_w * g_logv;
-      m_b_q25 -= lr_move * move_w * g_q25;
-      m_b_q75 -= lr_move * move_w * g_q75;
+      for(int q=0; q<FXAI_CHR_QUANTILES; q++)
+         m_b_q[q] -= lr_move * move_w * g_q[q];
 
       for(int d=0; d<FXAI_CHR_D_MODEL; d++)
       {
          double wmu_old = m_w_mu[d];
          double wlv_old = m_w_logv[d];
-         double w25_old = m_w_q25[d];
-         double w75_old = m_w_q75[d];
 
          m_w_mu[d] -= lr_move * move_w * (g_mu * rep[d] + l2 * 0.10 * m_w_mu[d]);
          m_w_logv[d] -= lr_move * move_w * (g_logv * rep[d] + l2 * 0.10 * m_w_logv[d]);
-         m_w_q25[d] -= lr_move * move_w * (g_q25 * rep[d] + l2 * 0.10 * m_w_q25[d]);
-         m_w_q75[d] -= lr_move * move_w * (g_q75 * rep[d] + l2 * 0.10 * m_w_q75[d]);
-
-         g_rep[d] += move_w * (g_mu * wmu_old + 0.35 * g_logv * wlv_old + 0.20 * g_q25 * w25_old + 0.20 * g_q75 * w75_old);
+         double gq_rep = 0.0;
+         for(int q=0; q<FXAI_CHR_QUANTILES; q++)
+         {
+            double wq_old = m_w_q[q][d];
+            m_w_q[q][d] -= lr_move * move_w * (g_q[q] * rep[d] + l2 * 0.06 * m_w_q[q][d]);
+            gq_rep += g_q[q] * wq_old;
+         }
+         g_rep[d] += move_w * (g_mu * wmu_old + 0.35 * g_logv * wlv_old + 0.16 * gq_rep);
       }
 
       // Multi-horizon move heads.
       double horizon_tgt[FXAI_CHR_HORIZONS];
       horizon_tgt[0] = move_tgt;
-      horizon_tgt[1] = 0.75 * move_tgt;
-      horizon_tgt[2] = 0.55 * move_tgt;
+      horizon_tgt[1] = 0.80 * move_tgt;
+      horizon_tgt[2] = 0.60 * move_tgt;
+      horizon_tgt[3] = 0.40 * move_tgt;
       double lr_h = AdamGroupLR(2, MathAbs(diff), base_lr * 0.55);
       for(int hidx=0; hidx<FXAI_CHR_HORIZONS; hidx++)
       {
@@ -1529,61 +1953,96 @@ protected:
          }
       }
 
-      // Encoder-weight updates using layer summary statistics.
+      // Encoder-weight updates using cached token activations (causal TBPTT-lite).
+      double tok_w_den = ((token_count > 0) ? ((double)MathMax(token_count - 1, 0) + 1.6) : 1.0);
+      if(tok_w_den <= 0.0) tok_w_den = 1.0;
+
       for(int l=0; l<FXAI_CHR_LAYERS; l++)
       {
          double lr_enc = AdamGroupLR(4 + l, gnorm, base_lr * 0.25);
 
-         // Output projection from attention contexts.
+         // Output projection from cached attention context.
          for(int d=0; d<FXAI_CHR_D_MODEL; d++)
          {
             for(int od=0; od<FXAI_CHR_D_MODEL; od++)
             {
-               double grad = g_rep[d] * layer_ctx_mean[l][od] + l2 * 0.05 * m_wo[l][d][od];
+               int hdx = od / FXAI_CHR_D_HEAD;
+               int dh = od % FXAI_CHR_D_HEAD;
+               double grad = l2 * 0.05 * m_wo[l][d][od];
+               for(int t=0; t<token_count; t++)
+               {
+                  double tw = ((t == token_count - 1 ? 1.6 : 1.0) / tok_w_den);
+                  grad += tw * g_rep[d] * m_cache_ctx[l][hdx][t][dh];
+               }
                m_wo[l][d][od] -= lr_enc * move_w * grad;
             }
          }
 
-         // FFN2.
-         double dff[FXAI_CHR_D_FF];
-         for(int r=0; r<FXAI_CHR_D_FF; r++) dff[r] = 0.0;
-
-         for(int d=0; d<FXAI_CHR_D_MODEL; d++)
-         {
-            m_bff2[l][d] -= lr_enc * move_w * g_rep[d] * 0.30;
+         // FFN2 -> FFN1 path.
+         double dff[FXAI_CHR_MAX_PATCHES][FXAI_CHR_D_FF];
+         for(int t=0; t<token_count; t++)
             for(int r=0; r<FXAI_CHR_D_FF; r++)
-            {
-               double grad = g_rep[d] * layer_ff_mean[l][r] + l2 * 0.05 * m_wff2[l][d][r];
-               m_wff2[l][d][r] -= lr_enc * move_w * grad;
-               dff[r] += g_rep[d] * m_wff2[l][d][r];
-            }
-         }
+               dff[t][r] = 0.0;
 
-         // FFN1 (approximate backprop through GELU).
-         for(int r=0; r<FXAI_CHR_D_FF; r++)
+         for(int t=0; t<token_count; t++)
          {
-            double act = layer_ff_mean[l][r];
-            double dg = GELUDerivApprox(act);
-            double dr = dff[r] * dg;
-            m_bff1[l][r] -= lr_enc * move_w * dr * 0.25;
+            double tw = ((t == token_count - 1 ? 1.6 : 1.0) / tok_w_den);
             for(int d=0; d<FXAI_CHR_D_MODEL; d++)
             {
-               double grad = dr * layer_in_mean[l][d] + l2 * 0.05 * m_wff1[l][r][d];
-               m_wff1[l][r][d] -= lr_enc * move_w * grad;
+               double gt = tw * g_rep[d];
+               m_bff2[l][d] -= lr_enc * move_w * gt * 0.30;
+               for(int r=0; r<FXAI_CHR_D_FF; r++)
+               {
+                  double w_old = m_wff2[l][d][r];
+                  double grad = gt * m_cache_ff1[l][t][r] + l2 * 0.05 * m_wff2[l][d][r];
+                  m_wff2[l][d][r] -= lr_enc * move_w * grad;
+                  dff[t][r] += gt * w_old;
+               }
             }
          }
 
-         // Q/K/V tiny corrective step keeps attention adaptable without heavy backprop.
+         for(int r=0; r<FXAI_CHR_D_FF; r++)
+         {
+            double bgrad = 0.0;
+            for(int d=0; d<FXAI_CHR_D_MODEL; d++)
+            {
+               double grad = l2 * 0.05 * m_wff1[l][r][d];
+               for(int t=0; t<token_count; t++)
+               {
+                  double tw = ((t == token_count - 1 ? 1.6 : 1.0) / tok_w_den);
+                  double dr = dff[t][r] * GELUDerivApprox(m_cache_ff1[l][t][r]);
+                  grad += tw * dr * m_cache_u[l][t][d];
+                  bgrad += tw * dr * 0.25;
+               }
+               m_wff1[l][r][d] -= lr_enc * move_w * grad;
+            }
+            m_bff1[l][r] -= lr_enc * move_w * bgrad;
+         }
+
+         // Q/K/V corrective step from cached token inputs and attention shape.
          for(int hdx=0; hdx<FXAI_CHR_HEADS; hdx++)
          {
             for(int dh=0; dh<FXAI_CHR_D_HEAD; dh++)
             {
+               int od = hdx * FXAI_CHR_D_HEAD + dh;
                for(int d=0; d<FXAI_CHR_D_MODEL; d++)
                {
-                  double corr = g_rep[d] * layer_in_mean[l][d] * 0.015;
-                  m_wq[l][hdx][dh][d] -= lr_enc * move_w * (corr + l2 * 0.02 * m_wq[l][hdx][dh][d]);
-                  m_wk[l][hdx][dh][d] -= lr_enc * move_w * (corr + l2 * 0.02 * m_wk[l][hdx][dh][d]);
-                  m_wv[l][hdx][dh][d] -= lr_enc * move_w * (corr + l2 * 0.02 * m_wv[l][hdx][dh][d]);
+                  double grad_q = l2 * 0.02 * m_wq[l][hdx][dh][d];
+                  double grad_k = l2 * 0.02 * m_wk[l][hdx][dh][d];
+                  double grad_v = l2 * 0.02 * m_wv[l][hdx][dh][d];
+                  for(int t=0; t<token_count; t++)
+                  {
+                     double tw = ((t == token_count - 1 ? 1.6 : 1.0) / tok_w_den);
+                     double xin = m_cache_layer_in[l][t][d];
+                     double gt = tw * g_rep[od];
+                     double diag_att = m_cache_att[l][hdx][t][t];
+                     grad_q += 0.018 * gt * xin;
+                     grad_k += 0.014 * gt * xin * (1.0 - diag_att);
+                     grad_v += 0.016 * gt * xin;
+                  }
+                  m_wq[l][hdx][dh][d] -= lr_enc * move_w * grad_q;
+                  m_wk[l][hdx][dh][d] -= lr_enc * move_w * grad_k;
+                  m_wv[l][hdx][dh][d] -= lr_enc * move_w * grad_v;
                }
             }
          }
@@ -1607,6 +2066,7 @@ protected:
             m_mem_v[m][d] = FXAI_ClipSym(m_mem_v[m][d], 8.0);
          }
       }
+      m_b_mem_gate = FXAI_ClipSym(0.995 * m_b_mem_gate + 0.005 * (best_attn - 0.25), 2.0);
 
       // Refresh least-used memory slot periodically.
       if((m_step % 128) == 0)
@@ -1638,6 +2098,71 @@ protected:
       // Update shared move estimators in base plugin.
       FXAI_UpdateMoveEMA(m_move_ema_abs, m_move_ready, move_points, 0.05);
       UpdateMoveHead(x, move_points, h, sample_w);
+
+      // Replay consolidation to reduce forgetting on volatile regimes.
+      ReplayPush(cls, x, move_points, cost, sample_w);
+      int replay_steps = 0;
+      if(m_replay_size >= 192) replay_steps = 2;
+      else if(m_replay_size >= 64) replay_steps = 1;
+      for(int rs=0; rs<replay_steps; rs++)
+      {
+         int slot = ReplaySampleSlot();
+         if(slot < 0) break;
+
+         double rep_r[FXAI_CHR_D_MODEL];
+         double p_raw_r[FXAI_CHR_CLASS_COUNT];
+         double mu_r = 0.0, logv_r = 0.0, q25_r = 0.0, q75_r = 0.0;
+         double mu_h_r[FXAI_CHR_HORIZONS];
+         double patch_stat_r[FXAI_AI_FEATURES][FXAI_CHR_PATCH_LEN];
+         double token_hist_r[FXAI_CHR_CODEBOOK];
+         int token_target_r = 0;
+         double layer_in_mean_r[FXAI_CHR_LAYERS][FXAI_CHR_D_MODEL];
+         double layer_ctx_mean_r[FXAI_CHR_LAYERS][FXAI_CHR_D_MODEL];
+         double layer_ff_mean_r[FXAI_CHR_LAYERS][FXAI_CHR_D_FF];
+         double mem_attn_r[FXAI_CHR_MEMORY];
+         int token_count_r = 0;
+         double xr[FXAI_AI_WEIGHTS];
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            xr[k] = m_replay_x[slot][k];
+
+         ForwardPass(xr,
+                     false,
+                     true,
+                     m_replay_cls[slot],
+                     m_replay_move[slot],
+                     rep_r,
+                     p_raw_r,
+                     mu_r,
+                     logv_r,
+                     q25_r,
+                     q75_r,
+                     mu_h_r,
+                     patch_stat_r,
+                     token_hist_r,
+                     token_target_r,
+                     layer_in_mean_r,
+                     layer_ctx_mean_r,
+                     layer_ff_mean_r,
+                     mem_attn_r,
+                     token_count_r);
+
+         int cls_r = ClampI(m_replay_cls[slot], 0, FXAI_CHR_CLASS_COUNT - 1);
+         double wr = FXAI_Clamp(0.35 * m_replay_w[slot], 0.05, 1.50);
+         double err_r[FXAI_CHR_CLASS_COUNT];
+         for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
+            err_r[c] = p_raw_r[c] - (c == cls_r ? 1.0 : 0.0);
+
+         double lr_r = AdamGroupLR(13, MathAbs(err_r[0]) + MathAbs(err_r[1]) + MathAbs(err_r[2]), base_lr * 0.20);
+         for(int c=0; c<FXAI_CHR_CLASS_COUNT; c++)
+         {
+            m_b_cls[c] -= lr_r * wr * err_r[c];
+            for(int d=0; d<FXAI_CHR_D_MODEL; d++)
+               m_w_cls[c][d] -= lr_r * wr * (err_r[c] * rep_r[d] + l2 * 0.08 * m_w_cls[c][d]);
+         }
+         UpdateCalibrator3(p_raw_r, cls_r, wr, FXAI_Clamp(0.50 * cal_lr, 0.0002, 0.0120));
+      }
+
+      UpdateTeacherHeads();
    }
 
    virtual double PredictProb(const double &x[], const FXAIAIHyperParams &hp)
