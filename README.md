@@ -10,16 +10,7 @@ FXAI is the most advanced, professional, and state-of-the-art AI framework for M
 - [Typical Workflow](#typical-workflow)
 - [AI Models (A-Z)](#ai-models-a-z)
 - [Feature Set (A-Z)](#feature-set-a-z)
-- [Price Structure and Return Dynamics](#price-structure-and-return-dynamics)
-- [Trend and Multi-Timeframe Structure](#trend-and-multi-timeframe-structure)
-- [Volatility and Range Regime](#volatility-and-range-regime)
-- [Cross-Symbol Market Context](#cross-symbol-market-context)
-- [Time and Execution Friction Context](#time-and-execution-friction-context)
 - [Normalization Techniques](#normalization-techniques)
-- [Market-Structure and Volatility-Aware Scaling](#market-structure-and-volatility-aware-scaling)
-- [Statistical Distribution and Robust Shape Transforms](#statistical-distribution-and-robust-shape-transforms)
-- [Relative Change and Directional Encodings](#relative-change-and-directional-encodings)
-- [Adaptive Window/Instance Normalization for Deep Models](#adaptive-windowinstance-normalization-for-deep-models)
 - [Notes](#notes)
 
 ## What It Is
