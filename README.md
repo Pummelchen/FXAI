@@ -121,17 +121,25 @@ XGBoost is a widely used gradient-boosted tree method with strong regularization
 
 ## Feature Set (A-Z)
 
-Engineered model input features currently used by the project:
+Engineered model input features are grouped below by predictive role.
+
+### Price Structure and Return Dynamics
+These features encode near-term directional behavior, momentum decay, and micro mean-reversion signatures from M1 price action. They are useful in FX because short-horizon returns and candle geometry often react quickly to order-flow imbalance. This group forms the core directional signal layer before higher-level context is applied.
 
 - 1-bar return normalized (M1)
 - 3-bar return normalized (M1)
 - 5-bar return normalized (M1)
-- ATR(14) normalized (M1)
 - Close-to-Low edge (M1 OHLC)
 - Close-to-Open edge (M1 OHLC)
-- Context return dispersion (cross-symbol)
-- Context return mean (cross-symbol)
-- Context up-breadth ratio (cross-symbol)
+- High-to-Close edge (M1 OHLC)
+- Return variance proxy normalized (M1, window 10)
+- RSI(14) normalized (M1)
+- Rolling median edge (window 21)
+- Z-score vs rolling mean/std (M1, window 10)
+
+### Trend and Multi-Timeframe Structure
+This group captures trend persistence and slope alignment across M1 through H1 horizons. It is useful in FX prediction because many profitable intraday setups depend on higher-timeframe drift and local pullback structure agreeing. Smoothing filters in this group also reduce noise sensitivity and improve model stability in volatile sessions.
+
 - Ehlers Super Smoother (2-pole, period 20) edge
 - EMA(100) edge (H1)
 - EMA(100) edge (M15)
@@ -141,13 +149,8 @@ Engineered model input features currently used by the project:
 - EMA(200) edge (M15)
 - EMA(200) edge (M30)
 - EMA(200) edge (M5)
-- Garman-Klass volatility (OHLC)
 - H1 return (aligned)
 - H1 slope (aligned)
-- Hampel robust score (rolling median/MAD, window 21)
-- High-Low range normalized (M1 OHLC)
-- High-to-Close edge (M1 OHLC)
-- Hour of day (MT5 bar time)
 - Kalman filter estimate edge (window 34)
 - M15 return (aligned)
 - M15 SMA(100) edge
@@ -158,18 +161,34 @@ Engineered model input features currently used by the project:
 - M5 slope (aligned)
 - M5 SMA(100) edge
 - M5 SMA(200) edge
-- Minute of hour (MT5 bar time)
-- NATR(14) (M1)
-- Parkinson volatility (HL-only, window 20)
 - Quadruple-smoothed DEMA(100) edge
 - Quadruple-smoothed DEMA(200) edge
-- Return variance proxy normalized (M1, window 10)
+
+### Volatility and Range Regime
+These features estimate current market variability and effective move potential under different volatility definitions. They are useful for FX because entry quality depends not only on direction but also on whether expected movement can cover trading costs. This group improves risk-aware classification, skip decisions, and expected-value filtering.
+
+- ATR(14) normalized (M1)
+- Garman-Klass volatility (OHLC)
+- Hampel robust score (rolling median/MAD, window 21)
+- High-Low range normalized (M1 OHLC)
+- NATR(14) (M1)
+- Parkinson volatility (HL-only, window 20)
 - Rogers-Satchell volatility (OHLC)
-- Rolling median edge (window 21)
-- RSI(14) normalized (M1)
+
+### Cross-Symbol Market Context
+These features summarize behavior from related instruments to capture correlation and breadth effects. They are useful in FX because major pairs and macro-sensitive symbols often provide early context for risk-on and risk-off rotations. This group adds regime information that single-symbol models usually miss.
+
+- Context return dispersion (cross-symbol)
+- Context return mean (cross-symbol)
+- Context up-breadth ratio (cross-symbol)
+
+### Time and Execution Friction Context
+This group captures temporal structure and direct transaction-cost pressure on signals. It is useful in FX because trade quality varies strongly by weekday, hour, and minute due to liquidity cycles. Including spread and clock-time context helps models avoid low-quality entries during expensive or structurally noisy periods.
+
+- Hour of day (MT5 bar time)
+- Minute of hour (MT5 bar time)
 - Spread normalized
 - Weekday (MT5 bar time)
-- Z-score vs rolling mean/std (M1, window 10)
 
 ## Notes
 
