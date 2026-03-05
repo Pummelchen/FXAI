@@ -340,6 +340,51 @@ protected:
       m_v2_cls_steps++;
    }
 
+   bool BuildNativeFromDirectional(const double &x[],
+                                   const FXAIAIHyperParams &hp,
+                                   double &class_probs[],
+                                   double &expected_move_points)
+   {
+      EnsureInitialized(hp);
+
+      double p_up = FXAI_Clamp(PredictProb(x, hp), 0.001, 0.999);
+      double exp_move = PredictExpectedMovePoints(x, hp);
+      if(exp_move <= 0.0) exp_move = ResolveMinMovePoints();
+      if(exp_move <= 0.0) exp_move = 0.10;
+
+      double mm = ResolveMinMovePoints();
+      if(mm <= 0.0) mm = 0.10;
+      double cp = ResolveCostPoints(x);
+      if(cp < 0.0) cp = 0.0;
+
+      double xc[FXAI_PLUGIN_CLASS_FEATURES];
+      BuildClassInput(p_up, exp_move, mm, cp, xc);
+
+      double probs_head[3];
+      PredictLocalClassProbs(xc, probs_head);
+
+      double active = FXAI_Clamp((exp_move - mm) / MathMax(mm, 0.10), 0.0, 1.0);
+      double probs_anchor[3];
+      probs_anchor[(int)FXAI_LABEL_BUY]  = FXAI_Clamp(p_up * active, 0.001, 0.999);
+      probs_anchor[(int)FXAI_LABEL_SELL] = FXAI_Clamp((1.0 - p_up) * active, 0.001, 0.999);
+      probs_anchor[(int)FXAI_LABEL_SKIP] = FXAI_Clamp(1.0 - active, 0.001, 0.999);
+      double sa = probs_anchor[0] + probs_anchor[1] + probs_anchor[2];
+      if(sa <= 0.0) sa = 1.0;
+      for(int c=0; c<3; c++) probs_anchor[c] /= sa;
+
+      double w_head = (m_v2_cls_steps >= 24 ? 0.70 : 0.35);
+      double w_anchor = 1.0 - w_head;
+      for(int c=0; c<3; c++)
+         class_probs[c] = FXAI_Clamp(w_head * probs_head[c] + w_anchor * probs_anchor[c], 0.0005, 0.9990);
+
+      double s = class_probs[0] + class_probs[1] + class_probs[2];
+      if(s <= 0.0) s = 1.0;
+      for(int c=0; c<3; c++) class_probs[c] /= s;
+
+      expected_move_points = exp_move;
+      return true;
+   }
+
 public:
    CFXAIAIPlugin(void) { ResetAuxState(); }
 
@@ -367,9 +412,6 @@ public:
       // Core model update.
       UpdateWithMove(sample.label_class, sample.x, hp, sample.move_points);
 
-      if(SupportsNativeClassProbs())
-         return;
-
       // Fallback local multiclass objective for legacy plugins.
       double p_up = FXAI_Clamp(PredictProb(sample.x, hp), 0.001, 0.999);
       double exp_move = PredictExpectedMovePoints(sample.x, hp);
@@ -382,7 +424,21 @@ public:
       BuildClassInput(p_up, exp_move, mm, cp, xc);
 
       double sw = MoveSampleWeight(sample.x, sample.move_points);
-      if(sample.label_class == (int)FXAI_LABEL_SKIP) sw *= 0.75;
+      double mm_safe = MathMax(mm, 0.10);
+      double opp = MathAbs(sample.move_points) / mm_safe;
+      if(sample.label_class == (int)FXAI_LABEL_SKIP)
+      {
+         // Dynamic skip down-weighting reduces skip-class dominance when
+         // realized movement carried opportunity.
+         double skip_w = FXAI_Clamp(0.35 + (0.30 / (1.0 + opp)), 0.20, 0.75);
+         sw *= skip_w;
+      }
+      else
+      {
+         // Strengthen directional samples when realized edge was meaningful.
+         double dir_w = FXAI_Clamp(1.0 + 0.25 * (opp - 1.0), 1.0, 2.0);
+         sw *= dir_w;
+      }
       UpdateLocalClassHead(sample.label_class, xc, hp, sw);
    }
 

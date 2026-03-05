@@ -694,6 +694,18 @@ public:
    virtual int AIId(void) const { return (int)AI_QUANTILE; }
    virtual string AIName(void) const { return "quantile"; }
 
+   virtual bool SupportsNativeClassProbs(void) const { return true; }
+
+   virtual bool PredictNativeClassProbs(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        double &class_probs[],
+                                        double &expected_move_points)
+   {
+      EnsureInitialized(hp);
+      return BuildNativeFromDirectional(x, hp, class_probs, expected_move_points);
+   }
+
+
    virtual void Reset(void)
    {
       CFXAIAIPlugin::Reset();
