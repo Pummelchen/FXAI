@@ -3258,6 +3258,19 @@ void FXAI_GetModelHyperParams(const int ai_idx, FXAIAIHyperParams &hp)
       hp.lr = 0.0060;
       hp.l2 = 0.0030;
    }
+   // Recommended LSTM starting defaults.
+   if(ai_idx == (int)AI_LSTM)
+   {
+      hp.lr = 0.0080;
+      hp.l2 = 0.0040;
+   }
+   // Recommended LightGBM starting defaults.
+   if(ai_idx == (int)AI_LIGHTGBM)
+   {
+      hp.xgb_lr = 0.0300;
+      hp.xgb_l2 = 4.0000;
+      hp.xgb_split = 0.0000;
+   }
 }
 
 void FXAI_GetModelThresholds(const int ai_idx,
@@ -3317,10 +3330,9 @@ void FXAI_SampleModelHyperParams(const int ai_idx,
 {
    hp = base;
 
-   switch(ai_idx)
-   {
-      case (int)AI_SGD_LOGIT:
-      case (int)AI_LSTM:
+      switch(ai_idx)
+      {
+         case (int)AI_SGD_LOGIT:
       case (int)AI_LSTMG:
       case (int)AI_S4:
       case (int)AI_TFT:
@@ -3332,6 +3344,11 @@ void FXAI_SampleModelHyperParams(const int ai_idx,
       case (int)AI_TIMESFM:
          hp.lr = FXAI_RandRange(0.0030, 0.0600);
          hp.l2 = FXAI_RandRange(0.0000, 0.0300);
+         break;
+
+      case (int)AI_LSTM:
+         hp.lr = FXAI_RandRange(0.0040, 0.0200);
+         hp.l2 = FXAI_RandRange(0.0010, 0.0100);
          break;
 
       case (int)AI_GEODESICATTENTION:
@@ -3360,11 +3377,16 @@ void FXAI_SampleModelHyperParams(const int ai_idx,
          break;
 
       case (int)AI_XGB_FAST:
-      case (int)AI_LIGHTGBM:
       case (int)AI_XGBOOST:
          hp.xgb_lr = FXAI_RandRange(0.0050, 0.1200);
          hp.xgb_l2 = FXAI_RandRange(0.0000, 0.0300);
          hp.xgb_split = FXAI_RandRange(-0.8000, 0.8000);
+         break;
+
+      case (int)AI_LIGHTGBM:
+         hp.xgb_lr = FXAI_RandRange(0.0200, 0.0400);
+         hp.xgb_l2 = FXAI_RandRange(2.0000, 6.0000);
+         hp.xgb_split = FXAI_RandRange(-0.2000, 0.2000);
          break;
 
       case (int)AI_CATBOOST:
