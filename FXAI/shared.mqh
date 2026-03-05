@@ -2,7 +2,7 @@
 #ifndef __FXAI_SHARED_MQH__
 #define __FXAI_SHARED_MQH__
 
-#define FXAI_AI_FEATURES 15
+#define FXAI_AI_FEATURES 50
 #define FXAI_AI_WEIGHTS (FXAI_AI_FEATURES + 1)
 #define FXAI_AI_MLP_HIDDEN 8
 #define FXAI_AI_COUNT 22
@@ -42,6 +42,25 @@ enum ENUM_FXAI_LABEL_CLASS
    FXAI_LABEL_SELL = 0,
    FXAI_LABEL_BUY  = 1,
    FXAI_LABEL_SKIP = 2
+};
+
+enum ENUM_FXAI_FEATURE_NORMALIZATION
+{
+   FXAI_NORM_EXISTING = 0,          // Existing project scaling: regime-normalized + clipped.
+   FXAI_NORM_MINMAX_BUFFER5,        // Min/Max mapped to [0,1] with +/-5% buffer.
+   FXAI_NORM_CHANGE_PERCENT,        // Percent change versus previous feature value.
+   FXAI_NORM_BINARY_01,             // Binary step: higher than previous -> 1, else 0.
+   FXAI_NORM_LOG_RETURN,            // Log-return on buffered min/max mapped values.
+   FXAI_NORM_RELATIVE_CHANGE_PERCENT,// Symmetric relative change in percent.
+   FXAI_NORM_CANDLE_GEOMETRY,       // Candle body/range/wicks normalized by prior close or bar range.
+   FXAI_NORM_VOL_STD_RETURNS,       // Return features scaled by rolling past-only return std.
+   FXAI_NORM_ATR_NATR_UNIT,         // Change features scaled by ATR/NATR volatility unit.
+   FXAI_NORM_ZSCORE,                // Z-score standardization.
+   FXAI_NORM_ROBUST_MEDIAN_IQR,     // Robust scaling by median/IQR.
+   FXAI_NORM_QUANTILE_TO_NORMAL,    // Rank/quantile map (approx.) to normal space.
+   FXAI_NORM_POWER_YEOJOHNSON,      // Yeo-Johnson power transform + standardize.
+   FXAI_NORM_REVIN,                 // RevIN instance/window normalization.
+   FXAI_NORM_DAIN                   // DAIN adaptive normalization (lightweight learnable).
 };
 
 struct FXAIAIHyperParams

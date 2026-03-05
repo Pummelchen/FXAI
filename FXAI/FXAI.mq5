@@ -155,6 +155,10 @@ input bool   AI_DebugFlow     = false;
 // Models: all (diagnostics only, no model math impact).
 // Purpose: prints one-per-bar reasons for trade blocks/no-signal paths.
 // Importance/Range: false/true; enable during debugging, disable for production speed.
+input ENUM_FXAI_FEATURE_NORMALIZATION AI_FeatureNormalization = FXAI_NORM_EXISTING;
+// Models: all (shared feature pipeline before all plugin train/predict calls).
+// Purpose: selects the feature normalization method applied to prepared feature vectors.
+// Importance/Range: enum 0..14 (adds 11=QuantileToNormal, 12=PowerYeoJohnson, 13=RevIN, 14=DAIN).
 
 // Session/liquidity filter
 input bool SessionFilterEnabled        = false;
@@ -343,6 +347,14 @@ double FXAI_GetArrayValue(const double &arr[], const int idx, const double def_v
 {
    if(idx >= 0 && idx < ArraySize(arr)) return arr[idx];
    return def_value;
+}
+
+ENUM_FXAI_FEATURE_NORMALIZATION FXAI_GetFeatureNormalizationMethod()
+{
+   int v = (int)AI_FeatureNormalization;
+   if(v < (int)FXAI_NORM_EXISTING || v > (int)FXAI_NORM_DAIN)
+      return FXAI_NORM_EXISTING;
+   return (ENUM_FXAI_FEATURE_NORMALIZATION)v;
 }
 
 void FXAI_ResetModelAuxState(const int ai_idx)
@@ -678,6 +690,9 @@ bool FXAI_PrepareTrainingSample(const int i,
                                const FXAIDataSnapshot &snapshot,
                                const int &spread_m1[],
                                const datetime &time_arr[],
+                               const double &open_arr[],
+                               const double &high_arr[],
+                               const double &low_arr[],
                                const double &close_arr[],
                                const datetime &time_m5[],
                                const double &close_m5[],
@@ -685,6 +700,9 @@ bool FXAI_PrepareTrainingSample(const int i,
                                const datetime &time_m15[],
                                const double &close_m15[],
                                const int &map_m15[],
+                               const datetime &time_m30[],
+                               const double &close_m30[],
+                               const int &map_m30[],
                                const datetime &time_h1[],
                                const double &close_h1[],
                                const int &map_h1[],
@@ -696,9 +714,10 @@ bool FXAI_PrepareTrainingSample(const int i,
    FXAI_ResetPreparedSample(sample);
 
    if(i < 0 || i >= ArraySize(close_arr)) return false;
-   if(i - H < 0 || i - H >= ArraySize(close_arr)) return false;
-
-   double move_points = FXAI_MovePoints(close_arr[i], close_arr[i - H], snapshot.point);
+   bool has_label = (i - H >= 0 && i - H < ArraySize(close_arr));
+   double move_points = 0.0;
+   if(has_label)
+      move_points = FXAI_MovePoints(close_arr[i], close_arr[i - H], snapshot.point);
    double spread_i = FXAI_GetSpreadAtIndex(i, spread_m1, snapshot.spread_points);
    double min_move_i = spread_i + commission_points + cost_buffer_points;
    if(min_move_i < 0.0) min_move_i = 0.0;
@@ -707,10 +726,14 @@ bool FXAI_PrepareTrainingSample(const int i,
    double ctx_std_i = FXAI_GetArrayValue(ctx_std_arr, i, 0.0);
    double ctx_up_i = FXAI_GetArrayValue(ctx_up_arr, i, 0.5);
 
+   ENUM_FXAI_FEATURE_NORMALIZATION norm_method = FXAI_GetFeatureNormalizationMethod();
    double feat[FXAI_AI_FEATURES];
    if(!FXAI_ComputeFeatureVector(i,
                                 spread_i,
                                 time_arr,
+                                open_arr,
+                                high_arr,
+                                low_arr,
                                 close_arr,
                                 time_m5,
                                 close_m5,
@@ -718,21 +741,70 @@ bool FXAI_PrepareTrainingSample(const int i,
                                 time_m15,
                                 close_m15,
                                 map_m15,
+                                time_m30,
+                                close_m30,
+                                map_m30,
                                 time_h1,
                                 close_h1,
                                 map_h1,
                                 ctx_mean_i,
                                 ctx_std_i,
                                 ctx_up_i,
+                                norm_method,
                                 feat))
+      return false;
+
+   bool need_prev = FXAI_FeatureNormNeedsPrevious(norm_method);
+   bool has_prev_feat = false;
+   double feat_prev[FXAI_AI_FEATURES];
+   for(int f=0; f<FXAI_AI_FEATURES; f++)
+      feat_prev[f] = 0.0;
+
+   if(need_prev && (i + 1) < ArraySize(close_arr))
+   {
+      double spread_prev = FXAI_GetSpreadAtIndex(i + 1, spread_m1, spread_i);
+      double ctx_mean_prev = FXAI_GetArrayValue(ctx_mean_arr, i + 1, ctx_mean_i);
+      double ctx_std_prev = FXAI_GetArrayValue(ctx_std_arr, i + 1, ctx_std_i);
+      double ctx_up_prev = FXAI_GetArrayValue(ctx_up_arr, i + 1, ctx_up_i);
+
+      has_prev_feat = FXAI_ComputeFeatureVector(i + 1,
+                                               spread_prev,
+                                               time_arr,
+                                               open_arr,
+                                               high_arr,
+                                               low_arr,
+                                               close_arr,
+                                               time_m5,
+                                               close_m5,
+                                               map_m5,
+                                               time_m15,
+                                               close_m15,
+                                               map_m15,
+                                               time_m30,
+                                               close_m30,
+                                               map_m30,
+                                               time_h1,
+                                               close_h1,
+                                               map_h1,
+                                               ctx_mean_prev,
+                                               ctx_std_prev,
+                                               ctx_up_prev,
+                                               norm_method,
+                                               feat_prev);
+   }
+
+   double feat_norm[FXAI_AI_FEATURES];
+   sample.sample_time = ((i >= 0 && i < ArraySize(time_arr)) ? time_arr[i] : 0);
+   FXAI_ApplyFeatureNormalization(norm_method, feat, feat_prev, has_prev_feat, sample.sample_time, feat_norm);
+
+   if(!has_label)
       return false;
 
    sample.label_class = FXAI_BuildEVClassLabel(move_points, min_move_i, ev_threshold_points);
    sample.move_points = move_points;
    sample.min_move_points = min_move_i;
    sample.cost_points = min_move_i;
-   sample.sample_time = ((i >= 0 && i < ArraySize(time_arr)) ? time_arr[i] : 0);
-   FXAI_BuildInputVector(feat, sample.x);
+   FXAI_BuildInputVector(feat_norm, sample.x);
    sample.valid = true;
    return true;
 }
@@ -846,45 +918,63 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
    MqlRates rates_m1[];
    MqlRates rates_m5[];
    MqlRates rates_m15[];
+   MqlRates rates_m30[];
    MqlRates rates_h1[];
    MqlRates rates_ctx_tmp[];
 
+   double open_arr[];
+   double high_arr[];
+   double low_arr[];
    double close_arr[];
    datetime time_arr[];
    int spread_m1[];
    if(!FXAI_LoadSeriesWithSpread(symbol, needed, rates_m1, close_arr, time_arr, spread_m1))
       return false;
 
+   FXAI_ExtractRatesOHLC(rates_m1, open_arr, high_arr, low_arr, close_arr);
+
    if(ArraySize(close_arr) < needed || ArraySize(time_arr) < needed)
       return false;
 
    int needed_m5 = (needed / 5) + 80;
    int needed_m15 = (needed / 15) + 80;
+   int needed_m30 = (needed / 30) + 80;
    int needed_h1 = (needed / 60) + 80;
+   if(needed_m5 < 220) needed_m5 = 220;
+   if(needed_m15 < 220) needed_m15 = 220;
+   if(needed_m30 < 220) needed_m30 = 220;
+   if(needed_h1 < 220) needed_h1 = 220;
 
    double close_m5[];
    datetime time_m5[];
    double close_m15[];
    datetime time_m15[];
+   double close_m30[];
+   datetime time_m30[];
    double close_h1[];
    datetime time_h1[];
    int map_m5[];
    int map_m15[];
+   int map_m30[];
    int map_h1[];
 
    FXAI_LoadSeriesOptionalCached(symbol, PERIOD_M5, needed_m5, rates_m5, close_m5, time_m5);
    FXAI_LoadSeriesOptionalCached(symbol, PERIOD_M15, needed_m15, rates_m15, close_m15, time_m15);
+   FXAI_LoadSeriesOptionalCached(symbol, PERIOD_M30, needed_m30, rates_m30, close_m30, time_m30);
    FXAI_LoadSeriesOptionalCached(symbol, PERIOD_H1, needed_h1, rates_h1, close_h1, time_h1);
 
    int lag_m5 = 2 * PeriodSeconds(PERIOD_M5);
    int lag_m15 = 2 * PeriodSeconds(PERIOD_M15);
+   int lag_m30 = 2 * PeriodSeconds(PERIOD_M30);
    int lag_h1 = 2 * PeriodSeconds(PERIOD_H1);
    if(lag_m5 <= 0) lag_m5 = 600;
    if(lag_m15 <= 0) lag_m15 = 1800;
+   if(lag_m30 <= 0) lag_m30 = 3600;
    if(lag_h1 <= 0) lag_h1 = 7200;
 
    FXAI_BuildAlignedIndexMap(time_arr, time_m5, lag_m5, map_m5);
    FXAI_BuildAlignedIndexMap(time_arr, time_m15, lag_m15, map_m15);
+   FXAI_BuildAlignedIndexMap(time_arr, time_m30, lag_m30, map_m30);
    FXAI_BuildAlignedIndexMap(time_arr, time_h1, lag_h1, map_h1);
 
    int ctx_count = ArraySize(g_context_symbols);
@@ -931,6 +1021,9 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
                                  snapshot,
                                  spread_m1,
                                  time_arr,
+                                 open_arr,
+                                 high_arr,
+                                 low_arr,
                                  close_arr,
                                  time_m5,
                                  close_m5,
@@ -938,6 +1031,9 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
                                  time_m15,
                                  close_m15,
                                  map_m15,
+                                 time_m30,
+                                 close_m30,
+                                 map_m30,
                                  time_h1,
                                  close_h1,
                                  map_h1,
@@ -999,7 +1095,9 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
             if(val_end >= i_end) val_end = i_end - 1;
             if(val_end <= val_start) continue;
 
-            int train_start = val_end + 1;
+            // Prevent fold leakage: sample i uses label at i-H, so training must start
+            // at least H+1 bars older than validation end.
+            int train_start = val_end + H + 1;
             int train_end = i_end;
             if(train_end - train_start < 100) continue;
 
@@ -1117,6 +1215,9 @@ void FXAI_PrecomputeTrainingSamples(const int i_start,
                                    const FXAIDataSnapshot &snapshot,
                                    const int &spread_m1[],
                                    const datetime &time_arr[],
+                                   const double &open_arr[],
+                                   const double &high_arr[],
+                                   const double &low_arr[],
                                    const double &close_arr[],
                                    const datetime &time_m5[],
                                    const double &close_m5[],
@@ -1124,6 +1225,9 @@ void FXAI_PrecomputeTrainingSamples(const int i_start,
                                    const datetime &time_m15[],
                                    const double &close_m15[],
                                    const int &map_m15[],
+                                   const datetime &time_m30[],
+                                   const double &close_m30[],
+                                   const int &map_m30[],
                                    const datetime &time_h1[],
                                    const double &close_h1[],
                                    const int &map_h1[],
@@ -1139,7 +1243,9 @@ void FXAI_PrecomputeTrainingSamples(const int i_start,
    if(ArraySize(samples) < need_size)
       ArrayResize(samples, need_size);
 
-   for(int i=i_start; i<=i_end; i++)
+   // Build samples oldest -> newest (as-series: larger index is older) so
+   // any stateful normalizer sees a causal timeline.
+   for(int i=i_end; i>=i_start; i--)
    {
       if(i < 0 || i >= ArraySize(samples)) continue;
       FXAI_PrepareTrainingSample(i,
@@ -1150,6 +1256,9 @@ void FXAI_PrecomputeTrainingSamples(const int i_start,
                                 snapshot,
                                 spread_m1,
                                 time_arr,
+                                open_arr,
+                                high_arr,
+                                low_arr,
                                 close_arr,
                                 time_m5,
                                 close_m5,
@@ -1157,6 +1266,9 @@ void FXAI_PrecomputeTrainingSamples(const int i_start,
                                 time_m15,
                                 close_m15,
                                 map_m15,
+                                time_m30,
+                                close_m30,
+                                map_m30,
                                 time_h1,
                                 close_h1,
                                 map_h1,
@@ -1430,6 +1542,29 @@ void FXAI_ParseContextSymbols(const string raw, string &symbols[])
    }
 }
 
+void FXAI_FilterContextSymbols(const string main_symbol, string &symbols[])
+{
+   int n = ArraySize(symbols);
+   if(n <= 0) return;
+
+   int w = 0;
+   for(int i=0; i<n; i++)
+   {
+      string sym = symbols[i];
+      StringTrimLeft(sym);
+      StringTrimRight(sym);
+      if(StringLen(sym) <= 0) continue;
+      if(StringCompare(sym, main_symbol, false) == 0) continue;
+      if(!SymbolSelect(sym, true)) continue;
+
+      symbols[w] = sym;
+      w++;
+   }
+
+   if(w < n)
+      ArrayResize(symbols, w);
+}
+
 void FXAI_PrecomputeContextAggregates(const datetime &main_time[],
                                      FXAIContextSeries &ctx_series[],
                                      const int ctx_count,
@@ -1442,6 +1577,7 @@ void FXAI_PrecomputeContextAggregates(const datetime &main_time[],
    ArrayResize(ctx_mean_arr, n);
    ArrayResize(ctx_std_arr, n);
    ArrayResize(ctx_up_arr, n);
+   if(n <= 0) return;
 
    int lag_m1 = 2 * PeriodSeconds(PERIOD_M1);
    if(lag_m1 <= 0) lag_m1 = 120;
@@ -1449,6 +1585,16 @@ void FXAI_PrecomputeContextAggregates(const datetime &main_time[],
    int upto = upto_index;
    if(upto < 0) upto = 0;
    if(upto >= n) upto = n - 1;
+   // Keep one extra index ready for normalizers that need previous-bar features (i+1).
+   int upto_fill = upto;
+   if(upto_fill < n - 1) upto_fill++;
+
+   for(int i=0; i<n; i++)
+   {
+      ctx_mean_arr[i] = 0.0;
+      ctx_std_arr[i] = 0.0;
+      ctx_up_arr[i] = 0.5;
+   }
 
    for(int s=0; s<ctx_count; s++)
    {
@@ -1460,16 +1606,12 @@ void FXAI_PrecomputeContextAggregates(const datetime &main_time[],
       FXAI_BuildAlignedIndexMapRange(main_time,
                                     ctx_series[s].time,
                                     lag_m1,
-                                    upto,
+                                    upto_fill,
                                     ctx_series[s].aligned_idx);
    }
 
-   for(int i=0; i<=upto; i++)
+   for(int i=0; i<=upto_fill; i++)
    {
-      ctx_mean_arr[i] = 0.0;
-      ctx_std_arr[i] = 0.0;
-      ctx_up_arr[i] = 0.5;
-
       datetime t_ref = main_time[i];
       if(t_ref <= 0 || ctx_count <= 0) continue;
 
@@ -1550,6 +1692,7 @@ int OnInit()
       return(INIT_FAILED);
 
    FXAI_ParseContextSymbols(AI_ContextSymbols, g_context_symbols);
+   FXAI_FilterContextSymbols(_Symbol, g_context_symbols);
 
    ResetAIState(_Symbol);
    return(INIT_SUCCEEDED);
@@ -1953,17 +2096,24 @@ int SpecialDirectionAI(const string symbol)
    if(have_init_window) precompute_end = init_end;
    if(have_online_window && online_end > precompute_end) precompute_end = online_end;
    int align_upto = (precompute_end > 0 ? precompute_end : 0);
+   // Keep one extra mapped index ready for methods that normalize against i+1.
+   if(align_upto < needed - 1) align_upto++;
 
    static MqlRates rates_m1[];
    static MqlRates rates_m5[];
    static MqlRates rates_m15[];
+   static MqlRates rates_m30[];
    static MqlRates rates_h1[];
    static string cache_symbol = "";
    static datetime last_bar_m1 = 0;
    static datetime last_bar_m5 = 0;
    static datetime last_bar_m15 = 0;
+   static datetime last_bar_m30 = 0;
    static datetime last_bar_h1 = 0;
 
+   static double open_arr[];
+   static double high_arr[];
+   static double low_arr[];
    static double close_arr[];
    static datetime time_arr[];
    static int spread_m1[];
@@ -1978,10 +2128,12 @@ int SpecialDirectionAI(const string symbol)
       last_bar_m1 = 0;
       last_bar_m5 = 0;
       last_bar_m15 = 0;
+      last_bar_m30 = 0;
       last_bar_h1 = 0;
       ArrayResize(rates_m1, 0);
       ArrayResize(rates_m5, 0);
       ArrayResize(rates_m15, 0);
+      ArrayResize(rates_m30, 0);
       ArrayResize(rates_h1, 0);
       ArrayResize(ctx_series, 0);
    }
@@ -1995,6 +2147,7 @@ int SpecialDirectionAI(const string symbol)
       return -1;
    }
    FXAI_ExtractRatesCloseTimeSpread(rates_m1, close_arr, time_arr, spread_m1);
+   FXAI_ExtractRatesOHLC(rates_m1, open_arr, high_arr, low_arr, close_arr);
    if(ArraySize(close_arr) < needed || ArraySize(time_arr) < needed || ArraySize(spread_m1) < needed)
    {
       g_ai_last_reason = "m1_series_size_failed";
@@ -2003,16 +2156,24 @@ int SpecialDirectionAI(const string symbol)
 
    int needed_m5 = (needed / 5) + 80;
    int needed_m15 = (needed / 15) + 80;
+   int needed_m30 = (needed / 30) + 80;
    int needed_h1 = (needed / 60) + 80;
+   if(needed_m5 < 220) needed_m5 = 220;
+   if(needed_m15 < 220) needed_m15 = 220;
+   if(needed_m30 < 220) needed_m30 = 220;
+   if(needed_h1 < 220) needed_h1 = 220;
 
    static double close_m5[];
    static datetime time_m5[];
    static double close_m15[];
    static datetime time_m15[];
+   static double close_m30[];
+   static datetime time_m30[];
    static double close_h1[];
    static datetime time_h1[];
    static int map_m5[];
    static int map_m15[];
+   static int map_m30[];
    static int map_h1[];
    if(FXAI_UpdateRatesRolling(symbol, PERIOD_M5, needed_m5, last_bar_m5, rates_m5))
       FXAI_ExtractRatesCloseTime(rates_m5, close_m5, time_m5);
@@ -2032,6 +2193,15 @@ int SpecialDirectionAI(const string symbol)
       ArrayResize(map_m15, 0);
    }
 
+   if(FXAI_UpdateRatesRolling(symbol, PERIOD_M30, needed_m30, last_bar_m30, rates_m30))
+      FXAI_ExtractRatesCloseTime(rates_m30, close_m30, time_m30);
+   else
+   {
+      ArrayResize(close_m30, 0);
+      ArrayResize(time_m30, 0);
+      ArrayResize(map_m30, 0);
+   }
+
    if(FXAI_UpdateRatesRolling(symbol, PERIOD_H1, needed_h1, last_bar_h1, rates_h1))
       FXAI_ExtractRatesCloseTime(rates_h1, close_h1, time_h1);
    else
@@ -2043,13 +2213,16 @@ int SpecialDirectionAI(const string symbol)
 
    int lag_m5 = 2 * PeriodSeconds(PERIOD_M5);
    int lag_m15 = 2 * PeriodSeconds(PERIOD_M15);
+   int lag_m30 = 2 * PeriodSeconds(PERIOD_M30);
    int lag_h1 = 2 * PeriodSeconds(PERIOD_H1);
    if(lag_m5 <= 0) lag_m5 = 600;
    if(lag_m15 <= 0) lag_m15 = 1800;
+   if(lag_m30 <= 0) lag_m30 = 3600;
    if(lag_h1 <= 0) lag_h1 = 7200;
 
    FXAI_BuildAlignedIndexMapRange(time_arr, time_m5, lag_m5, align_upto, map_m5);
    FXAI_BuildAlignedIndexMapRange(time_arr, time_m15, lag_m15, align_upto, map_m15);
+   FXAI_BuildAlignedIndexMapRange(time_arr, time_m30, lag_m30, align_upto, map_m30);
    FXAI_BuildAlignedIndexMapRange(time_arr, time_h1, lag_h1, align_upto, map_h1);
 
    int ctx_count = ArraySize(g_context_symbols);
@@ -2114,10 +2287,14 @@ int SpecialDirectionAI(const string symbol)
    double ctx_std_pred = FXAI_GetArrayValue(ctx_std_arr, 0, 0.0);
    double ctx_up_pred = FXAI_GetArrayValue(ctx_up_arr, 0, 0.5);
 
+   ENUM_FXAI_FEATURE_NORMALIZATION norm_method = FXAI_GetFeatureNormalizationMethod();
    double feat_pred[FXAI_AI_FEATURES];
    if(!FXAI_ComputeFeatureVector(0,
                                 spread_pred,
                                 time_arr,
+                                open_arr,
+                                high_arr,
+                                low_arr,
                                 close_arr,
                                 time_m5,
                                 close_m5,
@@ -2125,12 +2302,16 @@ int SpecialDirectionAI(const string symbol)
                                 time_m15,
                                 close_m15,
                                 map_m15,
+                                time_m30,
+                                close_m30,
+                                map_m30,
                                 time_h1,
                                 close_h1,
                                 map_h1,
                                 ctx_mean_pred,
                                 ctx_std_pred,
                                 ctx_up_pred,
+                                norm_method,
                                 feat_pred))
    {
       g_ai_last_signal_bar = signal_bar;
@@ -2140,8 +2321,55 @@ int SpecialDirectionAI(const string symbol)
       return -1;
    }
 
+   bool need_prev = FXAI_FeatureNormNeedsPrevious(norm_method);
+   bool has_prev_feat = false;
+   double feat_prev[FXAI_AI_FEATURES];
+   for(int f=0; f<FXAI_AI_FEATURES; f++)
+      feat_prev[f] = 0.0;
+
+   if(need_prev && ArraySize(close_arr) > 1)
+   {
+      double spread_prev = FXAI_GetSpreadAtIndex(1, spread_m1, spread_pred);
+      double ctx_mean_prev = FXAI_GetArrayValue(ctx_mean_arr, 1, ctx_mean_pred);
+      double ctx_std_prev = FXAI_GetArrayValue(ctx_std_arr, 1, ctx_std_pred);
+      double ctx_up_prev = FXAI_GetArrayValue(ctx_up_arr, 1, ctx_up_pred);
+
+      has_prev_feat = FXAI_ComputeFeatureVector(1,
+                                               spread_prev,
+                                               time_arr,
+                                               open_arr,
+                                               high_arr,
+                                               low_arr,
+                                               close_arr,
+                                               time_m5,
+                                               close_m5,
+                                               map_m5,
+                                               time_m15,
+                                               close_m15,
+                                               map_m15,
+                                               time_m30,
+                                               close_m30,
+                                               map_m30,
+                                               time_h1,
+                                               close_h1,
+                                               map_h1,
+                                               ctx_mean_prev,
+                                               ctx_std_prev,
+                                               ctx_up_prev,
+                                               norm_method,
+                                               feat_prev);
+   }
+
+   double feat_pred_norm[FXAI_AI_FEATURES];
+   FXAI_ApplyFeatureNormalization(norm_method,
+                                  feat_pred,
+                                  feat_prev,
+                                  has_prev_feat,
+                                  snapshot.bar_time,
+                                  feat_pred_norm);
+
    double x_pred[FXAI_AI_WEIGHTS];
-   FXAI_BuildInputVector(feat_pred, x_pred);
+   FXAI_BuildInputVector(feat_pred_norm, x_pred);
 
    double fallback_expected_move = FXAI_EstimateExpectedAbsMovePoints(close_arr,
                                                                       H,
@@ -2151,9 +2379,11 @@ int SpecialDirectionAI(const string symbol)
       fallback_expected_move = min_move_pred;
 
    static FXAIPreparedSample samples[];
-   if(precompute_end >= H)
+   if(precompute_end >= 1)
    {
-      FXAI_PrecomputeTrainingSamples(H,
+      // Start at 1 (not H) so rolling normalizers see the full recent past for
+      // prediction-time feature scaling, even when horizon H is large.
+      FXAI_PrecomputeTrainingSamples(1,
                                     precompute_end,
                                     H,
                                     commission_points,
@@ -2162,6 +2392,9 @@ int SpecialDirectionAI(const string symbol)
                                     snapshot,
                                     spread_m1,
                                     time_arr,
+                                    open_arr,
+                                    high_arr,
+                                    low_arr,
                                     close_arr,
                                     time_m5,
                                     close_m5,
@@ -2169,6 +2402,9 @@ int SpecialDirectionAI(const string symbol)
                                     time_m15,
                                     close_m15,
                                     map_m15,
+                                    time_m30,
+                                    close_m30,
+                                    map_m30,
                                     time_h1,
                                     close_h1,
                                     map_h1,
@@ -2226,17 +2462,6 @@ int SpecialDirectionAI(const string symbol)
       FXAIAIHyperParams hp_model;
       FXAI_GetModelHyperParams(ai_idx, hp_model);
       plugin.EnsureInitialized(hp_model);
-
-      // Reliability is updated only from matured, out-of-sample predictions.
-      FXAI_UpdateReliabilityFromPending(ai_idx,
-                                       signal_seq,
-                                       H,
-                                       snapshot,
-                                       spread_m1,
-                                       close_arr,
-                                       commission_points,
-                                       cost_buffer_points,
-                                       evThresholdPoints);
 
       if(!g_ai_trained[ai_idx])
       {
