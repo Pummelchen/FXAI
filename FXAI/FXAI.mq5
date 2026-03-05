@@ -3252,6 +3252,12 @@ void FXAI_GetModelHyperParams(const int ai_idx, FXAIAIHyperParams &hp)
       return;
    }
    FXAI_BuildHyperParams(hp);
+   // Recommended GeodesicAttention starting defaults.
+   if(ai_idx == (int)AI_GEODESICATTENTION)
+   {
+      hp.lr = 0.0060;
+      hp.l2 = 0.0030;
+   }
 }
 
 void FXAI_GetModelThresholds(const int ai_idx,
@@ -3321,12 +3327,16 @@ void FXAI_SampleModelHyperParams(const int ai_idx,
       case (int)AI_AUTOFORMER:
       case (int)AI_STMN:
       case (int)AI_TST:
-      case (int)AI_GEODESICATTENTION:
       case (int)AI_PATCHTST:
       case (int)AI_CHRONOS:
       case (int)AI_TIMESFM:
          hp.lr = FXAI_RandRange(0.0030, 0.0600);
          hp.l2 = FXAI_RandRange(0.0000, 0.0300);
+         break;
+
+      case (int)AI_GEODESICATTENTION:
+         hp.lr = FXAI_RandRange(0.0030, 0.0150);
+         hp.l2 = FXAI_RandRange(0.0010, 0.0080);
          break;
 
       case (int)AI_TCN:
