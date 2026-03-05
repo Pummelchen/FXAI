@@ -2423,7 +2423,14 @@ void SendTrade()
 //--------------------------- ON TICK --------------------------------
 void OnTick()
 {
-   FX6_ProcessReliabilityBar(_Symbol);
+   static datetime last_ai_bar = 0;
+   datetime signal_bar = iTime(_Symbol, PERIOD_M1, 1);
+   bool new_m1_bar = false;
+   if(signal_bar > 0 && signal_bar != last_ai_bar)
+   {
+      last_ai_bar = signal_bar;
+      new_m1_bar = true;
+   }
 
    int total = OrdersTotal() + PositionsTotal();
 
@@ -2441,6 +2448,11 @@ void OnTick()
       if(MaxDD > 0) EAStop();
       TPCheck();
    }
+
+   if(!new_m1_bar) return;
+
+   // Heavy model/reliability updates run only once per closed M1 bar.
+   FX6_ProcessReliabilityBar(_Symbol);
 
    if(OrdersTotal() + PositionsTotal() == 0)
       SendTrade();

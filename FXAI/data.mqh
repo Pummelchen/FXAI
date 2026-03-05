@@ -1,10 +1,10 @@
 // FXAI v1
-#ifndef __FX6_DATA_MQH__
-#define __FX6_DATA_MQH__
+#ifndef __FXAI_DATA_MQH__
+#define __FXAI_DATA_MQH__
 
 #include "shared.mqh"
 
-double FX6_GetCurrentSpreadPoints(const string symbol)
+double FXAI_GetCurrentSpreadPoints(const string symbol)
 {
    long spread_raw = SymbolInfoInteger(symbol, SYMBOL_SPREAD);
    if(spread_raw > 0) return (double)spread_raw;
@@ -17,7 +17,7 @@ double FX6_GetCurrentSpreadPoints(const string symbol)
    return (ask - bid) / point;
 }
 
-double FX6_GetCommissionPointsRoundTripPerLot(const string symbol,
+double FXAI_GetCommissionPointsRoundTripPerLot(const string symbol,
                                                const double commission_per_lot_side)
 {
    if(commission_per_lot_side <= 0.0) return 0.0;
@@ -34,18 +34,18 @@ double FX6_GetCommissionPointsRoundTripPerLot(const string symbol,
    return (commission_per_lot_side * 2.0) / money_per_point_per_lot;
 }
 
-bool FX6_ExportDataSnapshot(const string symbol,
+bool FXAI_ExportDataSnapshot(const string symbol,
                             const double commission_per_lot_side,
                             const double buffer_points,
-                            FX6DataSnapshot &snapshot)
+                            FXAIDataSnapshot &snapshot)
 {
    snapshot.symbol = symbol;
    snapshot.bar_time = iTime(symbol, PERIOD_M1, 1);
    snapshot.point = SymbolInfoDouble(symbol, SYMBOL_POINT);
    if(snapshot.bar_time == 0 || snapshot.point <= 0.0) return false;
 
-   snapshot.spread_points = FX6_GetCurrentSpreadPoints(symbol);
-   snapshot.commission_points = FX6_GetCommissionPointsRoundTripPerLot(symbol, commission_per_lot_side);
+   snapshot.spread_points = FXAI_GetCurrentSpreadPoints(symbol);
+   snapshot.commission_points = FXAI_GetCommissionPointsRoundTripPerLot(symbol, commission_per_lot_side);
 
    double buffer = (buffer_points < 0.0 ? 0.0 : buffer_points);
    snapshot.min_move_points = snapshot.spread_points + snapshot.commission_points + buffer;
@@ -54,7 +54,7 @@ bool FX6_ExportDataSnapshot(const string symbol,
    return true;
 }
 
-bool FX6_IsInLiquidSession(const string symbol,
+bool FXAI_IsInLiquidSession(const string symbol,
                            const datetime now,
                            const int min_after_open_minutes,
                            const int min_before_close_minutes)
@@ -115,7 +115,7 @@ bool FX6_IsInLiquidSession(const string symbol,
    return false;
 }
 
-bool FX6_LoadRatesOptional(const string symbol,
+bool FXAI_LoadRatesOptional(const string symbol,
                            const ENUM_TIMEFRAMES tf,
                            const int needed,
                            MqlRates &rates_arr[])
@@ -142,7 +142,7 @@ bool FX6_LoadRatesOptional(const string symbol,
    return true;
 }
 
-bool FX6_UpdateRatesRolling(const string symbol,
+bool FXAI_UpdateRatesRolling(const string symbol,
                             const ENUM_TIMEFRAMES tf,
                             const int needed,
                             datetime &last_bar_time,
@@ -241,7 +241,7 @@ bool FX6_UpdateRatesRolling(const string symbol,
    return true;
 }
 
-void FX6_ExtractRatesCloseTime(const MqlRates &rates_arr[],
+void FXAI_ExtractRatesCloseTime(const MqlRates &rates_arr[],
                                double &close_arr[],
                                datetime &time_arr[])
 {
@@ -260,7 +260,7 @@ void FX6_ExtractRatesCloseTime(const MqlRates &rates_arr[],
    }
 }
 
-void FX6_ExtractRatesCloseTimeSpread(const MqlRates &rates_arr[],
+void FXAI_ExtractRatesCloseTimeSpread(const MqlRates &rates_arr[],
                                      double &close_arr[],
                                      datetime &time_arr[],
                                      int &spread_arr[])
@@ -284,32 +284,32 @@ void FX6_ExtractRatesCloseTimeSpread(const MqlRates &rates_arr[],
    }
 }
 
-bool FX6_LoadSeriesOptionalCached(const string symbol,
+bool FXAI_LoadSeriesOptionalCached(const string symbol,
                                   const ENUM_TIMEFRAMES tf,
                                   const int needed,
                                   MqlRates &rates_arr[],
                                   double &close_arr[],
                                   datetime &time_arr[])
 {
-   if(!FX6_LoadRatesOptional(symbol, tf, needed, rates_arr))
+   if(!FXAI_LoadRatesOptional(symbol, tf, needed, rates_arr))
    {
       ArrayResize(close_arr, 0);
       ArrayResize(time_arr, 0);
       return false;
    }
 
-   FX6_ExtractRatesCloseTime(rates_arr, close_arr, time_arr);
+   FXAI_ExtractRatesCloseTime(rates_arr, close_arr, time_arr);
    return (ArraySize(close_arr) > 0 && ArraySize(time_arr) > 0);
 }
 
-bool FX6_LoadSeriesWithSpread(const string symbol,
+bool FXAI_LoadSeriesWithSpread(const string symbol,
                               const int needed,
                               MqlRates &rates_arr[],
                               double &close_arr[],
                               datetime &time_arr[],
                               int &spread_arr[])
 {
-   if(!FX6_LoadRatesOptional(symbol, PERIOD_M1, needed, rates_arr))
+   if(!FXAI_LoadRatesOptional(symbol, PERIOD_M1, needed, rates_arr))
    {
       ArrayResize(close_arr, 0);
       ArrayResize(time_arr, 0);
@@ -317,40 +317,40 @@ bool FX6_LoadSeriesWithSpread(const string symbol,
       return false;
    }
 
-   FX6_ExtractRatesCloseTimeSpread(rates_arr, close_arr, time_arr, spread_arr);
+   FXAI_ExtractRatesCloseTimeSpread(rates_arr, close_arr, time_arr, spread_arr);
    return (ArraySize(close_arr) >= needed &&
            ArraySize(time_arr) >= needed &&
            ArraySize(spread_arr) >= needed);
 }
 
-bool FX6_LoadSeriesOptional(const string symbol,
+bool FXAI_LoadSeriesOptional(const string symbol,
                             const ENUM_TIMEFRAMES tf,
                             const int needed,
                             double &close_arr[],
                             datetime &time_arr[])
 {
    MqlRates rates_tmp[];
-   return FX6_LoadSeriesOptionalCached(symbol, tf, needed, rates_tmp, close_arr, time_arr);
+   return FXAI_LoadSeriesOptionalCached(symbol, tf, needed, rates_tmp, close_arr, time_arr);
 }
 
-bool FX6_LoadSeries(const string symbol,
+bool FXAI_LoadSeries(const string symbol,
                     const int needed,
                     double &close_arr[],
                     datetime &time_arr[])
 {
-   if(!FX6_LoadSeriesOptional(symbol, PERIOD_M1, needed, close_arr, time_arr))
+   if(!FXAI_LoadSeriesOptional(symbol, PERIOD_M1, needed, close_arr, time_arr))
       return false;
 
    return (ArraySize(close_arr) >= needed && ArraySize(time_arr) >= needed);
 }
 
-bool FX6_LoadSpreadSeriesOptional(const string symbol,
+bool FXAI_LoadSpreadSeriesOptional(const string symbol,
                                   const ENUM_TIMEFRAMES tf,
                                   const int needed,
                                   int &spread_arr[])
 {
    MqlRates rates_tmp[];
-   if(!FX6_LoadRatesOptional(symbol, tf, needed, rates_tmp))
+   if(!FXAI_LoadRatesOptional(symbol, tf, needed, rates_tmp))
    {
       ArrayResize(spread_arr, 0);
       return false;
@@ -372,7 +372,7 @@ bool FX6_LoadSpreadSeriesOptional(const string symbol,
    return true;
 }
 
-double FX6_GetSpreadAtIndex(const int i,
+double FXAI_GetSpreadAtIndex(const int i,
                             const int &spread_arr[],
                             const double fallback_spread_points)
 {
@@ -386,7 +386,7 @@ double FX6_GetSpreadAtIndex(const int i,
    return 0.0;
 }
 
-double FX6_MovePoints(const double price_now,
+double FXAI_MovePoints(const double price_now,
                       const double price_future,
                       const double point)
 {
@@ -394,7 +394,7 @@ double FX6_MovePoints(const double price_now,
    return (price_future - price_now) / point;
 }
 
-int FX6_BuildEVClassLabel(const double move_points,
+int FXAI_BuildEVClassLabel(const double move_points,
                           const double roundtrip_cost_points,
                           const double ev_threshold_points)
 {
@@ -403,21 +403,21 @@ int FX6_BuildEVClassLabel(const double move_points,
    double buy_ev = move_points - roundtrip_cost_points;
    double sell_ev = -move_points - roundtrip_cost_points;
 
-   if(buy_ev >= ev_min && buy_ev > sell_ev) return (int)FX6_LABEL_BUY;
-   if(sell_ev >= ev_min && sell_ev > buy_ev) return (int)FX6_LABEL_SELL;
-   return (int)FX6_LABEL_SKIP;
+   if(buy_ev >= ev_min && buy_ev > sell_ev) return (int)FXAI_LABEL_BUY;
+   if(sell_ev >= ev_min && sell_ev > buy_ev) return (int)FXAI_LABEL_SELL;
+   return (int)FXAI_LABEL_SKIP;
 }
 
-bool FX6_ClassToBinaryY(const int label_class,
+bool FXAI_ClassToBinaryY(const int label_class,
                         int &y)
 {
-   if(label_class == (int)FX6_LABEL_BUY)
+   if(label_class == (int)FXAI_LABEL_BUY)
    {
       y = 1;
       return true;
    }
 
-   if(label_class == (int)FX6_LABEL_SELL)
+   if(label_class == (int)FXAI_LABEL_SELL)
    {
       y = 0;
       return true;
@@ -427,7 +427,7 @@ bool FX6_ClassToBinaryY(const int label_class,
    return false;
 }
 
-int FX6_FindAlignedIndex(const datetime &time_arr[],
+int FXAI_FindAlignedIndex(const datetime &time_arr[],
                          const datetime ref_time,
                          const int max_lag_seconds)
 {
@@ -465,16 +465,16 @@ int FX6_FindAlignedIndex(const datetime &time_arr[],
    return ans;
 }
 
-void FX6_BuildAlignedIndexMap(const datetime &ref_time_arr[],
+void FXAI_BuildAlignedIndexMap(const datetime &ref_time_arr[],
                               const datetime &target_time_arr[],
                               const int max_lag_seconds,
                               int &out_idx_arr[])
 {
    int n_ref = ArraySize(ref_time_arr);
-   FX6_BuildAlignedIndexMapRange(ref_time_arr, target_time_arr, max_lag_seconds, n_ref - 1, out_idx_arr);
+   FXAI_BuildAlignedIndexMapRange(ref_time_arr, target_time_arr, max_lag_seconds, n_ref - 1, out_idx_arr);
 }
 
-void FX6_BuildAlignedIndexMapRange(const datetime &ref_time_arr[],
+void FXAI_BuildAlignedIndexMapRange(const datetime &ref_time_arr[],
                                    const datetime &target_time_arr[],
                                    const int max_lag_seconds,
                                    const int upto_index,
@@ -527,7 +527,7 @@ void FX6_BuildAlignedIndexMapRange(const datetime &ref_time_arr[],
    }
 }
 
-double FX6_SafeReturn(const double &arr[],
+double FXAI_SafeReturn(const double &arr[],
                       const int idx_now,
                       const int idx_prev)
 {
@@ -543,7 +543,7 @@ double FX6_SafeReturn(const double &arr[],
    return (a - b) / b;
 }
 
-double FX6_NormalizedSlope(const double &arr[],
+double FXAI_NormalizedSlope(const double &arr[],
                            const int start_idx,
                            const int width)
 {
@@ -575,7 +575,7 @@ double FX6_NormalizedSlope(const double &arr[],
    return slope / c;
 }
 
-double FX6_EstimateExpectedAbsMovePoints(const double &close_arr[],
+double FXAI_EstimateExpectedAbsMovePoints(const double &close_arr[],
                                          const int horizon_m1,
                                          const int sample_count,
                                          const double point)
@@ -595,7 +595,7 @@ double FX6_EstimateExpectedAbsMovePoints(const double &close_arr[],
       int f = i - horizon_m1;
       if(f < 0 || f >= n) continue;
 
-      double mv = FX6_MovePoints(close_arr[i], close_arr[f], point);
+      double mv = FXAI_MovePoints(close_arr[i], close_arr[f], point);
       sum_abs += MathAbs(mv);
       count++;
    }
@@ -604,7 +604,7 @@ double FX6_EstimateExpectedAbsMovePoints(const double &close_arr[],
    return sum_abs / (double)count;
 }
 
-double FX6_RollingAbsReturn(const double &arr[],
+double FXAI_RollingAbsReturn(const double &arr[],
                             const int start_idx,
                             const int width)
 {
@@ -620,7 +620,7 @@ double FX6_RollingAbsReturn(const double &arr[],
    int count = 0;
    for(int k=0; k<w; k++)
    {
-      double r = FX6_SafeReturn(arr, start_idx + k, start_idx + k + 1);
+      double r = FXAI_SafeReturn(arr, start_idx + k, start_idx + k + 1);
       sum_abs += MathAbs(r);
       count++;
    }
@@ -629,7 +629,7 @@ double FX6_RollingAbsReturn(const double &arr[],
    return sum_abs / (double)count;
 }
 
-bool FX6_ComputeFeatureVector(const int i,
+bool FXAI_ComputeFeatureVector(const int i,
                               const double spread_points,
                               const datetime &main_t1[],
                               const double &main_m1[],
@@ -657,7 +657,7 @@ bool FX6_ComputeFeatureVector(const int i,
    datetime t_ref = main_t1[i];
    if(t_ref <= 0) return false;
 
-   for(int f=0; f<FX6_AI_FEATURES; f++) features[f] = 0.0;
+   for(int f=0; f<FXAI_AI_FEATURES; f++) features[f] = 0.0;
 
    double c = main_m1[i];
    double c1 = main_m1[i + 1];
@@ -666,7 +666,7 @@ bool FX6_ComputeFeatureVector(const int i,
    if(c1 <= 0.0 || c3 <= 0.0 || c5 <= 0.0) return false;
 
    // Use rolling return magnitude as lightweight regime normalization.
-   double vol_unit = FX6_RollingAbsReturn(main_m1, i, 20);
+   double vol_unit = FXAI_RollingAbsReturn(main_m1, i, 20);
    if(vol_unit < 1e-6) vol_unit = 1e-6;
    double spread_norm = 1.0 + (10000.0 * vol_unit);
    if(spread_norm < 1.0) spread_norm = 1.0;
@@ -675,7 +675,7 @@ bool FX6_ComputeFeatureVector(const int i,
    features[0] = ((c - c1) / c1) / vol_unit;
    features[1] = ((c - c3) / c3) / vol_unit;
    features[2] = ((c - c5) / c5) / vol_unit;
-   features[3] = FX6_NormalizedSlope(main_m1, i, 10) / vol_unit;
+   features[3] = FXAI_NormalizedSlope(main_m1, i, 10) / vol_unit;
 
    double sumy = 0.0;
    for(int k=0; k<10; k++) sumy += main_m1[i + k];
@@ -694,7 +694,7 @@ bool FX6_ComputeFeatureVector(const int i,
    double rsum2 = 0.0;
    for(int k=0; k<10; k++)
    {
-      double r = FX6_SafeReturn(main_m1, i + k, i + k + 1);
+      double r = FXAI_SafeReturn(main_m1, i + k, i + k + 1);
       rsum += r;
       rsum2 += r * r;
    }
@@ -719,25 +719,25 @@ bool FX6_ComputeFeatureVector(const int i,
    if(i >= 0 && i < ArraySize(map_m15)) i15 = map_m15[i];
    if(i >= 0 && i < ArraySize(map_h1)) i60 = map_h1[i];
 
-   if(i5 < 0) i5 = FX6_FindAlignedIndex(main_t5, t_ref, lag_m5);
-   if(i15 < 0) i15 = FX6_FindAlignedIndex(main_t15, t_ref, lag_m15);
-   if(i60 < 0) i60 = FX6_FindAlignedIndex(main_h1_t, t_ref, lag_h1);
+   if(i5 < 0) i5 = FXAI_FindAlignedIndex(main_t5, t_ref, lag_m5);
+   if(i15 < 0) i15 = FXAI_FindAlignedIndex(main_t15, t_ref, lag_m15);
+   if(i60 < 0) i60 = FXAI_FindAlignedIndex(main_h1_t, t_ref, lag_h1);
 
-   features[7] = FX6_SafeReturn(main_m5, i5, i5 + 1) / vol_unit;
-   features[8] = FX6_SafeReturn(main_m15, i15, i15 + 1) / vol_unit;
-   features[9] = FX6_SafeReturn(main_h1, i60, i60 + 1) / vol_unit;
+   features[7] = FXAI_SafeReturn(main_m5, i5, i5 + 1) / vol_unit;
+   features[8] = FXAI_SafeReturn(main_m15, i15, i15 + 1) / vol_unit;
+   features[9] = FXAI_SafeReturn(main_h1, i60, i60 + 1) / vol_unit;
 
    // Cross-symbol context (dynamic list, pre-aggregated in caller)
    // [10] mean return, [11] return dispersion, [12] up-breadth in [-1, +1]
    features[10] = ctx_ret_mean / vol_unit;
    features[11] = ctx_ret_std / vol_unit;
-   features[12] = FX6_Clamp((ctx_up_ratio - 0.5) * 2.0, -1.0, 1.0);
+   features[12] = FXAI_Clamp((ctx_up_ratio - 0.5) * 2.0, -1.0, 1.0);
 
    // MTF slopes on aligned anchor bars
-   features[13] = FX6_NormalizedSlope(main_m5, i5, 6) / vol_unit;
-   features[14] = FX6_NormalizedSlope(main_h1, i60, 6) / vol_unit;
+   features[13] = FXAI_NormalizedSlope(main_m5, i5, 6) / vol_unit;
+   features[14] = FXAI_NormalizedSlope(main_h1, i60, 6) / vol_unit;
 
-   for(int f=0; f<FX6_AI_FEATURES; f++)
+   for(int f=0; f<FXAI_AI_FEATURES; f++)
    {
       double lo = -8.0;
       double hi = 8.0;
@@ -756,10 +756,37 @@ bool FX6_ComputeFeatureVector(const int i,
          lo = -1.0;
          hi = 1.0;
       }
-      features[f] = FX6_Clamp(features[f], lo, hi);
+      features[f] = FXAI_Clamp(features[f], lo, hi);
    }
 
    return true;
 }
 
-#endif // __FX6_DATA_MQH__
+// Backward-compatibility aliases for legacy FX6-prefixed data helpers.
+#define FX6_GetCurrentSpreadPoints FXAI_GetCurrentSpreadPoints
+#define FX6_GetCommissionPointsRoundTripPerLot FXAI_GetCommissionPointsRoundTripPerLot
+#define FX6_ExportDataSnapshot FXAI_ExportDataSnapshot
+#define FX6_IsInLiquidSession FXAI_IsInLiquidSession
+#define FX6_LoadRatesOptional FXAI_LoadRatesOptional
+#define FX6_UpdateRatesRolling FXAI_UpdateRatesRolling
+#define FX6_ExtractRatesCloseTime FXAI_ExtractRatesCloseTime
+#define FX6_ExtractRatesCloseTimeSpread FXAI_ExtractRatesCloseTimeSpread
+#define FX6_LoadSeriesOptionalCached FXAI_LoadSeriesOptionalCached
+#define FX6_LoadSeriesWithSpread FXAI_LoadSeriesWithSpread
+#define FX6_LoadSeriesOptional FXAI_LoadSeriesOptional
+#define FX6_LoadSeries FXAI_LoadSeries
+#define FX6_LoadSpreadSeriesOptional FXAI_LoadSpreadSeriesOptional
+#define FX6_GetSpreadAtIndex FXAI_GetSpreadAtIndex
+#define FX6_MovePoints FXAI_MovePoints
+#define FX6_BuildEVClassLabel FXAI_BuildEVClassLabel
+#define FX6_ClassToBinaryY FXAI_ClassToBinaryY
+#define FX6_FindAlignedIndex FXAI_FindAlignedIndex
+#define FX6_BuildAlignedIndexMap FXAI_BuildAlignedIndexMap
+#define FX6_BuildAlignedIndexMapRange FXAI_BuildAlignedIndexMapRange
+#define FX6_SafeReturn FXAI_SafeReturn
+#define FX6_NormalizedSlope FXAI_NormalizedSlope
+#define FX6_EstimateExpectedAbsMovePoints FXAI_EstimateExpectedAbsMovePoints
+#define FX6_RollingAbsReturn FXAI_RollingAbsReturn
+#define FX6_ComputeFeatureVector FXAI_ComputeFeatureVector
+
+#endif // __FXAI_DATA_MQH__

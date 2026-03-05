@@ -1,48 +1,50 @@
 // FXAI v1
-#ifndef __FX6_SHARED_MQH__
-#define __FX6_SHARED_MQH__
+#ifndef __FXAI_SHARED_MQH__
+#define __FXAI_SHARED_MQH__
 
-#define FX6_AI_FEATURES 15
-#define FX6_AI_WEIGHTS (FX6_AI_FEATURES + 1)
-#define FX6_AI_MLP_HIDDEN 8
-#define FX6_AI_COUNT 22
-#define FX6_ENHASH_BUCKETS 128
-#define FX6_PLUGIN_CLASS_FEATURES 5
+#define FXAI_AI_FEATURES 15
+#define FXAI_AI_WEIGHTS (FXAI_AI_FEATURES + 1)
+#define FXAI_AI_MLP_HIDDEN 8
+#define FXAI_AI_COUNT 22
+#define FXAI_ENHASH_BUCKETS 128
+#define FXAI_PLUGIN_CLASS_FEATURES 5
+
 
 enum ENUM_AI_TYPE
 {
-   AI_TYPE_SGD_LOGIT = 0,
-   AI_TYPE_FTRL_LOGIT,
-   AI_TYPE_PA_LINEAR,
-   AI_TYPE_XGB_FAST,
-   AI_TYPE_MLP_TINY,
-   AI_TYPE_LSTM,
-   AI_TYPE_LSTMG,
-   AI_TYPE_LIGHTGBM,
-   AI_TYPE_S4,
-   AI_TYPE_TCN,
-   AI_TYPE_TFT,
-   AI_TYPE_XGBOOST,
-   AI_TYPE_QUANTILE,
-   AI_TYPE_ENHASH,
-   AI_TYPE_AUTOFORMER,
-   AI_TYPE_STMN,
-   AI_TYPE_TST,
-   AI_TYPE_GEODESICATTENTION,
-   AI_TYPE_CATBOOST,
-   AI_TYPE_PATCHTST,
-   AI_TYPE_CHRONOS,
-   AI_TYPE_TIMESFM
+   AI_AUTOFORMER = 0,
+   AI_CATBOOST,
+   AI_CHRONOS,
+   AI_ENHASH,
+   AI_FTRL_LOGIT,
+   AI_GEODESICATTENTION,
+   AI_LIGHTGBM,
+   AI_LSTM,
+   AI_LSTMG,
+   AI_MLP_TINY,
+   AI_PA_LINEAR,
+   AI_PATCHTST,
+   AI_QUANTILE,
+   AI_S4,
+   AI_SGD_LOGIT,
+   AI_STMN,
+   AI_TCN,
+   AI_TFT,
+   AI_TIMESFM,
+   AI_TST,
+   AI_XGB_FAST,
+   AI_XGBOOST
 };
 
-enum ENUM_FX6_LABEL_CLASS
+
+enum ENUM_FXAI_LABEL_CLASS
 {
-   FX6_LABEL_SELL = 0,
-   FX6_LABEL_BUY  = 1,
-   FX6_LABEL_SKIP = 2
+   FXAI_LABEL_SELL = 0,
+   FXAI_LABEL_BUY  = 1,
+   FXAI_LABEL_SKIP = 2
 };
 
-struct FX6AIHyperParams
+struct FXAIAIHyperParams
 {
    double lr;
    double l2;
@@ -75,7 +77,7 @@ struct FX6AIHyperParams
    double tcn_dilation_base;
 };
 
-struct FX6DataSnapshot
+struct FXAIDataSnapshot
 {
    string symbol;
    datetime bar_time;
@@ -86,7 +88,7 @@ struct FX6DataSnapshot
 };
 
 // V2 plugin API sample payload used for training.
-struct FX6AISampleV2
+struct FXAIAISampleV2
 {
    bool valid;
    int label_class;
@@ -94,47 +96,47 @@ struct FX6AISampleV2
    double min_move_points;
    double cost_points;
    datetime sample_time;
-   double x[FX6_AI_WEIGHTS];
+   double x[FXAI_AI_WEIGHTS];
 };
 
 // V2 plugin API payload used for inference.
-struct FX6AIPredictV2
+struct FXAIAIPredictV2
 {
    double min_move_points;
    double cost_points;
    datetime sample_time;
-   double x[FX6_AI_WEIGHTS];
+   double x[FXAI_AI_WEIGHTS];
 };
 
 // V2 plugin prediction output (native 3-class + move estimate).
-struct FX6AIPredictionV2
+struct FXAIAIPredictionV2
 {
    double class_probs[3];
    double p_up;
    double expected_move_points;
 };
 
-double FX6_Clamp(const double v, const double lo, const double hi)
+double FXAI_Clamp(const double v, const double lo, const double hi)
 {
    if(v < lo) return lo;
    if(v > hi) return hi;
    return v;
 }
 
-double FX6_Sigmoid(const double z)
+double FXAI_Sigmoid(const double z)
 {
    if(z > 35.0) return 1.0;
    if(z < -35.0) return 0.0;
    return 1.0 / (1.0 + MathExp(-z));
 }
 
-double FX6_Logit(const double p)
+double FXAI_Logit(const double p)
 {
-   double x = FX6_Clamp(p, 1e-6, 1.0 - 1e-6);
+   double x = FXAI_Clamp(p, 1e-6, 1.0 - 1e-6);
    return MathLog(x / (1.0 - x));
 }
 
-double FX6_Tanh(const double z)
+double FXAI_Tanh(const double z)
 {
    if(z > 18.0) return 1.0;
    if(z < -18.0) return -1.0;
@@ -142,22 +144,22 @@ double FX6_Tanh(const double z)
    return (e2 - 1.0) / (e2 + 1.0);
 }
 
-double FX6_DotLinear(const double &w[], const double &x[])
+double FXAI_DotLinear(const double &w[], const double &x[])
 {
    double z = 0.0;
-   for(int i=0; i<FX6_AI_WEIGHTS; i++)
+   for(int i=0; i<FXAI_AI_WEIGHTS; i++)
       z += w[i] * x[i];
    return z;
 }
 
-double FX6_Sign(const double v)
+double FXAI_Sign(const double v)
 {
    if(v > 0.0) return 1.0;
    if(v < 0.0) return -1.0;
    return 0.0;
 }
 
-double FX6_ClipSym(const double v, const double limit_abs)
+double FXAI_ClipSym(const double v, const double limit_abs)
 {
    double lim = (limit_abs > 0.0 ? limit_abs : 0.0);
    if(lim <= 0.0) return v;
@@ -166,28 +168,28 @@ double FX6_ClipSym(const double v, const double limit_abs)
    return v;
 }
 
-double FX6_MoveWeight(const double move_points)
+double FXAI_MoveWeight(const double move_points)
 {
    double a = MathAbs(move_points);
    // Keep weighting lightweight and bounded for stable online updates.
-   return FX6_Clamp(1.0 + (0.05 * a), 0.80, 3.00);
+   return FXAI_Clamp(1.0 + (0.05 * a), 0.80, 3.00);
 }
 
-double FX6_MoveEdgeWeight(const double move_points, const double cost_points)
+double FXAI_MoveEdgeWeight(const double move_points, const double cost_points)
 {
    double mv = MathAbs(move_points);
    double c = (cost_points > 0.0 ? cost_points : 0.0);
    double edge = mv - c;
    double denom = MathMax(c, 1.0);
-   return FX6_Clamp(0.50 + (edge / denom), 0.25, 4.00);
+   return FXAI_Clamp(0.50 + (edge / denom), 0.25, 4.00);
 }
 
-void FX6_UpdateMoveEMA(double &ema_abs_move,
+void FXAI_UpdateMoveEMA(double &ema_abs_move,
                        bool &ready,
                        const double move_points,
                        const double alpha)
 {
-   double a = FX6_Clamp(alpha, 0.001, 0.500);
+   double a = FXAI_Clamp(alpha, 0.001, 0.500);
    double v = MathAbs(move_points);
    if(!MathIsValidNumber(v)) return;
 
@@ -201,18 +203,72 @@ void FX6_UpdateMoveEMA(double &ema_abs_move,
    ema_abs_move = (1.0 - a) * ema_abs_move + a * v;
 }
 
-int FX6_ThreeWayBranch(const double x, const double split)
+int FXAI_ThreeWayBranch(const double x, const double split)
 {
    if(x < split - 0.50) return 0;
    if(x > split + 0.50) return 2;
    return 1;
 }
 
-void FX6_BuildInputVector(const double &features[], double &x[])
+void FXAI_BuildInputVector(const double &features[], double &x[])
 {
    x[0] = 1.0;
-   for(int i=0; i<FX6_AI_FEATURES; i++)
+   for(int i=0; i<FXAI_AI_FEATURES; i++)
       x[i + 1] = features[i];
 }
 
-#endif // __FX6_SHARED_MQH__
+// Backward-compatibility layer for legacy FX6-prefixed code paths.
+#define FX6_AI_FEATURES FXAI_AI_FEATURES
+#define FX6_AI_WEIGHTS FXAI_AI_WEIGHTS
+#define FX6_AI_COUNT FXAI_AI_COUNT
+#define FX6_ENHASH_BUCKETS FXAI_ENHASH_BUCKETS
+
+#define FX6_LABEL_SELL FXAI_LABEL_SELL
+#define FX6_LABEL_BUY FXAI_LABEL_BUY
+#define FX6_LABEL_SKIP FXAI_LABEL_SKIP
+
+#define FX6_Clamp FXAI_Clamp
+#define FX6_Sigmoid FXAI_Sigmoid
+#define FX6_Logit FXAI_Logit
+#define FX6_Tanh FXAI_Tanh
+#define FX6_DotLinear FXAI_DotLinear
+#define FX6_Sign FXAI_Sign
+#define FX6_ClipSym FXAI_ClipSym
+#define FX6_MoveWeight FXAI_MoveWeight
+#define FX6_MoveEdgeWeight FXAI_MoveEdgeWeight
+#define FX6_UpdateMoveEMA FXAI_UpdateMoveEMA
+#define FX6_ThreeWayBranch FXAI_ThreeWayBranch
+#define FX6_BuildInputVector FXAI_BuildInputVector
+
+// Legacy enum aliases.
+#define AI_TYPE_AUTOFORMER AI_AUTOFORMER
+#define AI_TYPE_CATBOOST AI_CATBOOST
+#define AI_TYPE_CHRONOS AI_CHRONOS
+#define AI_TYPE_ENHASH AI_ENHASH
+#define AI_TYPE_FTRL_LOGIT AI_FTRL_LOGIT
+#define AI_TYPE_GEODESICATTENTION AI_GEODESICATTENTION
+#define AI_TYPE_LIGHTGBM AI_LIGHTGBM
+#define AI_TYPE_LSTM AI_LSTM
+#define AI_TYPE_LSTMG AI_LSTMG
+#define AI_TYPE_MLP_TINY AI_MLP_TINY
+#define AI_TYPE_PA_LINEAR AI_PA_LINEAR
+#define AI_TYPE_PATCHTST AI_PATCHTST
+#define AI_TYPE_QUANTILE AI_QUANTILE
+#define AI_TYPE_S4 AI_S4
+#define AI_TYPE_SGD_LOGIT AI_SGD_LOGIT
+#define AI_TYPE_STMN AI_STMN
+#define AI_TYPE_TCN AI_TCN
+#define AI_TYPE_TFT AI_TFT
+#define AI_TYPE_TIMESFM AI_TIMESFM
+#define AI_TYPE_TST AI_TST
+#define AI_TYPE_XGB_FAST AI_XGB_FAST
+#define AI_TYPE_XGBOOST AI_XGBOOST
+
+// Legacy type aliases.
+#define FX6AIHyperParams FXAIAIHyperParams
+#define FX6DataSnapshot FXAIDataSnapshot
+#define FX6AISampleV2 FXAIAISampleV2
+#define FX6AIPredictV2 FXAIAIPredictV2
+#define FX6AIPredictionV2 FXAIAIPredictionV2
+
+#endif // __FXAI_SHARED_MQH__
