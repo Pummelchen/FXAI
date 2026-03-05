@@ -1,6 +1,10 @@
 # FXAI
 
-FXAI is the most advanced, professional, and state-of-the-art AI framework for MetaTrader 5, engineered for serious FX research and deployment. It combines institutional-grade multi-model architecture, online learning, strict risk controls, and high-speed backtesting workflows in one unified MT5-native system. Built with zero external libraries or DLLs, FXAI runs entirely on highly optimized, pure MQL5 CPU code. Fully compatible with backtesting on the MQL5 Cloud Network, it enables massive parallel speedups and much faster optimization results.
+FXAI is the most advanced, state-of-the-art AI framework for Forex trading with MetaTrader 5.
+
+Engineered for serious FX & AI research, it combines institutional-grade multi-model architecture, online learning, strict risk controls, and high-speed backtesting workflows in one unified framework.
+
+Built with zero external libraries or DLLs, FXAI runs entirely on highly optimized, pure MQL5 CPU code. Fully compatible with backtesting on the MQL5 Cloud Network, it enables massive parallel speedups and much faster optimization results.
 
 Core benefits at a glance:
 - Multi-model plugin architecture with one unified API and shared data pipeline.
