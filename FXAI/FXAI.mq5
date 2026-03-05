@@ -237,16 +237,16 @@ input double PA_Margin  = 1.00;
 // Importance/Range: clamped 0.1..2.0; common 0.5..1.5.
 
 // XGB-like split learners
-input double XGB_FastLearningRate = 0.07;
-// Models: XGB_Fast only.
+input double XGB_FastLearningRate = 0.03;
+// Models: XGB_Fast, XGBoost, LightGBM, CatBoost.
 // Purpose: shrinkage factor for split-learner updates.
-// Importance/Range: clamped 0.001..0.2; common 0.02..0.1.
-input double XGB_FastL2           = 0.005;
-// Models: XGB_Fast only.
+// Importance/Range: clamped 0.001..0.3; CatBoost common 0.02..0.05.
+input double XGB_FastL2           = 4.0;
+// Models: XGB_Fast, XGBoost, LightGBM, CatBoost.
 // Purpose: L2 regularization for split learner coefficients.
-// Importance/Range: clamped 0..0.1; common 0.001..0.02.
+// Importance/Range: clamped 0..10; CatBoost common 3..8.
 input double XGB_SplitThreshold   = 0.00;
-// Models: XGB_Fast only.
+// Models: XGB_Fast, XGBoost, LightGBM, CatBoost.
 // Purpose: feature split pivot used by lightweight tree-like logic.
 // Importance/Range: clamped -2..2; common -0.5..0.5.
 
@@ -3171,8 +3171,8 @@ void FXAI_BuildHyperParams(FXAIAIHyperParams &hp)
    hp.pa_c      = FXAI_Clamp(PA_C,      0.010, 10.000);
    hp.pa_margin = FXAI_Clamp(PA_Margin, 0.100, 2.000);
 
-   hp.xgb_lr    = FXAI_Clamp(XGB_FastLearningRate, 0.001, 0.200);
-   hp.xgb_l2    = FXAI_Clamp(XGB_FastL2,           0.000, 0.100);
+   hp.xgb_lr    = FXAI_Clamp(XGB_FastLearningRate, 0.001, 0.300);
+   hp.xgb_l2    = FXAI_Clamp(XGB_FastL2,           0.000, 10.000);
    hp.xgb_split = FXAI_Clamp(XGB_SplitThreshold,  -2.000, 2.000);
 
    hp.mlp_lr   = FXAI_Clamp(MLP_LearningRate, 0.0005, 0.0500);
@@ -3352,10 +3352,15 @@ void FXAI_SampleModelHyperParams(const int ai_idx,
       case (int)AI_XGB_FAST:
       case (int)AI_LIGHTGBM:
       case (int)AI_XGBOOST:
-      case (int)AI_CATBOOST:
          hp.xgb_lr = FXAI_RandRange(0.0050, 0.1200);
          hp.xgb_l2 = FXAI_RandRange(0.0000, 0.0300);
          hp.xgb_split = FXAI_RandRange(-0.8000, 0.8000);
+         break;
+
+      case (int)AI_CATBOOST:
+         hp.xgb_lr = FXAI_RandRange(0.0200, 0.0500);
+         hp.xgb_l2 = FXAI_RandRange(3.0000, 8.0000);
+         hp.xgb_split = FXAI_RandRange(-0.2000, 0.2000);
          break;
 
       case (int)AI_MLP_TINY:
