@@ -1,30 +1,30 @@
 // FXAI v1
-#ifndef __FX6_AI_PA_MQH__
-#define __FX6_AI_PA_MQH__
+#ifndef __FXAI_AI_PA_MQH__
+#define __FXAI_AI_PA_MQH__
 
 #include "..\plugin_base.mqh"
 
-#define FX6_PA_CLASS_COUNT 3
-#define FX6_PA_HASH2_BUCKETS 97
-#define FX6_PA_CAL_BINS 10
+#define FXAI_PA_CLASS_COUNT 3
+#define FXAI_PA_HASH2_BUCKETS 97
+#define FXAI_PA_CAL_BINS 10
 
-class CFX6AIPA : public CFX6AIPlugin
+class CFXAIAIPA : public CFXAIAIPlugin
 {
 private:
    // Crammer-Singer multiclass PA weights.
-   double m_w[FX6_PA_CLASS_COUNT][FX6_AI_WEIGHTS];
-   double m_w_avg[FX6_PA_CLASS_COUNT][FX6_AI_WEIGHTS];
+   double m_w[FXAI_PA_CLASS_COUNT][FXAI_AI_WEIGHTS];
+   double m_w_avg[FXAI_PA_CLASS_COUNT][FXAI_AI_WEIGHTS];
 
    // Optional hashed interactions (two spaces to reduce collisions).
-   double m_hw1[FX6_PA_CLASS_COUNT][FX6_ENHASH_BUCKETS];
-   double m_hw1_avg[FX6_PA_CLASS_COUNT][FX6_ENHASH_BUCKETS];
-   double m_hw2[FX6_PA_CLASS_COUNT][FX6_PA_HASH2_BUCKETS];
-   double m_hw2_avg[FX6_PA_CLASS_COUNT][FX6_PA_HASH2_BUCKETS];
+   double m_hw1[FXAI_PA_CLASS_COUNT][FXAI_ENHASH_BUCKETS];
+   double m_hw1_avg[FXAI_PA_CLASS_COUNT][FXAI_ENHASH_BUCKETS];
+   double m_hw2[FXAI_PA_CLASS_COUNT][FXAI_PA_HASH2_BUCKETS];
+   double m_hw2_avg[FXAI_PA_CLASS_COUNT][FXAI_PA_HASH2_BUCKETS];
 
    // Dedicated move-amplitude head (plugin-level, not base-only EMA).
-   double m_mv_w[FX6_AI_WEIGHTS];
-   double m_mv_hw1[FX6_ENHASH_BUCKETS];
-   double m_mv_hw2[FX6_PA_HASH2_BUCKETS];
+   double m_mv_w[FXAI_AI_WEIGHTS];
+   double m_mv_hw1[FXAI_ENHASH_BUCKETS];
+   double m_mv_hw2[FXAI_PA_HASH2_BUCKETS];
    int    m_mv_steps;
 
    int    m_steps;
@@ -34,7 +34,7 @@ private:
    bool   m_use_hash2;
 
    // Online balancing and drift guard.
-   double m_cls_ema[FX6_PA_CLASS_COUNT];
+   double m_cls_ema[FXAI_PA_CLASS_COUNT];
    bool   m_loss_ready;
    double m_loss_fast;
    double m_loss_slow;
@@ -42,21 +42,21 @@ private:
 
    // Plugin-native multiclass calibration.
    double m_cal3_temp;
-   double m_cal3_bias[FX6_PA_CLASS_COUNT];
-   double m_cal3_iso_pos[FX6_PA_CLASS_COUNT][FX6_PA_CAL_BINS];
-   double m_cal3_iso_cnt[FX6_PA_CLASS_COUNT][FX6_PA_CAL_BINS];
+   double m_cal3_bias[FXAI_PA_CLASS_COUNT];
+   double m_cal3_iso_pos[FXAI_PA_CLASS_COUNT][FXAI_PA_CAL_BINS];
+   double m_cal3_iso_cnt[FXAI_PA_CLASS_COUNT][FXAI_PA_CAL_BINS];
    int    m_cal3_steps;
 
    int HashIndex(const int i, const int j) const
    {
       uint h = ((uint)(i * 73856093U)) ^ ((uint)(j * 19349663U));
-      return (int)(h % (uint)FX6_ENHASH_BUCKETS);
+      return (int)(h % (uint)FXAI_ENHASH_BUCKETS);
    }
 
    int HashIndex2(const int i, const int j) const
    {
       uint h = ((uint)(i * 83492791U)) ^ ((uint)(j * 2654435761U));
-      return (int)(h % (uint)FX6_PA_HASH2_BUCKETS);
+      return (int)(h % (uint)FXAI_PA_HASH2_BUCKETS);
    }
 
    double HashSign(const int i, const int j) const
@@ -72,9 +72,9 @@ private:
       if(logits[1] > m) m = logits[1];
       if(logits[2] > m) m = logits[2];
 
-      double e0 = MathExp(FX6_Clamp(logits[0] - m, -30.0, 30.0));
-      double e1 = MathExp(FX6_Clamp(logits[1] - m, -30.0, 30.0));
-      double e2 = MathExp(FX6_Clamp(logits[2] - m, -30.0, 30.0));
+      double e0 = MathExp(FXAI_Clamp(logits[0] - m, -30.0, 30.0));
+      double e1 = MathExp(FXAI_Clamp(logits[1] - m, -30.0, 30.0));
+      double e2 = MathExp(FXAI_Clamp(logits[2] - m, -30.0, 30.0));
       double s = e0 + e1 + e2;
       if(s <= 0.0)
       {
@@ -92,17 +92,17 @@ private:
                      const int cls,
                      const bool averaged) const
    {
-      if(cls < 0 || cls >= FX6_PA_CLASS_COUNT) return 0.0;
+      if(cls < 0 || cls >= FXAI_PA_CLASS_COUNT) return 0.0;
 
       double z = 0.0;
-      for(int i=0; i<FX6_AI_WEIGHTS; i++)
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
          z += (averaged ? m_w_avg[cls][i] : m_w[cls][i]) * x[i];
 
       if(!m_use_hash) return z;
 
-      for(int i=1; i<FX6_AI_WEIGHTS; i++)
+      for(int i=1; i<FXAI_AI_WEIGHTS; i++)
       {
-         for(int j=i+1; j<FX6_AI_WEIGHTS; j++)
+         for(int j=i+1; j<FXAI_AI_WEIGHTS; j++)
          {
             double hv = HashSign(i, j) * x[i] * x[j];
             int h1 = HashIndex(i, j);
@@ -122,21 +122,21 @@ private:
                       const bool averaged,
                       double &scores[]) const
    {
-      for(int c=0; c<FX6_PA_CLASS_COUNT; c++)
+      for(int c=0; c<FXAI_PA_CLASS_COUNT; c++)
          scores[c] = ScoreClass(x, c, averaged);
    }
 
    double ComputePhiNorm2(const double &x[]) const
    {
       double norm2 = 0.0;
-      for(int i=0; i<FX6_AI_WEIGHTS; i++)
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
          norm2 += x[i] * x[i];
 
       if(m_use_hash)
       {
-         for(int i=1; i<FX6_AI_WEIGHTS; i++)
+         for(int i=1; i<FXAI_AI_WEIGHTS; i++)
          {
-            for(int j=i+1; j<FX6_AI_WEIGHTS; j++)
+            for(int j=i+1; j<FXAI_AI_WEIGHTS; j++)
             {
                double hv = HashSign(i, j) * x[i] * x[j];
                norm2 += hv * hv;
@@ -157,44 +157,44 @@ private:
       double k = 1.0 - 0.01 * decay;
       if(k < 0.90) k = 0.90;
 
-      for(int c=0; c<FX6_PA_CLASS_COUNT; c++)
+      for(int c=0; c<FXAI_PA_CLASS_COUNT; c++)
       {
-         for(int i=1; i<FX6_AI_WEIGHTS; i++)
+         for(int i=1; i<FXAI_AI_WEIGHTS; i++)
          {
             m_w[c][i] *= k;
             m_w_avg[c][i] *= k;
          }
-         for(int i=0; i<FX6_ENHASH_BUCKETS; i++)
+         for(int i=0; i<FXAI_ENHASH_BUCKETS; i++)
          {
             m_hw1[c][i] *= k;
             m_hw1_avg[c][i] *= k;
          }
-         for(int i=0; i<FX6_PA_HASH2_BUCKETS; i++)
+         for(int i=0; i<FXAI_PA_HASH2_BUCKETS; i++)
          {
             m_hw2[c][i] *= k;
             m_hw2_avg[c][i] *= k;
          }
       }
 
-      for(int i=1; i<FX6_AI_WEIGHTS; i++)
+      for(int i=1; i<FXAI_AI_WEIGHTS; i++)
          m_mv_w[i] *= k;
-      for(int i=0; i<FX6_ENHASH_BUCKETS; i++)
+      for(int i=0; i<FXAI_ENHASH_BUCKETS; i++)
          m_mv_hw1[i] *= k;
-      for(int i=0; i<FX6_PA_HASH2_BUCKETS; i++)
+      for(int i=0; i<FXAI_PA_HASH2_BUCKETS; i++)
          m_mv_hw2[i] *= k;
    }
 
    double PredictMoveRaw(const double &x[]) const
    {
       double y = 0.0;
-      for(int i=0; i<FX6_AI_WEIGHTS; i++)
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
          y += m_mv_w[i] * x[i];
 
       if(m_use_hash)
       {
-         for(int i=1; i<FX6_AI_WEIGHTS; i++)
+         for(int i=1; i<FXAI_AI_WEIGHTS; i++)
          {
-            for(int j=i+1; j<FX6_AI_WEIGHTS; j++)
+            for(int j=i+1; j<FXAI_AI_WEIGHTS; j++)
             {
                double hv = HashSign(i, j) * x[i] * x[j];
                int h1 = HashIndex(i, j);
@@ -215,49 +215,49 @@ private:
    void Calibrate3(const double &p_raw[],
                    double &p_cal[]) const
    {
-      double inv_temp = 1.0 / FX6_Clamp(m_cal3_temp, 0.50, 3.00);
-      double logits[FX6_PA_CLASS_COUNT];
-      for(int c=0; c<FX6_PA_CLASS_COUNT; c++)
+      double inv_temp = 1.0 / FXAI_Clamp(m_cal3_temp, 0.50, 3.00);
+      double logits[FXAI_PA_CLASS_COUNT];
+      for(int c=0; c<FXAI_PA_CLASS_COUNT; c++)
       {
-         double pr = FX6_Clamp(p_raw[c], 0.0005, 0.9990);
+         double pr = FXAI_Clamp(p_raw[c], 0.0005, 0.9990);
          logits[c] = (MathLog(pr) * inv_temp) + m_cal3_bias[c];
       }
       Softmax3(logits, p_cal);
 
       if(m_cal3_steps < 30) return;
 
-      double p_iso[FX6_PA_CLASS_COUNT];
-      for(int c=0; c<FX6_PA_CLASS_COUNT; c++)
+      double p_iso[FXAI_PA_CLASS_COUNT];
+      for(int c=0; c<FXAI_PA_CLASS_COUNT; c++)
       {
          double total = 0.0;
-         for(int b=0; b<FX6_PA_CAL_BINS; b++) total += m_cal3_iso_cnt[c][b];
+         for(int b=0; b<FXAI_PA_CAL_BINS; b++) total += m_cal3_iso_cnt[c][b];
          if(total < 30.0)
          {
             p_iso[c] = p_cal[c];
             continue;
          }
 
-         double mono[FX6_PA_CAL_BINS];
+         double mono[FXAI_PA_CAL_BINS];
          double prev = 0.01;
-         for(int b=0; b<FX6_PA_CAL_BINS; b++)
+         for(int b=0; b<FXAI_PA_CAL_BINS; b++)
          {
             double r = prev;
             if(m_cal3_iso_cnt[c][b] > 1e-9)
                r = m_cal3_iso_pos[c][b] / m_cal3_iso_cnt[c][b];
-            r = FX6_Clamp(r, 0.001, 0.999);
+            r = FXAI_Clamp(r, 0.001, 0.999);
             if(r < prev) r = prev;
             mono[b] = r;
             prev = r;
          }
 
-         int bi = (int)MathFloor(p_cal[c] * (double)FX6_PA_CAL_BINS);
+         int bi = (int)MathFloor(p_cal[c] * (double)FXAI_PA_CAL_BINS);
          if(bi < 0) bi = 0;
-         if(bi >= FX6_PA_CAL_BINS) bi = FX6_PA_CAL_BINS - 1;
+         if(bi >= FXAI_PA_CAL_BINS) bi = FXAI_PA_CAL_BINS - 1;
          p_iso[c] = mono[bi];
       }
 
-      for(int c=0; c<FX6_PA_CLASS_COUNT; c++)
-         p_cal[c] = FX6_Clamp(0.75 * p_cal[c] + 0.25 * p_iso[c], 0.0005, 0.9990);
+      for(int c=0; c<FXAI_PA_CLASS_COUNT; c++)
+         p_cal[c] = FXAI_Clamp(0.75 * p_cal[c] + 0.25 * p_iso[c], 0.0005, 0.9990);
 
       double s = p_cal[0] + p_cal[1] + p_cal[2];
       if(s <= 0.0) s = 1.0;
@@ -271,37 +271,37 @@ private:
                           const double sample_w,
                           const double lr)
    {
-      double inv_temp = 1.0 / FX6_Clamp(m_cal3_temp, 0.50, 3.00);
-      double logits[FX6_PA_CLASS_COUNT];
-      for(int c=0; c<FX6_PA_CLASS_COUNT; c++)
+      double inv_temp = 1.0 / FXAI_Clamp(m_cal3_temp, 0.50, 3.00);
+      double logits[FXAI_PA_CLASS_COUNT];
+      for(int c=0; c<FXAI_PA_CLASS_COUNT; c++)
       {
-         double pr = FX6_Clamp(p_raw[c], 0.0005, 0.9990);
+         double pr = FXAI_Clamp(p_raw[c], 0.0005, 0.9990);
          logits[c] = (MathLog(pr) * inv_temp) + m_cal3_bias[c];
       }
 
-      double p_cal[FX6_PA_CLASS_COUNT];
+      double p_cal[FXAI_PA_CLASS_COUNT];
       Softmax3(logits, p_cal);
 
-      double w = FX6_Clamp(sample_w, 0.25, 6.00);
-      double cal_lr = FX6_Clamp(0.20 * lr * w, 0.0002, 0.0200);
+      double w = FXAI_Clamp(sample_w, 0.25, 6.00);
+      double cal_lr = FXAI_Clamp(0.20 * lr * w, 0.0002, 0.0200);
 
       double g_temp = 0.0;
-      for(int c=0; c<FX6_PA_CLASS_COUNT; c++)
+      for(int c=0; c<FXAI_PA_CLASS_COUNT; c++)
       {
          double target = (c == cls ? 1.0 : 0.0);
          double e = target - p_cal[c];
 
-         m_cal3_bias[c] = FX6_ClipSym(m_cal3_bias[c] + cal_lr * e, 4.0);
-         g_temp += e * MathLog(FX6_Clamp(p_raw[c], 0.0005, 0.9990));
+         m_cal3_bias[c] = FXAI_ClipSym(m_cal3_bias[c] + cal_lr * e, 4.0);
+         g_temp += e * MathLog(FXAI_Clamp(p_raw[c], 0.0005, 0.9990));
 
-         int bi = (int)MathFloor(p_cal[c] * (double)FX6_PA_CAL_BINS);
+         int bi = (int)MathFloor(p_cal[c] * (double)FXAI_PA_CAL_BINS);
          if(bi < 0) bi = 0;
-         if(bi >= FX6_PA_CAL_BINS) bi = FX6_PA_CAL_BINS - 1;
+         if(bi >= FXAI_PA_CAL_BINS) bi = FXAI_PA_CAL_BINS - 1;
          m_cal3_iso_cnt[c][bi] += w;
          m_cal3_iso_pos[c][bi] += w * target;
       }
 
-      m_cal3_temp = FX6_Clamp(m_cal3_temp - 0.02 * cal_lr * g_temp, 0.50, 3.00);
+      m_cal3_temp = FXAI_Clamp(m_cal3_temp - 0.02 * cal_lr * g_temp, 0.50, 3.00);
       m_cal3_steps++;
    }
 
@@ -327,7 +327,7 @@ private:
 
    void UpdateMoveHeadJoint(const double &x[],
                             const double move_points,
-                            const FX6AIHyperParams &hp,
+                            const FXAIAIHyperParams &hp,
                             const double sample_w)
    {
       double target = MathAbs(move_points);
@@ -336,46 +336,46 @@ private:
       double pred = PredictMoveRaw(x);
       double err = target - pred;
       double delta = 1.0;
-      double g = (MathAbs(err) <= delta ? err : FX6_Sign(err) * delta);
+      double g = (MathAbs(err) <= delta ? err : FXAI_Sign(err) * delta);
 
-      double w = FX6_Clamp(sample_w, 0.25, 6.00);
-      double lr = FX6_Clamp(0.02 * hp.lr * (0.85 + 0.15 * w), 0.00005, 0.02000);
-      double wd = FX6_Clamp(0.25 * hp.l2, 0.0, 0.0500);
+      double w = FXAI_Clamp(sample_w, 0.25, 6.00);
+      double lr = FXAI_Clamp(0.02 * hp.lr * (0.85 + 0.15 * w), 0.00005, 0.02000);
+      double wd = FXAI_Clamp(0.25 * hp.l2, 0.0, 0.0500);
 
       double g2 = 0.0;
-      double g_lin[FX6_AI_WEIGHTS];
-      double g_h1[FX6_ENHASH_BUCKETS];
-      double g_h2[FX6_PA_HASH2_BUCKETS];
+      double g_lin[FXAI_AI_WEIGHTS];
+      double g_h1[FXAI_ENHASH_BUCKETS];
+      double g_h2[FXAI_PA_HASH2_BUCKETS];
 
-      for(int i=0; i<FX6_AI_WEIGHTS; i++)
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
       {
-         g_lin[i] = FX6_ClipSym(w * g * x[i], 6.0);
+         g_lin[i] = FXAI_ClipSym(w * g * x[i], 6.0);
          g2 += g_lin[i] * g_lin[i];
       }
-      for(int i=0; i<FX6_ENHASH_BUCKETS; i++) g_h1[i] = 0.0;
-      for(int i=0; i<FX6_PA_HASH2_BUCKETS; i++) g_h2[i] = 0.0;
+      for(int i=0; i<FXAI_ENHASH_BUCKETS; i++) g_h1[i] = 0.0;
+      for(int i=0; i<FXAI_PA_HASH2_BUCKETS; i++) g_h2[i] = 0.0;
 
       if(m_use_hash)
       {
-         for(int i=1; i<FX6_AI_WEIGHTS; i++)
+         for(int i=1; i<FXAI_AI_WEIGHTS; i++)
          {
-            for(int j=i+1; j<FX6_AI_WEIGHTS; j++)
+            for(int j=i+1; j<FXAI_AI_WEIGHTS; j++)
             {
                double hv = HashSign(i, j) * x[i] * x[j];
                int h1 = HashIndex(i, j);
-               g_h1[h1] += FX6_ClipSym(w * g * hv, 6.0);
+               g_h1[h1] += FXAI_ClipSym(w * g * hv, 6.0);
 
                if(m_use_hash2)
                {
                   int h2 = HashIndex2(i, j);
-                  g_h2[h2] += FX6_ClipSym(w * g * 0.70 * hv, 6.0);
+                  g_h2[h2] += FXAI_ClipSym(w * g * 0.70 * hv, 6.0);
                }
             }
          }
       }
 
-      for(int i=0; i<FX6_ENHASH_BUCKETS; i++) g2 += g_h1[i] * g_h1[i];
-      for(int i=0; i<FX6_PA_HASH2_BUCKETS; i++) g2 += g_h2[i] * g_h2[i];
+      for(int i=0; i<FXAI_ENHASH_BUCKETS; i++) g2 += g_h1[i] * g_h1[i];
+      for(int i=0; i<FXAI_PA_HASH2_BUCKETS; i++) g2 += g_h2[i] * g_h2[i];
 
       double gscale = 1.0;
       if(g2 > 0.0)
@@ -385,69 +385,69 @@ private:
          if(gn > clip) gscale = clip / gn;
       }
 
-      for(int i=0; i<FX6_AI_WEIGHTS; i++)
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
       {
          if(i != 0) m_mv_w[i] *= (1.0 - lr * wd);
          m_mv_w[i] += lr * (g_lin[i] * gscale);
-         m_mv_w[i] = FX6_ClipSym(m_mv_w[i], 20.0);
+         m_mv_w[i] = FXAI_ClipSym(m_mv_w[i], 20.0);
       }
 
-      for(int i=0; i<FX6_ENHASH_BUCKETS; i++)
+      for(int i=0; i<FXAI_ENHASH_BUCKETS; i++)
       {
          m_mv_hw1[i] *= (1.0 - lr * wd);
          m_mv_hw1[i] += lr * (g_h1[i] * gscale);
-         m_mv_hw1[i] = FX6_ClipSym(m_mv_hw1[i], 15.0);
+         m_mv_hw1[i] = FXAI_ClipSym(m_mv_hw1[i], 15.0);
       }
 
-      for(int i=0; i<FX6_PA_HASH2_BUCKETS; i++)
+      for(int i=0; i<FXAI_PA_HASH2_BUCKETS; i++)
       {
          m_mv_hw2[i] *= (1.0 - lr * wd);
          m_mv_hw2[i] += lr * (g_h2[i] * gscale);
-         m_mv_hw2[i] = FX6_ClipSym(m_mv_hw2[i], 12.0);
+         m_mv_hw2[i] = FXAI_ClipSym(m_mv_hw2[i], 12.0);
       }
 
-      FX6_UpdateMoveEMA(m_move_ema_abs, m_move_ready, move_points, 0.05);
+      FXAI_UpdateMoveEMA(m_move_ema_abs, m_move_ready, move_points, 0.05);
       m_mv_steps++;
    }
 
    void UpdateWeighted(const int cls,
                        const double &x[],
-                       const FX6AIHyperParams &hp,
+                       const FXAIAIHyperParams &hp,
                        const double margin_scale,
                        const double sample_w,
                        const double move_points)
    {
-      if(cls < 0 || cls >= FX6_PA_CLASS_COUNT) return;
+      if(cls < 0 || cls >= FXAI_PA_CLASS_COUNT) return;
 
       m_steps++;
 
       // Class balance and recency weighting for online stability.
-      for(int c=0; c<FX6_PA_CLASS_COUNT; c++)
+      for(int c=0; c<FXAI_PA_CLASS_COUNT; c++)
          m_cls_ema[c] = 0.997 * m_cls_ema[c] + (c == cls ? 0.003 : 0.0);
       double mean_cls = (m_cls_ema[0] + m_cls_ema[1] + m_cls_ema[2]) / 3.0;
-      double cls_bal = FX6_Clamp(mean_cls / MathMax(m_cls_ema[cls], 0.005), 0.60, 2.50);
+      double cls_bal = FXAI_Clamp(mean_cls / MathMax(m_cls_ema[cls], 0.005), 0.60, 2.50);
       double recency = 0.85 + 0.30 * (1.0 - MathExp(-(double)m_steps / 512.0));
-      double w = FX6_Clamp(sample_w * cls_bal * recency, 0.10, 6.00);
+      double w = FXAI_Clamp(sample_w * cls_bal * recency, 0.10, 6.00);
 
-      double c = FX6_Clamp(hp.pa_c, 0.001, 100.0);
-      double margin0 = FX6_Clamp(hp.pa_margin, 0.05, 4.0);
-      double margin = FX6_Clamp(margin0 * margin_scale, 0.05, 8.0);
-      double decay = FX6_Clamp(hp.l2, 0.0, 0.2);
+      double c = FXAI_Clamp(hp.pa_c, 0.001, 100.0);
+      double margin0 = FXAI_Clamp(hp.pa_margin, 0.05, 4.0);
+      double margin = FXAI_Clamp(margin0 * margin_scale, 0.05, 8.0);
+      double decay = FXAI_Clamp(hp.l2, 0.0, 0.2);
 
       if(m_drift_cooldown > 0)
       {
-         c = FX6_Clamp(c * 0.70, 0.001, 100.0);
-         margin = FX6_Clamp(margin * 1.10, 0.05, 8.0);
+         c = FXAI_Clamp(c * 0.70, 0.001, 100.0);
+         margin = FXAI_Clamp(margin * 1.10, 0.05, 8.0);
       }
 
       ApplyDecay(decay);
 
-      double scores[FX6_PA_CLASS_COUNT];
+      double scores[FXAI_PA_CLASS_COUNT];
       ComputeScores(x, false, scores);
 
       int rival = -1;
       double rival_score = -DBL_MAX;
-      for(int cidx=0; cidx<FX6_PA_CLASS_COUNT; cidx++)
+      for(int cidx=0; cidx<FXAI_PA_CLASS_COUNT; cidx++)
       {
          if(cidx == cls) continue;
          if(scores[cidx] > rival_score)
@@ -463,11 +463,11 @@ private:
       {
          double norm2 = ComputePhiNorm2(x);
          double tau = loss / (2.0 * norm2 + (1.0 / (2.0 * c)));
-         tau = FX6_Clamp(tau * w, 0.0, c);
+         tau = FXAI_Clamp(tau * w, 0.0, c);
          if(m_drift_cooldown > 0)
-            tau = FX6_Clamp(tau * 0.80, 0.0, c);
+            tau = FXAI_Clamp(tau * 0.80, 0.0, c);
 
-         for(int i=0; i<FX6_AI_WEIGHTS; i++)
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++)
          {
             double dx = tau * x[i];
             m_w[cls][i] += dx;
@@ -476,9 +476,9 @@ private:
 
          if(m_use_hash)
          {
-            for(int i=1; i<FX6_AI_WEIGHTS; i++)
+            for(int i=1; i<FXAI_AI_WEIGHTS; i++)
             {
-               for(int j=i+1; j<FX6_AI_WEIGHTS; j++)
+               for(int j=i+1; j<FXAI_AI_WEIGHTS; j++)
                {
                   double hv = HashSign(i, j) * x[i] * x[j];
                   int h1 = HashIndex(i, j);
@@ -500,17 +500,17 @@ private:
 
       // Averaged-PA weights.
       double beta = 1.0 / (double)m_steps;
-      for(int cidx=0; cidx<FX6_PA_CLASS_COUNT; cidx++)
+      for(int cidx=0; cidx<FXAI_PA_CLASS_COUNT; cidx++)
       {
-         for(int i=0; i<FX6_AI_WEIGHTS; i++)
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++)
             m_w_avg[cidx][i] += beta * (m_w[cidx][i] - m_w_avg[cidx][i]);
-         for(int i=0; i<FX6_ENHASH_BUCKETS; i++)
+         for(int i=0; i<FXAI_ENHASH_BUCKETS; i++)
             m_hw1_avg[cidx][i] += beta * (m_hw1[cidx][i] - m_hw1_avg[cidx][i]);
-         for(int i=0; i<FX6_PA_HASH2_BUCKETS; i++)
+         for(int i=0; i<FXAI_PA_HASH2_BUCKETS; i++)
             m_hw2_avg[cidx][i] += beta * (m_hw2[cidx][i] - m_hw2_avg[cidx][i]);
       }
 
-      double scores_post[FX6_PA_CLASS_COUNT];
+      double scores_post[FXAI_PA_CLASS_COUNT];
       ComputeScores(x, false, scores_post);
       double margin_gap = scores_post[cls] - scores_post[rival];
       double abs_margin = MathAbs(margin_gap);
@@ -526,51 +526,51 @@ private:
       }
 
       double den = MathMax(m_margin_ema, 0.25);
-      double logits[FX6_PA_CLASS_COUNT];
-      for(int cidx=0; cidx<FX6_PA_CLASS_COUNT; cidx++)
-         logits[cidx] = FX6_ClipSym(scores_post[cidx] / den, 20.0);
-      double p_raw[FX6_PA_CLASS_COUNT];
+      double logits[FXAI_PA_CLASS_COUNT];
+      for(int cidx=0; cidx<FXAI_PA_CLASS_COUNT; cidx++)
+         logits[cidx] = FXAI_ClipSym(scores_post[cidx] / den, 20.0);
+      double p_raw[FXAI_PA_CLASS_COUNT];
       Softmax3(logits, p_raw);
 
-      double ce = -MathLog(FX6_Clamp(p_raw[cls], 1e-6, 1.0));
+      double ce = -MathLog(FXAI_Clamp(p_raw[cls], 1e-6, 1.0));
       UpdateLossDrift(ce);
-      double cal_lr = FX6_Clamp(0.01 * MathSqrt(w), 0.0005, 0.0300);
+      double cal_lr = FXAI_Clamp(0.01 * MathSqrt(w), 0.0005, 0.0300);
       UpdateCalibrator3(p_raw, cls, w, cal_lr);
 
       // Keep legacy binary calibrator aligned for compatibility paths.
-      double den_dir = p_raw[(int)FX6_LABEL_BUY] + p_raw[(int)FX6_LABEL_SELL];
+      double den_dir = p_raw[(int)FXAI_LABEL_BUY] + p_raw[(int)FXAI_LABEL_SELL];
       if(den_dir < 1e-9) den_dir = 1e-9;
-      double p_dir_raw = p_raw[(int)FX6_LABEL_BUY] / den_dir;
-      if(cls == (int)FX6_LABEL_BUY) UpdateCalibration(p_dir_raw, 1, w);
-      else if(cls == (int)FX6_LABEL_SELL) UpdateCalibration(p_dir_raw, 0, w);
+      double p_dir_raw = p_raw[(int)FXAI_LABEL_BUY] / den_dir;
+      if(cls == (int)FXAI_LABEL_BUY) UpdateCalibration(p_dir_raw, 1, w);
+      else if(cls == (int)FXAI_LABEL_SELL) UpdateCalibration(p_dir_raw, 0, w);
 
       UpdateMoveHeadJoint(x, move_points, hp, w);
    }
 
 public:
-   CFX6AIPA(void) { Reset(); }
+   CFXAIAIPA(void) { Reset(); }
 
-   virtual int AIId(void) const { return (int)AI_TYPE_PA_LINEAR; }
+   virtual int AIId(void) const { return (int)AI_PA_LINEAR; }
    virtual string AIName(void) const { return "pa_linear"; }
    virtual bool SupportsNativeClassProbs(void) const { return true; }
 
    virtual bool PredictNativeClassProbs(const double &x[],
-                                        const FX6AIHyperParams &hp,
+                                        const FXAIAIHyperParams &hp,
                                         double &class_probs[],
                                         double &expected_move_points)
    {
       bool averaged = (m_steps > 24);
-      double scores[FX6_PA_CLASS_COUNT];
+      double scores[FXAI_PA_CLASS_COUNT];
       ComputeScores(x, averaged, scores);
 
-      double den = (m_margin_ready ? m_margin_ema : FX6_Clamp(hp.pa_margin, 0.25, 4.0));
+      double den = (m_margin_ready ? m_margin_ema : FXAI_Clamp(hp.pa_margin, 0.25, 4.0));
       if(den < 0.25) den = 0.25;
 
-      double logits[FX6_PA_CLASS_COUNT];
-      for(int c=0; c<FX6_PA_CLASS_COUNT; c++)
-         logits[c] = FX6_ClipSym(scores[c] / den, 20.0);
+      double logits[FXAI_PA_CLASS_COUNT];
+      for(int c=0; c<FXAI_PA_CLASS_COUNT; c++)
+         logits[c] = FXAI_ClipSym(scores[c] / den, 20.0);
 
-      double p_raw[FX6_PA_CLASS_COUNT];
+      double p_raw[FXAI_PA_CLASS_COUNT];
       Softmax3(logits, p_raw);
       Calibrate3(p_raw, class_probs);
 
@@ -584,7 +584,7 @@ public:
 
    virtual void Reset(void)
    {
-      CFX6AIPlugin::Reset();
+      CFXAIAIPlugin::Reset();
 
       m_steps = 0;
       m_mv_steps = 0;
@@ -601,48 +601,48 @@ public:
       m_cal3_temp = 1.0;
       m_cal3_steps = 0;
 
-      for(int c=0; c<FX6_PA_CLASS_COUNT; c++)
+      for(int c=0; c<FXAI_PA_CLASS_COUNT; c++)
       {
          m_cls_ema[c] = 1.0;
          m_cal3_bias[c] = 0.0;
 
-         for(int i=0; i<FX6_AI_WEIGHTS; i++)
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++)
          {
             m_w[c][i] = 0.0;
             m_w_avg[c][i] = 0.0;
          }
 
-         for(int i=0; i<FX6_ENHASH_BUCKETS; i++)
+         for(int i=0; i<FXAI_ENHASH_BUCKETS; i++)
          {
             m_hw1[c][i] = 0.0;
             m_hw1_avg[c][i] = 0.0;
          }
 
-         for(int i=0; i<FX6_PA_HASH2_BUCKETS; i++)
+         for(int i=0; i<FXAI_PA_HASH2_BUCKETS; i++)
          {
             m_hw2[c][i] = 0.0;
             m_hw2_avg[c][i] = 0.0;
          }
 
-         for(int b=0; b<FX6_PA_CAL_BINS; b++)
+         for(int b=0; b<FXAI_PA_CAL_BINS; b++)
          {
             m_cal3_iso_pos[c][b] = 0.0;
             m_cal3_iso_cnt[c][b] = 0.0;
          }
       }
 
-      for(int i=0; i<FX6_AI_WEIGHTS; i++)
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
          m_mv_w[i] = 0.0;
-      for(int i=0; i<FX6_ENHASH_BUCKETS; i++)
+      for(int i=0; i<FXAI_ENHASH_BUCKETS; i++)
          m_mv_hw1[i] = 0.0;
-      for(int i=0; i<FX6_PA_HASH2_BUCKETS; i++)
+      for(int i=0; i<FXAI_PA_HASH2_BUCKETS; i++)
          m_mv_hw2[i] = 0.0;
    }
 
    // Legacy compatibility path.
-   virtual void Update(const int y, const double &x[], const FX6AIHyperParams &hp)
+   virtual void Update(const int y, const double &x[], const FXAIAIHyperParams &hp)
    {
-      int cls = (y > 0 ? (int)FX6_LABEL_BUY : (int)FX6_LABEL_SELL);
+      int cls = (y > 0 ? (int)FXAI_LABEL_BUY : (int)FXAI_LABEL_SELL);
       double pseudo_move = (y > 0 ? 1.0 : -1.0);
       UpdateWeighted(cls, x, hp, 1.0, 1.0, pseudo_move);
    }
@@ -650,41 +650,41 @@ public:
 protected:
    virtual void UpdateWithMove(const int y,
                                const double &x[],
-                               const FX6AIHyperParams &hp,
+                               const FXAIAIHyperParams &hp,
                                const double move_points)
    {
       int cls = NormalizeClassLabel(y, x, move_points);
 
-      FX6AIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
+      FXAIAIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
       double cost_proxy = InputCostProxyPoints(x);
       double abs_move = MathAbs(move_points);
       double excess = MathMax(0.0, abs_move - cost_proxy);
 
-      double ev_w = FX6_Clamp(0.35 + (excess / MathMax(cost_proxy, 0.50)), 0.10, 6.00);
-      if(cls == (int)FX6_LABEL_SKIP) ev_w *= 0.90;
+      double ev_w = FXAI_Clamp(0.35 + (excess / MathMax(cost_proxy, 0.50)), 0.10, 6.00);
+      if(cls == (int)FXAI_LABEL_SKIP) ev_w *= 0.90;
 
-      double move_scale = FX6_Clamp(1.0 + 0.10 * excess, 0.70, 3.50);
-      double margin_scale = FX6_Clamp(move_scale * (1.0 + 0.25 * (ev_w - 1.0)), 0.60, 4.00);
+      double move_scale = FXAI_Clamp(1.0 + 0.10 * excess, 0.70, 3.50);
+      double margin_scale = FXAI_Clamp(move_scale * (1.0 + 0.25 * (ev_w - 1.0)), 0.60, 4.00);
 
       UpdateWeighted(cls, x, h, margin_scale, ev_w, move_points);
    }
 
-   virtual double PredictProb(const double &x[], const FX6AIHyperParams &hp)
+   virtual double PredictProb(const double &x[], const FXAIAIHyperParams &hp)
    {
-      double probs[FX6_PA_CLASS_COUNT];
+      double probs[FXAI_PA_CLASS_COUNT];
       double expected = -1.0;
       if(!PredictNativeClassProbs(x, hp, probs, expected))
          return 0.5;
 
-      double den = probs[(int)FX6_LABEL_BUY] + probs[(int)FX6_LABEL_SELL];
+      double den = probs[(int)FXAI_LABEL_BUY] + probs[(int)FXAI_LABEL_SELL];
       if(den < 1e-9) return 0.5;
-      return FX6_Clamp(probs[(int)FX6_LABEL_BUY] / den, 0.001, 0.999);
+      return FXAI_Clamp(probs[(int)FXAI_LABEL_BUY] / den, 0.001, 0.999);
    }
 
-   virtual double PredictExpectedMovePoints(const double &x[], const FX6AIHyperParams &hp)
+   virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
    {
       double head = PredictMoveRaw(x);
-      double base = CFX6AIPlugin::PredictExpectedMovePoints(x, hp);
+      double base = CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
 
       if(m_mv_steps >= 24 && m_move_ready && m_move_ema_abs > 0.0)
          head = 0.70 * head + 0.30 * m_move_ema_abs;
@@ -695,4 +695,4 @@ protected:
    }
 };
 
-#endif // __FX6_AI_PA_MQH__
+#endif // __FXAI_AI_PA_MQH__

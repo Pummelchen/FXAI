@@ -1,22 +1,22 @@
 // FXAI v1
-#ifndef __FX6_AI_LIGHTGBM_MQH__
-#define __FX6_AI_LIGHTGBM_MQH__
+#ifndef __FXAI_AI_LIGHTGBM_MQH__
+#define __FXAI_AI_LIGHTGBM_MQH__
 
 #include "..\plugin_base.mqh"
 
-#define FX6_LGB_BINS 16
-#define FX6_LGB_MAX_LEAVES 16
-#define FX6_LGB_MAX_DEPTH 6
-#define FX6_LGB_MAX_NODES (2 * FX6_LGB_MAX_LEAVES - 1)
-#define FX6_LGB_MAX_TREES 64
-#define FX6_LGB_BUFFER 2048
-#define FX6_LGB_MIN_DATA 12
-#define FX6_LGB_MIN_CHILD_HESS 0.10
-#define FX6_LGB_GAMMA 0.01
-#define FX6_LGB_BUILD_EVERY 64
-#define FX6_LGB_MIN_BUFFER 128
+#define FXAI_LGB_BINS 16
+#define FXAI_LGB_MAX_LEAVES 16
+#define FXAI_LGB_MAX_DEPTH 6
+#define FXAI_LGB_MAX_NODES (2 * FXAI_LGB_MAX_LEAVES - 1)
+#define FXAI_LGB_MAX_TREES 64
+#define FXAI_LGB_BUFFER 2048
+#define FXAI_LGB_MIN_DATA 12
+#define FXAI_LGB_MIN_CHILD_HESS 0.10
+#define FXAI_LGB_GAMMA 0.01
+#define FXAI_LGB_BUILD_EVERY 64
+#define FXAI_LGB_MIN_BUFFER 128
 
-struct FX6LGBNode
+struct FXAILGBNode
 {
    bool   is_leaf;
    int    feature;
@@ -30,33 +30,33 @@ struct FX6LGBNode
    int    sample_count;
 };
 
-struct FX6LGBTree
+struct FXAILGBTree
 {
    int node_count;
-   FX6LGBNode nodes[FX6_LGB_MAX_NODES];
+   FXAILGBNode nodes[FXAI_LGB_MAX_NODES];
 };
 
-class CFX6AILightGBM : public CFX6AIPlugin
+class CFXAIAILightGBM : public CFXAIAIPlugin
 {
 private:
    bool   m_initialized;
    int    m_step;
    double m_bias;
 
-   FX6LGBTree m_trees[FX6_LGB_MAX_TREES];
+   FXAILGBTree m_trees[FXAI_LGB_MAX_TREES];
    int        m_tree_count;
 
-   double m_buf_x[FX6_LGB_BUFFER][FX6_AI_WEIGHTS];
-   int    m_buf_y[FX6_LGB_BUFFER];
-   double m_buf_move[FX6_LGB_BUFFER];
-   double m_buf_w[FX6_LGB_BUFFER];
+   double m_buf_x[FXAI_LGB_BUFFER][FXAI_AI_WEIGHTS];
+   int    m_buf_y[FXAI_LGB_BUFFER];
+   double m_buf_move[FXAI_LGB_BUFFER];
+   double m_buf_w[FXAI_LGB_BUFFER];
    int    m_buf_head;
    int    m_buf_size;
 
-   void InitTree(FX6LGBTree &tree) const
+   void InitTree(FXAILGBTree &tree) const
    {
       tree.node_count = 1;
-      for(int n=0; n<FX6_LGB_MAX_NODES; n++)
+      for(int n=0; n<FXAI_LGB_MAX_NODES; n++)
       {
          tree.nodes[n].is_leaf = true;
          tree.nodes[n].feature = -1;
@@ -75,9 +75,9 @@ private:
    {
       if(m_buf_size <= 0) return 0;
       int start = m_buf_head - m_buf_size;
-      while(start < 0) start += FX6_LGB_BUFFER;
+      while(start < 0) start += FXAI_LGB_BUFFER;
       int p = start + logical_idx;
-      while(p >= FX6_LGB_BUFFER) p -= FX6_LGB_BUFFER;
+      while(p >= FXAI_LGB_BUFFER) p -= FXAI_LGB_BUFFER;
       return p;
    }
 
@@ -87,26 +87,26 @@ private:
                    const double sample_w)
    {
       int pos = m_buf_head;
-      for(int i=0; i<FX6_AI_WEIGHTS; i++) m_buf_x[pos][i] = x[i];
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++) m_buf_x[pos][i] = x[i];
       m_buf_y[pos] = y;
       m_buf_move[pos] = move_points;
       m_buf_w[pos] = sample_w;
 
       m_buf_head++;
-      if(m_buf_head >= FX6_LGB_BUFFER) m_buf_head = 0;
-      if(m_buf_size < FX6_LGB_BUFFER) m_buf_size++;
+      if(m_buf_head >= FXAI_LGB_BUFFER) m_buf_head = 0;
+      if(m_buf_size < FXAI_LGB_BUFFER) m_buf_size++;
    }
 
-   int TraverseLeafIndex(const FX6LGBTree &tree, const double &x[]) const
+   int TraverseLeafIndex(const FXAILGBTree &tree, const double &x[]) const
    {
       int node = 0;
       int guard = 0;
-      while(node >= 0 && node < tree.node_count && guard < FX6_LGB_MAX_NODES)
+      while(node >= 0 && node < tree.node_count && guard < FXAI_LGB_MAX_NODES)
       {
          if(tree.nodes[node].is_leaf) return node;
 
          int f = tree.nodes[node].feature;
-         if(f < 1 || f >= FX6_AI_WEIGHTS) return node;
+         if(f < 1 || f >= FXAI_AI_WEIGHTS) return node;
          double xv = x[f];
          bool go_left;
          if(!MathIsValidNumber(xv))
@@ -122,7 +122,7 @@ private:
       return 0;
    }
 
-   double TreeOutput(const FX6LGBTree &tree, const double &x[]) const
+   double TreeOutput(const FXAILGBTree &tree, const double &x[]) const
    {
       int leaf = TraverseLeafIndex(tree, x);
       if(leaf < 0 || leaf >= tree.node_count) return 0.0;
@@ -144,14 +144,14 @@ private:
       if(range <= 1e-12) return 0;
       double q = (x - minv) / range;
       if(q <= 0.0) return 0;
-      if(q >= 1.0) return FX6_LGB_BINS - 1;
-      int b = (int)MathFloor(q * (double)FX6_LGB_BINS);
+      if(q >= 1.0) return FXAI_LGB_BINS - 1;
+      int b = (int)MathFloor(q * (double)FXAI_LGB_BINS);
       if(b < 0) b = 0;
-      if(b >= FX6_LGB_BINS) b = FX6_LGB_BINS - 1;
+      if(b >= FXAI_LGB_BINS) b = FXAI_LGB_BINS - 1;
       return b;
    }
 
-   void SetLeafFromAssign(FX6LGBTree &tree,
+   void SetLeafFromAssign(FXAILGBTree &tree,
                           const int node_idx,
                           const int &assign[],
                           const int tag,
@@ -184,14 +184,14 @@ private:
 
       double leaf = 0.0;
       if(H > 1e-9)
-         leaf = eta * FX6_ClipSym(G / (H + lambda), 5.0);
+         leaf = eta * FXAI_ClipSym(G / (H + lambda), 5.0);
       tree.nodes[node_idx].leaf_value = leaf;
    }
 
    bool FindBestSplitForLeaf(const int &assign[],
                              const int leaf_tag,
                              const int depth,
-                             const double &x_all[][FX6_AI_WEIGHTS],
+                             const double &x_all[][FXAI_AI_WEIGHTS],
                              const double &g[],
                              const double &h[],
                              const double lambda,
@@ -205,7 +205,7 @@ private:
       best_default_left = true;
       best_gain = 0.0;
 
-      if(depth >= FX6_LGB_MAX_DEPTH) return false;
+      if(depth >= FXAI_LGB_MAX_DEPTH) return false;
 
       int n = ArraySize(assign);
       double Gtot = 0.0, Htot = 0.0;
@@ -218,12 +218,12 @@ private:
          Ctot++;
       }
 
-      if(Ctot < 2 * FX6_LGB_MIN_DATA) return false;
-      if(Htot < 2.0 * FX6_LGB_MIN_CHILD_HESS) return false;
+      if(Ctot < 2 * FXAI_LGB_MIN_DATA) return false;
+      if(Htot < 2.0 * FXAI_LGB_MIN_CHILD_HESS) return false;
 
       double parent_score = (Gtot * Gtot) / (Htot + lambda + 1e-9);
 
-      for(int f=1; f<FX6_AI_WEIGHTS; f++)
+      for(int f=1; f<FXAI_AI_WEIGHTS; f++)
       {
          double minv = DBL_MAX;
          double maxv = -DBL_MAX;
@@ -246,13 +246,13 @@ private:
             c_valid++;
          }
 
-         if(c_valid < 2 * FX6_LGB_MIN_DATA) continue;
+         if(c_valid < 2 * FXAI_LGB_MIN_DATA) continue;
          if(maxv - minv < 1e-9) continue;
 
-         double gbin[FX6_LGB_BINS];
-         double hbin[FX6_LGB_BINS];
-         int cbin[FX6_LGB_BINS];
-         for(int b=0; b<FX6_LGB_BINS; b++)
+         double gbin[FXAI_LGB_BINS];
+         double hbin[FXAI_LGB_BINS];
+         int cbin[FXAI_LGB_BINS];
+         for(int b=0; b<FXAI_LGB_BINS; b++)
          {
             gbin[b] = 0.0;
             hbin[b] = 0.0;
@@ -272,7 +272,7 @@ private:
 
          double GL = 0.0, HL = 0.0;
          int CL = 0;
-         for(int sb=0; sb<FX6_LGB_BINS - 1; sb++)
+         for(int sb=0; sb<FXAI_LGB_BINS - 1; sb++)
          {
             GL += gbin[sb];
             HL += hbin[sb];
@@ -287,18 +287,18 @@ private:
                double hR = Htot - hL;
                int cR = Ctot - cL;
 
-               if(cL >= FX6_LGB_MIN_DATA && cR >= FX6_LGB_MIN_DATA &&
-                  hL >= FX6_LGB_MIN_CHILD_HESS && hR >= FX6_LGB_MIN_CHILD_HESS)
+               if(cL >= FXAI_LGB_MIN_DATA && cR >= FXAI_LGB_MIN_DATA &&
+                  hL >= FXAI_LGB_MIN_CHILD_HESS && hR >= FXAI_LGB_MIN_CHILD_HESS)
                {
                   double gain = 0.5 * ((gL * gL) / (hL + lambda + 1e-9) +
                                        (gR * gR) / (hR + lambda + 1e-9) -
-                                       parent_score) - FX6_LGB_GAMMA;
+                                       parent_score) - FXAI_LGB_GAMMA;
                   if(gain > best_gain)
                   {
                      best_gain = gain;
                      best_feature = f;
                      best_default_left = true;
-                     best_thr = minv + (maxv - minv) * ((double)(sb + 1) / (double)FX6_LGB_BINS);
+                     best_thr = minv + (maxv - minv) * ((double)(sb + 1) / (double)FXAI_LGB_BINS);
                   }
                }
             }
@@ -312,18 +312,18 @@ private:
                double hR = Htot - hL;
                int cR = Ctot - cL;
 
-               if(cL >= FX6_LGB_MIN_DATA && cR >= FX6_LGB_MIN_DATA &&
-                  hL >= FX6_LGB_MIN_CHILD_HESS && hR >= FX6_LGB_MIN_CHILD_HESS)
+               if(cL >= FXAI_LGB_MIN_DATA && cR >= FXAI_LGB_MIN_DATA &&
+                  hL >= FXAI_LGB_MIN_CHILD_HESS && hR >= FXAI_LGB_MIN_CHILD_HESS)
                {
                   double gain = 0.5 * ((gL * gL) / (hL + lambda + 1e-9) +
                                        (gR * gR) / (hR + lambda + 1e-9) -
-                                       parent_score) - FX6_LGB_GAMMA;
+                                       parent_score) - FXAI_LGB_GAMMA;
                   if(gain > best_gain)
                   {
                      best_gain = gain;
                      best_feature = f;
                      best_default_left = false;
-                     best_thr = minv + (maxv - minv) * ((double)(sb + 1) / (double)FX6_LGB_BINS);
+                     best_thr = minv + (maxv - minv) * ((double)(sb + 1) / (double)FXAI_LGB_BINS);
                   }
                }
             }
@@ -333,12 +333,12 @@ private:
       return (best_feature >= 1 && best_gain > 0.0);
    }
 
-   bool BuildOneTree(const FX6AIHyperParams &hp)
+   bool BuildOneTree(const FXAIAIHyperParams &hp)
    {
-      if(m_buf_size < FX6_LGB_MIN_BUFFER) return false;
+      if(m_buf_size < FXAI_LGB_MIN_BUFFER) return false;
 
       int n = m_buf_size;
-      double x_all[][FX6_AI_WEIGHTS];
+      double x_all[][FXAI_AI_WEIGHTS];
       int y_all[];
       double mv_all[];
       double w_all[];
@@ -350,7 +350,7 @@ private:
       for(int i=0; i<n; i++)
       {
          int p = BufPos(i);
-         for(int k=0; k<FX6_AI_WEIGHTS; k++) x_all[i][k] = m_buf_x[p][k];
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++) x_all[i][k] = m_buf_x[p][k];
          y_all[i] = m_buf_y[p];
          mv_all[i] = m_buf_move[p];
          w_all[i] = m_buf_w[p];
@@ -363,24 +363,24 @@ private:
 
       for(int i=0; i<n; i++)
       {
-         double xloc[FX6_AI_WEIGHTS];
-         for(int k=0; k<FX6_AI_WEIGHTS; k++) xloc[k] = x_all[i][k];
+         double xloc[FXAI_AI_WEIGHTS];
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++) xloc[k] = x_all[i][k];
          double margin = ModelMargin(xloc);
-         double p = FX6_Sigmoid(margin);
-         double wi = FX6_Clamp(w_all[i], 0.25, 4.00);
+         double p = FXAI_Sigmoid(margin);
+         double wi = FXAI_Clamp(w_all[i], 0.25, 4.00);
          g[i] = ((double)y_all[i] - p) * wi;
-         h[i] = FX6_Clamp(p * (1.0 - p) * wi, 0.02, 4.00);
+         h[i] = FXAI_Clamp(p * (1.0 - p) * wi, 0.02, 4.00);
       }
 
       double G = 0.0, H = 0.0;
       for(int i=0; i<n; i++) { G += g[i]; H += h[i]; }
 
-      double lambda = FX6_Clamp(hp.xgb_l2, 0.0001, 10.0000);
-      double eta = FX6_Clamp(hp.xgb_lr, 0.0001, 1.0000);
+      double lambda = FXAI_Clamp(hp.xgb_l2, 0.0001, 10.0000);
+      double eta = FXAI_Clamp(hp.xgb_lr, 0.0001, 1.0000);
       if(H > 1e-9)
-         m_bias += 0.20 * eta * FX6_ClipSym(G / (H + lambda), 5.0);
+         m_bias += 0.20 * eta * FXAI_ClipSym(G / (H + lambda), 5.0);
 
-      FX6LGBTree tree;
+      FXAILGBTree tree;
       InitTree(tree);
 
       int assign[];
@@ -389,7 +389,7 @@ private:
       SetLeafFromAssign(tree, 0, assign, 0, g, h, mv_all, eta, lambda);
 
       int leaves = 1;
-      while(leaves < FX6_LGB_MAX_LEAVES)
+      while(leaves < FXAI_LGB_MAX_LEAVES)
       {
          int best_leaf = -1;
          int best_feature = -1;
@@ -400,8 +400,8 @@ private:
          for(int node=0; node<tree.node_count; node++)
          {
             if(!tree.nodes[node].is_leaf) continue;
-            if(tree.nodes[node].depth >= FX6_LGB_MAX_DEPTH) continue;
-            if(tree.nodes[node].sample_count < 2 * FX6_LGB_MIN_DATA) continue;
+            if(tree.nodes[node].depth >= FXAI_LGB_MAX_DEPTH) continue;
+            if(tree.nodes[node].sample_count < 2 * FXAI_LGB_MIN_DATA) continue;
 
             int f = -1;
             double thr = 0.0;
@@ -431,7 +431,7 @@ private:
          }
 
          if(best_leaf < 0 || best_feature < 1 || best_gain <= 0.0) break;
-         if(tree.node_count + 2 > FX6_LGB_MAX_NODES) break;
+         if(tree.node_count + 2 > FXAI_LGB_MAX_NODES) break;
 
          int left = tree.node_count;
          int right = tree.node_count + 1;
@@ -460,17 +460,17 @@ private:
          leaves++;
       }
 
-      if(m_tree_count < FX6_LGB_MAX_TREES)
+      if(m_tree_count < FXAI_LGB_MAX_TREES)
       {
          m_trees[m_tree_count] = tree;
          m_tree_count++;
       }
       else
       {
-         for(int t=1; t<FX6_LGB_MAX_TREES; t++)
+         for(int t=1; t<FXAI_LGB_MAX_TREES; t++)
             m_trees[t - 1] = m_trees[t];
-         m_trees[FX6_LGB_MAX_TREES - 1] = tree;
-         m_tree_count = FX6_LGB_MAX_TREES;
+         m_trees[FXAI_LGB_MAX_TREES - 1] = tree;
+         m_tree_count = FXAI_LGB_MAX_TREES;
       }
 
       return true;
@@ -478,41 +478,41 @@ private:
 
    void UpdateWeighted(const int y,
                        const double &x[],
-                       const FX6AIHyperParams &hp,
+                       const FXAIAIHyperParams &hp,
                        const double sample_w,
                        const double move_points)
    {
       EnsureInitialized(hp);
       m_step++;
 
-      double w = FX6_Clamp(sample_w, 0.25, 4.00);
-      double l2 = FX6_Clamp(hp.xgb_l2, 0.0001, 10.0000);
+      double w = FXAI_Clamp(sample_w, 0.25, 4.00);
+      double l2 = FXAI_Clamp(hp.xgb_l2, 0.0001, 10.0000);
 
       double margin = ModelMargin(x);
-      double p_raw = FX6_Sigmoid(margin);
+      double p_raw = FXAI_Sigmoid(margin);
       double g_now = ((double)y - p_raw) * w;
-      double h_now = FX6_Clamp(p_raw * (1.0 - p_raw) * w, 0.02, 4.00);
-      m_bias += 0.01 * FX6_ClipSym(g_now / (h_now + l2), 2.0);
+      double h_now = FXAI_Clamp(p_raw * (1.0 - p_raw) * w, 0.02, 4.00);
+      m_bias += 0.01 * FXAI_ClipSym(g_now / (h_now + l2), 2.0);
 
       PushSample(y, x, move_points, w);
 
-      if(m_buf_size >= FX6_LGB_MIN_BUFFER && (m_step % FX6_LGB_BUILD_EVERY) == 0)
+      if(m_buf_size >= FXAI_LGB_MIN_BUFFER && (m_step % FXAI_LGB_BUILD_EVERY) == 0)
          BuildOneTree(hp);
 
       UpdateCalibration(p_raw, y, w);
-      FX6_UpdateMoveEMA(m_move_ema_abs, m_move_ready, move_points, 0.05);
+      FXAI_UpdateMoveEMA(m_move_ema_abs, m_move_ready, move_points, 0.05);
       UpdateMoveHead(x, move_points, hp, w);
    }
 
 public:
-   CFX6AILightGBM(void) { Reset(); }
+   CFXAIAILightGBM(void) { Reset(); }
 
-   virtual int AIId(void) const { return (int)AI_TYPE_LIGHTGBM; }
+   virtual int AIId(void) const { return (int)AI_LIGHTGBM; }
    virtual string AIName(void) const { return "lightgbm"; }
 
    virtual void Reset(void)
    {
-      CFX6AIPlugin::Reset();
+      CFXAIAIPlugin::Reset();
       m_initialized = false;
       m_step = 0;
       m_bias = 0.0;
@@ -520,25 +520,25 @@ public:
       m_buf_head = 0;
       m_buf_size = 0;
 
-      for(int i=0; i<FX6_LGB_BUFFER; i++)
+      for(int i=0; i<FXAI_LGB_BUFFER; i++)
       {
          m_buf_y[i] = 0;
          m_buf_move[i] = 0.0;
          m_buf_w[i] = 1.0;
-         for(int k=0; k<FX6_AI_WEIGHTS; k++) m_buf_x[i][k] = 0.0;
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++) m_buf_x[i][k] = 0.0;
       }
 
-      for(int t=0; t<FX6_LGB_MAX_TREES; t++)
+      for(int t=0; t<FXAI_LGB_MAX_TREES; t++)
          InitTree(m_trees[t]);
    }
 
-   virtual void EnsureInitialized(const FX6AIHyperParams &hp)
+   virtual void EnsureInitialized(const FXAIAIHyperParams &hp)
    {
       if(!m_initialized)
          m_initialized = true;
    }
 
-   virtual void Update(const int y, const double &x[], const FX6AIHyperParams &hp)
+   virtual void Update(const int y, const double &x[], const FXAIAIHyperParams &hp)
    {
       double pseudo_move = (y == 1 ? 1.0 : -1.0);
       UpdateWithMove(y, x, hp, pseudo_move);
@@ -546,27 +546,27 @@ public:
 
    virtual void UpdateWithMove(const int y,
                                const double &x[],
-                               const FX6AIHyperParams &hp,
+                               const FXAIAIHyperParams &hp,
                                const double move_points)
    {
       int cls = NormalizeClassLabel(y, x, move_points);
-      if(cls == (int)FX6_LABEL_SKIP) return;
-      int y_dir = (cls == (int)FX6_LABEL_BUY ? 1 : 0);
+      if(cls == (int)FXAI_LABEL_SKIP) return;
+      int y_dir = (cls == (int)FXAI_LABEL_BUY ? 1 : 0);
 
-      FX6AIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
+      FXAIAIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
       double cls_w = 1.0;
-      double w = FX6_Clamp(MoveSampleWeight(x, move_points) * cls_w, 0.10, 4.00);
+      double w = FXAI_Clamp(MoveSampleWeight(x, move_points) * cls_w, 0.10, 4.00);
       UpdateWeighted(y_dir, x, h, w, move_points);
    }
 
-   virtual double PredictProb(const double &x[], const FX6AIHyperParams &hp)
+   virtual double PredictProb(const double &x[], const FXAIAIHyperParams &hp)
    {
       EnsureInitialized(hp);
-      double p_raw = FX6_Sigmoid(ModelMargin(x));
+      double p_raw = FXAI_Sigmoid(ModelMargin(x));
       return CalibrateProb(p_raw);
    }
 
-   virtual double PredictExpectedMovePoints(const double &x[], const FX6AIHyperParams &hp)
+   virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
    {
       EnsureInitialized(hp);
 
@@ -584,8 +584,8 @@ public:
       }
 
       if(wsum > 0.0) return sum / wsum;
-      return CFX6AIPlugin::PredictExpectedMovePoints(x, hp);
+      return CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
    }
 };
 
-#endif // __FX6_AI_LIGHTGBM_MQH__
+#endif // __FXAI_AI_LIGHTGBM_MQH__

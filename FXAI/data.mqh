@@ -762,31 +762,4 @@ bool FXAI_ComputeFeatureVector(const int i,
    return true;
 }
 
-// Backward-compatibility aliases for legacy FX6-prefixed data helpers.
-#define FX6_GetCurrentSpreadPoints FXAI_GetCurrentSpreadPoints
-#define FX6_GetCommissionPointsRoundTripPerLot FXAI_GetCommissionPointsRoundTripPerLot
-#define FX6_ExportDataSnapshot FXAI_ExportDataSnapshot
-#define FX6_IsInLiquidSession FXAI_IsInLiquidSession
-#define FX6_LoadRatesOptional FXAI_LoadRatesOptional
-#define FX6_UpdateRatesRolling FXAI_UpdateRatesRolling
-#define FX6_ExtractRatesCloseTime FXAI_ExtractRatesCloseTime
-#define FX6_ExtractRatesCloseTimeSpread FXAI_ExtractRatesCloseTimeSpread
-#define FX6_LoadSeriesOptionalCached FXAI_LoadSeriesOptionalCached
-#define FX6_LoadSeriesWithSpread FXAI_LoadSeriesWithSpread
-#define FX6_LoadSeriesOptional FXAI_LoadSeriesOptional
-#define FX6_LoadSeries FXAI_LoadSeries
-#define FX6_LoadSpreadSeriesOptional FXAI_LoadSpreadSeriesOptional
-#define FX6_GetSpreadAtIndex FXAI_GetSpreadAtIndex
-#define FX6_MovePoints FXAI_MovePoints
-#define FX6_BuildEVClassLabel FXAI_BuildEVClassLabel
-#define FX6_ClassToBinaryY FXAI_ClassToBinaryY
-#define FX6_FindAlignedIndex FXAI_FindAlignedIndex
-#define FX6_BuildAlignedIndexMap FXAI_BuildAlignedIndexMap
-#define FX6_BuildAlignedIndexMapRange FXAI_BuildAlignedIndexMapRange
-#define FX6_SafeReturn FXAI_SafeReturn
-#define FX6_NormalizedSlope FXAI_NormalizedSlope
-#define FX6_EstimateExpectedAbsMovePoints FXAI_EstimateExpectedAbsMovePoints
-#define FX6_RollingAbsReturn FXAI_RollingAbsReturn
-#define FX6_ComputeFeatureVector FXAI_ComputeFeatureVector
-
 #endif // __FXAI_DATA_MQH__

@@ -1,22 +1,22 @@
 // FXAI v1
-#ifndef __FX6_AI_AUTOFORMER_MQH__
-#define __FX6_AI_AUTOFORMER_MQH__
+#ifndef __FXAI_AI_AUTOFORMER_MQH__
+#define __FXAI_AI_AUTOFORMER_MQH__
 
 #include "..\plugin_base.mqh"
 
-#define FX6_AF_SEQ 64
-#define FX6_AF_TBPTT 16
-#define FX6_AF_HEADS 2
-#define FX6_AF_D_HEAD (FX6_AI_MLP_HIDDEN / FX6_AF_HEADS)
-#define FX6_AF_TOPK_LAGS 4
-#define FX6_AF_CLASS_COUNT 3
-#define FX6_AF_MA_WIN 5
+#define FXAI_AF_SEQ 64
+#define FXAI_AF_TBPTT 16
+#define FXAI_AF_HEADS 2
+#define FXAI_AF_D_HEAD (FXAI_AI_MLP_HIDDEN / FXAI_AF_HEADS)
+#define FXAI_AF_TOPK_LAGS 4
+#define FXAI_AF_CLASS_COUNT 3
+#define FXAI_AF_MA_WIN 5
 
-#define FX6_AF_SELL 0
-#define FX6_AF_BUY  1
-#define FX6_AF_SKIP 2
+#define FXAI_AF_SELL 0
+#define FXAI_AF_BUY  1
+#define FXAI_AF_SKIP 2
 
-class CFX6AIAutoformer : public CFX6AIPlugin
+class CFXAIAIAutoformer : public CFXAIAIPlugin
 {
 private:
    bool   m_initialized;
@@ -24,110 +24,110 @@ private:
 
    int    m_seq_ptr;
    int    m_seq_len;
-   double m_seq_h[FX6_AF_SEQ][FX6_AI_MLP_HIDDEN];
-   double m_seq_season[FX6_AF_SEQ][FX6_AI_MLP_HIDDEN];
-   double m_seq_trend[FX6_AF_SEQ][FX6_AI_MLP_HIDDEN];
+   double m_seq_h[FXAI_AF_SEQ][FXAI_AI_MLP_HIDDEN];
+   double m_seq_season[FXAI_AF_SEQ][FXAI_AI_MLP_HIDDEN];
+   double m_seq_trend[FXAI_AF_SEQ][FXAI_AI_MLP_HIDDEN];
 
    // Input normalization.
    bool   m_x_norm_ready;
    int    m_x_norm_steps;
-   double m_x_mean[FX6_AI_WEIGHTS];
-   double m_x_var[FX6_AI_WEIGHTS];
+   double m_x_mean[FXAI_AI_WEIGHTS];
+   double m_x_var[FXAI_AI_WEIGHTS];
 
    // Input embedding + decomposition projections.
-   double m_w_in[FX6_AI_MLP_HIDDEN][FX6_AI_WEIGHTS];
-   double m_b_in[FX6_AI_MLP_HIDDEN];
+   double m_w_in[FXAI_AI_MLP_HIDDEN][FXAI_AI_WEIGHTS];
+   double m_b_in[FXAI_AI_MLP_HIDDEN];
 
-   double m_w_season[FX6_AI_MLP_HIDDEN][FX6_AI_MLP_HIDDEN];
-   double m_b_season[FX6_AI_MLP_HIDDEN];
-   double m_w_trend[FX6_AI_MLP_HIDDEN][FX6_AI_MLP_HIDDEN];
-   double m_b_trend[FX6_AI_MLP_HIDDEN];
+   double m_w_season[FXAI_AI_MLP_HIDDEN][FXAI_AI_MLP_HIDDEN];
+   double m_b_season[FXAI_AI_MLP_HIDDEN];
+   double m_w_trend[FXAI_AI_MLP_HIDDEN][FXAI_AI_MLP_HIDDEN];
+   double m_b_trend[FXAI_AI_MLP_HIDDEN];
 
    // Auto-correlation attention projections.
-   double m_wq[FX6_AF_HEADS][FX6_AF_D_HEAD][FX6_AI_MLP_HIDDEN];
-   double m_wk[FX6_AF_HEADS][FX6_AF_D_HEAD][FX6_AI_MLP_HIDDEN];
-   double m_wv[FX6_AF_HEADS][FX6_AF_D_HEAD][FX6_AI_MLP_HIDDEN];
-   double m_wo[FX6_AF_HEADS][FX6_AI_MLP_HIDDEN][FX6_AF_D_HEAD];
+   double m_wq[FXAI_AF_HEADS][FXAI_AF_D_HEAD][FXAI_AI_MLP_HIDDEN];
+   double m_wk[FXAI_AF_HEADS][FXAI_AF_D_HEAD][FXAI_AI_MLP_HIDDEN];
+   double m_wv[FXAI_AF_HEADS][FXAI_AF_D_HEAD][FXAI_AI_MLP_HIDDEN];
+   double m_wo[FXAI_AF_HEADS][FXAI_AI_MLP_HIDDEN][FXAI_AF_D_HEAD];
 
    // Fusion + GRN + FFN blocks.
-   double m_fuse_w[FX6_AI_MLP_HIDDEN][FX6_AI_MLP_HIDDEN];
-   double m_fuse_b[FX6_AI_MLP_HIDDEN];
-   double m_gate_w[FX6_AI_MLP_HIDDEN][FX6_AI_MLP_HIDDEN];
-   double m_gate_b[FX6_AI_MLP_HIDDEN];
+   double m_fuse_w[FXAI_AI_MLP_HIDDEN][FXAI_AI_MLP_HIDDEN];
+   double m_fuse_b[FXAI_AI_MLP_HIDDEN];
+   double m_gate_w[FXAI_AI_MLP_HIDDEN][FXAI_AI_MLP_HIDDEN];
+   double m_gate_b[FXAI_AI_MLP_HIDDEN];
 
-   double m_grn1_w1[FX6_AI_MLP_HIDDEN][FX6_AI_MLP_HIDDEN];
-   double m_grn1_w2[FX6_AI_MLP_HIDDEN][FX6_AI_MLP_HIDDEN];
-   double m_grn1_wg[FX6_AI_MLP_HIDDEN][FX6_AI_MLP_HIDDEN];
-   double m_grn1_b1[FX6_AI_MLP_HIDDEN];
-   double m_grn1_b2[FX6_AI_MLP_HIDDEN];
-   double m_grn1_bg[FX6_AI_MLP_HIDDEN];
+   double m_grn1_w1[FXAI_AI_MLP_HIDDEN][FXAI_AI_MLP_HIDDEN];
+   double m_grn1_w2[FXAI_AI_MLP_HIDDEN][FXAI_AI_MLP_HIDDEN];
+   double m_grn1_wg[FXAI_AI_MLP_HIDDEN][FXAI_AI_MLP_HIDDEN];
+   double m_grn1_b1[FXAI_AI_MLP_HIDDEN];
+   double m_grn1_b2[FXAI_AI_MLP_HIDDEN];
+   double m_grn1_bg[FXAI_AI_MLP_HIDDEN];
 
-   double m_grn2_w1[FX6_AI_MLP_HIDDEN][FX6_AI_MLP_HIDDEN];
-   double m_grn2_w2[FX6_AI_MLP_HIDDEN][FX6_AI_MLP_HIDDEN];
-   double m_grn2_wg[FX6_AI_MLP_HIDDEN][FX6_AI_MLP_HIDDEN];
-   double m_grn2_b1[FX6_AI_MLP_HIDDEN];
-   double m_grn2_b2[FX6_AI_MLP_HIDDEN];
-   double m_grn2_bg[FX6_AI_MLP_HIDDEN];
+   double m_grn2_w1[FXAI_AI_MLP_HIDDEN][FXAI_AI_MLP_HIDDEN];
+   double m_grn2_w2[FXAI_AI_MLP_HIDDEN][FXAI_AI_MLP_HIDDEN];
+   double m_grn2_wg[FXAI_AI_MLP_HIDDEN][FXAI_AI_MLP_HIDDEN];
+   double m_grn2_b1[FXAI_AI_MLP_HIDDEN];
+   double m_grn2_b2[FXAI_AI_MLP_HIDDEN];
+   double m_grn2_bg[FXAI_AI_MLP_HIDDEN];
 
-   double m_ff1_w[FX6_AI_MLP_HIDDEN][FX6_AI_MLP_HIDDEN];
-   double m_ff1_b[FX6_AI_MLP_HIDDEN];
-   double m_ff2_w[FX6_AI_MLP_HIDDEN][FX6_AI_MLP_HIDDEN];
-   double m_ff2_b[FX6_AI_MLP_HIDDEN];
+   double m_ff1_w[FXAI_AI_MLP_HIDDEN][FXAI_AI_MLP_HIDDEN];
+   double m_ff1_b[FXAI_AI_MLP_HIDDEN];
+   double m_ff2_w[FXAI_AI_MLP_HIDDEN][FXAI_AI_MLP_HIDDEN];
+   double m_ff2_b[FXAI_AI_MLP_HIDDEN];
 
    // Norm affine params.
-   double m_ln_fuse_g[FX6_AI_MLP_HIDDEN];
-   double m_ln_fuse_b[FX6_AI_MLP_HIDDEN];
-   double m_ln1_g[FX6_AI_MLP_HIDDEN];
-   double m_ln1_b[FX6_AI_MLP_HIDDEN];
-   double m_ln2_g[FX6_AI_MLP_HIDDEN];
-   double m_ln2_b[FX6_AI_MLP_HIDDEN];
-   double m_ln_out_g[FX6_AI_MLP_HIDDEN];
-   double m_ln_out_b[FX6_AI_MLP_HIDDEN];
+   double m_ln_fuse_g[FXAI_AI_MLP_HIDDEN];
+   double m_ln_fuse_b[FXAI_AI_MLP_HIDDEN];
+   double m_ln1_g[FXAI_AI_MLP_HIDDEN];
+   double m_ln1_b[FXAI_AI_MLP_HIDDEN];
+   double m_ln2_g[FXAI_AI_MLP_HIDDEN];
+   double m_ln2_b[FXAI_AI_MLP_HIDDEN];
+   double m_ln_out_g[FXAI_AI_MLP_HIDDEN];
+   double m_ln_out_b[FXAI_AI_MLP_HIDDEN];
 
    // Output heads: 3-class + distributional move.
-   double m_w_cls[FX6_AF_CLASS_COUNT][FX6_AI_MLP_HIDDEN];
-   double m_b_cls[FX6_AF_CLASS_COUNT];
+   double m_w_cls[FXAI_AF_CLASS_COUNT][FXAI_AI_MLP_HIDDEN];
+   double m_b_cls[FXAI_AF_CLASS_COUNT];
 
-   double m_w_mu[FX6_AI_MLP_HIDDEN];
+   double m_w_mu[FXAI_AI_MLP_HIDDEN];
    double m_b_mu;
-   double m_w_logv[FX6_AI_MLP_HIDDEN];
+   double m_w_logv[FXAI_AI_MLP_HIDDEN];
    double m_b_logv;
-   double m_w_q25[FX6_AI_MLP_HIDDEN];
+   double m_w_q25[FXAI_AI_MLP_HIDDEN];
    double m_b_q25;
-   double m_w_q75[FX6_AI_MLP_HIDDEN];
+   double m_w_q75[FXAI_AI_MLP_HIDDEN];
    double m_b_q75;
 
    // TBPTT buffers.
    int    m_train_len;
-   double m_train_x[FX6_AF_TBPTT][FX6_AI_WEIGHTS];
-   int    m_train_cls[FX6_AF_TBPTT];
-   double m_train_move[FX6_AF_TBPTT];
-   double m_train_cost[FX6_AF_TBPTT];
-   double m_train_w[FX6_AF_TBPTT];
+   double m_train_x[FXAI_AF_TBPTT][FXAI_AI_WEIGHTS];
+   int    m_train_cls[FXAI_AF_TBPTT];
+   double m_train_move[FXAI_AF_TBPTT];
+   double m_train_cost[FXAI_AF_TBPTT];
+   double m_train_w[FXAI_AF_TBPTT];
 
    // Forward caches for TBPTT updates.
-   double m_cache_xn[FX6_AF_TBPTT][FX6_AI_WEIGHTS];
-   double m_cache_embed[FX6_AF_TBPTT][FX6_AI_MLP_HIDDEN];
-   double m_cache_trend_raw[FX6_AF_TBPTT][FX6_AI_MLP_HIDDEN];
-   double m_cache_season_raw[FX6_AF_TBPTT][FX6_AI_MLP_HIDDEN];
-   double m_cache_trend[FX6_AF_TBPTT][FX6_AI_MLP_HIDDEN];
-   double m_cache_season[FX6_AF_TBPTT][FX6_AI_MLP_HIDDEN];
-   double m_cache_corr[FX6_AF_TBPTT][FX6_AI_MLP_HIDDEN];
-   double m_cache_fused[FX6_AF_TBPTT][FX6_AI_MLP_HIDDEN];
-   double m_cache_mid[FX6_AF_TBPTT][FX6_AI_MLP_HIDDEN];
-   double m_cache_final[FX6_AF_TBPTT][FX6_AI_MLP_HIDDEN];
+   double m_cache_xn[FXAI_AF_TBPTT][FXAI_AI_WEIGHTS];
+   double m_cache_embed[FXAI_AF_TBPTT][FXAI_AI_MLP_HIDDEN];
+   double m_cache_trend_raw[FXAI_AF_TBPTT][FXAI_AI_MLP_HIDDEN];
+   double m_cache_season_raw[FXAI_AF_TBPTT][FXAI_AI_MLP_HIDDEN];
+   double m_cache_trend[FXAI_AF_TBPTT][FXAI_AI_MLP_HIDDEN];
+   double m_cache_season[FXAI_AF_TBPTT][FXAI_AI_MLP_HIDDEN];
+   double m_cache_corr[FXAI_AF_TBPTT][FXAI_AI_MLP_HIDDEN];
+   double m_cache_fused[FXAI_AF_TBPTT][FXAI_AI_MLP_HIDDEN];
+   double m_cache_mid[FXAI_AF_TBPTT][FXAI_AI_MLP_HIDDEN];
+   double m_cache_final[FXAI_AF_TBPTT][FXAI_AI_MLP_HIDDEN];
 
-   double m_cache_head_ctx[FX6_AF_TBPTT][FX6_AF_HEADS][FX6_AF_D_HEAD];
-   int    m_cache_lag_idx[FX6_AF_TBPTT][FX6_AF_HEADS][FX6_AF_TOPK_LAGS];
-   double m_cache_lag_w[FX6_AF_TBPTT][FX6_AF_HEADS][FX6_AF_TOPK_LAGS];
-   double m_cache_lag_src[FX6_AF_TBPTT][FX6_AF_HEADS][FX6_AF_TOPK_LAGS][FX6_AI_MLP_HIDDEN];
+   double m_cache_head_ctx[FXAI_AF_TBPTT][FXAI_AF_HEADS][FXAI_AF_D_HEAD];
+   int    m_cache_lag_idx[FXAI_AF_TBPTT][FXAI_AF_HEADS][FXAI_AF_TOPK_LAGS];
+   double m_cache_lag_w[FXAI_AF_TBPTT][FXAI_AF_HEADS][FXAI_AF_TOPK_LAGS];
+   double m_cache_lag_src[FXAI_AF_TBPTT][FXAI_AF_HEADS][FXAI_AF_TOPK_LAGS][FXAI_AI_MLP_HIDDEN];
 
-   double m_cache_logits[FX6_AF_TBPTT][FX6_AF_CLASS_COUNT];
-   double m_cache_probs[FX6_AF_TBPTT][FX6_AF_CLASS_COUNT];
-   double m_cache_mu[FX6_AF_TBPTT];
-   double m_cache_logv[FX6_AF_TBPTT];
-   double m_cache_q25[FX6_AF_TBPTT];
-   double m_cache_q75[FX6_AF_TBPTT];
+   double m_cache_logits[FXAI_AF_TBPTT][FXAI_AF_CLASS_COUNT];
+   double m_cache_probs[FXAI_AF_TBPTT][FXAI_AF_CLASS_COUNT];
+   double m_cache_mu[FXAI_AF_TBPTT];
+   double m_cache_logv[FXAI_AF_TBPTT];
+   double m_cache_q25[FXAI_AF_TBPTT];
+   double m_cache_q75[FXAI_AF_TBPTT];
 
    int ClampI(const int v, const int lo, const int hi) const
    {
@@ -139,22 +139,22 @@ private:
    void LayerNormAffine(double &v[], const double &g[], const double &b[]) const
    {
       double mean = 0.0;
-      for(int i=0; i<FX6_AI_MLP_HIDDEN; i++)
+      for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
          mean += v[i];
-      mean /= (double)FX6_AI_MLP_HIDDEN;
+      mean /= (double)FXAI_AI_MLP_HIDDEN;
 
       double var = 0.0;
-      for(int i=0; i<FX6_AI_MLP_HIDDEN; i++)
+      for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
       {
          double d = v[i] - mean;
          var += d * d;
       }
 
-      double inv = 1.0 / MathSqrt(var / (double)FX6_AI_MLP_HIDDEN + 1e-6);
-      for(int i=0; i<FX6_AI_MLP_HIDDEN; i++)
+      double inv = 1.0 / MathSqrt(var / (double)FXAI_AI_MLP_HIDDEN + 1e-6);
+      for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
       {
          double n = (v[i] - mean) * inv;
-         v[i] = FX6_ClipSym(g[i] * n + b[i], 8.0);
+         v[i] = FXAI_ClipSym(g[i] * n + b[i], 8.0);
       }
    }
 
@@ -164,9 +164,9 @@ private:
       if(logits[1] > m) m = logits[1];
       if(logits[2] > m) m = logits[2];
 
-      double e0 = MathExp(FX6_Clamp(logits[0] - m, -30.0, 30.0));
-      double e1 = MathExp(FX6_Clamp(logits[1] - m, -30.0, 30.0));
-      double e2 = MathExp(FX6_Clamp(logits[2] - m, -30.0, 30.0));
+      double e0 = MathExp(FXAI_Clamp(logits[0] - m, -30.0, 30.0));
+      double e1 = MathExp(FXAI_Clamp(logits[1] - m, -30.0, 30.0));
+      double e2 = MathExp(FXAI_Clamp(logits[2] - m, -30.0, 30.0));
 
       double s = e0 + e1 + e2;
       if(s <= 0.0)
@@ -186,7 +186,7 @@ private:
    {
       m_x_norm_ready = false;
       m_x_norm_steps = 0;
-      for(int i=0; i<FX6_AI_WEIGHTS; i++)
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
       {
          m_x_mean[i] = 0.0;
          m_x_var[i] = 1.0;
@@ -196,7 +196,7 @@ private:
    void UpdateInputStats(const double &x[])
    {
       double a = (m_x_norm_steps < 128 ? 0.05 : 0.015);
-      for(int i=1; i<FX6_AI_WEIGHTS; i++)
+      for(int i=1; i<FXAI_AI_WEIGHTS; i++)
       {
          double d = x[i] - m_x_mean[i];
          m_x_mean[i] += a * d;
@@ -211,16 +211,16 @@ private:
    void NormalizeInput(const double &x[], double &xn[]) const
    {
       xn[0] = 1.0;
-      for(int i=1; i<FX6_AI_WEIGHTS; i++)
+      for(int i=1; i<FXAI_AI_WEIGHTS; i++)
       {
          if(!m_x_norm_ready)
          {
-            xn[i] = FX6_ClipSym(x[i], 8.0);
+            xn[i] = FXAI_ClipSym(x[i], 8.0);
             continue;
          }
 
          double inv = 1.0 / MathSqrt(m_x_var[i] + 1e-6);
-         xn[i] = FX6_ClipSym((x[i] - m_x_mean[i]) * inv, 8.0);
+         xn[i] = FXAI_ClipSym((x[i] - m_x_mean[i]) * inv, 8.0);
       }
    }
 
@@ -228,9 +228,9 @@ private:
    {
       m_seq_ptr = -1;
       m_seq_len = 0;
-      for(int t=0; t<FX6_AF_SEQ; t++)
+      for(int t=0; t<FXAI_AF_SEQ; t++)
       {
-         for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+         for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
          {
             m_seq_h[t][h] = 0.0;
             m_seq_season[t][h] = 0.0;
@@ -242,9 +242,9 @@ private:
    void ResetTrainBuffer(void)
    {
       m_train_len = 0;
-      for(int t=0; t<FX6_AF_TBPTT; t++)
+      for(int t=0; t<FXAI_AF_TBPTT; t++)
       {
-         m_train_cls[t] = FX6_AF_SKIP;
+         m_train_cls[t] = FXAI_AF_SKIP;
          m_train_move[t] = 0.0;
          m_train_cost[t] = 0.0;
          m_train_w[t] = 1.0;
@@ -254,13 +254,13 @@ private:
          m_cache_q25[t] = 0.0;
          m_cache_q75[t] = 0.0;
 
-         for(int i=0; i<FX6_AI_WEIGHTS; i++)
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++)
          {
             m_train_x[t][i] = 0.0;
             m_cache_xn[t][i] = 0.0;
          }
 
-         for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+         for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
          {
             m_cache_embed[t][h] = 0.0;
             m_cache_trend_raw[t][h] = 0.0;
@@ -273,21 +273,21 @@ private:
             m_cache_final[t][h] = 0.0;
          }
 
-         for(int hd=0; hd<FX6_AF_HEADS; hd++)
+         for(int hd=0; hd<FXAI_AF_HEADS; hd++)
          {
-            for(int d=0; d<FX6_AF_D_HEAD; d++)
+            for(int d=0; d<FXAI_AF_D_HEAD; d++)
                m_cache_head_ctx[t][hd][d] = 0.0;
 
-            for(int k=0; k<FX6_AF_TOPK_LAGS; k++)
+            for(int k=0; k<FXAI_AF_TOPK_LAGS; k++)
             {
                m_cache_lag_idx[t][hd][k] = -1;
                m_cache_lag_w[t][hd][k] = 0.0;
-               for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+               for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
                   m_cache_lag_src[t][hd][k][h] = 0.0;
             }
          }
 
-         for(int c=0; c<FX6_AF_CLASS_COUNT; c++)
+         for(int c=0; c<FXAI_AF_CLASS_COUNT; c++)
          {
             m_cache_logits[t][c] = 0.0;
             m_cache_probs[t][c] = 1.0 / 3.0;
@@ -299,8 +299,8 @@ private:
    {
       if(m_seq_len <= 0 || m_seq_ptr < 0) return 0;
       int idx = m_seq_ptr - back;
-      while(idx < 0) idx += FX6_AF_SEQ;
-      while(idx >= FX6_AF_SEQ) idx -= FX6_AF_SEQ;
+      while(idx < 0) idx += FXAI_AF_SEQ;
+      while(idx >= FXAI_AF_SEQ) idx -= FXAI_AF_SEQ;
       return idx;
    }
 
@@ -308,17 +308,17 @@ private:
                     const double &x[],
                     const double move_points) const
    {
-      if(y == FX6_AF_SELL || y == FX6_AF_BUY || y == FX6_AF_SKIP)
+      if(y == FXAI_AF_SELL || y == FXAI_AF_BUY || y == FXAI_AF_SKIP)
          return y;
 
       double cost = InputCostProxyPoints(x);
       double edge = MathAbs(move_points) - cost;
       double skip_band = 0.10 + 0.25 * MathMax(cost, 0.0);
-      if(edge <= skip_band) return FX6_AF_SKIP;
+      if(edge <= skip_band) return FXAI_AF_SKIP;
 
-      if(y > 0) return FX6_AF_BUY;
-      if(y == 0) return FX6_AF_SELL;
-      return (move_points >= 0.0 ? FX6_AF_BUY : FX6_AF_SELL);
+      if(y > 0) return FXAI_AF_BUY;
+      if(y == 0) return FXAI_AF_SELL;
+      return (move_points >= 0.0 ? FXAI_AF_BUY : FXAI_AF_SELL);
    }
 
    double ClassWeight(const int cls,
@@ -327,16 +327,16 @@ private:
                       const double sample_w) const
    {
       double edge = MathAbs(move_points) - cost;
-      double base = FX6_Clamp(sample_w, 0.25, 4.00);
+      double base = FXAI_Clamp(sample_w, 0.25, 4.00);
 
-      if(cls == FX6_AF_SKIP)
+      if(cls == FXAI_AF_SKIP)
       {
-         if(edge <= 0.0) return FX6_Clamp(base * 1.6, 0.25, 6.0);
-         return FX6_Clamp(base * 0.75, 0.25, 6.0);
+         if(edge <= 0.0) return FXAI_Clamp(base * 1.6, 0.25, 6.0);
+         return FXAI_Clamp(base * 0.75, 0.25, 6.0);
       }
 
-      if(edge <= 0.0) return FX6_Clamp(base * 0.55, 0.25, 6.0);
-      return FX6_Clamp(base * (1.0 + 0.06 * MathMin(edge, 20.0)), 0.25, 6.0);
+      if(edge <= 0.0) return FXAI_Clamp(base * 0.55, 0.25, 6.0);
+      return FXAI_Clamp(base * (1.0 + 0.06 * MathMin(edge, 20.0)), 0.25, 6.0);
    }
 
    double MoveWeight(const double move_points,
@@ -345,8 +345,8 @@ private:
    {
       double edge = MathAbs(move_points) - cost;
       double denom = MathMax(cost, 1.0);
-      double ew = FX6_Clamp(0.5 + edge / denom, 0.25, 4.0);
-      return FX6_Clamp(sample_w * ew, 0.25, 8.0);
+      double ew = FXAI_Clamp(0.5 + edge / denom, 0.25, 4.0);
+      return FXAI_Clamp(sample_w * ew, 0.25, 8.0);
    }
 
    void InitWeights(void)
@@ -356,7 +356,7 @@ private:
       ResetInputNorm();
       m_step = 0;
 
-      for(int o=0; o<FX6_AI_MLP_HIDDEN; o++)
+      for(int o=0; o<FXAI_AI_MLP_HIDDEN; o++)
       {
          m_b_in[o] = 0.0;
          m_b_season[o] = 0.0;
@@ -390,16 +390,16 @@ private:
          m_w_q25[o] = 0.03 * MathSin((double)(o + 3) * 1.07);
          m_w_q75[o] = 0.03 * MathCos((double)(o + 4) * 1.13);
 
-         for(int c=0; c<FX6_AF_CLASS_COUNT; c++)
+         for(int c=0; c<FXAI_AF_CLASS_COUNT; c++)
             m_w_cls[c][o] = 0.03 * MathSin((double)((c + 2) * (o + 1)) * 0.87);
 
-         for(int i=0; i<FX6_AI_WEIGHTS; i++)
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++)
          {
             double s = (double)((o + 1) * (i + 2));
             m_w_in[o][i] = 0.04 * MathSin(0.67 * s);
          }
 
-         for(int i=0; i<FX6_AI_MLP_HIDDEN; i++)
+         for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
          {
             double a = (double)((o + 1) * (i + 3));
             m_w_season[o][i] = 0.04 * MathCos(0.73 * a);
@@ -421,11 +421,11 @@ private:
          }
       }
 
-      for(int hd=0; hd<FX6_AF_HEADS; hd++)
+      for(int hd=0; hd<FXAI_AF_HEADS; hd++)
       {
-         for(int d=0; d<FX6_AF_D_HEAD; d++)
+         for(int d=0; d<FXAI_AF_D_HEAD; d++)
          {
-            for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+            for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
             {
                double t = (double)((hd + 1) * (d + 2) * (h + 3));
                m_wq[hd][d][h] = 0.04 * MathSin(0.69 * t);
@@ -436,7 +436,7 @@ private:
          }
       }
 
-      for(int c=0; c<FX6_AF_CLASS_COUNT; c++)
+      for(int c=0; c<FXAI_AF_CLASS_COUNT; c++)
          m_b_cls[c] = 0.0;
 
       m_b_mu = 0.0;
@@ -448,9 +448,9 @@ private:
    }
 
    void ApplyGRN(const double &in[],
-                 const double &w1[][FX6_AI_MLP_HIDDEN],
-                 const double &w2[][FX6_AI_MLP_HIDDEN],
-                 const double &wg[][FX6_AI_MLP_HIDDEN],
+                 const double &w1[][FXAI_AI_MLP_HIDDEN],
+                 const double &w2[][FXAI_AI_MLP_HIDDEN],
+                 const double &wg[][FXAI_AI_MLP_HIDDEN],
                  const double &b1[],
                  const double &b2[],
                  const double &bg[],
@@ -458,23 +458,23 @@ private:
                  const double &ln_b[],
                  double &out[]) const
    {
-      double h1[FX6_AI_MLP_HIDDEN];
-      for(int o=0; o<FX6_AI_MLP_HIDDEN; o++)
+      double h1[FXAI_AI_MLP_HIDDEN];
+      for(int o=0; o<FXAI_AI_MLP_HIDDEN; o++)
       {
          double z1 = b1[o];
          double zg = bg[o];
-         for(int i=0; i<FX6_AI_MLP_HIDDEN; i++)
+         for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
          {
             z1 += w1[o][i] * in[i];
             zg += wg[o][i] * in[i];
          }
-         h1[o] = FX6_Tanh(z1);
+         h1[o] = FXAI_Tanh(z1);
 
          double z2 = b2[o];
-         for(int i=0; i<FX6_AI_MLP_HIDDEN; i++)
+         for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
             z2 += w2[o][i] * h1[i];
 
-         double g = FX6_Sigmoid(zg);
+         double g = FXAI_Sigmoid(zg);
          out[o] = g * z2 + (1.0 - g) * in[o];
       }
 
@@ -483,22 +483,22 @@ private:
 
    void BuildEmbedding(const double &xn[], double &embed[]) const
    {
-      for(int o=0; o<FX6_AI_MLP_HIDDEN; o++)
+      for(int o=0; o<FXAI_AI_MLP_HIDDEN; o++)
       {
          double z = m_b_in[o];
-         for(int i=0; i<FX6_AI_WEIGHTS; i++)
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++)
             z += m_w_in[o][i] * xn[i];
-         embed[o] = FX6_Tanh(z);
+         embed[o] = FXAI_Tanh(z);
       }
    }
 
    void Decompose(const double &embed[], double &trend_raw[], double &season_raw[], double &trend[], double &season[]) const
    {
-      int win = FX6_AF_MA_WIN;
+      int win = FXAI_AF_MA_WIN;
       if(win < 2) win = 2;
-      if(win > FX6_AF_SEQ) win = FX6_AF_SEQ;
+      if(win > FXAI_AF_SEQ) win = FXAI_AF_SEQ;
 
-      for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+      for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
       {
          double sum = embed[h];
          int cnt = 1;
@@ -514,67 +514,67 @@ private:
          season_raw[h] = embed[h] - ma;
       }
 
-      for(int o=0; o<FX6_AI_MLP_HIDDEN; o++)
+      for(int o=0; o<FXAI_AI_MLP_HIDDEN; o++)
       {
          double zt = m_b_trend[o];
          double zs = m_b_season[o];
-         for(int i=0; i<FX6_AI_MLP_HIDDEN; i++)
+         for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
          {
             zt += m_w_trend[o][i] * trend_raw[i];
             zs += m_w_season[o][i] * season_raw[i];
          }
-         trend[o] = FX6_Tanh(zt);
-         season[o] = FX6_Tanh(zs);
+         trend[o] = FXAI_Tanh(zt);
+         season[o] = FXAI_Tanh(zs);
       }
    }
 
    void BuildSeasonTokens(const double &season_cur[],
-                          double &tokens[][FX6_AI_MLP_HIDDEN],
+                          double &tokens[][FXAI_AI_MLP_HIDDEN],
                           int &count) const
    {
       int keep = m_seq_len;
-      if(keep > FX6_AF_SEQ - 1) keep = FX6_AF_SEQ - 1;
+      if(keep > FXAI_AF_SEQ - 1) keep = FXAI_AF_SEQ - 1;
 
       for(int i=0; i<keep; i++)
       {
          int back = keep - 1 - i;
          int idx = SeqIndexBack(back);
-         for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+         for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
             tokens[i][h] = m_seq_season[idx][h];
       }
 
-      for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+      for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
          tokens[keep][h] = season_cur[h];
 
       count = keep + 1;
    }
 
    void AutoCorrelationAttention(const double &season_cur[],
-                                 const double &tokens[][FX6_AI_MLP_HIDDEN],
+                                 const double &tokens[][FXAI_AI_MLP_HIDDEN],
                                  const int token_count,
                                  const bool cache_on,
                                  const int cache_t,
                                  double &corr_out[])
    {
-      for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+      for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
          corr_out[h] = 0.0;
 
       if(token_count <= 0) return;
 
-      double inv_scale = 1.0 / MathSqrt((double)FX6_AF_D_HEAD);
-      double q[FX6_AF_D_HEAD];
-      double kvec[FX6_AF_D_HEAD];
-      double vvec[FX6_AF_D_HEAD];
+      double inv_scale = 1.0 / MathSqrt((double)FXAI_AF_D_HEAD);
+      double q[FXAI_AF_D_HEAD];
+      double kvec[FXAI_AF_D_HEAD];
+      double vvec[FXAI_AF_D_HEAD];
 
-      double scores[FX6_AF_SEQ];
-      double vcache[FX6_AF_SEQ][FX6_AF_D_HEAD];
+      double scores[FXAI_AF_SEQ];
+      double vcache[FXAI_AF_SEQ][FXAI_AF_D_HEAD];
 
-      for(int hd=0; hd<FX6_AF_HEADS; hd++)
+      for(int hd=0; hd<FXAI_AF_HEADS; hd++)
       {
-         for(int d=0; d<FX6_AF_D_HEAD; d++)
+         for(int d=0; d<FXAI_AF_D_HEAD; d++)
          {
             double s = 0.0;
-            for(int j=0; j<FX6_AI_MLP_HIDDEN; j++)
+            for(int j=0; j<FXAI_AI_MLP_HIDDEN; j++)
                s += m_wq[hd][d][j] * season_cur[j];
             q[d] = s;
          }
@@ -582,11 +582,11 @@ private:
          for(int t=0; t<token_count; t++)
          {
             double sc = 0.0;
-            for(int d=0; d<FX6_AF_D_HEAD; d++)
+            for(int d=0; d<FXAI_AF_D_HEAD; d++)
             {
                double kv = 0.0;
                double vv = 0.0;
-               for(int j=0; j<FX6_AI_MLP_HIDDEN; j++)
+               for(int j=0; j<FXAI_AI_MLP_HIDDEN; j++)
                {
                   kv += m_wk[hd][d][j] * tokens[t][j];
                   vv += m_wv[hd][d][j] * tokens[t][j];
@@ -600,15 +600,15 @@ private:
          }
 
          // Top-k lag selection.
-         int top_idx[FX6_AF_TOPK_LAGS];
-         double top_sc[FX6_AF_TOPK_LAGS];
-         for(int k=0; k<FX6_AF_TOPK_LAGS; k++)
+         int top_idx[FXAI_AF_TOPK_LAGS];
+         double top_sc[FXAI_AF_TOPK_LAGS];
+         for(int k=0; k<FXAI_AF_TOPK_LAGS; k++)
          {
             top_idx[k] = -1;
             top_sc[k] = -1e100;
          }
 
-         for(int k=0; k<FX6_AF_TOPK_LAGS; k++)
+         for(int k=0; k<FXAI_AF_TOPK_LAGS; k++)
          {
             int bi = -1;
             double bs = -1e100;
@@ -637,59 +637,59 @@ private:
          }
 
          double max_sc = -1e100;
-         for(int k=0; k<FX6_AF_TOPK_LAGS; k++)
+         for(int k=0; k<FXAI_AF_TOPK_LAGS; k++)
          {
             if(top_idx[k] < 0) continue;
             if(top_sc[k] > max_sc) max_sc = top_sc[k];
          }
          if(max_sc < -1e50) max_sc = 0.0;
 
-         double alpha[FX6_AF_TOPK_LAGS];
+         double alpha[FXAI_AF_TOPK_LAGS];
          double den = 0.0;
-         for(int k=0; k<FX6_AF_TOPK_LAGS; k++)
+         for(int k=0; k<FXAI_AF_TOPK_LAGS; k++)
          {
             if(top_idx[k] < 0)
             {
                alpha[k] = 0.0;
                continue;
             }
-            alpha[k] = MathExp(FX6_ClipSym(top_sc[k] - max_sc, 30.0));
+            alpha[k] = MathExp(FXAI_ClipSym(top_sc[k] - max_sc, 30.0));
             den += alpha[k];
          }
          if(den <= 0.0) den = 1.0;
-         for(int k=0; k<FX6_AF_TOPK_LAGS; k++)
+         for(int k=0; k<FXAI_AF_TOPK_LAGS; k++)
             alpha[k] /= den;
 
-         double ctx[FX6_AF_D_HEAD];
-         for(int d=0; d<FX6_AF_D_HEAD; d++) ctx[d] = 0.0;
+         double ctx[FXAI_AF_D_HEAD];
+         for(int d=0; d<FXAI_AF_D_HEAD; d++) ctx[d] = 0.0;
 
-         for(int k=0; k<FX6_AF_TOPK_LAGS; k++)
+         for(int k=0; k<FXAI_AF_TOPK_LAGS; k++)
          {
             int idx = top_idx[k];
             if(idx < 0 || idx >= token_count) continue;
             double a = alpha[k];
-            for(int d=0; d<FX6_AF_D_HEAD; d++)
+            for(int d=0; d<FXAI_AF_D_HEAD; d++)
                ctx[d] += a * vcache[idx][d];
 
-            if(cache_on && cache_t >= 0 && cache_t < FX6_AF_TBPTT)
+            if(cache_on && cache_t >= 0 && cache_t < FXAI_AF_TBPTT)
             {
                m_cache_lag_idx[cache_t][hd][k] = idx;
                m_cache_lag_w[cache_t][hd][k] = a;
-               for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+               for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
                   m_cache_lag_src[cache_t][hd][k][h] = tokens[idx][h];
             }
          }
 
-         if(cache_on && cache_t >= 0 && cache_t < FX6_AF_TBPTT)
+         if(cache_on && cache_t >= 0 && cache_t < FXAI_AF_TBPTT)
          {
-            for(int d=0; d<FX6_AF_D_HEAD; d++)
+            for(int d=0; d<FXAI_AF_D_HEAD; d++)
                m_cache_head_ctx[cache_t][hd][d] = ctx[d];
          }
 
-         for(int j=0; j<FX6_AI_MLP_HIDDEN; j++)
+         for(int j=0; j<FXAI_AI_MLP_HIDDEN; j++)
          {
             double s = 0.0;
-            for(int d=0; d<FX6_AF_D_HEAD; d++)
+            for(int d=0; d<FXAI_AF_D_HEAD; d++)
                s += m_wo[hd][j][d] * ctx[d];
             corr_out[j] += s;
          }
@@ -715,24 +715,24 @@ private:
       BuildEmbedding(xn_out, embed_out);
       Decompose(embed_out, trend_raw_out, season_raw_out, trend_out, season_out);
 
-      double tokens[FX6_AF_SEQ][FX6_AI_MLP_HIDDEN];
+      double tokens[FXAI_AF_SEQ][FXAI_AI_MLP_HIDDEN];
       int token_count = 0;
       BuildSeasonTokens(season_out, tokens, token_count);
 
       AutoCorrelationAttention(season_out, tokens, token_count, cache_on, cache_t, corr_out);
 
-      for(int o=0; o<FX6_AI_MLP_HIDDEN; o++)
+      for(int o=0; o<FXAI_AI_MLP_HIDDEN; o++)
       {
          double zf = m_fuse_b[o];
          double zg = m_gate_b[o];
-         for(int i=0; i<FX6_AI_MLP_HIDDEN; i++)
+         for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
          {
             double mix = corr_out[i] + trend_out[i];
             zf += m_fuse_w[o][i] * mix;
             zg += m_gate_w[o][i] * season_out[i];
          }
-         double g = FX6_Sigmoid(zg);
-         fused_out[o] = g * FX6_Tanh(zf) + (1.0 - g) * season_out[o];
+         double g = FXAI_Sigmoid(zg);
+         fused_out[o] = g * FXAI_Tanh(zf) + (1.0 - g) * season_out[o];
       }
       LayerNormAffine(fused_out, m_ln_fuse_g, m_ln_fuse_b);
 
@@ -747,21 +747,21 @@ private:
                m_ln1_b,
                mid_out);
 
-      double ff1[FX6_AI_MLP_HIDDEN];
-      for(int o=0; o<FX6_AI_MLP_HIDDEN; o++)
+      double ff1[FXAI_AI_MLP_HIDDEN];
+      for(int o=0; o<FXAI_AI_MLP_HIDDEN; o++)
       {
          double z1 = m_ff1_b[o];
-         for(int i=0; i<FX6_AI_MLP_HIDDEN; i++)
+         for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
             z1 += m_ff1_w[o][i] * mid_out[i];
-         ff1[o] = FX6_Tanh(z1);
+         ff1[o] = FXAI_Tanh(z1);
       }
 
-      for(int o=0; o<FX6_AI_MLP_HIDDEN; o++)
+      for(int o=0; o<FXAI_AI_MLP_HIDDEN; o++)
       {
          double z2 = m_ff2_b[o];
-         for(int i=0; i<FX6_AI_MLP_HIDDEN; i++)
+         for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
             z2 += m_ff2_w[o][i] * ff1[i];
-         final_out[o] = mid_out[o] + 0.25 * FX6_ClipSym(z2, 8.0);
+         final_out[o] = mid_out[o] + 0.25 * FXAI_ClipSym(z2, 8.0);
       }
       LayerNormAffine(final_out, m_ln2_g, m_ln2_b);
 
@@ -776,10 +776,10 @@ private:
                m_ln_out_b,
                final_out);
 
-      if(cache_on && cache_t >= 0 && cache_t < FX6_AF_TBPTT)
+      if(cache_on && cache_t >= 0 && cache_t < FXAI_AF_TBPTT)
       {
-         for(int i=0; i<FX6_AI_WEIGHTS; i++) m_cache_xn[cache_t][i] = xn_out[i];
-         for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++) m_cache_xn[cache_t][i] = xn_out[i];
+         for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
          {
             m_cache_embed[cache_t][h] = embed_out[h];
             m_cache_trend_raw[cache_t][h] = trend_raw_out[h];
@@ -796,16 +796,16 @@ private:
       if(commit)
       {
          m_seq_ptr++;
-         if(m_seq_ptr >= FX6_AF_SEQ) m_seq_ptr = 0;
+         if(m_seq_ptr >= FXAI_AF_SEQ) m_seq_ptr = 0;
 
-         for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+         for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
          {
             m_seq_h[m_seq_ptr][h] = final_out[h];
             m_seq_season[m_seq_ptr][h] = season_out[h];
             m_seq_trend[m_seq_ptr][h] = trend_out[h];
          }
 
-         if(m_seq_len < FX6_AF_SEQ) m_seq_len++;
+         if(m_seq_len < FXAI_AF_SEQ) m_seq_len++;
       }
    }
 
@@ -817,12 +817,12 @@ private:
                      double &q25,
                      double &q75) const
    {
-      for(int c=0; c<FX6_AF_CLASS_COUNT; c++)
+      for(int c=0; c<FXAI_AF_CLASS_COUNT; c++)
       {
          double z = m_b_cls[c];
-         for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+         for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
             z += m_w_cls[c][h] * final_state[h];
-         logits[c] = FX6_ClipSym(z, 20.0);
+         logits[c] = FXAI_ClipSym(z, 20.0);
       }
       Softmax3(logits, probs);
 
@@ -831,7 +831,7 @@ private:
       double r25 = m_b_q25;
       double r75 = m_b_q75;
 
-      for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+      for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
       {
          mu += m_w_mu[h] * final_state[h];
          logv += m_w_logv[h] * final_state[h];
@@ -839,7 +839,7 @@ private:
          r75 += m_w_q75[h] * final_state[h];
       }
 
-      logv = FX6_Clamp(logv, -4.0, 4.0);
+      logv = FXAI_Clamp(logv, -4.0, 4.0);
       if(r25 <= r75)
       {
          q25 = r25;
@@ -858,10 +858,10 @@ private:
                           const double cost_points,
                           const double sample_w)
    {
-      if(m_train_len < FX6_AF_TBPTT)
+      if(m_train_len < FXAI_AF_TBPTT)
       {
          int p = m_train_len;
-         for(int i=0; i<FX6_AI_WEIGHTS; i++) m_train_x[p][i] = x[i];
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++) m_train_x[p][i] = x[i];
          m_train_cls[p] = cls;
          m_train_move[p] = move_points;
          m_train_cost[p] = cost_points;
@@ -870,42 +870,42 @@ private:
          return;
       }
 
-      for(int t=1; t<FX6_AF_TBPTT; t++)
+      for(int t=1; t<FXAI_AF_TBPTT; t++)
       {
-         for(int i=0; i<FX6_AI_WEIGHTS; i++) m_train_x[t - 1][i] = m_train_x[t][i];
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++) m_train_x[t - 1][i] = m_train_x[t][i];
          m_train_cls[t - 1] = m_train_cls[t];
          m_train_move[t - 1] = m_train_move[t];
          m_train_cost[t - 1] = m_train_cost[t];
          m_train_w[t - 1] = m_train_w[t];
       }
 
-      for(int i=0; i<FX6_AI_WEIGHTS; i++) m_train_x[FX6_AF_TBPTT - 1][i] = x[i];
-      m_train_cls[FX6_AF_TBPTT - 1] = cls;
-      m_train_move[FX6_AF_TBPTT - 1] = move_points;
-      m_train_cost[FX6_AF_TBPTT - 1] = cost_points;
-      m_train_w[FX6_AF_TBPTT - 1] = sample_w;
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++) m_train_x[FXAI_AF_TBPTT - 1][i] = x[i];
+      m_train_cls[FXAI_AF_TBPTT - 1] = cls;
+      m_train_move[FXAI_AF_TBPTT - 1] = move_points;
+      m_train_cost[FXAI_AF_TBPTT - 1] = cost_points;
+      m_train_w[FXAI_AF_TBPTT - 1] = sample_w;
    }
 
-   void TrainTBPTT(const FX6AIHyperParams &hp)
+   void TrainTBPTT(const FXAIAIHyperParams &hp)
    {
       if(m_train_len <= 0) return;
 
       int n = m_train_len;
-      if(n > FX6_AF_TBPTT) n = FX6_AF_TBPTT;
+      if(n > FXAI_AF_TBPTT) n = FXAI_AF_TBPTT;
       if(n <= 0) return;
 
-      double lr0 = FX6_Clamp(hp.lr, 0.0001, 1.0000);
-      double l2 = FX6_Clamp(hp.l2, 0.0000, 1.0000);
+      double lr0 = FXAI_Clamp(hp.lr, 0.0001, 1.0000);
+      double l2 = FXAI_Clamp(hp.l2, 0.0000, 1.0000);
 
       // Save live state and isolate TBPTT sequence.
       int saved_ptr = m_seq_ptr;
       int saved_len = m_seq_len;
-      double saved_h[FX6_AF_SEQ][FX6_AI_MLP_HIDDEN];
-      double saved_s[FX6_AF_SEQ][FX6_AI_MLP_HIDDEN];
-      double saved_t[FX6_AF_SEQ][FX6_AI_MLP_HIDDEN];
-      for(int t=0; t<FX6_AF_SEQ; t++)
+      double saved_h[FXAI_AF_SEQ][FXAI_AI_MLP_HIDDEN];
+      double saved_s[FXAI_AF_SEQ][FXAI_AI_MLP_HIDDEN];
+      double saved_t[FXAI_AF_SEQ][FXAI_AI_MLP_HIDDEN];
+      for(int t=0; t<FXAI_AF_SEQ; t++)
       {
-         for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+         for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
          {
             saved_h[t][h] = m_seq_h[t][h];
             saved_s[t][h] = m_seq_season[t][h];
@@ -917,24 +917,24 @@ private:
 
       for(int t=0; t<n; t++)
       {
-         double xrow[FX6_AI_WEIGHTS];
-         for(int i=0; i<FX6_AI_WEIGHTS; i++) xrow[i] = m_train_x[t][i];
+         double xrow[FXAI_AI_WEIGHTS];
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++) xrow[i] = m_train_x[t][i];
 
-         double xn[FX6_AI_WEIGHTS];
-         double emb[FX6_AI_MLP_HIDDEN];
-         double tr_raw[FX6_AI_MLP_HIDDEN];
-         double se_raw[FX6_AI_MLP_HIDDEN];
-         double tr[FX6_AI_MLP_HIDDEN];
-         double se[FX6_AI_MLP_HIDDEN];
-         double corr[FX6_AI_MLP_HIDDEN];
-         double fused[FX6_AI_MLP_HIDDEN];
-         double mid[FX6_AI_MLP_HIDDEN];
-         double fin[FX6_AI_MLP_HIDDEN];
+         double xn[FXAI_AI_WEIGHTS];
+         double emb[FXAI_AI_MLP_HIDDEN];
+         double tr_raw[FXAI_AI_MLP_HIDDEN];
+         double se_raw[FXAI_AI_MLP_HIDDEN];
+         double tr[FXAI_AI_MLP_HIDDEN];
+         double se[FXAI_AI_MLP_HIDDEN];
+         double corr[FXAI_AI_MLP_HIDDEN];
+         double fused[FXAI_AI_MLP_HIDDEN];
+         double mid[FXAI_AI_MLP_HIDDEN];
+         double fin[FXAI_AI_MLP_HIDDEN];
 
          ForwardStep(xrow, true, true, t, xn, emb, tr_raw, se_raw, tr, se, corr, fused, mid, fin);
 
-         double logits[FX6_AF_CLASS_COUNT];
-         double probs[FX6_AF_CLASS_COUNT];
+         double logits[FXAI_AF_CLASS_COUNT];
+         double probs[FXAI_AF_CLASS_COUNT];
          ComputeHeads(fin,
                       logits,
                       probs,
@@ -943,15 +943,15 @@ private:
                       m_cache_q25[t],
                       m_cache_q75[t]);
 
-         for(int c=0; c<FX6_AF_CLASS_COUNT; c++)
+         for(int c=0; c<FXAI_AF_CLASS_COUNT; c++)
          {
             m_cache_logits[t][c] = logits[c];
             m_cache_probs[t][c] = probs[c];
          }
       }
 
-      double next_delta[FX6_AI_MLP_HIDDEN];
-      for(int h=0; h<FX6_AI_MLP_HIDDEN; h++) next_delta[h] = 0.0;
+      double next_delta[FXAI_AI_MLP_HIDDEN];
+      for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++) next_delta[h] = 0.0;
 
       for(int t=n - 1; t>=0; t--)
       {
@@ -961,16 +961,16 @@ private:
          int cls = m_train_cls[t];
          double mv = m_train_move[t];
          double cost = m_train_cost[t];
-         double sw = FX6_Clamp(m_train_w[t], 0.25, 4.00);
+         double sw = FXAI_Clamp(m_train_w[t], 0.25, 4.00);
 
          double w_cls = ClassWeight(cls, mv, cost, sw);
          double w_mv = MoveWeight(mv, cost, sw);
 
-         double g_logits[FX6_AF_CLASS_COUNT];
-         for(int c=0; c<FX6_AF_CLASS_COUNT; c++)
+         double g_logits[FXAI_AF_CLASS_COUNT];
+         for(int c=0; c<FXAI_AF_CLASS_COUNT; c++)
          {
             double target = (c == cls ? 1.0 : 0.0);
-            g_logits[c] = FX6_ClipSym((m_cache_probs[t][c] - target) * w_cls, 4.0);
+            g_logits[c] = FXAI_ClipSym((m_cache_probs[t][c] - target) * w_cls, 4.0);
          }
 
          double target_move = mv;
@@ -980,25 +980,25 @@ private:
          double q75 = m_cache_q75[t];
 
          double sigma2 = MathExp(logv);
-         sigma2 = FX6_Clamp(sigma2, 0.05, 100.0);
+         sigma2 = FXAI_Clamp(sigma2, 0.05, 100.0);
 
-         double err_mu = FX6_ClipSym(mu - target_move, 30.0);
-         double g_mu = FX6_ClipSym((err_mu / sigma2) * w_mv, 5.0);
+         double err_mu = FXAI_ClipSym(mu - target_move, 30.0);
+         double g_mu = FXAI_ClipSym((err_mu / sigma2) * w_mv, 5.0);
 
          double ratio = (err_mu * err_mu) / sigma2;
-         double g_logv = FX6_ClipSym(0.5 * (1.0 - ratio) * w_mv, 4.0);
+         double g_logv = FXAI_ClipSym(0.5 * (1.0 - ratio) * w_mv, 4.0);
 
          double e25 = target_move - q25;
          double e75 = target_move - q75;
-         double g_q25 = FX6_ClipSym(((e25 < 0.0 ? -0.75 : 0.25)) * w_mv, 3.0);
-         double g_q75 = FX6_ClipSym(((e75 < 0.0 ? -0.25 : 0.75)) * w_mv, 3.0);
+         double g_q25 = FXAI_ClipSym(((e25 < 0.0 ? -0.75 : 0.25)) * w_mv, 3.0);
+         double g_q75 = FXAI_ClipSym(((e75 < 0.0 ? -0.25 : 0.75)) * w_mv, 3.0);
 
-         double delta[FX6_AI_MLP_HIDDEN];
+         double delta[FXAI_AI_MLP_HIDDEN];
          double gn = 0.0;
-         for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+         for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
          {
             double d = 0.35 * next_delta[h];
-            for(int c=0; c<FX6_AF_CLASS_COUNT; c++)
+            for(int c=0; c<FXAI_AF_CLASS_COUNT; c++)
                d += g_logits[c] * m_w_cls[c][h];
             d += g_mu * m_w_mu[h];
             d += g_logv * m_w_logv[h];
@@ -1012,19 +1012,19 @@ private:
          if(gn > 4.0)
          {
             double sc = 4.0 / gn;
-            for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+            for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
                delta[h] *= sc;
          }
 
          // Output head updates.
-         for(int c=0; c<FX6_AF_CLASS_COUNT; c++)
+         for(int c=0; c<FXAI_AF_CLASS_COUNT; c++)
          {
             m_b_cls[c] -= lr * g_logits[c];
-            m_b_cls[c] = FX6_ClipSym(m_b_cls[c], 8.0);
-            for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+            m_b_cls[c] = FXAI_ClipSym(m_b_cls[c], 8.0);
+            for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
             {
                double g = g_logits[c] * m_cache_final[t][h];
-               m_w_cls[c][h] -= lr * (FX6_ClipSym(g, 6.0) + l2 * m_w_cls[c][h]);
+               m_w_cls[c][h] -= lr * (FXAI_ClipSym(g, 6.0) + l2 * m_w_cls[c][h]);
             }
          }
 
@@ -1033,21 +1033,21 @@ private:
          m_b_q25 -= lr * g_q25;
          m_b_q75 -= lr * g_q75;
 
-         m_b_mu = FX6_ClipSym(m_b_mu, 20.0);
-         m_b_logv = FX6_Clamp(m_b_logv, -4.0, 4.0);
-         m_b_q25 = FX6_ClipSym(m_b_q25, 20.0);
-         m_b_q75 = FX6_ClipSym(m_b_q75, 20.0);
+         m_b_mu = FXAI_ClipSym(m_b_mu, 20.0);
+         m_b_logv = FXAI_Clamp(m_b_logv, -4.0, 4.0);
+         m_b_q25 = FXAI_ClipSym(m_b_q25, 20.0);
+         m_b_q75 = FXAI_ClipSym(m_b_q75, 20.0);
 
-         for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+         for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
          {
-            m_w_mu[h] -= lr * (FX6_ClipSym(g_mu * m_cache_final[t][h], 6.0) + l2 * m_w_mu[h]);
-            m_w_logv[h] -= lr * (FX6_ClipSym(g_logv * m_cache_final[t][h], 6.0) + l2 * m_w_logv[h]);
-            m_w_q25[h] -= lr * (FX6_ClipSym(g_q25 * m_cache_final[t][h], 6.0) + l2 * m_w_q25[h]);
-            m_w_q75[h] -= lr * (FX6_ClipSym(g_q75 * m_cache_final[t][h], 6.0) + l2 * m_w_q75[h]);
+            m_w_mu[h] -= lr * (FXAI_ClipSym(g_mu * m_cache_final[t][h], 6.0) + l2 * m_w_mu[h]);
+            m_w_logv[h] -= lr * (FXAI_ClipSym(g_logv * m_cache_final[t][h], 6.0) + l2 * m_w_logv[h]);
+            m_w_q25[h] -= lr * (FXAI_ClipSym(g_q25 * m_cache_final[t][h], 6.0) + l2 * m_w_q25[h]);
+            m_w_q75[h] -= lr * (FXAI_ClipSym(g_q75 * m_cache_final[t][h], 6.0) + l2 * m_w_q75[h]);
          }
 
          // FFN + GRN + fusion updates.
-         for(int o=0; o<FX6_AI_MLP_HIDDEN; o++)
+         for(int o=0; o<FXAI_AI_MLP_HIDDEN; o++)
          {
             double d = delta[o];
 
@@ -1078,96 +1078,96 @@ private:
             m_b_season[o] -= lr * 0.03 * d;
             m_b_in[o] -= lr * 0.02 * d;
 
-            for(int i=0; i<FX6_AI_MLP_HIDDEN; i++)
+            for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
             {
-               m_ff2_w[o][i] -= lr * (0.08 * FX6_ClipSym(d * m_cache_mid[t][i], 4.0) + l2 * m_ff2_w[o][i]);
-               m_ff1_w[o][i] -= lr * (0.04 * FX6_ClipSym(d * m_cache_fused[t][i], 4.0) + l2 * m_ff1_w[o][i]);
+               m_ff2_w[o][i] -= lr * (0.08 * FXAI_ClipSym(d * m_cache_mid[t][i], 4.0) + l2 * m_ff2_w[o][i]);
+               m_ff1_w[o][i] -= lr * (0.04 * FXAI_ClipSym(d * m_cache_fused[t][i], 4.0) + l2 * m_ff1_w[o][i]);
 
-               m_grn1_w2[o][i] -= lr * (0.12 * FX6_ClipSym(d * m_cache_fused[t][i], 4.0) + l2 * m_grn1_w2[o][i]);
-               m_grn1_w1[o][i] -= lr * (0.06 * FX6_ClipSym(d * m_cache_fused[t][i], 4.0) + l2 * m_grn1_w1[o][i]);
-               m_grn1_wg[o][i] -= lr * (0.04 * FX6_ClipSym(d * m_cache_fused[t][i], 4.0) + l2 * m_grn1_wg[o][i]);
+               m_grn1_w2[o][i] -= lr * (0.12 * FXAI_ClipSym(d * m_cache_fused[t][i], 4.0) + l2 * m_grn1_w2[o][i]);
+               m_grn1_w1[o][i] -= lr * (0.06 * FXAI_ClipSym(d * m_cache_fused[t][i], 4.0) + l2 * m_grn1_w1[o][i]);
+               m_grn1_wg[o][i] -= lr * (0.04 * FXAI_ClipSym(d * m_cache_fused[t][i], 4.0) + l2 * m_grn1_wg[o][i]);
 
-               m_grn2_w2[o][i] -= lr * (0.14 * FX6_ClipSym(d * m_cache_mid[t][i], 4.0) + l2 * m_grn2_w2[o][i]);
-               m_grn2_w1[o][i] -= lr * (0.08 * FX6_ClipSym(d * m_cache_mid[t][i], 4.0) + l2 * m_grn2_w1[o][i]);
-               m_grn2_wg[o][i] -= lr * (0.05 * FX6_ClipSym(d * m_cache_mid[t][i], 4.0) + l2 * m_grn2_wg[o][i]);
+               m_grn2_w2[o][i] -= lr * (0.14 * FXAI_ClipSym(d * m_cache_mid[t][i], 4.0) + l2 * m_grn2_w2[o][i]);
+               m_grn2_w1[o][i] -= lr * (0.08 * FXAI_ClipSym(d * m_cache_mid[t][i], 4.0) + l2 * m_grn2_w1[o][i]);
+               m_grn2_wg[o][i] -= lr * (0.05 * FXAI_ClipSym(d * m_cache_mid[t][i], 4.0) + l2 * m_grn2_wg[o][i]);
 
                double mix = m_cache_corr[t][i] + m_cache_trend[t][i];
-               m_fuse_w[o][i] -= lr * (0.06 * FX6_ClipSym(d * mix, 4.0) + l2 * m_fuse_w[o][i]);
-               m_gate_w[o][i] -= lr * (0.04 * FX6_ClipSym(d * m_cache_season[t][i], 4.0) + l2 * m_gate_w[o][i]);
+               m_fuse_w[o][i] -= lr * (0.06 * FXAI_ClipSym(d * mix, 4.0) + l2 * m_fuse_w[o][i]);
+               m_gate_w[o][i] -= lr * (0.04 * FXAI_ClipSym(d * m_cache_season[t][i], 4.0) + l2 * m_gate_w[o][i]);
 
-               m_w_trend[o][i] -= lr * (0.03 * FX6_ClipSym(d * m_cache_trend_raw[t][i], 3.0) + l2 * m_w_trend[o][i]);
-               m_w_season[o][i] -= lr * (0.03 * FX6_ClipSym(d * m_cache_season_raw[t][i], 3.0) + l2 * m_w_season[o][i]);
+               m_w_trend[o][i] -= lr * (0.03 * FXAI_ClipSym(d * m_cache_trend_raw[t][i], 3.0) + l2 * m_w_trend[o][i]);
+               m_w_season[o][i] -= lr * (0.03 * FXAI_ClipSym(d * m_cache_season_raw[t][i], 3.0) + l2 * m_w_season[o][i]);
             }
 
-            for(int i=0; i<FX6_AI_WEIGHTS; i++)
-               m_w_in[o][i] -= lr * (0.02 * FX6_ClipSym(d * m_cache_xn[t][i], 3.0) + l2 * m_w_in[o][i]);
+            for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+               m_w_in[o][i] -= lr * (0.02 * FXAI_ClipSym(d * m_cache_xn[t][i], 3.0) + l2 * m_w_in[o][i]);
          }
 
          // Auto-correlation attention updates.
-         double head_delta[FX6_AF_HEADS][FX6_AF_D_HEAD];
-         for(int hd=0; hd<FX6_AF_HEADS; hd++)
+         double head_delta[FXAI_AF_HEADS][FXAI_AF_D_HEAD];
+         for(int hd=0; hd<FXAI_AF_HEADS; hd++)
          {
-            for(int d=0; d<FX6_AF_D_HEAD; d++)
+            for(int d=0; d<FXAI_AF_D_HEAD; d++)
             {
                double s = 0.0;
-               for(int o=0; o<FX6_AI_MLP_HIDDEN; o++)
+               for(int o=0; o<FXAI_AI_MLP_HIDDEN; o++)
                   s += delta[o] * m_wo[hd][o][d];
-               head_delta[hd][d] = FX6_ClipSym(s, 3.0);
+               head_delta[hd][d] = FXAI_ClipSym(s, 3.0);
             }
          }
 
-         for(int hd=0; hd<FX6_AF_HEADS; hd++)
+         for(int hd=0; hd<FXAI_AF_HEADS; hd++)
          {
-            for(int d=0; d<FX6_AF_D_HEAD; d++)
+            for(int d=0; d<FXAI_AF_D_HEAD; d++)
             {
                double dh = head_delta[hd][d];
-               for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+               for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
                {
-                  m_wo[hd][h][d] -= lr * (0.08 * FX6_ClipSym(delta[h] * m_cache_head_ctx[t][hd][d], 4.0) + l2 * m_wo[hd][h][d]);
-                  m_wq[hd][d][h] -= lr * (0.03 * FX6_ClipSym(dh * m_cache_season[t][h], 4.0) + l2 * m_wq[hd][d][h]);
+                  m_wo[hd][h][d] -= lr * (0.08 * FXAI_ClipSym(delta[h] * m_cache_head_ctx[t][hd][d], 4.0) + l2 * m_wo[hd][h][d]);
+                  m_wq[hd][d][h] -= lr * (0.03 * FXAI_ClipSym(dh * m_cache_season[t][h], 4.0) + l2 * m_wq[hd][d][h]);
                }
 
-               for(int k=0; k<FX6_AF_TOPK_LAGS; k++)
+               for(int k=0; k<FXAI_AF_TOPK_LAGS; k++)
                {
                   double a = m_cache_lag_w[t][hd][k];
                   if(a <= 0.0) continue;
-                  for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+                  for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
                   {
                      double src = m_cache_lag_src[t][hd][k][h];
-                     m_wk[hd][d][h] -= lr * (0.02 * FX6_ClipSym(dh * a * src, 4.0) + l2 * m_wk[hd][d][h]);
-                     m_wv[hd][d][h] -= lr * (0.03 * FX6_ClipSym(dh * a * src, 4.0) + l2 * m_wv[hd][d][h]);
+                     m_wk[hd][d][h] -= lr * (0.02 * FXAI_ClipSym(dh * a * src, 4.0) + l2 * m_wk[hd][d][h]);
+                     m_wv[hd][d][h] -= lr * (0.03 * FXAI_ClipSym(dh * a * src, 4.0) + l2 * m_wv[hd][d][h]);
                   }
                }
             }
          }
 
          // Calibration and move-head updates.
-         double den = m_cache_probs[t][FX6_AF_BUY] + m_cache_probs[t][FX6_AF_SELL];
+         double den = m_cache_probs[t][FXAI_AF_BUY] + m_cache_probs[t][FXAI_AF_SELL];
          if(den < 1e-9) den = 1e-9;
-         double p_dir_raw = m_cache_probs[t][FX6_AF_BUY] / den;
+         double p_dir_raw = m_cache_probs[t][FXAI_AF_BUY] / den;
 
-         if(cls == FX6_AF_BUY)
+         if(cls == FXAI_AF_BUY)
             UpdateCalibration(p_dir_raw, 1, w_cls);
-         else if(cls == FX6_AF_SELL)
+         else if(cls == FXAI_AF_SELL)
             UpdateCalibration(p_dir_raw, 0, w_cls);
          else
             UpdateCalibration(p_dir_raw, (mv >= 0.0 ? 1 : 0), 0.25 * w_cls);
 
-         double xrow2[FX6_AI_WEIGHTS];
-         for(int i=0; i<FX6_AI_WEIGHTS; i++) xrow2[i] = m_train_x[t][i];
-         FX6_UpdateMoveEMA(m_move_ema_abs, m_move_ready, mv, 0.05);
+         double xrow2[FXAI_AI_WEIGHTS];
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++) xrow2[i] = m_train_x[t][i];
+         FXAI_UpdateMoveEMA(m_move_ema_abs, m_move_ready, mv, 0.05);
          UpdateMoveHead(xrow2, mv, hp, sw);
 
-         for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+         for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
             next_delta[h] = delta[h];
       }
 
       // Restore live sequence state.
       m_seq_ptr = saved_ptr;
       m_seq_len = saved_len;
-      for(int t=0; t<FX6_AF_SEQ; t++)
+      for(int t=0; t<FXAI_AF_SEQ; t++)
       {
-         for(int h=0; h<FX6_AI_MLP_HIDDEN; h++)
+         for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
          {
             m_seq_h[t][h] = saved_h[t][h];
             m_seq_season[t][h] = saved_s[t][h];
@@ -1177,14 +1177,14 @@ private:
    }
 
 public:
-   CFX6AIAutoformer(void) { Reset(); }
+   CFXAIAIAutoformer(void) { Reset(); }
 
-   virtual int AIId(void) const { return (int)AI_TYPE_AUTOFORMER; }
+   virtual int AIId(void) const { return (int)AI_AUTOFORMER; }
    virtual string AIName(void) const { return "autoformer"; }
 
    virtual void Reset(void)
    {
-      CFX6AIPlugin::Reset();
+      CFXAIAIPlugin::Reset();
       m_initialized = false;
       m_step = 0;
       ResetInputNorm();
@@ -1192,12 +1192,12 @@ public:
       ResetTrainBuffer();
    }
 
-   virtual void EnsureInitialized(const FX6AIHyperParams &hp)
+   virtual void EnsureInitialized(const FXAIAIHyperParams &hp)
    {
       if(!m_initialized) InitWeights();
    }
 
-   virtual void Update(const int y, const double &x[], const FX6AIHyperParams &hp)
+   virtual void Update(const int y, const double &x[], const FXAIAIHyperParams &hp)
    {
       double pseudo_move = (y == 1 ? 1.0 : -1.0);
       UpdateWithMove(y, x, hp, pseudo_move);
@@ -1205,7 +1205,7 @@ public:
 
    virtual void UpdateWithMove(const int y,
                                const double &x[],
-                               const FX6AIHyperParams &hp,
+                               const FXAIAIHyperParams &hp,
                                const double move_points)
    {
       EnsureInitialized(hp);
@@ -1215,88 +1215,88 @@ public:
 
       UpdateInputStats(x);
 
-      FX6AIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
+      FXAIAIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
       int cls = ResolveClass(y, x, move_points);
-      double sw = FX6_Clamp(MoveSampleWeight(x, move_points), 0.25, 4.00);
+      double sw = FXAI_Clamp(MoveSampleWeight(x, move_points), 0.25, 4.00);
       double cost = InputCostProxyPoints(x);
 
       AppendTrainSample(cls, x, move_points, cost, sw);
       TrainTBPTT(h);
 
       // Commit latest sample to runtime sequence.
-      double xn[FX6_AI_WEIGHTS];
-      double emb[FX6_AI_MLP_HIDDEN];
-      double tr_raw[FX6_AI_MLP_HIDDEN];
-      double se_raw[FX6_AI_MLP_HIDDEN];
-      double tr[FX6_AI_MLP_HIDDEN];
-      double se[FX6_AI_MLP_HIDDEN];
-      double corr[FX6_AI_MLP_HIDDEN];
-      double fused[FX6_AI_MLP_HIDDEN];
-      double mid[FX6_AI_MLP_HIDDEN];
-      double fin[FX6_AI_MLP_HIDDEN];
+      double xn[FXAI_AI_WEIGHTS];
+      double emb[FXAI_AI_MLP_HIDDEN];
+      double tr_raw[FXAI_AI_MLP_HIDDEN];
+      double se_raw[FXAI_AI_MLP_HIDDEN];
+      double tr[FXAI_AI_MLP_HIDDEN];
+      double se[FXAI_AI_MLP_HIDDEN];
+      double corr[FXAI_AI_MLP_HIDDEN];
+      double fused[FXAI_AI_MLP_HIDDEN];
+      double mid[FXAI_AI_MLP_HIDDEN];
+      double fin[FXAI_AI_MLP_HIDDEN];
       ForwardStep(x, true, false, -1, xn, emb, tr_raw, se_raw, tr, se, corr, fused, mid, fin);
    }
 
-   virtual double PredictProb(const double &x[], const FX6AIHyperParams &hp)
+   virtual double PredictProb(const double &x[], const FXAIAIHyperParams &hp)
    {
       EnsureInitialized(hp);
 
-      double xn[FX6_AI_WEIGHTS];
-      double emb[FX6_AI_MLP_HIDDEN];
-      double tr_raw[FX6_AI_MLP_HIDDEN];
-      double se_raw[FX6_AI_MLP_HIDDEN];
-      double tr[FX6_AI_MLP_HIDDEN];
-      double se[FX6_AI_MLP_HIDDEN];
-      double corr[FX6_AI_MLP_HIDDEN];
-      double fused[FX6_AI_MLP_HIDDEN];
-      double mid[FX6_AI_MLP_HIDDEN];
-      double fin[FX6_AI_MLP_HIDDEN];
+      double xn[FXAI_AI_WEIGHTS];
+      double emb[FXAI_AI_MLP_HIDDEN];
+      double tr_raw[FXAI_AI_MLP_HIDDEN];
+      double se_raw[FXAI_AI_MLP_HIDDEN];
+      double tr[FXAI_AI_MLP_HIDDEN];
+      double se[FXAI_AI_MLP_HIDDEN];
+      double corr[FXAI_AI_MLP_HIDDEN];
+      double fused[FXAI_AI_MLP_HIDDEN];
+      double mid[FXAI_AI_MLP_HIDDEN];
+      double fin[FXAI_AI_MLP_HIDDEN];
       ForwardStep(x, false, false, -1, xn, emb, tr_raw, se_raw, tr, se, corr, fused, mid, fin);
 
-      double logits[FX6_AF_CLASS_COUNT];
-      double probs[FX6_AF_CLASS_COUNT];
+      double logits[FXAI_AF_CLASS_COUNT];
+      double probs[FXAI_AF_CLASS_COUNT];
       double mu = 0.0, logv = 0.0, q25 = 0.0, q75 = 0.0;
       ComputeHeads(fin, logits, probs, mu, logv, q25, q75);
 
-      double den = probs[FX6_AF_BUY] + probs[FX6_AF_SELL];
+      double den = probs[FXAI_AF_BUY] + probs[FXAI_AF_SELL];
       if(den < 1e-9) den = 1e-9;
-      double p_dir_raw = probs[FX6_AF_BUY] / den;
+      double p_dir_raw = probs[FXAI_AF_BUY] / den;
       double p_dir_cal = CalibrateProb(p_dir_raw);
-      double p_up = p_dir_cal * FX6_Clamp(1.0 - probs[FX6_AF_SKIP], 0.0, 1.0);
-      return FX6_Clamp(p_up, 0.001, 0.999);
+      double p_up = p_dir_cal * FXAI_Clamp(1.0 - probs[FXAI_AF_SKIP], 0.0, 1.0);
+      return FXAI_Clamp(p_up, 0.001, 0.999);
    }
 
-   virtual double PredictExpectedMovePoints(const double &x[], const FX6AIHyperParams &hp)
+   virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
    {
       EnsureInitialized(hp);
 
-      double xn[FX6_AI_WEIGHTS];
-      double emb[FX6_AI_MLP_HIDDEN];
-      double tr_raw[FX6_AI_MLP_HIDDEN];
-      double se_raw[FX6_AI_MLP_HIDDEN];
-      double tr[FX6_AI_MLP_HIDDEN];
-      double se[FX6_AI_MLP_HIDDEN];
-      double corr[FX6_AI_MLP_HIDDEN];
-      double fused[FX6_AI_MLP_HIDDEN];
-      double mid[FX6_AI_MLP_HIDDEN];
-      double fin[FX6_AI_MLP_HIDDEN];
+      double xn[FXAI_AI_WEIGHTS];
+      double emb[FXAI_AI_MLP_HIDDEN];
+      double tr_raw[FXAI_AI_MLP_HIDDEN];
+      double se_raw[FXAI_AI_MLP_HIDDEN];
+      double tr[FXAI_AI_MLP_HIDDEN];
+      double se[FXAI_AI_MLP_HIDDEN];
+      double corr[FXAI_AI_MLP_HIDDEN];
+      double fused[FXAI_AI_MLP_HIDDEN];
+      double mid[FXAI_AI_MLP_HIDDEN];
+      double fin[FXAI_AI_MLP_HIDDEN];
       ForwardStep(x, false, false, -1, xn, emb, tr_raw, se_raw, tr, se, corr, fused, mid, fin);
 
-      double logits[FX6_AF_CLASS_COUNT];
-      double probs[FX6_AF_CLASS_COUNT];
+      double logits[FXAI_AF_CLASS_COUNT];
+      double probs[FXAI_AF_CLASS_COUNT];
       double mu = 0.0, logv = 0.0, q25 = 0.0, q75 = 0.0;
       ComputeHeads(fin, logits, probs, mu, logv, q25, q75);
 
       double sigma = MathExp(0.5 * logv);
-      sigma = FX6_Clamp(sigma, 0.05, 30.0);
+      sigma = FXAI_Clamp(sigma, 0.05, 30.0);
       double iqr = MathAbs(q75 - q25);
 
-      double ev = (MathAbs(mu) + 0.25 * sigma + 0.10 * iqr) * FX6_Clamp(1.0 - probs[FX6_AF_SKIP], 0.0, 1.0);
+      double ev = (MathAbs(mu) + 0.25 * sigma + 0.10 * iqr) * FXAI_Clamp(1.0 - probs[FXAI_AF_SKIP], 0.0, 1.0);
       if(ev > 0.0 && m_move_ready && m_move_ema_abs > 0.0)
          return 0.65 * ev + 0.35 * m_move_ema_abs;
       if(ev > 0.0) return ev;
-      return CFX6AIPlugin::PredictExpectedMovePoints(x, hp);
+      return CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
    }
 };
 
-#endif // __FX6_AI_AUTOFORMER_MQH__
+#endif // __FXAI_AI_AUTOFORMER_MQH__

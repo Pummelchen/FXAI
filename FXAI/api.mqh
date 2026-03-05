@@ -119,8 +119,4 @@ public:
    }
 };
 
-// Backward-compatibility aliases for legacy FX6-prefixed registry/plugin types.
-#define CFX6AIPlugin CFXAIAIPlugin
-#define CFX6AIRegistry CFXAIAIRegistry
-
 #endif // __FXAI_API_MQH__

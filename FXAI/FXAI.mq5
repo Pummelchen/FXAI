@@ -1,7 +1,7 @@
 // FXAI v1
 //+------------------------------------------------------------------+
-//|                                                          FX6.mq5 |
-//| FX6 modular EA: plugin-based AI + equity trailing + equity SL   |
+//|                                                          FXAI.mq5 |
+//| FXAI modular EA: plugin-based AI + equity trailing + equity SL   |
 //+------------------------------------------------------------------+
 #property strict
 
@@ -13,10 +13,10 @@
 CTrade trade;
 
 //-------------------------- INPUTS ---------------------------------
-input ENUM_AI_TYPE AI_Type = AI_TYPE_SGD_LOGIT;
+input ENUM_AI_TYPE AI_Type = AI_SGD_LOGIT;
 // Models: all (selector for which plugin runs in single-model mode).
 // Purpose: chooses the active prediction model implementation.
-// Importance/Range: enum value 0..FX6_AI_COUNT-1; use backtests to pick best per symbol.
+// Importance/Range: enum value 0..FXAI_AI_COUNT-1; use backtests to pick best per symbol.
 input bool   AI_Ensemble          = false;  
 // Models: all (ensemble controller across all plugins).
 // Purpose: enables multi-model voting instead of one selected model.
@@ -285,39 +285,39 @@ datetime CycleStartTime = 0;
 bool   TrailTracking   = false;
 double TrailPeakProfit = 0.0;
 
-CFX6AIRegistry g_plugins;
+CFXAIAIRegistry g_plugins;
 bool g_plugins_ready = false;
 
 string   g_ai_last_symbol = "";
-bool     g_ai_trained[FX6_AI_COUNT];
-datetime g_ai_last_train_bar[FX6_AI_COUNT];
+bool     g_ai_trained[FXAI_AI_COUNT];
+datetime g_ai_last_train_bar[FXAI_AI_COUNT];
 datetime g_ai_last_signal_bar = 0;
 int      g_ai_last_signal = -1;
 int      g_ai_last_signal_key = -1;
 string   g_ai_last_reason = "init";
 datetime g_last_debug_bar = 0;
 
-#define FX6_MAX_CONTEXT_SYMBOLS 32
-#define FX6_REL_MAX_PENDING 2048
+#define FXAI_MAX_CONTEXT_SYMBOLS 32
+#define FXAI_REL_MAX_PENDING 2048
 
 string g_context_symbols[];
-double g_model_reliability[FX6_AI_COUNT];
-double g_model_abs_move_ema[FX6_AI_COUNT];
-bool   g_model_abs_move_ready[FX6_AI_COUNT];
-FX6AIHyperParams g_model_hp[FX6_AI_COUNT];
-bool g_model_hp_ready[FX6_AI_COUNT];
-double g_model_buy_thr[FX6_AI_COUNT];
-double g_model_sell_thr[FX6_AI_COUNT];
-bool g_model_thr_ready[FX6_AI_COUNT];
+double g_model_reliability[FXAI_AI_COUNT];
+double g_model_abs_move_ema[FXAI_AI_COUNT];
+bool   g_model_abs_move_ready[FXAI_AI_COUNT];
+FXAIAIHyperParams g_model_hp[FXAI_AI_COUNT];
+bool g_model_hp_ready[FXAI_AI_COUNT];
+double g_model_buy_thr[FXAI_AI_COUNT];
+double g_model_sell_thr[FXAI_AI_COUNT];
+bool g_model_thr_ready[FXAI_AI_COUNT];
 bool g_ai_warmup_done = false;
-int      g_rel_pending_seq[FX6_AI_COUNT][FX6_REL_MAX_PENDING];
-double   g_rel_pending_prob[FX6_AI_COUNT][FX6_REL_MAX_PENDING][3];
-int      g_rel_pending_head[FX6_AI_COUNT];
-int      g_rel_pending_tail[FX6_AI_COUNT];
+int      g_rel_pending_seq[FXAI_AI_COUNT][FXAI_REL_MAX_PENDING];
+double   g_rel_pending_prob[FXAI_AI_COUNT][FXAI_REL_MAX_PENDING][3];
+int      g_rel_pending_head[FXAI_AI_COUNT];
+int      g_rel_pending_tail[FXAI_AI_COUNT];
 datetime g_rel_clock_bar_time = 0;
 int      g_rel_clock_seq = 0;
 
-struct FX6ContextSeries
+struct FXAIContextSeries
 {
    bool loaded;
    string symbol;
@@ -328,7 +328,7 @@ struct FX6ContextSeries
    int aligned_idx[];
 };
 
-struct FX6PreparedSample
+struct FXAIPreparedSample
 {
    bool valid;
    int label_class;
@@ -336,27 +336,27 @@ struct FX6PreparedSample
    double min_move_points;
    double cost_points;
    datetime sample_time;
-   double x[FX6_AI_WEIGHTS];
+   double x[FXAI_AI_WEIGHTS];
 };
 
-double FX6_GetArrayValue(const double &arr[], const int idx, const double def_value)
+double FXAI_GetArrayValue(const double &arr[], const int idx, const double def_value)
 {
    if(idx >= 0 && idx < ArraySize(arr)) return arr[idx];
    return def_value;
 }
 
-void FX6_ResetModelAuxState(const int ai_idx)
+void FXAI_ResetModelAuxState(const int ai_idx)
 {
-   if(ai_idx < 0 || ai_idx >= FX6_AI_COUNT) return;
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT) return;
 
    g_model_reliability[ai_idx] = 1.0;
    g_model_abs_move_ema[ai_idx] = 0.0;
    g_model_abs_move_ready[ai_idx] = false;
 }
 
-void FX6_UpdateModelMoveStats(const int ai_idx, const double move_points)
+void FXAI_UpdateModelMoveStats(const int ai_idx, const double move_points)
 {
-   if(ai_idx < 0 || ai_idx >= FX6_AI_COUNT) return;
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT) return;
 
    double abs_move = MathAbs(move_points);
    if(!MathIsValidNumber(abs_move) || abs_move <= 0.0) return;
@@ -371,44 +371,44 @@ void FX6_UpdateModelMoveStats(const int ai_idx, const double move_points)
    g_model_abs_move_ema[ai_idx] = (0.95 * g_model_abs_move_ema[ai_idx]) + (0.05 * abs_move);
 }
 
-double FX6_GetModelExpectedMove(const int ai_idx, const double fallback_move)
+double FXAI_GetModelExpectedMove(const int ai_idx, const double fallback_move)
 {
-   if(ai_idx >= 0 && ai_idx < FX6_AI_COUNT && g_model_abs_move_ready[ai_idx] && g_model_abs_move_ema[ai_idx] > 0.0)
+   if(ai_idx >= 0 && ai_idx < FXAI_AI_COUNT && g_model_abs_move_ready[ai_idx] && g_model_abs_move_ema[ai_idx] > 0.0)
       return g_model_abs_move_ema[ai_idx];
    return fallback_move;
 }
 
-void FX6_UpdateModelReliability(const int ai_idx, const int label_class, const double &probs[])
+void FXAI_UpdateModelReliability(const int ai_idx, const int label_class, const double &probs[])
 {
-   if(ai_idx < 0 || ai_idx >= FX6_AI_COUNT) return;
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT) return;
    if(label_class < 0 || label_class > 2) return;
 
    int best = 0;
    for(int c=1; c<3; c++)
       if(probs[c] > probs[best]) best = c;
 
-   double p_true = FX6_Clamp(probs[label_class], 0.0, 1.0);
+   double p_true = FXAI_Clamp(probs[label_class], 0.0, 1.0);
    double score = p_true;
    if(best == label_class) score += 0.25;
 
-   double target = FX6_Clamp(score * 1.4, 0.25, 1.75);
-   g_model_reliability[ai_idx] = FX6_Clamp((0.98 * g_model_reliability[ai_idx]) + (0.02 * target), 0.25, 2.50);
+   double target = FXAI_Clamp(score * 1.4, 0.25, 1.75);
+   g_model_reliability[ai_idx] = FXAI_Clamp((0.98 * g_model_reliability[ai_idx]) + (0.02 * target), 0.25, 2.50);
 }
 
-void FX6_ResetReliabilityPending()
+void FXAI_ResetReliabilityPending()
 {
-   for(int ai=0; ai<FX6_AI_COUNT; ai++)
+   for(int ai=0; ai<FXAI_AI_COUNT; ai++)
    {
       g_rel_pending_head[ai] = 0;
       g_rel_pending_tail[ai] = 0;
-      for(int k=0; k<FX6_REL_MAX_PENDING; k++)
+      for(int k=0; k<FXAI_REL_MAX_PENDING; k++)
          g_rel_pending_seq[ai][k] = -1;
    }
    g_rel_clock_bar_time = 0;
    g_rel_clock_seq = 0;
 }
 
-void FX6_AdvanceReliabilityClock(const datetime signal_bar)
+void FXAI_AdvanceReliabilityClock(const datetime signal_bar)
 {
    if(signal_bar <= 0) return;
    if(g_rel_clock_bar_time == 0)
@@ -425,16 +425,16 @@ void FX6_AdvanceReliabilityClock(const datetime signal_bar)
    }
 }
 
-void FX6_EnqueueReliabilityPending(const int ai_idx, const int signal_seq, const double &probs[])
+void FXAI_EnqueueReliabilityPending(const int ai_idx, const int signal_seq, const double &probs[])
 {
-   if(ai_idx < 0 || ai_idx >= FX6_AI_COUNT) return;
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT) return;
    if(signal_seq < 0) return;
 
    int head = g_rel_pending_head[ai_idx];
    int tail = g_rel_pending_tail[ai_idx];
 
    int prev = tail - 1;
-   if(prev < 0) prev += FX6_REL_MAX_PENDING;
+   if(prev < 0) prev += FXAI_REL_MAX_PENDING;
    if(head != tail && g_rel_pending_seq[ai_idx][prev] == signal_seq)
    {
       g_rel_pending_prob[ai_idx][prev][0] = probs[0];
@@ -449,27 +449,27 @@ void FX6_EnqueueReliabilityPending(const int ai_idx, const int signal_seq, const
    g_rel_pending_prob[ai_idx][tail][2] = probs[2];
 
    int next_tail = tail + 1;
-   if(next_tail >= FX6_REL_MAX_PENDING) next_tail = 0;
+   if(next_tail >= FXAI_REL_MAX_PENDING) next_tail = 0;
    if(next_tail == head)
    {
       head++;
-      if(head >= FX6_REL_MAX_PENDING) head = 0;
+      if(head >= FXAI_REL_MAX_PENDING) head = 0;
       g_rel_pending_head[ai_idx] = head;
    }
    g_rel_pending_tail[ai_idx] = next_tail;
 }
 
-void FX6_UpdateReliabilityFromPending(const int ai_idx,
+void FXAI_UpdateReliabilityFromPending(const int ai_idx,
                                       const int current_signal_seq,
                                       const int H,
-                                      const FX6DataSnapshot &snapshot,
+                                      const FXAIDataSnapshot &snapshot,
                                       const int &spread_m1[],
                                       const double &close_arr[],
                                       const double commission_points,
                                       const double cost_buffer_points,
                                       const double ev_threshold_points)
 {
-   if(ai_idx < 0 || ai_idx >= FX6_AI_COUNT) return;
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT) return;
    if(current_signal_seq < 0 || H < 1) return;
 
    int head = g_rel_pending_head[ai_idx];
@@ -479,7 +479,7 @@ void FX6_UpdateReliabilityFromPending(const int ai_idx,
    {
       int seq_pred = g_rel_pending_seq[ai_idx][head];
       int next_head = head + 1;
-      if(next_head >= FX6_REL_MAX_PENDING) next_head = 0;
+      if(next_head >= FXAI_REL_MAX_PENDING) next_head = 0;
 
       if(seq_pred < 0)
       {
@@ -496,18 +496,18 @@ void FX6_UpdateReliabilityFromPending(const int ai_idx,
       if(idx_pred >= 0 && idx_pred < ArraySize(close_arr) &&
          idx_future >= 0 && idx_future < ArraySize(close_arr))
       {
-         double spread_i = FX6_GetSpreadAtIndex(idx_pred, spread_m1, snapshot.spread_points);
+         double spread_i = FXAI_GetSpreadAtIndex(idx_pred, spread_m1, snapshot.spread_points);
          double min_move_i = spread_i + commission_points + cost_buffer_points;
          if(min_move_i < 0.0) min_move_i = 0.0;
 
-         double move_points = FX6_MovePoints(close_arr[idx_pred], close_arr[idx_future], snapshot.point);
-         int label_class = FX6_BuildEVClassLabel(move_points, min_move_i, ev_threshold_points);
+         double move_points = FXAI_MovePoints(close_arr[idx_pred], close_arr[idx_future], snapshot.point);
+         int label_class = FXAI_BuildEVClassLabel(move_points, min_move_i, ev_threshold_points);
 
          double probs_eval[3];
          probs_eval[0] = g_rel_pending_prob[ai_idx][head][0];
          probs_eval[1] = g_rel_pending_prob[ai_idx][head][1];
          probs_eval[2] = g_rel_pending_prob[ai_idx][head][2];
-         FX6_UpdateModelReliability(ai_idx, label_class, probs_eval);
+         FXAI_UpdateModelReliability(ai_idx, label_class, probs_eval);
       }
 
       head = next_head;
@@ -516,7 +516,7 @@ void FX6_UpdateReliabilityFromPending(const int ai_idx,
    g_rel_pending_head[ai_idx] = head;
 }
 
-void FX6_ProcessReliabilityBar(const string symbol)
+void FXAI_ProcessReliabilityBar(const string symbol)
 {
    if(StringLen(symbol) <= 0) return;
 
@@ -546,7 +546,7 @@ void FX6_ProcessReliabilityBar(const string symbol)
       ArrayResize(rel_spread_arr, 0);
    }
 
-   FX6_AdvanceReliabilityClock(signal_bar);
+   FXAI_AdvanceReliabilityClock(signal_bar);
    if(signal_bar == rel_last_processed_bar) return;
    rel_last_processed_bar = signal_bar;
 
@@ -554,26 +554,26 @@ void FX6_ProcessReliabilityBar(const string symbol)
    if(needed < 128) needed = 128;
    if(needed > 1500) needed = 1500;
 
-   if(!FX6_UpdateRatesRolling(symbol, PERIOD_M1, needed, rel_last_rates_bar, rel_rates_m1))
+   if(!FXAI_UpdateRatesRolling(symbol, PERIOD_M1, needed, rel_last_rates_bar, rel_rates_m1))
       return;
 
-   FX6_ExtractRatesCloseTimeSpread(rel_rates_m1, rel_close_arr, rel_time_arr, rel_spread_arr);
+   FXAI_ExtractRatesCloseTimeSpread(rel_rates_m1, rel_close_arr, rel_time_arr, rel_spread_arr);
    if(ArraySize(rel_close_arr) <= H || ArraySize(rel_spread_arr) <= H)
       return;
 
-   FX6DataSnapshot snapshot;
-   if(!FX6_ExportDataSnapshot(symbol, AI_CommissionPerLotSide, AI_CostBufferPoints, snapshot))
+   FXAIDataSnapshot snapshot;
+   if(!FXAI_ExportDataSnapshot(symbol, AI_CommissionPerLotSide, AI_CostBufferPoints, snapshot))
       return;
    snapshot.bar_time = signal_bar;
 
    double cost_buffer_points = (AI_CostBufferPoints < 0.0 ? 0.0 : AI_CostBufferPoints);
    double commission_points = snapshot.commission_points;
-   double evThresholdPoints = FX6_Clamp(AI_EVThresholdPoints, 0.0, 100.0);
+   double evThresholdPoints = FXAI_Clamp(AI_EVThresholdPoints, 0.0, 100.0);
    int signal_seq = g_rel_clock_seq;
 
-   for(int ai_idx=0; ai_idx<FX6_AI_COUNT; ai_idx++)
+   for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
    {
-      FX6_UpdateReliabilityFromPending(ai_idx,
+      FXAI_UpdateReliabilityFromPending(ai_idx,
                                        signal_seq,
                                        H,
                                        snapshot,
@@ -585,13 +585,13 @@ void FX6_ProcessReliabilityBar(const string symbol)
    }
 }
 
-double FX6_GetModelVoteWeight(const int ai_idx)
+double FXAI_GetModelVoteWeight(const int ai_idx)
 {
-   if(ai_idx < 0 || ai_idx >= FX6_AI_COUNT) return 1.0;
-   return FX6_Clamp(g_model_reliability[ai_idx], 0.25, 2.50);
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT) return 1.0;
+   return FXAI_Clamp(g_model_reliability[ai_idx], 0.25, 2.50);
 }
 
-void FX6_DeriveAdaptiveThresholds(const double base_buy_threshold,
+void FXAI_DeriveAdaptiveThresholds(const double base_buy_threshold,
                                   const double base_sell_threshold,
                                   const double min_move_points,
                                   const double expected_move_points,
@@ -600,21 +600,21 @@ void FX6_DeriveAdaptiveThresholds(const double base_buy_threshold,
                                   double &sell_min_prob,
                                   double &skip_min_prob)
 {
-   double buy_base = FX6_Clamp(base_buy_threshold, 0.50, 0.95);
-   double sell_base = FX6_Clamp(1.0 - base_sell_threshold, 0.50, 0.95);
+   double buy_base = FXAI_Clamp(base_buy_threshold, 0.50, 0.95);
+   double sell_base = FXAI_Clamp(1.0 - base_sell_threshold, 0.50, 0.95);
 
    double em = MathMax(expected_move_points, min_move_points + 0.10);
-   double cost_ratio = FX6_Clamp(min_move_points / em, 0.0, 2.0);
-   double vol_ratio = FX6_Clamp(vol_proxy / 4.0, 0.0, 1.0);
+   double cost_ratio = FXAI_Clamp(min_move_points / em, 0.0, 2.0);
+   double vol_ratio = FXAI_Clamp(vol_proxy / 4.0, 0.0, 1.0);
 
-   double tighten = FX6_Clamp(((cost_ratio - 0.35) * 0.35) + (0.10 * vol_ratio), 0.0, 0.25);
+   double tighten = FXAI_Clamp(((cost_ratio - 0.35) * 0.35) + (0.10 * vol_ratio), 0.0, 0.25);
 
-   buy_min_prob = FX6_Clamp(buy_base + tighten, 0.50, 0.96);
-   sell_min_prob = FX6_Clamp(sell_base + tighten, 0.50, 0.96);
-   skip_min_prob = FX6_Clamp(0.45 + (0.20 * cost_ratio) + (0.10 * vol_ratio), 0.35, 0.85);
+   buy_min_prob = FXAI_Clamp(buy_base + tighten, 0.50, 0.96);
+   sell_min_prob = FXAI_Clamp(sell_base + tighten, 0.50, 0.96);
+   skip_min_prob = FXAI_Clamp(0.45 + (0.20 * cost_ratio) + (0.10 * vol_ratio), 0.35, 0.85);
 }
 
-int FX6_ClassSignalFromEV(const double &probs[],
+int FXAI_ClassSignalFromEV(const double &probs[],
                           const double buy_min_prob,
                           const double sell_min_prob,
                           const double skip_min_prob,
@@ -624,9 +624,9 @@ int FX6_ClassSignalFromEV(const double &probs[],
 {
    if(expected_move_points <= 0.0) return -1;
 
-   double p_sell = probs[(int)FX6_LABEL_SELL];
-   double p_buy = probs[(int)FX6_LABEL_BUY];
-   double p_skip = probs[(int)FX6_LABEL_SKIP];
+   double p_sell = probs[(int)FXAI_LABEL_SELL];
+   double p_buy = probs[(int)FXAI_LABEL_BUY];
+   double p_skip = probs[(int)FXAI_LABEL_SKIP];
 
    if(p_skip >= skip_min_prob) return -1;
 
@@ -641,15 +641,15 @@ int FX6_ClassSignalFromEV(const double &probs[],
    return -1;
 }
 
-void FX6_SanitizeThresholdPair(double &buy_threshold, double &sell_threshold)
+void FXAI_SanitizeThresholdPair(double &buy_threshold, double &sell_threshold)
 {
-   buy_threshold = FX6_Clamp(buy_threshold, 0.50, 0.95);
-   sell_threshold = FX6_Clamp(sell_threshold, 0.05, 0.50);
+   buy_threshold = FXAI_Clamp(buy_threshold, 0.50, 0.95);
+   sell_threshold = FXAI_Clamp(sell_threshold, 0.05, 0.50);
 
    if(sell_threshold >= buy_threshold)
    {
-      sell_threshold = FX6_Clamp(sell_threshold, 0.05, 0.49);
-      buy_threshold = FX6_Clamp(MathMax(buy_threshold, sell_threshold + 0.01), 0.50, 0.95);
+      sell_threshold = FXAI_Clamp(sell_threshold, 0.05, 0.49);
+      buy_threshold = FXAI_Clamp(MathMax(buy_threshold, sell_threshold + 0.01), 0.50, 0.95);
       if(sell_threshold >= buy_threshold)
       {
          sell_threshold = 0.49;
@@ -658,24 +658,24 @@ void FX6_SanitizeThresholdPair(double &buy_threshold, double &sell_threshold)
    }
 }
 
-void FX6_ResetPreparedSample(FX6PreparedSample &sample)
+void FXAI_ResetPreparedSample(FXAIPreparedSample &sample)
 {
    sample.valid = false;
-   sample.label_class = (int)FX6_LABEL_SKIP;
+   sample.label_class = (int)FXAI_LABEL_SKIP;
    sample.move_points = 0.0;
    sample.min_move_points = 0.0;
    sample.cost_points = 0.0;
    sample.sample_time = 0;
-   for(int k=0; k<FX6_AI_WEIGHTS; k++)
+   for(int k=0; k<FXAI_AI_WEIGHTS; k++)
       sample.x[k] = 0.0;
 }
 
-bool FX6_PrepareTrainingSample(const int i,
+bool FXAI_PrepareTrainingSample(const int i,
                                const int H,
                                const double commission_points,
                                const double cost_buffer_points,
                                const double ev_threshold_points,
-                               const FX6DataSnapshot &snapshot,
+                               const FXAIDataSnapshot &snapshot,
                                const int &spread_m1[],
                                const datetime &time_arr[],
                                const double &close_arr[],
@@ -691,24 +691,24 @@ bool FX6_PrepareTrainingSample(const int i,
                                const double &ctx_mean_arr[],
                                const double &ctx_std_arr[],
                                const double &ctx_up_arr[],
-                               FX6PreparedSample &sample)
+                               FXAIPreparedSample &sample)
 {
-   FX6_ResetPreparedSample(sample);
+   FXAI_ResetPreparedSample(sample);
 
    if(i < 0 || i >= ArraySize(close_arr)) return false;
    if(i - H < 0 || i - H >= ArraySize(close_arr)) return false;
 
-   double move_points = FX6_MovePoints(close_arr[i], close_arr[i - H], snapshot.point);
-   double spread_i = FX6_GetSpreadAtIndex(i, spread_m1, snapshot.spread_points);
+   double move_points = FXAI_MovePoints(close_arr[i], close_arr[i - H], snapshot.point);
+   double spread_i = FXAI_GetSpreadAtIndex(i, spread_m1, snapshot.spread_points);
    double min_move_i = spread_i + commission_points + cost_buffer_points;
    if(min_move_i < 0.0) min_move_i = 0.0;
 
-   double ctx_mean_i = FX6_GetArrayValue(ctx_mean_arr, i, 0.0);
-   double ctx_std_i = FX6_GetArrayValue(ctx_std_arr, i, 0.0);
-   double ctx_up_i = FX6_GetArrayValue(ctx_up_arr, i, 0.5);
+   double ctx_mean_i = FXAI_GetArrayValue(ctx_mean_arr, i, 0.0);
+   double ctx_std_i = FXAI_GetArrayValue(ctx_std_arr, i, 0.0);
+   double ctx_up_i = FXAI_GetArrayValue(ctx_up_arr, i, 0.5);
 
-   double feat[FX6_AI_FEATURES];
-   if(!FX6_ComputeFeatureVector(i,
+   double feat[FXAI_AI_FEATURES];
+   if(!FXAI_ComputeFeatureVector(i,
                                 spread_i,
                                 time_arr,
                                 close_arr,
@@ -727,23 +727,23 @@ bool FX6_PrepareTrainingSample(const int i,
                                 feat))
       return false;
 
-   sample.label_class = FX6_BuildEVClassLabel(move_points, min_move_i, ev_threshold_points);
+   sample.label_class = FXAI_BuildEVClassLabel(move_points, min_move_i, ev_threshold_points);
    sample.move_points = move_points;
    sample.min_move_points = min_move_i;
    sample.cost_points = min_move_i;
    sample.sample_time = ((i >= 0 && i < ArraySize(time_arr)) ? time_arr[i] : 0);
-   FX6_BuildInputVector(feat, sample.x);
+   FXAI_BuildInputVector(feat, sample.x);
    sample.valid = true;
    return true;
 }
 
-double FX6_ScoreWarmupTrial(CFX6AIPlugin &plugin,
-                            const FX6AIHyperParams &hp,
+double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
+                            const FXAIAIHyperParams &hp,
                             const int val_start,
                             const int val_end,
                             const double buyThr,
                             const double sellThr,
-                            const FX6PreparedSample &samples[],
+                            const FXAIPreparedSample &samples[],
                             int &trades_out)
 {
    trades_out = 0;
@@ -764,19 +764,19 @@ double FX6_ScoreWarmupTrial(CFX6AIPlugin &plugin,
    {
       if(!samples[i].valid) continue;
 
-      FX6AIPredictV2 req;
+      FXAIAIPredictV2 req;
       req.min_move_points = samples[i].min_move_points;
       req.cost_points = samples[i].cost_points;
       req.sample_time = samples[i].sample_time;
-      for(int k=0; k<FX6_AI_WEIGHTS; k++)
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = samples[i].x[k];
 
-      FX6AIPredictionV2 pred;
+      FXAIAIPredictionV2 pred;
       plugin.PredictV2(req, hp, pred);
 
-      double p_buy = pred.class_probs[(int)FX6_LABEL_BUY];
-      double p_sell = pred.class_probs[(int)FX6_LABEL_SELL];
-      double p_skip = pred.class_probs[(int)FX6_LABEL_SKIP];
+      double p_buy = pred.class_probs[(int)FXAI_LABEL_BUY];
+      double p_sell = pred.class_probs[(int)FXAI_LABEL_SELL];
+      double p_skip = pred.class_probs[(int)FXAI_LABEL_SKIP];
 
       int signal = -1;
       if(p_buy >= buyThr && p_buy > p_sell && p_buy > p_skip) signal = 1;
@@ -804,7 +804,7 @@ double FX6_ScoreWarmupTrial(CFX6AIPlugin &plugin,
    return (avg_ev * 8.0) + (win_rate * 2.0);
 }
 
-bool FX6_WarmupTrainAndTune(const string symbol)
+bool FXAI_WarmupTrainAndTune(const string symbol)
 {
    const int FEATURE_LB = 10;
 
@@ -834,13 +834,13 @@ bool FX6_WarmupTrainAndTune(const string symbol)
 
    double base_buy_thr = AI_BuyThreshold;
    double base_sell_thr = AI_SellThreshold;
-   FX6_SanitizeThresholdPair(base_buy_thr, base_sell_thr);
-   double evThresholdPoints = FX6_Clamp(AI_EVThresholdPoints, 0.0, 100.0);
+   FXAI_SanitizeThresholdPair(base_buy_thr, base_sell_thr);
+   double evThresholdPoints = FXAI_Clamp(AI_EVThresholdPoints, 0.0, 100.0);
 
    int needed = warmup_samples + H + FEATURE_LB;
 
-   FX6DataSnapshot snapshot;
-   if(!FX6_ExportDataSnapshot(symbol, AI_CommissionPerLotSide, AI_CostBufferPoints, snapshot))
+   FXAIDataSnapshot snapshot;
+   if(!FXAI_ExportDataSnapshot(symbol, AI_CommissionPerLotSide, AI_CostBufferPoints, snapshot))
       return false;
 
    MqlRates rates_m1[];
@@ -852,7 +852,7 @@ bool FX6_WarmupTrainAndTune(const string symbol)
    double close_arr[];
    datetime time_arr[];
    int spread_m1[];
-   if(!FX6_LoadSeriesWithSpread(symbol, needed, rates_m1, close_arr, time_arr, spread_m1))
+   if(!FXAI_LoadSeriesWithSpread(symbol, needed, rates_m1, close_arr, time_arr, spread_m1))
       return false;
 
    if(ArraySize(close_arr) < needed || ArraySize(time_arr) < needed)
@@ -872,9 +872,9 @@ bool FX6_WarmupTrainAndTune(const string symbol)
    int map_m15[];
    int map_h1[];
 
-   FX6_LoadSeriesOptionalCached(symbol, PERIOD_M5, needed_m5, rates_m5, close_m5, time_m5);
-   FX6_LoadSeriesOptionalCached(symbol, PERIOD_M15, needed_m15, rates_m15, close_m15, time_m15);
-   FX6_LoadSeriesOptionalCached(symbol, PERIOD_H1, needed_h1, rates_h1, close_h1, time_h1);
+   FXAI_LoadSeriesOptionalCached(symbol, PERIOD_M5, needed_m5, rates_m5, close_m5, time_m5);
+   FXAI_LoadSeriesOptionalCached(symbol, PERIOD_M15, needed_m15, rates_m15, close_m15, time_m15);
+   FXAI_LoadSeriesOptionalCached(symbol, PERIOD_H1, needed_h1, rates_h1, close_h1, time_h1);
 
    int lag_m5 = 2 * PeriodSeconds(PERIOD_M5);
    int lag_m15 = 2 * PeriodSeconds(PERIOD_M15);
@@ -883,17 +883,17 @@ bool FX6_WarmupTrainAndTune(const string symbol)
    if(lag_m15 <= 0) lag_m15 = 1800;
    if(lag_h1 <= 0) lag_h1 = 7200;
 
-   FX6_BuildAlignedIndexMap(time_arr, time_m5, lag_m5, map_m5);
-   FX6_BuildAlignedIndexMap(time_arr, time_m15, lag_m15, map_m15);
-   FX6_BuildAlignedIndexMap(time_arr, time_h1, lag_h1, map_h1);
+   FXAI_BuildAlignedIndexMap(time_arr, time_m5, lag_m5, map_m5);
+   FXAI_BuildAlignedIndexMap(time_arr, time_m15, lag_m15, map_m15);
+   FXAI_BuildAlignedIndexMap(time_arr, time_h1, lag_h1, map_h1);
 
    int ctx_count = ArraySize(g_context_symbols);
-   if(ctx_count > FX6_MAX_CONTEXT_SYMBOLS) ctx_count = FX6_MAX_CONTEXT_SYMBOLS;
-   FX6ContextSeries ctx_series[];
+   if(ctx_count > FXAI_MAX_CONTEXT_SYMBOLS) ctx_count = FXAI_MAX_CONTEXT_SYMBOLS;
+   FXAIContextSeries ctx_series[];
    ArrayResize(ctx_series, ctx_count);
    for(int s=0; s<ctx_count; s++)
    {
-      ctx_series[s].loaded = FX6_LoadSeriesOptionalCached(g_context_symbols[s],
+      ctx_series[s].loaded = FXAI_LoadSeriesOptionalCached(g_context_symbols[s],
                                                           PERIOD_M1,
                                                           needed,
                                                           rates_ctx_tmp,
@@ -910,7 +910,7 @@ bool FX6_WarmupTrainAndTune(const string symbol)
    double ctx_mean_arr[];
    double ctx_std_arr[];
    double ctx_up_arr[];
-   FX6_PrecomputeContextAggregates(time_arr,
+   FXAI_PrecomputeContextAggregates(time_arr,
                                    ctx_series,
                                    ctx_count,
                                    i_end,
@@ -921,8 +921,8 @@ bool FX6_WarmupTrainAndTune(const string symbol)
    double cost_buffer_points = (AI_CostBufferPoints < 0.0 ? 0.0 : AI_CostBufferPoints);
    double commission_points = snapshot.commission_points;
 
-   FX6PreparedSample samples[];
-   FX6_PrecomputeTrainingSamples(i_start,
+   FXAIPreparedSample samples[];
+   FXAI_PrecomputeTrainingSamples(i_start,
                                  i_end,
                                  H,
                                  commission_points,
@@ -952,39 +952,39 @@ bool FX6_WarmupTrainAndTune(const string symbol)
    if(fold_len > (sample_span / 2)) fold_len = sample_span / 2;
    if(fold_len < 20) return false;
 
-   FX6AIHyperParams base_hp;
-   FX6_BuildHyperParams(base_hp);
+   FXAIAIHyperParams base_hp;
+   FXAI_BuildHyperParams(base_hp);
 
    datetime bar_time = iTime(symbol, PERIOD_M1, 1);
    if(bar_time <= 0) bar_time = TimeCurrent();
    int seed = AI_WarmupSeed;
    if(seed < 0) seed = -seed;
 
-   for(int ai_idx=0; ai_idx<FX6_AI_COUNT; ai_idx++)
+   for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
    {
       MathSrand((uint)(seed + (ai_idx + 1) * 104729 + (int)(bar_time % 65521)));
 
-      CFX6AIPlugin *fold_pool[];
+      CFXAIAIPlugin *fold_pool[];
       ArrayResize(fold_pool, warmup_folds);
       for(int f=0; f<warmup_folds; f++)
          fold_pool[f] = g_plugins.CreateInstance(ai_idx);
 
       double best_score = -1e18;
-      FX6AIHyperParams best_hp = base_hp;
+      FXAIAIHyperParams best_hp = base_hp;
       double best_buy_thr = base_buy_thr;
       double best_sell_thr = base_sell_thr;
 
       for(int loop=0; loop<warmup_loops; loop++)
       {
-         FX6AIHyperParams hp_trial;
+         FXAIAIHyperParams hp_trial;
          double buy_trial = base_buy_thr;
          double sell_trial = base_sell_thr;
          if(loop == 0)
             hp_trial = base_hp;
          else
          {
-            FX6_SampleModelHyperParams(ai_idx, base_hp, hp_trial);
-            FX6_SampleThresholdPair(base_buy_thr, base_sell_thr, buy_trial, sell_trial);
+            FXAI_SampleModelHyperParams(ai_idx, base_hp, hp_trial);
+            FXAI_SampleThresholdPair(base_buy_thr, base_sell_thr, buy_trial, sell_trial);
          }
 
          double score_sum = 0.0;
@@ -1003,7 +1003,7 @@ bool FX6_WarmupTrainAndTune(const string symbol)
             int train_end = i_end;
             if(train_end - train_start < 100) continue;
 
-            CFX6AIPlugin *trial = fold_pool[f];
+            CFXAIAIPlugin *trial = fold_pool[f];
             if(trial == NULL) continue;
             trial.Reset();
             trial.EnsureInitialized(hp_trial);
@@ -1014,21 +1014,21 @@ bool FX6_WarmupTrainAndTune(const string symbol)
                {
                   if(i < 0 || i >= ArraySize(samples)) continue;
                   if(!samples[i].valid) continue;
-                  FX6AISampleV2 s2;
+                  FXAIAISampleV2 s2;
                   s2.valid = samples[i].valid;
                   s2.label_class = samples[i].label_class;
                   s2.move_points = samples[i].move_points;
                   s2.min_move_points = samples[i].min_move_points;
                   s2.cost_points = samples[i].cost_points;
                   s2.sample_time = samples[i].sample_time;
-                  for(int k=0; k<FX6_AI_WEIGHTS; k++)
+                  for(int k=0; k<FXAI_AI_WEIGHTS; k++)
                      s2.x[k] = samples[i].x[k];
                   trial.TrainV2(s2, hp_trial);
                }
             }
 
             int trades_fold = 0;
-            double score_fold = FX6_ScoreWarmupTrial(*trial,
+            double score_fold = FXAI_ScoreWarmupTrial(*trial,
                                                      hp_trial,
                                                      val_start,
                                                      val_end,
@@ -1083,17 +1083,17 @@ bool FX6_WarmupTrainAndTune(const string symbol)
       g_model_sell_thr[ai_idx] = best_sell_thr;
       g_model_thr_ready[ai_idx] = true;
 
-      CFX6AIPlugin *runtime = g_plugins.Get(ai_idx);
+      CFXAIAIPlugin *runtime = g_plugins.Get(ai_idx);
       if(runtime == NULL) continue;
 
       runtime.Reset();
       runtime.EnsureInitialized(best_hp);
-      FX6_ResetModelAuxState(ai_idx);
+      FXAI_ResetModelAuxState(ai_idx);
 
       for(int i=i_end; i>=i_start; i--)
       {
          if(i < 0 || i >= ArraySize(samples)) continue;
-         FX6_ApplyPreparedSampleToModel(ai_idx, *runtime, samples[i], best_hp);
+         FXAI_ApplyPreparedSampleToModel(ai_idx, *runtime, samples[i], best_hp);
       }
 
       g_ai_trained[ai_idx] = true;
@@ -1101,20 +1101,20 @@ bool FX6_WarmupTrainAndTune(const string symbol)
    }
 
    g_ai_warmup_done = true;
-   Print("FX6 warmup completed: symbol=", symbol,
+   Print("FXAI warmup completed: symbol=", symbol,
          ", samples=", warmup_samples,
          ", loops=", warmup_loops,
          ", folds=", warmup_folds);
    return true;
 }
 
-void FX6_PrecomputeTrainingSamples(const int i_start,
+void FXAI_PrecomputeTrainingSamples(const int i_start,
                                    const int i_end,
                                    const int H,
                                    const double commission_points,
                                    const double cost_buffer_points,
                                    const double ev_threshold_points,
-                                   const FX6DataSnapshot &snapshot,
+                                   const FXAIDataSnapshot &snapshot,
                                    const int &spread_m1[],
                                    const datetime &time_arr[],
                                    const double &close_arr[],
@@ -1130,7 +1130,7 @@ void FX6_PrecomputeTrainingSamples(const int i_start,
                                    const double &ctx_mean_arr[],
                                    const double &ctx_std_arr[],
                                    const double &ctx_up_arr[],
-                                   FX6PreparedSample &samples[])
+                                   FXAIPreparedSample &samples[])
 {
    if(i_end < i_start) return;
    if(i_end < 0) return;
@@ -1142,7 +1142,7 @@ void FX6_PrecomputeTrainingSamples(const int i_start,
    for(int i=i_start; i<=i_end; i++)
    {
       if(i < 0 || i >= ArraySize(samples)) continue;
-      FX6_PrepareTrainingSample(i,
+      FXAI_PrepareTrainingSample(i,
                                 H,
                                 commission_points,
                                 cost_buffer_points,
@@ -1167,34 +1167,34 @@ void FX6_PrecomputeTrainingSamples(const int i_start,
    }
 }
 
-void FX6_ApplyPreparedSampleToModel(const int ai_idx,
-                                    CFX6AIPlugin &plugin,
-                                    const FX6PreparedSample &sample,
-                                    const FX6AIHyperParams &hp)
+void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
+                                    CFXAIAIPlugin &plugin,
+                                    const FXAIPreparedSample &sample,
+                                    const FXAIAIHyperParams &hp)
 {
    if(!sample.valid) return;
 
-   FX6AISampleV2 s2;
+   FXAIAISampleV2 s2;
    s2.valid = sample.valid;
    s2.label_class = sample.label_class;
    s2.move_points = sample.move_points;
    s2.min_move_points = sample.min_move_points;
    s2.cost_points = sample.cost_points;
    s2.sample_time = sample.sample_time;
-   for(int k=0; k<FX6_AI_WEIGHTS; k++)
+   for(int k=0; k<FXAI_AI_WEIGHTS; k++)
       s2.x[k] = sample.x[k];
 
    plugin.TrainV2(s2, hp);
-   FX6_UpdateModelMoveStats(ai_idx, sample.move_points);
+   FXAI_UpdateModelMoveStats(ai_idx, sample.move_points);
 }
 
-void FX6_TrainModelWindowPrepared(const int ai_idx,
-                                  CFX6AIPlugin &plugin,
+void FXAI_TrainModelWindowPrepared(const int ai_idx,
+                                  CFXAIAIPlugin &plugin,
                                   const int i_start,
                                   const int i_end,
                                   const int epochs,
-                                  const FX6AIHyperParams &hp,
-                                  const FX6PreparedSample &samples[])
+                                  const FXAIAIHyperParams &hp,
+                                  const FXAIPreparedSample &samples[])
 {
    if(i_end < i_start || epochs <= 0) return;
    int n = ArraySize(samples);
@@ -1209,59 +1209,59 @@ void FX6_TrainModelWindowPrepared(const int ai_idx,
    for(int epoch=0; epoch<epochs; epoch++)
    {
       for(int i=end; i>=start; i--)
-         FX6_ApplyPreparedSampleToModel(ai_idx, plugin, samples[i], hp);
+         FXAI_ApplyPreparedSampleToModel(ai_idx, plugin, samples[i], hp);
    }
 }
 
-void FX6_BuildHyperParams(FX6AIHyperParams &hp)
+void FXAI_BuildHyperParams(FXAIAIHyperParams &hp)
 {
-   hp.lr = FX6_Clamp(AI_LearningRate, 0.001, 0.200);
-   hp.l2 = FX6_Clamp(AI_L2, 0.0, 0.100);
+   hp.lr = FXAI_Clamp(AI_LearningRate, 0.001, 0.200);
+   hp.l2 = FXAI_Clamp(AI_L2, 0.0, 0.100);
 
-   hp.ftrl_alpha = FX6_Clamp(FTRL_Alpha, 0.001, 1.000);
-   hp.ftrl_beta  = FX6_Clamp(FTRL_Beta,  0.000, 5.000);
-   hp.ftrl_l1    = FX6_Clamp(FTRL_L1,    0.000, 0.100);
-   hp.ftrl_l2    = FX6_Clamp(FTRL_L2,    0.000, 1.000);
+   hp.ftrl_alpha = FXAI_Clamp(FTRL_Alpha, 0.001, 1.000);
+   hp.ftrl_beta  = FXAI_Clamp(FTRL_Beta,  0.000, 5.000);
+   hp.ftrl_l1    = FXAI_Clamp(FTRL_L1,    0.000, 0.100);
+   hp.ftrl_l2    = FXAI_Clamp(FTRL_L2,    0.000, 1.000);
 
-   hp.pa_c      = FX6_Clamp(PA_C,      0.010, 10.000);
-   hp.pa_margin = FX6_Clamp(PA_Margin, 0.100, 2.000);
+   hp.pa_c      = FXAI_Clamp(PA_C,      0.010, 10.000);
+   hp.pa_margin = FXAI_Clamp(PA_Margin, 0.100, 2.000);
 
-   hp.xgb_lr    = FX6_Clamp(XGB_FastLearningRate, 0.001, 0.200);
-   hp.xgb_l2    = FX6_Clamp(XGB_FastL2,           0.000, 0.100);
-   hp.xgb_split = FX6_Clamp(XGB_SplitThreshold,  -2.000, 2.000);
+   hp.xgb_lr    = FXAI_Clamp(XGB_FastLearningRate, 0.001, 0.200);
+   hp.xgb_l2    = FXAI_Clamp(XGB_FastL2,           0.000, 0.100);
+   hp.xgb_split = FXAI_Clamp(XGB_SplitThreshold,  -2.000, 2.000);
 
-   hp.mlp_lr   = FX6_Clamp(MLP_LearningRate, 0.0005, 0.0500);
-   hp.mlp_l2   = FX6_Clamp(MLP_L2,           0.0000, 0.0500);
-   hp.mlp_init = FX6_Clamp(MLP_InitScale,    0.0100, 0.5000);
+   hp.mlp_lr   = FXAI_Clamp(MLP_LearningRate, 0.0005, 0.0500);
+   hp.mlp_l2   = FXAI_Clamp(MLP_L2,           0.0000, 0.0500);
+   hp.mlp_init = FXAI_Clamp(MLP_InitScale,    0.0100, 0.5000);
 
-   hp.tcn_layers = (double)((int)FX6_Clamp((double)TCN_Layers, 2.0, 8.0));
-   hp.tcn_kernel = (double)((int)FX6_Clamp((double)TCN_KernelSize, 2.0, 5.0));
-   hp.tcn_dilation_base = (double)((int)FX6_Clamp((double)TCN_DilationBase, 1.0, 3.0));
+   hp.tcn_layers = (double)((int)FXAI_Clamp((double)TCN_Layers, 2.0, 8.0));
+   hp.tcn_kernel = (double)((int)FXAI_Clamp((double)TCN_KernelSize, 2.0, 5.0));
+   hp.tcn_dilation_base = (double)((int)FXAI_Clamp((double)TCN_DilationBase, 1.0, 3.0));
 
-   hp.quantile_lr = FX6_Clamp(Quantile_LearningRate, 0.0001, 0.1000);
-   hp.quantile_l2 = FX6_Clamp(Quantile_L2,           0.0000, 0.1000);
+   hp.quantile_lr = FXAI_Clamp(Quantile_LearningRate, 0.0001, 0.1000);
+   hp.quantile_l2 = FXAI_Clamp(Quantile_L2,           0.0000, 0.1000);
 
-   hp.enhash_lr = FX6_Clamp(ENHash_LearningRate, 0.0005, 0.1000);
-   hp.enhash_l1 = FX6_Clamp(ENHash_L1,           0.0000, 0.1000);
-   hp.enhash_l2 = FX6_Clamp(ENHash_L2,           0.0000, 0.1000);
+   hp.enhash_lr = FXAI_Clamp(ENHash_LearningRate, 0.0005, 0.1000);
+   hp.enhash_l1 = FXAI_Clamp(ENHash_L1,           0.0000, 0.1000);
+   hp.enhash_l2 = FXAI_Clamp(ENHash_L2,           0.0000, 0.1000);
 }
 
-double FX6_RandRange(const double lo, const double hi)
+double FXAI_RandRange(const double lo, const double hi)
 {
    if(hi <= lo) return lo;
    double u = (double)MathRand() / 32767.0;
-   return lo + (hi - lo) * FX6_Clamp(u, 0.0, 1.0);
+   return lo + (hi - lo) * FXAI_Clamp(u, 0.0, 1.0);
 }
 
-void FX6_ResetModelHyperParams()
+void FXAI_ResetModelHyperParams()
 {
-   FX6AIHyperParams base;
-   FX6_BuildHyperParams(base);
+   FXAIAIHyperParams base;
+   FXAI_BuildHyperParams(base);
    double base_buy = AI_BuyThreshold;
    double base_sell = AI_SellThreshold;
-   FX6_SanitizeThresholdPair(base_buy, base_sell);
+   FXAI_SanitizeThresholdPair(base_buy, base_sell);
 
-   for(int i=0; i<FX6_AI_COUNT; i++)
+   for(int i=0; i<FXAI_AI_COUNT; i++)
    {
       g_model_hp[i] = base;
       g_model_hp_ready[i] = false;
@@ -1271,17 +1271,17 @@ void FX6_ResetModelHyperParams()
    }
 }
 
-void FX6_GetModelHyperParams(const int ai_idx, FX6AIHyperParams &hp)
+void FXAI_GetModelHyperParams(const int ai_idx, FXAIAIHyperParams &hp)
 {
-   if(ai_idx >= 0 && ai_idx < FX6_AI_COUNT && g_model_hp_ready[ai_idx])
+   if(ai_idx >= 0 && ai_idx < FXAI_AI_COUNT && g_model_hp_ready[ai_idx])
    {
       hp = g_model_hp[ai_idx];
       return;
    }
-   FX6_BuildHyperParams(hp);
+   FXAI_BuildHyperParams(hp);
 }
 
-void FX6_GetModelThresholds(const int ai_idx,
+void FXAI_GetModelThresholds(const int ai_idx,
                             const double base_buy,
                             const double base_sell,
                             double &buy_thr,
@@ -1289,108 +1289,108 @@ void FX6_GetModelThresholds(const int ai_idx,
 {
    buy_thr = base_buy;
    sell_thr = base_sell;
-   FX6_SanitizeThresholdPair(buy_thr, sell_thr);
+   FXAI_SanitizeThresholdPair(buy_thr, sell_thr);
 
-   if(ai_idx < 0 || ai_idx >= FX6_AI_COUNT) return;
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT) return;
    if(!g_model_thr_ready[ai_idx]) return;
 
    buy_thr = g_model_buy_thr[ai_idx];
    sell_thr = g_model_sell_thr[ai_idx];
-   FX6_SanitizeThresholdPair(buy_thr, sell_thr);
+   FXAI_SanitizeThresholdPair(buy_thr, sell_thr);
 }
 
-void FX6_SampleThresholdPair(const double base_buy,
+void FXAI_SampleThresholdPair(const double base_buy,
                              const double base_sell,
                              double &buy_thr,
                              double &sell_thr)
 {
    double b0 = base_buy;
    double s0 = base_sell;
-   FX6_SanitizeThresholdPair(b0, s0);
+   FXAI_SanitizeThresholdPair(b0, s0);
 
-   buy_thr = FX6_Clamp(FX6_RandRange(MathMax(0.52, b0 - 0.08), MathMin(0.90, b0 + 0.08)), 0.50, 0.95);
-   sell_thr = FX6_Clamp(FX6_RandRange(MathMax(0.08, s0 - 0.08), MathMin(0.48, s0 + 0.08)), 0.05, 0.50);
-   FX6_SanitizeThresholdPair(buy_thr, sell_thr);
+   buy_thr = FXAI_Clamp(FXAI_RandRange(MathMax(0.52, b0 - 0.08), MathMin(0.90, b0 + 0.08)), 0.50, 0.95);
+   sell_thr = FXAI_Clamp(FXAI_RandRange(MathMax(0.08, s0 - 0.08), MathMin(0.48, s0 + 0.08)), 0.05, 0.50);
+   FXAI_SanitizeThresholdPair(buy_thr, sell_thr);
 }
 
-void FX6_SampleModelHyperParams(const int ai_idx,
-                                const FX6AIHyperParams &base,
-                                FX6AIHyperParams &hp)
+void FXAI_SampleModelHyperParams(const int ai_idx,
+                                const FXAIAIHyperParams &base,
+                                FXAIAIHyperParams &hp)
 {
    hp = base;
 
    switch(ai_idx)
    {
-      case (int)AI_TYPE_SGD_LOGIT:
-      case (int)AI_TYPE_LSTM:
-      case (int)AI_TYPE_LSTMG:
-      case (int)AI_TYPE_S4:
-      case (int)AI_TYPE_TFT:
-      case (int)AI_TYPE_AUTOFORMER:
-      case (int)AI_TYPE_STMN:
-      case (int)AI_TYPE_TST:
-      case (int)AI_TYPE_GEODESICATTENTION:
-      case (int)AI_TYPE_PATCHTST:
-      case (int)AI_TYPE_CHRONOS:
-      case (int)AI_TYPE_TIMESFM:
-         hp.lr = FX6_RandRange(0.0030, 0.0600);
-         hp.l2 = FX6_RandRange(0.0000, 0.0300);
+      case (int)AI_SGD_LOGIT:
+      case (int)AI_LSTM:
+      case (int)AI_LSTMG:
+      case (int)AI_S4:
+      case (int)AI_TFT:
+      case (int)AI_AUTOFORMER:
+      case (int)AI_STMN:
+      case (int)AI_TST:
+      case (int)AI_GEODESICATTENTION:
+      case (int)AI_PATCHTST:
+      case (int)AI_CHRONOS:
+      case (int)AI_TIMESFM:
+         hp.lr = FXAI_RandRange(0.0030, 0.0600);
+         hp.l2 = FXAI_RandRange(0.0000, 0.0300);
          break;
 
-      case (int)AI_TYPE_TCN:
-         hp.lr = FX6_RandRange(0.0030, 0.0500);
-         hp.l2 = FX6_RandRange(0.0000, 0.0200);
-         hp.tcn_layers = (double)((int)MathRound(FX6_RandRange(3.0, 6.0)));
-         hp.tcn_kernel = (double)((int)MathRound(FX6_RandRange(2.0, 4.0)));
-         hp.tcn_dilation_base = (double)((int)MathRound(FX6_RandRange(1.0, 3.0)));
+      case (int)AI_TCN:
+         hp.lr = FXAI_RandRange(0.0030, 0.0500);
+         hp.l2 = FXAI_RandRange(0.0000, 0.0200);
+         hp.tcn_layers = (double)((int)MathRound(FXAI_RandRange(3.0, 6.0)));
+         hp.tcn_kernel = (double)((int)MathRound(FXAI_RandRange(2.0, 4.0)));
+         hp.tcn_dilation_base = (double)((int)MathRound(FXAI_RandRange(1.0, 3.0)));
          break;
 
-      case (int)AI_TYPE_FTRL_LOGIT:
-         hp.ftrl_alpha = FX6_RandRange(0.0100, 0.2500);
-         hp.ftrl_beta = FX6_RandRange(0.1000, 2.5000);
-         hp.ftrl_l1 = FX6_RandRange(0.0000, 0.0100);
-         hp.ftrl_l2 = FX6_RandRange(0.0000, 0.1000);
+      case (int)AI_FTRL_LOGIT:
+         hp.ftrl_alpha = FXAI_RandRange(0.0100, 0.2500);
+         hp.ftrl_beta = FXAI_RandRange(0.1000, 2.5000);
+         hp.ftrl_l1 = FXAI_RandRange(0.0000, 0.0100);
+         hp.ftrl_l2 = FXAI_RandRange(0.0000, 0.1000);
          break;
 
-      case (int)AI_TYPE_PA_LINEAR:
-         hp.pa_c = FX6_RandRange(0.0500, 3.0000);
-         hp.pa_margin = FX6_RandRange(0.3000, 1.5000);
+      case (int)AI_PA_LINEAR:
+         hp.pa_c = FXAI_RandRange(0.0500, 3.0000);
+         hp.pa_margin = FXAI_RandRange(0.3000, 1.5000);
          break;
 
-      case (int)AI_TYPE_XGB_FAST:
-      case (int)AI_TYPE_LIGHTGBM:
-      case (int)AI_TYPE_XGBOOST:
-      case (int)AI_TYPE_CATBOOST:
-         hp.xgb_lr = FX6_RandRange(0.0050, 0.1200);
-         hp.xgb_l2 = FX6_RandRange(0.0000, 0.0300);
-         hp.xgb_split = FX6_RandRange(-0.8000, 0.8000);
+      case (int)AI_XGB_FAST:
+      case (int)AI_LIGHTGBM:
+      case (int)AI_XGBOOST:
+      case (int)AI_CATBOOST:
+         hp.xgb_lr = FXAI_RandRange(0.0050, 0.1200);
+         hp.xgb_l2 = FXAI_RandRange(0.0000, 0.0300);
+         hp.xgb_split = FXAI_RandRange(-0.8000, 0.8000);
          break;
 
-      case (int)AI_TYPE_MLP_TINY:
-         hp.mlp_lr = FX6_RandRange(0.0010, 0.0300);
-         hp.mlp_l2 = FX6_RandRange(0.0000, 0.0200);
-         hp.mlp_init = FX6_RandRange(0.0300, 0.2500);
+      case (int)AI_MLP_TINY:
+         hp.mlp_lr = FXAI_RandRange(0.0010, 0.0300);
+         hp.mlp_l2 = FXAI_RandRange(0.0000, 0.0200);
+         hp.mlp_init = FXAI_RandRange(0.0300, 0.2500);
          break;
 
-      case (int)AI_TYPE_QUANTILE:
-         hp.quantile_lr = FX6_RandRange(0.0010, 0.0500);
-         hp.quantile_l2 = FX6_RandRange(0.0000, 0.0200);
+      case (int)AI_QUANTILE:
+         hp.quantile_lr = FXAI_RandRange(0.0010, 0.0500);
+         hp.quantile_l2 = FXAI_RandRange(0.0000, 0.0200);
          break;
 
-      case (int)AI_TYPE_ENHASH:
-         hp.enhash_lr = FX6_RandRange(0.0020, 0.0500);
-         hp.enhash_l1 = FX6_RandRange(0.0000, 0.0100);
-         hp.enhash_l2 = FX6_RandRange(0.0000, 0.0200);
+      case (int)AI_ENHASH:
+         hp.enhash_lr = FXAI_RandRange(0.0020, 0.0500);
+         hp.enhash_l1 = FXAI_RandRange(0.0000, 0.0100);
+         hp.enhash_l2 = FXAI_RandRange(0.0000, 0.0200);
          break;
 
       default:
-         hp.lr = FX6_RandRange(0.0030, 0.0600);
-         hp.l2 = FX6_RandRange(0.0000, 0.0300);
+         hp.lr = FXAI_RandRange(0.0030, 0.0600);
+         hp.l2 = FXAI_RandRange(0.0000, 0.0300);
          break;
    }
 }
 
-void FX6_ParseContextSymbols(const string raw, string &symbols[])
+void FXAI_ParseContextSymbols(const string raw, string &symbols[])
 {
    ArrayResize(symbols, 0);
 
@@ -1425,13 +1425,13 @@ void FX6_ParseContextSymbols(const string raw, string &symbols[])
       int sz = ArraySize(symbols);
       ArrayResize(symbols, sz + 1);
       symbols[sz] = sym;
-      if(ArraySize(symbols) >= FX6_MAX_CONTEXT_SYMBOLS)
+      if(ArraySize(symbols) >= FXAI_MAX_CONTEXT_SYMBOLS)
          break;
    }
 }
 
-void FX6_PrecomputeContextAggregates(const datetime &main_time[],
-                                     FX6ContextSeries &ctx_series[],
+void FXAI_PrecomputeContextAggregates(const datetime &main_time[],
+                                     FXAIContextSeries &ctx_series[],
                                      const int ctx_count,
                                      const int upto_index,
                                      double &ctx_mean_arr[],
@@ -1457,7 +1457,7 @@ void FX6_PrecomputeContextAggregates(const datetime &main_time[],
          ArrayResize(ctx_series[s].aligned_idx, 0);
          continue;
       }
-      FX6_BuildAlignedIndexMapRange(main_time,
+      FXAI_BuildAlignedIndexMapRange(main_time,
                                     ctx_series[s].time,
                                     lag_m1,
                                     upto,
@@ -1486,7 +1486,7 @@ void FX6_PrecomputeContextAggregates(const datetime &main_time[],
             idx = ctx_series[s].aligned_idx[i];
          if(idx < 0) continue;
 
-         double r = FX6_SafeReturn(ctx_series[s].close, idx, idx + 1);
+         double r = FXAI_SafeReturn(ctx_series[s].close, idx, idx + 1);
          sum += r;
          sum2 += r * r;
          valid++;
@@ -1513,14 +1513,14 @@ void ResetAIState(const string symbol)
    g_ai_last_signal = -1;
    g_ai_last_signal_key = -1;
    g_ai_warmup_done = (!AI_Warmup);
-   FX6_ResetModelHyperParams();
-   FX6_ResetReliabilityPending();
+   FXAI_ResetModelHyperParams();
+   FXAI_ResetReliabilityPending();
 
-   for(int i=0; i<FX6_AI_COUNT; i++)
+   for(int i=0; i<FXAI_AI_COUNT; i++)
    {
       g_ai_trained[i] = false;
       g_ai_last_train_bar[i] = 0;
-      FX6_ResetModelAuxState(i);
+      FXAI_ResetModelAuxState(i);
    }
 
    if(g_plugins_ready)
@@ -1533,11 +1533,11 @@ int OnInit()
 
    double buy_init = AI_BuyThreshold;
    double sell_init = AI_SellThreshold;
-   FX6_SanitizeThresholdPair(buy_init, sell_init);
+   FXAI_SanitizeThresholdPair(buy_init, sell_init);
    if(MathAbs(buy_init - AI_BuyThreshold) > 1e-12 || MathAbs(sell_init - AI_SellThreshold) > 1e-12)
    {
       // Optimizer-safe behavior: keep running and sanitize thresholds in runtime path.
-      Print("FX6 warning: threshold inputs are outside recommended relation/range. ",
+      Print("FXAI warning: threshold inputs are outside recommended relation/range. ",
             "Runtime threshold sanitization will be applied.");
    }
 
@@ -1549,7 +1549,7 @@ int OnInit()
    if(!g_plugins_ready)
       return(INIT_FAILED);
 
-   FX6_ParseContextSymbols(AI_ContextSymbols, g_context_symbols);
+   FXAI_ParseContextSymbols(AI_ContextSymbols, g_context_symbols);
 
    ResetAIState(_Symbol);
    return(INIT_SUCCEEDED);
@@ -1578,7 +1578,7 @@ void ResetCycleState()
    TrailPeakProfit  = 0.0;
 }
 
-datetime FX6_GetOldestPositionTime()
+datetime FXAI_GetOldestPositionTime()
 {
    int total = PositionsTotal();
    if(total <= 0) return 0;
@@ -1596,7 +1596,7 @@ datetime FX6_GetOldestPositionTime()
    return oldest;
 }
 
-double FX6_NormalizeLot(const string symbol, const double requested_lot)
+double FXAI_NormalizeLot(const string symbol, const double requested_lot)
 {
    double vmin  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
    double vmax  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
@@ -1610,7 +1610,7 @@ double FX6_NormalizeLot(const string symbol, const double requested_lot)
    if(!MathIsValidNumber(lot) || lot <= 0.0)
       lot = vmin;
 
-   lot = FX6_Clamp(lot, vmin, vmax);
+   lot = FXAI_Clamp(lot, vmin, vmax);
    lot = vmin + MathFloor(((lot - vmin) / vstep) + 1e-9) * vstep;
 
    if(lot < vmin) lot = vmin;
@@ -1664,7 +1664,7 @@ void CloseAll()
          break;
    }
 
-   Print("FX6 warning: CloseAll incomplete. Remaining positions=", PositionsTotal(),
+   Print("FXAI warning: CloseAll incomplete. Remaining positions=", PositionsTotal(),
          ", orders=", OrdersTotal());
 }
 
@@ -1723,7 +1723,7 @@ int TradePossible(const string symbol, string &reason)
 
    if(SessionFilterEnabled)
    {
-      if(!FX6_IsInLiquidSession(symbol,
+      if(!FXAI_IsInLiquidSession(symbol,
                                 currentTime,
                                 SessionMinAfterOpenMinutes,
                                 SessionMinBeforeCloseMinutes))
@@ -1750,7 +1750,7 @@ void EAStop()
    double eq = AccountInfoDouble(ACCOUNT_EQUITY);
    if(eq > EquiMax) EquiMax = eq;
 
-   double maxdd = FX6_Clamp(MaxDD, 0.0, 99.9);
+   double maxdd = FXAI_Clamp(MaxDD, 0.0, 99.9);
    if(maxdd <= 0.0) return;
 
    if((eq / EquiMax) < ((100.0 - maxdd) / 100.0))
@@ -1779,7 +1779,7 @@ void TradeKillerManage()
 
    datetime start_t = CycleStartTime;
    if(start_t <= 0)
-      start_t = FX6_GetOldestPositionTime();
+      start_t = FXAI_GetOldestPositionTime();
    if(start_t <= 0) return;
 
    datetime now_t = TimeCurrent();
@@ -1886,17 +1886,17 @@ int SpecialDirectionAI(const string symbol)
    if(trainEpochs > 20) trainEpochs = 20;
 
    int aiType = (int)AI_Type;
-   if(aiType < 0 || aiType >= FX6_AI_COUNT)
-      aiType = (int)AI_TYPE_SGD_LOGIT;
+   if(aiType < 0 || aiType >= FXAI_AI_COUNT)
+      aiType = (int)AI_SGD_LOGIT;
 
    bool ensembleMode = (bool)AI_Ensemble;
-   double agreePct = FX6_Clamp(Ensemble_AgreePct, 50.0, 100.0);
+   double agreePct = FXAI_Clamp(Ensemble_AgreePct, 50.0, 100.0);
 
    double buyThr = AI_BuyThreshold;
    double sellThr = AI_SellThreshold;
-   FX6_SanitizeThresholdPair(buyThr, sellThr);
+   FXAI_SanitizeThresholdPair(buyThr, sellThr);
 
-   double evThresholdPoints = FX6_Clamp(AI_EVThresholdPoints, 0.0, 100.0);
+   double evThresholdPoints = FXAI_Clamp(AI_EVThresholdPoints, 0.0, 100.0);
    int evLookback = AI_EVLookbackSamples;
    if(evLookback < 20) evLookback = 20;
    if(evLookback > 400) evLookback = 400;
@@ -1906,7 +1906,7 @@ int SpecialDirectionAI(const string symbol)
 
    if(AI_Warmup && !g_ai_warmup_done)
    {
-      if(!FX6_WarmupTrainAndTune(symbol))
+      if(!FXAI_WarmupTrainAndTune(symbol))
       {
          g_ai_last_reason = "warmup_pending";
          return -1;
@@ -1928,8 +1928,8 @@ int SpecialDirectionAI(const string symbol)
       return g_ai_last_signal;
    }
 
-   FX6DataSnapshot snapshot;
-   if(!FX6_ExportDataSnapshot(symbol, AI_CommissionPerLotSide, AI_CostBufferPoints, snapshot))
+   FXAIDataSnapshot snapshot;
+   if(!FXAI_ExportDataSnapshot(symbol, AI_CommissionPerLotSide, AI_CostBufferPoints, snapshot))
    {
       g_ai_last_reason = "snapshot_export_failed";
       return -1;
@@ -1967,7 +1967,7 @@ int SpecialDirectionAI(const string symbol)
    static double close_arr[];
    static datetime time_arr[];
    static int spread_m1[];
-   static FX6ContextSeries ctx_series[];
+   static FXAIContextSeries ctx_series[];
    static double ctx_mean_arr[];
    static double ctx_std_arr[];
    static double ctx_up_arr[];
@@ -1986,15 +1986,15 @@ int SpecialDirectionAI(const string symbol)
       ArrayResize(ctx_series, 0);
    }
 
-   FX6_AdvanceReliabilityClock(signal_bar);
+   FXAI_AdvanceReliabilityClock(signal_bar);
    int signal_seq = g_rel_clock_seq;
 
-   if(!FX6_UpdateRatesRolling(symbol, PERIOD_M1, needed, last_bar_m1, rates_m1))
+   if(!FXAI_UpdateRatesRolling(symbol, PERIOD_M1, needed, last_bar_m1, rates_m1))
    {
       g_ai_last_reason = "m1_series_load_failed";
       return -1;
    }
-   FX6_ExtractRatesCloseTimeSpread(rates_m1, close_arr, time_arr, spread_m1);
+   FXAI_ExtractRatesCloseTimeSpread(rates_m1, close_arr, time_arr, spread_m1);
    if(ArraySize(close_arr) < needed || ArraySize(time_arr) < needed || ArraySize(spread_m1) < needed)
    {
       g_ai_last_reason = "m1_series_size_failed";
@@ -2014,8 +2014,8 @@ int SpecialDirectionAI(const string symbol)
    static int map_m5[];
    static int map_m15[];
    static int map_h1[];
-   if(FX6_UpdateRatesRolling(symbol, PERIOD_M5, needed_m5, last_bar_m5, rates_m5))
-      FX6_ExtractRatesCloseTime(rates_m5, close_m5, time_m5);
+   if(FXAI_UpdateRatesRolling(symbol, PERIOD_M5, needed_m5, last_bar_m5, rates_m5))
+      FXAI_ExtractRatesCloseTime(rates_m5, close_m5, time_m5);
    else
    {
       ArrayResize(close_m5, 0);
@@ -2023,8 +2023,8 @@ int SpecialDirectionAI(const string symbol)
       ArrayResize(map_m5, 0);
    }
 
-   if(FX6_UpdateRatesRolling(symbol, PERIOD_M15, needed_m15, last_bar_m15, rates_m15))
-      FX6_ExtractRatesCloseTime(rates_m15, close_m15, time_m15);
+   if(FXAI_UpdateRatesRolling(symbol, PERIOD_M15, needed_m15, last_bar_m15, rates_m15))
+      FXAI_ExtractRatesCloseTime(rates_m15, close_m15, time_m15);
    else
    {
       ArrayResize(close_m15, 0);
@@ -2032,8 +2032,8 @@ int SpecialDirectionAI(const string symbol)
       ArrayResize(map_m15, 0);
    }
 
-   if(FX6_UpdateRatesRolling(symbol, PERIOD_H1, needed_h1, last_bar_h1, rates_h1))
-      FX6_ExtractRatesCloseTime(rates_h1, close_h1, time_h1);
+   if(FXAI_UpdateRatesRolling(symbol, PERIOD_H1, needed_h1, last_bar_h1, rates_h1))
+      FXAI_ExtractRatesCloseTime(rates_h1, close_h1, time_h1);
    else
    {
       ArrayResize(close_h1, 0);
@@ -2048,12 +2048,12 @@ int SpecialDirectionAI(const string symbol)
    if(lag_m15 <= 0) lag_m15 = 1800;
    if(lag_h1 <= 0) lag_h1 = 7200;
 
-   FX6_BuildAlignedIndexMapRange(time_arr, time_m5, lag_m5, align_upto, map_m5);
-   FX6_BuildAlignedIndexMapRange(time_arr, time_m15, lag_m15, align_upto, map_m15);
-   FX6_BuildAlignedIndexMapRange(time_arr, time_h1, lag_h1, align_upto, map_h1);
+   FXAI_BuildAlignedIndexMapRange(time_arr, time_m5, lag_m5, align_upto, map_m5);
+   FXAI_BuildAlignedIndexMapRange(time_arr, time_m15, lag_m15, align_upto, map_m15);
+   FXAI_BuildAlignedIndexMapRange(time_arr, time_h1, lag_h1, align_upto, map_h1);
 
    int ctx_count = ArraySize(g_context_symbols);
-   if(ctx_count > FX6_MAX_CONTEXT_SYMBOLS) ctx_count = FX6_MAX_CONTEXT_SYMBOLS;
+   if(ctx_count > FXAI_MAX_CONTEXT_SYMBOLS) ctx_count = FXAI_MAX_CONTEXT_SYMBOLS;
    if(ArraySize(ctx_series) != ctx_count)
    {
       ArrayResize(ctx_series, ctx_count);
@@ -2078,14 +2078,14 @@ int SpecialDirectionAI(const string symbol)
          ArrayResize(ctx_series[s].rates, 0);
       }
 
-      ctx_series[s].loaded = FX6_UpdateRatesRolling(ctx_symbol,
+      ctx_series[s].loaded = FXAI_UpdateRatesRolling(ctx_symbol,
                                                     PERIOD_M1,
                                                     needed,
                                                     ctx_series[s].last_bar_time,
                                                     ctx_series[s].rates);
       if(ctx_series[s].loaded)
       {
-         FX6_ExtractRatesCloseTime(ctx_series[s].rates,
+         FXAI_ExtractRatesCloseTime(ctx_series[s].rates,
                                    ctx_series[s].close,
                                    ctx_series[s].time);
       }
@@ -2097,7 +2097,7 @@ int SpecialDirectionAI(const string symbol)
       }
    }
 
-   FX6_PrecomputeContextAggregates(time_arr,
+   FXAI_PrecomputeContextAggregates(time_arr,
                                    ctx_series,
                                    ctx_count,
                                    align_upto,
@@ -2107,15 +2107,15 @@ int SpecialDirectionAI(const string symbol)
 
    double cost_buffer_points = (AI_CostBufferPoints < 0.0 ? 0.0 : AI_CostBufferPoints);
    double commission_points = snapshot.commission_points;
-   double spread_pred = FX6_GetSpreadAtIndex(0, spread_m1, snapshot.spread_points);
+   double spread_pred = FXAI_GetSpreadAtIndex(0, spread_m1, snapshot.spread_points);
    double min_move_pred = spread_pred + commission_points + cost_buffer_points;
    if(min_move_pred < 0.0) min_move_pred = 0.0;
-   double ctx_mean_pred = FX6_GetArrayValue(ctx_mean_arr, 0, 0.0);
-   double ctx_std_pred = FX6_GetArrayValue(ctx_std_arr, 0, 0.0);
-   double ctx_up_pred = FX6_GetArrayValue(ctx_up_arr, 0, 0.5);
+   double ctx_mean_pred = FXAI_GetArrayValue(ctx_mean_arr, 0, 0.0);
+   double ctx_std_pred = FXAI_GetArrayValue(ctx_std_arr, 0, 0.0);
+   double ctx_up_pred = FXAI_GetArrayValue(ctx_up_arr, 0, 0.5);
 
-   double feat_pred[FX6_AI_FEATURES];
-   if(!FX6_ComputeFeatureVector(0,
+   double feat_pred[FXAI_AI_FEATURES];
+   if(!FXAI_ComputeFeatureVector(0,
                                 spread_pred,
                                 time_arr,
                                 close_arr,
@@ -2140,20 +2140,20 @@ int SpecialDirectionAI(const string symbol)
       return -1;
    }
 
-   double x_pred[FX6_AI_WEIGHTS];
-   FX6_BuildInputVector(feat_pred, x_pred);
+   double x_pred[FXAI_AI_WEIGHTS];
+   FXAI_BuildInputVector(feat_pred, x_pred);
 
-   double fallback_expected_move = FX6_EstimateExpectedAbsMovePoints(close_arr,
+   double fallback_expected_move = FXAI_EstimateExpectedAbsMovePoints(close_arr,
                                                                       H,
                                                                       evLookback,
                                                                       snapshot.point);
    if(fallback_expected_move <= 0.0)
       fallback_expected_move = min_move_pred;
 
-   static FX6PreparedSample samples[];
+   static FXAIPreparedSample samples[];
    if(precompute_end >= H)
    {
-      FX6_PrecomputeTrainingSamples(H,
+      FXAI_PrecomputeTrainingSamples(H,
                                     precompute_end,
                                     H,
                                     commission_points,
@@ -2190,7 +2190,7 @@ int SpecialDirectionAI(const string symbol)
    }
    else
    {
-      for(int ai_idx=0; ai_idx<FX6_AI_COUNT; ai_idx++)
+      for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
       {
          if(g_plugins.Get(ai_idx) == NULL) continue;
          int sz = ArraySize(active_ai_ids);
@@ -2219,16 +2219,16 @@ int SpecialDirectionAI(const string symbol)
    {
       int ai_idx = active_ai_ids[m];
 
-      CFX6AIPlugin *plugin = g_plugins.Get(ai_idx);
+      CFXAIAIPlugin *plugin = g_plugins.Get(ai_idx);
       if(plugin == NULL)
          continue;
 
-      FX6AIHyperParams hp_model;
-      FX6_GetModelHyperParams(ai_idx, hp_model);
+      FXAIAIHyperParams hp_model;
+      FXAI_GetModelHyperParams(ai_idx, hp_model);
       plugin.EnsureInitialized(hp_model);
 
       // Reliability is updated only from matured, out-of-sample predictions.
-      FX6_UpdateReliabilityFromPending(ai_idx,
+      FXAI_UpdateReliabilityFromPending(ai_idx,
                                        signal_seq,
                                        H,
                                        snapshot,
@@ -2242,7 +2242,7 @@ int SpecialDirectionAI(const string symbol)
       {
          if(have_init_window)
          {
-            FX6_TrainModelWindowPrepared(ai_idx,
+            FXAI_TrainModelWindowPrepared(ai_idx,
                                          *plugin,
                                          init_start,
                                          init_end,
@@ -2258,7 +2258,7 @@ int SpecialDirectionAI(const string symbol)
       {
          if(have_online_window)
          {
-            FX6_TrainModelWindowPrepared(ai_idx,
+            FXAI_TrainModelWindowPrepared(ai_idx,
                                          *plugin,
                                          online_start,
                                          online_end,
@@ -2270,14 +2270,14 @@ int SpecialDirectionAI(const string symbol)
          g_ai_last_train_bar[ai_idx] = snapshot.bar_time;
       }
 
-      FX6AIPredictV2 req;
+      FXAIAIPredictV2 req;
       req.min_move_points = min_move_pred;
       req.cost_points = min_move_pred;
       req.sample_time = snapshot.bar_time;
-      for(int k=0; k<FX6_AI_WEIGHTS; k++)
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = x_pred[k];
 
-      FX6AIPredictionV2 pred;
+      FXAIAIPredictionV2 pred;
       plugin.PredictV2(req, hp_model, pred);
 
       double class_probs_pred[3];
@@ -2287,20 +2287,20 @@ int SpecialDirectionAI(const string symbol)
 
       double expected_move = pred.expected_move_points;
       if(expected_move <= 0.0)
-         expected_move = FX6_GetModelExpectedMove(ai_idx, fallback_expected_move);
+         expected_move = FXAI_GetModelExpectedMove(ai_idx, fallback_expected_move);
       if(expected_move <= 0.0)
          expected_move = fallback_expected_move;
 
-      FX6_EnqueueReliabilityPending(ai_idx, signal_seq, class_probs_pred);
+      FXAI_EnqueueReliabilityPending(ai_idx, signal_seq, class_probs_pred);
 
       double modelBuyThr = buyThr;
       double modelSellThr = sellThr;
-      FX6_GetModelThresholds(ai_idx, buyThr, sellThr, modelBuyThr, modelSellThr);
+      FXAI_GetModelThresholds(ai_idx, buyThr, sellThr, modelBuyThr, modelSellThr);
 
       double buyMinProb = modelBuyThr;
       double sellMinProb = 1.0 - modelSellThr;
       double skipMinProb = 0.55;
-      FX6_DeriveAdaptiveThresholds(modelBuyThr,
+      FXAI_DeriveAdaptiveThresholds(modelBuyThr,
                                    modelSellThr,
                                    min_move_pred,
                                    expected_move,
@@ -2309,7 +2309,7 @@ int SpecialDirectionAI(const string symbol)
                                    sellMinProb,
                                    skipMinProb);
 
-      int signal = FX6_ClassSignalFromEV(class_probs_pred,
+      int signal = FXAI_ClassSignalFromEV(class_probs_pred,
                                          buyMinProb,
                                          sellMinProb,
                                          skipMinProb,
@@ -2323,7 +2323,7 @@ int SpecialDirectionAI(const string symbol)
       }
       else
       {
-         double voteWeight = FX6_GetModelVoteWeight(ai_idx);
+         double voteWeight = FXAI_GetModelVoteWeight(ai_idx);
          if(signal == 1)
          {
             buyVotes++;
@@ -2379,7 +2379,7 @@ void SendTrade()
    if(TradePossible(_Symbol, trade_reason) != 1)
    {
       if(emit_debug)
-         Print("FX6 debug: Trade blocked. reason=", trade_reason);
+         Print("FXAI debug: Trade blocked. reason=", trade_reason);
       return;
    }
 
@@ -2389,11 +2389,11 @@ void SendTrade()
    if(direction == -1)
    {
       if(emit_debug)
-         Print("FX6 debug: AI no-trade. reason=", g_ai_last_reason);
+         Print("FXAI debug: AI no-trade. reason=", g_ai_last_reason);
       return;
    }
 
-   double trade_lot = FX6_NormalizeLot(_Symbol, Lot);
+   double trade_lot = FXAI_NormalizeLot(_Symbol, Lot);
    if(trade_lot <= 0.0) return;
 
    bool ok = false;
@@ -2401,10 +2401,10 @@ void SendTrade()
    else               ok = trade.Sell(trade_lot, _Symbol, 0, 0, 0, "Sell");
 
    if(!ok && emit_debug)
-      Print("FX6 debug: Order send failed. retcode=", (int)trade.ResultRetcode(),
+      Print("FXAI debug: Order send failed. retcode=", (int)trade.ResultRetcode(),
             " desc=", trade.ResultRetcodeDescription());
    else if(ok && emit_debug)
-      Print("FX6 debug: Order sent. direction=", direction, " lot=", DoubleToString(trade_lot, 2));
+      Print("FXAI debug: Order sent. direction=", direction, " lot=", DoubleToString(trade_lot, 2));
 
    if(ok)
    {
@@ -2452,7 +2452,7 @@ void OnTick()
    if(!new_m1_bar) return;
 
    // Heavy model/reliability updates run only once per closed M1 bar.
-   FX6_ProcessReliabilityBar(_Symbol);
+   FXAI_ProcessReliabilityBar(_Symbol);
 
    if(OrdersTotal() + PositionsTotal() == 0)
       SendTrade();
