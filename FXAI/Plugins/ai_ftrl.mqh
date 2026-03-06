@@ -1,3 +1,4 @@
+// FXAI v2
 // FXAI v1
 #ifndef __FXAI_AI_FTRL_MQH__
 #define __FXAI_AI_FTRL_MQH__

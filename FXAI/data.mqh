@@ -1,3 +1,4 @@
+// FXAI v2
 // FXAI v1
 #ifndef __FXAI_DATA_MQH__
 #define __FXAI_DATA_MQH__
@@ -1174,6 +1175,20 @@ void FXAI_GetFeatureClipBounds(const int f, double &lo, double &hi)
       lo = -12.0;
       hi = 12.0;
    }
+   else if(f >= 50 && f < FXAI_AI_FEATURES)
+   {
+      int rel = (f - 50) % 4;
+      if(rel == 3)
+      {
+         lo = -1.1;
+         hi = 1.1;
+      }
+      else
+      {
+         lo = -8.0;
+         hi = 8.0;
+      }
+   }
 }
 
 double FXAI_MinMaxBuffer5Map(const double v, const double lo, const double hi)
@@ -1663,6 +1678,7 @@ bool FXAI_ComputeFeatureVector(const int i,
                               const double ctx_ret_mean,
                               const double ctx_ret_std,
                               const double ctx_up_ratio,
+                              const double &ctx_extra_arr[],
                               const ENUM_FXAI_FEATURE_NORMALIZATION norm_method,
                               double &features[])
 {
@@ -1895,6 +1911,22 @@ bool FXAI_ComputeFeatureVector(const int i,
 
    double ss20 = FXAI_EhlersSuperSmootherAt(main_m1, i, 20);
    features[49] = FXAI_MAEdgeFeature(c, ss20, vol_unit);
+
+   // Detailed cross-symbol context: per-symbol aligned returns, lagged returns,
+   // relative-strength residuals, and rolling correlation to the main symbol.
+   for(int slot=0; slot<FXAI_CONTEXT_TOP_SYMBOLS; slot++)
+   {
+      int base_f = 50 + slot * 4;
+      double ctx_ret = FXAI_GetContextExtraValue(ctx_extra_arr, i, slot * 4 + 0, 0.0);
+      double ctx_lag = FXAI_GetContextExtraValue(ctx_extra_arr, i, slot * 4 + 1, 0.0);
+      double ctx_rel = FXAI_GetContextExtraValue(ctx_extra_arr, i, slot * 4 + 2, 0.0);
+      double ctx_corr = FXAI_GetContextExtraValue(ctx_extra_arr, i, slot * 4 + 3, 0.0);
+
+      features[base_f + 0] = ctx_ret / vol_unit;
+      features[base_f + 1] = ctx_lag / vol_unit;
+      features[base_f + 2] = ctx_rel / vol_unit;
+      features[base_f + 3] = ctx_corr;
+   }
 
    for(int f=0; f<FXAI_AI_FEATURES; f++)
    {

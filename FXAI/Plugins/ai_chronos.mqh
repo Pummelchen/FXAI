@@ -1,4 +1,4 @@
-// FXAI v1
+// FXAI v2
 #ifndef __FXAI_AI_CHRONOS_MQH__
 #define __FXAI_AI_CHRONOS_MQH__
 

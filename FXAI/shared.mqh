@@ -1,13 +1,16 @@
+// FXAI v2
 // FXAI v1
 #ifndef __FXAI_SHARED_MQH__
 #define __FXAI_SHARED_MQH__
 
-#define FXAI_AI_FEATURES 50
+#define FXAI_AI_FEATURES 62
 #define FXAI_AI_WEIGHTS (FXAI_AI_FEATURES + 1)
 #define FXAI_AI_MLP_HIDDEN 8
 #define FXAI_AI_COUNT 22
 #define FXAI_ENHASH_BUCKETS 128
 #define FXAI_PLUGIN_CLASS_FEATURES 5
+#define FXAI_CONTEXT_TOP_SYMBOLS 3
+#define FXAI_CONTEXT_EXTRA_FEATS (FXAI_CONTEXT_TOP_SYMBOLS * 4)
 
 
 enum ENUM_AI_TYPE
@@ -234,6 +237,33 @@ void FXAI_BuildInputVector(const double &features[], double &x[])
    x[0] = 1.0;
    for(int i=0; i<FXAI_AI_FEATURES; i++)
       x[i + 1] = features[i];
+}
+
+int FXAI_ContextExtraIndex(const int sample_idx, const int feat_idx)
+{
+   if(sample_idx < 0) return -1;
+   if(feat_idx < 0 || feat_idx >= FXAI_CONTEXT_EXTRA_FEATS) return -1;
+   return sample_idx * FXAI_CONTEXT_EXTRA_FEATS + feat_idx;
+}
+
+double FXAI_GetContextExtraValue(const double &arr[],
+                                 const int sample_idx,
+                                 const int feat_idx,
+                                 const double def_value)
+{
+   int idx = FXAI_ContextExtraIndex(sample_idx, feat_idx);
+   if(idx >= 0 && idx < ArraySize(arr)) return arr[idx];
+   return def_value;
+}
+
+void FXAI_SetContextExtraValue(double &arr[],
+                               const int sample_idx,
+                               const int feat_idx,
+                               const double value)
+{
+   int idx = FXAI_ContextExtraIndex(sample_idx, feat_idx);
+   if(idx >= 0 && idx < ArraySize(arr))
+      arr[idx] = value;
 }
 
 #endif // __FXAI_SHARED_MQH__

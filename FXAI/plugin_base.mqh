@@ -1,3 +1,4 @@
+// FXAI v2
 // FXAI v1
 #ifndef __FXAI_PLUGIN_BASE_MQH__
 #define __FXAI_PLUGIN_BASE_MQH__
