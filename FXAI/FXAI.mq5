@@ -5,8 +5,8 @@
 #property strict
 
 #include <Trade\Trade.mqh>
-#include "Engine\shared.mqh"
-#include "Engine\data.mqh"
+#include "Engine\core.mqh"
+#include "Engine\data_pipeline.mqh"
 #include "API\api.mqh"
 
 CTrade trade;

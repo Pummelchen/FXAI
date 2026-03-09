@@ -1,5 +1,5 @@
-#ifndef __FXAI_SHARED_MQH__
-#define __FXAI_SHARED_MQH__
+#ifndef __FXAI_CORE_MQH__
+#define __FXAI_CORE_MQH__
 
 #define FXAI_AI_FEATURES 62
 #define FXAI_AI_WEIGHTS (FXAI_AI_FEATURES + 1)
@@ -394,4 +394,4 @@ void FXAI_SetContextExtraValue(double &arr[],
       arr[idx] = value;
 }
 
-#endif // __FXAI_SHARED_MQH__
+#endif // __FXAI_CORE_MQH__

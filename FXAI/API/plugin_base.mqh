@@ -2,7 +2,7 @@
 #define __FXAI_PLUGIN_BASE_MQH__
 
 #include <Object.mqh>
-#include "..\Engine\shared.mqh"
+#include "..\Engine\core.mqh"
 
 class CFXAIAIPlugin : public CObject
 {

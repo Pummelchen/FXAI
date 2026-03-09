@@ -1,7 +1,7 @@
-#ifndef __FXAI_DATA_MQH__
-#define __FXAI_DATA_MQH__
+#ifndef __FXAI_DATA_PIPELINE_MQH__
+#define __FXAI_DATA_PIPELINE_MQH__
 
-#include "shared.mqh"
+#include "core.mqh"
 
 #define FXAI_NORM_ROLL_WINDOW_DEFAULT 192
 #define FXAI_NORM_ROLL_WINDOW_MAX 512
@@ -1995,4 +1995,4 @@ bool FXAI_ComputeFeatureVector(const int i,
    return true;
 }
 
-#endif // __FXAI_DATA_MQH__
+#endif // __FXAI_DATA_PIPELINE_MQH__
