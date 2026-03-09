@@ -1,6 +1,6 @@
 // FXAI v2
 //+------------------------------------------------------------------+
-//|                                                          FXAI.mq5 |
+//|                                                         FXAI.mq5 |
 //| FXAI modular EA: plugin-based AI + equity trailing + equity SL   |
 //+------------------------------------------------------------------+
 #property strict
@@ -17,11 +17,11 @@ input ENUM_AI_TYPE AI_Type = AI_SGD_LOGIT;
 // Models: all (selector for which plugin runs in single-model mode).
 // Purpose: chooses the active prediction model implementation.
 // Importance/Range: enum value 0..FXAI_AI_COUNT-1; use backtests to pick best per symbol.
-input bool   AI_Ensemble          = false;  
+input bool   AI_Ensemble          = false;
 // Models: all (ensemble controller across all plugins).
 // Purpose: enables multi-model voting instead of one selected model.
 // Importance/Range: false/true; true is usually more stable but may reduce trade count.
-input double Ensemble_AgreePct    = 70.0; 
+input double Ensemble_AgreePct    = 70.0;
 // Models: all (only used when AI_Ensemble=true).
 // Purpose: sets the minimum vote percentage needed for BUY or SELL.
 // Importance/Range: practical 50..90; higher means fewer but stricter entries.
@@ -4062,6 +4062,36 @@ void FXAI_GetModelHyperParams(const int ai_idx, FXAIAIHyperParams &hp)
       hp.pa_c = 4.0000;
       hp.pa_margin = 1.2000;
    }
+   // Recommended CFX_WORLD starting defaults.
+   if(ai_idx == (int)AI_CFX_WORLD)
+   {
+      hp.lr = 0.0100;
+      hp.l2 = 0.0020;
+   }
+   // Recommended LOFFM starting defaults.
+   if(ai_idx == (int)AI_LOFFM)
+   {
+      hp.lr = 0.0080;
+      hp.l2 = 0.0030;
+   }
+   // Recommended TRR starting defaults.
+   if(ai_idx == (int)AI_TRR)
+   {
+      hp.lr = 0.0090;
+      hp.l2 = 0.0025;
+   }
+   // Recommended GRAPHWM starting defaults.
+   if(ai_idx == (int)AI_GRAPHWM)
+   {
+      hp.lr = 0.0080;
+      hp.l2 = 0.0020;
+   }
+   // Recommended MOE_CONFORMAL starting defaults.
+   if(ai_idx == (int)AI_MOE_CONFORMAL)
+   {
+      hp.lr = 0.0060;
+      hp.l2 = 0.0030;
+   }
 }
 
 void FXAI_GetModelHyperParamsRouted(const int ai_idx,
@@ -4165,8 +4195,14 @@ void FXAI_SampleModelHyperParams(const int ai_idx,
       case (int)AI_STMN:
       case (int)AI_TST:
       case (int)AI_PATCHTST:
-      case (int)AI_CHRONOS:
-      case (int)AI_TIMESFM:
+         case (int)AI_CHRONOS:
+         case (int)AI_TIMESFM:
+         case (int)AI_CFX_WORLD:
+         case (int)AI_LOFFM:
+         case (int)AI_TRR:
+         case (int)AI_GRAPHWM:
+         case (int)AI_MOE_CONFORMAL:
+         case (int)AI_RETRDIFF:
          hp.lr = FXAI_RandRange(0.0030, 0.0600);
          hp.l2 = FXAI_RandRange(0.0000, 0.0300);
          break;

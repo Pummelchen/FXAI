@@ -80,6 +80,9 @@ Autoformer decomposes time series into trend and seasonal components before fore
 ### CatBoost
 CatBoost is a gradient-boosted decision tree method that handles nonlinear feature interactions well. It is useful in FX because threshold effects in spread, volatility, and session context are often nonlinear. The model is robust with mixed feature scales and can perform strongly on engineered tabular features. Further reading: CatBoost.
 
+### CFX World
+CFX World is a lightweight world-model plugin that simulates multiple forward market paths from a compact latent state. It is useful in FX because trade quality depends on path shape, not only on final direction, especially when spread and adverse excursion matter. In this framework it converts consensus across simulated paths into `BUY / SELL / SKIP` probabilities and an expected-move estimate. It is strongest when you want a CPU-bounded proxy for scenario analysis inside MT5.
+
 ### Chronos
 Chronos-style forecasting targets robust sequence modeling across changing temporal patterns. It is useful for FX when intraday behavior shifts with sessions and macro events. In ensemble mode it can add diversity against purely linear or tree-based models. Background on the domain: Time series.
 
@@ -92,8 +95,14 @@ FTRL Logit is designed for streaming optimization with sparse updates and good s
 ### GeodesicAttention
 GeodesicAttention emphasizes relational structure between observations instead of only raw Euclidean distance. It is useful for FX because regime similarity can matter more than absolute price levels. This can improve signal consistency when markets rotate between risk-on and risk-off states. Related concept: Attention (machine learning).
 
+### GraphWM
+GraphWM is a compact graph-inspired world model that builds directional and move forecasts from relative structure between short-horizon returns. It is useful in FX because lead-lag tension and local cross-feature geometry often matter more than isolated raw indicators. In this project it acts as a fast nonlinear plugin that stays practical for M1 online updates. It is especially attractive when you want additional ensemble diversity without paying for a heavy sequence model.
+
 ### LightGBM
 LightGBM is a gradient-boosted tree framework optimized for speed and strong nonlinear modeling. It is useful for FX because it can capture asymmetric responses to volatility and liquidity conditions. The model also provides interpretable split behavior across engineered feature sets. Further reading: LightGBM.
+
+### LOFFM
+LOFFM is an online latent mixture-of-experts model that routes samples into several specialized trading regimes. It is useful in FX because trend, mean-reversion, breakout, and noisy-neutral conditions rarely respond well to one shared decision surface. In this framework each expert carries its own directional and move head while the router reallocates probability mass as regime evidence shifts. That makes it a strong candidate for adaptive intraday modeling where market state changes quickly across sessions.
 
 ### LSTM
 LSTM is a recurrent neural architecture built to retain useful sequence memory over time. It is useful in FX where momentum, mean reversion, and volatility clustering are path dependent. In this framework it complements tabular models by modeling temporal state dynamics directly. Further reading: Long short-term memory.
@@ -104,6 +113,9 @@ LSTM-G extends recurrent modeling with additional gating refinements for sequenc
 ### MLP Tiny
 MLP Tiny is a compact feed-forward neural baseline with low compute overhead. It is useful for FX as a fast nonlinear learner that can run efficiently in MT5. The model also serves as a resilient ensemble member against over-specialized plugins. Further reading: Multilayer perceptron.
 
+### MoE Conformal
+MoE Conformal combines mixture-of-experts routing with conformal-style uncertainty filtering. It is useful in FX because many bad trades are not wrong-direction problems but low-confidence decisions that should have been skipped entirely. In this framework it learns regime-specialized experts and then widens the `SKIP` region when uncertainty or expert disagreement becomes too high. That makes it particularly relevant for cost-aware intraday trading where precision usually matters more than raw trade count.
+
 ### PA Linear
 PA Linear uses passive-aggressive updates to react strongly to mistakes and stay conservative otherwise. It is useful for FX streaming where fast adaptation to regime changes is critical. The linear form keeps latency low and behavior easy to diagnose during backtests. Background: Online machine learning.
 
@@ -112,6 +124,9 @@ PatchTST processes sequences in patches to improve local pattern extraction effi
 
 ### Quantile
 Quantile modeling predicts distribution bands instead of only a single directional probability. It is useful for FX because trade quality depends on expected move size and tail risk. In this project it supports cost-aware decision thresholds and skip logic. Further reading: Quantile regression.
+
+### RetrDiff
+RetrDiff is a retrieval-based plugin that stores embedded historical situations and predicts by analogy to the nearest past states. It is useful in FX because many short-horizon setups repeat approximately rather than exactly, and nearest-neighbor memory can capture that without full retraining. In this framework it retrieves similar embeddings, aggregates their realized direction and move outcomes, and turns that into native 3-class probabilities. It works best as an ensemble diversifier against parametric models that may forget older but still relevant market patterns.
 
 ### S4
 S4 is a state-space sequence model designed for long-context temporal dependencies. It is useful for FX because distant context can still influence current volatility and direction. The architecture is attractive when you want long memory with controlled runtime cost. Related background: State-space representation.
@@ -130,6 +145,9 @@ TFT combines gating, variable selection, and attention for interpretable sequenc
 
 ### TimesFM
 TimesFM-style modeling emphasizes broad time-series generalization with strong sequence representations. It is useful for FX as a high-capacity model when market structure changes across periods. In ensemble settings it can contribute robust regime-level forecasts. Background: Foundation model.
+
+### TRR
+TRR is a topology-aware reservoir readout model that mixes handcrafted temporal shape features with a lightweight recurrent reservoir. It is useful in FX because path complexity, recurrence, compression, and transition structure often matter as much as raw return values. In this project it builds topological regime descriptors, updates a fixed reservoir state, and learns only the readout layers online. That gives it a practical middle ground between simple tabular models and heavier recurrent or transformer architectures.
 
 ### TST
 TST applies transformer attention directly to time-series tokens. It is useful for FX because attention can detect nonlocal dependencies across the lookback window. This makes it a strong complement to local-window linear or tree-based methods. Further reading: Transformer (deep learning architecture).

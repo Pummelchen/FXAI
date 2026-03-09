@@ -1,0 +1,253 @@
+// FXAI v2
+#ifndef __FXAI_AI_MOE_CONFORMAL_MQH__
+#define __FXAI_AI_MOE_CONFORMAL_MQH__
+
+#include "..\plugin_base.mqh"
+
+#define FXAI_MOE_E 4
+
+class CFXAIAIMoEConformal : public CFXAIAIPlugin
+{
+private:
+   bool   m_init;
+   int    m_feat_n;
+   int    m_steps;
+   int    m_cal_n;
+   double m_router[FXAI_MOE_E][12];
+   double m_gate[FXAI_MOE_E][FXAI_AI_WEIGHTS];
+   double m_dir[FXAI_MOE_E][FXAI_AI_WEIGHTS];
+   double m_move[FXAI_MOE_E][FXAI_AI_WEIGHTS];
+   double m_scores[128];
+
+   double SX(const double &x[], int i) const
+   {
+      if(i < 0 || i >= ArraySize(x)) return 0.0;
+      double v = x[i];
+      if(!MathIsValidNumber(v)) return 0.0;
+      return v;
+   }
+
+   void BuildRegime(const double &x[], double &r[]) const
+   {
+      ArrayResize(r, 11);
+      double r1 = SX(x,0), r5 = SX(x,1), r15 = SX(x,2), r60 = SX(x,3), vol = MathAbs(SX(x,4));
+      r[0] = 1.0;
+      r[1] = FXAI_Clamp(r1, -10.0, 10.0);
+      r[2] = FXAI_Clamp(r5, -10.0, 10.0);
+      r[3] = FXAI_Clamp(r15, -10.0, 10.0);
+      r[4] = FXAI_Clamp(r60, -10.0, 10.0);
+      r[5] = FXAI_Clamp(vol, 0.0, 10.0);
+      r[6] = FXAI_Clamp(r1 - r5, -10.0, 10.0);
+      r[7] = FXAI_Clamp(r5 - r15, -10.0, 10.0);
+      r[8] = FXAI_Clamp((r1 + r5 + r15) / MathMax(vol, 1e-6), -10.0, 10.0);
+      r[9] = FXAI_Clamp(SX(x,5), -10.0, 10.0);
+      r[10]= FXAI_Clamp(SX(x,6), -10.0, 10.0);
+   }
+
+   void BuildFeat(const double &x[], double &f[]) const
+   {
+      ArrayResize(f, m_feat_n);
+      for(int i=0; i<m_feat_n; i++) f[i] = 0.0;
+      int n = MathMin(ArraySize(x), m_feat_n);
+      for(int i=0; i<n; i++) f[i] = FXAI_Clamp(SX(x,i), -10.0, 10.0);
+   }
+
+   double DotRouter(const int expert, const double &r[]) const
+   {
+      double z = 0.0;
+      for(int i=0; i<ArraySize(r); i++) z += m_router[expert][i] * r[i];
+      return z;
+   }
+
+   double DotGate(const int expert, const double &f[]) const
+   {
+      double z = m_gate[expert][0];
+      int n = MathMin(ArraySize(f), FXAI_AI_WEIGHTS - 1);
+      for(int i=0; i<n; i++) z += m_gate[expert][i + 1] * f[i];
+      return z;
+   }
+
+   double DotDir(const int expert, const double &f[]) const
+   {
+      double z = m_dir[expert][0];
+      int n = MathMin(ArraySize(f), FXAI_AI_WEIGHTS - 1);
+      for(int i=0; i<n; i++) z += m_dir[expert][i + 1] * f[i];
+      return z;
+   }
+
+   double DotMove(const int expert, const double &f[]) const
+   {
+      double z = m_move[expert][0];
+      int n = MathMin(ArraySize(f), FXAI_AI_WEIGHTS - 1);
+      for(int i=0; i<n; i++) z += m_move[expert][i + 1] * f[i];
+      return z;
+   }
+
+   void RouterSoftmax(const double &r[], double &g[]) const
+   {
+      ArrayResize(g, FXAI_MOE_E);
+      double z[FXAI_MOE_E];
+      double m = -DBL_MAX;
+      for(int e=0; e<FXAI_MOE_E; e++)
+      {
+         z[e] = DotRouter(e, r);
+         if(z[e] > m) m = z[e];
+      }
+      double s = 0.0;
+      for(int e=0; e<FXAI_MOE_E; e++) { g[e] = MathExp(FXAI_Clamp(z[e] - m, -30.0, 30.0)); s += g[e]; }
+      if(s <= 0.0) s = 1.0;
+      for(int e=0; e<FXAI_MOE_E; e++) g[e] /= s;
+   }
+
+   double Quantile90() const
+   {
+      if(m_cal_n <= 8) return 0.40;
+      double tmp[]; ArrayResize(tmp, m_cal_n);
+      for(int i=0; i<m_cal_n; i++) tmp[i] = m_scores[i];
+      ArraySort(tmp);
+      int q = (int)MathFloor(0.90 * (m_cal_n - 1));
+      if(q < 0) q = 0;
+      if(q >= m_cal_n) q = m_cal_n - 1;
+      return tmp[q];
+   }
+
+protected:
+   virtual double PredictProb(const double &x[], const FXAIAIHyperParams &hp)
+   {
+      double probs[3]; double em = 0.0;
+      PredictNativeClassProbs(x, hp, probs, em);
+      return probs[(int)FXAI_LABEL_BUY];
+   }
+
+   virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
+   {
+      double probs[3]; double em = 0.0;
+      PredictNativeClassProbs(x, hp, probs, em);
+      return em;
+   }
+
+   virtual void UpdateWithMove(const int y, const double &x[], const FXAIAIHyperParams &hp, const double move_points)
+   {
+      EnsureInitialized(hp);
+      double r[]; BuildRegime(x, r);
+      double f[]; BuildFeat(x, f);
+      double g[]; RouterSoftmax(r, g);
+      double lr = FXAI_Clamp(hp.lr, 0.0001, 0.03);
+      double l2 = FXAI_Clamp(hp.l2, 0.0, 0.10);
+
+      for(int e=0; e<FXAI_MOE_E; e++)
+      {
+         double ge = g[e];
+         double p_trade = FXAI_Clamp(FXAI_Sigmoid(DotGate(e, f)), 0.001, 0.999);
+         double p_up    = FXAI_Clamp(FXAI_Sigmoid(DotDir(e, f)), 0.001, 0.999);
+         double p_move  = DotMove(e, f);
+         double t_trade = (y == (int)FXAI_LABEL_SKIP ? 0.0 : 1.0);
+         double t_up    = (y == (int)FXAI_LABEL_BUY ? 1.0 : 0.0);
+         double err_trade = (t_trade - p_trade) * ge;
+         double err_up    = (t_up - p_up) * ge;
+         double err_move  = (MathAbs(move_points) - p_move) * ge;
+
+         m_gate[e][0] += lr * (err_trade - l2 * m_gate[e][0]);
+         m_dir[e][0]  += lr * (err_up    - l2 * m_dir[e][0]);
+         m_move[e][0] += lr * 0.20 * (err_move - l2 * m_move[e][0]);
+         int n = MathMin(ArraySize(f), FXAI_AI_WEIGHTS - 1);
+         for(int i=0; i<n; i++)
+         {
+            m_gate[e][i + 1] += lr * (err_trade * f[i] - l2 * m_gate[e][i + 1]);
+            if(y != (int)FXAI_LABEL_SKIP)
+               m_dir[e][i + 1] += lr * (err_up * f[i] - l2 * m_dir[e][i + 1]);
+            m_move[e][i + 1] += lr * 0.20 * (err_move * f[i] - l2 * m_move[e][i + 1]);
+         }
+      }
+
+      double probs[3]; double em = 0.0;
+      PredictNativeClassProbs(x, hp, probs, em);
+      double p_true = probs[(y == (int)FXAI_LABEL_BUY ? (int)FXAI_LABEL_BUY : (y == (int)FXAI_LABEL_SELL ? (int)FXAI_LABEL_SELL : (int)FXAI_LABEL_SKIP))];
+      double score = 1.0 - FXAI_Clamp(p_true, 0.0005, 0.9990);
+      m_scores[m_cal_n % 128] = score;
+      if(m_cal_n < 128) m_cal_n++;
+      m_steps++;
+   }
+
+public:
+   CFXAIAIMoEConformal(void)
+   {
+      m_init = false;
+      m_feat_n = 24;
+      m_steps = 0;
+      m_cal_n = 0;
+      ArrayInitialize(m_scores, 0.40);
+      ArrayInitialize(m_router, 0.0);
+      ArrayInitialize(m_gate, 0.0);
+      ArrayInitialize(m_dir, 0.0);
+      ArrayInitialize(m_move, 0.0);
+   }
+
+   virtual int AIId(void) const { return (int)AI_MOE_CONFORMAL; }
+   virtual string AIName(void) const { return "moe_conformal"; }
+
+   virtual void Reset(void)
+   {
+      CFXAIAIPlugin::Reset();
+      m_init = false;
+      m_steps = 0;
+      m_cal_n = 0;
+      ArrayInitialize(m_scores, 0.40);
+      ArrayInitialize(m_router, 0.0);
+      ArrayInitialize(m_gate, 0.0);
+      ArrayInitialize(m_dir, 0.0);
+      ArrayInitialize(m_move, 0.0);
+   }
+
+   virtual void EnsureInitialized(const FXAIAIHyperParams &hp)
+   {
+      if(m_init) return;
+      m_feat_n = MathMin(32, MathMax(16, FXAI_AI_WEIGHTS - 1));
+      for(int e=0; e<FXAI_MOE_E; e++) m_router[e][e + 1] = 0.10;
+      m_init = true;
+   }
+
+   virtual bool SupportsNativeClassProbs(void) const { return true; }
+
+   virtual bool PredictNativeClassProbs(const double &x[], const FXAIAIHyperParams &hp, double &class_probs[], double &expected_move_points)
+   {
+      EnsureInitialized(hp);
+      double r[]; BuildRegime(x, r);
+      double f[]; BuildFeat(x, f);
+      double g[]; RouterSoftmax(r, g);
+
+      double p_trade = 0.0, p_up = 0.0, p_move = 0.0;
+      for(int e=0; e<FXAI_MOE_E; e++)
+      {
+         double ge = g[e];
+         p_trade += ge * FXAI_Clamp(FXAI_Sigmoid(DotGate(e, f)), 0.001, 0.999);
+         p_up    += ge * FXAI_Clamp(FXAI_Sigmoid(DotDir(e, f)),  0.001, 0.999);
+         p_move  += ge * MathAbs(DotMove(e, f));
+      }
+      expected_move_points = MathMax(p_move, ResolveMinMovePoints());
+
+      double q = Quantile90();
+      double p_buy = p_trade * p_up;
+      double p_sell = p_trade * (1.0 - p_up);
+      double p_skip = 1.0 - p_trade;
+
+      bool allow_buy = (1.0 - p_buy) <= q;
+      bool allow_sell = (1.0 - p_sell) <= q;
+      if(allow_buy == allow_sell)
+      {
+         p_skip = MathMax(p_skip, 0.55);
+         p_buy *= 0.50;
+         p_sell *= 0.50;
+      }
+
+      class_probs[(int)FXAI_LABEL_SELL] = FXAI_Clamp(p_sell, 0.0005, 0.9990);
+      class_probs[(int)FXAI_LABEL_BUY]  = FXAI_Clamp(p_buy,  0.0005, 0.9990);
+      class_probs[(int)FXAI_LABEL_SKIP] = FXAI_Clamp(p_skip, 0.0005, 0.9990);
+      double s = class_probs[0] + class_probs[1] + class_probs[2];
+      if(s <= 0.0) s = 1.0;
+      for(int i=0; i<3; i++) class_probs[i] /= s;
+      return true;
+   }
+};
+
+#endif

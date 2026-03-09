@@ -27,6 +27,12 @@
 #include "Plugins\ai_patchtst.mqh"
 #include "Plugins\ai_chronos.mqh"
 #include "Plugins\ai_timesfm.mqh"
+#include "Plugins\ai_cfx_world.mqh"
+#include "Plugins\ai_loffm.mqh"
+#include "Plugins\ai_trr.mqh"
+#include "Plugins\ai_graphwm.mqh"
+#include "Plugins\ai_moe_conformal.mqh"
+#include "Plugins\ai_retrdiff.mqh"
 
 class CFXAIAIRegistry
 {
@@ -115,6 +121,12 @@ public:
          case (int)AI_XGBOOST: return new CFXAIAIXGBoost();
          case (int)AI_QUANTILE: return new CFXAIAIQuantile();
          case (int)AI_ENHASH: return new CFXAIAIENHash();
+         case (int)AI_CFX_WORLD: return new CFXAIAICFXWorld();
+         case (int)AI_LOFFM: return new CFXAIAILOFFM();
+         case (int)AI_TRR: return new CFXAIAITRR();
+         case (int)AI_GRAPHWM: return new CFXAIAIGraphWM();
+         case (int)AI_MOE_CONFORMAL: return new CFXAIAIMoEConformal();
+         case (int)AI_RETRDIFF: return new CFXAIAIRetrDiff();
          default: return NULL;
       }
    }
