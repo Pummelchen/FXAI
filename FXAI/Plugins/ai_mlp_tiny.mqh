@@ -1897,7 +1897,10 @@ public:
          rw *= ReplayAgeWeight(m_replay_time[p], cur_t);
          if(m_replay_session[p] >= 0 && m_replay_session[p] != cur_sess) rw *= 0.85;
          SetContext(m_replay_time[p], m_replay_cost[p], cur_min);
-         UpdateWeighted(m_replay_y[p], m_replay_x[p], h, rw, m_replay_move[p], true);
+         double replay_x[FXAI_AI_WEIGHTS];
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+            replay_x[i] = m_replay_x[p][i];
+         UpdateWeighted(m_replay_y[p], replay_x, h, rw, m_replay_move[p], true);
       }
 
       SetContext(cur_t, cur_cost, cur_min);

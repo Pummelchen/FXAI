@@ -1157,7 +1157,10 @@ protected:
          int idx = PickHardReplay();
          if(idx < 0) break;
          double rw = FXAI_Clamp(0.75 * m_rep_w[idx], 0.10, 4.00);
-         UpdateWeighted(m_rep_cls[idx], m_rep_x[idx], h, margin_scale, rw, m_rep_move[idx], true);
+         double replay_x[FXAI_AI_WEIGHTS];
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+            replay_x[i] = m_rep_x[idx][i];
+         UpdateWeighted(m_rep_cls[idx], replay_x, h, margin_scale, rw, m_rep_move[idx], true);
       }
    }
 
