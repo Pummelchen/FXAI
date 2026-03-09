@@ -3617,12 +3617,70 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
       FXAIAIHyperParams hp_init;
       FXAI_GetModelHyperParamsRouted(ai_idx, 0, base_h, hp_init);
       runtime.EnsureInitialized(hp_init);
-      FXAI_TrainModelWindowPreparedRouted(ai_idx,
-                                          *runtime,
-                                          i_start,
-                                          i_end,
-                                          warmup_train_epochs,
-                                          primary_samples);
+   }
+
+   // Warm the runtime models across every configured horizon. The online path
+   // uses a single runtime instance per model, so base-horizon-only warmup can
+   // leave routed non-base horizons effectively cold on the first live bars.
+   for(int hi=0; hi<ArraySize(horizons); hi++)
+   {
+      int H = FXAI_ClampHorizon(horizons[hi]);
+      FXAIPreparedSample runtime_samples[];
+      if(H == base_h)
+      {
+         FXAI_CopyPreparedSamples(primary_samples, runtime_samples);
+      }
+      else
+      {
+         FXAI_PrecomputeTrainingSamples(i_start,
+                                       i_end,
+                                       H,
+                                       commission_points,
+                                       cost_buffer_points,
+                                       evThresholdPoints,
+                                       snapshot,
+                                       spread_m1,
+                                       time_arr,
+                                       open_arr,
+                                       high_arr,
+                                       low_arr,
+                                       close_arr,
+                                       time_m5,
+                                       close_m5,
+                                       map_m5,
+                                       time_m15,
+                                       close_m15,
+                                       map_m15,
+                                       time_m30,
+                                       close_m30,
+                                       map_m30,
+                                       time_h1,
+                                       close_h1,
+                                       map_h1,
+                                       ctx_mean_arr,
+                                       ctx_std_arr,
+                                       ctx_up_arr,
+                                       ctx_extra_arr,
+                                       runtime_samples);
+      }
+
+      for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
+      {
+         CFXAIAIPlugin *runtime = g_plugins.Get(ai_idx);
+         if(runtime == NULL) continue;
+
+         FXAI_TrainModelWindowPreparedRouted(ai_idx,
+                                             *runtime,
+                                             i_start,
+                                             i_end,
+                                             warmup_train_epochs,
+                                             runtime_samples);
+      }
+   }
+
+   for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
+   {
+      if(g_plugins.Get(ai_idx) == NULL) continue;
       g_ai_trained[ai_idx] = true;
       g_ai_last_train_bar[ai_idx] = bar_time;
    }
@@ -5755,16 +5813,15 @@ int SpecialDirectionAI(const string symbol)
          double stack_buy_ev = ((2.0 * ensemble_probs[(int)FXAI_LABEL_BUY]) - 1.0) * MathMax(fallback_expected_move, min_move_pred) - min_move_pred;
          double stack_sell_ev = ((2.0 * ensemble_probs[(int)FXAI_LABEL_SELL]) - 1.0) * MathMax(fallback_expected_move, min_move_pred) - min_move_pred;
 
-         double agree_soft = FXAI_Clamp(agreePct * 0.75, 50.0, 90.0);
          if(ensemble_probs[(int)FXAI_LABEL_SKIP] >= 0.58 || skipPct >= 75.0)
             decision = -1;
          else if(ensemble_probs[(int)FXAI_LABEL_BUY] >= ensemble_probs[(int)FXAI_LABEL_SELL] &&
-                 buyPct >= agree_soft &&
+                 buyPct >= agreePct &&
                  stack_buy_ev >= evThresholdPoints &&
                  avg_buy_ev > avg_sell_ev)
             decision = 1;
          else if(ensemble_probs[(int)FXAI_LABEL_SELL] > ensemble_probs[(int)FXAI_LABEL_BUY] &&
-                 sellPct >= agree_soft &&
+                 sellPct >= agreePct &&
                  stack_sell_ev >= evThresholdPoints &&
                  avg_sell_ev > avg_buy_ev)
             decision = 0;

@@ -123,6 +123,7 @@ bool FXAI_IsInLiquidSession(const string symbol,
    int pad_close = (min_before_close_minutes > 0 ? min_before_close_minutes : 0) * 60;
    bool has_session = false;
 
+   // First check the current trading day.
    for(int session_idx=0; session_idx<10; session_idx++)
    {
       datetime from = 0;
@@ -163,6 +164,29 @@ bool FXAI_IsInLiquidSession(const string symbol,
          if(in_w1 || in_w2)
             return true;
       }
+   }
+
+   // Then check spillover from the previous trading day for sessions that cross midnight.
+   int prev_dow = ts.day_of_week - 1;
+   if(prev_dow < 0) prev_dow = 6;
+   for(int session_idx=0; session_idx<10; session_idx++)
+   {
+      datetime from = 0;
+      datetime to = 0;
+      if(!SymbolInfoSessionTrade(symbol, (ENUM_DAY_OF_WEEK)prev_dow, session_idx, from, to))
+         break;
+
+      has_session = true;
+
+      int from_sec = (int)(from % 86400);
+      int to_sec = (int)(to % 86400);
+      if(from_sec <= to_sec)
+         continue;
+
+      int close_cut = to_sec - pad_close;
+      if(close_cut < 0) close_cut = -1;
+      if(close_cut >= 0 && sec_now <= close_cut)
+         return true;
    }
 
    if(!has_session) return true;
