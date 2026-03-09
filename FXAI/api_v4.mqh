@@ -119,6 +119,33 @@ bool FXAI_ValidatePredictionV4(const FXAIAIPredictionV4 &pred,
    return true;
 }
 
+int FXAI_ResolveManifestSequenceBars(const FXAIAIManifestV4 &manifest,
+                                     const int horizon_minutes)
+{
+   if(!FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_WINDOW_CONTEXT) &&
+      !FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL))
+      return 1;
+
+   int min_seq = manifest.min_sequence_bars;
+   int max_seq = manifest.max_sequence_bars;
+   if(min_seq < 1) min_seq = 1;
+   if(max_seq < min_seq) max_seq = min_seq;
+
+   int h = (horizon_minutes > 0 ? horizon_minutes : 1);
+   int seq = h * 8;
+   if(seq < min_seq) seq = min_seq;
+   if(seq > max_seq) seq = max_seq;
+   return seq;
+}
+
+int FXAI_GetPluginSequenceBars(CFXAIAIPlugin &plugin,
+                               const int horizon_minutes)
+{
+   FXAIAIManifestV4 manifest;
+   plugin.Describe(manifest);
+   return FXAI_ResolveManifestSequenceBars(manifest, horizon_minutes);
+}
+
 void FXAI_TrainViaV4(CFXAIAIPlugin &plugin,
                      const FXAIAITrainRequestV4 &req,
                      const FXAIAIHyperParams &hp)

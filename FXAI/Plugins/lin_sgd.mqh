@@ -525,7 +525,6 @@ public:
 
    }
 
-   virtual bool SupportsCorePrediction(void) const { return true; }
 
    virtual bool PredictModelCore(const double &x[],
                                         const FXAIAIHyperParams &hp,

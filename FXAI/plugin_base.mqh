@@ -134,12 +134,12 @@ protected:
       ctx.regime_id = regime_id;
       ctx.session_bucket = FXAI_DeriveSessionBucket(sample_time);
       ctx.horizon_minutes = horizon_minutes;
-      ctx.feature_schema_id = 1;
-      ctx.normalization_method_id = 0;
-      ctx.sequence_bars = 1;
+      ctx.feature_schema_id = m_ctx_feature_schema_id;
+      ctx.normalization_method_id = m_ctx_normalization_method_id;
+      ctx.sequence_bars = m_ctx_sequence_bars;
       ctx.cost_points = cost_points;
       ctx.min_move_points = min_move_points;
-      ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+      ctx.point_value = m_ctx_point_value;
       ctx.sample_time = sample_time;
       SetContext(ctx);
    }
@@ -787,6 +787,13 @@ public:
       EnsureInitialized(hp);
       SetContext(req.ctx);
 
+      FXAIAIManifestV4 manifest;
+      Describe(manifest);
+      bool can_learn = FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_ONLINE_LEARNING);
+      bool can_replay = can_learn && FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY);
+      if(!can_learn)
+         return;
+
       double pre_probs[3];
       pre_probs[0] = 0.10;
       pre_probs[1] = 0.10;
@@ -799,16 +806,19 @@ public:
       pre_move = MathMax(pre_move, MathMax(req.ctx.min_move_points, 0.10));
 
       double sample_w = (req.sample_weight > 0.0 ? req.sample_weight : MoveSampleWeight(req.x, req.move_points));
-      UpdateContextCalibrationBank(req.label_class, pre_probs, pre_move, req.move_points, sample_w);
+      if(have_pre)
+         UpdateContextCalibrationBank(req.label_class, pre_probs, pre_move, req.move_points, sample_w);
       double replay_pri = ComputeReplayPriority(req.label_class,
                                                 pre_probs,
                                                 req.move_points,
                                                 req.ctx.cost_points,
                                                 req.ctx.min_move_points);
-      StoreReplaySample(req, replay_pri);
+      if(can_replay)
+         StoreReplaySample(req, replay_pri);
 
       TrainModelCore(req.label_class, req.x, hp, req.move_points);
-      RunReplayRehearsal(hp, req.ctx.regime_id, req.ctx.horizon_minutes);
+      if(can_replay)
+         RunReplayRehearsal(hp, req.ctx.regime_id, req.ctx.horizon_minutes);
    }
 
    bool Predict(const FXAIAIPredictRequestV4 &req,

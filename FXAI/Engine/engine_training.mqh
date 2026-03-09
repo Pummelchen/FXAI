@@ -452,7 +452,7 @@ void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
    s3.ctx.normalization_method_id = (int)FXAI_GetModelNormMethodRouted(ai_idx,
                                                                        sample.regime_id,
                                                                        sample.horizon_minutes);
-   s3.ctx.sequence_bars = 1;
+   s3.ctx.sequence_bars = FXAI_GetPluginSequenceBars(plugin, sample.horizon_minutes);
    s3.ctx.cost_points = sample.cost_points;
    s3.ctx.min_move_points = sample.min_move_points;
    s3.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
@@ -714,6 +714,11 @@ void FXAI_TrainModelReplay(const int ai_idx,
                            const int epochs)
 {
    if(epochs <= 0 || g_replay_count <= 0) return;
+
+   FXAIAIManifestV4 manifest;
+   plugin.Describe(manifest);
+   if(!FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY))
+      return;
 
    int hslot = FXAI_GetHorizonSlot(horizon_minutes);
    if(hslot < 0 || hslot >= FXAI_MAX_HORIZONS) hslot = 0;

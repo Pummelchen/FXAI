@@ -1717,7 +1717,6 @@ public:
       FillManifest(out, (int)FXAI_FAMILY_RECURRENT, caps, 16, 128);
 
    }
-   virtual bool SupportsCorePrediction(void) const { return true; }
 
    virtual void Reset(void)
    {

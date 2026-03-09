@@ -338,7 +338,7 @@ bool FXAI_ValidateNativePluginAPI()
       req_v4.ctx.horizon_minutes = 5;
       req_v4.ctx.feature_schema_id = 1;
       req_v4.ctx.normalization_method_id = (int)AI_FeatureNormalization;
-      req_v4.ctx.sequence_bars = 1;
+      req_v4.ctx.sequence_bars = FXAI_GetPluginSequenceBars(*plugin, req_v4.ctx.horizon_minutes);
       req_v4.ctx.cost_points = 0.5;
       req_v4.ctx.min_move_points = 0.8;
       req_v4.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
@@ -373,7 +373,8 @@ bool FXAI_ValidateNativePluginAPI()
    return true;
 }
 
-void FXAI_FillComplianceContext(FXAIAIContextV4 &ctx,
+void FXAI_FillComplianceContext(CFXAIAIPlugin &plugin,
+                                FXAIAIContextV4 &ctx,
                                 const double cost_points,
                                 const datetime sample_time,
                                 const int regime_id,
@@ -385,14 +386,15 @@ void FXAI_FillComplianceContext(FXAIAIContextV4 &ctx,
    ctx.horizon_minutes = horizon_minutes;
    ctx.feature_schema_id = 1;
    ctx.normalization_method_id = (int)AI_FeatureNormalization;
-   ctx.sequence_bars = 1;
+    ctx.sequence_bars = FXAI_GetPluginSequenceBars(plugin, horizon_minutes);
    ctx.min_move_points = MathMax(cost_points + 0.30, 0.50);
    ctx.cost_points = MathMax(cost_points, 0.0);
    ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
    ctx.sample_time = sample_time;
 }
 
-void FXAI_FillComplianceTrainRequest(FXAIAITrainRequestV4 &req,
+void FXAI_FillComplianceTrainRequest(CFXAIAIPlugin &plugin,
+                                     FXAIAITrainRequestV4 &req,
                                      const int label_class,
                                      const double move_points,
                                      const double cost_points,
@@ -404,7 +406,7 @@ void FXAI_FillComplianceTrainRequest(FXAIAITrainRequestV4 &req,
                                      const int horizon_minutes)
 {
    req.valid = true;
-   FXAI_FillComplianceContext(req.ctx, cost_points, sample_time, regime_id, horizon_minutes);
+   FXAI_FillComplianceContext(plugin, req.ctx, cost_points, sample_time, regime_id, horizon_minutes);
    req.label_class = label_class;
    req.move_points = move_points;
    req.sample_weight = 1.0;
@@ -420,7 +422,8 @@ void FXAI_FillComplianceTrainRequest(FXAIAITrainRequestV4 &req,
    req.x[7] = req.ctx.cost_points;
 }
 
-void FXAI_FillCompliancePredictRequest(FXAIAIPredictRequestV4 &req,
+void FXAI_FillCompliancePredictRequest(CFXAIAIPlugin &plugin,
+                                       FXAIAIPredictRequestV4 &req,
                                        const double cost_points,
                                        const double v1,
                                        const double v2,
@@ -430,7 +433,7 @@ void FXAI_FillCompliancePredictRequest(FXAIAIPredictRequestV4 &req,
                                        const int horizon_minutes)
 {
    req.valid = true;
-   FXAI_FillComplianceContext(req.ctx, cost_points, sample_time, regime_id, horizon_minutes);
+   FXAI_FillComplianceContext(plugin, req.ctx, cost_points, sample_time, regime_id, horizon_minutes);
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
       req.x[k] = 0.0;
    req.x[0] = 1.0;
@@ -527,12 +530,12 @@ bool FXAI_RunStateResetCompliance(CFXAIAIPlugin &plugin,
    int horizon = FXAI_ComplianceHorizon(manifest, 5);
 
    FXAIAITrainRequestV4 train_req;
-   FXAI_FillComplianceTrainRequest(train_req, (int)FXAI_LABEL_BUY, 5.5, 0.8,
+   FXAI_FillComplianceTrainRequest(plugin, train_req, (int)FXAI_LABEL_BUY, 5.5, 0.8,
                                    0.80, 0.45, 0.20, now_t - 90, 2, horizon);
    train_req.ctx.sequence_bars = seq;
 
    FXAIAIPredictRequestV4 pred_req;
-   FXAI_FillCompliancePredictRequest(pred_req, 0.8, 0.80, 0.45, 0.20, now_t - 30, 2, horizon);
+   FXAI_FillCompliancePredictRequest(plugin, pred_req, 0.8, 0.80, 0.45, 0.20, now_t - 30, 2, horizon);
    pred_req.ctx.sequence_bars = seq;
 
    for(int i=0; i<6; i++)
@@ -575,13 +578,13 @@ bool FXAI_RunSequenceWindowCompliance(CFXAIAIPlugin &plugin,
    int horizon = FXAI_ComplianceHorizon(manifest, 13);
 
    FXAIAITrainRequestV4 train_req;
-   FXAI_FillComplianceTrainRequest(train_req, (int)FXAI_LABEL_SELL, -5.0, 0.9,
+   FXAI_FillComplianceTrainRequest(plugin, train_req, (int)FXAI_LABEL_SELL, -5.0, 0.9,
                                    -0.75, -0.42, -0.18, now_t - 150, 3, horizon);
    train_req.ctx.sequence_bars = seq;
 
    FXAIAIPredictRequestV4 pred_req_seq, pred_req_one;
-   FXAI_FillCompliancePredictRequest(pred_req_seq, 0.9, -0.75, -0.42, -0.18, now_t - 10, 3, horizon);
-   FXAI_FillCompliancePredictRequest(pred_req_one, 0.9, -0.75, -0.42, -0.18, now_t - 10, 3, horizon);
+   FXAI_FillCompliancePredictRequest(plugin, pred_req_seq, 0.9, -0.75, -0.42, -0.18, now_t - 10, 3, horizon);
+   FXAI_FillCompliancePredictRequest(plugin, pred_req_one, 0.9, -0.75, -0.42, -0.18, now_t - 10, 3, horizon);
    pred_req_seq.ctx.sequence_bars = seq;
    pred_req_one.ctx.sequence_bars = 1;
 
@@ -629,7 +632,7 @@ bool FXAI_RunCalibrationDriftCompliance(CFXAIAIPlugin &plugin,
                     (cls == (int)FXAI_LABEL_SELL ? -(5.0 + 0.04 * step) : 0.15 + 0.002 * step));
 
       FXAIAITrainRequestV4 train_req;
-      FXAI_FillComplianceTrainRequest(train_req, cls, move, cost,
+      FXAI_FillComplianceTrainRequest(plugin, train_req, cls, move, cost,
                                       v1, v2, v3,
                                       now_t - (step * 60), regime, horizon);
       train_req.ctx.sequence_bars = seq;
@@ -639,9 +642,9 @@ bool FXAI_RunCalibrationDriftCompliance(CFXAIAIPlugin &plugin,
          continue;
 
       FXAIAIPredictRequestV4 pred_buy, pred_sell, pred_skip;
-      FXAI_FillCompliancePredictRequest(pred_buy, 0.7, 0.82, 0.46, 0.21, now_t + step, regime, base_h);
-      FXAI_FillCompliancePredictRequest(pred_sell, 0.7, -0.82, -0.46, -0.21, now_t + step, regime, alt_h);
-      FXAI_FillCompliancePredictRequest(pred_skip, 1.2, 0.02, 0.01, 0.00, now_t + step, regime, base_h);
+      FXAI_FillCompliancePredictRequest(plugin, pred_buy, 0.7, 0.82, 0.46, 0.21, now_t + step, regime, base_h);
+      FXAI_FillCompliancePredictRequest(plugin, pred_sell, 0.7, -0.82, -0.46, -0.21, now_t + step, regime, alt_h);
+      FXAI_FillCompliancePredictRequest(plugin, pred_skip, 1.2, 0.02, 0.01, 0.00, now_t + step, regime, base_h);
       pred_buy.ctx.sequence_bars = seq;
       pred_sell.ctx.sequence_bars = seq;
       pred_skip.ctx.sequence_bars = seq;
@@ -707,10 +710,10 @@ bool FXAI_RunPluginComplianceHarness()
       }
 
       FXAIAITrainRequestV4 buy_s, sell_s, skip_s, buy_big_s;
-      FXAI_FillComplianceTrainRequest(buy_s, (int)FXAI_LABEL_BUY, 4.5, 0.8, 0.75, 0.40, 0.20, now_t - 180, 1, 5);
-      FXAI_FillComplianceTrainRequest(sell_s, (int)FXAI_LABEL_SELL, -4.5, 0.8, -0.75, -0.40, -0.20, now_t - 120, 1, 5);
-      FXAI_FillComplianceTrainRequest(skip_s, (int)FXAI_LABEL_SKIP, 0.2, 0.8, 0.02, 0.01, 0.00, now_t - 60, 1, 5);
-      FXAI_FillComplianceTrainRequest(buy_big_s, (int)FXAI_LABEL_BUY, 8.0, 0.8, 1.20, 0.65, 0.35, now_t - 30, 1, 13);
+      FXAI_FillComplianceTrainRequest(*plugin, buy_s, (int)FXAI_LABEL_BUY, 4.5, 0.8, 0.75, 0.40, 0.20, now_t - 180, 1, 5);
+      FXAI_FillComplianceTrainRequest(*plugin, sell_s, (int)FXAI_LABEL_SELL, -4.5, 0.8, -0.75, -0.40, -0.20, now_t - 120, 1, 5);
+      FXAI_FillComplianceTrainRequest(*plugin, skip_s, (int)FXAI_LABEL_SKIP, 0.2, 0.8, 0.02, 0.01, 0.00, now_t - 60, 1, 5);
+      FXAI_FillComplianceTrainRequest(*plugin, buy_big_s, (int)FXAI_LABEL_BUY, 8.0, 0.8, 1.20, 0.65, 0.35, now_t - 30, 1, 13);
 
       for(int rep=0; rep<10; rep++)
       {
@@ -721,11 +724,11 @@ bool FXAI_RunPluginComplianceHarness()
       }
 
       FXAIAIPredictRequestV4 req_buy_lo, req_buy_hi, req_sell_lo, req_skip_lo, req_buy_big;
-      FXAI_FillCompliancePredictRequest(req_buy_lo, 0.8, 0.75, 0.40, 0.20, now_t, 1, 5);
-      FXAI_FillCompliancePredictRequest(req_buy_hi, 3.5, 0.75, 0.40, 0.20, now_t, 1, 5);
-      FXAI_FillCompliancePredictRequest(req_sell_lo, 0.8, -0.75, -0.40, -0.20, now_t, 1, 5);
-      FXAI_FillCompliancePredictRequest(req_skip_lo, 0.8, 0.02, 0.01, 0.00, now_t, 1, 5);
-      FXAI_FillCompliancePredictRequest(req_buy_big, 0.8, 1.20, 0.65, 0.35, now_t, 1, 13);
+      FXAI_FillCompliancePredictRequest(*plugin, req_buy_lo, 0.8, 0.75, 0.40, 0.20, now_t, 1, 5);
+      FXAI_FillCompliancePredictRequest(*plugin, req_buy_hi, 3.5, 0.75, 0.40, 0.20, now_t, 1, 5);
+      FXAI_FillCompliancePredictRequest(*plugin, req_sell_lo, 0.8, -0.75, -0.40, -0.20, now_t, 1, 5);
+      FXAI_FillCompliancePredictRequest(*plugin, req_skip_lo, 0.8, 0.02, 0.01, 0.00, now_t, 1, 5);
+      FXAI_FillCompliancePredictRequest(*plugin, req_buy_big, 0.8, 1.20, 0.65, 0.35, now_t, 1, 13);
 
       FXAIAIPredictionV4 pred_buy_lo, pred_buy_hi, pred_sell_lo, pred_skip_lo, pred_buy_big;
       FXAI_PredictViaV4(*plugin, req_buy_lo, hp, pred_buy_lo);

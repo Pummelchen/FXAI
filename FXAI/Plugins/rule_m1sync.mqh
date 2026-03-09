@@ -141,7 +141,7 @@ public:
 
    {
 
-      const ulong caps = (ulong)(FXAI_CAP_MULTI_HORIZON|FXAI_CAP_SELF_TEST);
+      const ulong caps = (ulong)(FXAI_CAP_ONLINE_LEARNING|FXAI_CAP_MULTI_HORIZON|FXAI_CAP_SELF_TEST);
 
       FillManifest(out, (int)FXAI_FAMILY_RULE_BASED, caps, 1, 1);
 
@@ -161,10 +161,6 @@ public:
       m_init = true;
    }
 
-   virtual bool SupportsCorePrediction(void) const
-   {
-      return true;
-   }
 
    virtual bool PredictModelCore(const double &x[],
                                         const FXAIAIHyperParams &hp,

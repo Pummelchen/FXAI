@@ -243,7 +243,6 @@ public:
       m_init = true;
    }
 
-   virtual bool SupportsCorePrediction(void) const { return true; }
 
    virtual bool PredictModelCore(const double &x[], const FXAIAIHyperParams &hp, double &class_probs[], double &expected_move_points)
    {

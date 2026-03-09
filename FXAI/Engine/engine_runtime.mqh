@@ -792,7 +792,7 @@ int SpecialDirectionAI(const string symbol)
       req.ctx.feature_schema_id = 1;
       int method_id = (int)FXAI_GetModelNormMethodRouted(ai_idx, regime_id, H);
       req.ctx.normalization_method_id = method_id;
-      req.ctx.sequence_bars = 1;
+      req.ctx.sequence_bars = FXAI_GetPluginSequenceBars(*plugin, H);
       req.ctx.min_move_points = min_move_pred;
       req.ctx.cost_points = min_move_pred;
       req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);

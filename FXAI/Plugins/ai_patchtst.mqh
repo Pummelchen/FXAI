@@ -901,7 +901,6 @@ public:
       FillManifest(out, (int)FXAI_FAMILY_TRANSFORMER, caps, 24, 256);
 
    }
-   virtual bool SupportsCorePrediction(void) const { return true; }
 
    virtual void Reset(void)
    {

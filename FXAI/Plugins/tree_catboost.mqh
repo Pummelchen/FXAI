@@ -1644,7 +1644,6 @@ public:
       FillManifest(out, (int)FXAI_FAMILY_TREE, caps, 1, 1);
 
    }
-   virtual bool SupportsCorePrediction(void) const { return true; }
 
    virtual void Reset(void)
    {

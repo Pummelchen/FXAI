@@ -104,7 +104,7 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
          s3.ctx.horizon_minutes = samples[i].horizon_minutes;
          s3.ctx.feature_schema_id = 1;
          s3.ctx.normalization_method_id = (int)AI_FeatureNormalization;
-         s3.ctx.sequence_bars = 1;
+         s3.ctx.sequence_bars = FXAI_GetPluginSequenceBars(*trial, samples[i].horizon_minutes);
          s3.ctx.cost_points = samples[i].cost_points;
          s3.ctx.min_move_points = samples[i].min_move_points;
          s3.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
@@ -717,7 +717,7 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
       req.ctx.horizon_minutes = score_h;
       req.ctx.feature_schema_id = 1;
       req.ctx.normalization_method_id = (int)AI_FeatureNormalization;
-      req.ctx.sequence_bars = 1;
+      req.ctx.sequence_bars = FXAI_GetPluginSequenceBars(plugin, score_h);
       req.ctx.cost_points = samples[i].cost_points;
       req.ctx.min_move_points = samples[i].min_move_points;
       req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
@@ -843,7 +843,7 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
       req.ctx.normalization_method_id = (int)FXAI_GetModelNormMethodRouted(ai_idx,
                                                                            eval_sample.regime_id,
                                                                            score_h);
-      req.ctx.sequence_bars = 1;
+      req.ctx.sequence_bars = FXAI_GetPluginSequenceBars(plugin, score_h);
       req.ctx.cost_points = eval_sample.cost_points;
       req.ctx.min_move_points = eval_sample.min_move_points;
       req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
@@ -1296,7 +1296,7 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             req.ctx.normalization_method_id = (int)FXAI_GetModelNormMethodRouted(ai_idx,
                                                                                  pred_sample.regime_id,
                                                                                  pred_sample.horizon_minutes);
-            req.ctx.sequence_bars = 1;
+            req.ctx.sequence_bars = FXAI_GetPluginSequenceBars(*plugin, pred_sample.horizon_minutes);
             req.ctx.cost_points = pred_sample.cost_points;
             req.ctx.min_move_points = pred_sample.min_move_points;
             req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
