@@ -20,14 +20,19 @@ protected:
    double m_iso_pos[12];
    double m_iso_cnt[12];
 
-   // V3 context payload (set by TrainV3/PredictV3).
+   // V4 context payload (set by Train/Predict).
    bool     m_ctx_time_ready;
    datetime m_ctx_time;
    bool     m_ctx_cost_ready;
    double   m_ctx_cost_points;
    double   m_ctx_min_move_points;
    int      m_ctx_regime_id;
+   int      m_ctx_session_bucket;
    int      m_ctx_horizon_minutes;
+   int      m_ctx_feature_schema_id;
+   int      m_ctx_normalization_method_id;
+   int      m_ctx_sequence_bars;
+   double   m_ctx_point_value;
 
    double m_bank_class_mass[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS][3];
    double m_bank_total[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
@@ -48,8 +53,8 @@ protected:
    int      m_replay_horizon[FXAI_PLUGIN_REPLAY_CAPACITY];
    double   m_replay_priority[FXAI_PLUGIN_REPLAY_CAPACITY];
 
-   int      m_native_predict_calls;
-   int      m_native_predict_failures;
+   int      m_core_predict_calls;
+   int      m_core_predict_failures;
    int      m_expected_prior_calls;
    int      m_replay_rehearsals;
 
@@ -74,10 +79,48 @@ protected:
       return 0.0;
    }
 
+   double ResolvePointValue(void) const
+   {
+      if(MathIsValidNumber(m_ctx_point_value) && m_ctx_point_value > 0.0)
+         return m_ctx_point_value;
+      return (_Point > 0.0 ? _Point : 1.0);
+   }
+
    datetime ResolveContextTime(void) const
    {
       if(m_ctx_time_ready && m_ctx_time > 0) return m_ctx_time;
       return TimeCurrent();
+   }
+
+   void SetContext(const FXAIAIContextV4 &ctx)
+   {
+      m_ctx_time_ready = (ctx.sample_time > 0);
+      m_ctx_time = (m_ctx_time_ready ? ctx.sample_time : 0);
+
+      m_ctx_cost_ready = (MathIsValidNumber(ctx.cost_points) && ctx.cost_points >= 0.0);
+      m_ctx_cost_points = (m_ctx_cost_ready ? ctx.cost_points : 0.0);
+
+      if(MathIsValidNumber(ctx.min_move_points) && ctx.min_move_points > 0.0)
+         m_ctx_min_move_points = ctx.min_move_points;
+      else
+         m_ctx_min_move_points = 0.0;
+
+      if(ctx.regime_id >= 0 && ctx.regime_id < FXAI_PLUGIN_REGIME_BUCKETS)
+         m_ctx_regime_id = ctx.regime_id;
+      else
+         m_ctx_regime_id = 0;
+
+      if(ctx.session_bucket >= 0 && ctx.session_bucket < FXAI_PLUGIN_SESSION_BUCKETS)
+         m_ctx_session_bucket = ctx.session_bucket;
+      else
+         m_ctx_session_bucket = FXAI_DeriveSessionBucket(ctx.sample_time);
+
+      m_ctx_horizon_minutes = (ctx.horizon_minutes > 0 ? ctx.horizon_minutes : 1);
+      m_ctx_feature_schema_id = (ctx.feature_schema_id > 0 ? ctx.feature_schema_id : 1);
+      m_ctx_normalization_method_id = ctx.normalization_method_id;
+      m_ctx_sequence_bars = (ctx.sequence_bars > 0 ? ctx.sequence_bars : 1);
+      m_ctx_point_value = (MathIsValidNumber(ctx.point_value) && ctx.point_value > 0.0
+                           ? ctx.point_value : (_Point > 0.0 ? _Point : 1.0));
    }
 
    void SetContext(const datetime sample_time,
@@ -86,23 +129,19 @@ protected:
                    const int regime_id,
                    const int horizon_minutes)
    {
-      m_ctx_time_ready = (sample_time > 0);
-      m_ctx_time = (m_ctx_time_ready ? sample_time : 0);
-
-      m_ctx_cost_ready = (MathIsValidNumber(cost_points) && cost_points >= 0.0);
-      m_ctx_cost_points = (m_ctx_cost_ready ? cost_points : 0.0);
-
-      if(MathIsValidNumber(min_move_points) && min_move_points > 0.0)
-         m_ctx_min_move_points = min_move_points;
-      else
-         m_ctx_min_move_points = 0.0;
-
-      if(regime_id >= 0 && regime_id < FXAI_PLUGIN_REGIME_BUCKETS)
-         m_ctx_regime_id = regime_id;
-      else
-         m_ctx_regime_id = 0;
-
-      m_ctx_horizon_minutes = (horizon_minutes > 0 ? horizon_minutes : 1);
+      FXAIAIContextV4 ctx;
+      ctx.api_version = FXAI_API_VERSION_V4;
+      ctx.regime_id = regime_id;
+      ctx.session_bucket = FXAI_DeriveSessionBucket(sample_time);
+      ctx.horizon_minutes = horizon_minutes;
+      ctx.feature_schema_id = 1;
+      ctx.normalization_method_id = 0;
+      ctx.sequence_bars = 1;
+      ctx.cost_points = cost_points;
+      ctx.min_move_points = min_move_points;
+      ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+      ctx.sample_time = sample_time;
+      SetContext(ctx);
    }
 
    int NormalizeClassLabel(const int y,
@@ -148,7 +187,12 @@ protected:
       m_ctx_cost_points = 0.0;
       m_ctx_min_move_points = 0.0;
       m_ctx_regime_id = 0;
+      m_ctx_session_bucket = 0;
       m_ctx_horizon_minutes = 1;
+      m_ctx_feature_schema_id = 1;
+      m_ctx_normalization_method_id = 0;
+      m_ctx_sequence_bars = 1;
+      m_ctx_point_value = (_Point > 0.0 ? _Point : 1.0);
 
       for(int r=0; r<FXAI_PLUGIN_REGIME_BUCKETS; r++)
       {
@@ -183,8 +227,8 @@ protected:
             m_replay_x[i][k] = 0.0;
       }
 
-      m_native_predict_calls = 0;
-      m_native_predict_failures = 0;
+      m_core_predict_calls = 0;
+      m_core_predict_failures = 0;
       m_expected_prior_calls = 0;
       m_replay_rehearsals = 0;
    }
@@ -342,15 +386,9 @@ protected:
 
    int ContextSessionBucket(void) const
    {
-      MqlDateTime dt;
-      TimeToStruct(ResolveContextTime(), dt);
-      int hour = dt.hour;
-      if(hour < 0) hour = 0;
-      if(hour > 23) hour = 23;
-      int bucket = hour / 4;
-      if(bucket < 0) bucket = 0;
-      if(bucket >= FXAI_PLUGIN_SESSION_BUCKETS) bucket = FXAI_PLUGIN_SESSION_BUCKETS - 1;
-      return bucket;
+      if(m_ctx_session_bucket >= 0 && m_ctx_session_bucket < FXAI_PLUGIN_SESSION_BUCKETS)
+         return m_ctx_session_bucket;
+      return FXAI_DeriveSessionBucket(ResolveContextTime());
    }
 
    int ContextHorizonBucket(void) const
@@ -364,6 +402,21 @@ protected:
       if(h <= 21) return 5;
       if(h <= 34) return 6;
       return FXAI_PLUGIN_HORIZON_BUCKETS - 1;
+   }
+
+   void BuildCurrentContext(FXAIAIContextV4 &ctx) const
+   {
+      ctx.api_version = FXAI_API_VERSION_V4;
+      ctx.regime_id = m_ctx_regime_id;
+      ctx.session_bucket = ContextSessionBucket();
+      ctx.horizon_minutes = m_ctx_horizon_minutes;
+      ctx.feature_schema_id = m_ctx_feature_schema_id;
+      ctx.normalization_method_id = m_ctx_normalization_method_id;
+      ctx.sequence_bars = m_ctx_sequence_bars;
+      ctx.cost_points = m_ctx_cost_points;
+      ctx.min_move_points = m_ctx_min_move_points;
+      ctx.point_value = ResolvePointValue();
+      ctx.sample_time = ResolveContextTime();
    }
 
    void NormalizeClassDistribution(double &probs[]) const
@@ -505,7 +558,7 @@ protected:
       return FXAI_Clamp(pri, 0.10, 8.00);
    }
 
-   void StoreReplaySample(const FXAIAITrainRequestV3 &sample,
+   void StoreReplaySample(const FXAIAITrainRequestV4 &sample,
                           const double priority)
    {
       int slot = m_replay_head;
@@ -567,7 +620,12 @@ protected:
       bool keep_cost_ready = m_ctx_cost_ready;
       double keep_min_move = m_ctx_min_move_points;
       int keep_regime = m_ctx_regime_id;
+      int keep_session = m_ctx_session_bucket;
       int keep_horizon = m_ctx_horizon_minutes;
+      int keep_feature_schema = m_ctx_feature_schema_id;
+      int keep_norm_method = m_ctx_normalization_method_id;
+      int keep_sequence_bars = m_ctx_sequence_bars;
+      double keep_point_value = m_ctx_point_value;
 
       for(int j=0; j<FXAI_PLUGIN_REPLAY_STEPS; j++)
       {
@@ -581,7 +639,7 @@ protected:
          double replay_x[FXAI_AI_WEIGHTS];
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
             replay_x[k] = m_replay_x[idx][k];
-         UpdateWithMove(m_replay_label[idx], replay_x, hp, m_replay_move[idx]);
+         TrainModelCore(m_replay_label[idx], replay_x, hp, m_replay_move[idx]);
          m_replay_rehearsals++;
       }
 
@@ -591,10 +649,15 @@ protected:
       m_ctx_cost_points = keep_cost;
       m_ctx_min_move_points = keep_min_move;
       m_ctx_regime_id = keep_regime;
+      m_ctx_session_bucket = keep_session;
       m_ctx_horizon_minutes = keep_horizon;
+      m_ctx_feature_schema_id = keep_feature_schema;
+      m_ctx_normalization_method_id = keep_norm_method;
+      m_ctx_sequence_bars = keep_sequence_bars;
+      m_ctx_point_value = keep_point_value;
    }
 
-   int DefaultFamilyV3(void) const
+   int DefaultFamily(void) const
    {
       switch(AIId())
       {
@@ -653,7 +716,7 @@ protected:
       }
    }
 
-   ulong DefaultFeatureGroupsMaskV3(void) const
+   ulong DefaultFeatureGroupsMask(void) const
    {
       ulong mask = 0;
       mask |= ((ulong)1 << (int)FXAI_FEAT_GROUP_PRICE);
@@ -666,48 +729,102 @@ protected:
       return mask;
    }
 
-   void FillDefaultManifestV3(FXAIAIManifestV3 &out) const
+   ulong DefaultCapabilityMask(void) const
    {
-      out.api_version = FXAI_API_VERSION_V3;
-      out.ai_id = AIId();
-      out.ai_name = AIName();
-      out.family = DefaultFamilyV3();
-      out.supports_native_3class = SupportsNativeClassProbs();
-      out.supports_distributional_move = true;
-      out.supports_online_learning = true;
-      out.supports_replay = true;
-      out.supports_state = (out.family == (int)FXAI_FAMILY_RECURRENT ||
-                            out.family == (int)FXAI_FAMILY_CONVOLUTIONAL ||
-                            out.family == (int)FXAI_FAMILY_TRANSFORMER ||
-                            out.family == (int)FXAI_FAMILY_STATE_SPACE ||
-                            out.family == (int)FXAI_FAMILY_WORLD_MODEL);
-      out.supports_window_context = out.supports_state;
-      out.supports_multi_horizon = true;
-      out.feature_schema_id = 1;
-      out.feature_groups_mask = DefaultFeatureGroupsMaskV3();
-      out.min_horizon_minutes = 1;
-      out.max_horizon_minutes = 720;
+      ulong caps = 0;
+      caps |= (ulong)FXAI_CAP_ONLINE_LEARNING;
+      caps |= (ulong)FXAI_CAP_REPLAY;
+      caps |= (ulong)FXAI_CAP_MULTI_HORIZON;
+      caps |= (ulong)FXAI_CAP_SELF_TEST;
+
+      int family = DefaultFamily();
+      if(family == (int)FXAI_FAMILY_RECURRENT ||
+         family == (int)FXAI_FAMILY_CONVOLUTIONAL ||
+         family == (int)FXAI_FAMILY_TRANSFORMER ||
+         family == (int)FXAI_FAMILY_STATE_SPACE ||
+         family == (int)FXAI_FAMILY_WORLD_MODEL)
+      {
+         caps |= (ulong)FXAI_CAP_STATEFUL;
+         caps |= (ulong)FXAI_CAP_WINDOW_CONTEXT;
+      }
+      return caps;
    }
 
-   void FillPredictionV3(const double &class_probs[],
-                         const double move_mean_points,
-                         FXAIAIPredictionV3 &dst) const
+   void FillDefaultManifest(FXAIAIManifestV4 &out) const
+   {
+      out.api_version = FXAI_API_VERSION_V4;
+      out.ai_id = AIId();
+      out.ai_name = AIName();
+      out.family = DefaultFamily();
+      out.capability_mask = DefaultCapabilityMask();
+      out.feature_schema_id = 1;
+      out.feature_groups_mask = DefaultFeatureGroupsMask();
+      out.min_horizon_minutes = 1;
+      out.max_horizon_minutes = 720;
+      out.min_sequence_bars = 1;
+      out.max_sequence_bars = 1;
+   }
+
+   void ResetModelOutput(FXAIAIModelOutputV4 &out) const
+   {
+      out.class_probs[0] = 0.10;
+      out.class_probs[1] = 0.10;
+      out.class_probs[2] = 0.80;
+      out.move_mean_points = MathMax(ResolveMinMovePoints(), 0.10);
+      out.move_q25_points = 0.0;
+      out.move_q50_points = 0.0;
+      out.move_q75_points = 0.0;
+      out.confidence = 0.0;
+      out.reliability = 0.0;
+      out.has_quantiles = false;
+      out.has_confidence = false;
+   }
+
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      ResetModelOutput(out);
+      double move_mean_points = out.move_mean_points;
+      if(!PredictModelCore(x, hp, out.class_probs, move_mean_points))
+         return false;
+      out.move_mean_points = MathMax(move_mean_points, MathMax(ResolveMinMovePoints(), 0.10));
+      return true;
+   }
+
+   void FillPredictionV4(const FXAIAIModelOutputV4 &model_out,
+                         const double calibrated_move_mean_points,
+                         FXAIAIPredictionV4 &dst) const
    {
       for(int c=0; c<3; c++)
-         dst.class_probs[c] = class_probs[c];
+         dst.class_probs[c] = model_out.class_probs[c];
 
       double buy_p = dst.class_probs[(int)FXAI_LABEL_BUY];
       double sell_p = dst.class_probs[(int)FXAI_LABEL_SELL];
       double skip_p = dst.class_probs[(int)FXAI_LABEL_SKIP];
       double directional_conf = MathMax(buy_p, sell_p);
       double uncertainty = FXAI_Clamp(1.0 - directional_conf + 0.50 * skip_p, 0.10, 1.50);
-      double mean_move = MathMax(move_mean_points, ResolveMinMovePoints());
+      double mean_move = MathMax(calibrated_move_mean_points, ResolveMinMovePoints());
 
       dst.move_mean_points = mean_move;
-      dst.move_q25_points = MathMax(ResolveMinMovePoints(), mean_move * MathMax(0.25, 1.0 - 0.45 * uncertainty));
-      dst.move_q75_points = MathMax(dst.move_q25_points, mean_move * (1.0 + 0.45 * uncertainty));
-      dst.confidence = FXAI_Clamp(directional_conf, 0.0, 1.0);
-      dst.calibration_confidence = FXAI_Clamp(1.0 - 0.50 * skip_p, 0.0, 1.0);
+      double raw_mean = MathMax(model_out.move_mean_points, ResolveMinMovePoints());
+      double scale = (raw_mean > 1e-9 ? mean_move / raw_mean : 1.0);
+
+      if(model_out.has_quantiles)
+      {
+         dst.move_q25_points = MathMax(ResolveMinMovePoints(), model_out.move_q25_points * scale);
+         dst.move_q50_points = MathMax(dst.move_q25_points, model_out.move_q50_points * scale);
+         dst.move_q75_points = MathMax(dst.move_q50_points, model_out.move_q75_points * scale);
+      }
+      else
+      {
+         dst.move_q25_points = MathMax(ResolveMinMovePoints(), mean_move * MathMax(0.25, 1.0 - 0.45 * uncertainty));
+         dst.move_q50_points = mean_move;
+         dst.move_q75_points = MathMax(dst.move_q50_points, mean_move * (1.0 + 0.45 * uncertainty));
+      }
+
+      dst.confidence = FXAI_Clamp(model_out.has_confidence ? model_out.confidence : directional_conf, 0.0, 1.0);
+      dst.reliability = FXAI_Clamp(model_out.has_confidence ? model_out.reliability : (1.0 - 0.50 * skip_p), 0.0, 1.0);
    }
 
 public:
@@ -715,49 +832,41 @@ public:
 
    virtual int AIId(void) const = 0;
    virtual string AIName(void) const = 0;
-   virtual int APIVersion(void) const { return FXAI_API_VERSION_V3; }
 
    virtual void Reset(void) { ResetAuxState(); }
-   virtual void DescribeV3(FXAIAIManifestV3 &out) const { FillDefaultManifestV3(out); }
-   virtual void ResetStateV3(const int reason, const datetime when)
+   virtual void Describe(FXAIAIManifestV4 &out) const { FillDefaultManifest(out); }
+   virtual void ResetState(const int reason, const datetime when)
    {
       Reset();
    }
-   virtual bool SelfTestV3(void)
+   virtual bool SelfTest(void)
    {
-      FXAIAIManifestV3 manifest;
-      DescribeV3(manifest);
-      return (manifest.api_version == FXAI_API_VERSION_V3 && manifest.supports_native_3class);
+      FXAIAIManifestV4 manifest;
+      Describe(manifest);
+      return (manifest.api_version == FXAI_API_VERSION_V4 &&
+              manifest.ai_id == AIId() &&
+              StringLen(manifest.ai_name) > 0);
    }
    virtual void EnsureInitialized(const FXAIAIHyperParams &hp) {}
-   virtual bool SupportsNativeClassProbs(void) const = 0;
-   virtual bool PredictNativeClassProbs(const double &x[],
-                                        const FXAIAIHyperParams &hp,
-                                        double &class_probs[],
-                                        double &expected_move_points) = 0;
 
-   int NativePredictFailures(void) const { return m_native_predict_failures; }
+   int CorePredictFailures(void) const { return m_core_predict_failures; }
    int ExpectedPriorCalls(void) const { return m_expected_prior_calls; }
    int ReplayRehearsals(void) const { return m_replay_rehearsals; }
 
-   void TrainV3(const FXAIAITrainRequestV3 &req, const FXAIAIHyperParams &hp)
+   void Train(const FXAIAITrainRequestV4 &req, const FXAIAIHyperParams &hp)
    {
       if(!req.valid) return;
       EnsureInitialized(hp);
-      SetContext(req.ctx.sample_time,
-                 req.ctx.cost_points,
-                 req.ctx.min_move_points,
-                 req.ctx.regime_id,
-                 req.ctx.horizon_minutes);
+      SetContext(req.ctx);
 
       double pre_probs[3];
       pre_probs[0] = 0.10;
       pre_probs[1] = 0.10;
       pre_probs[2] = 0.80;
       double pre_move = MathMax(req.ctx.min_move_points, 0.10);
-      bool have_pre = PredictNativeClassProbs(req.x, hp, pre_probs, pre_move);
+      bool have_pre = PredictModelCore(req.x, hp, pre_probs, pre_move);
       if(!have_pre)
-         m_native_predict_failures++;
+         m_core_predict_failures++;
       NormalizeClassDistribution(pre_probs);
       pre_move = MathMax(pre_move, MathMax(req.ctx.min_move_points, 0.10));
 
@@ -770,47 +879,47 @@ public:
                                                 req.ctx.min_move_points);
       StoreReplaySample(req, replay_pri);
 
-      UpdateWithMove(req.label_class, req.x, hp, req.move_points);
+      TrainModelCore(req.label_class, req.x, hp, req.move_points);
       RunReplayRehearsal(hp, req.ctx.regime_id, req.ctx.horizon_minutes);
    }
 
-   bool PredictV3(const FXAIAIPredictRequestV3 &req,
-                  const FXAIAIHyperParams &hp,
-                  FXAIAIPredictionV3 &out)
+   bool Predict(const FXAIAIPredictRequestV4 &req,
+                const FXAIAIHyperParams &hp,
+                FXAIAIPredictionV4 &out)
    {
       if(!req.valid) return false;
       EnsureInitialized(hp);
-      SetContext(req.ctx.sample_time,
-                 req.ctx.cost_points,
-                 req.ctx.min_move_points,
-                 req.ctx.regime_id,
-                 req.ctx.horizon_minutes);
+      SetContext(req.ctx);
 
-      double native_probs[3];
-      native_probs[0] = 0.10;
-      native_probs[1] = 0.10;
-      native_probs[2] = 0.80;
-      double native_move = MathMax(req.ctx.min_move_points, 0.10);
-      m_native_predict_calls++;
-      if(!PredictNativeClassProbs(req.x, hp, native_probs, native_move))
+      FXAIAIModelOutputV4 model_out;
+      ResetModelOutput(model_out);
+      m_core_predict_calls++;
+      if(!PredictDistributionCore(req.x, hp, model_out))
       {
-         m_native_predict_failures++;
-         double fail_probs[3];
-         fail_probs[(int)FXAI_LABEL_SELL] = 0.05;
-         fail_probs[(int)FXAI_LABEL_BUY] = 0.05;
-         fail_probs[(int)FXAI_LABEL_SKIP] = 0.90;
-         FillPredictionV3(fail_probs, MathMax(req.ctx.min_move_points, 0.10), out);
+         m_core_predict_failures++;
+         ResetModelOutput(model_out);
+         model_out.class_probs[(int)FXAI_LABEL_SELL] = 0.05;
+         model_out.class_probs[(int)FXAI_LABEL_BUY] = 0.05;
+         model_out.class_probs[(int)FXAI_LABEL_SKIP] = 0.90;
+         model_out.move_mean_points = MathMax(req.ctx.min_move_points, 0.10);
+         FillPredictionV4(model_out, model_out.move_mean_points, out);
          return false;
       }
 
-      NormalizeClassDistribution(native_probs);
-      ApplyContextCalibrationBank(native_probs);
-      FillPredictionV3(native_probs, ApplyExpectedMoveCalibrationBank(native_move), out);
+      NormalizeClassDistribution(model_out.class_probs);
+      ApplyContextCalibrationBank(model_out.class_probs);
+      double calibrated_move = ApplyExpectedMoveCalibrationBank(model_out.move_mean_points);
+      FillPredictionV4(model_out, calibrated_move, out);
       return true;
    }
 
 protected:
-   virtual void UpdateWithMove(const int y,
+   virtual bool PredictModelCore(const double &x[],
+                                 const FXAIAIHyperParams &hp,
+                                 double &class_probs[],
+                                 double &move_mean_points) = 0;
+
+   virtual void TrainModelCore(const int y,
                                const double &x[],
                                const FXAIAIHyperParams &hp,
                                const double move_points) = 0;

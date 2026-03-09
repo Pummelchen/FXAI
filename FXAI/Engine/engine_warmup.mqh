@@ -96,25 +96,25 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
       {
          if(i < 0 || i >= ArraySize(samples)) continue;
          if(!samples[i].valid) continue;
-         FXAIAITrainRequestV3 s3;
+         FXAIAITrainRequestV4 s3;
          s3.valid = samples[i].valid;
-         s3.ctx.api_version = FXAI_API_VERSION_V3;
+         s3.ctx.api_version = FXAI_API_VERSION_V4;
          s3.ctx.regime_id = samples[i].regime_id;
-         s3.ctx.session_bucket = 0;
+         s3.ctx.session_bucket = FXAI_DeriveSessionBucket(samples[i].sample_time);
          s3.ctx.horizon_minutes = samples[i].horizon_minutes;
          s3.ctx.feature_schema_id = 1;
-         s3.ctx.normalization_method_id = 0;
+         s3.ctx.normalization_method_id = (int)AI_FeatureNormalization;
          s3.ctx.sequence_bars = 1;
          s3.ctx.cost_points = samples[i].cost_points;
          s3.ctx.min_move_points = samples[i].min_move_points;
-         s3.ctx.point_value = 0.0;
+         s3.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
          s3.ctx.sample_time = samples[i].sample_time;
          s3.label_class = samples[i].label_class;
          s3.move_points = samples[i].move_points;
          s3.sample_weight = 1.0;
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
             s3.x[k] = samples[i].x[k];
-         FXAI_TrainViaV3(*trial, s3, hp);
+         FXAI_TrainViaV4(*trial, s3, hp);
       }
    }
 
@@ -709,24 +709,24 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
    {
       if(!samples[i].valid) continue;
 
-      FXAIAIPredictRequestV3 req;
+      FXAIAIPredictRequestV4 req;
       req.valid = samples[i].valid;
-      req.ctx.api_version = FXAI_API_VERSION_V3;
+      req.ctx.api_version = FXAI_API_VERSION_V4;
       req.ctx.regime_id = samples[i].regime_id;
-      req.ctx.session_bucket = 0;
+      req.ctx.session_bucket = FXAI_DeriveSessionBucket(samples[i].sample_time);
       req.ctx.horizon_minutes = score_h;
       req.ctx.feature_schema_id = 1;
-      req.ctx.normalization_method_id = 0;
+      req.ctx.normalization_method_id = (int)AI_FeatureNormalization;
       req.ctx.sequence_bars = 1;
       req.ctx.cost_points = samples[i].cost_points;
       req.ctx.min_move_points = samples[i].min_move_points;
-      req.ctx.point_value = 0.0;
+      req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
       req.ctx.sample_time = samples[i].sample_time;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = samples[i].x[k];
 
-      FXAIAIPredictionV3 pred;
-      FXAI_PredictViaV3(plugin, req, hp, pred);
+      FXAIAIPredictionV4 pred;
+      FXAI_PredictViaV4(plugin, req, hp, pred);
 
       double probs_eval[3];
       probs_eval[(int)FXAI_LABEL_SELL] = pred.class_probs[(int)FXAI_LABEL_SELL];
@@ -833,24 +833,26 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
       FXAI_GetCachedPreparedSample(ai_idx, samples[i], i, caches, eval_sample);
       if(!eval_sample.valid) continue;
 
-      FXAIAIPredictRequestV3 req;
+      FXAIAIPredictRequestV4 req;
       req.valid = eval_sample.valid;
-      req.ctx.api_version = FXAI_API_VERSION_V3;
+      req.ctx.api_version = FXAI_API_VERSION_V4;
       req.ctx.regime_id = eval_sample.regime_id;
-      req.ctx.session_bucket = 0;
+      req.ctx.session_bucket = FXAI_DeriveSessionBucket(eval_sample.sample_time);
       req.ctx.horizon_minutes = score_h;
       req.ctx.feature_schema_id = 1;
-      req.ctx.normalization_method_id = 0;
+      req.ctx.normalization_method_id = (int)FXAI_GetModelNormMethodRouted(ai_idx,
+                                                                           eval_sample.regime_id,
+                                                                           score_h);
       req.ctx.sequence_bars = 1;
       req.ctx.cost_points = eval_sample.cost_points;
       req.ctx.min_move_points = eval_sample.min_move_points;
-      req.ctx.point_value = 0.0;
+      req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
       req.ctx.sample_time = eval_sample.sample_time;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = eval_sample.x[k];
 
-      FXAIAIPredictionV3 pred;
-      FXAI_PredictViaV3(plugin, req, hp, pred);
+      FXAIAIPredictionV4 pred;
+      FXAI_PredictViaV4(plugin, req, hp, pred);
 
       double probs_eval[3];
       probs_eval[(int)FXAI_LABEL_SELL] = pred.class_probs[(int)FXAI_LABEL_SELL];
@@ -1284,24 +1286,26 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
 
             FXAIPreparedSample pred_sample;
             FXAI_GetCachedPreparedSample(ai_idx, samples[i], i, norm_caches, pred_sample);
-            FXAIAIPredictRequestV3 req;
+            FXAIAIPredictRequestV4 req;
             req.valid = pred_sample.valid;
-            req.ctx.api_version = FXAI_API_VERSION_V3;
+            req.ctx.api_version = FXAI_API_VERSION_V4;
             req.ctx.regime_id = pred_sample.regime_id;
-            req.ctx.session_bucket = 0;
+            req.ctx.session_bucket = FXAI_DeriveSessionBucket(pred_sample.sample_time);
             req.ctx.horizon_minutes = pred_sample.horizon_minutes;
             req.ctx.feature_schema_id = 1;
-            req.ctx.normalization_method_id = 0;
+            req.ctx.normalization_method_id = (int)FXAI_GetModelNormMethodRouted(ai_idx,
+                                                                                 pred_sample.regime_id,
+                                                                                 pred_sample.horizon_minutes);
             req.ctx.sequence_bars = 1;
             req.ctx.cost_points = pred_sample.cost_points;
             req.ctx.min_move_points = pred_sample.min_move_points;
-            req.ctx.point_value = 0.0;
+            req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
             req.ctx.sample_time = pred_sample.sample_time;
             for(int k=0; k<FXAI_AI_WEIGHTS; k++)
                req.x[k] = pred_sample.x[k];
 
-            FXAIAIPredictionV3 pred;
-            FXAI_PredictViaV3(*plugin, req, hp_model, pred);
+            FXAIAIPredictionV4 pred;
+            FXAI_PredictViaV4(*plugin, req, hp_model, pred);
 
             double probs_eval[3];
             probs_eval[0] = pred.class_probs[0];

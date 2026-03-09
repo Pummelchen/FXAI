@@ -143,25 +143,25 @@ protected:
    virtual double PredictProb(const double &x[], const FXAIAIHyperParams &hp)
    {
       double probs[3]; double em = 0.0;
-      PredictNativeClassProbs(x, hp, probs, em);
+      PredictModelCore(x, hp, probs, em);
       return probs[(int)FXAI_LABEL_BUY];
    }
 
    virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
    {
       double probs[3]; double em = 0.0;
-      PredictNativeClassProbs(x, hp, probs, em);
+      PredictModelCore(x, hp, probs, em);
       return em;
    }
 
-   virtual void UpdateWithMove(const int y, const double &x[], const FXAIAIHyperParams &hp, const double move_points)
+   virtual void TrainModelCore(const int y, const double &x[], const FXAIAIHyperParams &hp, const double move_points)
    {
       EnsureInitialized(hp);
       double e[]; Embed(x, e);
       double b[]; BuildBase(x, b);
       double pred_probs[3];
       double pred_move = 0.0;
-      PredictNativeClassProbs(x, hp, pred_probs, pred_move);
+      PredictModelCore(x, hp, pred_probs, pred_move);
       LearnProjection(b, y, move_points, pred_probs[(int)FXAI_LABEL_BUY], 1.0 - pred_probs[(int)FXAI_LABEL_SKIP], pred_move);
 
       datetime sample_time = ResolveContextTime();
@@ -232,9 +232,9 @@ public:
       m_init = true;
    }
 
-   virtual bool SupportsNativeClassProbs(void) const { return true; }
+   virtual bool SupportsCorePrediction(void) const { return true; }
 
-   virtual bool PredictNativeClassProbs(const double &x[], const FXAIAIHyperParams &hp, double &class_probs[], double &expected_move_points)
+   virtual bool PredictModelCore(const double &x[], const FXAIAIHyperParams &hp, double &class_probs[], double &expected_move_points)
    {
       EnsureInitialized(hp);
       if(m_count < 8)

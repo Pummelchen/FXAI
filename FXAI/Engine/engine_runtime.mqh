@@ -783,26 +783,26 @@ int SpecialDirectionAI(const string symbol)
          g_ai_last_train_bar[ai_idx] = snapshot.bar_time;
       }
 
-      FXAIAIPredictRequestV3 req;
+      FXAIAIPredictRequestV4 req;
       req.valid = true;
-      req.ctx.api_version = FXAI_API_VERSION_V3;
+      req.ctx.api_version = FXAI_API_VERSION_V4;
       req.ctx.regime_id = regime_id;
-      req.ctx.session_bucket = 0;
+      req.ctx.session_bucket = FXAI_DeriveSessionBucket(snapshot.bar_time);
       req.ctx.horizon_minutes = H;
       req.ctx.feature_schema_id = 1;
-      req.ctx.normalization_method_id = 0;
+      int method_id = (int)FXAI_GetModelNormMethodRouted(ai_idx, regime_id, H);
+      req.ctx.normalization_method_id = method_id;
       req.ctx.sequence_bars = 1;
       req.ctx.min_move_points = min_move_pred;
       req.ctx.cost_points = min_move_pred;
       req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
       req.ctx.sample_time = snapshot.bar_time;
-      int method_id = (int)FXAI_GetModelNormMethodRouted(ai_idx, regime_id, H);
       int input_idx = FXAI_FindNormInputCache(method_id, input_caches);
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = (input_idx >= 0 ? input_caches[input_idx].x[k] : x_pred[k]);
 
-      FXAIAIPredictionV3 pred;
-      FXAI_PredictViaV3(*plugin, req, hp_model, pred);
+      FXAIAIPredictionV4 pred;
+      FXAI_PredictViaV4(*plugin, req, hp_model, pred);
 
       double class_probs_pred[3];
       class_probs_pred[0] = pred.class_probs[0];

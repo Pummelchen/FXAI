@@ -1,12 +1,12 @@
-#ifndef __FXAI_API_V3_MQH__
-#define __FXAI_API_V3_MQH__
+#ifndef __FXAI_API_V4_MQH__
+#define __FXAI_API_V4_MQH__
 
 #include "plugin_base.mqh"
 
-bool FXAI_ValidateManifestV3(const FXAIAIManifestV3 &manifest,
+bool FXAI_ValidateManifestV4(const FXAIAIManifestV4 &manifest,
                              string &reason)
 {
-   if(manifest.api_version != FXAI_API_VERSION_V3)
+   if(manifest.api_version != FXAI_API_VERSION_V4)
    {
       reason = "api_version";
       return false;
@@ -21,9 +21,9 @@ bool FXAI_ValidateManifestV3(const FXAIAIManifestV3 &manifest,
       reason = "ai_name";
       return false;
    }
-   if(!manifest.supports_native_3class)
+   if((manifest.capability_mask & (ulong)FXAI_CAP_ONLINE_LEARNING) == 0)
    {
-      reason = "native_3class";
+      reason = "capability_mask";
       return false;
    }
    if(manifest.min_horizon_minutes <= 0 || manifest.max_horizon_minutes < manifest.min_horizon_minutes)
@@ -31,11 +31,16 @@ bool FXAI_ValidateManifestV3(const FXAIAIManifestV3 &manifest,
       reason = "horizon_range";
       return false;
    }
+   if(manifest.min_sequence_bars <= 0 || manifest.max_sequence_bars < manifest.min_sequence_bars)
+   {
+      reason = "sequence_range";
+      return false;
+   }
    reason = "";
    return true;
 }
 
-bool FXAI_ValidatePredictionV3(const FXAIAIPredictionV3 &pred,
+bool FXAI_ValidatePredictionV4(const FXAIAIPredictionV4 &pred,
                                string &reason)
 {
    double sum = 0.0;
@@ -58,8 +63,10 @@ bool FXAI_ValidatePredictionV3(const FXAIAIPredictionV3 &pred,
       reason = "move_mean";
       return false;
    }
-   if(!MathIsValidNumber(pred.move_q25_points) || !MathIsValidNumber(pred.move_q75_points) ||
-      pred.move_q25_points < 0.0 || pred.move_q75_points < pred.move_q25_points)
+   if(!MathIsValidNumber(pred.move_q25_points) || !MathIsValidNumber(pred.move_q50_points) ||
+      !MathIsValidNumber(pred.move_q75_points) ||
+      pred.move_q25_points < 0.0 || pred.move_q50_points < pred.move_q25_points ||
+      pred.move_q75_points < pred.move_q50_points)
    {
       reason = "move_quantiles";
       return false;
@@ -69,29 +76,29 @@ bool FXAI_ValidatePredictionV3(const FXAIAIPredictionV3 &pred,
       reason = "confidence";
       return false;
    }
-   if(!MathIsValidNumber(pred.calibration_confidence) || pred.calibration_confidence < 0.0 ||
-      pred.calibration_confidence > 1.0)
+   if(!MathIsValidNumber(pred.reliability) || pred.reliability < 0.0 ||
+      pred.reliability > 1.0)
    {
-      reason = "calibration_confidence";
+      reason = "reliability";
       return false;
    }
    reason = "";
    return true;
 }
 
-void FXAI_TrainViaV3(CFXAIAIPlugin &plugin,
-                     const FXAIAITrainRequestV3 &req,
+void FXAI_TrainViaV4(CFXAIAIPlugin &plugin,
+                     const FXAIAITrainRequestV4 &req,
                      const FXAIAIHyperParams &hp)
 {
-   plugin.TrainV3(req, hp);
+   plugin.Train(req, hp);
 }
 
-bool FXAI_PredictViaV3(CFXAIAIPlugin &plugin,
-                       const FXAIAIPredictRequestV3 &req,
+bool FXAI_PredictViaV4(CFXAIAIPlugin &plugin,
+                       const FXAIAIPredictRequestV4 &req,
                        const FXAIAIHyperParams &hp,
-                       FXAIAIPredictionV3 &out)
+                       FXAIAIPredictionV4 &out)
 {
-   return plugin.PredictV3(req, hp, out);
+   return plugin.Predict(req, hp, out);
 }
 
-#endif // __FXAI_API_V3_MQH__
+#endif // __FXAI_API_V4_MQH__

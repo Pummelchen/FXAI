@@ -109,7 +109,7 @@ protected:
       return MathMax(mu + 0.25 * sigma, 0.0);
    }
 
-   virtual void UpdateWithMove(const int y, const double &x[], const FXAIAIHyperParams &hp, const double move_points)
+   virtual void TrainModelCore(const int y, const double &x[], const FXAIAIHyperParams &hp, const double move_points)
    {
       EnsureInitialized(hp);
       double f[]; ArrayResize(f, m_feat_n);
@@ -192,9 +192,9 @@ public:
       m_init = true;
    }
 
-   virtual bool SupportsNativeClassProbs(void) const { return true; }
+   virtual bool SupportsCorePrediction(void) const { return true; }
 
-   virtual bool PredictNativeClassProbs(const double &x[], const FXAIAIHyperParams &hp, double &class_probs[], double &expected_move_points)
+   virtual bool PredictModelCore(const double &x[], const FXAIAIHyperParams &hp, double &class_probs[], double &expected_move_points)
    {
       EnsureInitialized(hp);
       double f[]; ArrayResize(f, m_feat_n);

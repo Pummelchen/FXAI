@@ -442,18 +442,20 @@ void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
 {
    if(!sample.valid) return;
 
-   FXAIAITrainRequestV3 s3;
+   FXAIAITrainRequestV4 s3;
    s3.valid = sample.valid;
-   s3.ctx.api_version = FXAI_API_VERSION_V3;
+   s3.ctx.api_version = FXAI_API_VERSION_V4;
    s3.ctx.regime_id = sample.regime_id;
-   s3.ctx.session_bucket = 0;
+   s3.ctx.session_bucket = FXAI_DeriveSessionBucket(sample.sample_time);
    s3.ctx.horizon_minutes = sample.horizon_minutes;
    s3.ctx.feature_schema_id = 1;
-   s3.ctx.normalization_method_id = 0;
+   s3.ctx.normalization_method_id = (int)FXAI_GetModelNormMethodRouted(ai_idx,
+                                                                       sample.regime_id,
+                                                                       sample.horizon_minutes);
    s3.ctx.sequence_bars = 1;
    s3.ctx.cost_points = sample.cost_points;
    s3.ctx.min_move_points = sample.min_move_points;
-   s3.ctx.point_value = 0.0;
+   s3.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
    s3.ctx.sample_time = sample.sample_time;
    s3.label_class = sample.label_class;
    s3.move_points = sample.move_points;
@@ -461,7 +463,7 @@ void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
       s3.x[k] = sample.x[k];
 
-   FXAI_TrainViaV3(plugin, s3, hp);
+   FXAI_TrainViaV4(plugin, s3, hp);
    FXAI_UpdateModelMoveStats(ai_idx, sample.move_points);
 }
 

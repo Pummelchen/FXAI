@@ -1906,9 +1906,9 @@ public:
    virtual int AIId(void) const { return (int)AI_AUTOFORMER; }
    virtual string AIName(void) const { return "autoformer"; }
 
-   virtual bool SupportsNativeClassProbs(void) const { return true; }
+   virtual bool SupportsCorePrediction(void) const { return true; }
 
-   virtual bool PredictNativeClassProbs(const double &x[],
+   virtual bool PredictModelCore(const double &x[],
                                         const FXAIAIHyperParams &hp,
                                         double &class_probs[],
                                         double &expected_move_points)
@@ -1964,10 +1964,10 @@ public:
    virtual void Update(const int y, const double &x[], const FXAIAIHyperParams &hp)
    {
       double pseudo_move = (y == 1 ? 1.0 : -1.0);
-      UpdateWithMove(y, x, hp, pseudo_move);
+      TrainModelCore(y, x, hp, pseudo_move);
    }
 
-   virtual void UpdateWithMove(const int y,
+   virtual void TrainModelCore(const int y,
                                const double &x[],
                                const FXAIAIHyperParams &hp,
                                const double move_points)
@@ -1998,7 +1998,7 @@ public:
    {
       double probs[FXAI_AF_CLASS_COUNT];
       double ev = 0.0;
-      if(!PredictNativeClassProbs(x, hp, probs, ev))
+      if(!PredictModelCore(x, hp, probs, ev))
          return 0.5;
 
       double den = probs[FXAI_AF_BUY] + probs[FXAI_AF_SELL];
@@ -2013,7 +2013,7 @@ public:
    {
       double probs[FXAI_AF_CLASS_COUNT];
       double ev = -1.0;
-      if(PredictNativeClassProbs(x, hp, probs, ev) && ev > 0.0)
+      if(PredictModelCore(x, hp, probs, ev) && ev > 0.0)
          return ev;
       return ExpectedMovePrior(x);
    }

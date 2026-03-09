@@ -329,12 +329,12 @@ public:
       EnsureBootstrapped();
    }
 
-   virtual bool SupportsNativeClassProbs(void) const
+   virtual bool SupportsCorePrediction(void) const
    {
       return true;
    }
 
-   virtual bool PredictNativeClassProbs(const double &x[], const FXAIAIHyperParams &hp, double &class_probs[], double &expected_move_points)
+   virtual bool PredictModelCore(const double &x[], const FXAIAIHyperParams &hp, double &class_probs[], double &expected_move_points)
    {
       EnsureBootstrapped();
 
@@ -375,7 +375,7 @@ public:
    }
 
 protected:
-   virtual void UpdateWithMove(const int y, const double &x[], const FXAIAIHyperParams &hp, const double move_points)
+   virtual void TrainModelCore(const int y, const double &x[], const FXAIAIHyperParams &hp, const double move_points)
    {
       EnsureBootstrapped();
 
@@ -462,7 +462,7 @@ protected:
    {
       double probs[3];
       double exp_move = 0.0;
-      if(PredictNativeClassProbs(x, hp, probs, exp_move))
+      if(PredictModelCore(x, hp, probs, exp_move))
          return probs[(int)FXAI_LABEL_BUY] / MathMax(probs[(int)FXAI_LABEL_BUY] + probs[(int)FXAI_LABEL_SELL], 1e-6);
       return 0.50;
    }
@@ -472,7 +472,7 @@ protected:
       EnsureBootstrapped();
       double probs[3];
       double exp_move = 0.0;
-      if(PredictNativeClassProbs(x, hp, probs, exp_move))
+      if(PredictModelCore(x, hp, probs, exp_move))
       {
          double base = ExpectedMovePrior(x);
          if(base > 0.0) return 0.75 * exp_move + 0.25 * base;

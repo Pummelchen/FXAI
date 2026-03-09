@@ -15,7 +15,7 @@
 #define FXAI_PLUGIN_REPLAY_STEPS 2
 #define FXAI_CONTEXT_TOP_SYMBOLS 3
 #define FXAI_CONTEXT_EXTRA_FEATS (FXAI_CONTEXT_TOP_SYMBOLS * 4)
-#define FXAI_API_VERSION_V3 3
+#define FXAI_API_VERSION_V4 4
 
 
 enum ENUM_AI_TYPE
@@ -73,6 +73,17 @@ enum ENUM_FXAI_AI_FAMILY
    FXAI_FAMILY_WORLD_MODEL,
    FXAI_FAMILY_RULE_BASED,
    FXAI_FAMILY_OTHER
+};
+
+enum ENUM_FXAI_PLUGIN_CAPABILITY
+{
+   FXAI_CAP_ONLINE_LEARNING    = 1,
+   FXAI_CAP_REPLAY             = 2,
+   FXAI_CAP_STATEFUL           = 4,
+   FXAI_CAP_WINDOW_CONTEXT     = 8,
+   FXAI_CAP_MULTI_HORIZON      = 16,
+   FXAI_CAP_NATIVE_DISTRIBUTION= 32,
+   FXAI_CAP_SELF_TEST          = 64
 };
 
 enum ENUM_FXAI_RESET_REASON
@@ -160,26 +171,22 @@ struct FXAIDataSnapshot
    double min_move_points;
 };
 
-struct FXAIAIManifestV3
+struct FXAIAIManifestV4
 {
    int api_version;
    int ai_id;
    string ai_name;
    int family;
-   bool supports_native_3class;
-   bool supports_distributional_move;
-   bool supports_online_learning;
-   bool supports_replay;
-   bool supports_state;
-   bool supports_window_context;
-   bool supports_multi_horizon;
+   ulong capability_mask;
    int feature_schema_id;
    ulong feature_groups_mask;
    int min_horizon_minutes;
    int max_horizon_minutes;
+   int min_sequence_bars;
+   int max_sequence_bars;
 };
 
-struct FXAIAIContextV3
+struct FXAIAIContextV4
 {
    int api_version;
    int regime_id;
@@ -194,32 +201,70 @@ struct FXAIAIContextV3
    datetime sample_time;
 };
 
-struct FXAIAITrainRequestV3
+struct FXAIAITrainRequestV4
 {
    bool valid;
-   FXAIAIContextV3 ctx;
+   FXAIAIContextV4 ctx;
    int label_class;
    double move_points;
    double sample_weight;
    double x[FXAI_AI_WEIGHTS];
 };
 
-struct FXAIAIPredictRequestV3
+struct FXAIAIPredictRequestV4
 {
    bool valid;
-   FXAIAIContextV3 ctx;
+   FXAIAIContextV4 ctx;
    double x[FXAI_AI_WEIGHTS];
 };
 
-struct FXAIAIPredictionV3
+struct FXAIAIPredictionV4
 {
    double class_probs[3];
    double move_mean_points;
    double move_q25_points;
+   double move_q50_points;
    double move_q75_points;
    double confidence;
-   double calibration_confidence;
+   double reliability;
 };
+
+struct FXAIAIModelOutputV4
+{
+   double class_probs[3];
+   double move_mean_points;
+   double move_q25_points;
+   double move_q50_points;
+   double move_q75_points;
+   double confidence;
+   double reliability;
+   bool   has_quantiles;
+   bool   has_confidence;
+};
+
+bool FXAI_HasCapability(const ulong capability_mask,
+                        const int capability)
+{
+   ulong cap = (ulong)capability;
+   return ((capability_mask & cap) == cap);
+}
+
+int FXAI_DeriveSessionBucket(const datetime sample_time)
+{
+   datetime t = sample_time;
+   if(t <= 0) t = TimeCurrent();
+
+   MqlDateTime dt;
+   TimeToStruct(t, dt);
+   int hour = dt.hour;
+   if(hour < 0) hour = 0;
+   if(hour > 23) hour = 23;
+
+   int bucket = hour / 4;
+   if(bucket < 0) bucket = 0;
+   if(bucket >= FXAI_PLUGIN_SESSION_BUCKETS) bucket = FXAI_PLUGIN_SESSION_BUCKETS - 1;
+   return bucket;
+}
 
 double FXAI_Clamp(const double v, const double lo, const double hi)
 {

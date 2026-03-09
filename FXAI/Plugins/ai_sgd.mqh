@@ -514,9 +514,9 @@ public:
    virtual int AIId(void) const { return (int)AI_SGD_LOGIT; }
    virtual string AIName(void) const { return "sgd_logit"; }
 
-   virtual bool SupportsNativeClassProbs(void) const { return true; }
+   virtual bool SupportsCorePrediction(void) const { return true; }
 
-   virtual bool PredictNativeClassProbs(const double &x[],
+   virtual bool PredictModelCore(const double &x[],
                                         const FXAIAIHyperParams &hp,
                                         double &class_probs[],
                                         double &expected_move_points)
@@ -587,7 +587,7 @@ public:
    }
 
 protected:
-   virtual void UpdateWithMove(const int y,
+   virtual void TrainModelCore(const int y,
                                const double &x[],
                                const FXAIAIHyperParams &hp,
                                const double move_points)

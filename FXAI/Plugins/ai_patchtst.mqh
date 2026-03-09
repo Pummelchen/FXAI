@@ -890,7 +890,7 @@ public:
 
    virtual int AIId(void) const { return (int)AI_PATCHTST; }
    virtual string AIName(void) const { return "patchtst"; }
-   virtual bool SupportsNativeClassProbs(void) const { return true; }
+   virtual bool SupportsCorePrediction(void) const { return true; }
 
    virtual void Reset(void)
    {
@@ -915,7 +915,7 @@ public:
       InitWeights();
    }
 
-   virtual bool PredictNativeClassProbs(const double &x[],
+   virtual bool PredictModelCore(const double &x[],
                                         const FXAIAIHyperParams &hp,
                                         double &class_probs[],
                                         double &expected_move_points)
@@ -967,11 +967,11 @@ public:
    {
       int cls = (y > 0 ? (int)FXAI_LABEL_BUY : (int)FXAI_LABEL_SELL);
       double pseudo_move = (y > 0 ? 1.0 : -1.0);
-      UpdateWithMove(cls, x, hp, pseudo_move);
+      TrainModelCore(cls, x, hp, pseudo_move);
    }
 
 protected:
-   virtual void UpdateWithMove(const int y,
+   virtual void TrainModelCore(const int y,
                                const double &x[],
                                const FXAIAIHyperParams &hp,
                                const double move_points)
@@ -1244,7 +1244,7 @@ protected:
 
       double probs[3];
       double expected_move = 0.0;
-      if(!PredictNativeClassProbs(x, hp, probs, expected_move))
+      if(!PredictModelCore(x, hp, probs, expected_move))
          return 0.5;
 
       double den = probs[(int)FXAI_LABEL_BUY] + probs[(int)FXAI_LABEL_SELL];
@@ -1258,7 +1258,7 @@ protected:
 
       double probs[3];
       double ev = -1.0;
-      if(PredictNativeClassProbs(x, hp, probs, ev) && ev > 0.0)
+      if(PredictModelCore(x, hp, probs, ev) && ev > 0.0)
          return ev;
 
       return ExpectedMovePrior(x);

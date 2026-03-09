@@ -955,9 +955,9 @@ public:
 
    virtual int AIId(void) const { return (int)AI_PA_LINEAR; }
    virtual string AIName(void) const { return "pa_linear"; }
-   virtual bool SupportsNativeClassProbs(void) const { return true; }
+   virtual bool SupportsCorePrediction(void) const { return true; }
 
-   virtual bool PredictNativeClassProbs(const double &x[],
+   virtual bool PredictModelCore(const double &x[],
                                         const FXAIAIHyperParams &hp,
                                         double &class_probs[],
                                         double &expected_move_points)
@@ -1090,7 +1090,7 @@ public:
    }
 
 protected:
-   virtual void UpdateWithMove(const int y,
+   virtual void TrainModelCore(const int y,
                                const double &x[],
                                const FXAIAIHyperParams &hp,
                                const double move_points)
@@ -1166,7 +1166,7 @@ protected:
    {
       double probs[FXAI_PA_CLASS_COUNT];
       double expected = -1.0;
-      if(!PredictNativeClassProbs(x, hp, probs, expected))
+      if(!PredictModelCore(x, hp, probs, expected))
          return 0.5;
 
       double den = probs[(int)FXAI_LABEL_BUY] + probs[(int)FXAI_LABEL_SELL];

@@ -150,12 +150,12 @@ public:
       m_init = true;
    }
 
-   virtual bool SupportsNativeClassProbs(void) const
+   virtual bool SupportsCorePrediction(void) const
    {
       return true;
    }
 
-   virtual bool PredictNativeClassProbs(const double &x[],
+   virtual bool PredictModelCore(const double &x[],
                                         const FXAIAIHyperParams &hp,
                                         double &class_probs[],
                                         double &expected_move_points)
@@ -195,7 +195,7 @@ public:
    }
 
 protected:
-   virtual void UpdateWithMove(const int y,
+   virtual void TrainModelCore(const int y,
                                const double &x[],
                                const FXAIAIHyperParams &hp,
                                const double move_points)
@@ -223,7 +223,7 @@ protected:
    {
       double probs[3];
       double exp_move = 0.0;
-      PredictNativeClassProbs(x, hp, probs, exp_move);
+      PredictModelCore(x, hp, probs, exp_move);
       return probs[(int)FXAI_LABEL_BUY] / MathMax(probs[(int)FXAI_LABEL_BUY] + probs[(int)FXAI_LABEL_SELL], 1e-6);
    }
 
@@ -231,7 +231,7 @@ protected:
    {
       double probs[3];
       double exp_move = 0.0;
-      PredictNativeClassProbs(x, hp, probs, exp_move);
+      PredictModelCore(x, hp, probs, exp_move);
       return exp_move;
    }
 };

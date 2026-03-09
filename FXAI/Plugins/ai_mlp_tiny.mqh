@@ -1652,9 +1652,9 @@ public:
    virtual int AIId(void) const { return (int)AI_MLP_TINY; }
    virtual string AIName(void) const { return "mlp_tiny"; }
 
-   virtual bool SupportsNativeClassProbs(void) const { return true; }
+   virtual bool SupportsCorePrediction(void) const { return true; }
 
-   virtual bool PredictNativeClassProbs(const double &x[],
+   virtual bool PredictModelCore(const double &x[],
                                         const FXAIAIHyperParams &hp,
                                         double &class_probs[],
                                         double &expected_move_points)
@@ -1863,10 +1863,10 @@ public:
                        const FXAIAIHyperParams &hp)
    {
       double pseudo_move = (y == 1 ? 1.0 : -1.0);
-      UpdateWithMove(y, x, hp, pseudo_move);
+      TrainModelCore(y, x, hp, pseudo_move);
    }
 
-   virtual void UpdateWithMove(const int y,
+   virtual void TrainModelCore(const int y,
                                const double &x[],
                                const FXAIAIHyperParams &hp,
                                const double move_points)
@@ -1909,7 +1909,7 @@ public:
    {
       double cp[FXAI_MLP_CLASSES];
       double em = 0.0;
-      PredictNativeClassProbs(x, hp, cp, em);
+      PredictModelCore(x, hp, cp, em);
       double den = cp[(int)FXAI_LABEL_BUY] + cp[(int)FXAI_LABEL_SELL];
       if(den <= 1e-9) return 0.5;
       return FXAI_Clamp(cp[(int)FXAI_LABEL_BUY] / den, 0.001, 0.999);
@@ -1920,7 +1920,7 @@ public:
    {
       double cp[FXAI_MLP_CLASSES];
       double em = 0.0;
-      PredictNativeClassProbs(x, hp, cp, em);
+      PredictModelCore(x, hp, cp, em);
       return em;
    }
 };

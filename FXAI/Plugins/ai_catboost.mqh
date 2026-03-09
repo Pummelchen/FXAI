@@ -1633,7 +1633,7 @@ public:
 
    virtual int AIId(void) const { return (int)AI_CATBOOST; }
    virtual string AIName(void) const { return "catboost"; }
-   virtual bool SupportsNativeClassProbs(void) const { return true; }
+   virtual bool SupportsCorePrediction(void) const { return true; }
 
    virtual void Reset(void)
    {
@@ -1722,7 +1722,7 @@ public:
       m_bias[(int)FXAI_LABEL_SKIP] = 0.10;
    }
 
-   virtual bool PredictNativeClassProbs(const double &x[],
+   virtual bool PredictModelCore(const double &x[],
                                         const FXAIAIHyperParams &hp,
                                         double &class_probs[],
                                         double &expected_move_points)
@@ -1750,11 +1750,11 @@ public:
    {
       int cls = (y > 0 ? (int)FXAI_LABEL_BUY : (int)FXAI_LABEL_SELL);
       double pseudo_move = (y > 0 ? 1.0 : -1.0);
-      UpdateWithMove(cls, x, hp, pseudo_move);
+      TrainModelCore(cls, x, hp, pseudo_move);
    }
 
 protected:
-   virtual void UpdateWithMove(const int y,
+   virtual void TrainModelCore(const int y,
                                const double &x[],
                                const FXAIAIHyperParams &hp,
                                const double move_points)

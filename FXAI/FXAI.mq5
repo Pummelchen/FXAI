@@ -188,7 +188,7 @@ input bool   AI_DebugFlow     = false;
 // Importance/Range: false/true; enable during debugging, disable for production speed.
 input bool   AI_ComplianceHarness = false;
 // Models: all (framework/API validation only).
-// Purpose: runs plugin V3 compliance checks on init before trading starts.
+// Purpose: runs plugin API v4 compliance checks on init before trading starts.
 // Importance/Range: false/true; enable when validating framework changes, disable for production speed.
 input ENUM_FXAI_FEATURE_NORMALIZATION AI_FeatureNormalization = FXAI_NORM_EXISTING;
 // Models: all (shared feature pipeline before all plugin train/predict calls).
@@ -497,7 +497,7 @@ int      g_replay_cursor = 0;
 datetime g_replay_last_sample_time[FXAI_MAX_HORIZONS];
 
 
-#include "api_v3.mqh"
+#include "api_v4.mqh"
 #include "Engine\engine_all.mqh"
 
 int OnInit()

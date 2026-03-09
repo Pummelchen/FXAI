@@ -188,18 +188,18 @@ protected:
    virtual double PredictProb(const double &x[], const FXAIAIHyperParams &hp)
    {
       double probs[3]; double em = 0.0;
-      PredictNativeClassProbs(x, hp, probs, em);
+      PredictModelCore(x, hp, probs, em);
       return probs[(int)FXAI_LABEL_BUY];
    }
 
    virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
    {
       double probs[3]; double em = 0.0;
-      PredictNativeClassProbs(x, hp, probs, em);
+      PredictModelCore(x, hp, probs, em);
       return em;
    }
 
-   virtual void UpdateWithMove(const int y, const double &x[], const FXAIAIHyperParams &hp, const double move_points)
+   virtual void TrainModelCore(const int y, const double &x[], const FXAIAIHyperParams &hp, const double move_points)
    {
       EnsureInitialized(hp);
       double r[]; BuildRegime(x, r);
@@ -246,7 +246,7 @@ protected:
       }
 
       double probs[3]; double em = 0.0;
-      PredictNativeClassProbs(x, hp, probs, em);
+      PredictModelCore(x, hp, probs, em);
       double p_true = probs[(y == (int)FXAI_LABEL_BUY ? (int)FXAI_LABEL_BUY : (y == (int)FXAI_LABEL_SELL ? (int)FXAI_LABEL_SELL : (int)FXAI_LABEL_SKIP))];
       double score = 1.0 - FXAI_Clamp(p_true, 0.0005, 0.9990);
       m_scores[m_cal_n % 128] = score;
@@ -305,9 +305,9 @@ public:
       m_init = true;
    }
 
-   virtual bool SupportsNativeClassProbs(void) const { return true; }
+   virtual bool SupportsCorePrediction(void) const { return true; }
 
-   virtual bool PredictNativeClassProbs(const double &x[], const FXAIAIHyperParams &hp, double &class_probs[], double &expected_move_points)
+   virtual bool PredictModelCore(const double &x[], const FXAIAIHyperParams &hp, double &class_probs[], double &expected_move_points)
    {
       EnsureInitialized(hp);
       double r[]; BuildRegime(x, r);

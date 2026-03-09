@@ -311,7 +311,7 @@ bool FXAI_ValidateNativePluginAPI()
       CFXAIAIPlugin *plugin = g_plugins.Get(ai_idx);
       if(plugin == NULL)
       {
-         Print("FXAI error: API v3 plugin missing at id=", ai_idx);
+         Print("FXAI error: API v4 plugin missing at id=", ai_idx);
          return false;
       }
 
@@ -319,89 +319,52 @@ bool FXAI_ValidateNativePluginAPI()
       FXAI_GetModelHyperParams(ai_idx, hp);
       plugin.EnsureInitialized(hp);
 
-      if(!plugin.SupportsNativeClassProbs())
-      {
-         Print("FXAI error: API v3 requires native 3-class support. model=", plugin.AIName(),
-               " id=", ai_idx);
-         return false;
-      }
-
-      double probs[3];
-      probs[0] = 0.0; probs[1] = 0.0; probs[2] = 0.0;
-      double expected_move = 0.0;
-      if(!plugin.PredictNativeClassProbs(x_dummy, hp, probs, expected_move))
-      {
-         Print("FXAI error: model native 3-class path returned false. model=", plugin.AIName(),
-               " id=", ai_idx);
-         return false;
-      }
-
-      if(!MathIsValidNumber(probs[0]) || !MathIsValidNumber(probs[1]) || !MathIsValidNumber(probs[2]))
-      {
-         Print("FXAI error: model native probabilities invalid. model=", plugin.AIName(),
-               " id=", ai_idx);
-         return false;
-      }
-      if(probs[0] < 0.0 || probs[1] < 0.0 || probs[2] < 0.0)
-      {
-         Print("FXAI error: model native probabilities negative. model=", plugin.AIName(),
-               " id=", ai_idx);
-         return false;
-      }
-      double s = probs[0] + probs[1] + probs[2];
-      if(!MathIsValidNumber(s) || s <= 0.0)
-      {
-         Print("FXAI error: model native probabilities degenerate. model=", plugin.AIName(),
-               " id=", ai_idx);
-         return false;
-      }
-
-      FXAIAIManifestV3 manifest;
-      plugin.DescribeV3(manifest);
+      FXAIAIManifestV4 manifest;
+      plugin.Describe(manifest);
       string reason = "";
-      if(!FXAI_ValidateManifestV3(manifest, reason))
+      if(!FXAI_ValidateManifestV4(manifest, reason))
       {
-         Print("FXAI error: API v3 manifest invalid. model=", plugin.AIName(),
+         Print("FXAI error: API v4 manifest invalid. model=", plugin.AIName(),
                " id=", ai_idx,
                " reason=", reason);
          return false;
       }
 
-      FXAIAIPredictRequestV3 req_v3;
-      req_v3.valid = true;
-      req_v3.ctx.api_version = FXAI_API_VERSION_V3;
-      req_v3.ctx.regime_id = 0;
-      req_v3.ctx.session_bucket = 0;
-      req_v3.ctx.horizon_minutes = 5;
-      req_v3.ctx.feature_schema_id = 1;
-      req_v3.ctx.normalization_method_id = (int)AI_FeatureNormalization;
-      req_v3.ctx.sequence_bars = 1;
-      req_v3.ctx.cost_points = 0.5;
-      req_v3.ctx.min_move_points = 0.8;
-      req_v3.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
-      req_v3.ctx.sample_time = TimeCurrent();
+      FXAIAIPredictRequestV4 req_v4;
+      req_v4.valid = true;
+      req_v4.ctx.api_version = FXAI_API_VERSION_V4;
+      req_v4.ctx.regime_id = 0;
+      req_v4.ctx.session_bucket = FXAI_DeriveSessionBucket(TimeCurrent());
+      req_v4.ctx.horizon_minutes = 5;
+      req_v4.ctx.feature_schema_id = 1;
+      req_v4.ctx.normalization_method_id = (int)AI_FeatureNormalization;
+      req_v4.ctx.sequence_bars = 1;
+      req_v4.ctx.cost_points = 0.5;
+      req_v4.ctx.min_move_points = 0.8;
+      req_v4.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+      req_v4.ctx.sample_time = TimeCurrent();
       for(int kk=0; kk<FXAI_AI_WEIGHTS; kk++)
-         req_v3.x[kk] = x_dummy[kk];
+         req_v4.x[kk] = x_dummy[kk];
 
-      FXAIAIPredictionV3 pred_v3;
-      if(!plugin.PredictV3(req_v3, hp, pred_v3))
+      FXAIAIPredictionV4 pred_v4;
+      if(!plugin.Predict(req_v4, hp, pred_v4))
       {
-         Print("FXAI error: API v3 predict failed. model=", plugin.AIName(),
+         Print("FXAI error: API v4 predict failed. model=", plugin.AIName(),
                " id=", ai_idx);
          return false;
       }
 
-      if(!FXAI_ValidatePredictionV3(pred_v3, reason))
+      if(!FXAI_ValidatePredictionV4(pred_v4, reason))
       {
-         Print("FXAI error: API v3 prediction invalid. model=", plugin.AIName(),
+         Print("FXAI error: API v4 prediction invalid. model=", plugin.AIName(),
                " id=", ai_idx,
                " reason=", reason);
          return false;
       }
 
-      if(!plugin.SelfTestV3())
+      if(!plugin.SelfTest())
       {
-         Print("FXAI error: API v3 self-test failed. model=", plugin.AIName(),
+         Print("FXAI error: API v4 self-test failed. model=", plugin.AIName(),
                " id=", ai_idx);
          return false;
       }
@@ -410,15 +373,15 @@ bool FXAI_ValidateNativePluginAPI()
    return true;
 }
 
-void FXAI_FillComplianceContext(FXAIAIContextV3 &ctx,
+void FXAI_FillComplianceContext(FXAIAIContextV4 &ctx,
                                 const double cost_points,
                                 const datetime sample_time,
                                 const int regime_id,
                                 const int horizon_minutes)
 {
-   ctx.api_version = FXAI_API_VERSION_V3;
+   ctx.api_version = FXAI_API_VERSION_V4;
    ctx.regime_id = regime_id;
-   ctx.session_bucket = 0;
+   ctx.session_bucket = FXAI_DeriveSessionBucket(sample_time);
    ctx.horizon_minutes = horizon_minutes;
    ctx.feature_schema_id = 1;
    ctx.normalization_method_id = (int)AI_FeatureNormalization;
@@ -429,7 +392,7 @@ void FXAI_FillComplianceContext(FXAIAIContextV3 &ctx,
    ctx.sample_time = sample_time;
 }
 
-void FXAI_FillComplianceTrainRequest(FXAIAITrainRequestV3 &req,
+void FXAI_FillComplianceTrainRequest(FXAIAITrainRequestV4 &req,
                                      const int label_class,
                                      const double move_points,
                                      const double cost_points,
@@ -457,7 +420,7 @@ void FXAI_FillComplianceTrainRequest(FXAIAITrainRequestV3 &req,
    req.x[7] = req.ctx.cost_points;
 }
 
-void FXAI_FillCompliancePredictRequest(FXAIAIPredictRequestV3 &req,
+void FXAI_FillCompliancePredictRequest(FXAIAIPredictRequestV4 &req,
                                        const double cost_points,
                                        const double v1,
                                        const double v2,
@@ -481,7 +444,7 @@ void FXAI_FillCompliancePredictRequest(FXAIAIPredictRequestV3 &req,
 }
 
 bool FXAI_ValidatePredictionOutput(const CFXAIAIPlugin &plugin,
-                                   const FXAIAIPredictionV3 &pred,
+                                   const FXAIAIPredictionV4 &pred,
                                    const string tag)
 {
    double s = pred.class_probs[(int)FXAI_LABEL_SELL]
@@ -532,7 +495,7 @@ bool FXAI_RunPluginComplianceHarness()
       plugin.Reset();
       plugin.EnsureInitialized(hp);
 
-      FXAIAITrainRequestV3 buy_s, sell_s, skip_s, buy_big_s;
+      FXAIAITrainRequestV4 buy_s, sell_s, skip_s, buy_big_s;
       FXAI_FillComplianceTrainRequest(buy_s, (int)FXAI_LABEL_BUY, 4.5, 0.8, 0.75, 0.40, 0.20, now_t - 180, 1, 5);
       FXAI_FillComplianceTrainRequest(sell_s, (int)FXAI_LABEL_SELL, -4.5, 0.8, -0.75, -0.40, -0.20, now_t - 120, 1, 5);
       FXAI_FillComplianceTrainRequest(skip_s, (int)FXAI_LABEL_SKIP, 0.2, 0.8, 0.02, 0.01, 0.00, now_t - 60, 1, 5);
@@ -540,25 +503,25 @@ bool FXAI_RunPluginComplianceHarness()
 
       for(int rep=0; rep<10; rep++)
       {
-         FXAI_TrainViaV3(*plugin, buy_s, hp);
-         FXAI_TrainViaV3(*plugin, sell_s, hp);
-         FXAI_TrainViaV3(*plugin, skip_s, hp);
-         FXAI_TrainViaV3(*plugin, buy_big_s, hp);
+         FXAI_TrainViaV4(*plugin, buy_s, hp);
+         FXAI_TrainViaV4(*plugin, sell_s, hp);
+         FXAI_TrainViaV4(*plugin, skip_s, hp);
+         FXAI_TrainViaV4(*plugin, buy_big_s, hp);
       }
 
-      FXAIAIPredictRequestV3 req_buy_lo, req_buy_hi, req_sell_lo, req_skip_lo, req_buy_big;
+      FXAIAIPredictRequestV4 req_buy_lo, req_buy_hi, req_sell_lo, req_skip_lo, req_buy_big;
       FXAI_FillCompliancePredictRequest(req_buy_lo, 0.8, 0.75, 0.40, 0.20, now_t, 1, 5);
       FXAI_FillCompliancePredictRequest(req_buy_hi, 3.5, 0.75, 0.40, 0.20, now_t, 1, 5);
       FXAI_FillCompliancePredictRequest(req_sell_lo, 0.8, -0.75, -0.40, -0.20, now_t, 1, 5);
       FXAI_FillCompliancePredictRequest(req_skip_lo, 0.8, 0.02, 0.01, 0.00, now_t, 1, 5);
       FXAI_FillCompliancePredictRequest(req_buy_big, 0.8, 1.20, 0.65, 0.35, now_t, 1, 13);
 
-      FXAIAIPredictionV3 pred_buy_lo, pred_buy_hi, pred_sell_lo, pred_skip_lo, pred_buy_big;
-      FXAI_PredictViaV3(*plugin, req_buy_lo, hp, pred_buy_lo);
-      FXAI_PredictViaV3(*plugin, req_buy_hi, hp, pred_buy_hi);
-      FXAI_PredictViaV3(*plugin, req_sell_lo, hp, pred_sell_lo);
-      FXAI_PredictViaV3(*plugin, req_skip_lo, hp, pred_skip_lo);
-      FXAI_PredictViaV3(*plugin, req_buy_big, hp, pred_buy_big);
+      FXAIAIPredictionV4 pred_buy_lo, pred_buy_hi, pred_sell_lo, pred_skip_lo, pred_buy_big;
+      FXAI_PredictViaV4(*plugin, req_buy_lo, hp, pred_buy_lo);
+      FXAI_PredictViaV4(*plugin, req_buy_hi, hp, pred_buy_hi);
+      FXAI_PredictViaV4(*plugin, req_sell_lo, hp, pred_sell_lo);
+      FXAI_PredictViaV4(*plugin, req_skip_lo, hp, pred_skip_lo);
+      FXAI_PredictViaV4(*plugin, req_buy_big, hp, pred_buy_big);
 
       bool ok = FXAI_ValidatePredictionOutput(*plugin, pred_buy_lo, "buy_lo")
              && FXAI_ValidatePredictionOutput(*plugin, pred_buy_hi, "buy_hi")
@@ -610,10 +573,10 @@ bool FXAI_RunPluginComplianceHarness()
          return false;
       }
 
-      if(plugin.NativePredictFailures() > 0)
+      if(plugin.CorePredictFailures() > 0)
       {
-         Print("FXAI compliance error: native predict failures detected. model=", plugin.AIName(),
-               " failures=", plugin.NativePredictFailures());
+         Print("FXAI compliance error: core predict failures detected. model=", plugin.AIName(),
+               " failures=", plugin.CorePredictFailures());
          delete plugin;
          return false;
       }
