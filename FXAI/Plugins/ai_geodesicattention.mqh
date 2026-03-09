@@ -150,12 +150,12 @@ private:
    bool   m_quality_degraded;
 
    // Replay and teacher distillation.
-   int    m_replay_head;
-   int    m_replay_size;
-   double m_replay_x[FXAI_GA_REPLAY][FXAI_AI_WEIGHTS];
+   int    m_ga_replay_head;
+   int    m_ga_replay_size;
+   double m_ga_replay_x[FXAI_GA_REPLAY][FXAI_AI_WEIGHTS];
    int    m_replay_cls[FXAI_GA_REPLAY];
-   double m_replay_move[FXAI_GA_REPLAY];
-   double m_replay_cost[FXAI_GA_REPLAY];
+   double m_ga_replay_move[FXAI_GA_REPLAY];
+   double m_ga_replay_cost[FXAI_GA_REPLAY];
    double m_replay_w[FXAI_GA_REPLAY];
 
    double m_t_w_cls[FXAI_GA_CLASS_COUNT][FXAI_GA_D_MODEL];
@@ -612,26 +612,26 @@ private:
                    const double cost_points,
                    const double sample_w)
    {
-      int p = m_replay_head;
-      for(int k=0; k<FXAI_AI_WEIGHTS; k++) m_replay_x[p][k] = x[k];
+      int p = m_ga_replay_head;
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++) m_ga_replay_x[p][k] = x[k];
       m_replay_cls[p] = cls;
-      m_replay_move[p] = move_points;
-      m_replay_cost[p] = cost_points;
+      m_ga_replay_move[p] = move_points;
+      m_ga_replay_cost[p] = cost_points;
       m_replay_w[p] = sample_w;
-      m_replay_head++;
-      if(m_replay_head >= FXAI_GA_REPLAY) m_replay_head = 0;
-      if(m_replay_size < FXAI_GA_REPLAY) m_replay_size++;
+      m_ga_replay_head++;
+      if(m_ga_replay_head >= FXAI_GA_REPLAY) m_ga_replay_head = 0;
+      if(m_ga_replay_size < FXAI_GA_REPLAY) m_ga_replay_size++;
    }
 
    int ReplaySampleSlot(void) const
    {
-      if(m_replay_size <= 0) return -1;
+      if(m_ga_replay_size <= 0) return -1;
       double u = FXAI_Clamp((double)MathRand() / 32767.0, 0.0, 1.0);
-      int age = (int)MathFloor(u * (double)m_replay_size);
+      int age = (int)MathFloor(u * (double)m_ga_replay_size);
       if(age < 0) age = 0;
-      if(age >= m_replay_size) age = m_replay_size - 1;
+      if(age >= m_ga_replay_size) age = m_ga_replay_size - 1;
 
-      int slot = m_replay_head - 1 - age;
+      int slot = m_ga_replay_head - 1 - age;
       while(slot < 0) slot += FXAI_GA_REPLAY;
       while(slot >= FXAI_GA_REPLAY) slot -= FXAI_GA_REPLAY;
       return slot;
@@ -699,15 +699,15 @@ private:
       }
 
       // Replay init.
-      m_replay_head = 0;
-      m_replay_size = 0;
+      m_ga_replay_head = 0;
+      m_ga_replay_size = 0;
       for(int r=0; r<FXAI_GA_REPLAY; r++)
       {
          m_replay_cls[r] = FXAI_GA_SKIP;
-         m_replay_move[r] = 0.0;
-         m_replay_cost[r] = 0.0;
+         m_ga_replay_move[r] = 0.0;
+         m_ga_replay_cost[r] = 0.0;
          m_replay_w[r] = 1.0;
-         for(int k=0; k<FXAI_AI_WEIGHTS; k++) m_replay_x[r][k] = 0.0;
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++) m_ga_replay_x[r][k] = 0.0;
       }
 
       for(int g=0; g<3; g++)
@@ -1257,10 +1257,10 @@ private:
 
    void TrainReplayMiniBatch(const FXAIAIHyperParams &hp)
    {
-      if(m_replay_size < 32) return;
+      if(m_ga_replay_size < 32) return;
 
       int steps = 1;
-      if(m_replay_size >= 192) steps = 2;
+      if(m_ga_replay_size >= 192) steps = 2;
       double l2 = FXAI_Clamp(hp.l2, 0.0, 0.1000);
       double lr = FXAI_Clamp(0.20 * ScheduledLR(hp), 0.00002, 0.01000);
 
@@ -1269,7 +1269,7 @@ private:
          int slot = ReplaySampleSlot();
          if(slot < 0) break;
          double xr[FXAI_AI_WEIGHTS];
-         for(int i=0; i<FXAI_AI_WEIGHTS; i++) xr[i] = m_replay_x[slot][i];
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++) xr[i] = m_ga_replay_x[slot][i];
 
          double emb[FXAI_GA_D_MODEL];
          double loc[FXAI_GA_D_MODEL];

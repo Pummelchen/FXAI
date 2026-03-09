@@ -118,15 +118,15 @@ private:
    int    m_cal3_steps;
 
    // Stability: replay + teacher distillation.
-   int    m_replay_head;
-   int    m_replay_size;
+   int    m_chr_replay_head;
+   int    m_chr_replay_size;
    int    m_replay_pos[FXAI_CHR_REPLAY];
-   double m_replay_x[FXAI_CHR_REPLAY][FXAI_AI_WEIGHTS];
+   double m_chr_replay_x[FXAI_CHR_REPLAY][FXAI_AI_WEIGHTS];
    int    m_replay_cls[FXAI_CHR_REPLAY];
-   double m_replay_move[FXAI_CHR_REPLAY];
-   double m_replay_cost[FXAI_CHR_REPLAY];
+   double m_chr_replay_move[FXAI_CHR_REPLAY];
+   double m_chr_replay_cost[FXAI_CHR_REPLAY];
    double m_replay_w[FXAI_CHR_REPLAY];
-   datetime m_replay_time[FXAI_CHR_REPLAY];
+   datetime m_chr_replay_time[FXAI_CHR_REPLAY];
 
    double m_t_w_cls[FXAI_CHR_CLASS_COUNT][FXAI_CHR_D_MODEL];
    double m_t_b_cls[FXAI_CHR_CLASS_COUNT];
@@ -221,28 +221,28 @@ private:
                    const double cost_points,
                    const double sample_w)
    {
-      int p = m_replay_head;
+      int p = m_chr_replay_head;
       m_replay_pos[p] = (m_seq_ptr >= 0 ? m_seq_ptr : 0);
-      for(int k=0; k<FXAI_AI_WEIGHTS; k++) m_replay_x[p][k] = x[k];
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++) m_chr_replay_x[p][k] = x[k];
       m_replay_cls[p] = cls;
-      m_replay_move[p] = move_points;
-      m_replay_cost[p] = cost_points;
+      m_chr_replay_move[p] = move_points;
+      m_chr_replay_cost[p] = cost_points;
       m_replay_w[p] = sample_w;
-      m_replay_time[p] = ResolveContextTime();
-      m_replay_head++;
-      if(m_replay_head >= FXAI_CHR_REPLAY) m_replay_head = 0;
-      if(m_replay_size < FXAI_CHR_REPLAY) m_replay_size++;
+      m_chr_replay_time[p] = ResolveContextTime();
+      m_chr_replay_head++;
+      if(m_chr_replay_head >= FXAI_CHR_REPLAY) m_chr_replay_head = 0;
+      if(m_chr_replay_size < FXAI_CHR_REPLAY) m_chr_replay_size++;
    }
 
    int ReplaySampleSlot(void) const
    {
-      if(m_replay_size <= 0) return -1;
+      if(m_chr_replay_size <= 0) return -1;
       double u = FXAI_Clamp((double)MathRand() / 32767.0, 0.0, 1.0);
-      int age = (int)MathFloor(u * (double)m_replay_size);
+      int age = (int)MathFloor(u * (double)m_chr_replay_size);
       if(age < 0) age = 0;
-      if(age >= m_replay_size) age = m_replay_size - 1;
+      if(age >= m_chr_replay_size) age = m_chr_replay_size - 1;
 
-      int slot = m_replay_head - 1 - age;
+      int slot = m_chr_replay_head - 1 - age;
       while(slot < 0) slot += FXAI_CHR_REPLAY;
       while(slot >= FXAI_CHR_REPLAY) slot -= FXAI_CHR_REPLAY;
       return slot;
@@ -1225,17 +1225,17 @@ private:
          m_opt_v[g] = 0.0;
       }
 
-      m_replay_head = 0;
-      m_replay_size = 0;
+      m_chr_replay_head = 0;
+      m_chr_replay_size = 0;
       for(int r=0; r<FXAI_CHR_REPLAY; r++)
       {
          m_replay_pos[r] = 0;
          m_replay_cls[r] = (int)FXAI_LABEL_SKIP;
-         m_replay_move[r] = 0.0;
-         m_replay_cost[r] = 0.0;
+         m_chr_replay_move[r] = 0.0;
+         m_chr_replay_cost[r] = 0.0;
          m_replay_w[r] = 1.0;
-         m_replay_time[r] = 0;
-         for(int k=0; k<FXAI_AI_WEIGHTS; k++) m_replay_x[r][k] = 0.0;
+         m_chr_replay_time[r] = 0;
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++) m_chr_replay_x[r][k] = 0.0;
       }
 
       m_val_ready = false;
@@ -1555,8 +1555,8 @@ public:
          m_opt_v[g] = 0.0;
       }
       m_mem_ptr = 0;
-      m_replay_head = 0;
-      m_replay_size = 0;
+      m_chr_replay_head = 0;
+      m_chr_replay_size = 0;
       m_val_ready = false;
       m_val_steps = 0;
       m_reference_ready = false;
@@ -2101,8 +2101,8 @@ protected:
       // Replay consolidation to reduce forgetting on volatile regimes.
       ReplayPush(cls, x, move_points, cost, sample_w);
       int replay_steps = 0;
-      if(m_replay_size >= 192) replay_steps = 2;
-      else if(m_replay_size >= 64) replay_steps = 1;
+      if(m_chr_replay_size >= 192) replay_steps = 2;
+      else if(m_chr_replay_size >= 64) replay_steps = 1;
       for(int rs=0; rs<replay_steps; rs++)
       {
          int slot = ReplaySampleSlot();
@@ -2122,13 +2122,13 @@ protected:
          int token_count_r = 0;
          double xr[FXAI_AI_WEIGHTS];
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-            xr[k] = m_replay_x[slot][k];
+            xr[k] = m_chr_replay_x[slot][k];
 
          ForwardPass(xr,
                      false,
                      true,
                      m_replay_cls[slot],
-                     m_replay_move[slot],
+                     m_chr_replay_move[slot],
                      rep_r,
                      p_raw_r,
                      mu_r,

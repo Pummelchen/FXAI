@@ -118,15 +118,15 @@ private:
    double m_ctx_b[FXAI_MLP_CTX];
 
    // Replay buffer.
-   double   m_replay_x[FXAI_MLP_REPLAY][FXAI_AI_WEIGHTS];
+   double   m_mlp_replay_x[FXAI_MLP_REPLAY][FXAI_AI_WEIGHTS];
    int      m_replay_y[FXAI_MLP_REPLAY];
-   double   m_replay_move[FXAI_MLP_REPLAY];
-   double   m_replay_cost[FXAI_MLP_REPLAY];
+   double   m_mlp_replay_move[FXAI_MLP_REPLAY];
+   double   m_mlp_replay_cost[FXAI_MLP_REPLAY];
    double   m_replay_w[FXAI_MLP_REPLAY];
-   datetime m_replay_time[FXAI_MLP_REPLAY];
+   datetime m_mlp_replay_time[FXAI_MLP_REPLAY];
    int      m_replay_session[FXAI_MLP_REPLAY];
-   int      m_replay_head;
-   int      m_replay_size;
+   int      m_mlp_replay_head;
+   int      m_mlp_replay_size;
 
    // SWA params (used with EMA in inference).
    bool   m_swa_ready;
@@ -538,8 +538,8 @@ private:
 
    int ReplayPos(const int logical_idx) const
    {
-      if(m_replay_size <= 0) return 0;
-      int start = m_replay_head - m_replay_size;
+      if(m_mlp_replay_size <= 0) return 0;
+      int start = m_mlp_replay_head - m_mlp_replay_size;
       while(start < 0) start += FXAI_MLP_REPLAY;
       int p = start + logical_idx;
       while(p >= FXAI_MLP_REPLAY) p -= FXAI_MLP_REPLAY;
@@ -554,18 +554,18 @@ private:
                    const datetime t_sample,
                    const int sess)
    {
-      int p = m_replay_head;
-      for(int i=0; i<FXAI_AI_WEIGHTS; i++) m_replay_x[p][i] = x[i];
+      int p = m_mlp_replay_head;
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++) m_mlp_replay_x[p][i] = x[i];
       m_replay_y[p] = cls;
-      m_replay_move[p] = move_points;
-      m_replay_cost[p] = cost_points;
+      m_mlp_replay_move[p] = move_points;
+      m_mlp_replay_cost[p] = cost_points;
       m_replay_w[p] = sample_w;
-      m_replay_time[p] = t_sample;
+      m_mlp_replay_time[p] = t_sample;
       m_replay_session[p] = sess;
 
-      m_replay_head++;
-      if(m_replay_head >= FXAI_MLP_REPLAY) m_replay_head = 0;
-      if(m_replay_size < FXAI_MLP_REPLAY) m_replay_size++;
+      m_mlp_replay_head++;
+      if(m_mlp_replay_head >= FXAI_MLP_REPLAY) m_mlp_replay_head = 0;
+      if(m_mlp_replay_size < FXAI_MLP_REPLAY) m_mlp_replay_size++;
    }
 
    double ReplayAgeWeight(const datetime t_sample,
@@ -971,17 +971,17 @@ private:
       }
       m_norm_steps = 0;
 
-      m_replay_head = 0;
-      m_replay_size = 0;
+      m_mlp_replay_head = 0;
+      m_mlp_replay_size = 0;
       for(int i=0; i<FXAI_MLP_REPLAY; i++)
       {
          m_replay_y[i] = (int)FXAI_LABEL_SKIP;
-         m_replay_move[i] = 0.0;
-         m_replay_cost[i] = 0.0;
+         m_mlp_replay_move[i] = 0.0;
+         m_mlp_replay_cost[i] = 0.0;
          m_replay_w[i] = 1.0;
-         m_replay_time[i] = 0;
+         m_mlp_replay_time[i] = 0;
          m_replay_session[i] = -1;
-         for(int k=0; k<FXAI_AI_WEIGHTS; k++) m_replay_x[i][k] = 0.0;
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++) m_mlp_replay_x[i][k] = 0.0;
       }
 
       m_cal3_steps = 0;
@@ -1708,8 +1708,8 @@ public:
       m_shadow_decay = 0.995;
       m_symbol_hash = 0.0;
       m_norm_steps = 0;
-      m_replay_head = 0;
-      m_replay_size = 0;
+      m_mlp_replay_head = 0;
+      m_mlp_replay_size = 0;
       m_swa_ready = false;
       m_swa_count = 0;
       m_cal3_steps = 0;
@@ -1840,13 +1840,13 @@ public:
       for(int r=0; r<FXAI_MLP_REPLAY; r++)
       {
          m_replay_y[r] = (int)FXAI_LABEL_SKIP;
-         m_replay_move[r] = 0.0;
-         m_replay_cost[r] = 0.0;
+         m_mlp_replay_move[r] = 0.0;
+         m_mlp_replay_cost[r] = 0.0;
          m_replay_w[r] = 1.0;
-         m_replay_time[r] = 0;
+         m_mlp_replay_time[r] = 0;
          m_replay_session[r] = -1;
          for(int i=0; i<FXAI_AI_WEIGHTS; i++)
-            m_replay_x[r][i] = 0.0;
+            m_mlp_replay_x[r][i] = 0.0;
       }
 
       InitMoments();
@@ -1882,23 +1882,23 @@ public:
       UpdateWeighted(y, x, h, w, move_points, false);
 
       int replay_n = 0;
-      if(m_replay_size >= 96) replay_n = 3;
-      else if(m_replay_size >= 32) replay_n = 2;
-      else if(m_replay_size >= 12) replay_n = 1;
+      if(m_mlp_replay_size >= 96) replay_n = 3;
+      else if(m_mlp_replay_size >= 32) replay_n = 2;
+      else if(m_mlp_replay_size >= 12) replay_n = 1;
 
       for(int r=0; r<replay_n; r++)
       {
-         if(m_replay_size <= 0) break;
-         int li = MathRand() % m_replay_size;
+         if(m_mlp_replay_size <= 0) break;
+         int li = MathRand() % m_mlp_replay_size;
          int p = ReplayPos(li);
          double rw = FXAI_Clamp(m_replay_w[p], 0.20, 4.00);
-         rw *= ReplayAgeWeight(m_replay_time[p], cur_t);
+         rw *= ReplayAgeWeight(m_mlp_replay_time[p], cur_t);
          if(m_replay_session[p] >= 0 && m_replay_session[p] != cur_sess) rw *= 0.85;
-         SetContext(m_replay_time[p], m_replay_cost[p], cur_min, m_ctx_regime_id, m_ctx_horizon_minutes);
+         SetContext(m_mlp_replay_time[p], m_mlp_replay_cost[p], cur_min, m_ctx_regime_id, m_ctx_horizon_minutes);
          double replay_x[FXAI_AI_WEIGHTS];
          for(int i=0; i<FXAI_AI_WEIGHTS; i++)
-            replay_x[i] = m_replay_x[p][i];
-         UpdateWeighted(m_replay_y[p], replay_x, h, rw, m_replay_move[p], true);
+            replay_x[i] = m_mlp_replay_x[p][i];
+         UpdateWeighted(m_replay_y[p], replay_x, h, rw, m_mlp_replay_move[p], true);
       }
 
       SetContext(cur_t, cur_cost, cur_min, m_ctx_regime_id, m_ctx_horizon_minutes);

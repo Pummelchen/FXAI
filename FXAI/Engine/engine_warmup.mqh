@@ -96,18 +96,25 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
       {
          if(i < 0 || i >= ArraySize(samples)) continue;
          if(!samples[i].valid) continue;
-         FXAIAISampleV2 s2;
-         s2.valid = samples[i].valid;
-         s2.label_class = samples[i].label_class;
-         s2.regime_id = samples[i].regime_id;
-         s2.horizon_minutes = samples[i].horizon_minutes;
-         s2.move_points = samples[i].move_points;
-         s2.min_move_points = samples[i].min_move_points;
-         s2.cost_points = samples[i].cost_points;
-         s2.sample_time = samples[i].sample_time;
+         FXAIAITrainRequestV3 s3;
+         s3.valid = samples[i].valid;
+         s3.ctx.api_version = FXAI_API_VERSION_V3;
+         s3.ctx.regime_id = samples[i].regime_id;
+         s3.ctx.session_bucket = 0;
+         s3.ctx.horizon_minutes = samples[i].horizon_minutes;
+         s3.ctx.feature_schema_id = 1;
+         s3.ctx.normalization_method_id = 0;
+         s3.ctx.sequence_bars = 1;
+         s3.ctx.cost_points = samples[i].cost_points;
+         s3.ctx.min_move_points = samples[i].min_move_points;
+         s3.ctx.point_value = 0.0;
+         s3.ctx.sample_time = samples[i].sample_time;
+         s3.label_class = samples[i].label_class;
+         s3.move_points = samples[i].move_points;
+         s3.sample_weight = 1.0;
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-            s2.x[k] = samples[i].x[k];
-         FXAI_TrainViaV3(trial, s2, hp);
+            s3.x[k] = samples[i].x[k];
+         FXAI_TrainViaV3(*trial, s3, hp);
       }
    }
 
@@ -702,16 +709,23 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
    {
       if(!samples[i].valid) continue;
 
-      FXAIAIPredictV2 req;
-      req.regime_id = samples[i].regime_id;
-      req.horizon_minutes = score_h;
-      req.min_move_points = samples[i].min_move_points;
-      req.cost_points = samples[i].cost_points;
-      req.sample_time = samples[i].sample_time;
+      FXAIAIPredictRequestV3 req;
+      req.valid = samples[i].valid;
+      req.ctx.api_version = FXAI_API_VERSION_V3;
+      req.ctx.regime_id = samples[i].regime_id;
+      req.ctx.session_bucket = 0;
+      req.ctx.horizon_minutes = score_h;
+      req.ctx.feature_schema_id = 1;
+      req.ctx.normalization_method_id = 0;
+      req.ctx.sequence_bars = 1;
+      req.ctx.cost_points = samples[i].cost_points;
+      req.ctx.min_move_points = samples[i].min_move_points;
+      req.ctx.point_value = 0.0;
+      req.ctx.sample_time = samples[i].sample_time;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = samples[i].x[k];
 
-      FXAIAIPredictionV2 pred;
+      FXAIAIPredictionV3 pred;
       FXAI_PredictViaV3(plugin, req, hp, pred);
 
       double probs_eval[3];
@@ -719,7 +733,7 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
       probs_eval[(int)FXAI_LABEL_BUY] = pred.class_probs[(int)FXAI_LABEL_BUY];
       probs_eval[(int)FXAI_LABEL_SKIP] = pred.class_probs[(int)FXAI_LABEL_SKIP];
 
-      double expected_move = pred.expected_move_points;
+      double expected_move = pred.move_mean_points;
       if(expected_move <= 0.0 && fallback_move_ready)
          expected_move = MathMax(fallback_move_ema, samples[i].min_move_points);
       if(expected_move <= 0.0) expected_move = samples[i].min_move_points;
@@ -819,16 +833,23 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
       FXAI_GetCachedPreparedSample(ai_idx, samples[i], i, caches, eval_sample);
       if(!eval_sample.valid) continue;
 
-      FXAIAIPredictV2 req;
-      req.regime_id = eval_sample.regime_id;
-      req.horizon_minutes = score_h;
-      req.min_move_points = eval_sample.min_move_points;
-      req.cost_points = eval_sample.cost_points;
-      req.sample_time = eval_sample.sample_time;
+      FXAIAIPredictRequestV3 req;
+      req.valid = eval_sample.valid;
+      req.ctx.api_version = FXAI_API_VERSION_V3;
+      req.ctx.regime_id = eval_sample.regime_id;
+      req.ctx.session_bucket = 0;
+      req.ctx.horizon_minutes = score_h;
+      req.ctx.feature_schema_id = 1;
+      req.ctx.normalization_method_id = 0;
+      req.ctx.sequence_bars = 1;
+      req.ctx.cost_points = eval_sample.cost_points;
+      req.ctx.min_move_points = eval_sample.min_move_points;
+      req.ctx.point_value = 0.0;
+      req.ctx.sample_time = eval_sample.sample_time;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = eval_sample.x[k];
 
-      FXAIAIPredictionV2 pred;
+      FXAIAIPredictionV3 pred;
       FXAI_PredictViaV3(plugin, req, hp, pred);
 
       double probs_eval[3];
@@ -836,7 +857,7 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
       probs_eval[(int)FXAI_LABEL_BUY] = pred.class_probs[(int)FXAI_LABEL_BUY];
       probs_eval[(int)FXAI_LABEL_SKIP] = pred.class_probs[(int)FXAI_LABEL_SKIP];
 
-      double expected_move = pred.expected_move_points;
+      double expected_move = pred.move_mean_points;
       if(expected_move <= 0.0 && fallback_move_ready)
          expected_move = MathMax(fallback_move_ema, eval_sample.min_move_points);
       if(expected_move <= 0.0) expected_move = eval_sample.min_move_points;
@@ -1261,19 +1282,26 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             FXAIAIHyperParams hp_model;
             FXAI_GetModelHyperParamsRouted(ai_idx, regime_id, H, hp_model);
 
-            FXAIAIPredictV2 req;
             FXAIPreparedSample pred_sample;
             FXAI_GetCachedPreparedSample(ai_idx, samples[i], i, norm_caches, pred_sample);
-            req.regime_id = pred_sample.regime_id;
-            req.horizon_minutes = pred_sample.horizon_minutes;
-            req.min_move_points = pred_sample.min_move_points;
-            req.cost_points = pred_sample.cost_points;
-            req.sample_time = pred_sample.sample_time;
+            FXAIAIPredictRequestV3 req;
+            req.valid = pred_sample.valid;
+            req.ctx.api_version = FXAI_API_VERSION_V3;
+            req.ctx.regime_id = pred_sample.regime_id;
+            req.ctx.session_bucket = 0;
+            req.ctx.horizon_minutes = pred_sample.horizon_minutes;
+            req.ctx.feature_schema_id = 1;
+            req.ctx.normalization_method_id = 0;
+            req.ctx.sequence_bars = 1;
+            req.ctx.cost_points = pred_sample.cost_points;
+            req.ctx.min_move_points = pred_sample.min_move_points;
+            req.ctx.point_value = 0.0;
+            req.ctx.sample_time = pred_sample.sample_time;
             for(int k=0; k<FXAI_AI_WEIGHTS; k++)
                req.x[k] = pred_sample.x[k];
 
-            FXAIAIPredictionV2 pred;
-            FXAI_PredictViaV3(plugin, req, hp_model, pred);
+            FXAIAIPredictionV3 pred;
+            FXAI_PredictViaV3(*plugin, req, hp_model, pred);
 
             double probs_eval[3];
             probs_eval[0] = pred.class_probs[0];
@@ -1281,7 +1309,7 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             probs_eval[2] = pred.class_probs[2];
             FXAI_ApplyRegimeCalibration(ai_idx, regime_id, probs_eval);
 
-            double expected_move = pred.expected_move_points;
+            double expected_move = pred.move_mean_points;
             if(expected_move <= 0.0 && fallback_move_ready)
                expected_move = MathMax(fallback_move_ema, samples[i].min_move_points);
             if(expected_move <= 0.0) expected_move = samples[i].min_move_points;

@@ -32,9 +32,9 @@ private:
    double m_global_edge_ema;
    double m_global_hit_ema;
    double m_replay_d[FXAI_LOFFM_EXPERTS][FXAI_LOFFM_REPLAY][FXAI_LOFFM_DERIVED];
-   double m_replay_move[FXAI_LOFFM_EXPERTS][FXAI_LOFFM_REPLAY];
-   int    m_replay_label[FXAI_LOFFM_EXPERTS][FXAI_LOFFM_REPLAY];
-   int    m_replay_head[FXAI_LOFFM_EXPERTS];
+   double m_loffm_replay_move[FXAI_LOFFM_EXPERTS][FXAI_LOFFM_REPLAY];
+   int    m_loffm_replay_label[FXAI_LOFFM_EXPERTS][FXAI_LOFFM_REPLAY];
+   int    m_loffm_replay_head[FXAI_LOFFM_EXPERTS];
    int    m_replay_count[FXAI_LOFFM_EXPERTS];
 
    double ClampProb(const double p) const
@@ -58,13 +58,13 @@ private:
          m_hit_ema[e]    = 0.50;
          m_expert_mass[e]= 0.0;
          m_usage_ema[e]  = 1.0 / (double)FXAI_LOFFM_EXPERTS;
-         m_replay_head[e] = 0;
+         m_loffm_replay_head[e] = 0;
          m_replay_count[e] = 0;
          for(int r=0; r<FXAI_LOFFM_REPLAY; r++)
          {
             for(int k=0; k<FXAI_LOFFM_DERIVED; k++) m_replay_d[e][r][k] = 0.0;
-            m_replay_move[e][r] = 0.0;
-            m_replay_label[e][r] = (int)FXAI_LABEL_SKIP;
+            m_loffm_replay_move[e][r] = 0.0;
+            m_loffm_replay_label[e][r] = (int)FXAI_LABEL_SKIP;
          }
       }
       for(int k=0; k<FXAI_LOFFM_STATE; k++) m_global_state[k] = 0.0;
@@ -305,11 +305,11 @@ private:
 
    void StoreReplay(const int expert, const double &d[], const int label, const double move_points)
    {
-      int slot = m_replay_head[expert];
+      int slot = m_loffm_replay_head[expert];
       for(int k=0; k<FXAI_LOFFM_DERIVED; k++) m_replay_d[expert][slot][k] = d[k];
-      m_replay_move[expert][slot] = move_points;
-      m_replay_label[expert][slot] = label;
-      m_replay_head[expert] = (slot + 1) % FXAI_LOFFM_REPLAY;
+      m_loffm_replay_move[expert][slot] = move_points;
+      m_loffm_replay_label[expert][slot] = label;
+      m_loffm_replay_head[expert] = (slot + 1) % FXAI_LOFFM_REPLAY;
       if(m_replay_count[expert] < FXAI_LOFFM_REPLAY) m_replay_count[expert]++;
    }
 
@@ -396,12 +396,12 @@ private:
    void ReplayExpert(const int expert, const FXAIAIHyperParams &hp)
    {
       if(m_replay_count[expert] <= 0) return;
-      int slot = m_replay_head[expert] - 1;
+      int slot = m_loffm_replay_head[expert] - 1;
       if(slot < 0) slot += FXAI_LOFFM_REPLAY;
       double rd[FXAI_LOFFM_DERIVED];
       for(int k=0; k<FXAI_LOFFM_DERIVED; k++) rd[k] = m_replay_d[expert][slot][k];
-      double replay_target_move = MathAbs(m_replay_move[expert][slot]);
-      TrainExpertSample(expert, rd, m_replay_label[expert][slot], m_replay_move[expert][slot], replay_target_move, 0.45, hp, 0.55, false);
+      double replay_target_move = MathAbs(m_loffm_replay_move[expert][slot]);
+      TrainExpertSample(expert, rd, m_loffm_replay_label[expert][slot], m_loffm_replay_move[expert][slot], replay_target_move, 0.45, hp, 0.55, false);
    }
 
 public:

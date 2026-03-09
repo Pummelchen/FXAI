@@ -80,55 +80,18 @@ bool FXAI_ValidatePredictionV3(const FXAIAIPredictionV3 &pred,
 }
 
 void FXAI_TrainViaV3(CFXAIAIPlugin &plugin,
-                     const FXAIAISampleV2 &sample,
+                     const FXAIAITrainRequestV3 &req,
                      const FXAIAIHyperParams &hp)
 {
-   FXAIAITrainRequestV3 req;
-   req.ctx.api_version = FXAI_API_VERSION_V3;
-   req.ctx.regime_id = sample.regime_id;
-   req.ctx.session_bucket = 0;
-   req.ctx.horizon_minutes = sample.horizon_minutes;
-   req.ctx.feature_schema_id = 1;
-   req.ctx.normalization_method_id = 0;
-   req.ctx.sequence_bars = 1;
-   req.ctx.cost_points = sample.cost_points;
-   req.ctx.min_move_points = sample.min_move_points;
-   req.ctx.point_value = 0.0;
-   req.ctx.sample_time = sample.sample_time;
-   req.label_class = sample.label_class;
-   req.move_points = sample.move_points;
-   req.sample_weight = 1.0;
-   for(int i=0; i<FXAI_AI_WEIGHTS; i++)
-      req.x[i] = sample.x[i];
    plugin.TrainV3(req, hp);
 }
 
-void FXAI_PredictViaV3(CFXAIAIPlugin &plugin,
-                       const FXAIAIPredictV2 &req_v2,
+bool FXAI_PredictViaV3(CFXAIAIPlugin &plugin,
+                       const FXAIAIPredictRequestV3 &req,
                        const FXAIAIHyperParams &hp,
-                       FXAIAIPredictionV2 &out_v2)
+                       FXAIAIPredictionV3 &out)
 {
-   FXAIAIPredictRequestV3 req_v3;
-   req_v3.ctx.api_version = FXAI_API_VERSION_V3;
-   req_v3.ctx.regime_id = req_v2.regime_id;
-   req_v3.ctx.session_bucket = 0;
-   req_v3.ctx.horizon_minutes = req_v2.horizon_minutes;
-   req_v3.ctx.feature_schema_id = 1;
-   req_v3.ctx.normalization_method_id = 0;
-   req_v3.ctx.sequence_bars = 1;
-   req_v3.ctx.cost_points = req_v2.cost_points;
-   req_v3.ctx.min_move_points = req_v2.min_move_points;
-   req_v3.ctx.point_value = 0.0;
-   req_v3.ctx.sample_time = req_v2.sample_time;
-   for(int i=0; i<FXAI_AI_WEIGHTS; i++)
-      req_v3.x[i] = req_v2.x[i];
-
-   FXAIAIPredictionV3 pred_v3;
-   plugin.PredictV3(req_v3, hp, pred_v3);
-   for(int c=0; c<3; c++)
-      out_v2.class_probs[c] = pred_v3.class_probs[c];
-   out_v2.p_up = out_v2.class_probs[(int)FXAI_LABEL_BUY];
-   out_v2.expected_move_points = pred_v3.move_mean_points;
+   return plugin.PredictV3(req, hp, out);
 }
 
 #endif // __FXAI_API_V3_MQH__

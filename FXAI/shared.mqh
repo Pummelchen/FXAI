@@ -15,7 +15,6 @@
 #define FXAI_PLUGIN_REPLAY_STEPS 2
 #define FXAI_CONTEXT_TOP_SYMBOLS 3
 #define FXAI_CONTEXT_EXTRA_FEATS (FXAI_CONTEXT_TOP_SYMBOLS * 4)
-#define FXAI_API_VERSION_V2 2
 #define FXAI_API_VERSION_V3 3
 
 
@@ -197,6 +196,7 @@ struct FXAIAIContextV3
 
 struct FXAIAITrainRequestV3
 {
+   bool valid;
    FXAIAIContextV3 ctx;
    int label_class;
    double move_points;
@@ -206,6 +206,7 @@ struct FXAIAITrainRequestV3
 
 struct FXAIAIPredictRequestV3
 {
+   bool valid;
    FXAIAIContextV3 ctx;
    double x[FXAI_AI_WEIGHTS];
 };
@@ -218,39 +219,6 @@ struct FXAIAIPredictionV3
    double move_q75_points;
    double confidence;
    double calibration_confidence;
-};
-
-// V2 plugin API sample payload used for training.
-struct FXAIAISampleV2
-{
-   bool valid;
-   int label_class;
-   int regime_id;
-   int horizon_minutes;
-   double move_points;
-   double min_move_points;
-   double cost_points;
-   datetime sample_time;
-   double x[FXAI_AI_WEIGHTS];
-};
-
-// V2 plugin API payload used for inference.
-struct FXAIAIPredictV2
-{
-   int regime_id;
-   int horizon_minutes;
-   double min_move_points;
-   double cost_points;
-   datetime sample_time;
-   double x[FXAI_AI_WEIGHTS];
-};
-
-// V2 plugin prediction output (native 3-class + move estimate).
-struct FXAIAIPredictionV2
-{
-   double class_probs[3];
-   double p_up;
-   double expected_move_points;
 };
 
 double FXAI_Clamp(const double v, const double lo, const double hi)

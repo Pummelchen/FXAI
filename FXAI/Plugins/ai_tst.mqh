@@ -42,10 +42,10 @@ private:
    // Replay memory for hard-sample and class-balanced training.
    int    m_replay_len;
    int    m_replay_ptr;
-   double m_replay_x[FXAI_TST_REPLAY][FXAI_AI_WEIGHTS];
+   double m_tst_replay_x[FXAI_TST_REPLAY][FXAI_AI_WEIGHTS];
    int    m_replay_cls[FXAI_TST_REPLAY];
-   double m_replay_move[FXAI_TST_REPLAY];
-   double m_replay_cost[FXAI_TST_REPLAY];
+   double m_tst_replay_move[FXAI_TST_REPLAY];
+   double m_tst_replay_cost[FXAI_TST_REPLAY];
    double m_replay_w[FXAI_TST_REPLAY];
    double m_replay_hard[FXAI_TST_REPLAY];
 
@@ -304,12 +304,12 @@ private:
       for(int i=0; i<FXAI_TST_REPLAY; i++)
       {
          m_replay_cls[i] = FXAI_TST_SKIP;
-         m_replay_move[i] = 0.0;
-         m_replay_cost[i] = 0.0;
+         m_tst_replay_move[i] = 0.0;
+         m_tst_replay_cost[i] = 0.0;
          m_replay_w[i] = 1.0;
          m_replay_hard[i] = 0.0;
          for(int j=0; j<FXAI_AI_WEIGHTS; j++)
-            m_replay_x[i][j] = 0.0;
+            m_tst_replay_x[i][j] = 0.0;
       }
    }
 
@@ -324,10 +324,10 @@ private:
       if(p < 0 || p >= FXAI_TST_REPLAY) p = 0;
 
       for(int i=0; i<FXAI_AI_WEIGHTS; i++)
-         m_replay_x[p][i] = x[i];
+         m_tst_replay_x[p][i] = x[i];
       m_replay_cls[p] = cls;
-      m_replay_move[p] = move_points;
-      m_replay_cost[p] = cost_points;
+      m_tst_replay_move[p] = move_points;
+      m_tst_replay_cost[p] = cost_points;
       m_replay_w[p] = sample_w;
       m_replay_hard[p] = FXAI_Clamp(hardness, 0.0, 10.0);
 
@@ -374,8 +374,8 @@ private:
       if(idx < 0 || idx >= m_replay_len) return;
       double xr[FXAI_AI_WEIGHTS];
       for(int i=0; i<FXAI_AI_WEIGHTS; i++)
-         xr[i] = m_replay_x[idx][i];
-      AppendTrainSample(m_replay_cls[idx], xr, m_replay_move[idx], m_replay_cost[idx], m_replay_w[idx]);
+         xr[i] = m_tst_replay_x[idx][i];
+      AppendTrainSample(m_replay_cls[idx], xr, m_tst_replay_move[idx], m_tst_replay_cost[idx], m_replay_w[idx]);
    }
 
    void UpdateSessionCalibration(const int sess,

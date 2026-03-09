@@ -119,15 +119,15 @@ private:
    double m_ema_b_q75;
 
    // Drift-aware replay buffer.
-   double   m_replay_x[FXAI_LSTM_REPLAY][FXAI_AI_WEIGHTS];
+   double   m_lstm_replay_x[FXAI_LSTM_REPLAY][FXAI_AI_WEIGHTS];
    int      m_replay_y[FXAI_LSTM_REPLAY];
-   double   m_replay_move[FXAI_LSTM_REPLAY];
-   double   m_replay_cost[FXAI_LSTM_REPLAY];
+   double   m_lstm_replay_move[FXAI_LSTM_REPLAY];
+   double   m_lstm_replay_cost[FXAI_LSTM_REPLAY];
    double   m_replay_w[FXAI_LSTM_REPLAY];
-   datetime m_replay_time[FXAI_LSTM_REPLAY];
+   datetime m_lstm_replay_time[FXAI_LSTM_REPLAY];
    int      m_replay_session[FXAI_LSTM_REPLAY];
-   int      m_replay_head;
-   int      m_replay_size;
+   int      m_lstm_replay_head;
+   int      m_lstm_replay_size;
 
    // Online validation / quality gate.
    bool   m_val_ready;
@@ -377,8 +377,8 @@ private:
 
    int ReplayPos(const int logical_idx) const
    {
-      if(m_replay_size <= 0) return 0;
-      int start = m_replay_head - m_replay_size;
+      if(m_lstm_replay_size <= 0) return 0;
+      int start = m_lstm_replay_head - m_lstm_replay_size;
       while(start < 0) start += FXAI_LSTM_REPLAY;
       int p = start + logical_idx;
       while(p >= FXAI_LSTM_REPLAY) p -= FXAI_LSTM_REPLAY;
@@ -393,19 +393,19 @@ private:
                    const datetime t_sample,
                    const int sess)
    {
-      int p = m_replay_head;
+      int p = m_lstm_replay_head;
       for(int i=0; i<FXAI_AI_WEIGHTS; i++)
-         m_replay_x[p][i] = x[i];
+         m_lstm_replay_x[p][i] = x[i];
       m_replay_y[p] = cls;
-      m_replay_move[p] = move_points;
-      m_replay_cost[p] = cost_points;
+      m_lstm_replay_move[p] = move_points;
+      m_lstm_replay_cost[p] = cost_points;
       m_replay_w[p] = sample_w;
-      m_replay_time[p] = t_sample;
+      m_lstm_replay_time[p] = t_sample;
       m_replay_session[p] = sess;
 
-      m_replay_head++;
-      if(m_replay_head >= FXAI_LSTM_REPLAY) m_replay_head = 0;
-      if(m_replay_size < FXAI_LSTM_REPLAY) m_replay_size++;
+      m_lstm_replay_head++;
+      if(m_lstm_replay_head >= FXAI_LSTM_REPLAY) m_lstm_replay_head = 0;
+      if(m_lstm_replay_size < FXAI_LSTM_REPLAY) m_lstm_replay_size++;
    }
 
    double ReplayAgeWeight(const datetime t_sample,
@@ -854,18 +854,18 @@ private:
          m_opt_v[g] = 0.0;
       }
 
-      m_replay_head = 0;
-      m_replay_size = 0;
+      m_lstm_replay_head = 0;
+      m_lstm_replay_size = 0;
       for(int i=0; i<FXAI_LSTM_REPLAY; i++)
       {
          m_replay_y[i] = (int)FXAI_LABEL_SKIP;
-         m_replay_move[i] = 0.0;
-         m_replay_cost[i] = 0.0;
+         m_lstm_replay_move[i] = 0.0;
+         m_lstm_replay_cost[i] = 0.0;
          m_replay_w[i] = 1.0;
-         m_replay_time[i] = 0;
+         m_lstm_replay_time[i] = 0;
          m_replay_session[i] = -1;
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-            m_replay_x[i][k] = 0.0;
+            m_lstm_replay_x[i][k] = 0.0;
       }
 
       m_val_ready = false;
@@ -1725,8 +1725,8 @@ public:
 
       m_ema_ready = false;
       m_ema_steps = 0;
-      m_replay_head = 0;
-      m_replay_size = 0;
+      m_lstm_replay_head = 0;
+      m_lstm_replay_size = 0;
       m_val_ready = false;
       m_val_steps = 0;
       m_quality_degraded = false;
@@ -1843,7 +1843,7 @@ public:
       AppendBatch(cls, x, move_points, w, m_pending_reset_flag);
       PushReplay(cls, x, move_points, cost_points, w, t_now, sess);
 
-      if(m_replay_size >= 64 && m_batch_size < FXAI_LSTM_TBPTT && (m_seen_updates % 6) == 0)
+      if(m_lstm_replay_size >= 64 && m_batch_size < FXAI_LSTM_TBPTT && (m_seen_updates % 6) == 0)
       {
          int add_n = (m_batch_size <= 6 ? 2 : 1);
          for(int a=0; a<add_n; a++)
@@ -1852,12 +1852,12 @@ public:
             double best_score = -1.0;
             for(int tries=0; tries<12; tries++)
             {
-               int li = MathRand() % m_replay_size;
+               int li = MathRand() % m_lstm_replay_size;
                int rp = ReplayPos(li);
-               double rw = ReplayAgeWeight(m_replay_time[rp], t_now);
+               double rw = ReplayAgeWeight(m_lstm_replay_time[rp], t_now);
                if(m_replay_session[rp] == sess) rw *= 1.20;
                if(m_replay_y[rp] == (int)FXAI_LABEL_SKIP) rw *= 0.95;
-               double edge_r = MathAbs(m_replay_move[rp]) - MathMax(0.0, m_replay_cost[rp]);
+               double edge_r = MathAbs(m_lstm_replay_move[rp]) - MathMax(0.0, m_lstm_replay_cost[rp]);
                if(edge_r > 0.0) rw *= (1.0 + 0.04 * MathMin(edge_r, 20.0));
                else rw *= 0.80;
                if(rw > best_score)
@@ -1869,11 +1869,11 @@ public:
             if(pick >= 0)
             {
                double xr[FXAI_AI_WEIGHTS];
-               for(int i=0; i<FXAI_AI_WEIGHTS; i++) xr[i] = m_replay_x[pick][i];
-               double edge_r = MathAbs(m_replay_move[pick]) - MathMax(0.0, m_replay_cost[pick]);
-               double rw = FXAI_Clamp(m_replay_w[pick] * ReplayAgeWeight(m_replay_time[pick], t_now), 0.10, 6.00);
+               for(int i=0; i<FXAI_AI_WEIGHTS; i++) xr[i] = m_lstm_replay_x[pick][i];
+               double edge_r = MathAbs(m_lstm_replay_move[pick]) - MathMax(0.0, m_lstm_replay_cost[pick]);
+               double rw = FXAI_Clamp(m_replay_w[pick] * ReplayAgeWeight(m_lstm_replay_time[pick], t_now), 0.10, 6.00);
                if(edge_r > 0.0) rw *= (1.0 + 0.03 * MathMin(edge_r, 20.0));
-               AppendBatch(m_replay_y[pick], xr, m_replay_move[pick], rw, 1.0);
+               AppendBatch(m_replay_y[pick], xr, m_lstm_replay_move[pick], rw, 1.0);
                if(m_batch_size >= FXAI_LSTM_TBPTT) break;
             }
          }

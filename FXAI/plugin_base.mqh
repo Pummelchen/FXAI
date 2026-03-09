@@ -20,7 +20,7 @@ protected:
    double m_iso_pos[12];
    double m_iso_cnt[12];
 
-   // V2 context payload (set by TrainV2/PredictV2).
+   // V3 context payload (set by TrainV3/PredictV3).
    bool     m_ctx_time_ready;
    datetime m_ctx_time;
    bool     m_ctx_cost_ready;
@@ -36,29 +36,29 @@ protected:
    double m_bank_ev_g2_scale[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
    double m_bank_ev_g2_bias[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
 
-   int      m_v2_replay_head;
-   int      m_v2_replay_size;
-   double   m_v2_replay_x[FXAI_PLUGIN_REPLAY_CAPACITY][FXAI_AI_WEIGHTS];
-   int      m_v2_replay_label[FXAI_PLUGIN_REPLAY_CAPACITY];
-   double   m_v2_replay_move[FXAI_PLUGIN_REPLAY_CAPACITY];
-   double   m_v2_replay_cost[FXAI_PLUGIN_REPLAY_CAPACITY];
-   double   m_v2_replay_min_move[FXAI_PLUGIN_REPLAY_CAPACITY];
-   datetime m_v2_replay_time[FXAI_PLUGIN_REPLAY_CAPACITY];
-   int      m_v2_replay_regime[FXAI_PLUGIN_REPLAY_CAPACITY];
-   int      m_v2_replay_horizon[FXAI_PLUGIN_REPLAY_CAPACITY];
-   double   m_v2_replay_priority[FXAI_PLUGIN_REPLAY_CAPACITY];
+   int      m_replay_head;
+   int      m_replay_size;
+   double   m_replay_x[FXAI_PLUGIN_REPLAY_CAPACITY][FXAI_AI_WEIGHTS];
+   int      m_replay_label[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_replay_move[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_replay_cost[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_replay_min_move[FXAI_PLUGIN_REPLAY_CAPACITY];
+   datetime m_replay_time[FXAI_PLUGIN_REPLAY_CAPACITY];
+   int      m_replay_regime[FXAI_PLUGIN_REPLAY_CAPACITY];
+   int      m_replay_horizon[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_replay_priority[FXAI_PLUGIN_REPLAY_CAPACITY];
 
    int      m_native_predict_calls;
    int      m_native_predict_failures;
    int      m_expected_prior_calls;
-   int      m_v2_replay_rehearsals;
+   int      m_replay_rehearsals;
 
    double InputCostProxyPoints(const double &x[]) const
    {
       if(m_ctx_cost_ready && m_ctx_cost_points >= 0.0)
          return m_ctx_cost_points;
 
-      // Fallback for legacy callers where explicit cost is not provided.
+      // Fallback when context has not been set explicitly before a dry-run call.
       if(ArraySize(x) <= 7) return 0.0;
       return MathMax(0.0, MathAbs(x[7]));
    }
@@ -167,26 +167,26 @@ protected:
          }
       }
 
-      m_v2_replay_head = 0;
-      m_v2_replay_size = 0;
+      m_replay_head = 0;
+      m_replay_size = 0;
       for(int i=0; i<FXAI_PLUGIN_REPLAY_CAPACITY; i++)
       {
-         m_v2_replay_label[i] = (int)FXAI_LABEL_SKIP;
-         m_v2_replay_move[i] = 0.0;
-         m_v2_replay_cost[i] = 0.0;
-         m_v2_replay_min_move[i] = 0.0;
-         m_v2_replay_time[i] = 0;
-         m_v2_replay_regime[i] = 0;
-         m_v2_replay_horizon[i] = 1;
-         m_v2_replay_priority[i] = 0.0;
+         m_replay_label[i] = (int)FXAI_LABEL_SKIP;
+         m_replay_move[i] = 0.0;
+         m_replay_cost[i] = 0.0;
+         m_replay_min_move[i] = 0.0;
+         m_replay_time[i] = 0;
+         m_replay_regime[i] = 0;
+         m_replay_horizon[i] = 1;
+         m_replay_priority[i] = 0.0;
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-            m_v2_replay_x[i][k] = 0.0;
+            m_replay_x[i][k] = 0.0;
       }
 
       m_native_predict_calls = 0;
       m_native_predict_failures = 0;
       m_expected_prior_calls = 0;
-      m_v2_replay_rehearsals = 0;
+      m_replay_rehearsals = 0;
    }
 
    void UpdateMoveHead(const double &x[],
@@ -505,31 +505,31 @@ protected:
       return FXAI_Clamp(pri, 0.10, 8.00);
    }
 
-   void StoreReplaySample(const FXAIAISampleV2 &sample,
+   void StoreReplaySample(const FXAIAITrainRequestV3 &sample,
                           const double priority)
    {
-      int slot = m_v2_replay_head;
+      int slot = m_replay_head;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-         m_v2_replay_x[slot][k] = sample.x[k];
-      m_v2_replay_label[slot] = sample.label_class;
-      m_v2_replay_move[slot] = sample.move_points;
-      m_v2_replay_cost[slot] = sample.cost_points;
-      m_v2_replay_min_move[slot] = sample.min_move_points;
-      m_v2_replay_time[slot] = sample.sample_time;
-      m_v2_replay_regime[slot] = sample.regime_id;
-      m_v2_replay_horizon[slot] = sample.horizon_minutes;
-      m_v2_replay_priority[slot] = priority;
+         m_replay_x[slot][k] = sample.x[k];
+      m_replay_label[slot] = sample.label_class;
+      m_replay_move[slot] = sample.move_points;
+      m_replay_cost[slot] = sample.ctx.cost_points;
+      m_replay_min_move[slot] = sample.ctx.min_move_points;
+      m_replay_time[slot] = sample.ctx.sample_time;
+      m_replay_regime[slot] = sample.ctx.regime_id;
+      m_replay_horizon[slot] = sample.ctx.horizon_minutes;
+      m_replay_priority[slot] = priority;
 
-      m_v2_replay_head = (m_v2_replay_head + 1) % FXAI_PLUGIN_REPLAY_CAPACITY;
-      if(m_v2_replay_size < FXAI_PLUGIN_REPLAY_CAPACITY)
-         m_v2_replay_size++;
+      m_replay_head = (m_replay_head + 1) % FXAI_PLUGIN_REPLAY_CAPACITY;
+      if(m_replay_size < FXAI_PLUGIN_REPLAY_CAPACITY)
+         m_replay_size++;
    }
 
    void RunReplayRehearsal(const FXAIAIHyperParams &hp,
                            const int regime_id,
                            const int horizon_minutes)
    {
-      if(m_v2_replay_size <= 0) return;
+      if(m_replay_size <= 0) return;
 
       int best_idx[FXAI_PLUGIN_REPLAY_STEPS];
       double best_score[FXAI_PLUGIN_REPLAY_STEPS];
@@ -539,11 +539,11 @@ protected:
          best_score[j] = -1e18;
       }
 
-      for(int i=0; i<m_v2_replay_size; i++)
+      for(int i=0; i<m_replay_size; i++)
       {
-         double score = m_v2_replay_priority[i];
-         if(m_v2_replay_regime[i] == regime_id) score += 0.80;
-         if(m_v2_replay_horizon[i] == horizon_minutes) score += 0.60;
+         double score = m_replay_priority[i];
+         if(m_replay_regime[i] == regime_id) score += 0.80;
+         if(m_replay_horizon[i] == horizon_minutes) score += 0.60;
 
          for(int j=0; j<FXAI_PLUGIN_REPLAY_STEPS; j++)
          {
@@ -572,17 +572,17 @@ protected:
       for(int j=0; j<FXAI_PLUGIN_REPLAY_STEPS; j++)
       {
          int idx = best_idx[j];
-         if(idx < 0 || idx >= m_v2_replay_size) continue;
-         SetContext(m_v2_replay_time[idx],
-                    m_v2_replay_cost[idx],
-                    m_v2_replay_min_move[idx],
-                    m_v2_replay_regime[idx],
-                    m_v2_replay_horizon[idx]);
+         if(idx < 0 || idx >= m_replay_size) continue;
+         SetContext(m_replay_time[idx],
+                    m_replay_cost[idx],
+                    m_replay_min_move[idx],
+                    m_replay_regime[idx],
+                    m_replay_horizon[idx]);
          double replay_x[FXAI_AI_WEIGHTS];
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-            replay_x[k] = m_v2_replay_x[idx][k];
-         UpdateWithMove(m_v2_replay_label[idx], replay_x, hp, m_v2_replay_move[idx]);
-         m_v2_replay_rehearsals++;
+            replay_x[k] = m_replay_x[idx][k];
+         UpdateWithMove(m_replay_label[idx], replay_x, hp, m_replay_move[idx]);
+         m_replay_rehearsals++;
       }
 
       m_ctx_time_ready = keep_time_ready;
@@ -689,18 +689,19 @@ protected:
       out.max_horizon_minutes = 720;
    }
 
-   void FillPredictionV3(const FXAIAIPredictionV2 &src,
+   void FillPredictionV3(const double &class_probs[],
+                         const double move_mean_points,
                          FXAIAIPredictionV3 &dst) const
    {
       for(int c=0; c<3; c++)
-         dst.class_probs[c] = src.class_probs[c];
+         dst.class_probs[c] = class_probs[c];
 
       double buy_p = dst.class_probs[(int)FXAI_LABEL_BUY];
       double sell_p = dst.class_probs[(int)FXAI_LABEL_SELL];
       double skip_p = dst.class_probs[(int)FXAI_LABEL_SKIP];
       double directional_conf = MathMax(buy_p, sell_p);
       double uncertainty = FXAI_Clamp(1.0 - directional_conf + 0.50 * skip_p, 0.10, 1.50);
-      double mean_move = MathMax(src.expected_move_points, ResolveMinMovePoints());
+      double mean_move = MathMax(move_mean_points, ResolveMinMovePoints());
 
       dst.move_mean_points = mean_move;
       dst.move_q25_points = MathMax(ResolveMinMovePoints(), mean_move * MathMax(0.25, 1.0 - 0.45 * uncertainty));
@@ -717,7 +718,7 @@ public:
    virtual int APIVersion(void) const { return FXAI_API_VERSION_V3; }
 
    virtual void Reset(void) { ResetAuxState(); }
-    virtual void DescribeV3(FXAIAIManifestV3 &out) const { FillDefaultManifestV3(out); }
+   virtual void DescribeV3(FXAIAIManifestV3 &out) const { FillDefaultManifestV3(out); }
    virtual void ResetStateV3(const int reason, const datetime when)
    {
       Reset();
@@ -729,138 +730,90 @@ public:
       return (manifest.api_version == FXAI_API_VERSION_V3 && manifest.supports_native_3class);
    }
    virtual void EnsureInitialized(const FXAIAIHyperParams &hp) {}
-   virtual bool SupportsNativeClassProbs(void) const { return false; }
+   virtual bool SupportsNativeClassProbs(void) const = 0;
    virtual bool PredictNativeClassProbs(const double &x[],
                                         const FXAIAIHyperParams &hp,
                                         double &class_probs[],
-                                        double &expected_move_points)
-   {
-      return false;
-   }
+                                        double &expected_move_points) = 0;
 
    int NativePredictFailures(void) const { return m_native_predict_failures; }
    int ExpectedPriorCalls(void) const { return m_expected_prior_calls; }
-   int ReplayRehearsals(void) const { return m_v2_replay_rehearsals; }
+   int ReplayRehearsals(void) const { return m_replay_rehearsals; }
 
-   // V2 training API: time/cost-aware sample payload.
-   void TrainV2(const FXAIAISampleV2 &sample, const FXAIAIHyperParams &hp)
+   void TrainV3(const FXAIAITrainRequestV3 &req, const FXAIAIHyperParams &hp)
    {
-      if(!sample.valid) return;
+      if(!req.valid) return;
       EnsureInitialized(hp);
-      SetContext(sample.sample_time,
-                 sample.cost_points,
-                 sample.min_move_points,
-                 sample.regime_id,
-                 sample.horizon_minutes);
+      SetContext(req.ctx.sample_time,
+                 req.ctx.cost_points,
+                 req.ctx.min_move_points,
+                 req.ctx.regime_id,
+                 req.ctx.horizon_minutes);
 
       double pre_probs[3];
       pre_probs[0] = 0.10;
       pre_probs[1] = 0.10;
       pre_probs[2] = 0.80;
-      double pre_move = MathMax(sample.min_move_points, 0.10);
-      bool have_pre = PredictNativeClassProbs(sample.x, hp, pre_probs, pre_move);
+      double pre_move = MathMax(req.ctx.min_move_points, 0.10);
+      bool have_pre = PredictNativeClassProbs(req.x, hp, pre_probs, pre_move);
       if(!have_pre)
          m_native_predict_failures++;
       NormalizeClassDistribution(pre_probs);
-      pre_move = MathMax(pre_move, MathMax(sample.min_move_points, 0.10));
+      pre_move = MathMax(pre_move, MathMax(req.ctx.min_move_points, 0.10));
 
-      double sample_w = MoveSampleWeight(sample.x, sample.move_points);
-      UpdateContextCalibrationBank(sample.label_class, pre_probs, pre_move, sample.move_points, sample_w);
-      double replay_pri = ComputeReplayPriority(sample.label_class,
+      double sample_w = (req.sample_weight > 0.0 ? req.sample_weight : MoveSampleWeight(req.x, req.move_points));
+      UpdateContextCalibrationBank(req.label_class, pre_probs, pre_move, req.move_points, sample_w);
+      double replay_pri = ComputeReplayPriority(req.label_class,
                                                 pre_probs,
-                                                sample.move_points,
-                                                sample.cost_points,
-                                                sample.min_move_points);
-      StoreReplaySample(sample, replay_pri);
+                                                req.move_points,
+                                                req.ctx.cost_points,
+                                                req.ctx.min_move_points);
+      StoreReplaySample(req, replay_pri);
 
-      UpdateWithMove(sample.label_class, sample.x, hp, sample.move_points);
-      RunReplayRehearsal(hp, sample.regime_id, sample.horizon_minutes);
-   }
-
-   // V2 inference API: returns calibrated 3-class distribution.
-   void PredictV2(const FXAIAIPredictV2 &req,
-                  const FXAIAIHyperParams &hp,
-      FXAIAIPredictionV2 &out)
-   {
-      EnsureInitialized(hp);
-      SetContext(req.sample_time,
-                 req.cost_points,
-                 req.min_move_points,
-                 req.regime_id,
-                 req.horizon_minutes);
-
-      double native_probs[3];
-      native_probs[0] = 0.10;
-      native_probs[1] = 0.10;
-      native_probs[2] = 0.80;
-      double native_move = MathMax(req.min_move_points, 0.10);
-      m_native_predict_calls++;
-      if(!PredictNativeClassProbs(req.x, hp, native_probs, native_move))
-      {
-         m_native_predict_failures++;
-         out.class_probs[(int)FXAI_LABEL_SELL] = 0.05;
-         out.class_probs[(int)FXAI_LABEL_BUY] = 0.05;
-         out.class_probs[(int)FXAI_LABEL_SKIP] = 0.90;
-         out.p_up = out.class_probs[(int)FXAI_LABEL_BUY];
-         out.expected_move_points = MathMax(req.min_move_points, 0.10);
-         return;
-      }
-
-      NormalizeClassDistribution(native_probs);
-      ApplyContextCalibrationBank(native_probs);
-      out.class_probs[0] = native_probs[0];
-      out.class_probs[1] = native_probs[1];
-      out.class_probs[2] = native_probs[2];
-      out.p_up = out.class_probs[(int)FXAI_LABEL_BUY];
-      out.expected_move_points = ApplyExpectedMoveCalibrationBank(native_move);
-   }
-
-   void TrainV3(const FXAIAITrainRequestV3 &req, const FXAIAIHyperParams &hp)
-   {
-      FXAIAISampleV2 sample;
-      sample.valid = true;
-      sample.label_class = req.label_class;
-      sample.regime_id = req.ctx.regime_id;
-      sample.horizon_minutes = req.ctx.horizon_minutes;
-      sample.move_points = req.move_points;
-      sample.min_move_points = req.ctx.min_move_points;
-      sample.cost_points = req.ctx.cost_points;
-      sample.sample_time = req.ctx.sample_time;
-      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
-         sample.x[i] = req.x[i];
-      TrainV2(sample, hp);
+      UpdateWithMove(req.label_class, req.x, hp, req.move_points);
+      RunReplayRehearsal(hp, req.ctx.regime_id, req.ctx.horizon_minutes);
    }
 
    bool PredictV3(const FXAIAIPredictRequestV3 &req,
                   const FXAIAIHyperParams &hp,
                   FXAIAIPredictionV3 &out)
    {
-      FXAIAIPredictV2 req_v2;
-      req_v2.regime_id = req.ctx.regime_id;
-      req_v2.horizon_minutes = req.ctx.horizon_minutes;
-      req_v2.min_move_points = req.ctx.min_move_points;
-      req_v2.cost_points = req.ctx.cost_points;
-      req_v2.sample_time = req.ctx.sample_time;
-      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
-         req_v2.x[i] = req.x[i];
+      if(!req.valid) return false;
+      EnsureInitialized(hp);
+      SetContext(req.ctx.sample_time,
+                 req.ctx.cost_points,
+                 req.ctx.min_move_points,
+                 req.ctx.regime_id,
+                 req.ctx.horizon_minutes);
 
-      FXAIAIPredictionV2 out_v2;
-      PredictV2(req_v2, hp, out_v2);
-      FillPredictionV3(out_v2, out);
+      double native_probs[3];
+      native_probs[0] = 0.10;
+      native_probs[1] = 0.10;
+      native_probs[2] = 0.80;
+      double native_move = MathMax(req.ctx.min_move_points, 0.10);
+      m_native_predict_calls++;
+      if(!PredictNativeClassProbs(req.x, hp, native_probs, native_move))
+      {
+         m_native_predict_failures++;
+         double fail_probs[3];
+         fail_probs[(int)FXAI_LABEL_SELL] = 0.05;
+         fail_probs[(int)FXAI_LABEL_BUY] = 0.05;
+         fail_probs[(int)FXAI_LABEL_SKIP] = 0.90;
+         FillPredictionV3(fail_probs, MathMax(req.ctx.min_move_points, 0.10), out);
+         return false;
+      }
+
+      NormalizeClassDistribution(native_probs);
+      ApplyContextCalibrationBank(native_probs);
+      FillPredictionV3(native_probs, ApplyExpectedMoveCalibrationBank(native_move), out);
       return true;
    }
 
 protected:
-   // Legacy model hooks (v1 core), kept protected to retire external v1 usage.
    virtual void UpdateWithMove(const int y,
                                const double &x[],
                                const FXAIAIHyperParams &hp,
                                const double move_points) = 0;
-   virtual double PredictProb(const double &x[], const FXAIAIHyperParams &hp) = 0;
-   virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
-   {
-      return ExpectedMovePrior(x);
-   }
 };
 
 #endif // __FXAI_PLUGIN_BASE_MQH__
