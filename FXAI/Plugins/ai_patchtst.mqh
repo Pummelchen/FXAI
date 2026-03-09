@@ -889,7 +889,18 @@ public:
    CFXAIAIPatchTST(void) { Reset(); }
 
    virtual int AIId(void) const { return (int)AI_PATCHTST; }
-   virtual string AIName(void) const { return "patchtst"; }
+   virtual string AIName(void) const { return "ai_patchtst"; }
+
+
+   virtual void Describe(FXAIAIManifestV4 &out) const
+
+   {
+
+      const ulong caps = (ulong)(FXAI_CAP_ONLINE_LEARNING|FXAI_CAP_REPLAY|FXAI_CAP_STATEFUL|FXAI_CAP_WINDOW_CONTEXT|FXAI_CAP_MULTI_HORIZON|FXAI_CAP_SELF_TEST);
+
+      FillManifest(out, (int)FXAI_FAMILY_TRANSFORMER, caps, 24, 256);
+
+   }
    virtual bool SupportsCorePrediction(void) const { return true; }
 
    virtual void Reset(void)

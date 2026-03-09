@@ -411,7 +411,18 @@ public:
    }
 
    virtual int AIId(void) const { return AI_LOFFM; }
-   virtual string AIName(void) const { return "loffm"; }
+   virtual string AIName(void) const { return "mix_loffm"; }
+
+
+   virtual void Describe(FXAIAIManifestV4 &out) const
+
+   {
+
+      const ulong caps = (ulong)(FXAI_CAP_ONLINE_LEARNING|FXAI_CAP_REPLAY|FXAI_CAP_MULTI_HORIZON|FXAI_CAP_SELF_TEST);
+
+      FillManifest(out, (int)FXAI_FAMILY_MIXTURE, caps, 1, 1);
+
+   }
 
    virtual void Reset(void)
    {

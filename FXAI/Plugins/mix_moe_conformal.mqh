@@ -278,7 +278,18 @@ public:
    }
 
    virtual int AIId(void) const { return (int)AI_MOE_CONFORMAL; }
-   virtual string AIName(void) const { return "moe_conformal"; }
+   virtual string AIName(void) const { return "mix_moe_conformal"; }
+
+
+   virtual void Describe(FXAIAIManifestV4 &out) const
+
+   {
+
+      const ulong caps = (ulong)(FXAI_CAP_ONLINE_LEARNING|FXAI_CAP_REPLAY|FXAI_CAP_MULTI_HORIZON|FXAI_CAP_SELF_TEST);
+
+      FillManifest(out, (int)FXAI_FAMILY_MIXTURE, caps, 1, 1);
+
+   }
 
    virtual void Reset(void)
    {

@@ -134,7 +134,18 @@ public:
    }
 
    virtual int AIId(void) const { return (int)AI_M1SYNC; }
-   virtual string AIName(void) const { return "m1sync"; }
+   virtual string AIName(void) const { return "rule_m1sync"; }
+
+
+   virtual void Describe(FXAIAIManifestV4 &out) const
+
+   {
+
+      const ulong caps = (ulong)(FXAI_CAP_MULTI_HORIZON|FXAI_CAP_SELF_TEST);
+
+      FillManifest(out, (int)FXAI_FAMILY_RULE_BASED, caps, 1, 1);
+
+   }
 
    virtual void Reset(void)
    {

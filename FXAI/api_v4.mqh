@@ -21,7 +21,22 @@ bool FXAI_ValidateManifestV4(const FXAIAIManifestV4 &manifest,
       reason = "ai_name";
       return false;
    }
-   if((manifest.capability_mask & (ulong)FXAI_CAP_ONLINE_LEARNING) == 0)
+   if(manifest.family < (int)FXAI_FAMILY_LINEAR || manifest.family > (int)FXAI_FAMILY_OTHER)
+   {
+      reason = "family";
+      return false;
+   }
+   if(manifest.feature_schema_id <= 0)
+   {
+      reason = "feature_schema_id";
+      return false;
+   }
+   if(manifest.feature_groups_mask == 0)
+   {
+      reason = "feature_groups_mask";
+      return false;
+   }
+   if((manifest.capability_mask & (ulong)FXAI_CAP_SELF_TEST) == 0)
    {
       reason = "capability_mask";
       return false;
@@ -34,6 +49,24 @@ bool FXAI_ValidateManifestV4(const FXAIAIManifestV4 &manifest,
    if(manifest.min_sequence_bars <= 0 || manifest.max_sequence_bars < manifest.min_sequence_bars)
    {
       reason = "sequence_range";
+      return false;
+   }
+   if(FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY) &&
+      !FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_ONLINE_LEARNING))
+   {
+      reason = "replay_requires_online_learning";
+      return false;
+   }
+   if(FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_WINDOW_CONTEXT) &&
+      manifest.max_sequence_bars <= 1)
+   {
+      reason = "window_context_sequence_range";
+      return false;
+   }
+   if(FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL) &&
+      manifest.max_sequence_bars <= 1)
+   {
+      reason = "stateful_sequence_range";
       return false;
    }
    reason = "";

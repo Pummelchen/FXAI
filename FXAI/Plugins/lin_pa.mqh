@@ -954,7 +954,18 @@ public:
    CFXAIAIPA(void) { Reset(); }
 
    virtual int AIId(void) const { return (int)AI_PA_LINEAR; }
-   virtual string AIName(void) const { return "pa_linear"; }
+   virtual string AIName(void) const { return "lin_pa"; }
+
+
+   virtual void Describe(FXAIAIManifestV4 &out) const
+
+   {
+
+      const ulong caps = (ulong)(FXAI_CAP_ONLINE_LEARNING|FXAI_CAP_REPLAY|FXAI_CAP_MULTI_HORIZON|FXAI_CAP_SELF_TEST);
+
+      FillManifest(out, (int)FXAI_FAMILY_LINEAR, caps, 1, 1);
+
+   }
    virtual bool SupportsCorePrediction(void) const { return true; }
 
    virtual bool PredictModelCore(const double &x[],

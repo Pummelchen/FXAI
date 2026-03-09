@@ -316,7 +316,18 @@ public:
    }
 
    virtual int AIId(void) const { return AI_CFX_WORLD; }
-   virtual string AIName(void) const { return "cfx_world"; }
+   virtual string AIName(void) const { return "wm_cfx"; }
+
+
+   virtual void Describe(FXAIAIManifestV4 &out) const
+
+   {
+
+      const ulong caps = (ulong)(FXAI_CAP_ONLINE_LEARNING|FXAI_CAP_REPLAY|FXAI_CAP_STATEFUL|FXAI_CAP_WINDOW_CONTEXT|FXAI_CAP_MULTI_HORIZON|FXAI_CAP_SELF_TEST);
+
+      FillManifest(out, (int)FXAI_FAMILY_WORLD_MODEL, caps, 8, 128);
+
+   }
 
    virtual void Reset(void)
    {

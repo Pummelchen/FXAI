@@ -447,16 +447,17 @@ bool FXAI_ValidatePredictionOutput(const CFXAIAIPlugin &plugin,
                                    const FXAIAIPredictionV4 &pred,
                                    const string tag)
 {
-   double s = pred.class_probs[(int)FXAI_LABEL_SELL]
-            + pred.class_probs[(int)FXAI_LABEL_BUY]
-            + pred.class_probs[(int)FXAI_LABEL_SKIP];
-   if(!MathIsValidNumber(s) || MathAbs(s - 1.0) > 1e-3)
+   string reason = "";
+   if(!FXAI_ValidatePredictionV4(pred, reason))
    {
-      Print("FXAI compliance error: probability sum invalid. model=", plugin.AIName(),
-            " tag=", tag, " sum=", DoubleToString(s, 6));
+      Print("FXAI compliance error: invalid prediction. model=", plugin.AIName(),
+            " tag=", tag, " reason=", reason);
       return false;
    }
 
+   double s = pred.class_probs[(int)FXAI_LABEL_SELL]
+            + pred.class_probs[(int)FXAI_LABEL_BUY]
+            + pred.class_probs[(int)FXAI_LABEL_SKIP];
    for(int c=0; c<3; c++)
    {
       if(!MathIsValidNumber(pred.class_probs[c]) || pred.class_probs[c] < 0.0 || pred.class_probs[c] > 1.0)
@@ -472,6 +473,205 @@ bool FXAI_ValidatePredictionOutput(const CFXAIAIPlugin &plugin,
       Print("FXAI compliance error: expected move invalid. model=", plugin.AIName(),
             " tag=", tag, " ev=", DoubleToString(pred.move_mean_points, 6));
       return false;
+   }
+
+   return true;
+}
+
+int FXAI_ComplianceSequenceBars(const FXAIAIManifestV4 &manifest)
+{
+   if(manifest.max_sequence_bars <= 1)
+      return 1;
+   int seq = manifest.max_sequence_bars;
+   if(seq < manifest.min_sequence_bars)
+      seq = manifest.min_sequence_bars;
+   if(seq < 2) seq = 2;
+   if(seq > 16) seq = 16;
+   return seq;
+}
+
+int FXAI_ComplianceHorizon(const FXAIAIManifestV4 &manifest,
+                           const int desired_horizon)
+{
+   int h = desired_horizon;
+   if(h < manifest.min_horizon_minutes) h = manifest.min_horizon_minutes;
+   if(h > manifest.max_horizon_minutes) h = manifest.max_horizon_minutes;
+   if(h < 1) h = 1;
+   return h;
+}
+
+double FXAI_PredictionDistance(const FXAIAIPredictionV4 &a,
+                               const FXAIAIPredictionV4 &b)
+{
+   double d = 0.0;
+   for(int c=0; c<3; c++)
+      d += MathAbs(a.class_probs[c] - b.class_probs[c]);
+   d += 0.05 * MathAbs(a.move_mean_points - b.move_mean_points);
+   d += 0.02 * MathAbs(a.move_q25_points - b.move_q25_points);
+   d += 0.02 * MathAbs(a.move_q50_points - b.move_q50_points);
+   d += 0.02 * MathAbs(a.move_q75_points - b.move_q75_points);
+   d += 0.10 * MathAbs(a.confidence - b.confidence);
+   d += 0.10 * MathAbs(a.reliability - b.reliability);
+   return d;
+}
+
+bool FXAI_RunStateResetCompliance(CFXAIAIPlugin &plugin,
+                                  const FXAIAIManifestV4 &manifest,
+                                  const FXAIAIHyperParams &hp,
+                                  const datetime now_t)
+{
+   if(!FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL))
+      return true;
+
+   int seq = FXAI_ComplianceSequenceBars(manifest);
+   int horizon = FXAI_ComplianceHorizon(manifest, 5);
+
+   FXAIAITrainRequestV4 train_req;
+   FXAI_FillComplianceTrainRequest(train_req, (int)FXAI_LABEL_BUY, 5.5, 0.8,
+                                   0.80, 0.45, 0.20, now_t - 90, 2, horizon);
+   train_req.ctx.sequence_bars = seq;
+
+   FXAIAIPredictRequestV4 pred_req;
+   FXAI_FillCompliancePredictRequest(pred_req, 0.8, 0.80, 0.45, 0.20, now_t - 30, 2, horizon);
+   pred_req.ctx.sequence_bars = seq;
+
+   for(int i=0; i<6; i++)
+      FXAI_TrainViaV4(plugin, train_req, hp);
+
+   FXAIAIPredictionV4 pred_before, pred_after_reset_a, pred_after_reset_b;
+   FXAI_PredictViaV4(plugin, pred_req, hp, pred_before);
+
+   plugin.ResetState((int)FXAI_RESET_SESSION_CHANGE, now_t);
+   if(!FXAI_PredictViaV4(plugin, pred_req, hp, pred_after_reset_a) ||
+      !FXAI_ValidatePredictionOutput(plugin, pred_after_reset_a, "reset_a"))
+      return false;
+
+   plugin.ResetState((int)FXAI_RESET_SESSION_CHANGE, now_t + 60);
+   if(!FXAI_PredictViaV4(plugin, pred_req, hp, pred_after_reset_b) ||
+      !FXAI_ValidatePredictionOutput(plugin, pred_after_reset_b, "reset_b"))
+      return false;
+
+   double drift = FXAI_PredictionDistance(pred_after_reset_a, pred_after_reset_b);
+   if(drift > 1e-4)
+   {
+      Print("FXAI compliance error: reset not idempotent. model=", plugin.AIName(),
+            " drift=", DoubleToString(drift, 8));
+      return false;
+   }
+
+   return true;
+}
+
+bool FXAI_RunSequenceWindowCompliance(CFXAIAIPlugin &plugin,
+                                      const FXAIAIManifestV4 &manifest,
+                                      const FXAIAIHyperParams &hp,
+                                      const datetime now_t)
+{
+   bool wants_window = FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_WINDOW_CONTEXT);
+   if(!wants_window)
+      return (manifest.min_sequence_bars == 1 && manifest.max_sequence_bars == 1);
+
+   int seq = FXAI_ComplianceSequenceBars(manifest);
+   int horizon = FXAI_ComplianceHorizon(manifest, 13);
+
+   FXAIAITrainRequestV4 train_req;
+   FXAI_FillComplianceTrainRequest(train_req, (int)FXAI_LABEL_SELL, -5.0, 0.9,
+                                   -0.75, -0.42, -0.18, now_t - 150, 3, horizon);
+   train_req.ctx.sequence_bars = seq;
+
+   FXAIAIPredictRequestV4 pred_req_seq, pred_req_one;
+   FXAI_FillCompliancePredictRequest(pred_req_seq, 0.9, -0.75, -0.42, -0.18, now_t - 10, 3, horizon);
+   FXAI_FillCompliancePredictRequest(pred_req_one, 0.9, -0.75, -0.42, -0.18, now_t - 10, 3, horizon);
+   pred_req_seq.ctx.sequence_bars = seq;
+   pred_req_one.ctx.sequence_bars = 1;
+
+   for(int i=0; i<4; i++)
+      FXAI_TrainViaV4(plugin, train_req, hp);
+
+   FXAIAIPredictionV4 pred_seq, pred_one;
+   if(!FXAI_PredictViaV4(plugin, pred_req_seq, hp, pred_seq) ||
+      !FXAI_ValidatePredictionOutput(plugin, pred_seq, "sequence"))
+      return false;
+
+   if(!FXAI_PredictViaV4(plugin, pred_req_one, hp, pred_one) ||
+      !FXAI_ValidatePredictionOutput(plugin, pred_one, "sequence_one"))
+      return false;
+
+   plugin.ResetState((int)FXAI_RESET_REGIME_CHANGE, now_t + 120);
+   if(!FXAI_PredictViaV4(plugin, pred_req_seq, hp, pred_seq) ||
+      !FXAI_ValidatePredictionOutput(plugin, pred_seq, "sequence_reset"))
+      return false;
+
+   return true;
+}
+
+bool FXAI_RunCalibrationDriftCompliance(CFXAIAIPlugin &plugin,
+                                        const FXAIAIManifestV4 &manifest,
+                                        const FXAIAIHyperParams &hp,
+                                        const datetime now_t)
+{
+   int seq = FXAI_ComplianceSequenceBars(manifest);
+   int base_h = FXAI_ComplianceHorizon(manifest, 5);
+   int alt_h = FXAI_ComplianceHorizon(manifest, 13);
+   int long_h = FXAI_ComplianceHorizon(manifest, 34);
+
+   for(int step=0; step<180; step++)
+   {
+      int cls = (step % 3 == 0 ? (int)FXAI_LABEL_BUY :
+                 (step % 3 == 1 ? (int)FXAI_LABEL_SELL : (int)FXAI_LABEL_SKIP));
+      int regime = step % 4;
+      int horizon = (step % 3 == 0 ? base_h : (step % 3 == 1 ? alt_h : long_h));
+      double cost = (step % 5 == 0 ? 1.4 : 0.7);
+      double v1 = (cls == (int)FXAI_LABEL_BUY ? 0.85 : (cls == (int)FXAI_LABEL_SELL ? -0.85 : 0.03));
+      double v2 = 0.55 * v1;
+      double v3 = 0.30 * v1;
+      double move = (cls == (int)FXAI_LABEL_BUY ? 5.0 + 0.04 * step :
+                    (cls == (int)FXAI_LABEL_SELL ? -(5.0 + 0.04 * step) : 0.15 + 0.002 * step));
+
+      FXAIAITrainRequestV4 train_req;
+      FXAI_FillComplianceTrainRequest(train_req, cls, move, cost,
+                                      v1, v2, v3,
+                                      now_t - (step * 60), regime, horizon);
+      train_req.ctx.sequence_bars = seq;
+      FXAI_TrainViaV4(plugin, train_req, hp);
+
+      if((step % 24) != 23)
+         continue;
+
+      FXAIAIPredictRequestV4 pred_buy, pred_sell, pred_skip;
+      FXAI_FillCompliancePredictRequest(pred_buy, 0.7, 0.82, 0.46, 0.21, now_t + step, regime, base_h);
+      FXAI_FillCompliancePredictRequest(pred_sell, 0.7, -0.82, -0.46, -0.21, now_t + step, regime, alt_h);
+      FXAI_FillCompliancePredictRequest(pred_skip, 1.2, 0.02, 0.01, 0.00, now_t + step, regime, base_h);
+      pred_buy.ctx.sequence_bars = seq;
+      pred_sell.ctx.sequence_bars = seq;
+      pred_skip.ctx.sequence_bars = seq;
+
+      FXAIAIPredictionV4 out_buy, out_sell, out_skip;
+      if(!FXAI_PredictViaV4(plugin, pred_buy, hp, out_buy) ||
+         !FXAI_PredictViaV4(plugin, pred_sell, hp, out_sell) ||
+         !FXAI_PredictViaV4(plugin, pred_skip, hp, out_skip))
+         return false;
+
+      if(!FXAI_ValidatePredictionOutput(plugin, out_buy, "drift_buy") ||
+         !FXAI_ValidatePredictionOutput(plugin, out_sell, "drift_sell") ||
+         !FXAI_ValidatePredictionOutput(plugin, out_skip, "drift_skip"))
+         return false;
+
+      if(out_buy.class_probs[(int)FXAI_LABEL_BUY] + 0.03 < out_buy.class_probs[(int)FXAI_LABEL_SELL])
+      {
+         Print("FXAI compliance error: calibration drift buy ordering failed. model=", plugin.AIName());
+         return false;
+      }
+      if(out_sell.class_probs[(int)FXAI_LABEL_SELL] + 0.03 < out_sell.class_probs[(int)FXAI_LABEL_BUY])
+      {
+         Print("FXAI compliance error: calibration drift sell ordering failed. model=", plugin.AIName());
+         return false;
+      }
+      if(out_skip.class_probs[(int)FXAI_LABEL_SKIP] < 0.15)
+      {
+         Print("FXAI compliance error: calibration drift skip weak. model=", plugin.AIName());
+         return false;
+      }
    }
 
    return true;
@@ -494,6 +694,17 @@ bool FXAI_RunPluginComplianceHarness()
       FXAI_GetModelHyperParams(ai_idx, hp);
       plugin.Reset();
       plugin.EnsureInitialized(hp);
+
+      FXAIAIManifestV4 manifest;
+      plugin.Describe(manifest);
+      string reason = "";
+      if(!FXAI_ValidateManifestV4(manifest, reason))
+      {
+         Print("FXAI compliance error: manifest invalid. model=", plugin.AIName(),
+               " reason=", reason);
+         delete plugin;
+         return false;
+      }
 
       FXAIAITrainRequestV4 buy_s, sell_s, skip_s, buy_big_s;
       FXAI_FillComplianceTrainRequest(buy_s, (int)FXAI_LABEL_BUY, 4.5, 0.8, 0.75, 0.40, 0.20, now_t - 180, 1, 5);
@@ -577,6 +788,15 @@ bool FXAI_RunPluginComplianceHarness()
       {
          Print("FXAI compliance error: core predict failures detected. model=", plugin.AIName(),
                " failures=", plugin.CorePredictFailures());
+         delete plugin;
+         return false;
+      }
+
+      plugin.ResetState((int)FXAI_RESET_FULL, now_t + 180);
+      if(!FXAI_RunStateResetCompliance(*plugin, manifest, hp, now_t + 240) ||
+         !FXAI_RunSequenceWindowCompliance(*plugin, manifest, hp, now_t + 300) ||
+         !FXAI_RunCalibrationDriftCompliance(*plugin, manifest, hp, now_t + 360))
+      {
          delete plugin;
          return false;
       }

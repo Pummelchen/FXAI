@@ -72,9 +72,9 @@ The project is designed to keep MT5 execution practical while enabling advanced 
 
 ## Reference Appendix
 
-The detailed appendix material was moved into a dedicated reference document so the main README stays focused. Use the text appendix below for the full long-form model, feature, and normalization lists.
+The compact reference below explains the framework, naming convention, model families, and core design choices without overloading the main README.
 
-- [FXAI Detailed Reference](FXAI_Detailed_Reference.txt)
+- [FXAI Reference](FXAI_Reference.txt)
 
 ## Notes
 

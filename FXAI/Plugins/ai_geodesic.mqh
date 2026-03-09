@@ -1701,7 +1701,18 @@ public:
    CFXAIAIGeodesicAttention(void) { Reset(); }
 
    virtual int AIId(void) const { return (int)AI_GEODESICATTENTION; }
-   virtual string AIName(void) const { return "geodesicattention"; }
+   virtual string AIName(void) const { return "ai_geodesic"; }
+
+
+   virtual void Describe(FXAIAIManifestV4 &out) const
+
+   {
+
+      const ulong caps = (ulong)(FXAI_CAP_ONLINE_LEARNING|FXAI_CAP_REPLAY|FXAI_CAP_STATEFUL|FXAI_CAP_WINDOW_CONTEXT|FXAI_CAP_MULTI_HORIZON|FXAI_CAP_SELF_TEST);
+
+      FillManifest(out, (int)FXAI_FAMILY_TRANSFORMER, caps, 24, 128);
+
+   }
    virtual bool SupportsCorePrediction(void) const { return true; }
 
    virtual bool PredictModelCore(const double &x[],

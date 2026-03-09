@@ -691,7 +691,18 @@ public:
    CFXAIAIQuantile(void) { Reset(); }
 
    virtual int AIId(void) const { return (int)AI_QUANTILE; }
-   virtual string AIName(void) const { return "quantile"; }
+   virtual string AIName(void) const { return "dist_quantile"; }
+
+
+   virtual void Describe(FXAIAIManifestV4 &out) const
+
+   {
+
+      const ulong caps = (ulong)(FXAI_CAP_ONLINE_LEARNING|FXAI_CAP_REPLAY|FXAI_CAP_MULTI_HORIZON|FXAI_CAP_NATIVE_DISTRIBUTION|FXAI_CAP_SELF_TEST);
+
+      FillManifest(out, (int)FXAI_FAMILY_DISTRIBUTIONAL, caps, 1, 1);
+
+   }
 
    virtual bool SupportsCorePrediction(void) const { return true; }
 

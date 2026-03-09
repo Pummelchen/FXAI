@@ -657,65 +657,6 @@ protected:
       m_ctx_point_value = keep_point_value;
    }
 
-   int DefaultFamily(void) const
-   {
-      switch(AIId())
-      {
-         case (int)AI_SGD_LOGIT:
-         case (int)AI_FTRL_LOGIT:
-         case (int)AI_PA_LINEAR:
-         case (int)AI_ENHASH:
-            return (int)FXAI_FAMILY_LINEAR;
-
-         case (int)AI_XGB_FAST:
-         case (int)AI_XGBOOST:
-         case (int)AI_LIGHTGBM:
-         case (int)AI_CATBOOST:
-            return (int)FXAI_FAMILY_TREE;
-
-         case (int)AI_LSTM:
-         case (int)AI_LSTMG:
-            return (int)FXAI_FAMILY_RECURRENT;
-
-         case (int)AI_TCN:
-            return (int)FXAI_FAMILY_CONVOLUTIONAL;
-
-         case (int)AI_S4:
-            return (int)FXAI_FAMILY_STATE_SPACE;
-
-         case (int)AI_QUANTILE:
-            return (int)FXAI_FAMILY_DISTRIBUTIONAL;
-
-         case (int)AI_LOFFM:
-         case (int)AI_MOE_CONFORMAL:
-            return (int)FXAI_FAMILY_MIXTURE;
-
-         case (int)AI_RETRDIFF:
-            return (int)FXAI_FAMILY_RETRIEVAL;
-
-         case (int)AI_CFX_WORLD:
-         case (int)AI_GRAPHWM:
-            return (int)FXAI_FAMILY_WORLD_MODEL;
-
-         case (int)AI_M1SYNC:
-            return (int)FXAI_FAMILY_RULE_BASED;
-
-         case (int)AI_AUTOFORMER:
-         case (int)AI_CHRONOS:
-         case (int)AI_GEODESICATTENTION:
-         case (int)AI_PATCHTST:
-         case (int)AI_STMN:
-         case (int)AI_TFT:
-         case (int)AI_TIMESFM:
-         case (int)AI_TRR:
-         case (int)AI_TST:
-            return (int)FXAI_FAMILY_TRANSFORMER;
-
-         default:
-            return (int)FXAI_FAMILY_OTHER;
-      }
-   }
-
    ulong DefaultFeatureGroupsMask(void) const
    {
       ulong mask = 0;
@@ -729,40 +670,27 @@ protected:
       return mask;
    }
 
-   ulong DefaultCapabilityMask(void) const
-   {
-      ulong caps = 0;
-      caps |= (ulong)FXAI_CAP_ONLINE_LEARNING;
-      caps |= (ulong)FXAI_CAP_REPLAY;
-      caps |= (ulong)FXAI_CAP_MULTI_HORIZON;
-      caps |= (ulong)FXAI_CAP_SELF_TEST;
-
-      int family = DefaultFamily();
-      if(family == (int)FXAI_FAMILY_RECURRENT ||
-         family == (int)FXAI_FAMILY_CONVOLUTIONAL ||
-         family == (int)FXAI_FAMILY_TRANSFORMER ||
-         family == (int)FXAI_FAMILY_STATE_SPACE ||
-         family == (int)FXAI_FAMILY_WORLD_MODEL)
-      {
-         caps |= (ulong)FXAI_CAP_STATEFUL;
-         caps |= (ulong)FXAI_CAP_WINDOW_CONTEXT;
-      }
-      return caps;
-   }
-
-   void FillDefaultManifest(FXAIAIManifestV4 &out) const
+   void FillManifest(FXAIAIManifestV4 &out,
+                     const int family,
+                     const ulong capability_mask,
+                     const int min_sequence_bars,
+                     const int max_sequence_bars,
+                     const int min_horizon_minutes = 1,
+                     const int max_horizon_minutes = 720,
+                     const ulong feature_groups_mask = 0,
+                     const int feature_schema_id = 1) const
    {
       out.api_version = FXAI_API_VERSION_V4;
       out.ai_id = AIId();
       out.ai_name = AIName();
-      out.family = DefaultFamily();
-      out.capability_mask = DefaultCapabilityMask();
-      out.feature_schema_id = 1;
-      out.feature_groups_mask = DefaultFeatureGroupsMask();
-      out.min_horizon_minutes = 1;
-      out.max_horizon_minutes = 720;
-      out.min_sequence_bars = 1;
-      out.max_sequence_bars = 1;
+      out.family = family;
+      out.capability_mask = capability_mask;
+      out.feature_schema_id = feature_schema_id;
+      out.feature_groups_mask = (feature_groups_mask != 0 ? feature_groups_mask : DefaultFeatureGroupsMask());
+      out.min_horizon_minutes = min_horizon_minutes;
+      out.max_horizon_minutes = max_horizon_minutes;
+      out.min_sequence_bars = min_sequence_bars;
+      out.max_sequence_bars = max_sequence_bars;
    }
 
    void ResetModelOutput(FXAIAIModelOutputV4 &out) const
@@ -834,7 +762,7 @@ public:
    virtual string AIName(void) const = 0;
 
    virtual void Reset(void) { ResetAuxState(); }
-   virtual void Describe(FXAIAIManifestV4 &out) const { FillDefaultManifest(out); }
+   virtual void Describe(FXAIAIManifestV4 &out) const = 0;
    virtual void ResetState(const int reason, const datetime when)
    {
       Reset();

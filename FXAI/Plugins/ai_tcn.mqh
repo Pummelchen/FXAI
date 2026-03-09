@@ -1280,7 +1280,18 @@ public:
    CFXAIAITCN(void) { Reset(); }
 
    virtual int AIId(void) const { return (int)AI_TCN; }
-   virtual string AIName(void) const { return "tcn"; }
+   virtual string AIName(void) const { return "ai_tcn"; }
+
+
+   virtual void Describe(FXAIAIManifestV4 &out) const
+
+   {
+
+      const ulong caps = (ulong)(FXAI_CAP_ONLINE_LEARNING|FXAI_CAP_REPLAY|FXAI_CAP_STATEFUL|FXAI_CAP_WINDOW_CONTEXT|FXAI_CAP_MULTI_HORIZON|FXAI_CAP_SELF_TEST);
+
+      FillManifest(out, (int)FXAI_FAMILY_CONVOLUTIONAL, caps, 16, 128);
+
+   }
 
    virtual bool SupportsCorePrediction(void) const { return true; }
 

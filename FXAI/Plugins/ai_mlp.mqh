@@ -1650,7 +1650,18 @@ public:
    CFXAIAIMLPTiny(void) { Reset(); }
 
    virtual int AIId(void) const { return (int)AI_MLP_TINY; }
-   virtual string AIName(void) const { return "mlp_tiny"; }
+   virtual string AIName(void) const { return "ai_mlp"; }
+
+
+   virtual void Describe(FXAIAIManifestV4 &out) const
+
+   {
+
+      const ulong caps = (ulong)(FXAI_CAP_ONLINE_LEARNING|FXAI_CAP_REPLAY|FXAI_CAP_MULTI_HORIZON|FXAI_CAP_SELF_TEST);
+
+      FillManifest(out, (int)FXAI_FAMILY_OTHER, caps, 1, 1);
+
+   }
 
    virtual bool SupportsCorePrediction(void) const { return true; }
 
