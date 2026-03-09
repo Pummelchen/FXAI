@@ -466,7 +466,16 @@ public:
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
-      return BuildNativeFromDirectional(x, hp, class_probs, expected_move_points);
+      double p_dir = CalibrateProb(FXAI_Sigmoid(ModelMargin(x)));
+      expected_move_points = PredictExpectedMovePoints(x, hp);
+
+      double min_move = MathMax(ResolveMinMovePoints(), 0.10);
+      double cost = MathMax(ResolveCostPoints(x), 0.0);
+      double active = FXAI_Clamp((expected_move_points - 0.35 * cost) / MathMax(min_move, 0.10), 0.0, 1.0);
+      class_probs[(int)FXAI_LABEL_BUY] = p_dir * active;
+      class_probs[(int)FXAI_LABEL_SELL] = (1.0 - p_dir) * active;
+      class_probs[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+      return true;
    }
 
 
@@ -561,7 +570,7 @@ public:
       }
 
       if(wsum > 0.0) return sum / wsum;
-      return CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      return ExpectedMovePrior(x);
    }
 };
 

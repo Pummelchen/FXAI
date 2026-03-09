@@ -1177,7 +1177,7 @@ protected:
    virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
    {
       double head = PredictMoveRaw(x);
-      double base = CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      double base = ExpectedMovePrior(x);
 
       if(m_mv_steps >= 24 && m_move_ready && m_move_ema_abs > 0.0)
          head = 0.70 * head + 0.30 * m_move_ema_abs;

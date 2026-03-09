@@ -404,7 +404,39 @@ public:
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
-      return BuildNativeFromDirectional(x, hp, class_probs, expected_move_points);
+      double xn[FXAI_AI_WEIGHTS];
+      NormalizeInput(x, false, xn);
+
+      int sess = SessionBucket(ResolveContextTime());
+      int reg  = RegimeBucket(x);
+
+      double probs[FXAI_ENH_CLASSES];
+      double p_dir_raw = 0.5;
+      double p_skip = 0.0;
+      double inter_amp = 0.0;
+      double inter_std = 0.0;
+      double collision = 0.0;
+      EvalModel(xn, sess, reg, false, probs, p_dir_raw, p_skip, inter_amp, inter_std, collision);
+
+      double conf = 1.0 / (1.0 + 0.60 * inter_std + 0.50 * collision + 0.20 * m_diag_calerr_ema);
+      conf = FXAI_Clamp(conf, 0.25, 1.00);
+      double p_dir = FXAI_Clamp(0.5 + (p_dir_raw - 0.5) * conf, 0.001, 0.999);
+      double active = FXAI_Clamp(1.0 - p_skip, 0.0, 1.0);
+
+      class_probs[(int)FXAI_LABEL_BUY] = p_dir * active;
+      class_probs[(int)FXAI_LABEL_SELL] = (1.0 - p_dir) * active;
+      class_probs[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+
+      expected_move_points = (probs[(int)FXAI_LABEL_BUY] + probs[(int)FXAI_LABEL_SELL]) * (inter_amp + 0.35 * inter_std);
+      if(m_inter_n > 1)
+      {
+         double var = m_inter_m2 / (double)(m_inter_n - 1);
+         if(var > 0.0)
+            expected_move_points += 0.20 * MathSqrt(var);
+      }
+      if(expected_move_points <= 0.0)
+         expected_move_points = ExpectedMovePrior(xn);
+      return true;
    }
 
 
@@ -673,7 +705,7 @@ public:
       if(ev > 0.0 && m_move_ready && m_move_ema_abs > 0.0)
          return 0.60 * ev + 0.40 * m_move_ema_abs;
       if(ev > 0.0) return ev;
-      return CFXAIAIPlugin::PredictExpectedMovePoints(xn, hp);
+      return ExpectedMovePrior(xn);
    }
 };
 

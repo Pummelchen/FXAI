@@ -540,7 +540,7 @@ protected:
 
    virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
    {
-      if(!m_initialized) return CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      if(!m_initialized) return ExpectedMovePrior(x);
 
       double d[FXAI_LOFFM_DERIVED];
       double g[FXAI_LOFFM_EXPERTS];
@@ -551,7 +551,7 @@ protected:
       for(int e=0; e<FXAI_LOFFM_EXPERTS; e++)
          exp_move += g[e] * PredictExpertMove(e, d);
 
-      double base = CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      double base = ExpectedMovePrior(x);
       if(base > 0.0) return 0.70 * exp_move + 0.30 * base;
       return exp_move;
    }

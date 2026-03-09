@@ -811,7 +811,7 @@ protected:
 
       if(pred < 0.0) pred = 0.0;
 
-      double base = CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      double base = ExpectedMovePrior(x);
       if(m_mv_steps >= 24 && base > 0.0) return 0.65 * pred + 0.35 * base;
       if(m_mv_steps >= 24) return pred;
       if(base > 0.0) return base;

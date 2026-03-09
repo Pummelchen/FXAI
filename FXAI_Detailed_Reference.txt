@@ -1,0 +1,192 @@
+FXAI Detailed Reference
+=======================
+
+This document contains the detailed appendix material moved out of the main README to keep the repository front page shorter.
+
+## AI Models by Type
+
+### Online Linear and Sparse Models
+
+#### SGD Logit
+SGD Logit is a transparent online logistic baseline with very fast incremental updates. It is useful for FX when you need stable behavior, low CPU cost, and easy calibration under continuous M1 retraining. In this framework it provides a strong benchmark and a reliable ensemble anchor.
+
+#### FTRL Logit
+FTRL Logit is optimized for streaming sparse updates and non-stationary data. It is useful in FX because session changes and volatility shocks can shift feature relevance quickly, and FTRL adapts without requiring expensive full retraining. It is one of the strongest pure online baselines in the project.
+
+#### PA Linear
+PA Linear uses passive-aggressive updates to react strongly to mistakes while staying conservative otherwise. It is useful in FX because it adapts quickly to regime changes while remaining CPU-light and easy to diagnose. In ensemble mode it acts as a fast corrective model when slower plugins lag new conditions.
+
+#### ENHash
+ENHash combines elastic-net style regularization with hashed interaction features. It is useful in FX because it stays lightweight while still learning nonlinear feature crosses between price, volatility, time, and context inputs. This makes it a practical high-frequency online learner inside MT5.
+
+### Tree and Boosting Models
+
+#### XGBoost
+XGBoost is a regularized gradient-boosted tree model for engineered tabular features. It is useful in FX because many decision boundaries around spread, volatility, and timing are nonlinear and threshold-driven. In this framework it serves as a classic boosted-tree reference model.
+
+#### XGB Fast
+XGB Fast is a speed-optimized boosting variant designed for low-latency runtime environments. It is useful for FX backtesting and live execution when throughput matters as much as model richness. It keeps nonlinear split power while staying practical for repeated M1 updates.
+
+#### LightGBM
+LightGBM is a histogram-based gradient-boosted tree model optimized for speed and strong nonlinear modeling. It is useful in FX because asymmetric responses to volatility and liquidity often fit tree structures well. In this framework it is one of the strongest high-performance tabular models.
+
+#### CatBoost
+CatBoost is a boosted-tree method that is strong on mixed engineered feature sets and interaction effects. It is useful in FX because tabular alpha often depends on nonlinear combinations of regime, time, volatility, and context features. It is particularly good when feature scales differ and threshold effects matter.
+
+### Recurrent, Convolutional, and State-Space Sequence Models
+
+#### LSTM
+LSTM is a recurrent neural architecture designed to retain useful temporal memory. It is useful in FX where momentum, pullback behavior, and volatility clustering are path dependent rather than purely cross-sectional. In this project it complements tabular models with explicit sequence state.
+
+#### LSTM-G
+LSTM-G extends recurrent modeling with stronger gating behavior for sequence stability. It is useful in FX because gating quality matters when market state changes abruptly around session opens or macro events. It acts as a higher-grade recurrent model for noisy intraday series.
+
+#### TCN
+TCN uses causal dilated convolutions to model long effective history without recurrent loops. It is useful for FX because it can capture multi-scale temporal motifs efficiently while staying stable in online inference. This makes it attractive when you want strong sequence modeling with bounded runtime cost.
+
+#### S4
+S4 is a state-space sequence model built for long-context dependencies. It is useful in FX because distant context can still influence current move quality, volatility, and trend persistence. In this framework it provides long-memory sequence diversity against tree and linear models.
+
+#### STMN
+STMN targets spatio-temporal dynamics by combining time evolution with cross-context structure. It is useful in FX where multi-symbol co-movement and lead-lag effects often matter. It adds structural sequence modeling beyond a single-symbol price stream.
+
+#### MLP Tiny
+MLP Tiny is a compact feed-forward neural baseline with low compute overhead. It is useful for FX as a fast nonlinear learner that can update frequently inside MT5 without heavy resource use. In ensemble mode it provides robust general-purpose nonlinear coverage.
+
+### Transformer and Attention Family
+
+#### TST
+TST applies transformer attention directly to time-series tokens. It is useful in FX because attention can detect nonlocal dependencies across the lookback window that simpler local models miss. It complements recurrent and boosting approaches with explicit sequence-wide dependency modeling.
+
+#### TFT
+TFT combines gating, variable selection, and attention for interpretable sequence forecasting. It is useful in FX because feature importance changes across sessions, volatility states, and horizons. In this framework it can dynamically reweight inputs instead of relying on static feature rankings.
+
+#### Autoformer
+Autoformer decomposes time series into trend and seasonal components before forecasting. It is useful in FX because regime drift can hide signal in raw returns, and decomposition helps separate slower structure from intraday noise. It is strongest when training spans multiple market states rather than one narrow phase.
+
+#### PatchTST
+PatchTST processes sequences in patches to improve local pattern extraction efficiency. It is useful in FX because many short recurring micro-structures are local, repeated, and noisy. It gives the ensemble a patch-based view of sequence structure rather than a purely step-by-step one.
+
+#### GeodesicAttention
+GeodesicAttention emphasizes relational similarity between observations instead of relying only on raw Euclidean geometry. It is useful in FX because regime similarity can matter more than absolute level similarity. This helps when the market revisits familiar structures at different price levels.
+
+### Foundation-Style and Large Time-Series Surrogates
+
+#### Chronos
+Chronos-style forecasting targets robust sequence modeling across changing temporal patterns. It is useful in FX when intraday behavior shifts materially with sessions and macro events. In this framework it serves as a high-capacity sequence surrogate that adds diversity against simpler online models.
+
+#### TimesFM
+TimesFM-style modeling emphasizes broad time-series generalization with strong sequence representations. It is useful in FX as a high-capacity model family when structure changes across periods and sessions. In ensemble use it contributes regime-level robustness more than simple local pattern fitting.
+
+### Distributional and Risk-Aware Models
+
+#### Quantile
+Quantile modeling predicts distribution bands rather than only one directional probability. It is useful in FX because trade quality depends on expected move size, tail width, and cost coverage, not only on sign. In this project it improves cost-aware decision thresholds and skip logic.
+
+#### MoE Conformal
+MoE Conformal combines mixture-of-experts routing with conformal-style uncertainty filtering. It is useful in FX because many bad trades are really low-confidence situations that should be skipped rather than forced into buy or sell. It is particularly relevant for precision-oriented intraday trading.
+
+### World Models, Retrieval, Mixtures, and Structural Models
+
+#### CFX World
+CFX World is a lightweight world-model plugin that simulates multiple forward market paths from a compact latent state. It is useful in FX because trade quality depends on path shape and adverse excursion, not only on final direction. In this framework it converts scenario consensus into `BUY / SELL / SKIP` probabilities and an expected-move estimate.
+
+#### GraphWM
+GraphWM is a graph-inspired structural model that builds directional and move forecasts from relative structure between short-horizon returns. It is useful in FX because lead-lag tension and local market geometry often matter more than isolated raw indicators. It adds a structural nonlinear view that stays practical for MT5.
+
+#### LOFFM
+LOFFM is an online latent mixture-of-experts model that routes samples into specialized regime experts. It is useful in FX because trend, mean-reversion, breakout, and noisy-neutral conditions rarely respond well to one shared decision surface. It gives the framework adaptive specialization without leaving pure MQL5.
+
+#### TRR
+TRR is a topology-aware reservoir readout model that mixes temporal shape descriptors with a lightweight recurrent reservoir. It is useful in FX because path complexity, recurrence, and compression-expansion structure often matter as much as raw return values. It provides a middle ground between simple tabular models and heavier sequence architectures.
+
+#### RetrDiff
+RetrDiff is a retrieval-based plugin that predicts from nearest historical analogs in an embedded state space. It is useful in FX because many short-horizon setups repeat approximately rather than exactly, and memory-based prediction can capture that efficiently. It is especially useful as an ensemble diversifier against purely parametric models.
+
+#### M1Sync
+M1Sync is a deliberately simple rule-based plugin that checks whether a configurable number of completed M1 closes and the current price form a clean one-direction move. It is useful in FX as a strict micro-momentum filter because it only trades when very short-term price action is sequentially aligned. It is best used as a confirmation or gating model rather than as a standalone predictive engine.
+
+## Feature Set (A-Z)
+
+Engineered model input features are grouped below by predictive role.
+
+### Price Structure and Return Dynamics
+These features encode near-term directional behavior, momentum decay, and micro mean-reversion signatures from M1 price action. They are useful in FX because short-horizon returns and candle geometry often react quickly to order-flow imbalance. This group forms the core directional signal layer before higher-level context is applied.
+
+- Returns: 1/3/5-bar normalized (M1)
+- Candle edges: Close-Open / Close-Low / High-Close (M1 OHLC)
+- Return variance proxy normalized (M1, window 10)
+- RSI(14) normalized (M1)
+- Rolling median edge (window 21)
+- Z-score vs rolling mean/std (M1, window 10)
+
+### Trend and Multi-Timeframe Structure
+This group captures trend persistence and slope alignment across M1 through H1 horizons. It is useful in FX prediction because many profitable intraday setups depend on higher-timeframe drift and local pullback structure agreeing. Smoothing filters in this group also reduce noise sensitivity and improve model stability in volatile sessions.
+
+- Ehlers Super Smoother (2-pole, period 20) edge
+- EMA(100/200): M5 / M15 / M30 / H1
+- SMA(100/200): M5 / M15 / M30
+- Returns and slopes: M5 / M15 / H1 (aligned)
+- Kalman filter estimate edge (window 34)
+- Quadruple-smoothed DEMA(100/200) edge
+
+### Volatility and Range Regime
+These features estimate current market variability and effective move potential under different volatility definitions. They are useful for FX because entry quality depends not only on direction but also on whether expected movement can cover trading costs. This group improves risk-aware classification, skip decisions, and expected-value filtering.
+
+- ATR(14) normalized (M1)
+- Garman-Klass volatility (OHLC)
+- Hampel robust score (rolling median/MAD, window 21)
+- High-Low range normalized (M1 OHLC)
+- NATR(14) (M1)
+- Parkinson volatility (HL-only, window 20)
+- Rogers-Satchell volatility (OHLC)
+
+### Cross-Symbol Market Context
+These features summarize behavior from related instruments to capture correlation and breadth effects. They are useful in FX because major pairs and macro-sensitive symbols often provide early context for risk-on and risk-off rotations. This group adds regime information that single-symbol models usually miss.
+
+- Context return dispersion (cross-symbol)
+- Context return mean (cross-symbol)
+- Context up-breadth ratio (cross-symbol)
+
+### Time and Execution Friction Context
+This group captures temporal structure and direct transaction-cost pressure on signals. It is useful in FX because trade quality varies strongly by weekday, hour, and minute due to liquidity cycles. Including spread and clock-time context helps models avoid low-quality entries during expensive or structurally noisy periods.
+
+- Hour of day (MT5 bar time)
+- Minute of hour (MT5 bar time)
+- Spread normalized
+- Weekday (MT5 bar time)
+
+## Normalization Techniques
+
+Normalization is handled by a shared pipeline and can be selected through `AI_FeatureNormalization`. The project uses both market-structure-aware scaling and statistical transforms so models can remain stable across changing volatility regimes. Grouping methods this way makes backtest optimization easier because you can search by family before fine-tuning model-specific hyperparameters. The goal is to maximize signal consistency while preserving economically meaningful price structure.
+
+### Market-Structure and Volatility-Aware Scaling
+These methods preserve FX microstructure context by scaling signals with volatility or candle geometry rather than treating all bars as statistically identical. They are useful when session liquidity, spread pressure, and volatility clustering shift quickly across the day. In practice, they help reduce false positives during noisy periods while keeping directional moves tradable during expansions. This group is often the strongest first choice for intraday FX where cost-adjusted edge matters more than pure statistical fit.
+
+- `Regime-Scaled Z + Clipped` (`FXAI_NORM_EXISTING`)
+- `Candle Geometry` (`FXAI_NORM_CANDLE_GEOMETRY`)
+- `Volatility-Scaled Returns` (`FXAI_NORM_VOL_STD_RETURNS`)
+- `ATR/NATR Unit Scaling` (`FXAI_NORM_ATR_NATR_UNIT`)
+
+### Statistical Distribution and Robust Shape Transforms
+These methods reshape feature distributions so models can train on smoother, more comparable inputs across symbols and periods. They are useful in FX because engineered features often have heavy tails, skew, and regime-dependent dispersion that can destabilize learning. Robust and quantile-based transforms also reduce sensitivity to outliers from spikes and thin-liquidity prints. This group is valuable when you want better calibration and more stable model behavior in long optimization runs.
+
+- `Min/Max with 5% Buffer` (`FXAI_NORM_MINMAX_BUFFER5`)
+- `Z-Score Standardization` (`FXAI_NORM_ZSCORE`)
+- `Robust Median/IQR` (`FXAI_NORM_ROBUST_MEDIAN_IQR`)
+- `Quantile to Normal` (`FXAI_NORM_QUANTILE_TO_NORMAL`)
+- `Power Transform (Yeo-Johnson) + Standardize` (`FXAI_NORM_POWER_YEOJOHNSON`)
+
+### Relative Change and Directional Encodings
+These methods emphasize feature movement dynamics from one bar to the next, which is critical for short-horizon decisioning. They are useful for FX because momentum shifts and micro mean-reversion often appear first as relative or signed change rather than absolute level. Binary directional encoding can also simplify noisy features for lightweight models and ensemble voting. This group is especially practical when targeting high trade frequency with tight latency and robust online adaptation.
+
+- `Change in %` (`FXAI_NORM_CHANGE_PERCENT`)
+- `Relative Change %` (`FXAI_NORM_RELATIVE_CHANGE_PERCENT`)
+- `Log Return Transform` (`FXAI_NORM_LOG_RETURN`)
+- `Binary 0/1 Direction` (`FXAI_NORM_BINARY_01`)
+
+### Adaptive Window/Instance Normalization for Deep Models
+These methods adapt normalization to current-window context rather than relying only on static global assumptions. They are useful in FX because deep sequence models can drift when the mean and scale of features change across sessions and regimes. RevIN improves invariance by normalizing per instance/window, while DAIN adds lightweight learnable adaptation for dynamic rescaling and gating. This group is most useful for transformer/recurrent plugins where distribution drift can strongly impact inference quality.
+
+- `RevIN` (`FXAI_NORM_REVIN`)
+- `DAIN` (`FXAI_NORM_DAIN`)

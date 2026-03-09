@@ -974,7 +974,33 @@ public:
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
-      return BuildNativeFromDirectional(x, hp, class_probs, expected_move_points);
+      double probs[FXAI_XGBF_CLASS_COUNT];
+      PredictRawClassProbs(x, probs);
+
+      double dir_den = probs[FXAI_XGBF_BUY] + probs[FXAI_XGBF_SELL];
+      if(dir_den < 1e-9) dir_den = 1e-9;
+      double p_dir_raw = probs[FXAI_XGBF_BUY] / dir_den;
+      double p_dir_cal = CalibrateProb(p_dir_raw);
+      double active = FXAI_Clamp(1.0 - probs[FXAI_XGBF_SKIP], 0.0, 1.0);
+      class_probs[(int)FXAI_LABEL_BUY] = p_dir_cal * active;
+      class_probs[(int)FXAI_LABEL_SELL] = (1.0 - p_dir_cal) * active;
+      class_probs[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+
+      double mu_buy, var_buy, q_buy;
+      double mu_sell, var_sell, q_sell;
+      double mu_skip, var_skip, q_skip;
+      ClassMoveStats(FXAI_XGBF_BUY, x, mu_buy, var_buy, q_buy);
+      ClassMoveStats(FXAI_XGBF_SELL, x, mu_sell, var_sell, q_sell);
+      ClassMoveStats(FXAI_XGBF_SKIP, x, mu_skip, var_skip, q_skip);
+      double buy_abs = (MathMax(0.0, mu_buy) > 0.0 ? MathMax(0.0, mu_buy) : q_buy);
+      double sell_abs = (MathMax(0.0, -mu_sell) > 0.0 ? MathMax(0.0, -mu_sell) : q_sell);
+      double base = probs[FXAI_XGBF_BUY] * buy_abs + probs[FXAI_XGBF_SELL] * sell_abs;
+      double unc = probs[FXAI_XGBF_BUY] * var_buy + probs[FXAI_XGBF_SELL] * var_sell;
+      if(unc < 0.0) unc = 0.0;
+      expected_move_points = base + 0.15 * MathSqrt(unc) + 0.10 * (probs[FXAI_XGBF_BUY] * q_buy + probs[FXAI_XGBF_SELL] * q_sell);
+      if(expected_move_points <= 0.0)
+         expected_move_points = ExpectedMovePrior(x);
+      return true;
    }
 
 
@@ -1134,7 +1160,7 @@ public:
       if(edge > 0.0 && m_move_ready && m_move_ema_abs > 0.0)
          return 0.70 * edge + 0.30 * m_move_ema_abs;
       if(edge > 0.0) return edge;
-      return CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      return ExpectedMovePrior(x);
    }
 };
 

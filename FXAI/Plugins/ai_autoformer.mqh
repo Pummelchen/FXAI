@@ -1934,7 +1934,7 @@ public:
       else if(ev > 0.0)
          expected_move_points = ev;
       else
-         expected_move_points = CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+         expected_move_points = ExpectedMovePrior(x);
 
       return true;
    }
@@ -2015,7 +2015,7 @@ public:
       double ev = -1.0;
       if(PredictNativeClassProbs(x, hp, probs, ev) && ev > 0.0)
          return ev;
-      return CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      return ExpectedMovePrior(x);
    }
 };
 

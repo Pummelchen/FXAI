@@ -1730,7 +1730,7 @@ public:
       Calibrate3(probs, class_probs);
 
       double ev = ExpectedMoveFromHeads(mu, logv, q_all, class_probs[FXAI_GA_SKIP]);
-      double base_ev = CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      double base_ev = ExpectedMovePrior(x);
       if(ev > 0.0 && base_ev > 0.0) expected_move_points = 0.75 * ev + 0.25 * base_ev;
       else if(ev > 0.0) expected_move_points = ev;
       else expected_move_points = base_ev;
@@ -1815,7 +1815,7 @@ public:
       double probs[3];
       double ev = -1.0;
       if(PredictNativeClassProbs(x, hp, probs, ev) && ev > 0.0) return ev;
-      return CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      return ExpectedMovePrior(x);
    }
 };
 

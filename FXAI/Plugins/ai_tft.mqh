@@ -2632,7 +2632,32 @@ public:
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
-      return BuildNativeFromDirectional(x, hp, class_probs, expected_move_points);
+      double ps = 0.3333, pb = 0.3333, pk = 0.3333;
+      double mu = 0.0, logv = MathLog(1.0), q25 = 0.0, q75 = 0.0;
+
+      ForwardInference(x, m_shadow_ready, ps, pb, pk, mu, logv, q25, q75);
+      double den = pb + ps;
+      if(den < 1e-9) den = 1e-9;
+      double p_dir_raw = pb / den;
+
+      double p_cal = CalibrateProb(p_dir_raw);
+      int sess = SessionBucket(ResolveContextTime());
+      p_cal = ApplySessionCalibration(sess, p_cal);
+
+      double active = FXAI_Clamp(1.0 - pk, 0.0, 1.0);
+      if(pk > m_thr_skip) active *= 0.25;
+      else if(p_cal < m_thr_buy && p_cal > m_thr_sell) active *= 0.35;
+
+      class_probs[(int)FXAI_LABEL_BUY] = p_cal * active;
+      class_probs[(int)FXAI_LABEL_SELL] = (1.0 - p_cal) * active;
+      class_probs[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+
+      double sigma = MathSqrt(MathMax(MathExp(logv), 1e-6));
+      double iqr = MathAbs(q75 - q25);
+      expected_move_points = MathMax(0.0, (0.55 * MathAbs(mu) + 0.25 * sigma + 0.20 * iqr) * active);
+      if(expected_move_points <= 0.0)
+         expected_move_points = ExpectedMovePrior(x);
+      return true;
    }
 
 
@@ -2753,7 +2778,7 @@ public:
       double active = FXAI_Clamp(1.0 - pk, 0.0, 1.0);
       double ev = MathMax(0.0, (0.55 * MathAbs(mu) + 0.25 * sigma + 0.20 * iqr) * active);
 
-      double base_ev = CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      double base_ev = ExpectedMovePrior(x);
       if(ev > 0.0 && base_ev > 0.0) return 0.65 * ev + 0.35 * base_ev;
       if(ev > 0.0) return ev;
       return base_ev;

@@ -1298,7 +1298,26 @@ public:
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
-      return BuildNativeFromDirectional(x, hp, class_probs, expected_move_points);
+      double st_re[FXAI_AI_MLP_HIDDEN], st_im[FXAI_AI_MLP_HIDDEN];
+      double z = 0.0, p_local = 0.5;
+      double mu1 = 0.0, mu3 = 0.0, mu5 = 0.0, logv = 0.0;
+      ForwardNoCommit(x, false, st_re, st_im, z, p_local, mu1, mu3, mu5, logv);
+
+      double mean_combo = 0.50 * mu1 + 0.30 * mu3 + 0.20 * mu5;
+      if(mean_combo < 0.0) mean_combo = 0.0;
+      double sigma = FXAI_Clamp(MathExp(0.5 * logv), 0.05, 20.0);
+      expected_move_points = mean_combo + 0.30 * sigma;
+      if(expected_move_points <= 0.0)
+         expected_move_points = ExpectedMovePrior(x);
+
+      double min_move = MathMax(ResolveMinMovePoints(), 0.10);
+      double cost = MathMax(ResolveCostPoints(x), 0.0);
+      double active = FXAI_Clamp((expected_move_points - 0.35 * cost) / MathMax(min_move, 0.10), 0.0, 1.0);
+      double p_dir = FXAI_Clamp(p_local, 0.001, 0.999);
+      class_probs[(int)FXAI_LABEL_BUY] = p_dir * active;
+      class_probs[(int)FXAI_LABEL_SELL] = (1.0 - p_dir) * active;
+      class_probs[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+      return true;
    }
 
 
@@ -1390,7 +1409,7 @@ public:
       if(ev > 0.0 && m_move_ready && m_move_ema_abs > 0.0)
          return 0.65 * ev + 0.35 * m_move_ema_abs;
       if(ev > 0.0) return ev;
-      return CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      return ExpectedMovePrior(x);
    }
 };
 

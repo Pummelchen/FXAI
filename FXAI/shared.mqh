@@ -8,6 +8,11 @@
 #define FXAI_NORM_METHOD_COUNT 15
 #define FXAI_ENHASH_BUCKETS 128
 #define FXAI_PLUGIN_CLASS_FEATURES 5
+#define FXAI_PLUGIN_REGIME_BUCKETS 12
+#define FXAI_PLUGIN_SESSION_BUCKETS 6
+#define FXAI_PLUGIN_HORIZON_BUCKETS 8
+#define FXAI_PLUGIN_REPLAY_CAPACITY 96
+#define FXAI_PLUGIN_REPLAY_STEPS 2
 #define FXAI_CONTEXT_TOP_SYMBOLS 3
 #define FXAI_CONTEXT_EXTRA_FEATS (FXAI_CONTEXT_TOP_SYMBOLS * 4)
 
@@ -122,6 +127,8 @@ struct FXAIAISampleV2
 {
    bool valid;
    int label_class;
+   int regime_id;
+   int horizon_minutes;
    double move_points;
    double min_move_points;
    double cost_points;
@@ -132,6 +139,8 @@ struct FXAIAISampleV2
 // V2 plugin API payload used for inference.
 struct FXAIAIPredictV2
 {
+   int regime_id;
+   int horizon_minutes;
    double min_move_points;
    double cost_points;
    datetime sample_time;

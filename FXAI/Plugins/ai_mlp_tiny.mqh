@@ -1685,7 +1685,7 @@ public:
       double active = FXAI_Clamp(1.0 - class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0);
       double ev = amp * active;
 
-      double base_ev = CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      double base_ev = ExpectedMovePrior(x);
       if(ev > 0.0 && base_ev > 0.0) expected_move_points = 0.65 * ev + 0.35 * base_ev;
       else if(ev > 0.0) expected_move_points = ev;
       else expected_move_points = base_ev;
@@ -1894,14 +1894,14 @@ public:
          double rw = FXAI_Clamp(m_replay_w[p], 0.20, 4.00);
          rw *= ReplayAgeWeight(m_replay_time[p], cur_t);
          if(m_replay_session[p] >= 0 && m_replay_session[p] != cur_sess) rw *= 0.85;
-         SetContext(m_replay_time[p], m_replay_cost[p], cur_min);
+         SetContext(m_replay_time[p], m_replay_cost[p], cur_min, m_ctx_regime_id, m_ctx_horizon_minutes);
          double replay_x[FXAI_AI_WEIGHTS];
          for(int i=0; i<FXAI_AI_WEIGHTS; i++)
             replay_x[i] = m_replay_x[p][i];
          UpdateWeighted(m_replay_y[p], replay_x, h, rw, m_replay_move[p], true);
       }
 
-      SetContext(cur_t, cur_cost, cur_min);
+      SetContext(cur_t, cur_cost, cur_min, m_ctx_regime_id, m_ctx_horizon_minutes);
    }
 
    virtual double PredictProb(const double &x[],

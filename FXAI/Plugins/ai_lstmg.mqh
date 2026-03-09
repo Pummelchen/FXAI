@@ -1923,7 +1923,7 @@ public:
 
       double ev_raw = ExpectedMoveFromHeads(mu, logv, q25, q75, class_probs[(int)FXAI_LABEL_SKIP]);
       double ev_cal = CalibrateEV(ev_raw);
-      double base_ev = CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      double base_ev = ExpectedMovePrior(x);
 
       if(ev_cal > 0.0 && base_ev > 0.0) expected_move_points = 0.70 * ev_cal + 0.30 * base_ev;
       else if(ev_cal > 0.0) expected_move_points = ev_cal;
@@ -2016,7 +2016,7 @@ public:
       if(PredictNativeClassProbs(x, hp, probs, ev) && ev > 0.0)
          return ev;
 
-      return CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      return ExpectedMovePrior(x);
    }
 };
 

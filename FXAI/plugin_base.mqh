@@ -26,10 +26,32 @@ protected:
    bool     m_ctx_cost_ready;
    double   m_ctx_cost_points;
    double   m_ctx_min_move_points;
+   int      m_ctx_regime_id;
+   int      m_ctx_horizon_minutes;
 
-   // Plugin-local 3-class calibrator head (v2 native class output).
-   double m_v2_cls_w[3][FXAI_PLUGIN_CLASS_FEATURES];
-   int    m_v2_cls_steps;
+   double m_bank_class_mass[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS][3];
+   double m_bank_total[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
+   double m_bank_ev_scale[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
+   double m_bank_ev_bias[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
+   double m_bank_ev_g2_scale[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
+   double m_bank_ev_g2_bias[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
+
+   int      m_v2_replay_head;
+   int      m_v2_replay_size;
+   double   m_v2_replay_x[FXAI_PLUGIN_REPLAY_CAPACITY][FXAI_AI_WEIGHTS];
+   int      m_v2_replay_label[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_v2_replay_move[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_v2_replay_cost[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_v2_replay_min_move[FXAI_PLUGIN_REPLAY_CAPACITY];
+   datetime m_v2_replay_time[FXAI_PLUGIN_REPLAY_CAPACITY];
+   int      m_v2_replay_regime[FXAI_PLUGIN_REPLAY_CAPACITY];
+   int      m_v2_replay_horizon[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_v2_replay_priority[FXAI_PLUGIN_REPLAY_CAPACITY];
+
+   int      m_native_predict_calls;
+   int      m_native_predict_failures;
+   int      m_expected_prior_calls;
+   int      m_v2_replay_rehearsals;
 
    double InputCostProxyPoints(const double &x[]) const
    {
@@ -60,7 +82,9 @@ protected:
 
    void SetContext(const datetime sample_time,
                    const double cost_points,
-                   const double min_move_points)
+                   const double min_move_points,
+                   const int regime_id,
+                   const int horizon_minutes)
    {
       m_ctx_time_ready = (sample_time > 0);
       m_ctx_time = (m_ctx_time_ready ? sample_time : 0);
@@ -72,6 +96,13 @@ protected:
          m_ctx_min_move_points = min_move_points;
       else
          m_ctx_min_move_points = 0.0;
+
+      if(regime_id >= 0 && regime_id < FXAI_PLUGIN_REGIME_BUCKETS)
+         m_ctx_regime_id = regime_id;
+      else
+         m_ctx_regime_id = 0;
+
+      m_ctx_horizon_minutes = (horizon_minutes > 0 ? horizon_minutes : 1);
    }
 
    int NormalizeClassLabel(const int y,
@@ -116,15 +147,46 @@ protected:
       m_ctx_cost_ready = false;
       m_ctx_cost_points = 0.0;
       m_ctx_min_move_points = 0.0;
+      m_ctx_regime_id = 0;
+      m_ctx_horizon_minutes = 1;
 
-      m_v2_cls_steps = 0;
-      for(int c=0; c<3; c++)
+      for(int r=0; r<FXAI_PLUGIN_REGIME_BUCKETS; r++)
       {
-         for(int k=0; k<FXAI_PLUGIN_CLASS_FEATURES; k++)
-            m_v2_cls_w[c][k] = 0.0;
+         for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
+         {
+            for(int h=0; h<FXAI_PLUGIN_HORIZON_BUCKETS; h++)
+            {
+               m_bank_total[r][s][h] = 0.0;
+               m_bank_ev_scale[r][s][h] = 1.0;
+               m_bank_ev_bias[r][s][h] = 0.0;
+               m_bank_ev_g2_scale[r][s][h] = 0.0;
+               m_bank_ev_g2_bias[r][s][h] = 0.0;
+               for(int c=0; c<3; c++)
+                  m_bank_class_mass[r][s][h][c] = (c == (int)FXAI_LABEL_SKIP ? 1.2 : 1.0);
+            }
+         }
       }
-      // Conservative prior to reduce early overtrading.
-      m_v2_cls_w[(int)FXAI_LABEL_SKIP][0] = 0.20;
+
+      m_v2_replay_head = 0;
+      m_v2_replay_size = 0;
+      for(int i=0; i<FXAI_PLUGIN_REPLAY_CAPACITY; i++)
+      {
+         m_v2_replay_label[i] = (int)FXAI_LABEL_SKIP;
+         m_v2_replay_move[i] = 0.0;
+         m_v2_replay_cost[i] = 0.0;
+         m_v2_replay_min_move[i] = 0.0;
+         m_v2_replay_time[i] = 0;
+         m_v2_replay_regime[i] = 0;
+         m_v2_replay_horizon[i] = 1;
+         m_v2_replay_priority[i] = 0.0;
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            m_v2_replay_x[i][k] = 0.0;
+      }
+
+      m_native_predict_calls = 0;
+      m_native_predict_failures = 0;
+      m_expected_prior_calls = 0;
+      m_v2_replay_rehearsals = 0;
    }
 
    void UpdateMoveHead(const double &x[],
@@ -255,25 +317,6 @@ protected:
       return FXAI_MoveEdgeWeight(move_points, cost);
    }
 
-   void BuildClassInput(const double p_up,
-                        const double expected_move_points,
-                        const double min_move_points,
-                        const double cost_points,
-                        double &xc[]) const
-   {
-      double p = FXAI_Clamp(p_up, 0.001, 0.999);
-      double em = (expected_move_points > 0.0 ? expected_move_points : 0.0);
-      double mm = (min_move_points > 0.0 ? min_move_points : 0.10);
-      double cp = (cost_points >= 0.0 ? cost_points : mm);
-      double denom = MathMax(mm, 0.10);
-
-      xc[0] = 1.0;
-      xc[1] = FXAI_Clamp((p - 0.5) * 2.0, -1.0, 1.0);
-      xc[2] = FXAI_Clamp((em - mm) / denom, -6.0, 6.0);
-      xc[3] = FXAI_Clamp(em / denom, 0.0, 12.0);
-      xc[4] = FXAI_Clamp(cp / denom, 0.0, 4.0);
-   }
-
    void Softmax3(const double &logits[], double &probs[]) const
    {
       double m = logits[0];
@@ -297,91 +340,258 @@ protected:
       probs[2] = e2 / s;
    }
 
-   void PredictLocalClassProbs(const double &xc[], double &probs[]) const
+   int ContextSessionBucket(void) const
    {
-      double logits[3];
-      for(int c=0; c<3; c++)
-      {
-         double z = 0.0;
-         for(int k=0; k<FXAI_PLUGIN_CLASS_FEATURES; k++)
-            z += m_v2_cls_w[c][k] * xc[k];
-         logits[c] = z;
-      }
-      Softmax3(logits, probs);
+      MqlDateTime dt;
+      TimeToStruct(ResolveContextTime(), dt);
+      int hour = dt.hour;
+      if(hour < 0) hour = 0;
+      if(hour > 23) hour = 23;
+      int bucket = hour / 4;
+      if(bucket < 0) bucket = 0;
+      if(bucket >= FXAI_PLUGIN_SESSION_BUCKETS) bucket = FXAI_PLUGIN_SESSION_BUCKETS - 1;
+      return bucket;
    }
 
-   void UpdateLocalClassHead(const int label_class,
-                             const double &xc[],
-                             const FXAIAIHyperParams &hp,
-                             const double sample_w)
+   int ContextHorizonBucket(void) const
+   {
+      int h = (m_ctx_horizon_minutes > 0 ? m_ctx_horizon_minutes : 1);
+      if(h <= 1) return 0;
+      if(h <= 3) return 1;
+      if(h <= 5) return 2;
+      if(h <= 8) return 3;
+      if(h <= 13) return 4;
+      if(h <= 21) return 5;
+      if(h <= 34) return 6;
+      return FXAI_PLUGIN_HORIZON_BUCKETS - 1;
+   }
+
+   void NormalizeClassDistribution(double &probs[]) const
+   {
+      for(int c=0; c<3; c++)
+      {
+         if(!MathIsValidNumber(probs[c])) probs[c] = 0.0;
+         probs[c] = FXAI_Clamp(probs[c], 0.0005, 0.9990);
+      }
+
+      double s = probs[0] + probs[1] + probs[2];
+      if(!MathIsValidNumber(s) || s <= 0.0)
+      {
+         probs[0] = 0.10;
+         probs[1] = 0.10;
+         probs[2] = 0.80;
+         return;
+      }
+
+      for(int c=0; c<3; c++)
+         probs[c] /= s;
+   }
+
+   double ExpectedMovePrior(const double &x[])
+   {
+      m_expected_prior_calls++;
+      double head = (m_move_head_ready ? PredictMoveHeadRaw(x) : -1.0);
+      if(head > 0.0 && m_move_ready && m_move_ema_abs > 0.0)
+         return 0.60 * head + 0.40 * m_move_ema_abs;
+      if(head > 0.0) return head;
+      if(m_move_ready && m_move_ema_abs > 0.0) return m_move_ema_abs;
+      return MathMax(ResolveMinMovePoints(), 0.10);
+   }
+
+   void ApplyContextCalibrationBank(double &probs[])
+   {
+      int r = m_ctx_regime_id;
+      if(r < 0) r = 0;
+      if(r >= FXAI_PLUGIN_REGIME_BUCKETS) r = FXAI_PLUGIN_REGIME_BUCKETS - 1;
+      int s = ContextSessionBucket();
+      int h = ContextHorizonBucket();
+
+      double total = m_bank_total[r][s][h];
+      if(total <= 0.0)
+      {
+         NormalizeClassDistribution(probs);
+         return;
+      }
+
+      double prior[3];
+      for(int c=0; c<3; c++)
+         prior[c] = m_bank_class_mass[r][s][h][c] / MathMax(total, 1e-9);
+
+      double mix = FXAI_Clamp(total / 120.0, 0.05, 0.35);
+      for(int c=0; c<3; c++)
+         probs[c] = (1.0 - mix) * probs[c] + mix * prior[c];
+
+      NormalizeClassDistribution(probs);
+   }
+
+   double ApplyExpectedMoveCalibrationBank(const double expected_move_points)
+   {
+      double ev = (expected_move_points > 0.0 ? expected_move_points : MathMax(ResolveMinMovePoints(), 0.10));
+      int r = m_ctx_regime_id;
+      if(r < 0) r = 0;
+      if(r >= FXAI_PLUGIN_REGIME_BUCKETS) r = FXAI_PLUGIN_REGIME_BUCKETS - 1;
+      int s = ContextSessionBucket();
+      int h = ContextHorizonBucket();
+
+      ev = ev * m_bank_ev_scale[r][s][h] + m_bank_ev_bias[r][s][h];
+      if(!MathIsValidNumber(ev) || ev <= 0.0)
+         ev = MathMax(ResolveMinMovePoints(), 0.10);
+      return ev;
+   }
+
+   void UpdateContextCalibrationBank(const int label_class,
+                                     const double &probs[],
+                                     const double expected_move_points,
+                                     const double move_points,
+                                     const double sample_w)
    {
       if(label_class < (int)FXAI_LABEL_SELL || label_class > (int)FXAI_LABEL_SKIP)
          return;
 
-      double probs[3];
-      PredictLocalClassProbs(xc, probs);
-
+      int r = m_ctx_regime_id;
+      if(r < 0) r = 0;
+      if(r >= FXAI_PLUGIN_REGIME_BUCKETS) r = FXAI_PLUGIN_REGIME_BUCKETS - 1;
+      int s = ContextSessionBucket();
+      int h = ContextHorizonBucket();
       double w = FXAI_Clamp(sample_w, 0.25, 4.00);
-      double lr = FXAI_Clamp(hp.lr * 0.40 * w, 0.0003, 0.0500);
-      double l2 = FXAI_Clamp(hp.l2, 0.0, 0.1000);
 
-      for(int c=0; c<3; c++)
+      m_bank_class_mass[r][s][h][label_class] += w;
+      m_bank_total[r][s][h] += w;
+      if(m_bank_total[r][s][h] > 30000.0)
       {
-         double target = (c == label_class ? 1.0 : 0.0);
-         double err = target - probs[c];
-         for(int k=0; k<FXAI_PLUGIN_CLASS_FEATURES; k++)
+         for(int c=0; c<3; c++)
+            m_bank_class_mass[r][s][h][c] *= 0.5;
+         m_bank_total[r][s][h] *= 0.5;
+      }
+
+      double pred = MathMax(expected_move_points, MathMax(ResolveMinMovePoints(), 0.10));
+      double tgt = MathMax(MathAbs(move_points), MathMax(ResolveMinMovePoints(), 0.10));
+      double err = FXAI_ClipSym(tgt - pred, 30.0);
+
+      double lr = 0.015 * w;
+      double g_scale = err / MathMax(pred, 0.25);
+      double g_bias = 0.30 * err;
+
+      m_bank_ev_g2_scale[r][s][h] += g_scale * g_scale;
+      m_bank_ev_g2_bias[r][s][h] += g_bias * g_bias;
+
+      double lr_scale = lr / MathSqrt(m_bank_ev_g2_scale[r][s][h] + 1e-8);
+      double lr_bias = lr / MathSqrt(m_bank_ev_g2_bias[r][s][h] + 1e-8);
+
+      m_bank_ev_scale[r][s][h] += lr_scale * g_scale;
+      m_bank_ev_bias[r][s][h] += lr_bias * g_bias;
+
+      m_bank_ev_scale[r][s][h] = FXAI_Clamp(m_bank_ev_scale[r][s][h], 0.40, 2.50);
+      m_bank_ev_bias[r][s][h] = FXAI_Clamp(m_bank_ev_bias[r][s][h], -20.0, 20.0);
+   }
+
+   double ComputeReplayPriority(const int label_class,
+                                const double &probs[],
+                                const double move_points,
+                                const double cost_points,
+                                const double min_move_points) const
+   {
+      int cls = label_class;
+      if(cls < (int)FXAI_LABEL_SELL || cls > (int)FXAI_LABEL_SKIP)
+         cls = (move_points >= 0.0 ? (int)FXAI_LABEL_BUY : (int)FXAI_LABEL_SELL);
+
+      double p_true = (cls >= 0 && cls < 3 ? probs[cls] : 0.3333333);
+      double edge = MathMax(MathAbs(move_points) - MathMax(cost_points, 0.0), 0.0);
+      double mm = MathMax(min_move_points, 0.10);
+      double pri = 0.50 + (1.0 - FXAI_Clamp(p_true, 0.0, 1.0));
+      pri += 0.35 * FXAI_Clamp(edge / mm, 0.0, 4.0);
+      if(cls == (int)FXAI_LABEL_SKIP)
+         pri += 0.15;
+      return FXAI_Clamp(pri, 0.10, 8.00);
+   }
+
+   void StoreReplaySample(const FXAIAISampleV2 &sample,
+                          const double priority)
+   {
+      int slot = m_v2_replay_head;
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         m_v2_replay_x[slot][k] = sample.x[k];
+      m_v2_replay_label[slot] = sample.label_class;
+      m_v2_replay_move[slot] = sample.move_points;
+      m_v2_replay_cost[slot] = sample.cost_points;
+      m_v2_replay_min_move[slot] = sample.min_move_points;
+      m_v2_replay_time[slot] = sample.sample_time;
+      m_v2_replay_regime[slot] = sample.regime_id;
+      m_v2_replay_horizon[slot] = sample.horizon_minutes;
+      m_v2_replay_priority[slot] = priority;
+
+      m_v2_replay_head = (m_v2_replay_head + 1) % FXAI_PLUGIN_REPLAY_CAPACITY;
+      if(m_v2_replay_size < FXAI_PLUGIN_REPLAY_CAPACITY)
+         m_v2_replay_size++;
+   }
+
+   void RunReplayRehearsal(const FXAIAIHyperParams &hp,
+                           const int regime_id,
+                           const int horizon_minutes)
+   {
+      if(m_v2_replay_size <= 0) return;
+
+      int best_idx[FXAI_PLUGIN_REPLAY_STEPS];
+      double best_score[FXAI_PLUGIN_REPLAY_STEPS];
+      for(int j=0; j<FXAI_PLUGIN_REPLAY_STEPS; j++)
+      {
+         best_idx[j] = -1;
+         best_score[j] = -1e18;
+      }
+
+      for(int i=0; i<m_v2_replay_size; i++)
+      {
+         double score = m_v2_replay_priority[i];
+         if(m_v2_replay_regime[i] == regime_id) score += 0.80;
+         if(m_v2_replay_horizon[i] == horizon_minutes) score += 0.60;
+
+         for(int j=0; j<FXAI_PLUGIN_REPLAY_STEPS; j++)
          {
-            double reg = (k == 0 ? 0.0 : l2 * m_v2_cls_w[c][k]);
-            m_v2_cls_w[c][k] += lr * (err * xc[k] - reg);
+            if(score > best_score[j])
+            {
+               for(int k=FXAI_PLUGIN_REPLAY_STEPS - 1; k>j; k--)
+               {
+                  best_score[k] = best_score[k - 1];
+                  best_idx[k] = best_idx[k - 1];
+               }
+               best_score[j] = score;
+               best_idx[j] = i;
+               break;
+            }
          }
       }
 
-      m_v2_cls_steps++;
-   }
+      datetime keep_time = m_ctx_time;
+      bool keep_time_ready = m_ctx_time_ready;
+      double keep_cost = m_ctx_cost_points;
+      bool keep_cost_ready = m_ctx_cost_ready;
+      double keep_min_move = m_ctx_min_move_points;
+      int keep_regime = m_ctx_regime_id;
+      int keep_horizon = m_ctx_horizon_minutes;
 
-   bool BuildNativeFromDirectional(const double &x[],
-                                   const FXAIAIHyperParams &hp,
-                                   double &class_probs[],
-                                   double &expected_move_points)
-   {
-      EnsureInitialized(hp);
+      for(int j=0; j<FXAI_PLUGIN_REPLAY_STEPS; j++)
+      {
+         int idx = best_idx[j];
+         if(idx < 0 || idx >= m_v2_replay_size) continue;
+         SetContext(m_v2_replay_time[idx],
+                    m_v2_replay_cost[idx],
+                    m_v2_replay_min_move[idx],
+                    m_v2_replay_regime[idx],
+                    m_v2_replay_horizon[idx]);
+         double replay_x[FXAI_AI_WEIGHTS];
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            replay_x[k] = m_v2_replay_x[idx][k];
+         UpdateWithMove(m_v2_replay_label[idx], replay_x, hp, m_v2_replay_move[idx]);
+         m_v2_replay_rehearsals++;
+      }
 
-      double p_up = FXAI_Clamp(PredictProb(x, hp), 0.001, 0.999);
-      double exp_move = PredictExpectedMovePoints(x, hp);
-      if(exp_move <= 0.0) exp_move = ResolveMinMovePoints();
-      if(exp_move <= 0.0) exp_move = 0.10;
-
-      double mm = ResolveMinMovePoints();
-      if(mm <= 0.0) mm = 0.10;
-      double cp = ResolveCostPoints(x);
-      if(cp < 0.0) cp = 0.0;
-
-      double xc[FXAI_PLUGIN_CLASS_FEATURES];
-      BuildClassInput(p_up, exp_move, mm, cp, xc);
-
-      double probs_head[3];
-      PredictLocalClassProbs(xc, probs_head);
-
-      double active = FXAI_Clamp((exp_move - mm) / MathMax(mm, 0.10), 0.0, 1.0);
-      double probs_anchor[3];
-      probs_anchor[(int)FXAI_LABEL_BUY]  = FXAI_Clamp(p_up * active, 0.001, 0.999);
-      probs_anchor[(int)FXAI_LABEL_SELL] = FXAI_Clamp((1.0 - p_up) * active, 0.001, 0.999);
-      probs_anchor[(int)FXAI_LABEL_SKIP] = FXAI_Clamp(1.0 - active, 0.001, 0.999);
-      double sa = probs_anchor[0] + probs_anchor[1] + probs_anchor[2];
-      if(sa <= 0.0) sa = 1.0;
-      for(int c=0; c<3; c++) probs_anchor[c] /= sa;
-
-      double w_head = (m_v2_cls_steps >= 24 ? 0.70 : 0.35);
-      double w_anchor = 1.0 - w_head;
-      for(int c=0; c<3; c++)
-         class_probs[c] = FXAI_Clamp(w_head * probs_head[c] + w_anchor * probs_anchor[c], 0.0005, 0.9990);
-
-      double s = class_probs[0] + class_probs[1] + class_probs[2];
-      if(s <= 0.0) s = 1.0;
-      for(int c=0; c<3; c++) class_probs[c] /= s;
-
-      expected_move_points = exp_move;
-      return true;
+      m_ctx_time_ready = keep_time_ready;
+      m_ctx_time = keep_time;
+      m_ctx_cost_ready = keep_cost_ready;
+      m_ctx_cost_points = keep_cost;
+      m_ctx_min_move_points = keep_min_move;
+      m_ctx_regime_id = keep_regime;
+      m_ctx_horizon_minutes = keep_horizon;
    }
 
 public:
@@ -401,110 +611,81 @@ public:
       return false;
    }
 
+   int NativePredictFailures(void) const { return m_native_predict_failures; }
+   int ExpectedPriorCalls(void) const { return m_expected_prior_calls; }
+   int ReplayRehearsals(void) const { return m_v2_replay_rehearsals; }
+
    // V2 training API: time/cost-aware sample payload.
    void TrainV2(const FXAIAISampleV2 &sample, const FXAIAIHyperParams &hp)
    {
       if(!sample.valid) return;
       EnsureInitialized(hp);
-      SetContext(sample.sample_time, sample.cost_points, sample.min_move_points);
+      SetContext(sample.sample_time,
+                 sample.cost_points,
+                 sample.min_move_points,
+                 sample.regime_id,
+                 sample.horizon_minutes);
 
-      // Core model update.
+      double pre_probs[3];
+      pre_probs[0] = 0.10;
+      pre_probs[1] = 0.10;
+      pre_probs[2] = 0.80;
+      double pre_move = MathMax(sample.min_move_points, 0.10);
+      bool have_pre = PredictNativeClassProbs(sample.x, hp, pre_probs, pre_move);
+      if(!have_pre)
+         m_native_predict_failures++;
+      NormalizeClassDistribution(pre_probs);
+      pre_move = MathMax(pre_move, MathMax(sample.min_move_points, 0.10));
+
+      double sample_w = MoveSampleWeight(sample.x, sample.move_points);
+      UpdateContextCalibrationBank(sample.label_class, pre_probs, pre_move, sample.move_points, sample_w);
+      double replay_pri = ComputeReplayPriority(sample.label_class,
+                                                pre_probs,
+                                                sample.move_points,
+                                                sample.cost_points,
+                                                sample.min_move_points);
+      StoreReplaySample(sample, replay_pri);
+
       UpdateWithMove(sample.label_class, sample.x, hp, sample.move_points);
-
-      // Fallback local multiclass objective for legacy plugins.
-      double p_up = FXAI_Clamp(PredictProb(sample.x, hp), 0.001, 0.999);
-      double exp_move = PredictExpectedMovePoints(sample.x, hp);
-      if(exp_move <= 0.0) exp_move = MathAbs(sample.move_points);
-      if(exp_move <= 0.0) exp_move = ResolveMinMovePoints();
-
-      double xc[FXAI_PLUGIN_CLASS_FEATURES];
-      double mm = (sample.min_move_points > 0.0 ? sample.min_move_points : ResolveMinMovePoints());
-      double cp = (sample.cost_points >= 0.0 ? sample.cost_points : ResolveCostPoints(sample.x));
-      BuildClassInput(p_up, exp_move, mm, cp, xc);
-
-      double sw = MoveSampleWeight(sample.x, sample.move_points);
-      double mm_safe = MathMax(mm, 0.10);
-      double opp = MathAbs(sample.move_points) / mm_safe;
-      if(sample.label_class == (int)FXAI_LABEL_SKIP)
-      {
-         // Dynamic skip down-weighting reduces skip-class dominance when
-         // realized movement carried opportunity.
-         double skip_w = FXAI_Clamp(0.35 + (0.30 / (1.0 + opp)), 0.20, 0.75);
-         sw *= skip_w;
-      }
-      else
-      {
-         // Strengthen directional samples when realized edge was meaningful.
-         double dir_w = FXAI_Clamp(1.0 + 0.25 * (opp - 1.0), 1.0, 2.0);
-         sw *= dir_w;
-      }
-      UpdateLocalClassHead(sample.label_class, xc, hp, sw);
+      RunReplayRehearsal(hp, sample.regime_id, sample.horizon_minutes);
    }
 
    // V2 inference API: returns calibrated 3-class distribution.
    void PredictV2(const FXAIAIPredictV2 &req,
                   const FXAIAIHyperParams &hp,
-                  FXAIAIPredictionV2 &out)
+      FXAIAIPredictionV2 &out)
    {
       EnsureInitialized(hp);
-      SetContext(req.sample_time, req.cost_points, req.min_move_points);
+      SetContext(req.sample_time,
+                 req.cost_points,
+                 req.min_move_points,
+                 req.regime_id,
+                 req.horizon_minutes);
 
-      if(SupportsNativeClassProbs())
+      double native_probs[3];
+      native_probs[0] = 0.10;
+      native_probs[1] = 0.10;
+      native_probs[2] = 0.80;
+      double native_move = MathMax(req.min_move_points, 0.10);
+      m_native_predict_calls++;
+      if(!PredictNativeClassProbs(req.x, hp, native_probs, native_move))
       {
-         double native_probs[3];
-         double native_move = -1.0;
-         if(PredictNativeClassProbs(req.x, hp, native_probs, native_move))
-         {
-            out.class_probs[0] = FXAI_Clamp(native_probs[0], 0.0005, 0.9990);
-            out.class_probs[1] = FXAI_Clamp(native_probs[1], 0.0005, 0.9990);
-            out.class_probs[2] = FXAI_Clamp(native_probs[2], 0.0005, 0.9990);
-            double s0 = out.class_probs[0] + out.class_probs[1] + out.class_probs[2];
-            if(s0 <= 0.0) s0 = 1.0;
-            out.class_probs[0] /= s0;
-            out.class_probs[1] /= s0;
-            out.class_probs[2] /= s0;
-            out.p_up = out.class_probs[(int)FXAI_LABEL_BUY];
-            out.expected_move_points = (native_move > 0.0 ? native_move : MathMax(ResolveMinMovePoints(), 0.10));
-            return;
-         }
+         m_native_predict_failures++;
+         out.class_probs[(int)FXAI_LABEL_SELL] = 0.05;
+         out.class_probs[(int)FXAI_LABEL_BUY] = 0.05;
+         out.class_probs[(int)FXAI_LABEL_SKIP] = 0.90;
+         out.p_up = out.class_probs[(int)FXAI_LABEL_BUY];
+         out.expected_move_points = MathMax(req.min_move_points, 0.10);
+         return;
       }
 
-      double p_up = FXAI_Clamp(PredictProb(req.x, hp), 0.001, 0.999);
-      double exp_move = PredictExpectedMovePoints(req.x, hp);
-      if(exp_move <= 0.0) exp_move = ResolveMinMovePoints();
-      if(exp_move <= 0.0) exp_move = 0.10;
-
-      double mm = (req.min_move_points > 0.0 ? req.min_move_points : ResolveMinMovePoints());
-      if(mm <= 0.0) mm = 0.10;
-      double cp = (req.cost_points >= 0.0 ? req.cost_points : ResolveCostPoints(req.x));
-      if(cp < 0.0) cp = 0.0;
-
-      double xc[FXAI_PLUGIN_CLASS_FEATURES];
-      BuildClassInput(p_up, exp_move, mm, cp, xc);
-
-      double probs_head[3];
-      PredictLocalClassProbs(xc, probs_head);
-
-      double active = FXAI_Clamp((exp_move - mm) / MathMax(mm, 0.10), 0.0, 1.0);
-      double probs_anchor[3];
-      probs_anchor[(int)FXAI_LABEL_BUY] = FXAI_Clamp(p_up * active, 0.001, 0.999);
-      probs_anchor[(int)FXAI_LABEL_SELL] = FXAI_Clamp((1.0 - p_up) * active, 0.001, 0.999);
-      probs_anchor[(int)FXAI_LABEL_SKIP] = FXAI_Clamp(1.0 - active, 0.001, 0.999);
-      double sa = probs_anchor[0] + probs_anchor[1] + probs_anchor[2];
-      if(sa <= 0.0) sa = 1.0;
-      for(int c=0; c<3; c++) probs_anchor[c] /= sa;
-
-      double w_head = (m_v2_cls_steps >= 24 ? 0.70 : 0.35);
-      double w_anchor = 1.0 - w_head;
-      for(int c=0; c<3; c++)
-         out.class_probs[c] = FXAI_Clamp(w_head * probs_head[c] + w_anchor * probs_anchor[c], 0.0005, 0.9990);
-
-      double s = out.class_probs[0] + out.class_probs[1] + out.class_probs[2];
-      if(s <= 0.0) s = 1.0;
-      for(int c=0; c<3; c++) out.class_probs[c] /= s;
-
+      NormalizeClassDistribution(native_probs);
+      ApplyContextCalibrationBank(native_probs);
+      out.class_probs[0] = native_probs[0];
+      out.class_probs[1] = native_probs[1];
+      out.class_probs[2] = native_probs[2];
       out.p_up = out.class_probs[(int)FXAI_LABEL_BUY];
-      out.expected_move_points = exp_move;
+      out.expected_move_points = ApplyExpectedMoveCalibrationBank(native_move);
    }
 
 protected:
@@ -516,12 +697,7 @@ protected:
    virtual double PredictProb(const double &x[], const FXAIAIHyperParams &hp) = 0;
    virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
    {
-      double head = (m_move_head_ready ? PredictMoveHeadRaw(x) : -1.0);
-      if(head > 0.0 && m_move_ready && m_move_ema_abs > 0.0)
-         return 0.60 * head + 0.40 * m_move_ema_abs;
-      if(head > 0.0) return head;
-      if(m_move_ready && m_move_ema_abs > 0.0) return m_move_ema_abs;
-      return -1.0;
+      return ExpectedMovePrior(x);
    }
 };
 

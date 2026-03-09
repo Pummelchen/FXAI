@@ -1661,7 +1661,36 @@ public:
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
-      return BuildNativeFromDirectional(x, hp, class_probs, expected_move_points);
+      double emb[FXAI_AI_MLP_HIDDEN];
+      double loc[FXAI_AI_MLP_HIDDEN];
+      double att[FXAI_AI_MLP_HIDDEN];
+      double fin[FXAI_AI_MLP_HIDDEN];
+      double grp[3];
+      double ctx[FXAI_TST_HEADS][FXAI_TST_D_HEAD];
+      ForwardStep(x, false, false, -1, emb, loc, att, fin, grp, ctx);
+
+      double logits[FXAI_TST_CLASS_COUNT];
+      double probs[FXAI_TST_CLASS_COUNT];
+      double mu = 0.0, logv = 0.0, q25 = 0.0, q75 = 0.0;
+      double mu_h[FXAI_TST_HORIZONS];
+      ComputeHeads(fin, logits, probs, mu, logv, q25, q75, mu_h[0], mu_h[1], mu_h[2]);
+
+      double den = probs[FXAI_TST_BUY] + probs[FXAI_TST_SELL];
+      if(den < 1e-9) den = 1e-9;
+      double p_dir_raw = probs[FXAI_TST_BUY] / den;
+      double p_dir_cal = CalibrateSessionProb(SessionBucketNow(), p_dir_raw);
+      double active = FXAI_Clamp(1.0 - probs[FXAI_TST_SKIP], 0.0, 1.0);
+      class_probs[(int)FXAI_LABEL_BUY] = p_dir_cal * active;
+      class_probs[(int)FXAI_LABEL_SELL] = (1.0 - p_dir_cal) * active;
+      class_probs[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+
+      double sigma = FXAI_Clamp(MathExp(0.5 * logv), 0.05, 30.0);
+      double iqr = MathAbs(q75 - q25);
+      double ev_h = 0.50 * MathAbs(mu_h[0]) + 0.30 * MathAbs(mu_h[1]) + 0.20 * MathAbs(mu_h[2]);
+      expected_move_points = (0.55 * MathAbs(mu) + 0.45 * ev_h + 0.22 * sigma + 0.10 * iqr) * active;
+      if(expected_move_points <= 0.0)
+         expected_move_points = ExpectedMovePrior(x);
+      return true;
    }
 
 
@@ -1816,7 +1845,7 @@ public:
       if(ev > 0.0 && m_move_ready && m_move_ema_abs > 0.0)
          return 0.65 * ev + 0.35 * m_move_ema_abs;
       if(ev > 0.0) return ev;
-      return CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      return ExpectedMovePrior(x);
    }
 };
 

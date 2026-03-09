@@ -18,7 +18,7 @@ Core benefits at a glance:
 - [Core Benefits](#core-benefits)
 - [Project Structure](#project-structure)
 - [Typical Workflow](#typical-workflow)
-- [Reference PDF](#reference-pdf)
+- [Reference Appendix](#reference-appendix)
 - [Notes](#notes)
 
 ## What It Is
@@ -70,12 +70,11 @@ The project is designed to keep MT5 execution practical while enabling advanced 
 3. Sync MT5 project state into this GitHub repo after a clean MT5 compile.
 4. Repeat with walk-forward validation before live deployment.
 
-## Reference PDF
+## Reference Appendix
 
-The detailed appendix material was moved into a dedicated reference document so the main README stays focused. Use the links below for the full long-form lists and descriptions.
+The detailed appendix material was moved into a dedicated reference document so the main README stays focused. Use the text appendix below for the full long-form model, feature, and normalization lists.
 
-- [FXAI Detailed Reference (PDF)](docs/FXAI_Detailed_Reference.pdf)
-- [FXAI Detailed Reference (Text Source)](docs/FXAI_Detailed_Reference.txt)
+- [FXAI Detailed Reference](FXAI_Detailed_Reference.txt)
 
 ## Notes
 

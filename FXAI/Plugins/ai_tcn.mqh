@@ -1290,7 +1290,29 @@ public:
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
-      return BuildNativeFromDirectional(x, hp, class_probs, expected_move_points);
+      double h_last[FXAI_AI_MLP_HIDDEN];
+      ForwardStep(x, false, false, -1, h_last);
+
+      double logits[FXAI_TCN_CLASS_COUNT];
+      double probs[FXAI_TCN_CLASS_COUNT];
+      double mu = 0.0, logv = 0.0, q25 = 0.0, q75 = 0.0;
+      ComputeHeads(h_last, logits, probs, mu, logv, q25, q75);
+
+      double den = probs[FXAI_TCN_BUY] + probs[FXAI_TCN_SELL];
+      if(den < 1e-9) den = 1e-9;
+      double p_dir_raw = probs[FXAI_TCN_BUY] / den;
+      double p_dir_cal = CalibrateProb(p_dir_raw);
+      double active = FXAI_Clamp(1.0 - probs[FXAI_TCN_SKIP], 0.0, 1.0);
+      class_probs[(int)FXAI_LABEL_BUY] = p_dir_cal * active;
+      class_probs[(int)FXAI_LABEL_SELL] = (1.0 - p_dir_cal) * active;
+      class_probs[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+
+      double sigma = FXAI_Clamp(MathExp(0.5 * logv), 0.05, 30.0);
+      double iqr = MathAbs(q75 - q25);
+      expected_move_points = (MathAbs(mu) + 0.25 * sigma + 0.10 * iqr) * active;
+      if(expected_move_points <= 0.0)
+         expected_move_points = ExpectedMovePrior(x);
+      return true;
    }
 
 
@@ -1393,7 +1415,7 @@ public:
       if(ev > 0.0 && m_move_ready && m_move_ema_abs > 0.0)
          return 0.65 * ev + 0.35 * m_move_ema_abs;
       if(ev > 0.0) return ev;
-      return CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      return ExpectedMovePrior(x);
    }
 };
 

@@ -186,6 +186,10 @@ input bool   AI_DebugFlow     = false;
 // Models: all (diagnostics only, no model math impact).
 // Purpose: prints one-per-bar reasons for trade blocks/no-signal paths.
 // Importance/Range: false/true; enable during debugging, disable for production speed.
+input bool   AI_ComplianceHarness = false;
+// Models: all (framework/API validation only).
+// Purpose: runs plugin V2 compliance checks on init before trading starts.
+// Importance/Range: false/true; enable when validating framework changes, disable for production speed.
 input ENUM_FXAI_FEATURE_NORMALIZATION AI_FeatureNormalization = FXAI_NORM_EXISTING;
 // Models: all (shared feature pipeline before all plugin train/predict calls).
 // Purpose: selects the feature normalization method applied to prepared feature vectors.
@@ -3090,6 +3094,8 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
          FXAIAISampleV2 s2;
          s2.valid = samples[i].valid;
          s2.label_class = samples[i].label_class;
+         s2.regime_id = samples[i].regime_id;
+         s2.horizon_minutes = samples[i].horizon_minutes;
          s2.move_points = samples[i].move_points;
          s2.min_move_points = samples[i].min_move_points;
          s2.cost_points = samples[i].cost_points;
@@ -3692,6 +3698,8 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
       if(!samples[i].valid) continue;
 
       FXAIAIPredictV2 req;
+      req.regime_id = samples[i].regime_id;
+      req.horizon_minutes = score_h;
       req.min_move_points = samples[i].min_move_points;
       req.cost_points = samples[i].cost_points;
       req.sample_time = samples[i].sample_time;
@@ -3807,6 +3815,8 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
       if(!eval_sample.valid) continue;
 
       FXAIAIPredictV2 req;
+      req.regime_id = eval_sample.regime_id;
+      req.horizon_minutes = score_h;
       req.min_move_points = eval_sample.min_move_points;
       req.cost_points = eval_sample.cost_points;
       req.sample_time = eval_sample.sample_time;
@@ -4249,6 +4259,8 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             FXAIAIPredictV2 req;
             FXAIPreparedSample pred_sample;
             FXAI_GetCachedPreparedSample(ai_idx, samples[i], i, norm_caches, pred_sample);
+            req.regime_id = pred_sample.regime_id;
+            req.horizon_minutes = pred_sample.horizon_minutes;
             req.min_move_points = pred_sample.min_move_points;
             req.cost_points = pred_sample.cost_points;
             req.sample_time = pred_sample.sample_time;
@@ -5374,6 +5386,8 @@ void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
    FXAIAISampleV2 s2;
    s2.valid = sample.valid;
    s2.label_class = sample.label_class;
+   s2.regime_id = sample.regime_id;
+   s2.horizon_minutes = sample.horizon_minutes;
    s2.move_points = sample.move_points;
    s2.min_move_points = sample.min_move_points;
    s2.cost_points = sample.cost_points;
@@ -6442,6 +6456,207 @@ bool FXAI_ValidateNativePluginAPI()
    return true;
 }
 
+void FXAI_FillComplianceSample(FXAIAISampleV2 &sample,
+                               const int label_class,
+                               const double move_points,
+                               const double cost_points,
+                               const double v1,
+                               const double v2,
+                               const double v3,
+                               const datetime sample_time,
+                               const int regime_id,
+                               const int horizon_minutes)
+{
+   sample.valid = true;
+   sample.label_class = label_class;
+   sample.regime_id = regime_id;
+   sample.horizon_minutes = horizon_minutes;
+   sample.move_points = move_points;
+   sample.min_move_points = MathMax(cost_points + 0.30, 0.50);
+   sample.cost_points = MathMax(cost_points, 0.0);
+   sample.sample_time = sample_time;
+   for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      sample.x[k] = 0.0;
+   sample.x[0] = 1.0;
+   sample.x[1] = v1;
+   sample.x[2] = v2;
+   sample.x[3] = v3;
+   sample.x[4] = 0.35 * v2;
+   sample.x[5] = 0.25 * v3;
+   sample.x[6] = 0.15 * v1;
+   sample.x[7] = sample.cost_points;
+}
+
+void FXAI_FillComplianceRequest(FXAIAIPredictV2 &req,
+                                const double cost_points,
+                                const double v1,
+                                const double v2,
+                                const double v3,
+                                const datetime sample_time,
+                                const int regime_id,
+                                const int horizon_minutes)
+{
+   req.regime_id = regime_id;
+   req.horizon_minutes = horizon_minutes;
+   req.min_move_points = MathMax(cost_points + 0.30, 0.50);
+   req.cost_points = MathMax(cost_points, 0.0);
+   req.sample_time = sample_time;
+   for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      req.x[k] = 0.0;
+   req.x[0] = 1.0;
+   req.x[1] = v1;
+   req.x[2] = v2;
+   req.x[3] = v3;
+   req.x[4] = 0.35 * v2;
+   req.x[5] = 0.25 * v3;
+   req.x[6] = 0.15 * v1;
+   req.x[7] = req.cost_points;
+}
+
+bool FXAI_ValidatePredictionOutput(const CFXAIAIPlugin &plugin,
+                                   const FXAIAIPredictionV2 &pred,
+                                   const string tag)
+{
+   double s = pred.class_probs[(int)FXAI_LABEL_SELL]
+            + pred.class_probs[(int)FXAI_LABEL_BUY]
+            + pred.class_probs[(int)FXAI_LABEL_SKIP];
+   if(!MathIsValidNumber(s) || MathAbs(s - 1.0) > 1e-3)
+   {
+      Print("FXAI compliance error: probability sum invalid. model=", plugin.AIName(),
+            " tag=", tag, " sum=", DoubleToString(s, 6));
+      return false;
+   }
+
+   for(int c=0; c<3; c++)
+   {
+      if(!MathIsValidNumber(pred.class_probs[c]) || pred.class_probs[c] < 0.0 || pred.class_probs[c] > 1.0)
+      {
+         Print("FXAI compliance error: probability range invalid. model=", plugin.AIName(),
+               " tag=", tag, " class=", c, " value=", DoubleToString(pred.class_probs[c], 6));
+         return false;
+      }
+   }
+
+   if(!MathIsValidNumber(pred.expected_move_points) || pred.expected_move_points <= 0.0)
+   {
+      Print("FXAI compliance error: expected move invalid. model=", plugin.AIName(),
+            " tag=", tag, " ev=", DoubleToString(pred.expected_move_points, 6));
+      return false;
+   }
+
+   return true;
+}
+
+bool FXAI_RunPluginComplianceHarness()
+{
+   datetime now_t = TimeCurrent();
+
+   for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
+   {
+      CFXAIAIPlugin *plugin = g_plugins.CreateInstance(ai_idx);
+      if(plugin == NULL)
+      {
+         Print("FXAI compliance error: could not create plugin id=", ai_idx);
+         return false;
+      }
+
+      FXAIAIHyperParams hp;
+      FXAI_GetModelHyperParams(ai_idx, hp);
+      plugin.Reset();
+      plugin.EnsureInitialized(hp);
+
+      FXAIAISampleV2 buy_s, sell_s, skip_s, buy_big_s;
+      FXAI_FillComplianceSample(buy_s, (int)FXAI_LABEL_BUY, 4.5, 0.8, 0.75, 0.40, 0.20, now_t - 180, 1, 5);
+      FXAI_FillComplianceSample(sell_s, (int)FXAI_LABEL_SELL, -4.5, 0.8, -0.75, -0.40, -0.20, now_t - 120, 1, 5);
+      FXAI_FillComplianceSample(skip_s, (int)FXAI_LABEL_SKIP, 0.2, 0.8, 0.02, 0.01, 0.00, now_t - 60, 1, 5);
+      FXAI_FillComplianceSample(buy_big_s, (int)FXAI_LABEL_BUY, 8.0, 0.8, 1.20, 0.65, 0.35, now_t - 30, 1, 13);
+
+      for(int rep=0; rep<10; rep++)
+      {
+         plugin.TrainV2(buy_s, hp);
+         plugin.TrainV2(sell_s, hp);
+         plugin.TrainV2(skip_s, hp);
+         plugin.TrainV2(buy_big_s, hp);
+      }
+
+      FXAIAIPredictV2 req_buy_lo, req_buy_hi, req_sell_lo, req_skip_lo, req_buy_big;
+      FXAI_FillComplianceRequest(req_buy_lo, 0.8, 0.75, 0.40, 0.20, now_t, 1, 5);
+      FXAI_FillComplianceRequest(req_buy_hi, 3.5, 0.75, 0.40, 0.20, now_t, 1, 5);
+      FXAI_FillComplianceRequest(req_sell_lo, 0.8, -0.75, -0.40, -0.20, now_t, 1, 5);
+      FXAI_FillComplianceRequest(req_skip_lo, 0.8, 0.02, 0.01, 0.00, now_t, 1, 5);
+      FXAI_FillComplianceRequest(req_buy_big, 0.8, 1.20, 0.65, 0.35, now_t, 1, 13);
+
+      FXAIAIPredictionV2 pred_buy_lo, pred_buy_hi, pred_sell_lo, pred_skip_lo, pred_buy_big;
+      plugin.PredictV2(req_buy_lo, hp, pred_buy_lo);
+      plugin.PredictV2(req_buy_hi, hp, pred_buy_hi);
+      plugin.PredictV2(req_sell_lo, hp, pred_sell_lo);
+      plugin.PredictV2(req_skip_lo, hp, pred_skip_lo);
+      plugin.PredictV2(req_buy_big, hp, pred_buy_big);
+
+      bool ok = FXAI_ValidatePredictionOutput(*plugin, pred_buy_lo, "buy_lo")
+             && FXAI_ValidatePredictionOutput(*plugin, pred_buy_hi, "buy_hi")
+             && FXAI_ValidatePredictionOutput(*plugin, pred_sell_lo, "sell_lo")
+             && FXAI_ValidatePredictionOutput(*plugin, pred_skip_lo, "skip_lo")
+             && FXAI_ValidatePredictionOutput(*plugin, pred_buy_big, "buy_big");
+      if(!ok)
+      {
+         delete plugin;
+         return false;
+      }
+
+      if(pred_buy_lo.class_probs[(int)FXAI_LABEL_BUY] + 0.05 < pred_buy_lo.class_probs[(int)FXAI_LABEL_SELL])
+      {
+         Print("FXAI compliance error: buy ordering failed. model=", plugin.AIName());
+         delete plugin;
+         return false;
+      }
+      if(pred_sell_lo.class_probs[(int)FXAI_LABEL_SELL] + 0.05 < pred_sell_lo.class_probs[(int)FXAI_LABEL_BUY])
+      {
+         Print("FXAI compliance error: sell ordering failed. model=", plugin.AIName());
+         delete plugin;
+         return false;
+      }
+      if(pred_skip_lo.class_probs[(int)FXAI_LABEL_SKIP] < 0.20)
+      {
+         Print("FXAI compliance error: skip response too weak. model=", plugin.AIName());
+         delete plugin;
+         return false;
+      }
+
+      double actionable_lo = pred_buy_lo.class_probs[(int)FXAI_LABEL_BUY] + pred_buy_lo.class_probs[(int)FXAI_LABEL_SELL];
+      double actionable_hi = pred_buy_hi.class_probs[(int)FXAI_LABEL_BUY] + pred_buy_hi.class_probs[(int)FXAI_LABEL_SELL];
+      if(actionable_hi > actionable_lo + 0.20)
+      {
+         Print("FXAI compliance error: cost awareness failed. model=", plugin.AIName(),
+               " low=", DoubleToString(actionable_lo, 4),
+               " high=", DoubleToString(actionable_hi, 4));
+         delete plugin;
+         return false;
+      }
+
+      if(pred_buy_big.expected_move_points + 0.25 < pred_buy_lo.expected_move_points)
+      {
+         Print("FXAI compliance error: EV monotonicity failed. model=", plugin.AIName(),
+               " big=", DoubleToString(pred_buy_big.expected_move_points, 4),
+               " base=", DoubleToString(pred_buy_lo.expected_move_points, 4));
+         delete plugin;
+         return false;
+      }
+
+      if(plugin.NativePredictFailures() > 0)
+      {
+         Print("FXAI compliance error: native predict failures detected. model=", plugin.AIName(),
+               " failures=", plugin.NativePredictFailures());
+         delete plugin;
+         return false;
+      }
+
+      delete plugin;
+   }
+
+   return true;
+}
+
 int OnInit()
 {
    MathSrand((uint)TimeLocal());
@@ -6465,6 +6680,9 @@ int OnInit()
       return(INIT_FAILED);
 
    if(!FXAI_ValidateNativePluginAPI())
+      return(INIT_PARAMETERS_INCORRECT);
+
+   if(AI_ComplianceHarness && !FXAI_RunPluginComplianceHarness())
       return(INIT_PARAMETERS_INCORRECT);
 
    FXAI_ParseContextSymbols(AI_ContextSymbols, g_context_symbols);
@@ -7566,6 +7784,8 @@ int SpecialDirectionAI(const string symbol)
       }
 
       FXAIAIPredictV2 req;
+      req.regime_id = regime_id;
+      req.horizon_minutes = H;
       req.min_move_points = min_move_pred;
       req.cost_points = min_move_pred;
       req.sample_time = snapshot.bar_time;

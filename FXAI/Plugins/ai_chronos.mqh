@@ -1612,7 +1612,7 @@ public:
       Calibrate3(p_raw, class_probs);
 
       double ev = ExpectedMoveFromHeads(mu, logv, q25, q75, mu_h, class_probs[(int)FXAI_LABEL_SKIP]);
-      double base_ev = CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      double base_ev = ExpectedMovePrior(x);
 
       double tok_prob[FXAI_CHR_CODEBOOK];
       int tok_top = 0;
@@ -2187,7 +2187,7 @@ protected:
       if(PredictNativeClassProbs(x, hp, probs, ev) && ev > 0.0)
          return ev;
 
-      return CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      return ExpectedMovePrior(x);
    }
 };
 

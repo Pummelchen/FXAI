@@ -1859,7 +1859,7 @@ protected:
       }
 
       double tree_est = (wsum > 0.0 ? sum / wsum : -1.0);
-      double base_est = CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      double base_est = ExpectedMovePrior(x);
 
       if(tree_est > 0.0 && base_est > 0.0) return 0.70 * tree_est + 0.30 * base_est;
       if(tree_est > 0.0) return tree_est;

@@ -701,7 +701,51 @@ public:
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
-      return BuildNativeFromDirectional(x, hp, class_probs, expected_move_points);
+      int sess = SessionBucket(ResolveContextTime());
+      int reg = RegimeBucket(x);
+      double cost = InputCostProxyPoints(x);
+
+      double q_short[FXAI_QT_Q], q_medium[FXAI_QT_Q], q_blend[FXAI_QT_Q];
+      BuildBlendedQuantiles(x, sess, reg, q_short, q_medium, q_blend);
+
+      double zf[FXAI_QT_ZF];
+      BuildClassFeatures(q_short, q_medium, q_blend, cost, x, zf);
+      PredictClassProbs(zf, class_probs);
+
+      double spread = q_blend[FXAI_QT_Q - 1] - q_blend[0];
+      if(spread < 0.05) spread = 0.05;
+
+      double buy_ev = 0.5 * (q_blend[FXAI_QT_MID] + q_blend[FXAI_QT_Q - 1]) - cost;
+      double sell_ev = 0.5 * (-q_blend[FXAI_QT_MID] - q_blend[0]) - cost;
+      double den = class_probs[(int)FXAI_LABEL_BUY] + class_probs[(int)FXAI_LABEL_SELL];
+      if(den < 1e-9) den = 1e-9;
+
+      double p_dir_cls = class_probs[(int)FXAI_LABEL_BUY] / den;
+      double p_dir_ev = FXAI_Sigmoid(FXAI_ClipSym((buy_ev - sell_ev) / (spread + 0.10), 12.0));
+      double cf[FXAI_QT_CALF];
+      BuildCalFeatures(q_blend, class_probs, cost, x, cf);
+      double p_dir_cal = PredictDirectionCal(cf);
+      double p_dir = FXAI_Clamp((0.45 * p_dir_cls) + (0.35 * p_dir_ev) + (0.20 * p_dir_cal), 0.001, 0.999);
+
+      double p_skip = FXAI_Clamp(class_probs[(int)FXAI_LABEL_SKIP], 0.0, 0.98);
+      if(buy_ev <= 0.0 && sell_ev <= 0.0)
+         p_skip = MathMax(p_skip, 0.70);
+      double active = FXAI_Clamp(1.0 - p_skip, 0.0, 1.0);
+      class_probs[(int)FXAI_LABEL_BUY] = p_dir * active;
+      class_probs[(int)FXAI_LABEL_SELL] = (1.0 - p_dir) * active;
+      class_probs[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+
+      double buy_tail = 0.5 * MathMax(0.0, q_blend[FXAI_QT_Q - 1] - cost)
+                      + 0.5 * MathMax(0.0, q_blend[FXAI_QT_Q - 2] - cost);
+      double sell_tail = 0.5 * MathMax(0.0, -q_blend[0] - cost)
+                       + 0.5 * MathMax(0.0, -q_blend[1] - cost);
+      double ev = class_probs[(int)FXAI_LABEL_BUY] * buy_tail
+                + class_probs[(int)FXAI_LABEL_SELL] * sell_tail;
+      double amp = 0.5 * (MathAbs(q_blend[FXAI_QT_Q - 1]) + MathAbs(q_blend[0]));
+      expected_move_points = MathMax(ev, 0.35 * amp) * FXAI_Clamp(m_rel_weight, 0.50, 1.50);
+      if(expected_move_points <= 0.0)
+         expected_move_points = ExpectedMovePrior(x);
+      return true;
    }
 
 
@@ -939,7 +983,7 @@ public:
       double pred = MathMax(ev, 0.35 * amp);
       pred *= FXAI_Clamp(m_rel_weight, 0.50, 1.50);
 
-      double base = CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      double base = ExpectedMovePrior(x);
       if(pred > 0.0 && base > 0.0)
          return 0.65 * pred + 0.35 * base;
       if(pred > 0.0)

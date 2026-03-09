@@ -1127,7 +1127,26 @@ public:
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
-      return BuildNativeFromDirectional(x, hp, class_probs, expected_move_points);
+      double probs[FXAI_STMN_CLASS_COUNT];
+      double mu = 0.0, logv = 0.0, q25 = 0.0, q75 = 0.0;
+      ForwardInference(x, probs, mu, logv, q25, q75);
+
+      double den = probs[FXAI_STMN_BUY] + probs[FXAI_STMN_SELL];
+      if(den < 1e-9) den = 1e-9;
+      double p_dir_raw = probs[FXAI_STMN_BUY] / den;
+      double p_dir_cal = CalibrateProb(p_dir_raw);
+      double active = FXAI_Clamp(1.0 - probs[FXAI_STMN_SKIP], 0.0, 1.0);
+      class_probs[(int)FXAI_LABEL_BUY] = p_dir_cal * active;
+      class_probs[(int)FXAI_LABEL_SELL] = (1.0 - p_dir_cal) * active;
+      class_probs[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+
+      double spread_amp = MathMax(0.0, q75 - q25);
+      double sigma = MathSqrt(MathMax(MathExp(logv), 1e-6));
+      double amp = MathMax(0.0, 0.55 * MathAbs(mu) + 0.25 * spread_amp + 0.20 * sigma);
+      expected_move_points = amp * active;
+      if(expected_move_points <= 0.0)
+         expected_move_points = ExpectedMovePrior(x);
+      return true;
    }
 
 
@@ -1247,7 +1266,7 @@ public:
       double active = FXAI_Clamp(1.0 - probs[FXAI_STMN_SKIP], 0.0, 1.0);
       double ev = amp * active;
 
-      double base_ev = CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      double base_ev = ExpectedMovePrior(x);
       if(ev > 0.0 && base_ev > 0.0) return 0.65 * ev + 0.35 * base_ev;
       if(ev > 0.0) return ev;
       return base_ev;

@@ -525,11 +525,11 @@ protected:
       double exp_move = 0.0;
       if(PredictNativeClassProbs(x, hp, probs, exp_move))
       {
-         double base = CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+         double base = ExpectedMovePrior(x);
          if(base > 0.0) return 0.70 * exp_move + 0.30 * base;
          return exp_move;
       }
-      return CFXAIAIPlugin::PredictExpectedMovePoints(x, hp);
+      return ExpectedMovePrior(x);
    }
 };
 
