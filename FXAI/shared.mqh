@@ -15,6 +15,8 @@
 #define FXAI_PLUGIN_REPLAY_STEPS 2
 #define FXAI_CONTEXT_TOP_SYMBOLS 3
 #define FXAI_CONTEXT_EXTRA_FEATS (FXAI_CONTEXT_TOP_SYMBOLS * 4)
+#define FXAI_API_VERSION_V2 2
+#define FXAI_API_VERSION_V3 3
 
 
 enum ENUM_AI_TYPE
@@ -56,6 +58,43 @@ enum ENUM_FXAI_LABEL_CLASS
    FXAI_LABEL_SELL = 0,
    FXAI_LABEL_BUY  = 1,
    FXAI_LABEL_SKIP = 2
+};
+
+enum ENUM_FXAI_AI_FAMILY
+{
+   FXAI_FAMILY_LINEAR = 0,
+   FXAI_FAMILY_TREE,
+   FXAI_FAMILY_RECURRENT,
+   FXAI_FAMILY_CONVOLUTIONAL,
+   FXAI_FAMILY_TRANSFORMER,
+   FXAI_FAMILY_STATE_SPACE,
+   FXAI_FAMILY_DISTRIBUTIONAL,
+   FXAI_FAMILY_MIXTURE,
+   FXAI_FAMILY_RETRIEVAL,
+   FXAI_FAMILY_WORLD_MODEL,
+   FXAI_FAMILY_RULE_BASED,
+   FXAI_FAMILY_OTHER
+};
+
+enum ENUM_FXAI_RESET_REASON
+{
+   FXAI_RESET_FULL = 0,
+   FXAI_RESET_SYMBOL_CHANGE,
+   FXAI_RESET_SESSION_CHANGE,
+   FXAI_RESET_REGIME_CHANGE,
+   FXAI_RESET_COMPLIANCE,
+   FXAI_RESET_MANUAL
+};
+
+enum ENUM_FXAI_FEATURE_GROUP
+{
+   FXAI_FEAT_GROUP_PRICE = 0,
+   FXAI_FEAT_GROUP_MULTI_TIMEFRAME,
+   FXAI_FEAT_GROUP_VOLATILITY,
+   FXAI_FEAT_GROUP_TIME,
+   FXAI_FEAT_GROUP_CONTEXT,
+   FXAI_FEAT_GROUP_COST,
+   FXAI_FEAT_GROUP_FILTERS
 };
 
 enum ENUM_FXAI_FEATURE_NORMALIZATION
@@ -120,6 +159,65 @@ struct FXAIDataSnapshot
    double spread_points;
    double commission_points;
    double min_move_points;
+};
+
+struct FXAIAIManifestV3
+{
+   int api_version;
+   int ai_id;
+   string ai_name;
+   int family;
+   bool supports_native_3class;
+   bool supports_distributional_move;
+   bool supports_online_learning;
+   bool supports_replay;
+   bool supports_state;
+   bool supports_window_context;
+   bool supports_multi_horizon;
+   int feature_schema_id;
+   ulong feature_groups_mask;
+   int min_horizon_minutes;
+   int max_horizon_minutes;
+};
+
+struct FXAIAIContextV3
+{
+   int api_version;
+   int regime_id;
+   int session_bucket;
+   int horizon_minutes;
+   int feature_schema_id;
+   int normalization_method_id;
+   int sequence_bars;
+   double cost_points;
+   double min_move_points;
+   double point_value;
+   datetime sample_time;
+};
+
+struct FXAIAITrainRequestV3
+{
+   FXAIAIContextV3 ctx;
+   int label_class;
+   double move_points;
+   double sample_weight;
+   double x[FXAI_AI_WEIGHTS];
+};
+
+struct FXAIAIPredictRequestV3
+{
+   FXAIAIContextV3 ctx;
+   double x[FXAI_AI_WEIGHTS];
+};
+
+struct FXAIAIPredictionV3
+{
+   double class_probs[3];
+   double move_mean_points;
+   double move_q25_points;
+   double move_q75_points;
+   double confidence;
+   double calibration_confidence;
 };
 
 // V2 plugin API sample payload used for training.

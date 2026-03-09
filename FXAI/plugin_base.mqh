@@ -594,13 +594,140 @@ protected:
       m_ctx_horizon_minutes = keep_horizon;
    }
 
+   int DefaultFamilyV3(void) const
+   {
+      switch(AIId())
+      {
+         case (int)AI_SGD_LOGIT:
+         case (int)AI_FTRL_LOGIT:
+         case (int)AI_PA_LINEAR:
+         case (int)AI_ENHASH:
+            return (int)FXAI_FAMILY_LINEAR;
+
+         case (int)AI_XGB_FAST:
+         case (int)AI_XGBOOST:
+         case (int)AI_LIGHTGBM:
+         case (int)AI_CATBOOST:
+            return (int)FXAI_FAMILY_TREE;
+
+         case (int)AI_LSTM:
+         case (int)AI_LSTMG:
+            return (int)FXAI_FAMILY_RECURRENT;
+
+         case (int)AI_TCN:
+            return (int)FXAI_FAMILY_CONVOLUTIONAL;
+
+         case (int)AI_S4:
+            return (int)FXAI_FAMILY_STATE_SPACE;
+
+         case (int)AI_QUANTILE:
+            return (int)FXAI_FAMILY_DISTRIBUTIONAL;
+
+         case (int)AI_LOFFM:
+         case (int)AI_MOE_CONFORMAL:
+            return (int)FXAI_FAMILY_MIXTURE;
+
+         case (int)AI_RETRDIFF:
+            return (int)FXAI_FAMILY_RETRIEVAL;
+
+         case (int)AI_CFX_WORLD:
+         case (int)AI_GRAPHWM:
+            return (int)FXAI_FAMILY_WORLD_MODEL;
+
+         case (int)AI_M1SYNC:
+            return (int)FXAI_FAMILY_RULE_BASED;
+
+         case (int)AI_AUTOFORMER:
+         case (int)AI_CHRONOS:
+         case (int)AI_GEODESICATTENTION:
+         case (int)AI_PATCHTST:
+         case (int)AI_STMN:
+         case (int)AI_TFT:
+         case (int)AI_TIMESFM:
+         case (int)AI_TRR:
+         case (int)AI_TST:
+            return (int)FXAI_FAMILY_TRANSFORMER;
+
+         default:
+            return (int)FXAI_FAMILY_OTHER;
+      }
+   }
+
+   ulong DefaultFeatureGroupsMaskV3(void) const
+   {
+      ulong mask = 0;
+      mask |= ((ulong)1 << (int)FXAI_FEAT_GROUP_PRICE);
+      mask |= ((ulong)1 << (int)FXAI_FEAT_GROUP_MULTI_TIMEFRAME);
+      mask |= ((ulong)1 << (int)FXAI_FEAT_GROUP_VOLATILITY);
+      mask |= ((ulong)1 << (int)FXAI_FEAT_GROUP_TIME);
+      mask |= ((ulong)1 << (int)FXAI_FEAT_GROUP_CONTEXT);
+      mask |= ((ulong)1 << (int)FXAI_FEAT_GROUP_COST);
+      mask |= ((ulong)1 << (int)FXAI_FEAT_GROUP_FILTERS);
+      return mask;
+   }
+
+   void FillDefaultManifestV3(FXAIAIManifestV3 &out) const
+   {
+      out.api_version = FXAI_API_VERSION_V3;
+      out.ai_id = AIId();
+      out.ai_name = AIName();
+      out.family = DefaultFamilyV3();
+      out.supports_native_3class = SupportsNativeClassProbs();
+      out.supports_distributional_move = true;
+      out.supports_online_learning = true;
+      out.supports_replay = true;
+      out.supports_state = (out.family == (int)FXAI_FAMILY_RECURRENT ||
+                            out.family == (int)FXAI_FAMILY_CONVOLUTIONAL ||
+                            out.family == (int)FXAI_FAMILY_TRANSFORMER ||
+                            out.family == (int)FXAI_FAMILY_STATE_SPACE ||
+                            out.family == (int)FXAI_FAMILY_WORLD_MODEL);
+      out.supports_window_context = out.supports_state;
+      out.supports_multi_horizon = true;
+      out.feature_schema_id = 1;
+      out.feature_groups_mask = DefaultFeatureGroupsMaskV3();
+      out.min_horizon_minutes = 1;
+      out.max_horizon_minutes = 720;
+   }
+
+   void FillPredictionV3(const FXAIAIPredictionV2 &src,
+                         FXAIAIPredictionV3 &dst) const
+   {
+      for(int c=0; c<3; c++)
+         dst.class_probs[c] = src.class_probs[c];
+
+      double buy_p = dst.class_probs[(int)FXAI_LABEL_BUY];
+      double sell_p = dst.class_probs[(int)FXAI_LABEL_SELL];
+      double skip_p = dst.class_probs[(int)FXAI_LABEL_SKIP];
+      double directional_conf = MathMax(buy_p, sell_p);
+      double uncertainty = FXAI_Clamp(1.0 - directional_conf + 0.50 * skip_p, 0.10, 1.50);
+      double mean_move = MathMax(src.expected_move_points, ResolveMinMovePoints());
+
+      dst.move_mean_points = mean_move;
+      dst.move_q25_points = MathMax(ResolveMinMovePoints(), mean_move * MathMax(0.25, 1.0 - 0.45 * uncertainty));
+      dst.move_q75_points = MathMax(dst.move_q25_points, mean_move * (1.0 + 0.45 * uncertainty));
+      dst.confidence = FXAI_Clamp(directional_conf, 0.0, 1.0);
+      dst.calibration_confidence = FXAI_Clamp(1.0 - 0.50 * skip_p, 0.0, 1.0);
+   }
+
 public:
    CFXAIAIPlugin(void) { ResetAuxState(); }
 
    virtual int AIId(void) const = 0;
    virtual string AIName(void) const = 0;
+   virtual int APIVersion(void) const { return FXAI_API_VERSION_V3; }
 
    virtual void Reset(void) { ResetAuxState(); }
+    virtual void DescribeV3(FXAIAIManifestV3 &out) const { FillDefaultManifestV3(out); }
+   virtual void ResetStateV3(const int reason, const datetime when)
+   {
+      Reset();
+   }
+   virtual bool SelfTestV3(void)
+   {
+      FXAIAIManifestV3 manifest;
+      DescribeV3(manifest);
+      return (manifest.api_version == FXAI_API_VERSION_V3 && manifest.supports_native_3class);
+   }
    virtual void EnsureInitialized(const FXAIAIHyperParams &hp) {}
    virtual bool SupportsNativeClassProbs(void) const { return false; }
    virtual bool PredictNativeClassProbs(const double &x[],
@@ -686,6 +813,41 @@ public:
       out.class_probs[2] = native_probs[2];
       out.p_up = out.class_probs[(int)FXAI_LABEL_BUY];
       out.expected_move_points = ApplyExpectedMoveCalibrationBank(native_move);
+   }
+
+   void TrainV3(const FXAIAITrainRequestV3 &req, const FXAIAIHyperParams &hp)
+   {
+      FXAIAISampleV2 sample;
+      sample.valid = true;
+      sample.label_class = req.label_class;
+      sample.regime_id = req.ctx.regime_id;
+      sample.horizon_minutes = req.ctx.horizon_minutes;
+      sample.move_points = req.move_points;
+      sample.min_move_points = req.ctx.min_move_points;
+      sample.cost_points = req.ctx.cost_points;
+      sample.sample_time = req.ctx.sample_time;
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+         sample.x[i] = req.x[i];
+      TrainV2(sample, hp);
+   }
+
+   bool PredictV3(const FXAIAIPredictRequestV3 &req,
+                  const FXAIAIHyperParams &hp,
+                  FXAIAIPredictionV3 &out)
+   {
+      FXAIAIPredictV2 req_v2;
+      req_v2.regime_id = req.ctx.regime_id;
+      req_v2.horizon_minutes = req.ctx.horizon_minutes;
+      req_v2.min_move_points = req.ctx.min_move_points;
+      req_v2.cost_points = req.ctx.cost_points;
+      req_v2.sample_time = req.ctx.sample_time;
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+         req_v2.x[i] = req.x[i];
+
+      FXAIAIPredictionV2 out_v2;
+      PredictV2(req_v2, hp, out_v2);
+      FillPredictionV3(out_v2, out);
+      return true;
    }
 
 protected:
