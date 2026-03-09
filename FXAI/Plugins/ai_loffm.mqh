@@ -10,6 +10,7 @@
 #define FXAI_LOFFM_STATE 6
 #define FXAI_LOFFM_LATENT 12
 #define FXAI_LOFFM_MOVE_FEATS 8
+#define FXAI_LOFFM_REPLAY 12
 
 class CFXAIAILOFFM : public CFXAIAIPlugin
 {
@@ -21,14 +22,22 @@ private:
    double m_dir_g2[FXAI_LOFFM_EXPERTS][FXAI_LOFFM_LATENT];
    double m_move_head_w[FXAI_LOFFM_EXPERTS][FXAI_LOFFM_MOVE_FEATS];
    double m_move_g2[FXAI_LOFFM_EXPERTS][FXAI_LOFFM_MOVE_FEATS];
+   double m_skip_w[FXAI_LOFFM_EXPERTS][FXAI_LOFFM_DERIVED];
+   double m_skip_g2[FXAI_LOFFM_EXPERTS][FXAI_LOFFM_DERIVED];
    double m_latent[FXAI_LOFFM_EXPERTS][FXAI_LOFFM_STATE];
    double m_conf_ema[FXAI_LOFFM_EXPERTS];
    double m_edge_ema[FXAI_LOFFM_EXPERTS];
    double m_hit_ema[FXAI_LOFFM_EXPERTS];
    double m_expert_mass[FXAI_LOFFM_EXPERTS];
+   double m_usage_ema[FXAI_LOFFM_EXPERTS];
    double m_global_state[FXAI_LOFFM_STATE];
    double m_global_edge_ema;
    double m_global_hit_ema;
+   double m_replay_d[FXAI_LOFFM_EXPERTS][FXAI_LOFFM_REPLAY][FXAI_LOFFM_DERIVED];
+   double m_replay_move[FXAI_LOFFM_EXPERTS][FXAI_LOFFM_REPLAY];
+   int    m_replay_label[FXAI_LOFFM_EXPERTS][FXAI_LOFFM_REPLAY];
+   int    m_replay_head[FXAI_LOFFM_EXPERTS];
+   int    m_replay_count[FXAI_LOFFM_EXPERTS];
 
    double ClampProb(const double p) const
    {
@@ -44,11 +53,21 @@ private:
          for(int k=0; k<FXAI_LOFFM_DERIVED; k++) m_gate_w[e][k] = 0.0;
          for(int k=0; k<FXAI_LOFFM_LATENT;  k++) { m_dir_w[e][k] = 0.0; m_dir_g2[e][k] = 0.0; }
          for(int k=0; k<FXAI_LOFFM_MOVE_FEATS; k++) { m_move_head_w[e][k] = 0.0; m_move_g2[e][k] = 0.0; }
+         for(int k=0; k<FXAI_LOFFM_DERIVED; k++) { m_skip_w[e][k] = 0.0; m_skip_g2[e][k] = 0.0; }
          for(int k=0; k<FXAI_LOFFM_STATE; k++) m_latent[e][k] = 0.0;
          m_conf_ema[e]   = 0.50;
          m_edge_ema[e]   = 0.0;
          m_hit_ema[e]    = 0.50;
          m_expert_mass[e]= 0.0;
+         m_usage_ema[e]  = 1.0 / (double)FXAI_LOFFM_EXPERTS;
+         m_replay_head[e] = 0;
+         m_replay_count[e] = 0;
+         for(int r=0; r<FXAI_LOFFM_REPLAY; r++)
+         {
+            for(int k=0; k<FXAI_LOFFM_DERIVED; k++) m_replay_d[e][r][k] = 0.0;
+            m_replay_move[e][r] = 0.0;
+            m_replay_label[e][r] = (int)FXAI_LABEL_SKIP;
+         }
       }
       for(int k=0; k<FXAI_LOFFM_STATE; k++) m_global_state[k] = 0.0;
       m_global_edge_ema = 0.0;
@@ -89,6 +108,10 @@ private:
          m_dir_w[e][9] = 0.06;
          m_dir_w[e][10]= 0.04;
          m_dir_w[e][11]= (e == 2 ? 0.18 : 0.06);
+
+         m_skip_w[e][0] = (e == 3 ? 0.25 : -0.10);
+         m_skip_w[e][5] = (e == 3 ? 0.18 : 0.05);
+         m_skip_w[e][8] = (e == 3 ? 0.20 : 0.08);
       }
    }
 
@@ -197,6 +220,7 @@ private:
          double z = 0.0;
          for(int k=0; k<FXAI_LOFFM_DERIVED; k++)
             z += m_gate_w[e][k] * d[k];
+         z -= 0.35 * (m_usage_ema[e] - (1.0 / (double)FXAI_LOFFM_EXPERTS));
          z += 0.15 * m_hit_ema[e] - 0.10 * m_conf_ema[e];
          logits[e] = FXAI_ClipSym(z, 20.0);
          if(logits[e] > mx) mx = logits[e];
@@ -213,6 +237,14 @@ private:
          return;
       }
       for(int e=0; e<FXAI_LOFFM_EXPERTS; e++) g[e] /= s;
+   }
+
+   double PredictExpertSkip(const int expert, const double &d[]) const
+   {
+      double z = 0.0;
+      for(int k=0; k<FXAI_LOFFM_DERIVED; k++) z += m_skip_w[expert][k] * d[k];
+      z += 0.22 * MathAbs(d[5]) + 0.14 * MathAbs(d[8]) - 0.18 * m_hit_ema[expert] + 0.10 * m_conf_ema[expert];
+      return ClampProb(FXAI_Sigmoid(FXAI_ClipSym(z, 20.0)));
    }
 
    double PredictExpertUp(const int expert, const double &d[]) const
@@ -273,6 +305,107 @@ private:
       return 0;
    }
 
+   void StoreReplay(const int expert, const double &d[], const int label, const double move_points)
+   {
+      int slot = m_replay_head[expert];
+      for(int k=0; k<FXAI_LOFFM_DERIVED; k++) m_replay_d[expert][slot][k] = d[k];
+      m_replay_move[expert][slot] = move_points;
+      m_replay_label[expert][slot] = label;
+      m_replay_head[expert] = (slot + 1) % FXAI_LOFFM_REPLAY;
+      if(m_replay_count[expert] < FXAI_LOFFM_REPLAY) m_replay_count[expert]++;
+   }
+
+   void TrainExpertSample(const int expert,
+                          const double &d[],
+                          const int label,
+                          const double move_points,
+                          const double target_move,
+                          const double sample_w,
+                          const FXAIAIHyperParams &hp,
+                          const double gate_weight,
+                          const bool adapt_gate)
+   {
+      int dir_target = TargetDirFromLabel(label, move_points);
+      double y01 = (dir_target > 0 ? 1.0 : 0.0);
+      double pe = PredictExpertUp(expert, d);
+      double me = PredictExpertMove(expert, d);
+      double pskip = PredictExpertSkip(expert, d);
+      double l2 = FXAI_Clamp(hp.l2, 0.0, 0.05);
+      double gw = FXAI_Clamp(gate_weight, 0.15, 1.50);
+
+      if(dir_target != 0)
+      {
+         double err = y01 - pe;
+         double z[FXAI_LOFFM_LATENT];
+         BuildLatentInput(d, expert, z);
+         double lr = FXAI_Clamp(0.25 * hp.lr * sample_w * gw, 0.0002, 0.05);
+         for(int k=0; k<FXAI_LOFFM_LATENT; k++)
+         {
+            double grad = err * z[k] - l2 * m_dir_w[expert][k];
+            m_dir_g2[expert][k] += grad * grad;
+            double step = lr / MathSqrt(1.0 + m_dir_g2[expert][k]);
+            m_dir_w[expert][k] = FXAI_ClipSym(m_dir_w[expert][k] + step * grad, 4.0);
+         }
+      }
+
+      double target_skip = (label == (int)FXAI_LABEL_SKIP ? 1.0 : 0.0);
+      double skip_err = target_skip - pskip;
+      double skip_lr = FXAI_Clamp(0.18 * hp.lr * sample_w * (0.40 + gw), 0.0002, 0.03);
+      for(int k=0; k<FXAI_LOFFM_DERIVED; k++)
+      {
+         double grad = skip_err * d[k] - 0.5 * l2 * m_skip_w[expert][k];
+         m_skip_g2[expert][k] += grad * grad;
+         double step = skip_lr / MathSqrt(1.0 + m_skip_g2[expert][k]);
+         m_skip_w[expert][k] = FXAI_ClipSym(m_skip_w[expert][k] + step * grad, 3.0);
+      }
+
+      double mz[FXAI_LOFFM_MOVE_FEATS];
+      BuildMoveInput(d, expert, mz);
+      double mv_err = target_move - me;
+      double mlr = FXAI_Clamp(0.20 * hp.lr * sample_w * (0.40 + gw), 0.0002, 0.03);
+      for(int k=0; k<FXAI_LOFFM_MOVE_FEATS; k++)
+      {
+         double grad = mv_err * mz[k] - 0.25 * l2 * m_move_head_w[expert][k];
+         m_move_g2[expert][k] += grad * grad;
+         double step = mlr / MathSqrt(1.0 + m_move_g2[expert][k]);
+         m_move_head_w[expert][k] = FXAI_ClipSym(m_move_head_w[expert][k] + step * grad, 8.0);
+      }
+
+      if(adapt_gate)
+      {
+         double align = 0.0;
+         if(dir_target != 0)
+            align = (dir_target > 0 ? (pe - 0.5) : (0.5 - pe));
+         double overload = m_usage_ema[expert] - (1.0 / (double)FXAI_LOFFM_EXPERTS);
+         double reward = FXAI_ClipSym(0.70 * align + 0.20 * (target_move > 0.0 ? 1.0 : -0.5) - 0.35 * overload - 0.20 * target_skip, 1.2);
+         double gate_lr = FXAI_Clamp(0.05 * hp.lr * sample_w, 0.0001, 0.01);
+         for(int k=0; k<FXAI_LOFFM_DERIVED; k++)
+            m_gate_w[expert][k] = FXAI_ClipSym(m_gate_w[expert][k] + gate_lr * reward * d[k], 2.5);
+      }
+
+      if(dir_target != 0)
+      {
+         double hit = ((dir_target > 0 && pe >= 0.5) || (dir_target < 0 && pe < 0.5)) ? 1.0 : 0.0;
+         m_hit_ema[expert] = 0.98 * m_hit_ema[expert] + 0.02 * hit;
+      }
+      else
+      {
+         m_hit_ema[expert] = 0.985 * m_hit_ema[expert] + 0.015 * 0.50;
+      }
+      m_edge_ema[expert] = 0.97 * m_edge_ema[expert] + 0.03 * target_move;
+   }
+
+   void ReplayExpert(const int expert, const FXAIAIHyperParams &hp)
+   {
+      if(m_replay_count[expert] <= 0) return;
+      int slot = m_replay_head[expert] - 1;
+      if(slot < 0) slot += FXAI_LOFFM_REPLAY;
+      double rd[FXAI_LOFFM_DERIVED];
+      for(int k=0; k<FXAI_LOFFM_DERIVED; k++) rd[k] = m_replay_d[expert][slot][k];
+      double replay_target_move = MathAbs(m_replay_move[expert][slot]);
+      TrainExpertSample(expert, rd, m_replay_label[expert][slot], m_replay_move[expert][slot], replay_target_move, 0.45, hp, 0.55, false);
+   }
+
 public:
    CFXAIAILOFFM(void) : CFXAIAIPlugin()
    {
@@ -310,6 +443,7 @@ public:
       double p_buy = 0.0;
       double p_sell = 0.0;
       double exp_move = 0.0;
+      double p_skip = 0.0;
       double p_mean = 0.0;
       double disagreement = 0.0;
 
@@ -317,8 +451,10 @@ public:
       {
          double pe = PredictExpertUp(e, d);
          double me = PredictExpertMove(e, d);
-         p_buy += g[e] * pe;
-         p_sell += g[e] * (1.0 - pe);
+         double ps = PredictExpertSkip(e, d);
+         p_buy += g[e] * (1.0 - ps) * pe;
+         p_sell += g[e] * (1.0 - ps) * (1.0 - pe);
+         p_skip += g[e] * ps;
          exp_move += g[e] * me;
          p_mean += g[e] * pe;
       }
@@ -336,7 +472,7 @@ public:
       double tradable_ratio = (min_move > 0.0 ? tradable_edge / MathMax(min_move, 0.10) : tradable_edge);
       double stress = FXAI_Clamp(0.55*MathAbs(d[5]) + 0.45*MathAbs(d[8]), 0.0, 8.0);
       double conf_penalty = FXAI_Clamp(0.70*disagreement + 0.12*stress, 0.0, 0.95);
-      double active = FXAI_Clamp(0.50 * FXAI_Sigmoid(1.2 * tradable_ratio) + 0.50 * (1.0 - conf_penalty), 0.0, 1.0);
+      double active = FXAI_Clamp((0.45 * FXAI_Sigmoid(1.2 * tradable_ratio) + 0.40 * (1.0 - conf_penalty) + 0.15 * (1.0 - p_skip)) * (1.0 - 0.35 * p_skip), 0.0, 1.0);
 
       double dir_total = p_buy + p_sell;
       if(dir_total <= 0.0) dir_total = 1.0;
@@ -345,7 +481,7 @@ public:
 
       class_probs[(int)FXAI_LABEL_BUY]  = ClampProb(active * p_buy);
       class_probs[(int)FXAI_LABEL_SELL] = ClampProb(active * p_sell);
-      class_probs[(int)FXAI_LABEL_SKIP] = ClampProb(1.0 - active);
+      class_probs[(int)FXAI_LABEL_SKIP] = ClampProb(MathMax(p_skip, 1.0 - active + 0.15 * disagreement));
 
       double s = class_probs[0] + class_probs[1] + class_probs[2];
       if(s <= 0.0) s = 1.0;
@@ -373,63 +509,24 @@ protected:
       double target_move = MathMax(0.0, edge);
       double sample_w = FXAI_Clamp(MoveSampleWeight(x, move_points), 0.25, 4.0);
       int dir_target = TargetDirFromLabel(y, move_points);
-      double y01 = (dir_target > 0 ? 1.0 : 0.0);
 
       UpdateLatentState(d, g, move_points);
       FXAI_UpdateMoveEMA(m_global_edge_ema, m_move_ready, target_move, 0.03);
       m_global_hit_ema = 0.98 * m_global_hit_ema + 0.02 * ((dir_target == 0) ? 0.50 : 1.0);
 
+      int best_e = 0;
+      double best_g = g[0];
       for(int e=0; e<FXAI_LOFFM_EXPERTS; e++)
       {
-         double pe = PredictExpertUp(e, d);
-         double me = PredictExpertMove(e, d);
-
-         if(dir_target != 0)
-         {
-            double err = y01 - pe;
-            double z[FXAI_LOFFM_LATENT];
-            BuildLatentInput(d, e, z);
-            double lr = FXAI_Clamp(0.25 * hp.lr * sample_w * g[e], 0.0002, 0.05);
-            double l2 = FXAI_Clamp(hp.l2, 0.0, 0.05);
-            for(int k=0; k<FXAI_LOFFM_LATENT; k++)
-            {
-               double grad = err * z[k] - l2 * m_dir_w[e][k];
-               m_dir_g2[e][k] += grad * grad;
-               double step = lr / MathSqrt(1.0 + m_dir_g2[e][k]);
-               m_dir_w[e][k] = FXAI_ClipSym(m_dir_w[e][k] + step * grad, 4.0);
-            }
-
-            // Gentle gate adaptation: reward experts aligned with realized direction and edge.
-            double align = (dir_target > 0 ? (pe - 0.5) : (0.5 - pe));
-            double reward = FXAI_Clamp((0.65 * align + 0.20 * (edge > 0.0 ? 1.0 : -0.5)), -1.0, 1.0);
-            double gate_lr = FXAI_Clamp(0.05 * hp.lr * sample_w, 0.0001, 0.01);
-            for(int k=0; k<FXAI_LOFFM_DERIVED; k++)
-               m_gate_w[e][k] = FXAI_ClipSym(m_gate_w[e][k] + gate_lr * reward * d[k], 2.5);
-         }
-
-         double mz[FXAI_LOFFM_MOVE_FEATS];
-         BuildMoveInput(d, e, mz);
-         double mv_err = target_move - me;
-         double mlr = FXAI_Clamp(0.20 * hp.lr * sample_w * (0.40 + g[e]), 0.0002, 0.03);
-         for(int k=0; k<FXAI_LOFFM_MOVE_FEATS; k++)
-         {
-            double grad = mv_err * mz[k] - 0.01 * m_move_head_w[e][k];
-            m_move_g2[e][k] += grad * grad;
-            double step = mlr / MathSqrt(1.0 + m_move_g2[e][k]);
-            m_move_head_w[e][k] = FXAI_ClipSym(m_move_head_w[e][k] + step * grad, 8.0);
-         }
-
-         if(dir_target != 0)
-         {
-            double hit = ((dir_target > 0 && pe >= 0.5) || (dir_target < 0 && pe < 0.5)) ? 1.0 : 0.0;
-            m_hit_ema[e] = 0.98 * m_hit_ema[e] + 0.02 * hit;
-         }
-         else
-         {
-            m_hit_ema[e] = 0.985 * m_hit_ema[e] + 0.015 * 0.50;
-         }
-         m_edge_ema[e] = 0.97 * m_edge_ema[e] + 0.03 * target_move;
+         m_usage_ema[e] = 0.985 * m_usage_ema[e] + 0.015 * g[e];
+         if(g[e] > best_g) { best_g = g[e]; best_e = e; }
       }
+
+      for(int e=0; e<FXAI_LOFFM_EXPERTS; e++)
+         TrainExpertSample(e, d, y, move_points, target_move, sample_w, hp, g[e], true);
+
+      StoreReplay(best_e, d, y, move_points);
+      ReplayExpert(best_e, hp);
 
       m_steps++;
    }

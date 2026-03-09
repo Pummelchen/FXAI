@@ -5,6 +5,8 @@
 #include "..\plugin_base.mqh"
 
 #define FXAI_MOE_E 4
+#define FXAI_MOE_BUCKETS 12
+#define FXAI_MOE_BUCKET_DEPTH 64
 
 class CFXAIAIMoEConformal : public CFXAIAIPlugin
 {
@@ -18,6 +20,10 @@ private:
    double m_dir[FXAI_MOE_E][FXAI_AI_WEIGHTS];
    double m_move[FXAI_MOE_E][FXAI_AI_WEIGHTS];
    double m_scores[128];
+   double m_bucket_scores[FXAI_MOE_BUCKETS][FXAI_MOE_BUCKET_DEPTH];
+   int    m_bucket_counts[FXAI_MOE_BUCKETS];
+   double m_usage_ema[FXAI_MOE_E];
+   double m_cal_w[3][5];
 
    double SX(const double &x[], int i) const
    {
@@ -50,6 +56,29 @@ private:
       for(int i=0; i<m_feat_n; i++) f[i] = 0.0;
       int n = MathMin(ArraySize(x), m_feat_n);
       for(int i=0; i<n; i++) f[i] = FXAI_Clamp(SX(x,i), -10.0, 10.0);
+   }
+
+   int SessionBucket(void) const
+   {
+      MqlDateTime dt;
+      TimeToStruct(ResolveContextTime(), dt);
+      if(dt.hour < 6) return 0;
+      if(dt.hour < 12) return 1;
+      if(dt.hour < 17) return 2;
+      return 3;
+   }
+
+   int RegimeBucket(const double &x[]) const
+   {
+      double vol = MathAbs(SX(x, 4));
+      if(vol < 0.75) return 0;
+      if(vol < 1.75) return 1;
+      return 2;
+   }
+
+   int BucketIndex(const double &x[]) const
+   {
+      return 3 * SessionBucket() + RegimeBucket(x);
    }
 
    double DotRouter(const int expert, const double &r[]) const
@@ -90,7 +119,7 @@ private:
       double m = -DBL_MAX;
       for(int e=0; e<FXAI_MOE_E; e++)
       {
-         z[e] = DotRouter(e, r);
+         z[e] = DotRouter(e, r) - 0.35 * (m_usage_ema[e] - (1.0 / (double)FXAI_MOE_E));
          if(z[e] > m) m = z[e];
       }
       double s = 0.0;
@@ -99,16 +128,61 @@ private:
       for(int e=0; e<FXAI_MOE_E; e++) g[e] /= s;
    }
 
-   double Quantile90() const
+   double Quantile90(const int bucket) const
    {
-      if(m_cal_n <= 8) return 0.40;
-      double tmp[]; ArrayResize(tmp, m_cal_n);
-      for(int i=0; i<m_cal_n; i++) tmp[i] = m_scores[i];
+      int n = m_bucket_counts[bucket];
+      if(n <= 8) return 0.40;
+      double tmp[]; ArrayResize(tmp, n);
+      for(int i=0; i<n; i++) tmp[i] = m_bucket_scores[bucket][i];
       ArraySort(tmp);
-      int q = (int)MathFloor(0.90 * (m_cal_n - 1));
+      int q = (int)MathFloor(0.90 * (n - 1));
       if(q < 0) q = 0;
-      if(q >= m_cal_n) q = m_cal_n - 1;
+      if(q >= n) q = n - 1;
       return tmp[q];
+   }
+
+   void ApplyCalibrator(const double &base_probs[], const double expected_move_points, double &out_probs[]) const
+   {
+      double mm = MathMax(ResolveMinMovePoints(), 0.10);
+      double cp = (m_ctx_cost_ready && m_ctx_cost_points >= 0.0 ? m_ctx_cost_points : 0.0);
+      double xc[5];
+      xc[0] = 1.0;
+      xc[1] = FXAI_Clamp(base_probs[(int)FXAI_LABEL_BUY] - base_probs[(int)FXAI_LABEL_SELL], -1.0, 1.0);
+      xc[2] = FXAI_Clamp(base_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0);
+      xc[3] = FXAI_Clamp(expected_move_points / mm, 0.0, 12.0);
+      xc[4] = FXAI_Clamp(cp / mm, 0.0, 4.0);
+
+      double logits[3];
+      for(int c=0; c<3; c++)
+      {
+         logits[c] = 0.0;
+         for(int k=0; k<5; k++) logits[c] += m_cal_w[c][k] * xc[k];
+         logits[c] += MathLog(MathMax(base_probs[c], 1e-6));
+      }
+      Softmax3(logits, out_probs);
+   }
+
+   void UpdateCalibrator3(const int label, const double &base_probs[], const double expected_move_points, const FXAIAIHyperParams &hp)
+   {
+      double mm = MathMax(ResolveMinMovePoints(), 0.10);
+      double cp = (m_ctx_cost_ready && m_ctx_cost_points >= 0.0 ? m_ctx_cost_points : 0.0);
+      double xc[5];
+      xc[0] = 1.0;
+      xc[1] = FXAI_Clamp(base_probs[(int)FXAI_LABEL_BUY] - base_probs[(int)FXAI_LABEL_SELL], -1.0, 1.0);
+      xc[2] = FXAI_Clamp(base_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0);
+      xc[3] = FXAI_Clamp(expected_move_points / mm, 0.0, 12.0);
+      xc[4] = FXAI_Clamp(cp / mm, 0.0, 4.0);
+
+      double probs[3];
+      ApplyCalibrator(base_probs, expected_move_points, probs);
+      double lr = FXAI_Clamp(0.25 * hp.lr, 0.0002, 0.02);
+      for(int c=0; c<3; c++)
+      {
+         double tgt = (c == label ? 1.0 : 0.0);
+         double err = tgt - probs[c];
+         for(int k=0; k<5; k++)
+            m_cal_w[c][k] += lr * (err * xc[k] - 0.002 * m_cal_w[c][k]);
+      }
    }
 
 protected:
@@ -134,6 +208,8 @@ protected:
       double g[]; RouterSoftmax(r, g);
       double lr = FXAI_Clamp(hp.lr, 0.0001, 0.03);
       double l2 = FXAI_Clamp(hp.l2, 0.0, 0.10);
+      double router_loss[FXAI_MOE_E];
+      double router_total = 0.0;
 
       for(int e=0; e<FXAI_MOE_E; e++)
       {
@@ -146,6 +222,8 @@ protected:
          double err_trade = (t_trade - p_trade) * ge;
          double err_up    = (t_up - p_up) * ge;
          double err_move  = (MathAbs(move_points) - p_move) * ge;
+         router_loss[e] = MathAbs(t_trade - p_trade) + (y == (int)FXAI_LABEL_SKIP ? 0.0 : MathAbs(t_up - p_up)) + 0.10 * MathAbs(err_move);
+         router_total += 1.0 / MathMax(router_loss[e], 0.05);
 
          m_gate[e][0] += lr * (err_trade - l2 * m_gate[e][0]);
          m_dir[e][0]  += lr * (err_up    - l2 * m_dir[e][0]);
@@ -160,12 +238,25 @@ protected:
          }
       }
 
+      for(int e=0; e<FXAI_MOE_E; e++)
+      {
+         double reward = (1.0 / MathMax(router_loss[e], 0.05)) / MathMax(router_total, 1e-6);
+         m_usage_ema[e] = 0.985 * m_usage_ema[e] + 0.015 * g[e];
+         for(int i=0; i<ArraySize(r); i++)
+            m_router[e][i] += lr * 0.10 * ((reward - g[e]) * r[i] - 0.002 * m_router[e][i]);
+      }
+
       double probs[3]; double em = 0.0;
       PredictNativeClassProbs(x, hp, probs, em);
       double p_true = probs[(y == (int)FXAI_LABEL_BUY ? (int)FXAI_LABEL_BUY : (y == (int)FXAI_LABEL_SELL ? (int)FXAI_LABEL_SELL : (int)FXAI_LABEL_SKIP))];
       double score = 1.0 - FXAI_Clamp(p_true, 0.0005, 0.9990);
       m_scores[m_cal_n % 128] = score;
       if(m_cal_n < 128) m_cal_n++;
+      int bucket = BucketIndex(x);
+      int slot = m_bucket_counts[bucket] % FXAI_MOE_BUCKET_DEPTH;
+      m_bucket_scores[bucket][slot] = score;
+      if(m_bucket_counts[bucket] < FXAI_MOE_BUCKET_DEPTH) m_bucket_counts[bucket]++;
+      UpdateCalibrator3((y >= 0 && y <= 2 ? y : (int)FXAI_LABEL_SKIP), probs, em, hp);
       m_steps++;
    }
 
@@ -177,10 +268,14 @@ public:
       m_steps = 0;
       m_cal_n = 0;
       ArrayInitialize(m_scores, 0.40);
+      ArrayInitialize(m_bucket_scores, 0.40);
+      ArrayInitialize(m_bucket_counts, 0);
+      ArrayInitialize(m_usage_ema, 1.0 / (double)FXAI_MOE_E);
       ArrayInitialize(m_router, 0.0);
       ArrayInitialize(m_gate, 0.0);
       ArrayInitialize(m_dir, 0.0);
       ArrayInitialize(m_move, 0.0);
+      ArrayInitialize(m_cal_w, 0.0);
    }
 
    virtual int AIId(void) const { return (int)AI_MOE_CONFORMAL; }
@@ -193,10 +288,14 @@ public:
       m_steps = 0;
       m_cal_n = 0;
       ArrayInitialize(m_scores, 0.40);
+      ArrayInitialize(m_bucket_scores, 0.40);
+      ArrayInitialize(m_bucket_counts, 0);
+      ArrayInitialize(m_usage_ema, 1.0 / (double)FXAI_MOE_E);
       ArrayInitialize(m_router, 0.0);
       ArrayInitialize(m_gate, 0.0);
       ArrayInitialize(m_dir, 0.0);
       ArrayInitialize(m_move, 0.0);
+      ArrayInitialize(m_cal_w, 0.0);
    }
 
    virtual void EnsureInitialized(const FXAIAIHyperParams &hp)
@@ -226,7 +325,8 @@ public:
       }
       expected_move_points = MathMax(p_move, ResolveMinMovePoints());
 
-      double q = Quantile90();
+      int bucket = BucketIndex(x);
+      double q = Quantile90(bucket);
       double p_buy = p_trade * p_up;
       double p_sell = p_trade * (1.0 - p_up);
       double p_skip = 1.0 - p_trade;
@@ -240,9 +340,11 @@ public:
          p_sell *= 0.50;
       }
 
-      class_probs[(int)FXAI_LABEL_SELL] = FXAI_Clamp(p_sell, 0.0005, 0.9990);
-      class_probs[(int)FXAI_LABEL_BUY]  = FXAI_Clamp(p_buy,  0.0005, 0.9990);
-      class_probs[(int)FXAI_LABEL_SKIP] = FXAI_Clamp(p_skip, 0.0005, 0.9990);
+      double raw_probs[3];
+      raw_probs[(int)FXAI_LABEL_SELL] = FXAI_Clamp(p_sell, 0.0005, 0.9990);
+      raw_probs[(int)FXAI_LABEL_BUY]  = FXAI_Clamp(p_buy,  0.0005, 0.9990);
+      raw_probs[(int)FXAI_LABEL_SKIP] = FXAI_Clamp(p_skip, 0.0005, 0.9990);
+      ApplyCalibrator(raw_probs, expected_move_points, class_probs);
       double s = class_probs[0] + class_probs[1] + class_probs[2];
       if(s <= 0.0) s = 1.0;
       for(int i=0; i<3; i++) class_probs[i] /= s;

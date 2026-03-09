@@ -10,6 +10,7 @@
 #define FXAI_TRR_TOPO      12
 #define FXAI_TRR_RES       24
 #define FXAI_TRR_ZF        (1 + FXAI_TRR_TOPO + 4)
+#define FXAI_TRR_READOUT   (1 + (2 * FXAI_TRR_RES))
 
 class CFXAIAITRR : public CFXAIAIPlugin
 {
@@ -21,20 +22,33 @@ private:
    double m_hist[FXAI_TRR_DIMS][FXAI_TRR_BUF];
    double m_last_feat[FXAI_TRR_DIMS];
    double m_reservoir[FXAI_TRR_RES];
+   double m_reservoir_slow[FXAI_TRR_RES];
    double m_in_w[FXAI_TRR_RES][FXAI_TRR_ZF];
    double m_rec_w[FXAI_TRR_RES][FXAI_TRR_RES];
-   double m_cls_w[3][FXAI_TRR_RES + 1];
-   double m_cls_g2[3][FXAI_TRR_RES + 1];
-   double m_mv_w[FXAI_TRR_RES + 1];
-   double m_mv_g2[FXAI_TRR_RES + 1];
+   double m_cls_w[3][FXAI_TRR_READOUT];
+   double m_cls_g2[3][FXAI_TRR_READOUT];
+   double m_mv_w[FXAI_TRR_READOUT];
+   double m_mv_g2[FXAI_TRR_READOUT];
    double m_transition_ema;
    double m_dispersion_ema;
    double m_recurrence_ema;
    double m_move_edge_ema;
+   double m_session_bias[4][3];
+   double m_session_move_scale[4];
 
    double ClampProb(const double p) const
    {
       return FXAI_Clamp(p, 0.0005, 0.9995);
+   }
+
+   int SessionBucket(void) const
+   {
+      MqlDateTime dt;
+      TimeToStruct(ResolveContextTime(), dt);
+      if(dt.hour < 6) return 0;
+      if(dt.hour < 12) return 1;
+      if(dt.hour < 17) return 2;
+      return 3;
    }
 
    void ResetModel(void)
@@ -51,18 +65,19 @@ private:
       for(int i=0; i<FXAI_TRR_RES; i++)
       {
          m_reservoir[i] = 0.0;
+         m_reservoir_slow[i] = 0.0;
          for(int k=0; k<FXAI_TRR_ZF; k++) m_in_w[i][k] = 0.0;
          for(int j=0; j<FXAI_TRR_RES; j++) m_rec_w[i][j] = 0.0;
       }
       for(int c=0; c<3; c++)
       {
-         for(int k=0; k<=FXAI_TRR_RES; k++)
+         for(int k=0; k<FXAI_TRR_READOUT; k++)
          {
             m_cls_w[c][k] = 0.0;
             m_cls_g2[c][k] = 0.0;
          }
       }
-      for(int k=0; k<=FXAI_TRR_RES; k++)
+      for(int k=0; k<FXAI_TRR_READOUT; k++)
       {
          m_mv_w[k] = 0.0;
          m_mv_g2[k] = 0.0;
@@ -71,6 +86,11 @@ private:
       m_dispersion_ema = 0.0;
       m_recurrence_ema = 0.0;
       m_move_edge_ema = 0.0;
+      for(int b=0; b<4; b++)
+      {
+         for(int c=0; c<3; c++) m_session_bias[b][c] = 0.0;
+         m_session_move_scale[b] = 1.0;
+      }
    }
 
    double HashToWeight(const int a, const int b, const double scale) const
@@ -284,26 +304,42 @@ private:
       z[1 + FXAI_TRR_TOPO + 3] = f[5];
    }
 
-   void UpdateReservoir(const double &z[])
+   void PreviewReservoir(const double &z[], double &fast_out[], double &slow_out[]) const
    {
-      double new_state[FXAI_TRR_RES];
       for(int i=0; i<FXAI_TRR_RES; i++)
       {
          double in_sum = 0.0;
          for(int k=0; k<FXAI_TRR_ZF; k++) in_sum += m_in_w[i][k] * z[k];
          double rec_sum = 0.0;
          for(int j=0; j<FXAI_TRR_RES; j++) rec_sum += m_rec_w[i][j] * m_reservoir[j];
-         double leak = 0.22 + 0.01 * (double)(i % 5);
          double drive = FXAI_Tanh(FXAI_ClipSym(in_sum + rec_sum, 12.0));
-         new_state[i] = (1.0 - leak) * m_reservoir[i] + leak * drive;
+         double leak_fast = 0.22 + 0.01 * (double)(i % 5);
+         double leak_slow = 0.08 + 0.005 * (double)(i % 5);
+         fast_out[i] = (1.0 - leak_fast) * m_reservoir[i] + leak_fast * drive;
+         slow_out[i] = (1.0 - leak_slow) * m_reservoir_slow[i] + leak_slow * drive;
       }
-      for(int i=0; i<FXAI_TRR_RES; i++) m_reservoir[i] = new_state[i];
    }
 
-   void BuildReadoutInput(double &r[]) const
+   void UpdateReservoir(const double &z[])
+   {
+      double fast_out[FXAI_TRR_RES];
+      double slow_out[FXAI_TRR_RES];
+      PreviewReservoir(z, fast_out, slow_out);
+      for(int i=0; i<FXAI_TRR_RES; i++)
+      {
+         m_reservoir[i] = fast_out[i];
+         m_reservoir_slow[i] = slow_out[i];
+      }
+   }
+
+   void BuildReadoutInput(const double &fast_state[], const double &slow_state[], double &r[]) const
    {
       r[0] = 1.0;
-      for(int i=0; i<FXAI_TRR_RES; i++) r[1 + i] = m_reservoir[i];
+      for(int i=0; i<FXAI_TRR_RES; i++)
+      {
+         r[1 + i] = fast_state[i];
+         r[1 + FXAI_TRR_RES + i] = slow_state[i];
+      }
    }
 
    void SoftmaxReadout(const double &r[], double &probs[]) const
@@ -312,7 +348,7 @@ private:
       for(int c=0; c<3; c++)
       {
          double z = 0.0;
-         for(int k=0; k<=FXAI_TRR_RES; k++) z += m_cls_w[c][k] * r[k];
+         for(int k=0; k<FXAI_TRR_READOUT; k++) z += m_cls_w[c][k] * r[k];
          logits[c] = FXAI_ClipSym(z, 20.0);
       }
       Softmax3(logits, probs);
@@ -321,7 +357,7 @@ private:
    double PredictMoveHeadInternal(const double &r[]) const
    {
       double z = 0.0;
-      for(int k=0; k<=FXAI_TRR_RES; k++) z += m_mv_w[k] * r[k];
+      for(int k=0; k<FXAI_TRR_READOUT; k++) z += m_mv_w[k] * r[k];
       return MathMax(0.0, z);
    }
 
@@ -360,14 +396,12 @@ public:
       BuildDerived(x, f);
       BuildTopologyLiteFeatures(f, topo);
       BuildReservoirInput(topo, f, z);
+      double fast_state[FXAI_TRR_RES];
+      double slow_state[FXAI_TRR_RES];
+      PreviewReservoir(z, fast_state, slow_state);
 
-      // Virtual state preview for inference without mutating reservoir.
-      double old_state[FXAI_TRR_RES];
-      for(int i=0; i<FXAI_TRR_RES; i++) old_state[i] = m_reservoir[i];
-      UpdateReservoir(z);
-
-      double r[FXAI_TRR_RES + 1];
-      BuildReadoutInput(r);
+      double r[FXAI_TRR_READOUT];
+      BuildReadoutInput(fast_state, slow_state, r);
       SoftmaxReadout(r, class_probs);
 
       double move_hat = PredictMoveHeadInternal(r);
@@ -393,14 +427,15 @@ public:
       class_probs[(int)FXAI_LABEL_BUY]  = ClampProb(active * p_buy);
       class_probs[(int)FXAI_LABEL_SELL] = ClampProb(active * p_sell);
       class_probs[(int)FXAI_LABEL_SKIP] = ClampProb(MathMax(1.0 - active, recurrence * 0.40 + noise * 0.25));
+      int sb = SessionBucket();
+      double logits_cal[3];
+      for(int c=0; c<3; c++) logits_cal[c] = MathLog(MathMax(class_probs[c], 1e-6)) + m_session_bias[sb][c];
+      Softmax3(logits_cal, class_probs);
       double s = class_probs[0] + class_probs[1] + class_probs[2];
       if(s <= 0.0) s = 1.0;
       for(int c=0; c<3; c++) class_probs[c] /= s;
 
-      expected_move_points = MathMax(0.0, move_hat - 0.25 * cost);
-
-      // Restore true reservoir state after preview.
-      for(int i=0; i<FXAI_TRR_RES; i++) m_reservoir[i] = old_state[i];
+      expected_move_points = MathMax(0.0, (move_hat - 0.25 * cost) * m_session_move_scale[sb]);
       return true;
    }
 
@@ -417,8 +452,8 @@ protected:
       BuildReservoirInput(topo, f, z);
       UpdateReservoir(z);
 
-      double r[FXAI_TRR_RES + 1];
-      BuildReadoutInput(r);
+      double r[FXAI_TRR_READOUT];
+      BuildReadoutInput(m_reservoir, m_reservoir_slow, r);
 
       double probs[3];
       SoftmaxReadout(r, probs);
@@ -440,7 +475,7 @@ protected:
       {
          double tgt = (c == label ? 1.0 : 0.0);
          double err = tgt - probs[c];
-         for(int k=0; k<=FXAI_TRR_RES; k++)
+         for(int k=0; k<FXAI_TRR_READOUT; k++)
          {
             double grad = err * r[k] - l2 * m_cls_w[c][k];
             m_cls_g2[c][k] += grad * grad;
@@ -453,7 +488,7 @@ protected:
       if(cost < 0.0) cost = 0.0;
       double target_move = MathMax(0.0, MathAbs(move_points) - cost);
       double mv_err = target_move - pred_move;
-      for(int k=0; k<=FXAI_TRR_RES; k++)
+      for(int k=0; k<FXAI_TRR_READOUT; k++)
       {
          double grad = mv_err * r[k] - 0.01 * m_mv_w[k];
          m_mv_g2[k] += grad * grad;
@@ -465,6 +500,13 @@ protected:
       m_dispersion_ema = 0.96 * m_dispersion_ema + 0.04 * topo[5];
       m_recurrence_ema = 0.96 * m_recurrence_ema + 0.04 * topo[3];
       FXAI_UpdateMoveEMA(m_move_edge_ema, m_move_ready, target_move, 0.02);
+      int sb = SessionBucket();
+      for(int c=0; c<3; c++)
+      {
+         double tgt = (c == label ? 1.0 : 0.0);
+         m_session_bias[sb][c] = FXAI_ClipSym(0.995 * m_session_bias[sb][c] + 0.010 * (tgt - probs[c]), 1.5);
+      }
+      m_session_move_scale[sb] = FXAI_Clamp(0.995 * m_session_move_scale[sb] + 0.005 * (target_move / MathMax(pred_move, 0.10)), 0.70, 1.50);
 
       PushFeatures(f);
       m_steps++;

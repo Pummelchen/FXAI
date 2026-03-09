@@ -23,6 +23,8 @@ private:
    double m_confidence_ema;
    double m_consensus_ema;
    double m_edge_ema;
+   double m_downside_ema;
+   double m_session_edge[4];
 
    double ClampProb(const double p) const
    {
@@ -47,6 +49,8 @@ private:
       m_confidence_ema = 0.50;
       m_consensus_ema  = 0.50;
       m_edge_ema       = 0.0;
+      m_downside_ema   = 0.0;
+      for(int b=0; b<4; b++) m_session_edge[b] = 0.0;
    }
 
    void SeedModel(void)
@@ -95,6 +99,56 @@ private:
       double v = x[idx];
       if(!MathIsValidNumber(v)) return 0.0;
       return FXAI_ClipSym(v, 8.0);
+   }
+
+   int SessionBucket(void) const
+   {
+      MqlDateTime dt;
+      TimeToStruct(ResolveContextTime(), dt);
+      if(dt.hour < 6) return 0;
+      if(dt.hour < 12) return 1;
+      if(dt.hour < 17) return 2;
+      return 3;
+   }
+
+   int DynamicParticleCount(const double &f[], const double cost_points, const double min_move_points) const
+   {
+      double stress = MathAbs(f[2]) + 0.7 * MathAbs(f[4]) + 0.6 * MathAbs(f[5]);
+      double cost_ratio = cost_points / MathMax(min_move_points, 0.10);
+      int n = FXAI_CFXW_PARTS + (int)MathRound(3.0 * FXAI_Clamp(stress, 0.0, 2.5)) - (int)MathRound(FXAI_Clamp(cost_ratio - 1.0, 0.0, 3.0));
+      if(SessionBucket() == 2) n += 2;
+      if(SessionBucket() == 0) n += 1;
+      if(n < 12) n = 12;
+      if(n > 28) n = 28;
+      return n;
+   }
+
+   int DynamicHorizonSteps(const double &f[]) const
+   {
+      double regime_drive = MathAbs(f[1]) + 0.7 * MathAbs(f[3]) + 0.3 * MathAbs(f[6]);
+      int h = FXAI_CFXW_HORIZON + (int)MathRound(FXAI_Clamp(regime_drive - 0.8, 0.0, 3.0));
+      if(SessionBucket() == 0) h -= 1;
+      if(h < 4) h = 4;
+      if(h > 9) h = 9;
+      return h;
+   }
+
+   double DynamicNoiseScale(const double &f[]) const
+   {
+      double vol = 0.65 + 0.25 * MathAbs(f[2]) + 0.15 * MathAbs(f[5]);
+      int bucket = SessionBucket();
+      if(bucket == 0) vol *= 1.12;
+      else if(bucket == 1) vol *= 0.95;
+      else if(bucket == 2) vol *= 1.04;
+      return FXAI_Clamp(vol, 0.70, 1.80);
+   }
+
+   double DynamicDriftBias(const double &f[]) const
+   {
+      int bucket = SessionBucket();
+      double edge_bias = 0.08 * m_session_edge[bucket];
+      double state_bias = 0.05 * m_edge_ema * FXAI_Sign(f[1]);
+      return FXAI_ClipSym(edge_bias + state_bias, 0.35);
    }
 
    void BuildFeatureState(const double &x[], double &f[]) const
@@ -160,11 +214,11 @@ private:
       out_state[5] = FXAI_Clamp(0.5 + 0.5 * out_state[5], 0.0, 1.0);
    }
 
-   void AdvanceParticle(double &st[], const double &f[], uint &seed, double &step_move) const
+   void AdvanceParticle(double &st[], const double &f[], uint &seed, const double noise_scale, const double drift_bias, double &step_move) const
    {
-      double eps1 = NextNoise(seed);
-      double eps2 = NextNoise(seed);
-      double eps3 = NextNoise(seed);
+      double eps1 = noise_scale * NextNoise(seed);
+      double eps2 = noise_scale * NextNoise(seed);
+      double eps3 = noise_scale * NextNoise(seed);
 
       double drift      = st[0];
       double reversion  = st[1];
@@ -173,7 +227,7 @@ private:
       double noise      = FXAI_Clamp(st[4], 0.0, 2.0);
       double confidence = FXAI_Clamp(st[5], 0.0, 2.0);
 
-      double impulse = 0.60 * f[1] - 0.35 * f[3] + 0.20 * f[6];
+      double impulse = 0.60 * f[1] - 0.35 * f[3] + 0.20 * f[6] + drift_bias;
       double drift_next = 0.72 * drift + 0.18 * impulse + 0.06 * eps1 * (1.0 + breakout);
       double rev_next   = 0.62 * reversion + 0.14 * f[3] - 0.08 * drift + 0.05 * eps2;
       double vol_next   = FXAI_Clamp(0.82 * vol + 0.12 * MathAbs(f[2]) + 0.08 * MathAbs(eps1), 0.0, 2.5);
@@ -193,10 +247,14 @@ private:
       st[5] = cf_next;
    }
 
-   void RolloutConsensus(const double &f[], const double cost_points, const double min_move_points, double &buy_mass, double &sell_mass, double &skip_mass, double &exp_move) const
+   void RolloutConsensus(const double &f[], const double cost_points, const double min_move_points, double &buy_mass, double &sell_mass, double &skip_mass, double &exp_move, double &adverse_mean) const
    {
       double cost = (cost_points >= 0.0 ? cost_points : 0.0);
       double mm = (min_move_points > 0.0 ? min_move_points : MathMax(0.10, cost));
+      int particle_count = DynamicParticleCount(f, cost, mm);
+      int horizon_steps = DynamicHorizonSteps(f);
+      double noise_scale = DynamicNoiseScale(f);
+      double drift_bias = DynamicDriftBias(f);
 
       double base_state[FXAI_CFXW_STATE];
       InferStateFromFeatures(f, base_state);
@@ -206,7 +264,7 @@ private:
       double adverse_pen_sum = 0.0;
 
       uint seed0 = (uint)(m_seed ^ (uint)ResolveContextTime());
-      for(int p=0; p<FXAI_CFXW_PARTS; p++)
+      for(int p=0; p<particle_count; p++)
       {
          uint seed = (uint)(seed0 + (uint)(7331 * (p + 1)));
          double st[FXAI_CFXW_STATE];
@@ -215,10 +273,10 @@ private:
          double net = 0.0;
          double min_net = 0.0;
          double max_net = 0.0;
-         for(int h=0; h<FXAI_CFXW_HORIZON; h++)
+         for(int h=0; h<horizon_steps; h++)
          {
             double step = 0.0;
-            AdvanceParticle(st, f, seed, step);
+            AdvanceParticle(st, f, seed, noise_scale, drift_bias, step);
             net += step;
             if(net < min_net) min_net = net;
             if(net > max_net) max_net = net;
@@ -243,13 +301,14 @@ private:
          adverse_pen_sum += adverse;
       }
 
-      buy_mass = (double)buy_n  / (double)FXAI_CFXW_PARTS;
-      sell_mass= (double)sell_n / (double)FXAI_CFXW_PARTS;
-      skip_mass= (double)skip_n / (double)FXAI_CFXW_PARTS;
+      buy_mass = (double)buy_n  / (double)particle_count;
+      sell_mass= (double)sell_n / (double)particle_count;
+      skip_mass= (double)skip_n / (double)particle_count;
 
-      double raw_edge = edge_sum / (double)FXAI_CFXW_PARTS;
-      double risk_pen = adverse_pen_sum / (double)FXAI_CFXW_PARTS;
-      exp_move = MathMax(0.0, raw_edge - 0.25 * risk_pen);
+      double raw_edge = edge_sum / (double)particle_count;
+      double risk_pen = adverse_pen_sum / (double)particle_count;
+      adverse_mean = risk_pen;
+      exp_move = MathMax(0.0, raw_edge - 0.35 * risk_pen);
    }
 
 public:
@@ -288,14 +347,16 @@ public:
       if(cost < 0.0) cost = 0.0;
       double mm = ResolveMinMovePoints();
       if(mm <= 0.0) mm = MathMax(0.10, cost);
-      double buy_mass = 0.0, sell_mass = 0.0, skip_mass = 0.0, exp_move = 0.0;
-      RolloutConsensus(f, cost, mm, buy_mass, sell_mass, skip_mass, exp_move);
+      double buy_mass = 0.0, sell_mass = 0.0, skip_mass = 0.0, exp_move = 0.0, adverse_mean = 0.0;
+      RolloutConsensus(f, cost, mm, buy_mass, sell_mass, skip_mass, exp_move, adverse_mean);
 
       double total_dir = buy_mass + sell_mass;
       double consensus = MathAbs(buy_mass - sell_mass);
       double act = FXAI_Clamp(consensus + 0.35 * m_confidence_ema + 0.25 * m_consensus_ema, 0.0, 1.2);
       double edge_ratio = (exp_move - cost) / MathMax(mm, 0.10);
-      double active = FXAI_Clamp(0.55 * FXAI_Sigmoid(1.25 * edge_ratio) + 0.45 * act, 0.0, 1.0);
+      double downside_ratio = adverse_mean / MathMax(exp_move + mm, 0.10);
+      double risk_gate = 1.0 - FXAI_Clamp(0.55 * downside_ratio + 0.20 * m_downside_ema, 0.0, 0.90);
+      double active = FXAI_Clamp((0.50 * FXAI_Sigmoid(1.25 * edge_ratio) + 0.35 * act + 0.15 * (1.0 - skip_mass)) * risk_gate, 0.0, 1.0);
 
       double p_buy = 0.5, p_sell = 0.5;
       if(total_dir > 1e-9)
@@ -311,7 +372,7 @@ public:
       if(s <= 0.0) s = 1.0;
       for(int c=0; c<3; c++) class_probs[c] /= s;
 
-      expected_move_points = MathMax(0.0, exp_move);
+      expected_move_points = MathMax(0.0, exp_move - 0.20 * adverse_mean);
       return true;
    }
 
@@ -343,6 +404,13 @@ protected:
       target[4] = FXAI_Clamp(0.10 + 0.25 * MathAbs(f[5]) + 0.10 * cost, 0.0, 1.5);
       target[5] = FXAI_Clamp((dir == 0 ? 0.45 : 0.65) + (edge > 0.0 ? 0.15 : -0.10), 0.0, 1.5);
 
+      double buy_mass = 0.0, sell_mass = 0.0, skip_mass = 0.0, exp_move = 0.0, adverse_mean = 0.0;
+      RolloutConsensus(f, cost, MathMax(0.10, cost), buy_mass, sell_mass, skip_mass, exp_move, adverse_mean);
+      double downside_pen = adverse_mean / MathMax(MathAbs(move_points) + cost + 0.10, 0.10);
+      target[3] = FXAI_Clamp(target[3] + 0.12 * downside_pen, 0.0, 1.8);
+      target[4] = FXAI_Clamp(target[4] + 0.10 * downside_pen, 0.0, 1.8);
+      target[5] = FXAI_Clamp(target[5] - 0.15 * downside_pen, 0.0, 1.5);
+
       double sw = FXAI_Clamp(MoveSampleWeight(x, move_points), 0.25, 4.0);
       double lr = FXAI_Clamp(0.20 * hp.lr * sw, 0.0002, 0.04);
       double l2 = FXAI_Clamp(hp.l2, 0.0, 0.05);
@@ -363,8 +431,6 @@ protected:
          m_state[s] = new_state;
       }
 
-      double buy_mass = 0.0, sell_mass = 0.0, skip_mass = 0.0, exp_move = 0.0;
-      RolloutConsensus(f, cost, MathMax(0.10, cost), buy_mass, sell_mass, skip_mass, exp_move);
       double pred_sign = 0.0;
       if(buy_mass > sell_mass) pred_sign = 1.0;
       else if(sell_mass > buy_mass) pred_sign = -1.0;
@@ -374,15 +440,21 @@ protected:
       m_consensus_ema  = 0.97 * m_consensus_ema  + 0.03 * MathAbs(buy_mass - sell_mass);
       m_confidence_ema = 0.97 * m_confidence_ema + 0.03 * (1.0 - skip_mass);
       m_edge_ema       = 0.96 * m_edge_ema       + 0.04 * edge;
+      m_downside_ema   = 0.96 * m_downside_ema   + 0.04 * adverse_mean;
       FXAI_UpdateMoveEMA(m_edge_ema, m_move_ready, edge, 0.02);
 
+      int sb = SessionBucket();
+      double signed_edge = (dir == 0 ? -0.20 * adverse_mean : (double)dir * edge);
+      m_session_edge[sb] = 0.97 * m_session_edge[sb] + 0.03 * signed_edge;
+
       // Transition parameter adaptation.
-      m_trans[0] = FXAI_Clamp(0.995 * m_trans[0] + 0.005 * (0.55 + 0.20 * MathAbs(target[0])), 0.20, 0.98);
+      double sess_adj = 0.02 * MathAbs(m_session_edge[sb]);
+      m_trans[0] = FXAI_Clamp(0.995 * m_trans[0] + 0.005 * (0.55 + 0.20 * MathAbs(target[0]) + sess_adj), 0.20, 0.98);
       m_trans[1] = FXAI_Clamp(0.995 * m_trans[1] + 0.005 * (0.45 + 0.15 * MathAbs(target[1])), 0.10, 0.95);
-      m_trans[2] = FXAI_Clamp(0.995 * m_trans[2] + 0.005 * (0.70 + 0.10 * target[2]), 0.20, 0.995);
-      m_trans[3] = FXAI_Clamp(0.995 * m_trans[3] + 0.005 * (0.40 + 0.18 * target[3]), 0.10, 0.95);
-      m_trans[4] = FXAI_Clamp(0.995 * m_trans[4] + 0.005 * (0.65 + 0.10 * target[4]), 0.20, 0.995);
-      m_trans[5] = FXAI_Clamp(0.995 * m_trans[5] + 0.005 * (0.78 + 0.08 * target[5]), 0.20, 0.999);
+      m_trans[2] = FXAI_Clamp(0.995 * m_trans[2] + 0.005 * (0.70 + 0.10 * target[2] + 0.08 * downside_pen), 0.20, 0.995);
+      m_trans[3] = FXAI_Clamp(0.995 * m_trans[3] + 0.005 * (0.40 + 0.18 * target[3] + 0.05 * downside_pen), 0.10, 0.95);
+      m_trans[4] = FXAI_Clamp(0.995 * m_trans[4] + 0.005 * (0.65 + 0.10 * target[4] + 0.06 * downside_pen), 0.20, 0.995);
+      m_trans[5] = FXAI_Clamp(0.995 * m_trans[5] + 0.005 * (0.78 + 0.08 * target[5] - 0.04 * downside_pen), 0.20, 0.999);
 
       m_seed = (uint)((ulong)1103515245 * (ulong)(m_seed + (uint)(dir + 3)) + (ulong)12345);
       m_steps++;

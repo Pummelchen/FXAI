@@ -12,9 +12,12 @@ private:
    int    m_steps;
    double m_gate_w[FXAI_AI_WEIGHTS];
    double m_dir_w[FXAI_AI_WEIGHTS];
-   double m_move_head_w[FXAI_AI_WEIGHTS];
+   double m_move_mu_w[FXAI_AI_WEIGHTS];
+   double m_move_logv_w[FXAI_AI_WEIGHTS];
    double m_graph_bias;
    double m_last_probs[3];
+   double m_reliability_ema;
+   double m_err_ema;
 
    double SafeX(const double &x[], const int i) const
    {
@@ -57,6 +60,14 @@ private:
       double graph1 = carry1 + carry2;
       double graph2 = accel / vol;
       double graph3 = (MathAbs(trend) - cost) / MathMax(vol, 1e-6);
+      double ctx1 = SafeX(x, 13);
+      double ctx2 = SafeX(x, 14);
+      double ctx3 = SafeX(x, 15);
+      double ctx4 = SafeX(x, 16);
+      double ctx_mean = (ctx1 + ctx2 + ctx3) / 3.0;
+      double ctx_disp = (MathAbs(ctx1 - ctx_mean) + MathAbs(ctx2 - ctx_mean) + MathAbs(ctx3 - ctx_mean)) / 3.0;
+      double rel_spread = trend - ctx_mean;
+      double ctx_flow = 0.45 * (ctx1 - ctx2) + 0.30 * (ctx2 - ctx3) + 0.20 * ctx4;
 
       int k = base_n;
       if(k < n) f[k++] = FXAI_Clamp(carry1, -10.0, 10.0);
@@ -66,6 +77,9 @@ private:
       if(k < n) f[k++] = FXAI_Clamp(graph1, -10.0, 10.0);
       if(k < n) f[k++] = FXAI_Clamp(graph2, -10.0, 10.0);
       if(k < n) f[k++] = FXAI_Clamp(graph3, -10.0, 10.0);
+      if(k < n) f[k++] = FXAI_Clamp(rel_spread, -10.0, 10.0);
+      if(k < n) f[k++] = FXAI_Clamp(ctx_disp, -10.0, 10.0);
+      if(k < n) f[k++] = FXAI_Clamp(ctx_flow, -10.0, 10.0);
       if(k < n) f[k++] = FXAI_Clamp(m_graph_bias, -10.0, 10.0);
    }
 
@@ -90,8 +104,10 @@ protected:
    {
       double f[]; ArrayResize(f, m_feat_n);
       BuildGraphFeatures(x, f);
-      double raw = MathAbs(Dot(m_move_head_w, f));
-      return MathMax(raw, 0.0);
+      double mu = MathMax(0.0, Dot(m_move_mu_w, f));
+      double logv = FXAI_Clamp(Dot(m_move_logv_w, f), -4.0, 4.0);
+      double sigma = MathSqrt(MathExp(logv));
+      return MathMax(mu + 0.25 * sigma, 0.0);
    }
 
    virtual void UpdateWithMove(const int y, const double &x[], const FXAIAIHyperParams &hp, const double move_points)
@@ -104,23 +120,35 @@ protected:
       double l2 = FXAI_Clamp(hp.l2, 0.0, 0.10);
       double p_trade = FXAI_Clamp(FXAI_Sigmoid(Dot(m_gate_w, f)), 0.001, 0.999);
       double p_up    = FXAI_Clamp(FXAI_Sigmoid(Dot(m_dir_w, f)), 0.001, 0.999);
-      double p_move  = Dot(m_move_head_w, f);
+      double mu_move = MathMax(0.0, Dot(m_move_mu_w, f));
+      double logv_move = FXAI_Clamp(Dot(m_move_logv_w, f), -4.0, 4.0);
+      double var_move = MathExp(logv_move);
 
       double t_trade = (y == (int)FXAI_LABEL_SKIP ? 0.0 : 1.0);
       double t_up    = (y == (int)FXAI_LABEL_BUY ? 1.0 : 0.0);
       double move_t  = MathAbs(move_points);
+      double predicted_side = (p_up >= 0.5 ? 1.0 : -1.0);
+      double realized_side = (y == (int)FXAI_LABEL_BUY ? 1.0 : (y == (int)FXAI_LABEL_SELL ? -1.0 : 0.0));
+      double hit = (realized_side == 0.0 ? (p_trade < 0.5 ? 1.0 : 0.0) : (predicted_side == realized_side ? 1.0 : 0.0));
 
       UpdateLinear(m_gate_w, f, t_trade, p_trade, lr, l2);
       if(y != (int)FXAI_LABEL_SKIP)
          UpdateLinear(m_dir_w, f, t_up, p_up, lr, l2);
 
-      double err_move = FXAI_Clamp(move_t - p_move, -50.0, 50.0);
-      m_move_head_w[0] += lr * 0.25 * (err_move - l2 * m_move_head_w[0]);
+      double err_move = FXAI_Clamp(move_t - mu_move, -50.0, 50.0);
+      m_move_mu_w[0] += lr * 0.25 * (err_move - l2 * m_move_mu_w[0]);
       int n = MathMin(ArraySize(f), FXAI_AI_WEIGHTS - 1);
       for(int i=0; i<n; i++)
-         m_move_head_w[i + 1] += lr * 0.25 * (err_move * f[i] - l2 * m_move_head_w[i + 1]);
+      {
+         m_move_mu_w[i + 1] += lr * 0.25 * (err_move * f[i] - l2 * m_move_mu_w[i + 1]);
+         double grad_lv = ((err_move * err_move) - var_move) * f[i];
+         m_move_logv_w[i + 1] += lr * 0.02 * (grad_lv - l2 * m_move_logv_w[i + 1]);
+      }
+      m_move_logv_w[0] += lr * 0.02 * (((err_move * err_move) - var_move) - l2 * m_move_logv_w[0]);
 
       m_graph_bias = 0.995 * m_graph_bias + 0.005 * FXAI_Clamp(SafeX(x,0) - SafeX(x,1), -5.0, 5.0);
+      m_reliability_ema = 0.985 * m_reliability_ema + 0.015 * hit;
+      m_err_ema = 0.985 * m_err_ema + 0.015 * MathAbs(err_move) / MathMax(move_t + 1.0, 1.0);
       m_steps++;
    }
 
@@ -133,8 +161,11 @@ public:
       m_graph_bias = 0.0;
       ArrayInitialize(m_gate_w, 0.0);
       ArrayInitialize(m_dir_w, 0.0);
-      ArrayInitialize(m_move_head_w, 0.0);
+      ArrayInitialize(m_move_mu_w, 0.0);
+      ArrayInitialize(m_move_logv_w, 0.0);
       m_last_probs[0] = m_last_probs[1] = m_last_probs[2] = 1.0/3.0;
+      m_reliability_ema = 0.50;
+      m_err_ema = 0.0;
    }
 
    virtual int AIId(void) const { return (int)AI_GRAPHWM; }
@@ -148,8 +179,11 @@ public:
       m_graph_bias = 0.0;
       ArrayInitialize(m_gate_w, 0.0);
       ArrayInitialize(m_dir_w, 0.0);
-      ArrayInitialize(m_move_head_w, 0.0);
+      ArrayInitialize(m_move_mu_w, 0.0);
+      ArrayInitialize(m_move_logv_w, 0.0);
       m_last_probs[0] = m_last_probs[1] = m_last_probs[2] = 1.0/3.0;
+      m_reliability_ema = 0.50;
+      m_err_ema = 0.0;
    }
 
    virtual void EnsureInitialized(const FXAIAIHyperParams &hp)
@@ -169,15 +203,19 @@ public:
 
       double p_trade = FXAI_Clamp(FXAI_Sigmoid(Dot(m_gate_w, f)), 0.001, 0.999);
       double p_up    = FXAI_Clamp(FXAI_Sigmoid(Dot(m_dir_w, f)), 0.001, 0.999);
-      expected_move_points = MathMax(MathAbs(Dot(m_move_head_w, f)), 0.0);
+      double mu = MathMax(0.0, Dot(m_move_mu_w, f));
+      double logv = FXAI_Clamp(Dot(m_move_logv_w, f), -4.0, 4.0);
+      double sigma = MathSqrt(MathExp(logv));
+      expected_move_points = MathMax(mu + 0.25 * sigma, 0.0);
 
       double p_buy  = p_trade * p_up;
       double p_sell = p_trade * (1.0 - p_up);
       double p_skip = 1.0 - p_trade;
 
       double move_gate = FXAI_Clamp(expected_move_points / MathMax(ResolveMinMovePoints(), 0.10), 0.0, 1.5);
-      p_buy  *= MathMin(move_gate, 1.0);
-      p_sell *= MathMin(move_gate, 1.0);
+      double reliability_gate = FXAI_Clamp(0.55 + 0.90 * (m_reliability_ema - 0.5) - 0.25 * m_err_ema, 0.20, 1.20);
+      p_buy  *= MathMin(move_gate, 1.0) * reliability_gate;
+      p_sell *= MathMin(move_gate, 1.0) * reliability_gate;
       p_skip  = MathMax(0.001, 1.0 - (p_buy + p_sell));
 
       class_probs[(int)FXAI_LABEL_SELL] = FXAI_Clamp(p_sell, 0.0005, 0.9990);
