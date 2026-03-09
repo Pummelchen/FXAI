@@ -4092,6 +4092,12 @@ void FXAI_GetModelHyperParams(const int ai_idx, FXAIAIHyperParams &hp)
       hp.lr = 0.0060;
       hp.l2 = 0.0030;
    }
+   // Recommended M1SYNC starting defaults.
+   if(ai_idx == (int)AI_M1SYNC)
+   {
+      hp.lr = 0.0;
+      hp.l2 = 0.0;
+   }
 }
 
 void FXAI_GetModelHyperParamsRouted(const int ai_idx,
@@ -4205,6 +4211,9 @@ void FXAI_SampleModelHyperParams(const int ai_idx,
          case (int)AI_RETRDIFF:
          hp.lr = FXAI_RandRange(0.0030, 0.0600);
          hp.l2 = FXAI_RandRange(0.0000, 0.0300);
+         break;
+
+      case (int)AI_M1SYNC:
          break;
 
       case (int)AI_LSTM:

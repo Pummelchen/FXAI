@@ -110,6 +110,9 @@ LSTM is a recurrent neural architecture built to retain useful sequence memory o
 ### LSTM-G
 LSTM-G extends recurrent modeling with additional gating refinements for sequence stability. It is useful for FX because better gating can reduce noisy state transitions on fast intraday data. This helps when signal quality changes quickly around session opens and news spikes. Related background: Recurrent neural network.
 
+### M1Sync
+M1Sync is a deliberately simple rule-based plugin that checks whether the last three completed M1 closes and the current price form a clean one-step-at-a-time move in the same direction. It is useful in FX as a strict micro-momentum filter because it only trades when short-term price action is sequentially aligned, which can reduce entries during choppy bars. In this framework it outputs `BUY` on a strict upward chain, `SELL` on a strict downward chain, and `SKIP` otherwise. It is best treated as a lightweight confirmation model or ensemble gate rather than as a standalone predictive engine.
+
 ### MLP Tiny
 MLP Tiny is a compact feed-forward neural baseline with low compute overhead. It is useful for FX as a fast nonlinear learner that can run efficiently in MT5. The model also serves as a resilient ensemble member against over-specialized plugins. Further reading: Multilayer perceptron.
 

@@ -33,6 +33,7 @@
 #include "Plugins\ai_graphwm.mqh"
 #include "Plugins\ai_moe_conformal.mqh"
 #include "Plugins\ai_retrdiff.mqh"
+#include "Plugins\ai_m1sync.mqh"
 
 class CFXAIAIRegistry
 {
@@ -127,6 +128,7 @@ public:
          case (int)AI_GRAPHWM: return new CFXAIAIGraphWM();
          case (int)AI_MOE_CONFORMAL: return new CFXAIAIMoEConformal();
          case (int)AI_RETRDIFF: return new CFXAIAIRetrDiff();
+         case (int)AI_M1SYNC: return new CFXAIAIM1Sync();
          default: return NULL;
       }
    }
