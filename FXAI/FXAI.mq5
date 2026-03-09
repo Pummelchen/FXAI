@@ -51,6 +51,10 @@ input double AI_SellThreshold        = 0.40;
 // Models: all (3-class head + adaptive entry gate).
 // Purpose: base SELL side threshold input (lower than buy); runtime maps it to sell confidence.
 // Importance/Range: common 0.20..0.45; must stay in (0,1) and below AI_BuyThreshold.
+input int    AI_M1SyncBars          = 3;
+// Models: m1sync only (strict micro-momentum filter).
+// Purpose: number of completed M1 closes that must align with the current price in one direction.
+// Importance/Range: practical 2..8; higher is stricter and lowers trade count, code clamps to 2..12.
 
 input bool   AI_Warmup        = false;
 // Models: all (startup trainer/tuner for each plugin).
@@ -4645,6 +4649,14 @@ void OnDeinit(const int reason)
 {
    g_plugins.Release();
    g_plugins_ready = false;
+}
+
+int FXAI_GetM1SyncBars(void)
+{
+   int n = AI_M1SyncBars;
+   if(n < 2) n = 2;
+   if(n > 12) n = 12;
+   return n;
 }
 
 //------------------------- UTILS ------------------------------------

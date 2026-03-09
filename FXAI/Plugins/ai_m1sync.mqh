@@ -61,12 +61,17 @@ private:
       if(ctx_time > 0) shift = iBarShift(symbol, PERIOD_M1, ctx_time, true);
       if(shift < 1 && ctx_time > 0) shift = iBarShift(symbol, PERIOD_M1, ctx_time, false);
       if(shift < 1) shift = 1;
+      int bars = FXAI_GetM1SyncBars();
 
-      double c1 = iClose(symbol, PERIOD_M1, shift);
-      double c2 = iClose(symbol, PERIOD_M1, shift + 1);
-      double c3 = iClose(symbol, PERIOD_M1, shift + 2);
-      if(c1 <= 0.0 || c2 <= 0.0 || c3 <= 0.0)
-         return (int)FXAI_LABEL_SKIP;
+      double closes[];
+      ArrayResize(closes, bars);
+      for(int i=0; i<bars; i++)
+      {
+         int bar_shift = shift + (bars - 1 - i);
+         closes[i] = iClose(symbol, PERIOD_M1, bar_shift);
+         if(closes[i] <= 0.0)
+            return (int)FXAI_LABEL_SKIP;
+      }
 
       double now_price = ResolveCurrentLikePrice(symbol, shift, ctx_time);
       if(now_price <= 0.0)
@@ -78,20 +83,31 @@ private:
       if(mm <= 0.0) mm = MathMax(0.10, cost_points);
       double eps = MathMax(0.10 * point, 0.02 * cost_points * point);
 
-      double s1 = c2 - c3;
-      double s2 = c1 - c2;
-      double s3 = now_price - c1;
+      bool up_chain = true;
+      bool down_chain = true;
+      double min_step_points = DBL_MAX;
+      double prev = closes[0];
+      for(int i=1; i<bars; i++)
+      {
+         double step = closes[i] - prev;
+         if(step <= eps) up_chain = false;
+         if(step >= -eps) down_chain = false;
+         double step_points = MathAbs(step) / point;
+         if(step_points < min_step_points) min_step_points = step_points;
+         prev = closes[i];
+      }
 
-      bool up_chain = (s1 > eps && s2 > eps && s3 > eps);
-      bool down_chain = (s1 < -eps && s2 < -eps && s3 < -eps);
+      double final_step = now_price - closes[bars - 1];
+      if(final_step <= eps) up_chain = false;
+      if(final_step >= -eps) down_chain = false;
+      double final_step_points = MathAbs(final_step) / point;
+      if(final_step_points < min_step_points) min_step_points = final_step_points;
+
       if(!up_chain && !down_chain)
          return (int)FXAI_LABEL_SKIP;
 
-      double step1_points = MathAbs(s1) / point;
-      double step2_points = MathAbs(s2) / point;
-      double step3_points = MathAbs(s3) / point;
-      double total_points = MathAbs(now_price - c3) / point;
-      double min_step_points = MathMin(step1_points, MathMin(step2_points, step3_points));
+      double total_points = MathAbs(now_price - closes[0]) / point;
+      if(min_step_points == DBL_MAX) min_step_points = final_step_points;
 
       expected_move_points = MathMax(0.0, total_points - cost_points);
       double total_score = FXAI_Sigmoid((expected_move_points / MathMax(mm, 0.10)) - 0.50);

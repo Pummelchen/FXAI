@@ -73,6 +73,8 @@ enum ENUM_FXAI_FEATURE_NORMALIZATION
    FXAI_NORM_DAIN                   // DAIN adaptive normalization (lightweight learnable).
 };
 
+int FXAI_GetM1SyncBars(void);
+
 struct FXAIAIHyperParams
 {
    double lr;
