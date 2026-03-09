@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_PATCHTST_MQH__
 #define __FXAI_AI_PATCHTST_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 // Multivariate PatchTST reference plugin for FXAI.
 // Design: patch embedding -> positional encoding -> transformer encoder stack

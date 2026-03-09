@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_LIGHTGBM_MQH__
 #define __FXAI_AI_LIGHTGBM_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 // Reference-grade LightGBM-style plugin (3-class, histogram trees, 2nd-order, online calibrated).
 #define FXAI_LGB_BINS 64

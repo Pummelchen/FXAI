@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_M1SYNC_MQH__
 #define __FXAI_AI_M1SYNC_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 class CFXAIAIM1Sync : public CFXAIAIPlugin
 {

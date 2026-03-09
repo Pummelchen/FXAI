@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_MOE_CONFORMAL_MQH__
 #define __FXAI_AI_MOE_CONFORMAL_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_MOE_E 4
 #define FXAI_MOE_BUCKETS 12

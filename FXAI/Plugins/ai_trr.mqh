@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_TRR_MQH__
 #define __FXAI_AI_TRR_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_TRR_DIMS      8
 #define FXAI_TRR_BUF       32

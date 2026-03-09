@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_S4_MQH__
 #define __FXAI_AI_S4_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_S4_RANK 2
 #define FXAI_S4_TBPTT 12

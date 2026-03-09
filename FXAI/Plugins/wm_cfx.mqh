@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_CFX_WORLD_MQH__
 #define __FXAI_AI_CFX_WORLD_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_CFXW_STATE   6
 #define FXAI_CFXW_FEATS   8

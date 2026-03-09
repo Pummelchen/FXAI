@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_TIMESFM_MQH__
 #define __FXAI_AI_TIMESFM_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 // TimesFM foundation-model plugin for FXAI.
 // Design: tokenized multivariate context -> encoder stack -> memory retrieval

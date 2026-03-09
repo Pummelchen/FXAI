@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_GEODESICATTENTION_MQH__
 #define __FXAI_AI_GEODESICATTENTION_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 // Reference-grade geodesic attention plugin.
 #define FXAI_GA_SEQ 96

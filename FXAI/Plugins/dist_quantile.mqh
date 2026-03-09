@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_QUANTILE_MQH__
 #define __FXAI_AI_QUANTILE_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_QT_Q      9
 #define FXAI_QT_MID    4

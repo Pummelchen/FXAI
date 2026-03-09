@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_SGD_MQH__
 #define __FXAI_AI_SGD_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_SGD_CLASS_COUNT 3
 #define FXAI_SGD_HASH_BUCKETS 192

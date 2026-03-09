@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_PA_MQH__
 #define __FXAI_AI_PA_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_PA_CLASS_COUNT 3
 #define FXAI_PA_HASH2_BUCKETS 97

@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_RETRDIFF_MQH__
 #define __FXAI_AI_RETRDIFF_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_RETRDIFF_MEM 256
 #define FXAI_RETRDIFF_EMB 16

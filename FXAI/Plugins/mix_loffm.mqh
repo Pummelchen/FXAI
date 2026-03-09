@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_LOFFM_MQH__
 #define __FXAI_AI_LOFFM_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_LOFFM_EXPERTS 4
 #define FXAI_LOFFM_DERIVED 10

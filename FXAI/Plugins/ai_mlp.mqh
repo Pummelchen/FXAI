@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_MLP_TINY_MQH__
 #define __FXAI_AI_MLP_TINY_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_MLP_H1 16
 #define FXAI_MLP_H2 16

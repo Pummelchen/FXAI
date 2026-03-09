@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_TCN_MQH__
 #define __FXAI_AI_TCN_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_TCN_MAX_LAYERS 8
 #define FXAI_TCN_MAX_KERNEL 5

@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_ENHASH_MQH__
 #define __FXAI_AI_ENHASH_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_ENH_CLASSES 3
 #define FXAI_ENH_TABLES 2

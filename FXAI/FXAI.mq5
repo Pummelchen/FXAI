@@ -5,9 +5,9 @@
 #property strict
 
 #include <Trade\Trade.mqh>
-#include "shared.mqh"
-#include "data.mqh"
-#include "api.mqh"
+#include "Engine\shared.mqh"
+#include "Engine\data.mqh"
+#include "API\api.mqh"
 
 CTrade trade;
 
@@ -497,7 +497,6 @@ int      g_replay_cursor = 0;
 datetime g_replay_last_sample_time[FXAI_MAX_HORIZONS];
 
 
-#include "api_v4.mqh"
 #include "Engine\engine_all.mqh"
 
 int OnInit()

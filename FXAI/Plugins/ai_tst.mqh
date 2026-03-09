@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_TST_MQH__
 #define __FXAI_AI_TST_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_TST_SEQ 48
 #define FXAI_TST_TBPTT 16

@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_STMN_MQH__
 #define __FXAI_AI_STMN_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_STMN_NODES 6
 #define FXAI_STMN_CLASS_COUNT 3

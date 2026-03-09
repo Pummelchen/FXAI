@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_LSTM_MQH__
 #define __FXAI_AI_LSTM_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_LSTM_TBPTT 16
 #define FXAI_LSTM_CLASS_COUNT 3

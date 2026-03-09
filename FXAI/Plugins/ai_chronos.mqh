@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_CHRONOS_MQH__
 #define __FXAI_AI_CHRONOS_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 // Chronos foundation-model plugin for FXAI.
 // Design: tokenized multivariate context -> encoder stack -> memory retrieval

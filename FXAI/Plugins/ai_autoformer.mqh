@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_AUTOFORMER_MQH__
 #define __FXAI_AI_AUTOFORMER_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_AF_SEQ 128
 #define FXAI_AF_TBPTT 32

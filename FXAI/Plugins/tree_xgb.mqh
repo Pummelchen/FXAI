@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_XGBOOST_MQH__
 #define __FXAI_AI_XGBOOST_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 #define FXAI_XGB_MAX_TREES 64
 #define FXAI_XGB_MAX_DEPTH 3

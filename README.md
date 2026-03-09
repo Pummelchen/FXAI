@@ -74,7 +74,7 @@ The project is designed to keep MT5 execution practical while enabling advanced 
 
 The compact reference below explains the framework, naming convention, model families, and core design choices without overloading the main README.
 
-- [FXAI Reference](FXAI_Reference.txt)
+- [FXAI Reference](FXAI/FXAI_Reference.txt)
 
 ## Notes
 

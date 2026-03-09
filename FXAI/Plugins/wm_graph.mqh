@@ -1,7 +1,7 @@
 #ifndef __FXAI_AI_GRAPHWM_MQH__
 #define __FXAI_AI_GRAPHWM_MQH__
 
-#include "..\plugin_base.mqh"
+#include "..\API\plugin_base.mqh"
 
 class CFXAIAIGraphWM : public CFXAIAIPlugin
 {
