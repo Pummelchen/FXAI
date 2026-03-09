@@ -1,5 +1,3 @@
-// FXAI v2
-// FXAI v1
 #ifndef __FXAI_AI_SGD_MQH__
 #define __FXAI_AI_SGD_MQH__
 

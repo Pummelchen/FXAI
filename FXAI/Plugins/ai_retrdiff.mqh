@@ -1,4 +1,3 @@
-// FXAI v2
 #ifndef __FXAI_AI_RETRDIFF_MQH__
 #define __FXAI_AI_RETRDIFF_MQH__
 

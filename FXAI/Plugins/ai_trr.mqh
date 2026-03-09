@@ -1,5 +1,3 @@
-
-// FXAI v2
 #ifndef __FXAI_AI_TRR_MQH__
 #define __FXAI_AI_TRR_MQH__
 

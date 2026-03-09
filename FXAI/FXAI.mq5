@@ -1,4 +1,3 @@
-// FXAI v2
 //+------------------------------------------------------------------+
 //|                                                         FXAI.mq5 |
 //| FXAI modular EA: plugin-based AI + equity trailing + equity SL   |

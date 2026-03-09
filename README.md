@@ -46,7 +46,7 @@ The project is designed to keep MT5 execution practical while enabling advanced 
 - **Extensible by design**
   - New models can be added through the plugin API with consistent train/predict flow.
 - **Production-oriented workflow**
-  - MT5 Experts folder remains source-of-truth, GitHub is used for versioned snapshots.
+  - MT5 Experts folder remains source-of-truth, GitHub is used as the synchronized repository copy.
 
 ## Project Structure
 
@@ -67,7 +67,7 @@ The project is designed to keep MT5 execution practical while enabling advanced 
 
 1. Develop and compile in MT5 (`MQL5/Experts/FXAI`).
 2. Backtest/optimize model and risk parameters in Strategy Tester.
-3. Sync MT5 project state into this GitHub repo for version history.
+3. Sync MT5 project state into this GitHub repo after a clean MT5 compile.
 4. Repeat with walk-forward validation before live deployment.
 
 ## Reference PDF
