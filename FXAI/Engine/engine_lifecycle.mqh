@@ -260,30 +260,34 @@ void FXAI_PrecomputeContextAggregates(const datetime &main_time[],
    }
 }
 
-double FXAI_ContextSeriesUtilityNow(const datetime &main_time[],
-                                    const double &main_close[],
-                                    FXAIContextSeries &series)
+double FXAI_ContextSeriesUtilityAt(const datetime &main_time[],
+                                   const double &main_close[],
+                                   FXAIContextSeries &series,
+                                   const int main_i)
 {
    if(!series.loaded) return -1e9;
    if(ArraySize(main_time) <= 4 || ArraySize(main_close) <= 4) return -1e9;
    if(ArraySize(series.aligned_idx) <= 4) return -1e9;
+   if(main_i < 0 || main_i >= ArraySize(main_time) || main_i >= ArraySize(series.aligned_idx))
+      return -1e9;
 
    double sum_score = 0.0;
    int used = 0;
    for(int i=0; i<16; i++)
    {
-      if(i >= ArraySize(main_time) || i >= ArraySize(series.aligned_idx)) break;
-      int idx = series.aligned_idx[i];
+      int im = main_i + i;
+      if(im >= ArraySize(main_time) || im >= ArraySize(series.aligned_idx)) break;
+      int idx = series.aligned_idx[im];
       if(idx < 0) continue;
 
       double lag = 2.0 * PeriodSeconds(PERIOD_M1);
       if(lag <= 0.0) lag = 120.0;
-      double fresh = FXAI_AlignedFreshnessWeight(series.time, idx, main_time[i], (int)lag);
-      double main_ret = FXAI_SafeReturn(main_close, i, i + 1);
+      double fresh = FXAI_AlignedFreshnessWeight(series.time, idx, main_time[im], (int)lag);
+      double main_ret = FXAI_SafeReturn(main_close, im, im + 1);
       double ctx_ret = FXAI_SafeReturn(series.close, idx, idx + 1);
       double ctx_lag = FXAI_SafeReturn(series.close, idx + 1, idx + 2);
-      double corr = FXAI_ContextAlignedCorr(main_close, i, series, 20);
-      double vol = FXAI_RollingAbsReturn(main_close, i, 20);
+      double corr = FXAI_ContextAlignedCorr(main_close, im, series, 20);
+      double vol = FXAI_RollingAbsReturn(main_close, im, 20);
       if(vol < 1e-6) vol = MathAbs(main_ret);
       if(vol < 1e-6) vol = 1e-4;
 
@@ -302,76 +306,6 @@ double FXAI_ContextSeriesUtilityNow(const datetime &main_time[],
    return sum_score / (double)used;
 }
 
-void FXAI_SelectDynamicContextIndices(const datetime &main_time[],
-                                      const double &main_close[],
-                                      FXAIContextSeries &ctx_series[],
-                                      const int ctx_count,
-                                      int &selected_idx[])
-{
-   ArrayResize(selected_idx, 0);
-   if(ctx_count <= 0) return;
-
-   double slot_score[FXAI_MAX_CONTEXT_SYMBOLS];
-   int slot_idx[FXAI_MAX_CONTEXT_SYMBOLS];
-   int keep_n = ctx_count;
-   if(keep_n > FXAI_CONTEXT_DYNAMIC_POOL) keep_n = FXAI_CONTEXT_DYNAMIC_POOL;
-
-   for(int j=0; j<FXAI_MAX_CONTEXT_SYMBOLS; j++)
-   {
-      slot_score[j] = -1e18;
-      slot_idx[j] = -1;
-   }
-
-   for(int s=0; s<ctx_count && s<FXAI_MAX_CONTEXT_SYMBOLS; s++)
-   {
-      double inst = FXAI_ContextSeriesUtilityNow(main_time, main_close, ctx_series[s]);
-      if(inst <= -1e8) continue;
-
-      if(!g_context_symbol_utility_ready[s])
-      {
-         g_context_symbol_utility[s] = inst;
-         g_context_symbol_utility_ready[s] = true;
-      }
-      else
-      {
-         g_context_symbol_utility[s] = 0.85 * g_context_symbol_utility[s] + 0.15 * inst;
-      }
-
-      double score = g_context_symbol_utility[s];
-      for(int slot=0; slot<keep_n; slot++)
-      {
-         if(score <= slot_score[slot]) continue;
-         for(int shift=keep_n - 1; shift>slot; shift--)
-         {
-            slot_score[shift] = slot_score[shift - 1];
-            slot_idx[shift] = slot_idx[shift - 1];
-         }
-         slot_score[slot] = score;
-         slot_idx[slot] = s;
-         break;
-      }
-   }
-
-   for(int slot=0; slot<keep_n; slot++)
-   {
-      if(slot_idx[slot] < 0) continue;
-      int sz = ArraySize(selected_idx);
-      ArrayResize(selected_idx, sz + 1);
-      selected_idx[sz] = slot_idx[slot];
-   }
-
-   if(ArraySize(selected_idx) <= 0)
-   {
-      for(int s=0; s<ctx_count && s<FXAI_CONTEXT_DYNAMIC_POOL; s++)
-      {
-         if(!ctx_series[s].loaded) continue;
-         int sz = ArraySize(selected_idx);
-         ArrayResize(selected_idx, sz + 1);
-         selected_idx[sz] = s;
-      }
-   }
-}
-
 void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
                                              const double &main_close[],
                                              FXAIContextSeries &ctx_series[],
@@ -382,36 +316,196 @@ void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
                                              double &ctx_up_arr[],
                                              double &ctx_extra_arr[])
 {
-   int selected_idx[];
-   FXAI_SelectDynamicContextIndices(main_time, main_close, ctx_series, ctx_count, selected_idx);
-   if(ArraySize(selected_idx) <= 0)
+   int n = ArraySize(main_time);
+   if(ArraySize(main_close) != n) return;
+   ArrayResize(ctx_mean_arr, n);
+   ArrayResize(ctx_std_arr, n);
+   ArrayResize(ctx_up_arr, n);
+   ArrayResize(ctx_extra_arr, n * FXAI_CONTEXT_EXTRA_FEATS);
+   if(n <= 0) return;
+
+   int lag_m1 = 2 * PeriodSeconds(PERIOD_M1);
+   if(lag_m1 <= 0) lag_m1 = 120;
+
+   int upto = upto_index;
+   if(upto < 0) upto = 0;
+   if(upto >= n) upto = n - 1;
+   int upto_fill = upto;
+   if(upto_fill < n - 1) upto_fill++;
+
+   for(int i=0; i<n; i++)
    {
-      FXAI_PrecomputeContextAggregates(main_time,
-                                       main_close,
-                                       ctx_series,
-                                       ctx_count,
-                                       upto_index,
-                                       ctx_mean_arr,
-                                       ctx_std_arr,
-                                       ctx_up_arr,
-                                       ctx_extra_arr);
-      return;
+      ctx_mean_arr[i] = 0.0;
+      ctx_std_arr[i] = 0.0;
+      ctx_up_arr[i] = 0.5;
+   }
+   for(int i=0; i<ArraySize(ctx_extra_arr); i++)
+      ctx_extra_arr[i] = 0.0;
+
+   for(int s=0; s<ctx_count; s++)
+   {
+      if(!ctx_series[s].loaded)
+      {
+         ArrayResize(ctx_series[s].aligned_idx, 0);
+         continue;
+      }
+      FXAI_BuildAlignedIndexMapRange(main_time,
+                                    ctx_series[s].time,
+                                    lag_m1,
+                                    upto_fill,
+                                    ctx_series[s].aligned_idx);
    }
 
-   FXAIContextSeries selected[];
-   ArrayResize(selected, ArraySize(selected_idx));
-   for(int i=0; i<ArraySize(selected_idx); i++)
-      selected[i] = ctx_series[selected_idx[i]];
+   for(int i=0; i<=upto_fill; i++)
+   {
+      datetime t_ref = main_time[i];
+      if(t_ref <= 0 || ctx_count <= 0) continue;
 
-   FXAI_PrecomputeContextAggregates(main_time,
-                                    main_close,
-                                    selected,
-                                    ArraySize(selected),
-                                    upto_index,
-                                    ctx_mean_arr,
-                                    ctx_std_arr,
-                                    ctx_up_arr,
-                                    ctx_extra_arr);
+      double main_ret = FXAI_SafeReturn(main_close, i, i + 1);
+      double main_vol = FXAI_RollingAbsReturn(main_close, i, 20);
+      if(main_vol < 1e-6) main_vol = MathAbs(main_ret);
+      if(main_vol < 1e-6) main_vol = 1e-4;
+
+      double select_score[FXAI_MAX_CONTEXT_SYMBOLS];
+      int select_idx[FXAI_MAX_CONTEXT_SYMBOLS];
+      int keep_n = ctx_count;
+      if(keep_n > FXAI_CONTEXT_DYNAMIC_POOL) keep_n = FXAI_CONTEXT_DYNAMIC_POOL;
+      for(int s=0; s<FXAI_MAX_CONTEXT_SYMBOLS; s++)
+      {
+         select_score[s] = -1e18;
+         select_idx[s] = -1;
+      }
+
+      for(int s=0; s<ctx_count && s<FXAI_MAX_CONTEXT_SYMBOLS; s++)
+      {
+         if(!ctx_series[s].loaded) continue;
+         double util = FXAI_ContextSeriesUtilityAt(main_time, main_close, ctx_series[s], i);
+         if(util <= -1e8) continue;
+
+         if(i == 0)
+         {
+            if(!g_context_symbol_utility_ready[s])
+            {
+               g_context_symbol_utility[s] = util;
+               g_context_symbol_utility_ready[s] = true;
+            }
+            else
+            {
+               g_context_symbol_utility[s] = 0.85 * g_context_symbol_utility[s] + 0.15 * util;
+            }
+         }
+
+         for(int slot=0; slot<keep_n; slot++)
+         {
+            if(util <= select_score[slot]) continue;
+            for(int shift=keep_n - 1; shift>slot; shift--)
+            {
+               select_score[shift] = select_score[shift - 1];
+               select_idx[shift] = select_idx[shift - 1];
+            }
+            select_score[slot] = util;
+            select_idx[slot] = s;
+            break;
+         }
+      }
+
+      double weighted_sum = 0.0;
+      double weighted_sum2 = 0.0;
+      double weight_total = 0.0;
+      double up_weight = 0.0;
+      int valid = 0;
+      double top_score[FXAI_CONTEXT_TOP_SYMBOLS];
+      int top_symbol_idx[FXAI_CONTEXT_TOP_SYMBOLS];
+      double top_ctx_ret[FXAI_CONTEXT_TOP_SYMBOLS];
+      double top_ctx_lag[FXAI_CONTEXT_TOP_SYMBOLS];
+      double top_ctx_rel[FXAI_CONTEXT_TOP_SYMBOLS];
+      double top_ctx_corr[FXAI_CONTEXT_TOP_SYMBOLS];
+      for(int t=0; t<FXAI_CONTEXT_TOP_SYMBOLS; t++)
+      {
+         top_score[t] = -1e18;
+         top_symbol_idx[t] = -1;
+         top_ctx_ret[t] = 0.0;
+         top_ctx_lag[t] = 0.0;
+         top_ctx_rel[t] = 0.0;
+         top_ctx_corr[t] = 0.0;
+      }
+
+      for(int slot=0; slot<keep_n; slot++)
+      {
+         int s = select_idx[slot];
+         if(s < 0 || s >= ctx_count) continue;
+         if(!ctx_series[s].loaded) continue;
+         if(i >= ArraySize(ctx_series[s].aligned_idx)) continue;
+
+         int idx = ctx_series[s].aligned_idx[i];
+         if(idx < 0) continue;
+
+         double freshness = FXAI_AlignedFreshnessWeight(ctx_series[s].time, idx, t_ref, lag_m1);
+         double ctx_ret_raw = FXAI_SafeReturn(ctx_series[s].close, idx, idx + 1);
+         double ctx_lag_raw = FXAI_SafeReturn(ctx_series[s].close, idx + 1, idx + 2);
+         double ctx_rel_raw = ctx_ret_raw - main_ret;
+         double ctx_corr_raw = FXAI_ContextAlignedCorr(main_close, i, ctx_series[s], 20);
+         double rel_edge = FXAI_Clamp(MathAbs(ctx_rel_raw) / main_vol, 0.0, 4.0);
+         double ret_edge = FXAI_Clamp(MathAbs(ctx_ret_raw) / main_vol, 0.0, 4.0);
+         double lag_edge = FXAI_Clamp(MathAbs(ctx_lag_raw) / main_vol, 0.0, 4.0);
+         double corr_edge = MathAbs(ctx_corr_raw);
+         double symbol_score = freshness * ((0.40 * corr_edge) +
+                                            (0.30 * rel_edge) +
+                                            (0.20 * lag_edge) +
+                                            (0.10 * ret_edge));
+
+         double w = 0.20 + symbol_score;
+         weighted_sum += w * ctx_ret_raw;
+         weighted_sum2 += w * ctx_ret_raw * ctx_ret_raw;
+         weight_total += w;
+         if(ctx_ret_raw > 0.0) up_weight += w;
+         valid++;
+
+         for(int top_slot=0; top_slot<FXAI_CONTEXT_TOP_SYMBOLS; top_slot++)
+         {
+            if(symbol_score <= top_score[top_slot]) continue;
+            for(int shift=FXAI_CONTEXT_TOP_SYMBOLS - 1; shift>top_slot; shift--)
+            {
+               top_score[shift] = top_score[shift - 1];
+               top_symbol_idx[shift] = top_symbol_idx[shift - 1];
+               top_ctx_ret[shift] = top_ctx_ret[shift - 1];
+               top_ctx_lag[shift] = top_ctx_lag[shift - 1];
+               top_ctx_rel[shift] = top_ctx_rel[shift - 1];
+               top_ctx_corr[shift] = top_ctx_corr[shift - 1];
+            }
+            top_score[top_slot] = symbol_score;
+            top_symbol_idx[top_slot] = s;
+            top_ctx_ret[top_slot] = ctx_ret_raw * freshness;
+            top_ctx_lag[top_slot] = ctx_lag_raw * freshness;
+            top_ctx_rel[top_slot] = ctx_rel_raw * freshness;
+            top_ctx_corr[top_slot] = ctx_corr_raw * freshness;
+            break;
+         }
+      }
+
+      if(valid <= 0 || weight_total <= 0.0) continue;
+
+      double mean = weighted_sum / weight_total;
+      double var = (weighted_sum2 / weight_total) - (mean * mean);
+      if(var < 0.0) var = 0.0;
+      double up_ratio = up_weight / weight_total;
+      double coverage = (keep_n > 0 ? ((double)valid / (double)keep_n) : 0.0);
+      coverage = FXAI_Clamp(coverage, 0.0, 1.0);
+      double conf = 0.30 + (0.70 * coverage);
+
+      ctx_mean_arr[i] = mean * coverage;
+      ctx_std_arr[i] = MathSqrt(var) * conf;
+      ctx_up_arr[i] = 0.5 + ((up_ratio - 0.5) * coverage);
+
+      for(int top_slot=0; top_slot<FXAI_CONTEXT_TOP_SYMBOLS; top_slot++)
+      {
+         if(top_symbol_idx[top_slot] < 0) continue;
+         FXAI_SetContextExtraValue(ctx_extra_arr, i, top_slot * 4 + 0, top_ctx_ret[top_slot]);
+         FXAI_SetContextExtraValue(ctx_extra_arr, i, top_slot * 4 + 1, top_ctx_lag[top_slot]);
+         FXAI_SetContextExtraValue(ctx_extra_arr, i, top_slot * 4 + 2, top_ctx_rel[top_slot]);
+         FXAI_SetContextExtraValue(ctx_extra_arr, i, top_slot * 4 + 3, top_ctx_corr[top_slot]);
+      }
+   }
 }
 
 //--------------------------- INIT -----------------------------------

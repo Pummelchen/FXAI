@@ -13,6 +13,8 @@ input int    Audit_M1SyncBars = 3;
 input ENUM_FXAI_FEATURE_NORMALIZATION Audit_Normalization = FXAI_NORM_EXISTING;
 input int    Audit_SequenceBarsOverride = 0;
 input int    Audit_SchemaOverride = 0;
+input double Audit_CommissionPerLotSide = 0.0;
+input double Audit_CostBufferPoints = 2.0;
 input int    Audit_Seed = 42;
 input bool   Audit_ResetOutput = true;
 input bool   Audit_StopOnFailure = false;
@@ -39,6 +41,16 @@ int FXAI_AuditGetSequenceBarsOverride(void)
 int FXAI_AuditGetSchemaOverride(void)
 {
    return Audit_SchemaOverride;
+}
+
+double FXAI_AuditGetCommissionPerLotSide(void)
+{
+   return Audit_CommissionPerLotSide;
+}
+
+double FXAI_AuditGetCostBufferPoints(void)
+{
+   return Audit_CostBufferPoints;
 }
 
 bool FXAI_AuditScenarioIdFromName(const string raw_name,

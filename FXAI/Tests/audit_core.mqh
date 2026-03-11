@@ -18,6 +18,8 @@
 
 int FXAI_AuditGetSequenceBarsOverride(void);
 int FXAI_AuditGetSchemaOverride(void);
+double FXAI_AuditGetCommissionPerLotSide(void);
+double FXAI_AuditGetCostBufferPoints(void);
 
 struct FXAIAuditScenarioSpec
 {
@@ -669,10 +671,10 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       FXAI_ExtractRatesCloseTimeSpread(sel_m1, close_series, time_series, spread_series);
       FXAI_ExtractRatesOHLC(sel_m1, open_series, high_series, low_series, close_series);
 
-      int need_m5 = (bars / 5) + 220;
-      int need_m15 = (bars / 15) + 220;
-      int need_m30 = (bars / 30) + 220;
-      int need_h1 = (bars / 60) + 220;
+      int need_m5 = (search_bars / 5) + 220;
+      int need_m15 = (search_bars / 15) + 220;
+      int need_m30 = (search_bars / 30) + 220;
+      int need_h1 = (search_bars / 60) + 220;
       MqlRates rates_tf[];
       ArraySetAsSeries(rates_tf, true);
 
@@ -897,12 +899,13 @@ bool FXAI_AuditBuildSample(const int i,
    if(i - horizon_minutes < 0) return false;
 
    FXAIDataSnapshot snapshot;
-   snapshot.symbol = "SYNTH";
+   snapshot.symbol = _Symbol;
    snapshot.bar_time = time_arr[i];
    snapshot.point = point;
    snapshot.spread_points = FXAI_GetSpreadAtIndex(i, spread_arr, 1.0);
-   snapshot.commission_points = 0.0;
-   snapshot.min_move_points = snapshot.spread_points;
+   snapshot.commission_points = FXAI_GetCommissionPointsRoundTripPerLot(snapshot.symbol, FXAI_AuditGetCommissionPerLotSide());
+   snapshot.min_move_points = snapshot.spread_points + snapshot.commission_points + MathMax(FXAI_AuditGetCostBufferPoints(), 0.0);
+   if(snapshot.min_move_points < 0.0) snapshot.min_move_points = 0.0;
 
    double feat[FXAI_AI_FEATURES];
    if(!FXAI_ComputeFeatureVector(i,
@@ -971,7 +974,7 @@ bool FXAI_AuditBuildSample(const int i,
    FXAI_BuildInputVector(feat_norm, x);
 
    move_points = FXAI_MovePoints(close_arr[i], close_arr[i - horizon_minutes], point);
-   double cost_points = snapshot.spread_points;
+   double cost_points = snapshot.min_move_points;
    label_class = FXAI_BuildEVClassLabel(move_points, cost_points, ev_threshold_points);
    sample_weight = FXAI_Clamp(FXAI_MoveEdgeWeight(move_points, cost_points), 0.25, 4.0);
 
