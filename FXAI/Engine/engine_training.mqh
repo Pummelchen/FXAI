@@ -442,13 +442,16 @@ void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
 {
    if(!sample.valid) return;
 
+   FXAIAIManifestV4 manifest;
+   FXAI_GetPluginManifest(plugin, manifest);
+
    FXAIAITrainRequestV4 s3;
    s3.valid = sample.valid;
    s3.ctx.api_version = FXAI_API_VERSION_V4;
    s3.ctx.regime_id = sample.regime_id;
    s3.ctx.session_bucket = FXAI_DeriveSessionBucket(sample.sample_time);
    s3.ctx.horizon_minutes = sample.horizon_minutes;
-   s3.ctx.feature_schema_id = 1;
+    s3.ctx.feature_schema_id = manifest.feature_schema_id;
    s3.ctx.normalization_method_id = (int)FXAI_GetModelNormMethodRouted(ai_idx,
                                                                        sample.regime_id,
                                                                        sample.horizon_minutes);
@@ -462,6 +465,9 @@ void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
    s3.sample_weight = sample.sample_weight;
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
       s3.x[k] = sample.x[k];
+   FXAI_ApplyFeatureSchemaToInput(manifest.feature_schema_id,
+                                  manifest.feature_groups_mask,
+                                  s3.x);
 
    FXAI_TrainViaV4(plugin, s3, hp);
    FXAI_UpdateModelMoveStats(ai_idx, sample.move_points);

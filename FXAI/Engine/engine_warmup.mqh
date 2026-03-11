@@ -90,6 +90,8 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
 
    trial.Reset();
    trial.EnsureInitialized(hp);
+   FXAIAIManifestV4 trial_manifest;
+   FXAI_GetPluginManifest(*trial, trial_manifest);
    for(int epoch=0; epoch<2; epoch++)
    {
       for(int i=train_end; i>=train_start; i--)
@@ -102,7 +104,7 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
          s3.ctx.regime_id = samples[i].regime_id;
          s3.ctx.session_bucket = FXAI_DeriveSessionBucket(samples[i].sample_time);
          s3.ctx.horizon_minutes = samples[i].horizon_minutes;
-         s3.ctx.feature_schema_id = 1;
+         s3.ctx.feature_schema_id = trial_manifest.feature_schema_id;
          s3.ctx.normalization_method_id = (int)AI_FeatureNormalization;
          s3.ctx.sequence_bars = FXAI_GetPluginSequenceBars(*trial, samples[i].horizon_minutes);
          s3.ctx.cost_points = samples[i].cost_points;
@@ -114,6 +116,9 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
          s3.sample_weight = 1.0;
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
             s3.x[k] = samples[i].x[k];
+         FXAI_ApplyFeatureSchemaToInput(trial_manifest.feature_schema_id,
+                                        trial_manifest.feature_groups_mask,
+                                        s3.x);
          FXAI_TrainViaV4(*trial, s3, hp);
       }
    }
@@ -703,6 +708,8 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
    FXAI_ResetWarmupBucketStats(total_stats);
    double fallback_move_ema = 0.0;
    bool fallback_move_ready = false;
+   FXAIAIManifestV4 plugin_manifest;
+   FXAI_GetPluginManifest(plugin, plugin_manifest);
 
    int score_h = FXAI_ClampHorizon(horizon_minutes);
    for(int i=end; i>=start; i--)
@@ -715,7 +722,7 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
       req.ctx.regime_id = samples[i].regime_id;
       req.ctx.session_bucket = FXAI_DeriveSessionBucket(samples[i].sample_time);
       req.ctx.horizon_minutes = score_h;
-      req.ctx.feature_schema_id = 1;
+      req.ctx.feature_schema_id = plugin_manifest.feature_schema_id;
       req.ctx.normalization_method_id = (int)AI_FeatureNormalization;
       req.ctx.sequence_bars = FXAI_GetPluginSequenceBars(plugin, score_h);
       req.ctx.cost_points = samples[i].cost_points;
@@ -724,6 +731,9 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
       req.ctx.sample_time = samples[i].sample_time;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = samples[i].x[k];
+      FXAI_ApplyFeatureSchemaToInput(plugin_manifest.feature_schema_id,
+                                     plugin_manifest.feature_groups_mask,
+                                     req.x);
 
       FXAIAIPredictionV4 pred;
       FXAI_PredictViaV4(plugin, req, hp, pred);
@@ -822,6 +832,8 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
    FXAI_ResetWarmupBucketStats(total_stats);
    double fallback_move_ema = 0.0;
    bool fallback_move_ready = false;
+   FXAIAIManifestV4 plugin_manifest;
+   FXAI_GetPluginManifest(plugin, plugin_manifest);
 
    int score_h = FXAI_ClampHorizon(horizon_minutes);
    for(int i=end; i>=start; i--)
@@ -839,7 +851,7 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
       req.ctx.regime_id = eval_sample.regime_id;
       req.ctx.session_bucket = FXAI_DeriveSessionBucket(eval_sample.sample_time);
       req.ctx.horizon_minutes = score_h;
-      req.ctx.feature_schema_id = 1;
+      req.ctx.feature_schema_id = plugin_manifest.feature_schema_id;
       req.ctx.normalization_method_id = (int)FXAI_GetModelNormMethodRouted(ai_idx,
                                                                            eval_sample.regime_id,
                                                                            score_h);
@@ -850,6 +862,9 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
       req.ctx.sample_time = eval_sample.sample_time;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = eval_sample.x[k];
+      FXAI_ApplyFeatureSchemaToInput(plugin_manifest.feature_schema_id,
+                                     plugin_manifest.feature_groups_mask,
+                                     req.x);
 
       FXAIAIPredictionV4 pred;
       FXAI_PredictViaV4(plugin, req, hp, pred);
@@ -1292,7 +1307,9 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             req.ctx.regime_id = pred_sample.regime_id;
             req.ctx.session_bucket = FXAI_DeriveSessionBucket(pred_sample.sample_time);
             req.ctx.horizon_minutes = pred_sample.horizon_minutes;
-            req.ctx.feature_schema_id = 1;
+            FXAIAIManifestV4 plugin_manifest;
+            FXAI_GetPluginManifest(*plugin, plugin_manifest);
+            req.ctx.feature_schema_id = plugin_manifest.feature_schema_id;
             req.ctx.normalization_method_id = (int)FXAI_GetModelNormMethodRouted(ai_idx,
                                                                                  pred_sample.regime_id,
                                                                                  pred_sample.horizon_minutes);
@@ -1303,6 +1320,9 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             req.ctx.sample_time = pred_sample.sample_time;
             for(int k=0; k<FXAI_AI_WEIGHTS; k++)
                req.x[k] = pred_sample.x[k];
+            FXAI_ApplyFeatureSchemaToInput(plugin_manifest.feature_schema_id,
+                                           plugin_manifest.feature_groups_mask,
+                                           req.x);
 
             FXAIAIPredictionV4 pred;
             FXAI_PredictViaV4(*plugin, req, hp_model, pred);
@@ -1567,15 +1587,15 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
    double ctx_std_arr[];
    double ctx_up_arr[];
    double ctx_extra_arr[];
-   FXAI_PrecomputeContextAggregates(time_arr,
-                                   close_arr,
-                                   ctx_series,
-                                   ctx_count,
-                                   i_end,
-                                   ctx_mean_arr,
-                                   ctx_std_arr,
-                                   ctx_up_arr,
-                                   ctx_extra_arr);
+   FXAI_PrecomputeDynamicContextAggregates(time_arr,
+                                           close_arr,
+                                           ctx_series,
+                                           ctx_count,
+                                           i_end,
+                                           ctx_mean_arr,
+                                           ctx_std_arr,
+                                           ctx_up_arr,
+                                           ctx_extra_arr);
 
    double cost_buffer_points = (AI_CostBufferPoints < 0.0 ? 0.0 : AI_CostBufferPoints);
    double commission_points = snapshot.commission_points;

@@ -423,6 +423,14 @@ def build_summary(rows, oracles: dict):
     return summary
 
 
+def summary_has_market_replay(summary: dict) -> bool:
+    for plugin in summary.get("plugins", {}).values():
+        for scenario in plugin.get("scenarios", {}).keys():
+            if scenario.startswith("market_"):
+                return True
+    return False
+
+
 def render_report(rows, oracles: dict):
     groups = aggregate(rows)
     ranked = []
@@ -435,7 +443,7 @@ def render_report(rows, oracles: dict):
     out = []
     out.append("# FXAI Test Lab Drill Report")
     out.append("")
-    out.append("This report is intentionally harsh. A plugin only earns credit when it behaves like its claimed model family under synthetic market pressure.")
+    out.append("This report is intentionally harsh. A plugin only earns credit when it behaves like its claimed model family under synthetic pressure and real-market replay certification.")
     out.append("")
     for score, name, items, fam, oracle in ranked:
         issues = sorted({issue for r in items for issue in parse_issue_flags(r["issue_flags"])})
@@ -451,6 +459,114 @@ def render_report(rows, oracles: dict):
         out.append("Required improvements:")
         for s in build_suggestions(name, fam, items, oracle, findings):
             out.append(f"- {s}")
+        out.append("")
+    return "\n".join(out)
+
+
+def build_optimization_campaign(summary: dict, oracles: dict) -> dict:
+    campaign = {"plugins": {}}
+    for name, info in sorted(summary.get("plugins", {}).items()):
+        family = int(info.get("family", 11))
+        oracle = get_oracle(name, family, oracles)
+        issues = set(info.get("issues", [])) | set(info.get("findings", []))
+        experiments = []
+
+        schema_candidates = []
+        norm_candidates = []
+        seq_candidates = []
+        scenario_focus = ["random_walk", "drift_up", "drift_down", "market_trend", "market_chop"]
+
+        if family in (2, 3, 4, 5):  # recurrent/conv/transformer/state-space
+            schema_candidates.extend([3, 6])
+            seq_candidates.extend([8, 16, 32, 64])
+            norm_candidates.extend([0, 7, 8, 9, 13, 14])
+        elif family in (0, 6):  # linear/distributional
+            schema_candidates.extend([2, 6])
+            seq_candidates.extend([1, 4, 8])
+            norm_candidates.extend([0, 7, 8, 9, 10, 11])
+        elif family == 1:  # tree
+            schema_candidates.extend([5, 6, 1])
+            seq_candidates.extend([1, 4, 8])
+            norm_candidates.extend([0, 7, 8, 9, 10])
+        elif family == 10:  # rule-based
+            schema_candidates.extend([4, 1])
+            seq_candidates.extend([1, 2, 3, 4])
+            norm_candidates.extend([0])
+        else:
+            schema_candidates.extend([1, 6, 3])
+            seq_candidates.extend([1, 8, 16])
+            norm_candidates.extend([0, 7, 8, 9, 10])
+
+        if any("overtrades noise" in x for x in issues):
+            norm_candidates.extend([7, 8, 9, 10])
+            schema_candidates.extend([2, 4])
+        if any("misses trend" in x for x in issues):
+            seq_candidates.extend([16, 32, 64])
+            schema_candidates.extend([3, 6])
+        if any("calibration drift" in x for x in issues):
+            norm_candidates.extend([9, 10, 13, 14])
+        if any("sequence contract weak" in x for x in issues):
+            seq_candidates.extend([16, 32, 64, 96])
+        if any("dead move output" in x for x in issues):
+            schema_candidates.extend([6, 1])
+            norm_candidates.extend([7, 8, 9])
+
+        def uniq(seq):
+            seen = set()
+            out = []
+            for item in seq:
+                if item in seen:
+                    continue
+                seen.add(item)
+                out.append(item)
+            return out
+
+        experiments.append({
+            "name": "schema_ablation",
+            "schemas": uniq(schema_candidates)[:4],
+            "focus": scenario_focus,
+        })
+        experiments.append({
+            "name": "normalization_sweep",
+            "normalizations": uniq(norm_candidates)[:6],
+            "focus": scenario_focus,
+        })
+        experiments.append({
+            "name": "sequence_sweep",
+            "sequence_bars": uniq(seq_candidates)[:6],
+            "focus": scenario_focus,
+        })
+
+        campaign["plugins"][name] = {
+            "score": float(info.get("score", 0.0)),
+            "grade": info.get("grade", "F"),
+            "issues": sorted(issues),
+            "oracle_identity": oracle.get("identity", ""),
+            "experiments": experiments,
+        }
+    return campaign
+
+
+def render_optimization_campaign(campaign: dict) -> str:
+    out = ["# FXAI Optimization Campaign", ""]
+    out.append("This plan is generated from the latest audit summary. It proposes targeted schema, normalization, and sequence sweeps instead of blind brute force.")
+    out.append("")
+    for name, info in sorted(campaign.get("plugins", {}).items()):
+        out.append(f"## {name} | {info.get('score', 0.0):.1f}/100 | Grade {info.get('grade', 'F')}")
+        issues = info.get("issues", [])
+        if issues:
+            out.append("Issues: " + "; ".join(issues))
+        identity = info.get("oracle_identity", "")
+        if identity:
+            out.append(identity)
+        out.append("")
+        for exp in info.get("experiments", []):
+            if exp["name"] == "schema_ablation":
+                out.append(f"- Schema sweep: {exp['schemas']} | focus={exp['focus']}")
+            elif exp["name"] == "normalization_sweep":
+                out.append(f"- Normalization sweep: {exp['normalizations']} | focus={exp['focus']}")
+            elif exp["name"] == "sequence_sweep":
+                out.append(f"- Sequence sweep: {exp['sequence_bars']} | focus={exp['focus']}")
         out.append("")
     return "\n".join(out)
 
@@ -599,6 +715,8 @@ def write_audit_set(path: Path, args) -> None:
         f"PredictionTargetMinutes={args.horizon}||1||1||720||N",
         f"Audit_M1SyncBars={args.m1sync_bars}||2||1||12||N",
         f"Audit_Normalization={args.normalization}||0||0||14||N",
+        f"Audit_SequenceBarsOverride={args.sequence_bars}||0||0||256||N",
+        f"Audit_SchemaOverride={args.schema_id}||0||0||6||N",
         f"Audit_Seed={args.seed}||0||1||1000000||N",
         "Audit_ResetOutput=true||false||0||true||N",
         "Audit_StopOnFailure=false||false||0||true||N",
@@ -885,6 +1003,9 @@ def cmd_release_gate(args):
     if cmp["regressions"]:
         gate_failures.extend(cmp["regressions"])
 
+    if args.require_market_replay and not summary_has_market_replay(current_summary):
+        gate_failures.append("current audit report does not contain market replay scenarios")
+
     for name, info in sorted(current_summary.get("plugins", {}).items()):
         score = float(info.get("score", 0.0))
         if score < args.min_score:
@@ -909,6 +1030,23 @@ def cmd_release_gate(args):
     return 0
 
 
+def cmd_optimize_audit(args):
+    report = Path(args.report) if args.report else DEFAULT_REPORT
+    if not report.exists():
+        print(f"report not found: {report}", file=sys.stderr)
+        return 1
+    oracles = load_oracles()
+    summary = build_summary(load_rows(report), oracles)
+    campaign = build_optimization_campaign(summary, oracles)
+    text = render_optimization_campaign(campaign)
+    print(text)
+    if args.output:
+        Path(args.output).write_text(text, encoding="utf-8")
+    if args.json_output:
+        Path(args.json_output).write_text(json.dumps(campaign, indent=2, sort_keys=True), encoding="utf-8")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="FXAI external drill-sergeant test lab")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -923,11 +1061,13 @@ def main():
     ra.add_argument("--all-plugins", action="store_true")
     ra.add_argument("--plugin-id", type=int, default=28)
     ra.add_argument("--plugin-list", default="{all}")
-    ra.add_argument("--scenario-list", default="{random_walk, drift_up, drift_down, mean_revert, vol_cluster, monotonic_up, monotonic_down, regime_shift}")
+    ra.add_argument("--scenario-list", default="{random_walk, drift_up, drift_down, mean_revert, vol_cluster, monotonic_up, monotonic_down, regime_shift, market_recent, market_trend, market_chop}")
     ra.add_argument("--bars", type=int, default=20000)
     ra.add_argument("--horizon", type=int, default=5)
     ra.add_argument("--m1sync-bars", type=int, default=3)
     ra.add_argument("--normalization", type=int, default=0)
+    ra.add_argument("--sequence-bars", type=int, default=0)
+    ra.add_argument("--schema-id", type=int, default=0)
     ra.add_argument("--seed", type=int, default=42)
     ra.add_argument("--symbol", default="EURUSD")
     ra.add_argument("--login")
@@ -960,8 +1100,15 @@ def main():
     rg.add_argument("--baseline", required=True)
     rg.add_argument("--min-score", type=float, default=70.0)
     rg.add_argument("--fail-on-issues", action="store_true")
+    rg.add_argument("--require-market-replay", action="store_true")
     rg.add_argument("--output")
     rg.set_defaults(func=cmd_release_gate)
+
+    oa = sub.add_parser("optimize-audit", help="Generate an audit-guided optimization campaign for schemas, normalizers, and sequence lengths")
+    oa.add_argument("--report", default=str(DEFAULT_REPORT))
+    oa.add_argument("--output")
+    oa.add_argument("--json-output")
+    oa.set_defaults(func=cmd_optimize_audit)
 
     args = ap.parse_args()
     raise SystemExit(args.func(args))

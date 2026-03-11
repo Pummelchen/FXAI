@@ -192,6 +192,14 @@
       "drift_up": {
         "trend_align_min": 0.25
       },
+      "market_chop": {
+        "active_ratio_max": 0.55,
+        "bias_abs_max": 0.85,
+        "skip_ratio_min": 0.45
+      },
+      "market_trend": {
+        "trend_align_min": 0.15
+      },
       "random_walk": {
         "active_ratio_max": 0.4,
         "bias_abs_max": 0.8,
@@ -499,6 +507,22 @@
         }
       }
     },
+    "rule_buyonly": {
+      "identity": "Control baseline that always forces long exposure. It is intentionally naive and exists to benchmark the framework against a permanent long bias.",
+      "recommendations": [
+        "This plugin should never be treated as a production model. Use it only as a control for execution plumbing and benchmark comparisons.",
+        "Any serious directional model should beat this control on score, trade quality, and noise discipline."
+      ],
+      "scenario_rules": {
+        "drift_up": {
+          "active_ratio_min": 0.98,
+          "trend_align_min": 0.98
+        },
+        "random_walk": {
+          "active_ratio_min": 0.98
+        }
+      }
+    },
     "rule_m1sync": {
       "identity": "Strict monotonic micro-trend filter that should only fire on obvious short-term directional sync.",
       "recommendations": [
@@ -520,19 +544,16 @@
         }
       }
     },
-    "rule_buyonly": {
-      "identity": "Control baseline that always forces long exposure. It is intentionally naive and exists to benchmark the framework against a permanent long bias.",
+    "rule_random": {
+      "identity": "Control baseline that flips between buy and sell with no skip. It is a deterministic coin-flip benchmark for plumbing and audit sanity checks.",
       "recommendations": [
-        "This plugin should never be treated as a production model. Use it only as a control for execution plumbing and benchmark comparisons.",
-        "Any serious directional model should beat this control on score, trade quality, and noise discipline."
+        "This plugin is supposed to be weak. If a production model cannot beat it, the model or the framework setup is not credible.",
+        "Use it to test whether the framework handles a no-skip, always-active control without hidden bias or state contamination."
       ],
       "scenario_rules": {
-        "drift_up": {
-          "active_ratio_min": 0.98,
-          "trend_align_min": 0.98
-        },
         "random_walk": {
-          "active_ratio_min": 0.98
+          "active_ratio_min": 0.98,
+          "bias_abs_max": 0.2
         }
       }
     },
@@ -549,19 +570,6 @@
         },
         "random_walk": {
           "active_ratio_min": 0.98
-        }
-      }
-    },
-    "rule_random": {
-      "identity": "Control baseline that flips between buy and sell with no skip. It is a deterministic coin-flip benchmark for plumbing and audit sanity checks.",
-      "recommendations": [
-        "This plugin is supposed to be weak. If a production model cannot beat it, the model or the framework setup is not credible.",
-        "Use it to test whether the framework handles a no-skip, always-active control without hidden bias or state contamination."
-      ],
-      "scenario_rules": {
-        "random_walk": {
-          "active_ratio_min": 0.98,
-          "bias_abs_max": 0.20
         }
       }
     },

@@ -15,6 +15,7 @@
 #define FXAI_PLUGIN_REPLAY_STEPS 2
 #define FXAI_CONTEXT_TOP_SYMBOLS 3
 #define FXAI_CONTEXT_EXTRA_FEATS (FXAI_CONTEXT_TOP_SYMBOLS * 4)
+#define FXAI_CONTEXT_DYNAMIC_POOL 8
 #define FXAI_API_VERSION_V4 4
 
 
@@ -108,6 +109,16 @@ enum ENUM_FXAI_FEATURE_GROUP
    FXAI_FEAT_GROUP_CONTEXT,
    FXAI_FEAT_GROUP_COST,
    FXAI_FEAT_GROUP_FILTERS
+};
+
+enum ENUM_FXAI_FEATURE_SCHEMA
+{
+   FXAI_SCHEMA_FULL = 1,
+   FXAI_SCHEMA_SPARSE_STAT = 2,
+   FXAI_SCHEMA_SEQUENCE = 3,
+   FXAI_SCHEMA_RULE = 4,
+   FXAI_SCHEMA_TREE = 5,
+   FXAI_SCHEMA_CONTEXTUAL = 6
 };
 
 enum ENUM_FXAI_FEATURE_NORMALIZATION
@@ -368,6 +379,149 @@ void FXAI_BuildInputVector(const double &features[], double &x[])
    x[0] = 1.0;
    for(int i=0; i<FXAI_AI_FEATURES; i++)
       x[i + 1] = features[i];
+}
+
+ulong FXAI_FeatureGroupBit(const int group_id)
+{
+   if(group_id < 0 || group_id > (int)FXAI_FEAT_GROUP_FILTERS)
+      return 0;
+   return ((ulong)1 << (ulong)group_id);
+}
+
+int FXAI_GetFeatureGroupForIndex(const int feature_idx)
+{
+   if(feature_idx < 0 || feature_idx >= FXAI_AI_FEATURES)
+      return (int)FXAI_FEAT_GROUP_PRICE;
+
+   if(feature_idx <= 5) return (int)FXAI_FEAT_GROUP_PRICE;
+   if(feature_idx == 6) return (int)FXAI_FEAT_GROUP_COST;
+   if(feature_idx <= 9) return (int)FXAI_FEAT_GROUP_MULTI_TIMEFRAME;
+   if(feature_idx <= 12) return (int)FXAI_FEAT_GROUP_CONTEXT;
+   if(feature_idx <= 14) return (int)FXAI_FEAT_GROUP_MULTI_TIMEFRAME;
+   if(feature_idx <= 17) return (int)FXAI_FEAT_GROUP_TIME;
+   if(feature_idx <= 21) return (int)FXAI_FEAT_GROUP_PRICE;
+   if(feature_idx <= 37) return (int)FXAI_FEAT_GROUP_MULTI_TIMEFRAME;
+   if(feature_idx <= 45) return (int)FXAI_FEAT_GROUP_VOLATILITY;
+   if(feature_idx <= 49) return (int)FXAI_FEAT_GROUP_FILTERS;
+   return (int)FXAI_FEAT_GROUP_CONTEXT;
+}
+
+ulong FXAI_DefaultFeatureGroupsForFamily(const int family)
+{
+   ulong mask = 0;
+   switch(family)
+   {
+      case FXAI_FAMILY_LINEAR:
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_PRICE);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_MULTI_TIMEFRAME);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_VOLATILITY);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_TIME);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_CONTEXT);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_COST);
+         break;
+      case FXAI_FAMILY_TREE:
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_PRICE);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_MULTI_TIMEFRAME);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_VOLATILITY);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_TIME);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_CONTEXT);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_COST);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_FILTERS);
+         break;
+      case FXAI_FAMILY_RULE_BASED:
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_PRICE);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_TIME);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_COST);
+         break;
+      case FXAI_FAMILY_DISTRIBUTIONAL:
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_PRICE);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_MULTI_TIMEFRAME);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_VOLATILITY);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_CONTEXT);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_COST);
+         break;
+      default:
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_PRICE);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_MULTI_TIMEFRAME);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_VOLATILITY);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_TIME);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_CONTEXT);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_COST);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_FILTERS);
+         break;
+   }
+   return mask;
+}
+
+int FXAI_DefaultFeatureSchemaForFamily(const int family)
+{
+   switch(family)
+   {
+      case FXAI_FAMILY_LINEAR:
+      case FXAI_FAMILY_DISTRIBUTIONAL:
+         return (int)FXAI_SCHEMA_SPARSE_STAT;
+      case FXAI_FAMILY_RULE_BASED:
+         return (int)FXAI_SCHEMA_RULE;
+      case FXAI_FAMILY_TREE:
+         return (int)FXAI_SCHEMA_TREE;
+      case FXAI_FAMILY_RECURRENT:
+      case FXAI_FAMILY_CONVOLUTIONAL:
+      case FXAI_FAMILY_TRANSFORMER:
+      case FXAI_FAMILY_STATE_SPACE:
+         return (int)FXAI_SCHEMA_SEQUENCE;
+      case FXAI_FAMILY_RETRIEVAL:
+      case FXAI_FAMILY_MIXTURE:
+      case FXAI_FAMILY_WORLD_MODEL:
+         return (int)FXAI_SCHEMA_CONTEXTUAL;
+      default:
+         return (int)FXAI_SCHEMA_FULL;
+   }
+}
+
+bool FXAI_IsFeatureEnabledForSchema(const int feature_idx,
+                                    const int schema_id,
+                                    const ulong groups_mask)
+{
+   int group_id = FXAI_GetFeatureGroupForIndex(feature_idx);
+   ulong bit = FXAI_FeatureGroupBit(group_id);
+   if(bit == 0 || (groups_mask & bit) == 0)
+      return false;
+
+   switch(schema_id)
+   {
+      case FXAI_SCHEMA_SPARSE_STAT:
+         if(feature_idx >= 46 && feature_idx <= 49) return false;
+         if(feature_idx >= 50 && feature_idx <= 61) return false;
+         return true;
+      case FXAI_SCHEMA_RULE:
+         return (group_id == (int)FXAI_FEAT_GROUP_PRICE ||
+                 group_id == (int)FXAI_FEAT_GROUP_TIME ||
+                 group_id == (int)FXAI_FEAT_GROUP_COST);
+      case FXAI_SCHEMA_CONTEXTUAL:
+         if(group_id == (int)FXAI_FEAT_GROUP_TIME && feature_idx >= 15 && feature_idx <= 17)
+            return false;
+         return true;
+      case FXAI_SCHEMA_TREE:
+      case FXAI_SCHEMA_SEQUENCE:
+      case FXAI_SCHEMA_FULL:
+      default:
+         return true;
+   }
+}
+
+void FXAI_ApplyFeatureSchemaToInput(const int schema_id,
+                                    const ulong groups_mask,
+                                    double &x[])
+{
+   if(ArraySize(x) < FXAI_AI_WEIGHTS)
+      return;
+
+   x[0] = 1.0;
+   for(int f=0; f<FXAI_AI_FEATURES; f++)
+   {
+      if(!FXAI_IsFeatureEnabledForSchema(f, schema_id, groups_mask))
+         x[f + 1] = 0.0;
+   }
 }
 
 int FXAI_ContextExtraIndex(const int sample_idx, const int feat_idx)

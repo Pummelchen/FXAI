@@ -258,15 +258,15 @@ int SpecialDirectionAI(const string symbol)
       }
    }
 
-   FXAI_PrecomputeContextAggregates(time_arr,
-                                   close_arr,
-                                   ctx_series,
-                                   ctx_count,
-                                   align_upto,
-                                   ctx_mean_arr,
-                                   ctx_std_arr,
-                                   ctx_up_arr,
-                                   ctx_extra_arr);
+   FXAI_PrecomputeDynamicContextAggregates(time_arr,
+                                           close_arr,
+                                           ctx_series,
+                                           ctx_count,
+                                           align_upto,
+                                           ctx_mean_arr,
+                                           ctx_std_arr,
+                                           ctx_up_arr,
+                                           ctx_extra_arr);
 
    double cost_buffer_points = (AI_CostBufferPoints < 0.0 ? 0.0 : AI_CostBufferPoints);
    double commission_points = snapshot.commission_points;
@@ -746,6 +746,9 @@ int SpecialDirectionAI(const string symbol)
       if(plugin == NULL)
          continue;
 
+      FXAIAIManifestV4 manifest;
+      FXAI_GetPluginManifest(*plugin, manifest);
+
       FXAIAIHyperParams hp_model;
       FXAI_GetModelHyperParamsRouted(ai_idx, regime_id, H, hp_model);
       plugin.EnsureInitialized(hp_model);
@@ -790,7 +793,7 @@ int SpecialDirectionAI(const string symbol)
       req.ctx.regime_id = regime_id;
       req.ctx.session_bucket = FXAI_DeriveSessionBucket(snapshot.bar_time);
       req.ctx.horizon_minutes = H;
-      req.ctx.feature_schema_id = 1;
+      req.ctx.feature_schema_id = manifest.feature_schema_id;
       int method_id = (int)FXAI_GetModelNormMethodRouted(ai_idx, regime_id, H);
       req.ctx.normalization_method_id = method_id;
       req.ctx.sequence_bars = FXAI_GetPluginSequenceBars(*plugin, H);
@@ -801,6 +804,9 @@ int SpecialDirectionAI(const string symbol)
       int input_idx = FXAI_FindNormInputCache(method_id, input_caches);
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = (input_idx >= 0 ? input_caches[input_idx].x[k] : x_pred[k]);
+      FXAI_ApplyFeatureSchemaToInput(manifest.feature_schema_id,
+                                     manifest.feature_groups_mask,
+                                     req.x);
 
       FXAIAIPredictionV4 pred;
       FXAI_PredictViaV4(*plugin, req, hp_model, pred);

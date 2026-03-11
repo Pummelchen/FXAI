@@ -6,11 +6,13 @@
 input bool   Audit_AllPlugins = true;
 input ENUM_AI_TYPE Audit_Plugin = AI_M1SYNC;
 input string Audit_PluginList = "{all}";
-input string Audit_ScenarioList = "{random_walk, drift_up, drift_down, mean_revert, vol_cluster, monotonic_up, monotonic_down, regime_shift}";
+input string Audit_ScenarioList = "{random_walk, drift_up, drift_down, mean_revert, vol_cluster, monotonic_up, monotonic_down, regime_shift, market_recent, market_trend, market_chop}";
 input int    Audit_Bars = 20000;
 input int    PredictionTargetMinutes = 5;
 input int    Audit_M1SyncBars = 3;
 input ENUM_FXAI_FEATURE_NORMALIZATION Audit_Normalization = FXAI_NORM_EXISTING;
+input int    Audit_SequenceBarsOverride = 0;
+input int    Audit_SchemaOverride = 0;
 input int    Audit_Seed = 42;
 input bool   Audit_ResetOutput = true;
 input bool   Audit_StopOnFailure = false;
@@ -29,6 +31,16 @@ ENUM_FXAI_FEATURE_NORMALIZATION FXAI_GetFeatureNormalizationMethod()
    return Audit_Normalization;
 }
 
+int FXAI_AuditGetSequenceBarsOverride(void)
+{
+   return Audit_SequenceBarsOverride;
+}
+
+int FXAI_AuditGetSchemaOverride(void)
+{
+   return Audit_SchemaOverride;
+}
+
 bool FXAI_AuditScenarioIdFromName(const string raw_name,
                                   int &out_id)
 {
@@ -45,6 +57,9 @@ bool FXAI_AuditScenarioIdFromName(const string raw_name,
    if(name == "monotonic_up") { out_id = 5; return true; }
    if(name == "monotonic_down") { out_id = 6; return true; }
    if(name == "regime_shift") { out_id = 7; return true; }
+   if(name == "market_recent") { out_id = 8; return true; }
+   if(name == "market_trend") { out_id = 9; return true; }
+   if(name == "market_chop") { out_id = 10; return true; }
    return false;
 }
 

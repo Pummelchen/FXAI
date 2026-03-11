@@ -340,9 +340,9 @@ datetime g_last_debug_bar = 0;
 #define FXAI_REL_MAX_PENDING 2048
 #define FXAI_REGIME_COUNT 12
 #define FXAI_MAX_HORIZONS 8
-#define FXAI_STACK_FEATS 14
-#define FXAI_STACK_HIDDEN 8
-#define FXAI_HPOL_FEATS 12
+#define FXAI_STACK_FEATS 20
+#define FXAI_STACK_HIDDEN 10
+#define FXAI_HPOL_FEATS 16
 #define FXAI_NORM_CAND_MAX 8
 #define FXAI_REPLAY_CAPACITY 384
 #define FXAI_REPLAY_DRAWS 12
@@ -355,6 +355,8 @@ datetime g_last_debug_bar = 0;
 #define FXAI_REPLAYFLAG_WRONG_DIR 64
 
 string g_context_symbols[];
+double g_context_symbol_utility[FXAI_MAX_CONTEXT_SYMBOLS];
+bool   g_context_symbol_utility_ready[FXAI_MAX_CONTEXT_SYMBOLS];
 int    g_horizon_minutes[];
 double g_model_reliability[FXAI_AI_COUNT];
 double g_model_abs_move_ema[FXAI_AI_COUNT];

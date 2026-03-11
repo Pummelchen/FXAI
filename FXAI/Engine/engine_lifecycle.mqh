@@ -260,6 +260,160 @@ void FXAI_PrecomputeContextAggregates(const datetime &main_time[],
    }
 }
 
+double FXAI_ContextSeriesUtilityNow(const datetime &main_time[],
+                                    const double &main_close[],
+                                    FXAIContextSeries &series)
+{
+   if(!series.loaded) return -1e9;
+   if(ArraySize(main_time) <= 4 || ArraySize(main_close) <= 4) return -1e9;
+   if(ArraySize(series.aligned_idx) <= 4) return -1e9;
+
+   double sum_score = 0.0;
+   int used = 0;
+   for(int i=0; i<16; i++)
+   {
+      if(i >= ArraySize(main_time) || i >= ArraySize(series.aligned_idx)) break;
+      int idx = series.aligned_idx[i];
+      if(idx < 0) continue;
+
+      double lag = 2.0 * PeriodSeconds(PERIOD_M1);
+      if(lag <= 0.0) lag = 120.0;
+      double fresh = FXAI_AlignedFreshnessWeight(series.time, idx, main_time[i], (int)lag);
+      double main_ret = FXAI_SafeReturn(main_close, i, i + 1);
+      double ctx_ret = FXAI_SafeReturn(series.close, idx, idx + 1);
+      double ctx_lag = FXAI_SafeReturn(series.close, idx + 1, idx + 2);
+      double corr = FXAI_ContextAlignedCorr(main_close, i, series, 20);
+      double vol = FXAI_RollingAbsReturn(main_close, i, 20);
+      if(vol < 1e-6) vol = MathAbs(main_ret);
+      if(vol < 1e-6) vol = 1e-4;
+
+      double rel = FXAI_Clamp(MathAbs(ctx_ret - main_ret) / vol, 0.0, 4.0);
+      double lead = FXAI_Clamp(MathAbs(ctx_lag) / vol, 0.0, 4.0);
+      double mag = FXAI_Clamp(MathAbs(ctx_ret) / vol, 0.0, 4.0);
+      double score = fresh * ((0.45 * MathAbs(corr)) +
+                              (0.30 * rel) +
+                              (0.15 * lead) +
+                              (0.10 * mag));
+      sum_score += score;
+      used++;
+   }
+
+   if(used <= 0) return -1e9;
+   return sum_score / (double)used;
+}
+
+void FXAI_SelectDynamicContextIndices(const datetime &main_time[],
+                                      const double &main_close[],
+                                      FXAIContextSeries &ctx_series[],
+                                      const int ctx_count,
+                                      int &selected_idx[])
+{
+   ArrayResize(selected_idx, 0);
+   if(ctx_count <= 0) return;
+
+   double slot_score[FXAI_MAX_CONTEXT_SYMBOLS];
+   int slot_idx[FXAI_MAX_CONTEXT_SYMBOLS];
+   int keep_n = ctx_count;
+   if(keep_n > FXAI_CONTEXT_DYNAMIC_POOL) keep_n = FXAI_CONTEXT_DYNAMIC_POOL;
+
+   for(int j=0; j<FXAI_MAX_CONTEXT_SYMBOLS; j++)
+   {
+      slot_score[j] = -1e18;
+      slot_idx[j] = -1;
+   }
+
+   for(int s=0; s<ctx_count && s<FXAI_MAX_CONTEXT_SYMBOLS; s++)
+   {
+      double inst = FXAI_ContextSeriesUtilityNow(main_time, main_close, ctx_series[s]);
+      if(inst <= -1e8) continue;
+
+      if(!g_context_symbol_utility_ready[s])
+      {
+         g_context_symbol_utility[s] = inst;
+         g_context_symbol_utility_ready[s] = true;
+      }
+      else
+      {
+         g_context_symbol_utility[s] = 0.85 * g_context_symbol_utility[s] + 0.15 * inst;
+      }
+
+      double score = g_context_symbol_utility[s];
+      for(int slot=0; slot<keep_n; slot++)
+      {
+         if(score <= slot_score[slot]) continue;
+         for(int shift=keep_n - 1; shift>slot; shift--)
+         {
+            slot_score[shift] = slot_score[shift - 1];
+            slot_idx[shift] = slot_idx[shift - 1];
+         }
+         slot_score[slot] = score;
+         slot_idx[slot] = s;
+         break;
+      }
+   }
+
+   for(int slot=0; slot<keep_n; slot++)
+   {
+      if(slot_idx[slot] < 0) continue;
+      int sz = ArraySize(selected_idx);
+      ArrayResize(selected_idx, sz + 1);
+      selected_idx[sz] = slot_idx[slot];
+   }
+
+   if(ArraySize(selected_idx) <= 0)
+   {
+      for(int s=0; s<ctx_count && s<FXAI_CONTEXT_DYNAMIC_POOL; s++)
+      {
+         if(!ctx_series[s].loaded) continue;
+         int sz = ArraySize(selected_idx);
+         ArrayResize(selected_idx, sz + 1);
+         selected_idx[sz] = s;
+      }
+   }
+}
+
+void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
+                                             const double &main_close[],
+                                             FXAIContextSeries &ctx_series[],
+                                             const int ctx_count,
+                                             const int upto_index,
+                                             double &ctx_mean_arr[],
+                                             double &ctx_std_arr[],
+                                             double &ctx_up_arr[],
+                                             double &ctx_extra_arr[])
+{
+   int selected_idx[];
+   FXAI_SelectDynamicContextIndices(main_time, main_close, ctx_series, ctx_count, selected_idx);
+   if(ArraySize(selected_idx) <= 0)
+   {
+      FXAI_PrecomputeContextAggregates(main_time,
+                                       main_close,
+                                       ctx_series,
+                                       ctx_count,
+                                       upto_index,
+                                       ctx_mean_arr,
+                                       ctx_std_arr,
+                                       ctx_up_arr,
+                                       ctx_extra_arr);
+      return;
+   }
+
+   FXAIContextSeries selected[];
+   ArrayResize(selected, ArraySize(selected_idx));
+   for(int i=0; i<ArraySize(selected_idx); i++)
+      selected[i] = ctx_series[selected_idx[i]];
+
+   FXAI_PrecomputeContextAggregates(main_time,
+                                    main_close,
+                                    selected,
+                                    ArraySize(selected),
+                                    upto_index,
+                                    ctx_mean_arr,
+                                    ctx_std_arr,
+                                    ctx_up_arr,
+                                    ctx_extra_arr);
+}
+
 //--------------------------- INIT -----------------------------------
 void ResetAIState(const string symbol)
 {
@@ -276,6 +430,11 @@ void ResetAIState(const string symbol)
    FXAI_ResetAdaptiveRoutingState();
    FXAI_ResetRegimeCalibration();
    FXAI_ResetReplayReservoir();
+   for(int s=0; s<FXAI_MAX_CONTEXT_SYMBOLS; s++)
+   {
+      g_context_symbol_utility[s] = 0.0;
+      g_context_symbol_utility_ready[s] = false;
+   }
 
    if(!g_norm_windows_ready)
    {
@@ -320,7 +479,7 @@ bool FXAI_ValidateNativePluginAPI()
       plugin.EnsureInitialized(hp);
 
       FXAIAIManifestV4 manifest;
-      plugin.Describe(manifest);
+      FXAI_GetPluginManifest(*plugin, manifest);
       string reason = "";
       if(!FXAI_ValidateManifestV4(manifest, reason))
       {
@@ -336,7 +495,7 @@ bool FXAI_ValidateNativePluginAPI()
       req_v4.ctx.regime_id = 0;
       req_v4.ctx.session_bucket = FXAI_DeriveSessionBucket(TimeCurrent());
       req_v4.ctx.horizon_minutes = 5;
-      req_v4.ctx.feature_schema_id = 1;
+      req_v4.ctx.feature_schema_id = manifest.feature_schema_id;
       req_v4.ctx.normalization_method_id = (int)AI_FeatureNormalization;
       req_v4.ctx.sequence_bars = FXAI_GetPluginSequenceBars(*plugin, req_v4.ctx.horizon_minutes);
       req_v4.ctx.cost_points = 0.5;
@@ -345,6 +504,9 @@ bool FXAI_ValidateNativePluginAPI()
       req_v4.ctx.sample_time = TimeCurrent();
       for(int kk=0; kk<FXAI_AI_WEIGHTS; kk++)
          req_v4.x[kk] = x_dummy[kk];
+      FXAI_ApplyFeatureSchemaToInput(manifest.feature_schema_id,
+                                     manifest.feature_groups_mask,
+                                     req_v4.x);
 
       FXAIAIPredictionV4 pred_v4;
       if(!plugin.Predict(req_v4, hp, pred_v4))
@@ -380,13 +542,15 @@ void FXAI_FillComplianceContext(CFXAIAIPlugin &plugin,
                                 const int regime_id,
                                 const int horizon_minutes)
 {
+   FXAIAIManifestV4 manifest;
+   FXAI_GetPluginManifest(plugin, manifest);
    ctx.api_version = FXAI_API_VERSION_V4;
    ctx.regime_id = regime_id;
    ctx.session_bucket = FXAI_DeriveSessionBucket(sample_time);
    ctx.horizon_minutes = horizon_minutes;
-   ctx.feature_schema_id = 1;
+   ctx.feature_schema_id = manifest.feature_schema_id;
    ctx.normalization_method_id = (int)AI_FeatureNormalization;
-    ctx.sequence_bars = FXAI_GetPluginSequenceBars(plugin, horizon_minutes);
+   ctx.sequence_bars = FXAI_GetPluginSequenceBars(plugin, horizon_minutes);
    ctx.min_move_points = MathMax(cost_points + 0.30, 0.50);
    ctx.cost_points = MathMax(cost_points, 0.0);
    ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
@@ -420,6 +584,11 @@ void FXAI_FillComplianceTrainRequest(CFXAIAIPlugin &plugin,
    req.x[5] = 0.25 * v3;
    req.x[6] = 0.15 * v1;
    req.x[7] = req.ctx.cost_points;
+   FXAIAIManifestV4 manifest;
+   FXAI_GetPluginManifest(plugin, manifest);
+   FXAI_ApplyFeatureSchemaToInput(manifest.feature_schema_id,
+                                  manifest.feature_groups_mask,
+                                  req.x);
 }
 
 void FXAI_FillCompliancePredictRequest(CFXAIAIPlugin &plugin,
@@ -444,6 +613,11 @@ void FXAI_FillCompliancePredictRequest(CFXAIAIPlugin &plugin,
    req.x[5] = 0.25 * v3;
    req.x[6] = 0.15 * v1;
    req.x[7] = req.ctx.cost_points;
+   FXAIAIManifestV4 manifest;
+   FXAI_GetPluginManifest(plugin, manifest);
+   FXAI_ApplyFeatureSchemaToInput(manifest.feature_schema_id,
+                                  manifest.feature_groups_mask,
+                                  req.x);
 }
 
 bool FXAI_ValidatePredictionOutput(const CFXAIAIPlugin &plugin,

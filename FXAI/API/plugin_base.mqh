@@ -686,15 +686,15 @@ protected:
                      const int min_horizon_minutes = 1,
                      const int max_horizon_minutes = 720,
                      const ulong feature_groups_mask = 0,
-                     const int feature_schema_id = 1) const
+                     const int feature_schema_id = 0) const
    {
       out.api_version = FXAI_API_VERSION_V4;
       out.ai_id = AIId();
       out.ai_name = AIName();
       out.family = family;
       out.capability_mask = capability_mask;
-      out.feature_schema_id = feature_schema_id;
-      out.feature_groups_mask = (feature_groups_mask != 0 ? feature_groups_mask : DefaultFeatureGroupsMask());
+      out.feature_schema_id = (feature_schema_id > 0 ? feature_schema_id : FXAI_DefaultFeatureSchemaForFamily(family));
+      out.feature_groups_mask = (feature_groups_mask != 0 ? feature_groups_mask : FXAI_DefaultFeatureGroupsForFamily(family));
       out.min_horizon_minutes = min_horizon_minutes;
       out.max_horizon_minutes = max_horizon_minutes;
       out.min_sequence_bars = min_sequence_bars;

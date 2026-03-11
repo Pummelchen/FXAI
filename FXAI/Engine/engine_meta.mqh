@@ -210,6 +210,10 @@ void FXAI_BuildHorizonPolicyFeatures(const int horizon_minutes,
    feat[9] = ((double)dt.hour - 11.5) / 11.5;
    feat[10] = ((double)dt.min - 29.5) / 29.5;
    feat[11] = FXAI_Clamp(((double)horizon_minutes - (double)base_h) / (double)MathMax(base_h, 1), -2.0, 2.0) / 2.0;
+   feat[12] = FXAI_Clamp((expected_abs_points - min_move_points) / MathMax((double)horizon_minutes, 1.0), -2.0, 6.0) / 4.0;
+   feat[13] = FXAI_Clamp(expected_abs_points / MathSqrt((double)MathMax(horizon_minutes, 1)), 0.0, 20.0) / 10.0;
+   feat[14] = FXAI_Clamp(((double)horizon_minutes / (double)MathMax(base_h, 1)) - 1.0, -2.0, 4.0) / 2.0;
+   feat[15] = FXAI_Clamp((double)regime_id / (double)MathMax(FXAI_REGIME_COUNT - 1, 1), 0.0, 1.0) - 0.5;
 }
 
 int FXAI_SelectRoutedHorizon(const double &close_arr[],
@@ -342,6 +346,22 @@ void FXAI_StackBuildFeatures(const double buy_pct,
    feat[11] = FXAI_Clamp(vol_proxy / 4.0, 0.0, 1.0);
    feat[12] = FXAI_Clamp((double)horizon_minutes / (double)MathMax(FXAI_GetMaxConfiguredHorizon(horizon_minutes), 1), 0.0, 1.0);
    feat[13] = FXAI_Clamp(pk - MathMax(pb, ps), -1.0, 1.0);
+   double top = pb;
+   if(ps > top) top = ps;
+   if(pk > top) top = pk;
+   double second = 0.0;
+   if(top == pb)
+      second = MathMax(ps, pk);
+   else if(top == ps)
+      second = MathMax(pb, pk);
+   else
+      second = MathMax(pb, ps);
+   feat[14] = FXAI_Clamp(top - second, 0.0, 1.0);
+   feat[15] = FXAI_Clamp(MathAbs(pb - ps), 0.0, 1.0);
+   feat[16] = FXAI_Clamp(MathMin(pb, ps), 0.0, 0.5) * 2.0;
+   feat[17] = FXAI_Clamp(MathMax(avg_buy_ev, avg_sell_ev) / mm, -2.0, 6.0) / 4.0;
+   feat[18] = FXAI_Clamp(expected_move_points / mm, 0.0, 8.0) / 4.0;
+   feat[19] = FXAI_Clamp((pb + ps) - pk, -1.0, 1.0);
 }
 
 void FXAI_StackPredict(const int regime_id, const double &feat[], double &probs[])

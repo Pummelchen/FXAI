@@ -8,9 +8,10 @@ Built with zero external libraries or DLLs, FXAI runs entirely on highly optimiz
 
 Core benefits at a glance:
 - Multi-model plugin architecture with one unified API and shared data pipeline.
+- Manifest-driven feature schemas so each plugin family can consume a more appropriate view of the data.
 - Cost-aware `BUY / SELL / SKIP` decisions tuned for realistic FX execution conditions.
 - Strong equity-level protection logic to reduce overtrading and uncontrolled drawdowns.
-- High-speed MT5-native backtesting and optimization without external libraries or DLLs.
+- High-speed MT5-native backtesting, market replay certification, and optimization without external libraries or DLLs.
 
 ## Table of Contents
 
@@ -30,6 +31,7 @@ FXAI is an MT5 Expert Advisor project that combines:
 - Cost-aware training (spread/commission-aware labeling)
 - Online model updates during backtest/live runtime
 - Ensemble support to compare and combine models
+- Dynamic market-context selection from a larger symbol candidate pool
 - Equity-level risk management and trade protection logic
 
 The project is designed to keep MT5 execution practical while enabling advanced model experimentation.
@@ -44,6 +46,8 @@ The project is designed to keep MT5 execution practical while enabling advanced 
   - Built-in equity controls, skip class, and conservative calibration reduce overtrading.
 - **Backtest efficiency**
   - Lightweight online updates and shared data pipeline support large optimization runs.
+- **Audit discipline**
+  - Synthetic pressure tests and real-market replay certification catch weak plugins before large cloud backtests.
 - **Extensible by design**
   - New models can be added through the plugin API with consistent train/predict flow.
 - **Production-oriented workflow**
@@ -58,7 +62,7 @@ The project is designed to keep MT5 execution practical while enabling advanced 
 - `FXAI/API/plugin_base.mqh`  
   Shared plugin base contract and common model services
 - `FXAI/Engine/core.mqh`  
-  Shared types, enums, constants, and common helpers
+  Shared types, enums, manifest helpers, feature-schema helpers, and common math
 - `FXAI/Engine/data_pipeline.mqh`  
   Feature generation, normalization, and data/context pipeline
 - `FXAI/Engine/*.mqh`  
@@ -66,9 +70,9 @@ The project is designed to keep MT5 execution practical while enabling advanced 
 - `FXAI/Plugins/*.mqh`  
   Individual AI model implementations
 - `FXAI/Tests/FXAI_AuditRunner.mq5`  
-  MT5-side synthetic plugin audit runner
+  MT5-side synthetic and market-replay plugin audit runner
 - `FXAI/Tools/fxai_testlab.py`  
-  External drill-sergeant analyzer, baseline comparator, and release gate
+  External drill-sergeant analyzer, optimization planner, baseline comparator, and release gate
 
 ## Typical Workflow
 
@@ -79,20 +83,35 @@ The project is designed to keep MT5 execution practical while enabling advanced 
 
 ## Audit Lab
 
-FXAI includes a synthetic audit framework that pressure-tests plugins outside normal market backtests.
+FXAI includes a drill-sergeant Audit Lab that pressure-tests plugins with both synthetic scenarios and deterministic market replay packs.
 
 - Compile the main EA:
   - `python3 "FXAI/Tools/fxai_testlab.py" compile-main`
 - Compile the audit runner:
   - `python3 "FXAI/Tools/fxai_testlab.py" compile-audit`
+- Run the audit set:
+  - `python3 "FXAI/Tools/fxai_testlab.py" run-audit`
 - Analyze an existing audit report:
   - `python3 "FXAI/Tools/fxai_testlab.py" analyze`
+- Build an optimization campaign from the last report:
+  - `python3 "FXAI/Tools/fxai_testlab.py" optimize-audit`
 - Save a regression baseline:
   - `python3 "FXAI/Tools/fxai_testlab.py" baseline-save --name nightly_a`
 - Compare against a baseline:
   - `python3 "FXAI/Tools/fxai_testlab.py" baseline-compare --baseline nightly_a`
 - Enforce the release gate:
   - `python3 "FXAI/Tools/fxai_testlab.py" release-gate --baseline nightly_a`
+
+Audit-specific controls now include:
+- `--sequence-bars`
+- `--schema-id`
+- `--require-market-replay` on `release-gate`
+
+The Audit Lab can now certify:
+- synthetic stress scenarios such as random walk, monotonic trend, mean reversion, and volatility clustering
+- deterministic market replay packs such as `market_recent`, `market_trend`, and `market_chop`
+
+The engine also uses plugin manifests to shape runtime and warmup inputs through feature schemas and feature-group masks, so the Audit Lab and the live EA are testing the same family-specific data views.
 
 For unattended MT5 tester launch, `run-audit` supports:
 - CLI: `--login`, `--server`, `--password`
