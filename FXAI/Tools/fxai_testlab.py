@@ -679,7 +679,7 @@ def attempt_audit_launch(login: str, server: str, password: str, preset_name: st
     log_path = latest_terminal_log()
     log_text = read_utf16_or_text(log_path) if log_path else ""
     failure = extract_terminal_failure(log_text)
-    if failure and "account is not specified" in failure.lower():
+    if failure and "account is not specified" in failure.lower() and not password:
         return False, "config", failure
 
     if terminal_running():

@@ -473,8 +473,9 @@ public:
       if(cost < 0.0) cost = 0.0;
       double min_move = ResolveMinMovePoints();
       if(min_move <= 0.0) min_move = MathMax(0.10, cost);
-      double tradable_edge = exp_move - cost;
-      double tradable_ratio = (min_move > 0.0 ? tradable_edge / MathMax(min_move, 0.10) : tradable_edge);
+      // The move head is trained on post-cost edge already. Do not subtract cost again here.
+      double edge_hat = MathMax(0.0, exp_move);
+      double tradable_ratio = (min_move > 0.0 ? edge_hat / MathMax(min_move, 0.10) : edge_hat);
       double stress = FXAI_Clamp(0.55*MathAbs(d[5]) + 0.45*MathAbs(d[8]), 0.0, 8.0);
       double conf_penalty = FXAI_Clamp(0.70*disagreement + 0.12*stress, 0.0, 0.95);
       double active = FXAI_Clamp((0.45 * FXAI_Sigmoid(1.2 * tradable_ratio) + 0.40 * (1.0 - conf_penalty) + 0.15 * (1.0 - p_skip)) * (1.0 - 0.35 * p_skip), 0.0, 1.0);
@@ -492,9 +493,8 @@ public:
       if(s <= 0.0) s = 1.0;
       for(int c=0; c<3; c++) class_probs[c] /= s;
 
-      expected_move_points = MathMax(0.0, tradable_edge);
-      if(expected_move_points <= 0.0)
-         expected_move_points = FXAI_Clamp(0.35 * exp_move, 0.0, 5000.0);
+      // Publish raw move amplitude; the shared framework applies cost-aware gating centrally.
+      expected_move_points = FXAI_Clamp(edge_hat + cost, 0.0, 5000.0);
       return true;
    }
 

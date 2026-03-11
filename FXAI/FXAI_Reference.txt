@@ -108,6 +108,22 @@ The external control layer is `Tools/fxai_testlab.py`. Its job is not to replace
 
 The analyzer is driven by `Tools/plugin_oracles.json`. That file defines plugin-specific behavior expectations, family discipline rules, and scenario thresholds so the drill-sergeant report reflects what each model is supposed to be good at rather than only generic scorekeeping.
 
+Typical Tool Commands
+---------------------
+- Compile the main EA: `python3 "FXAI/Tools/fxai_testlab.py" compile-main`
+- Compile the audit runner: `python3 "FXAI/Tools/fxai_testlab.py" compile-audit`
+- Analyze an audit report: `python3 "FXAI/Tools/fxai_testlab.py" analyze`
+- Save a regression baseline: `python3 "FXAI/Tools/fxai_testlab.py" baseline-save --name nightly_a`
+- Compare with a baseline: `python3 "FXAI/Tools/fxai_testlab.py" baseline-compare --baseline nightly_a`
+- Enforce the release gate: `python3 "FXAI/Tools/fxai_testlab.py" release-gate --baseline nightly_a`
+
+Unattended Tester Credentials
+-----------------------------
+`run-audit` can launch the MT5 tester unattended when valid account credentials are supplied. Use either CLI flags `--login`, `--server`, `--password` or the environment variables `FXAI_MT5_LOGIN`, `FXAI_MT5_SERVER`, and `FXAI_MT5_PASSWORD`.
+
+Example:
+`FXAI_MT5_LOGIN=11013759 FXAI_MT5_SERVER=ICMarketsSC-MT5-4 FXAI_MT5_PASSWORD=YOUR_PASSWORD python3 "FXAI/Tools/fxai_testlab.py" run-audit --plugin-list "{rule_m1sync}" --scenario-list "{random_walk,monotonic_up}"`
+
 Phased Audit Design
 -------------------
 - Phase 1: compile and run the MT5 audit runner against synthetic scenarios using the real feature pipeline and plugin API.

@@ -414,11 +414,13 @@ public:
       if(cost < 0.0) cost = 0.0;
       double mm = ResolveMinMovePoints();
       if(mm <= 0.0) mm = MathMax(0.10, cost);
+      int sb = SessionBucket();
+      double edge_hat = MathMax(0.0, move_hat * m_session_move_scale[sb]);
 
       double transition = FXAI_Clamp(topo[10] / 6.0, 0.0, 1.5);
       double recurrence = FXAI_Clamp(topo[3], 0.0, 1.0);
       double noise = FXAI_Clamp(topo[11] / 6.0, 0.0, 1.5);
-      double active = FXAI_Clamp(0.55 * transition + 0.35 * FXAI_Sigmoid((move_hat - cost) / MathMax(mm, 0.10)) - 0.25 * recurrence - 0.20 * noise, 0.0, 1.0);
+      double active = FXAI_Clamp(0.55 * transition + 0.35 * FXAI_Sigmoid(edge_hat / MathMax(mm, 0.10)) - 0.25 * recurrence - 0.20 * noise, 0.0, 1.0);
 
       double dir_mass = class_probs[(int)FXAI_LABEL_BUY] + class_probs[(int)FXAI_LABEL_SELL];
       double p_buy = 0.5;
@@ -432,7 +434,6 @@ public:
       class_probs[(int)FXAI_LABEL_BUY]  = ClampProb(active * p_buy);
       class_probs[(int)FXAI_LABEL_SELL] = ClampProb(active * p_sell);
       class_probs[(int)FXAI_LABEL_SKIP] = ClampProb(MathMax(1.0 - active, recurrence * 0.40 + noise * 0.25));
-      int sb = SessionBucket();
       double logits_cal[3];
       for(int c=0; c<3; c++) logits_cal[c] = MathLog(MathMax(class_probs[c], 1e-6)) + m_session_bias[sb][c];
       Softmax3(logits_cal, class_probs);
@@ -440,7 +441,8 @@ public:
       if(s <= 0.0) s = 1.0;
       for(int c=0; c<3; c++) class_probs[c] /= s;
 
-      expected_move_points = MathMax(0.0, (move_hat - 0.25 * cost) * m_session_move_scale[sb]);
+      // Publish raw move amplitude; the shared framework handles cost-aware EV gating.
+      expected_move_points = MathMax(0.0, edge_hat + cost);
       return true;
    }
 

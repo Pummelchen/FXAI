@@ -52,16 +52,22 @@ The project is designed to keep MT5 execution practical while enabling advanced 
 
 - `FXAI/FXAI.mq5`  
   Main EA entry point
-- `FXAI/api.mqh`  
-  Plugin registry and model wiring
-- `FXAI/plugin_base.mqh`  
-  Shared plugin interface and training/prediction contracts
-- `FXAI/data.mqh`  
-  Feature generation and data/context pipeline
-- `FXAI/shared.mqh`  
-  Shared types, constants, and utility math
+- `FXAI/API/api.mqh`  
+  API v4 registry, validation, and plugin wiring
+- `FXAI/API/plugin_base.mqh`  
+  Shared plugin base contract and common model services
+- `FXAI/Engine/core.mqh`  
+  Shared types, enums, constants, and common helpers
+- `FXAI/Engine/data_pipeline.mqh`  
+  Feature generation, normalization, and data/context pipeline
+- `FXAI/Engine/*.mqh`  
+  Runtime, training, warmup, lifecycle, sample, and meta orchestration layers
 - `FXAI/Plugins/*.mqh`  
   Individual AI model implementations
+- `FXAI/Tests/FXAI_AuditRunner.mq5`  
+  MT5-side synthetic plugin audit runner
+- `FXAI/Tools/fxai_testlab.py`  
+  External drill-sergeant analyzer, baseline comparator, and release gate
 
 ## Typical Workflow
 
@@ -69,6 +75,36 @@ The project is designed to keep MT5 execution practical while enabling advanced 
 2. Backtest/optimize model and risk parameters in Strategy Tester.
 3. Sync MT5 project state into this GitHub repo after a clean MT5 compile.
 4. Repeat with walk-forward validation before live deployment.
+
+## Audit Lab
+
+FXAI includes a synthetic audit framework that pressure-tests plugins outside normal market backtests.
+
+- Compile the main EA:
+  - `python3 "FXAI/Tools/fxai_testlab.py" compile-main`
+- Compile the audit runner:
+  - `python3 "FXAI/Tools/fxai_testlab.py" compile-audit`
+- Analyze an existing audit report:
+  - `python3 "FXAI/Tools/fxai_testlab.py" analyze`
+- Save a regression baseline:
+  - `python3 "FXAI/Tools/fxai_testlab.py" baseline-save --name nightly_a`
+- Compare against a baseline:
+  - `python3 "FXAI/Tools/fxai_testlab.py" baseline-compare --baseline nightly_a`
+- Enforce the release gate:
+  - `python3 "FXAI/Tools/fxai_testlab.py" release-gate --baseline nightly_a`
+
+For unattended MT5 tester launch, `run-audit` supports:
+- CLI: `--login`, `--server`, `--password`
+- Environment: `FXAI_MT5_LOGIN`, `FXAI_MT5_SERVER`, `FXAI_MT5_PASSWORD`
+
+Typical unattended example:
+
+```bash
+export FXAI_MT5_LOGIN=11013759
+export FXAI_MT5_SERVER=ICMarketsSC-MT5-4
+export FXAI_MT5_PASSWORD='YOUR_PASSWORD'
+python3 "FXAI/Tools/fxai_testlab.py" run-audit --plugin-list "{rule_m1sync}" --scenario-list "{random_walk,monotonic_up}"
+```
 
 ## Reference Appendix
 
