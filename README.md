@@ -19,7 +19,7 @@ Core benefits at a glance:
 - [Core Benefits](#core-benefits)
 - [Project Structure](#project-structure)
 - [Typical Workflow](#typical-workflow)
-- [Reference Appendix](#reference-appendix)
+- [Reference Guides](#reference-guides)
 - [Notes](#notes)
 
 ## What It Is
@@ -83,54 +83,24 @@ The project is designed to keep MT5 execution practical while enabling advanced 
 
 ## Audit Lab
 
-FXAI includes a drill-sergeant Audit Lab that pressure-tests plugins with both synthetic scenarios and deterministic market replay packs.
+FXAI includes a drill-sergeant Audit Lab for plugin stress testing, market replay certification, regression checks, optimization planning, and release gating.
 
-- Compile the main EA:
-  - `python3 "FXAI/Tools/fxai_testlab.py" compile-main`
-- Compile the audit runner:
-  - `python3 "FXAI/Tools/fxai_testlab.py" compile-audit`
-- Run the audit set:
-  - `python3 "FXAI/Tools/fxai_testlab.py" run-audit`
-- Analyze an existing audit report:
-  - `python3 "FXAI/Tools/fxai_testlab.py" analyze`
-- Build an optimization campaign from the last report:
-  - `python3 "FXAI/Tools/fxai_testlab.py" optimize-audit`
-- Save a regression baseline:
-  - `python3 "FXAI/Tools/fxai_testlab.py" baseline-save --name nightly_a`
-- Compare against a baseline:
-  - `python3 "FXAI/Tools/fxai_testlab.py" baseline-compare --baseline nightly_a`
-- Enforce the release gate:
-  - `python3 "FXAI/Tools/fxai_testlab.py" release-gate --baseline nightly_a`
+The full operator handbook now lives here:
+- [Audit Lab Handbook](FXAI/Audit%20Lab.txt)
 
-Audit-specific controls now include:
-- `--sequence-bars`
-- `--schema-id`
-- `--require-market-replay` on `release-gate`
+Use that guide for:
+- what the Audit Lab does
+- how the MT5 audit runner and external analyzer work
+- unattended tester launch and credentials
+- baseline, comparison, optimization, and release-gate workflows
+- output files, troubleshooting, and recommended usage
 
-The Audit Lab can now certify:
-- synthetic stress scenarios such as random walk, monotonic trend, mean reversion, and volatility clustering
-- deterministic market replay packs such as `market_recent`, `market_trend`, and `market_chop`
+## Reference Guides
 
-The engine also uses plugin manifests to shape runtime and warmup inputs through feature schemas and feature-group masks, so the Audit Lab and the live EA are testing the same family-specific data views.
+The main framework handbook explains the architecture, naming convention, model families, and core design choices. The Audit Lab handbook explains the plugin certification toolchain and how to operate it.
 
-For unattended MT5 tester launch, `run-audit` supports:
-- CLI: `--login`, `--server`, `--password`
-- Environment: `FXAI_MT5_LOGIN`, `FXAI_MT5_SERVER`, `FXAI_MT5_PASSWORD`
-
-Typical unattended example:
-
-```bash
-export FXAI_MT5_LOGIN=11013759
-export FXAI_MT5_SERVER=ICMarketsSC-MT5-4
-export FXAI_MT5_PASSWORD='YOUR_PASSWORD'
-python3 "FXAI/Tools/fxai_testlab.py" run-audit --plugin-list "{rule_m1sync}" --scenario-list "{random_walk,monotonic_up}"
-```
-
-## Reference Appendix
-
-The compact reference below explains the framework, naming convention, model families, and core design choices without overloading the main README.
-
-- [FXAI Reference](FXAI/FXAI_Reference.txt)
+- [FXAI Handbook](FXAI/FXAI.txt)
+- [Audit Lab Handbook](FXAI/Audit%20Lab.txt)
 
 ## Notes
 

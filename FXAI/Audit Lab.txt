@@ -1,0 +1,204 @@
+Audit Lab
+=========
+
+Purpose
+-------
+The Audit Lab is FXAI's inspection and certification system for plugins. It exists to test whether a plugin behaves correctly, stays numerically stable, reacts to market structure in a sensible way, and deserves to be trusted before you spend time or money on large MT5 backtests.
+
+Think of it like a workshop test bench for an engine. The trading EA tells you whether a complete car can drive; the Audit Lab tells you whether each engine behaves properly before it goes into the car.
+
+What It Does
+------------
+The Audit Lab runs plugins through controlled test campaigns and then grades them harshly.
+
+It checks:
+- prediction validity: no broken class probabilities, no impossible output values, no unstable confidence or reliability
+- behavioral discipline: trend models should respond to drift, uncertainty models should skip noise, rule models should follow their rules, retrieval models should respond to repeated motifs
+- state integrity: reset behavior, replay behavior, sequence behavior, and long-run drift
+- market realism: deterministic market replay packs in addition to synthetic stress scenarios
+- regression quality: whether a plugin got worse than a known-good baseline
+
+Core Components
+---------------
+1. MT5 Audit Runner
+- File: `FXAI/Tests/FXAI_AuditRunner.mq5`
+- Runs inside MetaTrader 5.
+- Uses the real FXAI API, the real plugins, and the real feature pipeline.
+
+2. Audit Core
+- File: `FXAI/Tests/audit_core.mqh`
+- Generates synthetic scenarios and market replay samples.
+- Builds the audit report that the external tool reads.
+
+3. Drill-Sergeant Tool
+- File: `FXAI/Tools/fxai_testlab.py`
+- Compiles, launches, analyzes, compares baselines, and enforces release gates.
+- Produces strict pass/fail style output and improvement suggestions.
+
+4. Plugin Oracle File
+- File: `FXAI/Tools/plugin_oracles.json`
+- Defines what each plugin family and individual plugin is supposed to be good at.
+- This prevents the analyzer from judging every plugin by the wrong standard.
+
+How It Works
+------------
+Step 1: Build the target
+- Compile the main EA or the audit runner.
+- This ensures the code under test is exactly the code that will run.
+
+Step 2: Generate scenarios
+- Synthetic scenarios such as random walk, monotonic trend, mean reversion, volatility clusters, and regime shifts.
+- Market replay packs such as `market_recent`, `market_trend`, and `market_chop`.
+
+Step 3: Run plugins through API v4
+- The Audit Runner uses the same plugin API and the same shared data pipeline as the real framework.
+- This is important: the Audit Lab tests the real MQL5 plugins, not a Python copy of them.
+
+Step 4: Write the raw report
+- Output file: `FILE_COMMON/FXAI/Audit/fxai_audit_report.tsv`
+- This contains raw plugin-by-scenario measurements.
+
+Step 5: Analyze and grade
+- `fxai_testlab.py` reads the raw report.
+- It scores correctness, stability, discipline, and model identity.
+- It then produces concrete improvement suggestions.
+
+What You Can Use It For
+-----------------------
+- Check whether a plugin is working at all
+- Compare plugins before running expensive cloud backtests
+- Catch unstable training, replay bugs, reset bugs, or overconfident outputs
+- Test whether a plugin behaves as its model family claims
+- Save a regression baseline and check whether a new change made a plugin worse
+- Create audit-guided optimization campaigns before normal MT5 optimization
+
+Main Commands
+-------------
+Compile the main EA:
+`python3 "FXAI/Tools/fxai_testlab.py" compile-main`
+
+Compile the audit runner:
+`python3 "FXAI/Tools/fxai_testlab.py" compile-audit`
+
+Run the audit suite:
+`python3 "FXAI/Tools/fxai_testlab.py" run-audit`
+
+Analyze the latest audit report:
+`python3 "FXAI/Tools/fxai_testlab.py" analyze`
+
+Build an optimization campaign from the latest audit report:
+`python3 "FXAI/Tools/fxai_testlab.py" optimize-audit`
+
+Save a regression baseline:
+`python3 "FXAI/Tools/fxai_testlab.py" baseline-save --name nightly_a`
+
+Compare current results against a baseline:
+`python3 "FXAI/Tools/fxai_testlab.py" baseline-compare --baseline nightly_a`
+
+Enforce the release gate:
+`python3 "FXAI/Tools/fxai_testlab.py" release-gate --baseline nightly_a`
+
+Require market replay in the release gate:
+`python3 "FXAI/Tools/fxai_testlab.py" release-gate --baseline nightly_a --require-market-replay`
+
+Useful Controls
+---------------
+`--plugin-list`
+- Restricts the audit to specific plugins.
+- Useful when working on one model only.
+
+`--scenario-list`
+- Restricts the audit to selected scenarios.
+- Useful for focused debugging.
+
+`--sequence-bars`
+- Forces a sequence length for sequence-capable plugins.
+- Useful to test whether a plugin actually benefits from sequence context.
+
+`--schema-id`
+- Forces a particular feature schema.
+- Useful for controlled feature-view experiments.
+
+`--require-market-replay`
+- Makes the release gate stricter by requiring real replay coverage.
+
+Unattended MT5 Tester Launch
+----------------------------
+The Audit Lab can try to launch MT5 automatically.
+
+It supports these CLI options:
+- `--login`
+- `--server`
+- `--password`
+
+It also supports these environment variables:
+- `FXAI_MT5_LOGIN`
+- `FXAI_MT5_SERVER`
+- `FXAI_MT5_PASSWORD`
+
+Example:
+`FXAI_MT5_LOGIN=11013759 FXAI_MT5_SERVER=ICMarketsSC-MT5-4 FXAI_MT5_PASSWORD=YOUR_PASSWORD python3 "FXAI/Tools/fxai_testlab.py" run-audit --plugin-list "{rule_m1sync}" --scenario-list "{random_walk,monotonic_up}"`
+
+Expected Outputs
+----------------
+Raw MT5-side report:
+- `FILE_COMMON/FXAI/Audit/fxai_audit_report.tsv`
+
+External drill-sergeant output:
+- `FXAI/Tools/latest_drill_report.md`
+
+Optimization campaign files:
+- generated under `FXAI/Tools/`
+
+Regression baselines:
+- `FXAI/Tools/Baselines/`
+
+How To Read The Results
+-----------------------
+If a plugin scores badly, do not jump straight to backtesting harder. Read the failure class first.
+
+Typical failure classes:
+- invalid output: broken class probabilities, quantiles, or confidence values
+- weak discipline: the plugin reacts wrongly to the scenario it is supposed to understand
+- poor uncertainty handling: the plugin trades noise instead of skipping
+- reset/state issues: the plugin forgets too little or too much across resets and regime changes
+- regression failure: the plugin is worse than the saved baseline
+
+Good Audit Lab usage is not about hunting a green score only. It is about learning whether the plugin is behaving honestly.
+
+Best Practice Workflow
+----------------------
+1. Compile the main EA and the audit runner.
+2. Run focused audits while developing a plugin.
+3. Run full audits before large MT5 backtests.
+4. Save a baseline once the plugin reaches a stable quality level.
+5. Use the release gate before major commits, releases, or cloud optimization campaigns.
+
+When To Trust It
+----------------
+Trust the Audit Lab for:
+- plugin correctness
+- plugin stability
+- plugin discipline under controlled conditions
+- regression detection
+
+Do not treat it as a direct profit forecast. The Audit Lab is a quality and behavior inspector, not a PnL oracle.
+
+Troubleshooting
+---------------
+No audit result produced:
+- compile the audit runner first
+- check MT5 tester credentials if using unattended launch
+- check that the report path exists in `FILE_COMMON/FXAI/Audit/`
+
+Audit launch fails with account errors:
+- provide `--login`, `--server`, and `--password`
+- or set `FXAI_MT5_LOGIN`, `FXAI_MT5_SERVER`, and `FXAI_MT5_PASSWORD`
+
+Plugin looks dead in normal backtests but passes compile:
+- run a focused audit on only that plugin
+- inspect whether it is blocked by EV thresholds, cost model, or scenario mismatch
+
+Bottom Line
+-----------
+The Audit Lab is FXAI's quality-control system. Use it before expensive backtests, before releases, and before trusting a plugin with real research time.

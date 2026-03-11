@@ -1,5 +1,5 @@
-FXAI Reference
-==============
+FXAI
+====
 
 Executive Summary
 -----------------
@@ -104,51 +104,15 @@ The MT5 Experts folder is the source of truth for the runnable system. The Git r
 
 Drill-Sergeant Audit Lab
 ------------------------
-FXAI now includes a dedicated audit layer to pressure-test plugins outside of normal market backtests. The MT5-side runner is `Tests/FXAI_AuditRunner.mq5`; it generates controlled synthetic scenarios such as random walk, drift, monotonic trend, mean reversion, volatility clustering, and regime shifts, then trains and predicts with the real plugin code through API v4.
+FXAI includes a dedicated Audit Lab handbook in `Audit Lab.txt`. That document is the operational manual for compiling, launching, analyzing, baselining, and release-gating plugin audits.
 
-The same runner now also supports deterministic market replay certification. It can extract recent real M1 windows from the active symbol and classify them into `market_recent`, `market_trend`, and `market_chop`, so a plugin can be judged not only against synthetic toy regimes but also against recorded market tape with the real FXAI feature pipeline.
+Use `Audit Lab.txt` when you need to understand:
+- what the Audit Lab is testing
+- how the MT5 audit runner and the external drill-sergeant tool work together
+- which commands to run for compile, audit, baseline, compare, optimize, and release-gate workflows
+- where audit outputs are written and how to interpret them
 
-The external control layer is `Tools/fxai_testlab.py`. Its job is not to replace MT5 execution; its job is to compile the audit runner, launch the MT5 tester when possible, read the audit report, grade each plugin harshly, and produce concrete improvement recommendations by model family and plugin identity. For unattended tester launches it can now take explicit MT5 credentials from `--login`, `--server`, `--password` or from the environment variables `FXAI_MT5_LOGIN`, `FXAI_MT5_SERVER`, and `FXAI_MT5_PASSWORD`.
-
-The analyzer is driven by `Tools/plugin_oracles.json`. That file defines plugin-specific behavior expectations, family discipline rules, and scenario thresholds so the drill-sergeant report reflects what each model is supposed to be good at rather than only generic scorekeeping. The tool can now also generate optimization campaigns from audit results, suggesting schema, sequence-length, and normalization sweeps before a plugin is sent into expensive backtests.
-
-Typical Tool Commands
----------------------
-- Compile the main EA: `python3 "FXAI/Tools/fxai_testlab.py" compile-main`
-- Compile the audit runner: `python3 "FXAI/Tools/fxai_testlab.py" compile-audit`
-- Run the audit suite: `python3 "FXAI/Tools/fxai_testlab.py" run-audit`
-- Analyze an audit report: `python3 "FXAI/Tools/fxai_testlab.py" analyze`
-- Generate an optimization campaign: `python3 "FXAI/Tools/fxai_testlab.py" optimize-audit`
-- Save a regression baseline: `python3 "FXAI/Tools/fxai_testlab.py" baseline-save --name nightly_a`
-- Compare with a baseline: `python3 "FXAI/Tools/fxai_testlab.py" baseline-compare --baseline nightly_a`
-- Enforce the release gate: `python3 "FXAI/Tools/fxai_testlab.py" release-gate --baseline nightly_a`
-- Require real market replay in the release gate: `python3 "FXAI/Tools/fxai_testlab.py" release-gate --baseline nightly_a --require-market-replay`
-
-Audit-specific overrides:
-- `--sequence-bars` lets the Audit Lab stress different sequence lengths against the same plugin.
-- `--schema-id` lets the Audit Lab force alternate feature schemas for controlled experiments.
-
-Unattended Tester Credentials
------------------------------
-`run-audit` can launch the MT5 tester unattended when valid account credentials are supplied. Use either CLI flags `--login`, `--server`, `--password` or the environment variables `FXAI_MT5_LOGIN`, `FXAI_MT5_SERVER`, and `FXAI_MT5_PASSWORD`.
-
-Example:
-`FXAI_MT5_LOGIN=11013759 FXAI_MT5_SERVER=ICMarketsSC-MT5-4 FXAI_MT5_PASSWORD=YOUR_PASSWORD python3 "FXAI/Tools/fxai_testlab.py" run-audit --plugin-list "{rule_m1sync}" --scenario-list "{random_walk,monotonic_up}"`
-
-Phased Audit Design
--------------------
-- Phase 1: compile and run the MT5 audit runner against synthetic scenarios using the real feature pipeline and plugin API.
-- Phase 2: analyze the generated TSV report with the external drill-sergeant tool and score each plugin on correctness, stability, discipline, and model identity.
-- Phase 3: extend plugin-specific test oracles so each model is judged against what it is actually supposed to do, not only generic metrics.
-- Phase 4: use the audit lab as a regression gate before major releases or large cloud backtest campaigns.
-
-Audit Lab Outputs
------------------
-- Synthetic raw report: `FILE_COMMON/FXAI/Audit/fxai_audit_report.tsv`
-- External drill report: `Tools/latest_drill_report.md`
-- Optimization campaign plans: `Tools/*.md` or `Tools/*.json` generated from `optimize-audit`
-- Plugin oracle schema: `Tools/plugin_oracles.json`
-- Regression baselines: `Tools/Baselines/`
+The short version is simple: the Audit Lab exists to certify plugin quality before expensive backtests or releases. The detailed operating instructions now live in the dedicated handbook so this framework guide stays compact.
 
 Bottom Line
 -----------
