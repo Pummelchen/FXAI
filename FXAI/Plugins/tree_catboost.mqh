@@ -149,12 +149,12 @@ private:
       return 0;
    }
 
-   double Rand01(void) const
+   double Rand01(void)
    {
-      return FXAI_Clamp((double)MathRand() / 32767.0, 0.0, 1.0);
+      return PluginRand01();
    }
 
-   double RandGauss(void) const
+   double RandGauss(void)
    {
       // Lightweight approx N(0,1) via CLT sum(U)-6.
       double s = 0.0;
@@ -491,7 +491,7 @@ private:
    }
 
    void BuildPermutations(const int n,
-                          int &perm[][FXAI_CAT_ORDER_PERMS]) const
+                          int &perm[][FXAI_CAT_ORDER_PERMS])
    {
       ArrayResize(perm, n);
       for(int i=0; i<n; i++)

@@ -1862,7 +1862,7 @@ public:
             double best_score = -1.0;
             for(int tries=0; tries<12; tries++)
             {
-               int li = MathRand() % m_lstm_replay_size;
+               int li = PluginRandIndex(m_lstm_replay_size);
                int rp = ReplayPos(li);
                double rw = ReplayAgeWeight(m_lstm_replay_time[rp], t_now);
                if(m_replay_session[rp] == sess) rw *= 1.20;

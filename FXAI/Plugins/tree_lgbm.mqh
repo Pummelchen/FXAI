@@ -598,7 +598,7 @@ private:
          int k = 1;
          if(t >= 4)
          {
-            double u = FXAI_Clamp((double)MathRand() / 32767.0, 0.0, 1.0);
+            double u = PluginRand01();
             if(u < drop_rate) k = 0;
          }
          keep_mask[t] = k;
@@ -606,7 +606,7 @@ private:
       }
       if(m_tree_count[class_id] > 0 && kept <= 0)
       {
-         int r = MathRand() % m_tree_count[class_id];
+         int r = PluginRandIndex(m_tree_count[class_id]);
          keep_mask[r] = 1;
          kept = 1;
       }
@@ -625,7 +625,7 @@ private:
       const double bagging_fraction = 0.80;
       for(int i=0; i<n; i++)
       {
-         double ub = FXAI_Clamp((double)MathRand() / 32767.0, 0.0, 1.0);
+         double ub = PluginRand01();
          if(ub > bagging_fraction) continue;
 
          double xloc[FXAI_AI_WEIGHTS];
@@ -688,7 +688,7 @@ private:
 
          if(!keep)
          {
-            double ur = FXAI_Clamp((double)MathRand() / 32767.0, 0.0, 1.0);
+            double ur = PluginRand01();
             if(ur <= other_rate)
             {
                keep = true;
@@ -721,13 +721,13 @@ private:
       int feat_kept = 0;
       for(int f=1; f<FXAI_AI_WEIGHTS; f++)
       {
-         double uf = FXAI_Clamp((double)MathRand() / 32767.0, 0.0, 1.0);
+         double uf = PluginRand01();
          feat_active[f] = (uf <= 0.70 ? 1 : 0);
          if(feat_active[f] == 1) feat_kept++;
       }
       if(feat_kept <= 0)
       {
-         int rf = 1 + (MathRand() % (FXAI_AI_WEIGHTS - 1));
+         int rf = 1 + PluginRandIndex(FXAI_AI_WEIGHTS - 1);
          feat_active[rf] = 1;
       }
 

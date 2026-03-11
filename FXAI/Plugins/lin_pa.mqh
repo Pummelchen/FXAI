@@ -335,14 +335,14 @@ private:
       if(m_rep_size < FXAI_PA_REPLAY) m_rep_size++;
    }
 
-   int PickHardReplay(void) const
+   int PickHardReplay(void)
    {
       if(m_rep_size <= 0) return -1;
-      int best = MathRand() % m_rep_size;
+      int best = PluginRandIndex(m_rep_size);
       double best_h = m_rep_hard[best];
       for(int k=1; k<6; k++)
       {
-         int idx = MathRand() % m_rep_size;
+         int idx = PluginRandIndex(m_rep_size);
          if(m_rep_hard[idx] > best_h)
          {
             best = idx;

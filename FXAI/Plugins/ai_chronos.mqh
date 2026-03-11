@@ -234,10 +234,10 @@ private:
       if(m_chr_replay_size < FXAI_CHR_REPLAY) m_chr_replay_size++;
    }
 
-   int ReplaySampleSlot(void) const
+   int ReplaySampleSlot(void)
    {
       if(m_chr_replay_size <= 0) return -1;
-      double u = FXAI_Clamp((double)MathRand() / 32767.0, 0.0, 1.0);
+      double u = PluginRand01();
       int age = (int)MathFloor(u * (double)m_chr_replay_size);
       if(age < 0) age = 0;
       if(age >= m_chr_replay_size) age = m_chr_replay_size - 1;

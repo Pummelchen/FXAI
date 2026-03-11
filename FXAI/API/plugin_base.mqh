@@ -57,6 +57,8 @@ protected:
    int      m_core_predict_failures;
    int      m_expected_prior_calls;
    int      m_replay_rehearsals;
+   bool m_rng_seeded;
+   uint m_rng_state;
 
    double InputCostProxyPoints(const double &x[]) const
    {
@@ -231,6 +233,37 @@ protected:
       m_core_predict_failures = 0;
       m_expected_prior_calls = 0;
       m_replay_rehearsals = 0;
+      m_rng_seeded = false;
+      m_rng_state = 0u;
+   }
+
+   void EnsurePluginRNG(void)
+   {
+      if(m_rng_seeded) return;
+
+      uint seed = (uint)(AIId() + 1);
+      seed = (uint)(seed * 747796405u + 2891336453u);
+      if(seed == 0u)
+         seed = 2463534242u;
+
+      m_rng_state = seed;
+      m_rng_seeded = true;
+   }
+
+   double PluginRand01(void)
+   {
+      EnsurePluginRNG();
+      m_rng_state = (uint)(1664525u * m_rng_state + 1013904223u);
+      return FXAI_Clamp(((double)m_rng_state + 0.5) / 4294967296.0, 0.0, 1.0);
+   }
+
+   int PluginRandIndex(const int n)
+   {
+      if(n <= 0) return -1;
+      int idx = (int)MathFloor(PluginRand01() * (double)n);
+      if(idx < 0) idx = 0;
+      if(idx >= n) idx = n - 1;
+      return idx;
    }
 
    void UpdateMoveHead(const double &x[],
