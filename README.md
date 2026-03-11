@@ -25,6 +25,7 @@ Core benefits at a glance:
 
 FXAI is an MT5 Expert Advisor project that combines:
 - A plugin-based AI architecture (many models, one unified API)
+- Baseline control plugins such as `rule_buyonly`, `rule_sellonly`, and `rule_random`
 - 3-class decision logic: `BUY / SELL / SKIP`
 - Cost-aware training (spread/commission-aware labeling)
 - Online model updates during backtest/live runtime

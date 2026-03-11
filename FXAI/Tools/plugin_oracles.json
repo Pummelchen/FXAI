@@ -520,6 +520,51 @@
         }
       }
     },
+    "rule_buyonly": {
+      "identity": "Control baseline that always forces long exposure. It is intentionally naive and exists to benchmark the framework against a permanent long bias.",
+      "recommendations": [
+        "This plugin should never be treated as a production model. Use it only as a control for execution plumbing and benchmark comparisons.",
+        "Any serious directional model should beat this control on score, trade quality, and noise discipline."
+      ],
+      "scenario_rules": {
+        "drift_up": {
+          "active_ratio_min": 0.98,
+          "trend_align_min": 0.98
+        },
+        "random_walk": {
+          "active_ratio_min": 0.98
+        }
+      }
+    },
+    "rule_sellonly": {
+      "identity": "Control baseline that always forces short exposure. It is intentionally naive and exists to benchmark the framework against a permanent short bias.",
+      "recommendations": [
+        "This plugin should never be treated as a production model. Use it only as a control for execution plumbing and benchmark comparisons.",
+        "Any serious directional model should beat this control on score, trade quality, and noise discipline."
+      ],
+      "scenario_rules": {
+        "drift_down": {
+          "active_ratio_min": 0.98,
+          "trend_align_min": 0.98
+        },
+        "random_walk": {
+          "active_ratio_min": 0.98
+        }
+      }
+    },
+    "rule_random": {
+      "identity": "Control baseline that flips between buy and sell with no skip. It is a deterministic coin-flip benchmark for plumbing and audit sanity checks.",
+      "recommendations": [
+        "This plugin is supposed to be weak. If a production model cannot beat it, the model or the framework setup is not credible.",
+        "Use it to test whether the framework handles a no-skip, always-active control without hidden bias or state contamination."
+      ],
+      "scenario_rules": {
+        "random_walk": {
+          "active_ratio_min": 0.98,
+          "bias_abs_max": 0.20
+        }
+      }
+    },
     "tree_catboost": {
       "identity": "Ordered boosting model that should stay robust on noisy, non-stationary FX structure.",
       "recommendations": [

@@ -163,20 +163,52 @@ def compile_target(relative_target: Path, stage_name: str) -> int:
         f"/compile:{to_wine_path(stage_target)}",
         f"/log:{to_wine_path(stage_log)}",
     ]
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    log_text = read_metaeditor_log(stage_log)
-    if log_text:
-        lines = [line for line in log_text.splitlines() if line.strip()]
-        print(lines[-1] if lines else log_text)
-    if "0 errors, 0 warnings" in log_text:
-        built_ex5 = stage_target.with_suffix(".ex5")
-        live_ex5 = ROOT / relative_target.with_suffix(".ex5")
-        if built_ex5.exists():
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    deadline = time.time() + 1200.0
+    built_ex5 = stage_target.with_suffix(".ex5")
+    live_ex5 = ROOT / relative_target.with_suffix(".ex5")
+    last_log_text = ""
+
+    while time.time() < deadline:
+        rc = proc.poll()
+        log_text = read_metaeditor_log(stage_log)
+        if log_text:
+            last_log_text = log_text
+
+        if "0 errors, 0 warnings" in last_log_text and built_ex5.exists():
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=5)
             live_ex5.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(built_ex5, live_ex5)
-        return 0
-    sys.stdout.write(proc.stdout)
-    return proc.returncode or 1
+            lines = [line for line in last_log_text.splitlines() if line.strip()]
+            if lines:
+                print(lines[-1])
+            return 0
+
+        if rc is not None:
+            if last_log_text:
+                lines = [line for line in last_log_text.splitlines() if line.strip()]
+                if lines:
+                    print(lines[-1])
+            if "0 errors, 0 warnings" in last_log_text and built_ex5.exists():
+                live_ex5.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(built_ex5, live_ex5)
+                return 0
+            if proc.stdout is not None:
+                sys.stdout.write(proc.stdout.read())
+            return rc or 1
+
+        time.sleep(2.0)
+
+    if proc.poll() is None:
+        proc.kill()
+        proc.wait(timeout=5)
+    if last_log_text:
+        lines = [line for line in last_log_text.splitlines() if line.strip()]
+        if lines:
+            print(lines[-1])
+    return 124
 
 
 def load_rows(report: Path):

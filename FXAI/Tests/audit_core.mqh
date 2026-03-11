@@ -214,6 +214,9 @@ void FXAI_AuditDefaultHyperParams(const int ai_idx,
    switch(ai_idx)
    {
       case (int)AI_M1SYNC:
+      case (int)AI_BUY_ONLY:
+      case (int)AI_SELL_ONLY:
+      case (int)AI_RANDOM_NOSKIP:
          hp.lr = 0.0;
          hp.l2 = 0.0;
          break;

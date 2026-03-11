@@ -70,7 +70,7 @@ Memory / retrieval models
 - `mem_retrdiff`
 
 Rule-based filters
-- `rule_m1sync`
+- `rule_m1sync`, `rule_buyonly`, `rule_sellonly`, `rule_random`
 
 Data Pipeline Summary
 ---------------------

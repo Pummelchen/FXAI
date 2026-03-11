@@ -195,6 +195,9 @@ bool FXAI_PredictViaV4(CFXAIAIPlugin &plugin,
 #include "..\Plugins\mix_moe_conformal.mqh"
 #include "..\Plugins\mem_retrdiff.mqh"
 #include "..\Plugins\rule_m1sync.mqh"
+#include "..\Plugins\rule_buyonly.mqh"
+#include "..\Plugins\rule_sellonly.mqh"
+#include "..\Plugins\rule_random.mqh"
 
 class CFXAIAIRegistry
 {
@@ -290,6 +293,9 @@ public:
          case (int)AI_MOE_CONFORMAL: return new CFXAIAIMoEConformal();
          case (int)AI_RETRDIFF: return new CFXAIAIRetrDiff();
          case (int)AI_M1SYNC: return new CFXAIAIM1Sync();
+         case (int)AI_BUY_ONLY: return new CFXAIAIRuleBuyOnly();
+         case (int)AI_SELL_ONLY: return new CFXAIAIRuleSellOnly();
+         case (int)AI_RANDOM_NOSKIP: return new CFXAIAIRuleRandom();
          default: return NULL;
       }
    }

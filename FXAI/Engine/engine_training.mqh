@@ -977,6 +977,11 @@ void FXAI_GetModelHyperParams(const int ai_idx, FXAIAIHyperParams &hp)
       hp.lr = 0.0;
       hp.l2 = 0.0;
    }
+   if(ai_idx == (int)AI_BUY_ONLY || ai_idx == (int)AI_SELL_ONLY || ai_idx == (int)AI_RANDOM_NOSKIP)
+   {
+      hp.lr = 0.0;
+      hp.l2 = 0.0;
+   }
 }
 
 void FXAI_GetModelHyperParamsRouted(const int ai_idx,
@@ -1093,6 +1098,9 @@ void FXAI_SampleModelHyperParams(const int ai_idx,
          break;
 
       case (int)AI_M1SYNC:
+      case (int)AI_BUY_ONLY:
+      case (int)AI_SELL_ONLY:
+      case (int)AI_RANDOM_NOSKIP:
          break;
 
       case (int)AI_LSTM:
