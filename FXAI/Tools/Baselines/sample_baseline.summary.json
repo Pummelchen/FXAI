@@ -1,0 +1,44 @@
+{
+  "plugins": {
+    "rule_m1sync": {
+      "family": 10,
+      "findings": [
+        "missing required scenario: drift_up",
+        "missing required scenario: drift_down",
+        "missing required scenario: vol_cluster",
+        "missing required scenario: monotonic_down"
+      ],
+      "grade": "D",
+      "issues": [],
+      "scenarios": {
+        "monotonic_up": {
+          "active_ratio": 0.877778,
+          "avg_move": 4.6,
+          "bias_abs": 1.0,
+          "conf_drift": 0.04,
+          "invalid_preds": 0,
+          "issue_flags": 0,
+          "reset_delta": 0.0,
+          "score": 98.0,
+          "sequence_delta": -1.0,
+          "skip_ratio": 0.122222,
+          "trend_align": 1.0
+        },
+        "random_walk": {
+          "active_ratio": 0.042222,
+          "avg_move": 2.1,
+          "bias_abs": 0.052632,
+          "conf_drift": 0.05,
+          "invalid_preds": 0,
+          "issue_flags": 0,
+          "reset_delta": 0.0,
+          "score": 97.0,
+          "sequence_delta": -1.0,
+          "skip_ratio": 0.957778,
+          "trend_align": 0.0
+        }
+      },
+      "score": 73.5
+    }
+  }
+}

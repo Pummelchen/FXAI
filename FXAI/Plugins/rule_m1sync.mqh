@@ -10,6 +10,12 @@ private:
    int    m_steps;
    double m_hit_ema;
    double m_edge_ema;
+   bool   m_has_synth;
+   datetime m_synth_time[];
+   double m_synth_open[];
+   double m_synth_high[];
+   double m_synth_low[];
+   double m_synth_close[];
 
    double ResolvePointSize(const string symbol) const
    {
@@ -23,6 +29,21 @@ private:
                                   const int shift,
                                   const datetime ctx_time) const
    {
+      if(m_has_synth)
+      {
+         if(shift > 0 && shift - 1 < ArraySize(m_synth_open))
+         {
+            double op_s = m_synth_open[shift - 1];
+            if(op_s > 0.0) return op_s;
+         }
+         if(shift >= 0 && shift < ArraySize(m_synth_close))
+         {
+            double cl_s = m_synth_close[shift];
+            if(cl_s > 0.0) return cl_s;
+         }
+         return 0.0;
+      }
+
       datetime latest_closed = iTime(symbol, PERIOD_M1, 1);
       bool use_live = (ctx_time <= 0 || latest_closed <= 0 || MathAbs((double)(latest_closed - ctx_time)) <= 1.0);
       if(use_live)
@@ -46,6 +67,21 @@ private:
       return 0.0;
    }
 
+   int FindSyntheticShift(const datetime ctx_time) const
+   {
+      int n = ArraySize(m_synth_time);
+      if(n <= 0) return -1;
+      if(ctx_time <= 0) return 1;
+
+      for(int i=0; i<n; i++)
+      {
+         datetime t = m_synth_time[i];
+         if(t <= 0) continue;
+         if(t <= ctx_time) return i;
+      }
+      return n - 1;
+   }
+
    int EvaluateSyncSignal(const datetime ctx_time,
                           double &expected_move_points,
                           double &strength) const
@@ -54,11 +90,14 @@ private:
       strength = 0.0;
 
       string symbol = _Symbol;
-      if(!SymbolSelect(symbol, true)) return (int)FXAI_LABEL_SKIP;
+      if(!m_has_synth && !SymbolSelect(symbol, true)) return (int)FXAI_LABEL_SKIP;
 
       int shift = -1;
-      if(ctx_time > 0) shift = iBarShift(symbol, PERIOD_M1, ctx_time, true);
-      if(shift < 1 && ctx_time > 0) shift = iBarShift(symbol, PERIOD_M1, ctx_time, false);
+      if(m_has_synth)
+         shift = FindSyntheticShift(ctx_time);
+      else if(ctx_time > 0)
+         shift = iBarShift(symbol, PERIOD_M1, ctx_time, true);
+      if(!m_has_synth && shift < 1 && ctx_time > 0) shift = iBarShift(symbol, PERIOD_M1, ctx_time, false);
       if(shift < 1) shift = 1;
       int bars = FXAI_GetM1SyncBars();
 
@@ -67,7 +106,16 @@ private:
       for(int i=0; i<bars; i++)
       {
          int bar_shift = shift + (bars - 1 - i);
-         closes[i] = iClose(symbol, PERIOD_M1, bar_shift);
+         if(m_has_synth)
+         {
+            if(bar_shift < 0 || bar_shift >= ArraySize(m_synth_close))
+               return (int)FXAI_LABEL_SKIP;
+            closes[i] = m_synth_close[bar_shift];
+         }
+         else
+         {
+            closes[i] = iClose(symbol, PERIOD_M1, bar_shift);
+         }
          if(closes[i] <= 0.0)
             return (int)FXAI_LABEL_SKIP;
       }
@@ -108,10 +156,13 @@ private:
       double total_points = MathAbs(now_price - closes[0]) / point;
       if(min_step_points == DBL_MAX) min_step_points = final_step_points;
 
-      expected_move_points = MathMax(0.0, total_points - cost_points);
-      double total_score = FXAI_Sigmoid((expected_move_points / MathMax(mm, 0.10)) - 0.50);
-      double step_score = FXAI_Sigmoid((min_step_points / MathMax(mm, 0.10)) - 0.25);
-      strength = FXAI_Clamp(0.55 * total_score + 0.45 * step_score, 0.0, 1.0);
+      // The shared framework EV gate already subtracts trade cost. This rule plugin
+      // should therefore publish the raw move amplitude once, not net-of-cost twice.
+      expected_move_points = MathMax(total_points, 0.0);
+      double edge_points = total_points - cost_points;
+      double total_score = FXAI_Sigmoid(edge_points / MathMax(mm, 0.10));
+      double step_score = FXAI_Sigmoid((min_step_points / MathMax(mm, 0.10)) - 0.15);
+      strength = FXAI_Clamp(0.60 * total_score + 0.40 * step_score, 0.0, 1.0);
 
       if(up_chain) return (int)FXAI_LABEL_BUY;
       if(down_chain) return (int)FXAI_LABEL_SELL;
@@ -154,6 +205,49 @@ public:
       m_steps = 0;
       m_hit_ema = 0.55;
       m_edge_ema = 0.0;
+      m_has_synth = false;
+      ArrayResize(m_synth_time, 0);
+      ArrayResize(m_synth_open, 0);
+      ArrayResize(m_synth_high, 0);
+      ArrayResize(m_synth_low, 0);
+      ArrayResize(m_synth_close, 0);
+   }
+
+   virtual bool SupportsSyntheticSeries(void) const { return true; }
+
+   virtual bool SetSyntheticSeries(const datetime &time_arr[],
+                                   const double &open_arr[],
+                                   const double &high_arr[],
+                                   const double &low_arr[],
+                                   const double &close_arr[])
+   {
+      int n = ArraySize(time_arr);
+      if(n <= 0 || ArraySize(open_arr) != n || ArraySize(high_arr) != n ||
+         ArraySize(low_arr) != n || ArraySize(close_arr) != n)
+         return false;
+
+      ArrayCopy(m_synth_time, time_arr);
+      ArrayCopy(m_synth_open, open_arr);
+      ArrayCopy(m_synth_high, high_arr);
+      ArrayCopy(m_synth_low, low_arr);
+      ArrayCopy(m_synth_close, close_arr);
+      ArraySetAsSeries(m_synth_time, true);
+      ArraySetAsSeries(m_synth_open, true);
+      ArraySetAsSeries(m_synth_high, true);
+      ArraySetAsSeries(m_synth_low, true);
+      ArraySetAsSeries(m_synth_close, true);
+      m_has_synth = true;
+      return true;
+   }
+
+   virtual void ClearSyntheticSeries(void)
+   {
+      m_has_synth = false;
+      ArrayResize(m_synth_time, 0);
+      ArrayResize(m_synth_open, 0);
+      ArrayResize(m_synth_high, 0);
+      ArrayResize(m_synth_low, 0);
+      ArrayResize(m_synth_close, 0);
    }
 
    virtual void EnsureInitialized(const FXAIAIHyperParams &hp)
@@ -175,14 +269,14 @@ public:
 
       if(signal == (int)FXAI_LABEL_BUY)
       {
-         double buy = FXAI_Clamp(0.78 + 0.14 * strength + 0.08 * (reliability - 0.50), 0.65, 0.97);
+         double buy = FXAI_Clamp(0.90 + 0.08 * strength + 0.04 * (reliability - 0.50), 0.85, 0.995);
          class_probs[(int)FXAI_LABEL_BUY] = buy;
          class_probs[(int)FXAI_LABEL_SELL] = 0.01;
          class_probs[(int)FXAI_LABEL_SKIP] = MathMax(0.02, 1.0 - buy - 0.01);
       }
       else if(signal == (int)FXAI_LABEL_SELL)
       {
-         double sell = FXAI_Clamp(0.78 + 0.14 * strength + 0.08 * (reliability - 0.50), 0.65, 0.97);
+         double sell = FXAI_Clamp(0.90 + 0.08 * strength + 0.04 * (reliability - 0.50), 0.85, 0.995);
          class_probs[(int)FXAI_LABEL_SELL] = sell;
          class_probs[(int)FXAI_LABEL_BUY] = 0.01;
          class_probs[(int)FXAI_LABEL_SKIP] = MathMax(0.02, 1.0 - sell - 0.01);

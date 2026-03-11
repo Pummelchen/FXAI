@@ -132,6 +132,10 @@ private:
 
    datetime CurrentM1BarOpenTime(void) const
    {
+      datetime ctx_time = ResolveContextTime();
+      if(ctx_time > 0)
+         return (datetime)(ctx_time - (ctx_time % 60));
+
       datetime t = iTime(Symbol(), PERIOD_M1, 0);
       if(t <= 0)
       {

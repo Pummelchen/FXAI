@@ -1,0 +1,596 @@
+{
+  "family_defaults": {
+    "0": {
+      "family_note": "Linear models should be disciplined baselines: sparse, stable, cost-aware, and hard to fool on noise.",
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.32
+        },
+        "drift_up": {
+          "trend_align_min": 0.32
+        },
+        "random_walk": {
+          "active_ratio_max": 0.3,
+          "skip_ratio_min": 0.68
+        }
+      }
+    },
+    "1": {
+      "family_note": "Tree models should separate regimes cleanly and stay conservative when edge is weak.",
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.34
+        },
+        "drift_up": {
+          "trend_align_min": 0.34
+        },
+        "random_walk": {
+          "active_ratio_max": 0.32,
+          "skip_ratio_min": 0.65
+        },
+        "regime_shift": {
+          "conf_drift_max": 0.26
+        }
+      }
+    },
+    "10": {
+      "family_note": "Rule models should be brutally deterministic and transparent.",
+      "scenario_rules": {
+        "monotonic_down": {
+          "active_ratio_min": 0.6,
+          "trend_align_min": 0.8
+        },
+        "monotonic_up": {
+          "active_ratio_min": 0.6,
+          "trend_align_min": 0.8
+        },
+        "random_walk": {
+          "active_ratio_max": 0.2,
+          "skip_ratio_min": 0.8
+        }
+      }
+    },
+    "11": {
+      "family_note": "This model family needs explicit behavior checks and stronger identity tests."
+    },
+    "2": {
+      "family_note": "Recurrent models must exploit sequence memory without state bleed or reset instability.",
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.35
+        },
+        "drift_up": {
+          "trend_align_min": 0.35
+        },
+        "random_walk": {
+          "active_ratio_max": 0.35,
+          "skip_ratio_min": 0.62
+        }
+      },
+      "sequence_delta_min": 0.015
+    },
+    "3": {
+      "family_note": "Convolutional models should react to local shape and short trend structure, not random churn.",
+      "scenario_rules": {
+        "monotonic_down": {
+          "trend_align_min": 0.4
+        },
+        "monotonic_up": {
+          "trend_align_min": 0.4
+        },
+        "random_walk": {
+          "active_ratio_max": 0.34,
+          "skip_ratio_min": 0.62
+        }
+      },
+      "sequence_delta_min": 0.012
+    },
+    "4": {
+      "family_note": "Transformer-style models should use context depth intelligently and show measurable sequence sensitivity.",
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.35
+        },
+        "drift_up": {
+          "trend_align_min": 0.35
+        },
+        "random_walk": {
+          "active_ratio_max": 0.33,
+          "skip_ratio_min": 0.64
+        },
+        "regime_shift": {
+          "conf_drift_max": 0.24
+        }
+      },
+      "sequence_delta_min": 0.018
+    },
+    "5": {
+      "family_note": "State-space models should stay smooth, stable, and regime-aware under long synthetic streams.",
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.34
+        },
+        "drift_up": {
+          "trend_align_min": 0.34
+        },
+        "random_walk": {
+          "active_ratio_max": 0.3,
+          "skip_ratio_min": 0.66
+        }
+      },
+      "sequence_delta_min": 0.018
+    },
+    "6": {
+      "family_note": "Distributional models must express uncertainty honestly and avoid fake confidence under noise.",
+      "scenario_rules": {
+        "random_walk": {
+          "active_ratio_max": 0.24,
+          "skip_ratio_min": 0.72
+        },
+        "vol_cluster": {
+          "conf_drift_max": 0.18
+        }
+      }
+    },
+    "7": {
+      "family_note": "Mixture models should route intelligently and skip weak regimes instead of forcing bad trades.",
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.34
+        },
+        "drift_up": {
+          "trend_align_min": 0.34
+        },
+        "random_walk": {
+          "active_ratio_max": 0.22,
+          "skip_ratio_min": 0.74
+        },
+        "regime_shift": {
+          "conf_drift_max": 0.2
+        }
+      }
+    },
+    "8": {
+      "family_note": "Retrieval models should exploit repeat motifs without memorizing random walk garbage.",
+      "scenario_rules": {
+        "random_walk": {
+          "active_ratio_max": 0.22,
+          "skip_ratio_min": 0.75
+        },
+        "regime_shift": {
+          "conf_drift_max": 0.22
+        }
+      }
+    },
+    "9": {
+      "family_note": "World models should infer path structure and adverse excursion, not just direction guesses.",
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.33
+        },
+        "drift_up": {
+          "trend_align_min": 0.33
+        },
+        "random_walk": {
+          "active_ratio_max": 0.28,
+          "skip_ratio_min": 0.68
+        },
+        "regime_shift": {
+          "conf_drift_max": 0.2
+        }
+      },
+      "sequence_delta_min": 0.012
+    }
+  },
+  "global_defaults": {
+    "avg_move_min": 0.1,
+    "reset_delta_max": 0.3,
+    "scenario_rules": {
+      "drift_down": {
+        "trend_align_min": 0.25
+      },
+      "drift_up": {
+        "trend_align_min": 0.25
+      },
+      "random_walk": {
+        "active_ratio_max": 0.4,
+        "bias_abs_max": 0.8,
+        "skip_ratio_min": 0.6
+      },
+      "vol_cluster": {
+        "conf_drift_max": 0.22
+      }
+    },
+    "sequence_delta_min": 0.005
+  },
+  "plugins": {
+    "ai_autoformer": {
+      "identity": "Decomposition transformer that should separate trend structure from noisy short-term churn.",
+      "recommendations": [
+        "Decomposition must earn its keep: trend and seasonal paths should separate regime shift from random churn, not just smooth everything.",
+        "Autocorrelation attention should outperform simpler sequence baselines on monotonic drift and volatility clustering, otherwise the stack is ornamental."
+      ]
+    },
+    "ai_chronos": {
+      "identity": "Foundation-style surrogate that only deserves complexity if it handles temporal regime shifts better than simple baselines.",
+      "recommendations": [
+        "Foundation-style surrogates must justify their complexity by beating simple baselines on regime shift and volatility structure.",
+        "If synthetic sequence sensitivity is weak, the architecture is too decorative and needs harder temporal supervision."
+      ],
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.34
+        },
+        "drift_up": {
+          "trend_align_min": 0.34
+        },
+        "random_walk": {
+          "active_ratio_max": 0.26,
+          "skip_ratio_min": 0.7
+        },
+        "regime_shift": {
+          "conf_drift_max": 0.2
+        }
+      },
+      "sequence_delta_min": 0.025
+    },
+    "ai_geodesic": {
+      "identity": "Geometry-aware attention model that should react to shape, not just direction bias.",
+      "recommendations": [
+        "Geometric attention must prove it sees shape, not just generic direction bias; sequence changes should alter outputs materially.",
+        "If it cannot widen uncertainty under vol-cluster and regime-shift stress, the geometry layer is not doing real work."
+      ]
+    },
+    "ai_lstm": {
+      "identity": "Recurrent sequence model that should extract memory without hidden-state contamination.",
+      "recommendations": [
+        "State memory should help on drift and regime shifts and should not survive resets in a way that changes clean fresh predictions.",
+        "If sequence_delta is weak, the recurrent stack is acting like a shallow classifier and needs stronger temporal supervision."
+      ]
+    },
+    "ai_lstmg": {
+      "identity": "Gated recurrent model that should beat plain recurrence under difficult temporal regimes.",
+      "recommendations": [
+        "Gated recurrence must outperform plain LSTM under volatility clustering and regime flips, otherwise the extra gating complexity is wasted.",
+        "If reset drift appears, hidden-state or peephole handling is still leaking information across boundaries."
+      ]
+    },
+    "ai_mlp": {
+      "identity": "Dense baseline that should be simple, hard, and honest rather than flashy and noisy.",
+      "recommendations": [
+        "This model only earns respect if it becomes a hard, stable baseline that skips noise and reacts fast to obvious drift.",
+        "If it overtrades random walk, the dense stack is learning false comfort from static feature combinations."
+      ]
+    },
+    "ai_patchtst": {
+      "identity": "Patch transformer that should exploit longer temporal blocks, not just smooth the same signal harder.",
+      "recommendations": [
+        "Patch abstraction should help on regime-shift and volatility structure; if not, the patch encoder is just expensive smoothing.",
+        "A top performer here should show stronger long-context sensitivity than the short-context prediction path."
+      ],
+      "scenario_rules": {
+        "monotonic_down": {
+          "trend_align_min": 0.38
+        },
+        "monotonic_up": {
+          "trend_align_min": 0.38
+        },
+        "random_walk": {
+          "active_ratio_max": 0.3,
+          "skip_ratio_min": 0.68
+        },
+        "regime_shift": {
+          "conf_drift_max": 0.22
+        }
+      }
+    },
+    "ai_s4": {
+      "identity": "State-space temporal model that should remain smooth, stable, and context-sensitive over long runs.",
+      "recommendations": [
+        "State-space dynamics must stay smooth and stable under long random walks and still turn with real drift changes.",
+        "If sequence sensitivity is weak, the SSM core is not contributing enough beyond generic nonlinear filtering."
+      ]
+    },
+    "ai_stmn": {
+      "identity": "Spatio-temporal model that should only benefit when structural context actually matters.",
+      "recommendations": [
+        "Spatio-temporal structure should only help when context relationships matter; otherwise it should degrade gracefully to disciplined skipping.",
+        "If regime-shift behavior is poor, the graph-temporal memory is too static and needs better routing or reset policy."
+      ]
+    },
+    "ai_tcn": {
+      "identity": "Dilated convolutional model that should dominate short local shape and monotonic streak detection.",
+      "recommendations": [
+        "Dilated convolutions should dominate short local structure and monotonic streaks without becoming a noise-following machine.",
+        "If sequence_delta is weak, the receptive field is not being used meaningfully."
+      ]
+    },
+    "ai_tft": {
+      "identity": "Attention model with gating and variable selection that should choose context intelligently rather than amplify noise.",
+      "recommendations": [
+        "Variable selection and attention should improve regime discrimination, not simply amplify whatever features already dominate.",
+        "A serious TFT should widen skip under noise and become decisive only when context agrees."
+      ],
+      "scenario_rules": {
+        "random_walk": {
+          "active_ratio_max": 0.28,
+          "skip_ratio_min": 0.7
+        },
+        "regime_shift": {
+          "conf_drift_max": 0.18
+        },
+        "vol_cluster": {
+          "conf_drift_max": 0.18
+        }
+      }
+    },
+    "ai_timesfm": {
+      "identity": "Temporal foundation-style surrogate that should prove horizon-aware behavior and remain stable under long synthetic runs.",
+      "recommendations": [
+        "This model should show horizon-aware structure, not just generic trend following.",
+        "If it cannot stay stable under long random walks, the temporal abstraction is too brittle."
+      ],
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.34
+        },
+        "drift_up": {
+          "trend_align_min": 0.34
+        },
+        "random_walk": {
+          "active_ratio_max": 0.26,
+          "skip_ratio_min": 0.7
+        },
+        "regime_shift": {
+          "conf_drift_max": 0.2
+        }
+      },
+      "sequence_delta_min": 0.025
+    },
+    "ai_trr": {
+      "identity": "Reservoir-style temporal model that should react to time shape, not collapse to a static classifier.",
+      "recommendations": [
+        "Reservoir behavior should react to temporal shape, not collapse to a static classifier.",
+        "Sequence sensitivity must be measurable, otherwise the reservoir is dead weight."
+      ],
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.36
+        },
+        "drift_up": {
+          "trend_align_min": 0.36
+        },
+        "random_walk": {
+          "active_ratio_max": 0.28,
+          "skip_ratio_min": 0.7
+        },
+        "regime_shift": {
+          "conf_drift_max": 0.22
+        }
+      },
+      "sequence_delta_min": 0.02
+    },
+    "ai_tst": {
+      "identity": "Time-series transformer that should show real context-depth sensitivity, not just slow dense inference.",
+      "recommendations": [
+        "Attention should exploit context depth and feature interactions; if not, this is just a slow dense model.",
+        "If sequence sensitivity is flat, the transformer path needs harder temporal objectives and better position handling."
+      ]
+    },
+    "dist_quantile": {
+      "identity": "Distributional forecaster that should widen uncertainty under chaos and tighten under clean edge.",
+      "recommendations": [
+        "Make quantile spread widen clearly in vol-cluster scenarios and compress in calm drift scenarios.",
+        "Force directional probability to be derived consistently from the quantile shape instead of heuristic shortcuts."
+      ],
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.26
+        },
+        "drift_up": {
+          "trend_align_min": 0.26
+        },
+        "random_walk": {
+          "active_ratio_max": 0.2,
+          "skip_ratio_min": 0.78
+        },
+        "vol_cluster": {
+          "conf_drift_max": 0.16
+        }
+      }
+    },
+    "lin_enhash": {
+      "identity": "Sparse hashed interaction learner that should add structure without becoming a collision-driven noise machine.",
+      "recommendations": [
+        "Hashed interactions should add edge on structured drift and mean-revert setups; if they help random walk, collisions are teaching garbage.",
+        "Track hash-bucket stress and prune dead interactions aggressively so sparse capacity goes to real market structure."
+      ]
+    },
+    "lin_ftrl": {
+      "identity": "Regularized online linear baseline that should adapt quickly while staying brutally stable.",
+      "recommendations": [
+        "FTRL should be brutally stable: small edge, low overtrading, and fast adaptation when drift changes sign.",
+        "If it misses clean trend while still trading noise, the learning-rate and regularization balance is wrong."
+      ]
+    },
+    "lin_pa": {
+      "identity": "Margin-based online model that should be decisive on edge and disciplined on garbage.",
+      "recommendations": [
+        "PA should hit clean directional moves decisively and still stay restrained on noise; margin learning must stay aggressive but disciplined.",
+        "If it collapses to one side, the rival update logic or skip handling is too weak."
+      ]
+    },
+    "lin_sgd": {
+      "identity": "Simple sparse online baseline that should expose feature-pipeline weakness before fancy models hide it.",
+      "recommendations": [
+        "SGD is the honesty test: it should remain a clean, sparse, hard-to-break baseline that mostly skips garbage.",
+        "If it chases noise, your feature scaling or cost weighting is wrong before the fancy models even start."
+      ]
+    },
+    "mem_retrdiff": {
+      "identity": "Retrieval model that should exploit motif recurrence and ignore synthetic garbage memory.",
+      "recommendations": [
+        "Retrieval memory should help on repeated motifs and do nothing on pure noise; if it helps on noise, it is overfitting memory.",
+        "Compression and deduplication need to prevent memory bloat from synthetic random walk fragments."
+      ],
+      "scenario_rules": {
+        "monotonic_down": {
+          "trend_align_min": 0.3
+        },
+        "monotonic_up": {
+          "trend_align_min": 0.3
+        },
+        "random_walk": {
+          "active_ratio_max": 0.16,
+          "skip_ratio_min": 0.84
+        },
+        "regime_shift": {
+          "conf_drift_max": 0.2
+        }
+      }
+    },
+    "mix_loffm": {
+      "identity": "Mixture router that should separate drift, reversion, and noise instead of averaging them badly.",
+      "recommendations": [
+        "Expert routing must clearly separate drift, reversion, and noise; averaged mediocrity is failure for a mixture model.",
+        "If the router still trades random walk aggressively, specialization pressure is too weak."
+      ],
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.38
+        },
+        "drift_up": {
+          "trend_align_min": 0.38
+        },
+        "mean_revert": {
+          "active_ratio_min": 0.08
+        },
+        "random_walk": {
+          "active_ratio_max": 0.18,
+          "skip_ratio_min": 0.82
+        },
+        "regime_shift": {
+          "conf_drift_max": 0.18
+        }
+      }
+    },
+    "mix_moe_conformal": {
+      "identity": "Uncertainty-aware mixture that should reject weak setups aggressively rather than just dilute them.",
+      "recommendations": [
+        "The router must reject uncertainty aggressively on random walk, not just average expert outputs.",
+        "Conformal thresholds should harden under vol-cluster and regime-shift scenarios."
+      ],
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.3
+        },
+        "drift_up": {
+          "trend_align_min": 0.3
+        },
+        "random_walk": {
+          "active_ratio_max": 0.14,
+          "skip_ratio_min": 0.86
+        },
+        "regime_shift": {
+          "conf_drift_max": 0.18
+        },
+        "vol_cluster": {
+          "conf_drift_max": 0.16
+        }
+      }
+    },
+    "rule_m1sync": {
+      "identity": "Strict monotonic micro-trend filter that should only fire on obvious short-term directional sync.",
+      "recommendations": [
+        "Raise or lower the monotonic bar count only after checking random-walk skip rate versus monotonic-hit precision.",
+        "Keep cost logic single-sourced; never subtract friction twice inside the rule and again in the framework gate."
+      ],
+      "scenario_rules": {
+        "monotonic_down": {
+          "active_ratio_min": 0.75,
+          "trend_align_min": 0.9
+        },
+        "monotonic_up": {
+          "active_ratio_min": 0.75,
+          "trend_align_min": 0.9
+        },
+        "random_walk": {
+          "active_ratio_max": 0.12,
+          "skip_ratio_min": 0.88
+        }
+      }
+    },
+    "tree_catboost": {
+      "identity": "Ordered boosting model that should stay robust on noisy, non-stationary FX structure.",
+      "recommendations": [
+        "Ordered target statistics should stay disciplined on noise and should not leak confidence on synthetic random walk.",
+        "If regime-shift handling is weak, improve ordered permutation diversity and stronger leaf refresh under changing drift sign."
+      ]
+    },
+    "tree_lgbm": {
+      "identity": "Histogram boosting baseline that should be one of the strongest practical models under structured synthetic stress.",
+      "recommendations": [
+        "Tree splits should separate clean drift from low-edge noise without collapsing into one-sided bias.",
+        "If monotonic scenarios do not score well, split search or leaf refresh is not reacting quickly enough to structure."
+      ]
+    },
+    "tree_xgb": {
+      "identity": "Full XGB variant that should justify extra complexity over the faster implementation.",
+      "recommendations": [
+        "Full XGB should earn its extra complexity over the fast variant on shift-heavy and nonlinear scenarios.",
+        "If not, the extra tree machinery is dead weight and the split/leaf updates need work."
+      ]
+    },
+    "tree_xgb_fast": {
+      "identity": "Fast boosted-tree baseline that should be one of the strongest practical models in the framework.",
+      "recommendations": [
+        "Fast XGB should remain one of the strongest practical baselines: clean splits, good drift alignment, and low noise overtrading.",
+        "If it underperforms on regime shift, tree refresh and leaf aging are not adaptive enough."
+      ]
+    },
+    "wm_cfx": {
+      "identity": "World-style market model that should care about path quality and adverse excursion, not only end direction.",
+      "recommendations": [
+        "World-model outputs should react to path quality and adverse excursion, not only direction.",
+        "Regime-shift handling should stay stable when drift flips sign halfway through the scenario."
+      ],
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.38
+        },
+        "drift_up": {
+          "trend_align_min": 0.38
+        },
+        "random_walk": {
+          "active_ratio_max": 0.24,
+          "skip_ratio_min": 0.74
+        },
+        "regime_shift": {
+          "conf_drift_max": 0.18
+        }
+      }
+    },
+    "wm_graph": {
+      "identity": "Graph structural model that should earn its keep only when relative context and structure matter.",
+      "recommendations": [
+        "Graph structure should show benefit only when cross-context actually matters; random walk should still mostly skip.",
+        "Relative-value edges need to matter more than raw directional bias."
+      ],
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.32
+        },
+        "drift_up": {
+          "trend_align_min": 0.32
+        },
+        "random_walk": {
+          "active_ratio_max": 0.26,
+          "skip_ratio_min": 0.72
+        },
+        "regime_shift": {
+          "conf_drift_max": 0.2
+        }
+      }
+    }
+  }
+}

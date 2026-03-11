@@ -723,6 +723,7 @@ int SpecialDirectionAI(const string symbol)
    }
 
    int singleSignal = -1;
+   string singleNoTradeReason = "";
    double ensemble_buy_ev_sum = 0.0;
    double ensemble_sell_ev_sum = 0.0;
    double ensemble_buy_support = 0.0;
@@ -839,6 +840,27 @@ int SpecialDirectionAI(const string symbol)
                                          expected_move,
                                          min_move_pred,
                                          evThresholdPoints);
+      if(ensembleMode == 0 && ai_idx == (int)AI_M1SYNC && signal == -1)
+      {
+         double p_buy = class_probs_pred[(int)FXAI_LABEL_BUY];
+         double p_sell = class_probs_pred[(int)FXAI_LABEL_SELL];
+         double p_skip = class_probs_pred[(int)FXAI_LABEL_SKIP];
+         double buy_ev = ((2.0 * p_buy) - 1.0) * expected_move - min_move_pred;
+         double sell_ev = ((2.0 * p_sell) - 1.0) * expected_move - min_move_pred;
+         bool have_chain = (expected_move > 0.0 &&
+                            (p_buy >= 0.50 || p_sell >= 0.50) &&
+                            p_skip < 0.80);
+
+         if(!have_chain)
+            singleNoTradeReason = "m1sync_no_chain";
+         else if(p_skip >= skipMinProb)
+            singleNoTradeReason = "m1sync_chain_skip_block";
+         else if((p_buy >= buyMinProb && buy_ev < evThresholdPoints) ||
+                 (p_sell >= sellMinProb && sell_ev < evThresholdPoints))
+            singleNoTradeReason = "m1sync_chain_ev_blocked";
+         else
+            singleNoTradeReason = "m1sync_chain_threshold_block";
+      }
       FXAI_EnqueueReliabilityPending(ai_idx,
                                      signal_seq,
                                      signal,
@@ -960,6 +982,7 @@ int SpecialDirectionAI(const string symbol)
    g_ai_last_signal = decision;
    if(decision == 1) g_ai_last_reason = "buy";
    else if(decision == 0) g_ai_last_reason = "sell";
+   else if(ensembleMode == 0 && aiType == (int)AI_M1SYNC && StringLen(singleNoTradeReason) > 0) g_ai_last_reason = singleNoTradeReason;
    else if(ensembleMode != 0 && ensemble_meta_total <= 0.0) g_ai_last_reason = "no_meta_weight";
    else g_ai_last_reason = "no_consensus_or_ev";
 

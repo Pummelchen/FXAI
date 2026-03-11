@@ -1,0 +1,3 @@
+ai_id	ai_name	family	scenario	bars_total	samples_total	valid_preds	invalid_preds	buy_count	sell_count	skip_count	true_buy_count	true_sell_count	true_skip_count	exact_match_count	directional_eval_count	directional_correct_count	skip_ratio	active_ratio	bias_abs	conf_drift	reset_delta	sequence_delta	score	issue_flags	avg_conf	avg_rel	avg_move	trend_align
+28	rule_m1sync	10	random_walk	1000	900	900	0	20	18	862	100	100	700	720	38	22	0.957778	0.042222	0.052632	0.050000	0.000000	-1.000000	97.0000	0	0.930000	0.960000	2.100000	0.000000
+28	rule_m1sync	10	monotonic_up	1000	900	900	0	790	0	110	700	0	200	812	790	760	0.122222	0.877778	1.000000	0.040000	0.000000	-1.000000	98.0000	0	0.970000	0.980000	4.600000	1.000000

@@ -99,7 +99,14 @@ private:
 
    datetime CurrentM1BarOpenTime() const
    {
-      // Prefer chart/time-series open time; fall back to minute-rounded server time.
+      datetime ctx_time = ResolveContextTime();
+      if(ctx_time > 0)
+      {
+         long sc = (long)ctx_time;
+         return (datetime)(sc - (sc % 60));
+      }
+
+      // Prefer chart/time-series open time in live mode; fall back to minute-rounded server time.
       datetime bt = iTime(_Symbol, PERIOD_M1, 0);
       if(bt > 0) return bt;
 

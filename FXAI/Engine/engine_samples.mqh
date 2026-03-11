@@ -18,6 +18,29 @@ void FXAI_SanitizeThresholdPair(double &buy_threshold, double &sell_threshold)
    }
 }
 
+void FXAI_AssignExcursionsForRealizedMove(const double realized_move_points,
+                                          const double best_up_points,
+                                          const double best_dn_points,
+                                          double &mfe_points,
+                                          double &mae_points)
+{
+   if(realized_move_points > 0.0)
+   {
+      mfe_points = best_up_points;
+      mae_points = best_dn_points;
+      return;
+   }
+   if(realized_move_points < 0.0)
+   {
+      mfe_points = best_dn_points;
+      mae_points = best_up_points;
+      return;
+   }
+
+   mfe_points = MathMax(best_up_points, best_dn_points);
+   mae_points = MathMax(best_up_points, best_dn_points);
+}
+
 int FXAI_BuildTripleBarrierLabelEx(const int i,
                                    const int H,
                                    const double roundtrip_cost_points,
@@ -137,8 +160,7 @@ int FXAI_BuildTripleBarrierLabelEx(const int i,
             return (int)FXAI_LABEL_SELL;
          }
          realized_move_points = close_mv;
-         mfe_points = MathMax(best_up, best_dn);
-         mae_points = MathMin(best_up, best_dn);
+         FXAI_AssignExcursionsForRealizedMove(realized_move_points, best_up, best_dn, mfe_points, mae_points);
          time_to_hit_frac = FXAI_Clamp((double)step / (double)MathMax(max_step, 1), 0.0, 1.0);
          return FXAI_BuildEVClassLabel(realized_move_points, roundtrip_cost_points, ev_threshold_points);
       }
@@ -147,8 +169,7 @@ int FXAI_BuildTripleBarrierLabelEx(const int i,
    int idx_term = i - max_step;
    if(idx_term < 0) idx_term = 0;
    realized_move_points = FXAI_MovePoints(entry, close_arr[idx_term], snapshot.point);
-   mfe_points = MathMax(best_up, best_dn);
-   mae_points = MathMin(best_up, best_dn);
+   FXAI_AssignExcursionsForRealizedMove(realized_move_points, best_up, best_dn, mfe_points, mae_points);
    if(TradeKiller > 0 && H > TradeKiller)
       path_flags |= FXAI_PATHFLAG_KILLED_EARLY;
    return FXAI_BuildEVClassLabel(realized_move_points, roundtrip_cost_points, ev_threshold_points);

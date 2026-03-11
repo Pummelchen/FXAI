@@ -100,6 +100,28 @@ Operational Model
 -----------------
 The MT5 Experts folder is the source of truth for the runnable system. The Git repository is the synchronized versioned copy that should only be updated after the active MT5 project compiles cleanly. This keeps the research loop disciplined and ensures the code that gets versioned is the same code that produced the tested `ex5`.
 
+Drill-Sergeant Audit Lab
+------------------------
+FXAI now includes a dedicated synthetic audit layer to pressure-test plugins outside of normal market backtests. The MT5-side runner is `Tests/FXAI_AuditRunner.mq5`; it generates controlled synthetic scenarios such as random walk, drift, monotonic trend, mean reversion, volatility clustering, and regime shifts, then trains and predicts with the real plugin code through API v4.
+
+The external control layer is `Tools/fxai_testlab.py`. Its job is not to replace MT5 execution; its job is to compile the audit runner, launch the MT5 tester when possible, read the audit report, grade each plugin harshly, and produce concrete improvement recommendations by model family and plugin identity.
+
+The analyzer is driven by `Tools/plugin_oracles.json`. That file defines plugin-specific behavior expectations, family discipline rules, and scenario thresholds so the drill-sergeant report reflects what each model is supposed to be good at rather than only generic scorekeeping.
+
+Phased Audit Design
+-------------------
+- Phase 1: compile and run the MT5 audit runner against synthetic scenarios using the real feature pipeline and plugin API.
+- Phase 2: analyze the generated TSV report with the external drill-sergeant tool and score each plugin on correctness, stability, discipline, and model identity.
+- Phase 3: extend plugin-specific test oracles so each model is judged against what it is actually supposed to do, not only generic metrics.
+- Phase 4: use the audit lab as a regression gate before major releases or large cloud backtest campaigns.
+
+Audit Lab Outputs
+-----------------
+- Synthetic raw report: `FILE_COMMON/FXAI/Audit/fxai_audit_report.tsv`
+- External drill report: `Tools/latest_drill_report.md`
+- Plugin oracle schema: `Tools/plugin_oracles.json`
+- Regression baselines: `Tools/Baselines/`
+
 Bottom Line
 -----------
 FXAI is not a single trading strategy. It is a professional MT5 research and execution framework for systematic FX prediction, designed to compare model families fairly, train them under realistic trading constraints, and keep the full workflow inside MetaTrader 5.

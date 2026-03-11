@@ -236,10 +236,16 @@ public:
    virtual void EnsureInitialized(const FXAIAIHyperParams &hp)
    {
       if(m_init) return;
-      MathSrand(1337);
       for(int i=0; i<FXAI_RETRDIFF_EMB; i++)
          for(int j=0; j<8; j++)
-            m_R[i][j] = ((double)(MathRand() % 2001) / 1000.0) - 1.0;
+         {
+            uint h = (uint)((i + 1) * 73856093) ^ (uint)((j + 3) * 19349663) ^ (uint)2654435769;
+            h ^= (h >> 13);
+            h *= (uint)1274126177;
+            h ^= (h >> 16);
+            double u = (double)(h & (uint)2147483647) / 2147483647.0;
+            m_R[i][j] = 2.0 * u - 1.0;
+         }
       m_init = true;
    }
 

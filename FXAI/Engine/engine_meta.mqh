@@ -728,8 +728,12 @@ void FXAI_ApplyRegimeCalibration(const int ai_idx, const int regime_id, double &
    if(total < 8.0) return;
 
    double prior[3];
+   double prior_total = 0.0;
    for(int c=0; c<3; c++)
-      prior[c] = g_regime_class_mass[ai_idx][regime_id][c] / MathMax(total, 1e-9);
+      prior_total += g_regime_class_mass[ai_idx][regime_id][c];
+   if(prior_total <= 1e-9) return;
+   for(int c=0; c<3; c++)
+      prior[c] = g_regime_class_mass[ai_idx][regime_id][c] / prior_total;
 
    double strength = FXAI_Clamp((total - 8.0) / 220.0, 0.0, 0.45);
    double s = 0.0;
@@ -1407,7 +1411,9 @@ void FXAI_UpdateStackFromPending(const int current_signal_seq,
 
    FXAI_ResetStackPending();
    int keep_n = ArraySize(keep_seq);
-   if(keep_n > FXAI_REL_MAX_PENDING) keep_n = FXAI_REL_MAX_PENDING;
+   int queue_cap = FXAI_REL_MAX_PENDING - 1;
+   if(queue_cap < 0) queue_cap = 0;
+   if(keep_n > queue_cap) keep_n = queue_cap;
    for(int k=0; k<keep_n; k++)
    {
       g_stack_pending_seq[k] = keep_seq[k];
@@ -1423,8 +1429,6 @@ void FXAI_UpdateStackFromPending(const int current_signal_seq,
    }
    g_stack_pending_head = 0;
    g_stack_pending_tail = keep_n;
-   if(g_stack_pending_tail >= FXAI_REL_MAX_PENDING)
-      g_stack_pending_tail = FXAI_REL_MAX_PENDING - 1;
 }
 
 void FXAI_EnqueueHorizonPolicyPending(const int signal_seq,
@@ -1600,7 +1604,10 @@ void FXAI_UpdateHorizonPolicyFromPending(const int current_signal_seq,
 
    FXAI_ResetHorizonPolicyPending();
    int keep_n = ArraySize(keep_seq);
-   for(int k=0; k<keep_n && k<FXAI_REL_MAX_PENDING; k++)
+   int queue_cap = FXAI_REL_MAX_PENDING - 1;
+   if(queue_cap < 0) queue_cap = 0;
+   if(keep_n > queue_cap) keep_n = queue_cap;
+   for(int k=0; k<keep_n; k++)
    {
       g_hpolicy_pending_seq[k] = keep_seq[k];
       g_hpolicy_pending_regime[k] = keep_regime[k];
@@ -1611,8 +1618,6 @@ void FXAI_UpdateHorizonPolicyFromPending(const int current_signal_seq,
    }
    g_hpolicy_pending_head = 0;
    g_hpolicy_pending_tail = keep_n;
-   if(g_hpolicy_pending_tail >= FXAI_REL_MAX_PENDING)
-      g_hpolicy_pending_tail = FXAI_REL_MAX_PENDING - 1;
 }
 
 void FXAI_AdvanceReliabilityClock(const datetime signal_bar)
@@ -1827,7 +1832,9 @@ void FXAI_UpdateReliabilityFromPending(const int ai_idx,
    }
 
    int keep_n = ArraySize(keep_seq);
-   if(keep_n > FXAI_REL_MAX_PENDING) keep_n = FXAI_REL_MAX_PENDING;
+   int queue_cap = FXAI_REL_MAX_PENDING - 1;
+   if(queue_cap < 0) queue_cap = 0;
+   if(keep_n > queue_cap) keep_n = queue_cap;
    for(int k=0; k<FXAI_REL_MAX_PENDING; k++)
    {
       g_rel_pending_seq[ai_idx][k] = -1;
@@ -1854,8 +1861,6 @@ void FXAI_UpdateReliabilityFromPending(const int ai_idx,
 
    g_rel_pending_head[ai_idx] = 0;
    g_rel_pending_tail[ai_idx] = keep_n;
-   if(g_rel_pending_tail[ai_idx] >= FXAI_REL_MAX_PENDING)
-      g_rel_pending_tail[ai_idx] = FXAI_REL_MAX_PENDING - 1;
 }
 
 int FXAI_GetMaxPendingHorizon(const int fallback_h)

@@ -467,8 +467,16 @@ protected:
       }
 
       double prior[3];
+      double prior_total = 0.0;
       for(int c=0; c<3; c++)
-         prior[c] = m_bank_class_mass[r][s][h][c] / MathMax(total, 1e-9);
+         prior_total += m_bank_class_mass[r][s][h][c];
+      if(prior_total <= 1e-9)
+      {
+         NormalizeClassDistribution(probs);
+         return;
+      }
+      for(int c=0; c<3; c++)
+         prior[c] = m_bank_class_mass[r][s][h][c] / prior_total;
 
       double mix = FXAI_Clamp(total / 120.0, 0.05, 0.35);
       for(int c=0; c<3; c++)
@@ -763,6 +771,16 @@ public:
 
    virtual void Reset(void) { ResetAuxState(); }
    virtual void Describe(FXAIAIManifestV4 &out) const = 0;
+   virtual bool SupportsSyntheticSeries(void) const { return false; }
+   virtual bool SetSyntheticSeries(const datetime &time_arr[],
+                                   const double &open_arr[],
+                                   const double &high_arr[],
+                                   const double &low_arr[],
+                                   const double &close_arr[])
+   {
+      return false;
+   }
+   virtual void ClearSyntheticSeries(void) {}
    virtual void ResetState(const int reason, const datetime when)
    {
       Reset();

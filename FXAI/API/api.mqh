@@ -91,6 +91,11 @@ bool FXAI_ValidatePredictionV4(const FXAIAIPredictionV4 &pred,
       reason = "class_sum";
       return false;
    }
+   if(MathAbs(sum - 1.0) > 0.02)
+   {
+      reason = "class_sum_norm";
+      return false;
+   }
    if(!MathIsValidNumber(pred.move_mean_points) || pred.move_mean_points < 0.0)
    {
       reason = "move_mean";
