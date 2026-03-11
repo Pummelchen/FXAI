@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -101,6 +102,14 @@ def read_common_account() -> tuple[str, str]:
         elif line.startswith("Server="):
             server = line.split("=", 1)[1].strip()
     return login, server
+
+
+def resolve_credentials(args) -> tuple[str, str, str]:
+    common_login, common_server = read_common_account()
+    login = args.login or os.environ.get("FXAI_MT5_LOGIN", "") or common_login
+    server = args.server or os.environ.get("FXAI_MT5_SERVER", "") or common_server
+    password = args.password or os.environ.get("FXAI_MT5_PASSWORD", "")
+    return login, server, password
 
 
 def terminal_running() -> bool:
@@ -567,11 +576,13 @@ def write_audit_set(path: Path, args) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def write_audit_ini(path: Path, preset_name: str, login: str, symbol: str, server: str = "") -> None:
+def write_audit_ini(path: Path, preset_name: str, login: str, symbol: str, server: str = "", password: str = "") -> None:
     lines = [
         "[Common]",
         f"Login={login}" if login else "Login=",
         f"Server={server}" if server else "Server=",
+        f"Password={password}" if password else "Password=",
+        "KeepPrivate=1",
         "ProxyEnable=0",
         "CertInstall=0",
         "NewsEnable=0",
@@ -654,10 +665,10 @@ def build_profile_tester_section(preset_name: str, symbol: str, login: str = "",
     }
 
 
-def attempt_audit_launch(login: str, server: str, preset_name: str, args) -> tuple[bool, str, str]:
+def attempt_audit_launch(login: str, server: str, password: str, preset_name: str, args) -> tuple[bool, str, str]:
     start_ts = time.time()
     config_path = Path(tempfile.gettempdir()) / "fxai_audit_runner.ini"
-    write_audit_ini(config_path, preset_name, login, args.symbol, server)
+    write_audit_ini(config_path, preset_name, login, args.symbol, server, password)
     try:
         run_terminal_audit(config_path, args.timeout)
     except AuditRunError as exc:
@@ -686,6 +697,8 @@ def attempt_audit_launch(login: str, server: str, preset_name: str, args) -> tup
                 {
                     "Login": login,
                     "Server": server,
+                    "Password": password,
+                    "KeepPrivate": "1",
                     "ProxyEnable": "0",
                     "CertInstall": "0",
                     "NewsEnable": "0",
@@ -726,16 +739,16 @@ def cmd_run_audit(args):
     preset_path = TESTER_PRESET_DIR / preset_name
     write_audit_set(preset_path, args)
 
-    login, server = read_common_account()
-    if args.login:
-        login = args.login
+    login, server, password = resolve_credentials(args)
 
     if DEFAULT_REPORT.exists():
         DEFAULT_REPORT.unlink()
-    success, mode, failure = attempt_audit_launch(login, server, preset_name, args)
+    success, mode, failure = attempt_audit_launch(login, server, password, preset_name, args)
     if not success:
         if not failure and not login:
             failure = "MT5 tester did not produce a report and no login was available from common.ini"
+        elif not failure and not password:
+            failure = "MT5 tester did not produce a report and no password was supplied; set FXAI_MT5_PASSWORD or use --password"
         elif not failure:
             failure = "MT5 tester exited without producing the audit report"
         print(f"{mode} launch failed: {failure}", file=sys.stderr)
@@ -886,6 +899,8 @@ def main():
     ra.add_argument("--seed", type=int, default=42)
     ra.add_argument("--symbol", default="EURUSD")
     ra.add_argument("--login")
+    ra.add_argument("--server")
+    ra.add_argument("--password")
     ra.add_argument("--timeout", type=int, default=180)
     ra.add_argument("--baseline")
     ra.add_argument("--output")

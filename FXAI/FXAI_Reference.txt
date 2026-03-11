@@ -104,7 +104,7 @@ Drill-Sergeant Audit Lab
 ------------------------
 FXAI now includes a dedicated synthetic audit layer to pressure-test plugins outside of normal market backtests. The MT5-side runner is `Tests/FXAI_AuditRunner.mq5`; it generates controlled synthetic scenarios such as random walk, drift, monotonic trend, mean reversion, volatility clustering, and regime shifts, then trains and predicts with the real plugin code through API v4.
 
-The external control layer is `Tools/fxai_testlab.py`. Its job is not to replace MT5 execution; its job is to compile the audit runner, launch the MT5 tester when possible, read the audit report, grade each plugin harshly, and produce concrete improvement recommendations by model family and plugin identity.
+The external control layer is `Tools/fxai_testlab.py`. Its job is not to replace MT5 execution; its job is to compile the audit runner, launch the MT5 tester when possible, read the audit report, grade each plugin harshly, and produce concrete improvement recommendations by model family and plugin identity. For unattended tester launches it can now take explicit MT5 credentials from `--login`, `--server`, `--password` or from the environment variables `FXAI_MT5_LOGIN`, `FXAI_MT5_SERVER`, and `FXAI_MT5_PASSWORD`.
 
 The analyzer is driven by `Tools/plugin_oracles.json`. That file defines plugin-specific behavior expectations, family discipline rules, and scenario thresholds so the drill-sergeant report reflects what each model is supposed to be good at rather than only generic scorekeeping.
 
