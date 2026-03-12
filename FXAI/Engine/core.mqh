@@ -381,6 +381,42 @@ void FXAI_BuildInputVector(const double &features[], double &x[])
       x[i + 1] = features[i];
 }
 
+double FXAI_GetInputFeature(const double &x[], const int feature_idx)
+{
+   int idx = feature_idx + 1;
+   if(idx >= 0 && idx < ArraySize(x)) return x[idx];
+   return 0.0;
+}
+
+void FXAI_SetInputFeature(double &x[], const int feature_idx, const double value)
+{
+   int idx = feature_idx + 1;
+   if(idx >= 0 && idx < ArraySize(x))
+      x[idx] = value;
+}
+
+double FXAI_MeanInputFeatureRange(const double &x[],
+                                  const int first_feature_idx,
+                                  const int last_feature_idx)
+{
+   if(last_feature_idx < first_feature_idx) return 0.0;
+   double sum = 0.0;
+   int used = 0;
+   for(int f=first_feature_idx; f<=last_feature_idx; f++)
+   {
+      sum += FXAI_GetInputFeature(x, f);
+      used++;
+   }
+   if(used <= 0) return 0.0;
+   return sum / (double)used;
+}
+
+double FXAI_QuantizeSignedFeature(const double value, const double step)
+{
+   double s = (step > 1e-9 ? step : 0.25);
+   return MathRound(value / s) * s;
+}
+
 ulong FXAI_FeatureGroupBit(const int group_id)
 {
    if(group_id < 0 || group_id > (int)FXAI_FEAT_GROUP_FILTERS)
@@ -516,11 +552,146 @@ void FXAI_ApplyFeatureSchemaToInput(const int schema_id,
    if(ArraySize(x) < FXAI_AI_WEIGHTS)
       return;
 
+   double raw_x[FXAI_AI_WEIGHTS];
+   for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      raw_x[k] = x[k];
+
    x[0] = 1.0;
    for(int f=0; f<FXAI_AI_FEATURES; f++)
    {
       if(!FXAI_IsFeatureEnabledForSchema(f, schema_id, groups_mask))
          x[f + 1] = 0.0;
+   }
+
+   // Schema-specific projection stage. This is intentionally stronger than
+   // simple masking so each plugin family sees a representation aligned to its
+   // inductive bias while staying on the shared feature contract.
+   switch(schema_id)
+   {
+      case FXAI_SCHEMA_SPARSE_STAT:
+      {
+         double mtf_ret = FXAI_MeanInputFeatureRange(x, 7, 9);
+         double mtf_slope = FXAI_MeanInputFeatureRange(x, 13, 14);
+         double sma_fast = 0.25 * (FXAI_GetInputFeature(x, 22) + FXAI_GetInputFeature(x, 24) +
+                                   FXAI_GetInputFeature(x, 26) + FXAI_GetInputFeature(x, 28));
+         double sma_slow = 0.25 * (FXAI_GetInputFeature(x, 23) + FXAI_GetInputFeature(x, 25) +
+                                   FXAI_GetInputFeature(x, 27) + FXAI_GetInputFeature(x, 29));
+         double ema_fast = 0.25 * (FXAI_GetInputFeature(x, 30) + FXAI_GetInputFeature(x, 32) +
+                                   FXAI_GetInputFeature(x, 34) + FXAI_GetInputFeature(x, 36));
+         double ema_slow = 0.25 * (FXAI_GetInputFeature(x, 31) + FXAI_GetInputFeature(x, 33) +
+                                   FXAI_GetInputFeature(x, 35) + FXAI_GetInputFeature(x, 37));
+         double vol_pack = FXAI_MeanInputFeatureRange(x, 41, 45);
+         double filt_pack = FXAI_MeanInputFeatureRange(x, 46, 49);
+         double ctx_ret = FXAI_GetInputFeature(x, 10);
+         double ctx_rel = FXAI_GetInputFeature(x, 12);
+         double ctx_corr = 0.0;
+         bool ctx_enabled = ((groups_mask & FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_CONTEXT)) != 0);
+         if(ctx_enabled)
+         {
+            ctx_ret = (FXAI_GetInputFeature(x, 10) + FXAI_GetInputFeature(raw_x, 50) +
+                       FXAI_GetInputFeature(raw_x, 54) + FXAI_GetInputFeature(raw_x, 58)) / 4.0;
+            ctx_rel = (FXAI_GetInputFeature(x, 12) + FXAI_GetInputFeature(raw_x, 52) +
+                       FXAI_GetInputFeature(raw_x, 56) + FXAI_GetInputFeature(raw_x, 60)) / 4.0;
+            ctx_corr = (FXAI_GetInputFeature(raw_x, 53) + FXAI_GetInputFeature(raw_x, 57) +
+                        FXAI_GetInputFeature(raw_x, 61)) / 3.0;
+         }
+
+         FXAI_SetInputFeature(x, 7, mtf_ret);
+         FXAI_SetInputFeature(x, 8, mtf_slope);
+         FXAI_SetInputFeature(x, 9, 0.5 * (mtf_ret + mtf_slope));
+         FXAI_SetInputFeature(x, 22, sma_fast);
+         FXAI_SetInputFeature(x, 23, sma_slow);
+         FXAI_SetInputFeature(x, 24, ema_fast);
+         FXAI_SetInputFeature(x, 25, ema_slow);
+         FXAI_SetInputFeature(x, 26, sma_fast - sma_slow);
+         FXAI_SetInputFeature(x, 27, ema_fast - ema_slow);
+         FXAI_SetInputFeature(x, 28, vol_pack);
+         FXAI_SetInputFeature(x, 29, filt_pack);
+         FXAI_SetInputFeature(x, 30, ctx_ret);
+         FXAI_SetInputFeature(x, 31, ctx_rel);
+         FXAI_SetInputFeature(x, 32, ctx_corr);
+         for(int f=33; f<=39; f++)
+            FXAI_SetInputFeature(x, f, 0.0);
+         break;
+      }
+
+      case FXAI_SCHEMA_SEQUENCE:
+      {
+         double ret_short = FXAI_GetInputFeature(x, 0);
+         double ret_mid = FXAI_GetInputFeature(x, 1);
+         double ret_long = FXAI_GetInputFeature(x, 2);
+         double mtf_fast = 0.5 * (FXAI_GetInputFeature(x, 7) + FXAI_GetInputFeature(x, 13));
+         double mtf_slow = 0.5 * (FXAI_GetInputFeature(x, 9) + FXAI_GetInputFeature(x, 14));
+
+         FXAI_SetInputFeature(x, 13, ret_short - ret_mid);
+         FXAI_SetInputFeature(x, 14, ret_mid - ret_long);
+         FXAI_SetInputFeature(x, 22, FXAI_GetInputFeature(x, 22) - FXAI_GetInputFeature(x, 23));
+         FXAI_SetInputFeature(x, 23, FXAI_GetInputFeature(x, 24) - FXAI_GetInputFeature(x, 25));
+         FXAI_SetInputFeature(x, 24, FXAI_GetInputFeature(x, 26) - FXAI_GetInputFeature(x, 27));
+         FXAI_SetInputFeature(x, 25, FXAI_GetInputFeature(x, 28) - FXAI_GetInputFeature(x, 29));
+         FXAI_SetInputFeature(x, 26, FXAI_GetInputFeature(x, 30) - FXAI_GetInputFeature(x, 31));
+         FXAI_SetInputFeature(x, 27, FXAI_GetInputFeature(x, 32) - FXAI_GetInputFeature(x, 33));
+         FXAI_SetInputFeature(x, 28, FXAI_GetInputFeature(x, 34) - FXAI_GetInputFeature(x, 35));
+         FXAI_SetInputFeature(x, 29, FXAI_GetInputFeature(x, 36) - FXAI_GetInputFeature(x, 37));
+         FXAI_SetInputFeature(x, 30, mtf_fast);
+         FXAI_SetInputFeature(x, 31, mtf_slow);
+         FXAI_SetInputFeature(x, 32, mtf_fast - mtf_slow);
+         break;
+      }
+
+      case FXAI_SCHEMA_RULE:
+      {
+         for(int f=0; f<FXAI_AI_FEATURES; f++)
+         {
+            int group_id = FXAI_GetFeatureGroupForIndex(f);
+            if(group_id == (int)FXAI_FEAT_GROUP_TIME)
+               continue;
+
+            double v = FXAI_GetInputFeature(x, f);
+            double out_v = 0.0;
+            if(v > 0.15) out_v = 1.0;
+            else if(v < -0.15) out_v = -1.0;
+            FXAI_SetInputFeature(x, f, out_v);
+         }
+         break;
+      }
+
+      case FXAI_SCHEMA_TREE:
+      {
+         for(int f=0; f<FXAI_AI_FEATURES; f++)
+         {
+            double v = FXAI_GetInputFeature(x, f);
+            FXAI_SetInputFeature(x, f, FXAI_QuantizeSignedFeature(v, 0.25));
+         }
+         break;
+      }
+
+      case FXAI_SCHEMA_CONTEXTUAL:
+      {
+         double ctx_ret = (FXAI_GetInputFeature(x, 50) + FXAI_GetInputFeature(x, 54) +
+                           FXAI_GetInputFeature(x, 58)) / 3.0;
+         double ctx_lag = (FXAI_GetInputFeature(x, 51) + FXAI_GetInputFeature(x, 55) +
+                           FXAI_GetInputFeature(x, 59)) / 3.0;
+         double ctx_rel = (FXAI_GetInputFeature(x, 52) + FXAI_GetInputFeature(x, 56) +
+                           FXAI_GetInputFeature(x, 60)) / 3.0;
+         double ctx_corr = (FXAI_GetInputFeature(x, 53) + FXAI_GetInputFeature(x, 57) +
+                            FXAI_GetInputFeature(x, 61)) / 3.0;
+         double ctx_strength = 0.30 * MathAbs(ctx_ret) +
+                               0.30 * MathAbs(ctx_rel) +
+                               0.25 * MathAbs(ctx_corr) +
+                               0.15 * MathAbs(ctx_lag);
+
+         FXAI_SetInputFeature(x, 10, 0.50 * (FXAI_GetInputFeature(x, 10) + ctx_ret));
+         FXAI_SetInputFeature(x, 11, 0.50 * (FXAI_GetInputFeature(x, 11) + MathAbs(ctx_rel)));
+         FXAI_SetInputFeature(x, 12, 0.50 * (FXAI_GetInputFeature(x, 12) + ctx_corr));
+         FXAI_SetInputFeature(x, 13, ctx_lag);
+         FXAI_SetInputFeature(x, 14, ctx_strength);
+         break;
+      }
+
+      case FXAI_SCHEMA_FULL:
+      default:
+         break;
    }
 }
 

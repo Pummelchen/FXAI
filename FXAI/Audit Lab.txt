@@ -17,6 +17,7 @@ It checks:
 - state integrity: reset behavior, replay behavior, sequence behavior, and long-run drift
 - market realism: deterministic market replay packs in addition to synthetic stress scenarios
 - regression quality: whether a plugin got worse than a known-good baseline
+- optimization guidance: which schema, feature mask, normalizer, or sequence setting is worth testing next
 
 Core Components
 ---------------
@@ -48,7 +49,7 @@ Step 1: Build the target
 
 Step 2: Generate scenarios
 - Synthetic scenarios such as random walk, monotonic trend, mean reversion, volatility clusters, and regime shifts.
-- Market replay packs such as `market_recent`, `market_trend`, and `market_chop`.
+- Market replay packs such as `market_recent`, `market_trend`, `market_chop`, `market_session_edges`, `market_spread_shock`, and `market_walkforward`.
 
 Step 3: Run plugins through API v4
 - The Audit Runner uses the same plugin API and the same shared data pipeline as the real framework.
@@ -119,6 +120,10 @@ Useful Controls
 - Forces a particular feature schema.
 - Useful for controlled feature-view experiments.
 
+`--feature-mask`
+- Forces a feature-group mask override during the audit run.
+- Useful for family-specific ablations and compact schema experiments.
+
 `--require-market-replay`
 - Makes the release gate stricter by requiring real replay coverage.
 
@@ -149,6 +154,12 @@ External drill-sergeant output:
 
 Optimization campaign files:
 - generated under `FXAI/Tools/`
+
+Recommended optimization outputs:
+- schema sweeps for the current plugin family
+- normalization sweeps
+- sequence-length sweeps for sequence-capable plugins
+- feature-mask ablations to identify unnecessary feature groups
 
 Regression baselines:
 - `FXAI/Tools/Baselines/`

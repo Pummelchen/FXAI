@@ -200,6 +200,19 @@
       "market_trend": {
         "trend_align_min": 0.15
       },
+      "market_session_edges": {
+        "active_ratio_max": 0.62,
+        "conf_drift_max": 0.24,
+        "skip_ratio_min": 0.38
+      },
+      "market_spread_shock": {
+        "active_ratio_max": 0.40,
+        "skip_ratio_min": 0.60
+      },
+      "market_walkforward": {
+        "trend_align_min": 0.12,
+        "conf_drift_max": 0.24
+      },
       "random_walk": {
         "active_ratio_max": 0.4,
         "bias_abs_max": 0.8,

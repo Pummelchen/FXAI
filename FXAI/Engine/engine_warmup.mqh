@@ -602,6 +602,19 @@ void FXAI_WarmupTrainHorizonPolicyForSamples(const int H,
       double feat[FXAI_HPOL_FEATS];
       FXAIDataSnapshot snap_i = snapshot;
       snap_i.bar_time = samples[i].sample_time;
+      double warm_ctx_strength = FXAI_Clamp(MathAbs(FXAI_GetArrayValue(samples[i].x, 10, 0.0)) +
+                                             FXAI_GetArrayValue(samples[i].x, 11, 0.0) +
+                                             MathAbs(FXAI_GetArrayValue(samples[i].x, 12, 0.0)),
+                                             0.0,
+                                             4.0);
+      double warm_ctx_quality = FXAI_Clamp(0.50 * FXAI_GetArrayValue(samples[i].x, 10, 0.0) +
+                                            0.30 * FXAI_GetArrayValue(samples[i].x, 11, 0.0) +
+                                            0.20 * FXAI_GetArrayValue(samples[i].x, 12, 0.0),
+                                            -1.0,
+                                            2.0);
+      double warm_rel_hint = 0.50;
+      if(ai_hint >= 0 && ai_hint < FXAI_AI_COUNT)
+         warm_rel_hint = FXAI_Clamp(g_model_reliability[ai_hint], 0.0, 1.0);
       FXAI_BuildHorizonPolicyFeatures(H,
                                       base_h,
                                       exp_abs,
@@ -610,6 +623,9 @@ void FXAI_WarmupTrainHorizonPolicyForSamples(const int H,
                                       current_vol,
                                       samples[i].regime_id,
                                       ai_hint,
+                                      warm_ctx_strength,
+                                      warm_ctx_quality,
+                                      warm_rel_hint,
                                       feat);
 
       double edge = MathMax(MathAbs(samples[i].move_points) - samples[i].min_move_points, 0.0);
@@ -1290,6 +1306,12 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
          double ensemble_skip_support = 0.0;
          double ensemble_meta_total = 0.0;
          double ensemble_expected_sum = 0.0;
+         double ensemble_expected_sq_sum = 0.0;
+         double ensemble_conf_sum = 0.0;
+         double ensemble_rel_sum = 0.0;
+         double ensemble_margin_sum = 0.0;
+         double family_support[FXAI_FAMILY_OTHER + 1];
+         for(int fam_i=0; fam_i<=FXAI_FAMILY_OTHER; fam_i++) family_support[fam_i] = 0.0;
 
          for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
          {
@@ -1394,6 +1416,12 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             ensemble_buy_ev_sum += meta_w * model_buy_ev;
             ensemble_sell_ev_sum += meta_w * model_sell_ev;
             ensemble_expected_sum += meta_w * expected_move;
+            ensemble_expected_sq_sum += meta_w * expected_move * expected_move;
+            ensemble_conf_sum += meta_w * FXAI_Clamp(pred.confidence, 0.0, 1.0);
+            ensemble_rel_sum += meta_w * FXAI_Clamp(pred.reliability, 0.0, 1.0);
+            ensemble_margin_sum += meta_w * FXAI_Clamp(MathAbs(probs_eval[(int)FXAI_LABEL_BUY] - probs_eval[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+            if(plugin_manifest.family >= 0 && plugin_manifest.family <= FXAI_FAMILY_OTHER)
+               family_support[plugin_manifest.family] += meta_w;
             if(signal == 1) ensemble_buy_support += meta_w;
             else if(signal == 0) ensemble_sell_support += meta_w;
             else ensemble_skip_support += meta_w;
@@ -1409,6 +1437,34 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             double avg_buy_ev = ensemble_buy_ev_sum / ensemble_meta_total;
             double avg_sell_ev = ensemble_sell_ev_sum / ensemble_meta_total;
             double avg_expected = ensemble_expected_sum / ensemble_meta_total;
+            double avg_expected_sq = ensemble_expected_sq_sum / ensemble_meta_total;
+            double avg_conf = ensemble_conf_sum / ensemble_meta_total;
+            double avg_rel = ensemble_rel_sum / ensemble_meta_total;
+            double avg_margin = ensemble_margin_sum / ensemble_meta_total;
+            double move_dispersion = MathSqrt(MathMax(avg_expected_sq - avg_expected * avg_expected, 0.0));
+            int active_family_count = 0;
+            double dominant_family_support = 0.0;
+            for(int fam_i=0; fam_i<=FXAI_FAMILY_OTHER; fam_i++)
+            {
+               if(family_support[fam_i] > 0.0)
+               {
+                  active_family_count++;
+                  if(family_support[fam_i] > dominant_family_support)
+                     dominant_family_support = family_support[fam_i];
+               }
+            }
+            double active_family_ratio = (double)active_family_count / (double)MathMax(FXAI_FAMILY_OTHER + 1, 1);
+            double dominant_family_ratio = dominant_family_support / MathMax(ensemble_meta_total, 1e-6);
+            double warm_ctx_strength = FXAI_Clamp(MathAbs(FXAI_GetArrayValue(samples[i].x, 10, 0.0)) +
+                                                  FXAI_GetArrayValue(samples[i].x, 11, 0.0) +
+                                                  MathAbs(FXAI_GetArrayValue(samples[i].x, 12, 0.0)),
+                                                  0.0,
+                                                  4.0);
+            double warm_ctx_quality = FXAI_Clamp(0.50 * FXAI_GetArrayValue(samples[i].x, 10, 0.0) +
+                                                 0.30 * FXAI_GetArrayValue(samples[i].x, 11, 0.0) +
+                                                 0.20 * FXAI_GetArrayValue(samples[i].x, 12, 0.0),
+                                                 -1.0,
+                                                 2.0);
             double feat[FXAI_STACK_FEATS];
             FXAI_StackBuildFeatures(buyPct,
                                     sellPct,
@@ -1419,6 +1475,14 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
                                     avg_expected,
                                     (FXAI_AI_WEIGHTS > 6 ? MathAbs(samples[i].x[6]) : 0.0),
                                     H,
+                                    avg_conf,
+                                    avg_rel,
+                                    move_dispersion,
+                                    avg_margin,
+                                    active_family_ratio,
+                                    dominant_family_ratio,
+                                    warm_ctx_strength,
+                                    warm_ctx_quality,
                                     feat);
             FXAI_StackUpdate(regime_id, samples[i].label_class, feat, samples[i].sample_weight);
          }

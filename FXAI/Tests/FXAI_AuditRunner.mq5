@@ -6,13 +6,14 @@
 input bool   Audit_AllPlugins = true;
 input ENUM_AI_TYPE Audit_Plugin = AI_M1SYNC;
 input string Audit_PluginList = "{all}";
-input string Audit_ScenarioList = "{random_walk, drift_up, drift_down, mean_revert, vol_cluster, monotonic_up, monotonic_down, regime_shift, market_recent, market_trend, market_chop}";
+input string Audit_ScenarioList = "{random_walk, drift_up, drift_down, mean_revert, vol_cluster, monotonic_up, monotonic_down, regime_shift, market_recent, market_trend, market_chop, market_session_edges, market_spread_shock, market_walkforward}";
 input int    Audit_Bars = 20000;
 input int    PredictionTargetMinutes = 5;
 input int    Audit_M1SyncBars = 3;
 input ENUM_FXAI_FEATURE_NORMALIZATION Audit_Normalization = FXAI_NORM_EXISTING;
 input int    Audit_SequenceBarsOverride = 0;
 input int    Audit_SchemaOverride = 0;
+input ulong  Audit_FeatureGroupsMaskOverride = 0;
 input double Audit_CommissionPerLotSide = 0.0;
 input double Audit_CostBufferPoints = 2.0;
 input int    Audit_Seed = 42;
@@ -53,6 +54,11 @@ double FXAI_AuditGetCostBufferPoints(void)
    return Audit_CostBufferPoints;
 }
 
+ulong FXAI_AuditGetFeatureGroupsMaskOverride(void)
+{
+   return Audit_FeatureGroupsMaskOverride;
+}
+
 bool FXAI_AuditScenarioIdFromName(const string raw_name,
                                   int &out_id)
 {
@@ -72,6 +78,9 @@ bool FXAI_AuditScenarioIdFromName(const string raw_name,
    if(name == "market_recent") { out_id = 8; return true; }
    if(name == "market_trend") { out_id = 9; return true; }
    if(name == "market_chop") { out_id = 10; return true; }
+   if(name == "market_session_edges") { out_id = 11; return true; }
+   if(name == "market_spread_shock") { out_id = 12; return true; }
+   if(name == "market_walkforward") { out_id = 13; return true; }
    return false;
 }
 

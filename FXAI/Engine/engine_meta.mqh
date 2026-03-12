@@ -192,21 +192,29 @@ void FXAI_BuildHorizonPolicyFeatures(const int horizon_minutes,
                                      const double current_vol,
                                      const int regime_id,
                                      const int ai_hint,
+                                     const double context_strength,
+                                     const double context_quality,
+                                     const double model_reliability_hint,
                                      double &feat[])
 {
    MqlDateTime dt;
    TimeToStruct(snapshot.bar_time, dt);
    double hold_penalty = FXAI_Clamp(AI_HorizonPenaltyPerMinute, 0.0, 0.02);
+   double mm = MathMax(min_move_points, 0.50);
+   double ctx_strength = FXAI_Clamp(context_strength, 0.0, 4.0);
+   double ctx_quality = FXAI_Clamp(context_quality, -1.0, 2.0);
+   double rel_hint = FXAI_Clamp(model_reliability_hint, 0.0, 1.0);
+   int session_bucket = FXAI_DeriveSessionBucket(snapshot.bar_time);
 
    feat[0] = 1.0;
-   feat[1] = FXAI_Clamp((expected_abs_points - min_move_points) / MathMax(min_move_points, 0.50), -4.0, 6.0) / 4.0;
-   feat[2] = FXAI_Clamp(expected_abs_points / MathMax(min_move_points, 0.50), 0.0, 8.0) / 4.0;
+   feat[1] = FXAI_Clamp((expected_abs_points - min_move_points) / mm, -4.0, 6.0) / 4.0;
+   feat[2] = FXAI_Clamp(expected_abs_points / mm, 0.0, 8.0) / 4.0;
    feat[3] = 1.0 / MathSqrt((double)MathMax(horizon_minutes, 1));
    feat[4] = -hold_penalty * (double)horizon_minutes;
-   feat[5] = FXAI_Clamp(FXAI_GetHorizonRegimeEdge(regime_id, horizon_minutes) / MathMax(min_move_points, 0.50), -3.0, 3.0) / 3.0;
-   feat[6] = (ai_hint >= 0 ? FXAI_Clamp(FXAI_GetModelRegimeEdge(ai_hint, regime_id) / MathMax(min_move_points, 0.50), -3.0, 3.0) / 3.0 : 0.0);
+   feat[5] = FXAI_Clamp(FXAI_GetHorizonRegimeEdge(regime_id, horizon_minutes) / mm, -3.0, 3.0) / 3.0;
+   feat[6] = (ai_hint >= 0 ? FXAI_Clamp(FXAI_GetModelRegimeEdge(ai_hint, regime_id) / mm, -3.0, 3.0) / 3.0 : 0.0);
    feat[7] = FXAI_Clamp(current_vol / MathMax(snapshot.point, 1e-6), 0.0, 50.0) / 25.0;
-   feat[8] = FXAI_Clamp(snapshot.spread_points / MathMax(min_move_points, 0.50), 0.0, 2.0) - 0.5;
+   feat[8] = FXAI_Clamp(snapshot.spread_points / mm, 0.0, 2.0) - 0.5;
    feat[9] = ((double)dt.hour - 11.5) / 11.5;
    feat[10] = ((double)dt.min - 29.5) / 29.5;
    feat[11] = FXAI_Clamp(((double)horizon_minutes - (double)base_h) / (double)MathMax(base_h, 1), -2.0, 2.0) / 2.0;
@@ -214,6 +222,14 @@ void FXAI_BuildHorizonPolicyFeatures(const int horizon_minutes,
    feat[13] = FXAI_Clamp(expected_abs_points / MathSqrt((double)MathMax(horizon_minutes, 1)), 0.0, 20.0) / 10.0;
    feat[14] = FXAI_Clamp(((double)horizon_minutes / (double)MathMax(base_h, 1)) - 1.0, -2.0, 4.0) / 2.0;
    feat[15] = FXAI_Clamp((double)regime_id / (double)MathMax(FXAI_REGIME_COUNT - 1, 1), 0.0, 1.0) - 0.5;
+   feat[16] = FXAI_Clamp(ctx_strength / 2.0, 0.0, 1.5) - 0.25;
+   feat[17] = FXAI_Clamp(ctx_quality, -1.0, 2.0) / 2.0;
+   feat[18] = rel_hint - 0.5;
+   feat[19] = FXAI_Clamp(((expected_abs_points - min_move_points) / mm) * (0.5 + ctx_quality), -6.0, 6.0) / 6.0;
+   feat[20] = FXAI_Clamp((current_vol / MathMax(snapshot.point, 1e-6)) * (0.25 + ctx_strength), 0.0, 80.0) / 40.0;
+   feat[21] = FXAI_Clamp(snapshot.spread_points / MathMax(current_vol / MathMax(snapshot.point, 1e-6), 1.0), 0.0, 4.0) / 2.0 - 0.5;
+   feat[22] = ((double)session_bucket / (double)MathMax(FXAI_PLUGIN_SESSION_BUCKETS - 1, 1)) - 0.5;
+   feat[23] = ((double)FXAI_GetHorizonSlot(horizon_minutes) / (double)MathMax(FXAI_MAX_HORIZONS - 1, 1)) - 0.5;
 }
 
 int FXAI_SelectRoutedHorizon(const double &close_arr[],
@@ -222,7 +238,10 @@ int FXAI_SelectRoutedHorizon(const double &close_arr[],
                              const int ev_lookback,
                              const int fallback_h,
                              const int regime_id,
-                             const int ai_hint)
+                             const int ai_hint,
+                             const double context_strength,
+                             const double context_quality,
+                             const double model_reliability_hint)
 {
    int base_h = FXAI_ClampHorizon(fallback_h);
    if(!AI_MultiHorizon) return base_h;
@@ -281,6 +300,9 @@ int FXAI_SelectRoutedHorizon(const double &close_arr[],
                                          current_vol,
                                          regime_id,
                                          ai_hint,
+                                         context_strength,
+                                         context_quality,
+                                         model_reliability_hint,
                                          feat);
 
          double learned = 0.0;
@@ -315,6 +337,14 @@ void FXAI_StackBuildFeatures(const double buy_pct,
                              const double expected_move_points,
                              const double vol_proxy,
                              const int horizon_minutes,
+                             const double avg_confidence,
+                             const double avg_reliability,
+                             const double move_dispersion,
+                             const double directional_margin,
+                             const double active_family_ratio,
+                             const double dominant_family_ratio,
+                             const double context_strength,
+                             const double context_quality,
                              double &feat[])
 {
    double mm = MathMax(min_move_points, 0.10);
@@ -362,6 +392,14 @@ void FXAI_StackBuildFeatures(const double buy_pct,
    feat[17] = FXAI_Clamp(MathMax(avg_buy_ev, avg_sell_ev) / mm, -2.0, 6.0) / 4.0;
    feat[18] = FXAI_Clamp(expected_move_points / mm, 0.0, 8.0) / 4.0;
    feat[19] = FXAI_Clamp((pb + ps) - pk, -1.0, 1.0);
+   feat[20] = FXAI_Clamp(avg_confidence, 0.0, 1.0);
+   feat[21] = FXAI_Clamp(avg_reliability, 0.0, 1.0);
+   feat[22] = FXAI_Clamp(move_dispersion / mm, 0.0, 4.0) / 2.0;
+   feat[23] = FXAI_Clamp(directional_margin, 0.0, 1.0);
+   feat[24] = FXAI_Clamp(active_family_ratio, 0.0, 1.0);
+   feat[25] = FXAI_Clamp(dominant_family_ratio, 0.0, 1.0);
+   feat[26] = FXAI_Clamp(context_strength, 0.0, 4.0) / 2.0;
+   feat[27] = FXAI_Clamp(context_quality, -1.0, 2.0) / 2.0;
 }
 
 void FXAI_StackPredict(const int regime_id, const double &feat[], double &probs[])

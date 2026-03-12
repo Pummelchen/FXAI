@@ -276,6 +276,22 @@ int SpecialDirectionAI(const string symbol)
    double vol_hint = MathAbs(FXAI_SafeReturn(close_arr, 0, 1));
    int regime_hint = FXAI_GetRegimeId(snapshot.bar_time, spread_pred, vol_hint);
    int ai_hint = (ensembleMode ? -1 : aiType);
+   double ctx_util = 0.0, ctx_stability = 0.0, ctx_lead = 0.0, ctx_coverage = 0.0;
+   FXAI_GetDynamicContextState(ctx_util, ctx_stability, ctx_lead, ctx_coverage);
+   double context_strength = FXAI_Clamp(MathAbs(FXAI_GetArrayValue(ctx_mean_arr, 0, 0.0)) +
+                                        FXAI_GetArrayValue(ctx_std_arr, 0, 0.0) +
+                                        MathAbs(FXAI_GetArrayValue(ctx_up_arr, 0, 0.5) - 0.5),
+                                        0.0,
+                                        4.0);
+   double context_quality = FXAI_Clamp(0.45 * ctx_util +
+                                       0.25 * ctx_stability +
+                                       0.20 * ctx_lead +
+                                       0.10 * ctx_coverage,
+                                       -1.0,
+                                       2.0);
+   double model_reliability_hint = 0.50;
+   if(ai_hint >= 0 && ai_hint < FXAI_AI_COUNT)
+      model_reliability_hint = FXAI_Clamp(g_model_reliability[ai_hint], 0.0, 1.0);
 
    int H = FXAI_SelectRoutedHorizon(close_arr,
                                     snapshot,
@@ -283,7 +299,10 @@ int SpecialDirectionAI(const string symbol)
                                     evLookback,
                                     base_h,
                                     regime_hint,
-                                    ai_hint);
+                                    ai_hint,
+                                    context_strength,
+                                    context_quality,
+                                    model_reliability_hint);
    int init_start = H;
    int init_end = H + base - 1;
    int online_start = H;
@@ -421,6 +440,9 @@ int SpecialDirectionAI(const string symbol)
                                    MathAbs(FXAI_SafeReturn(close_arr, 0, 1)),
                                    regime_id,
                                    ai_hint,
+                                   context_strength,
+                                   context_quality,
+                                   model_reliability_hint,
                                    hpolicy_feat);
    FXAI_EnqueueHorizonPolicyPending(signal_seq, regime_id, H, min_move_pred, hpolicy_feat);
 
@@ -731,6 +753,12 @@ int SpecialDirectionAI(const string symbol)
    double ensemble_skip_support = 0.0;
    double ensemble_meta_total = 0.0;
    double ensemble_expected_sum = 0.0;
+   double ensemble_expected_sq_sum = 0.0;
+   double ensemble_conf_sum = 0.0;
+   double ensemble_rel_sum = 0.0;
+   double ensemble_margin_sum = 0.0;
+   double family_support[FXAI_FAMILY_OTHER + 1];
+   for(int fam_i=0; fam_i<=FXAI_FAMILY_OTHER; fam_i++) family_support[fam_i] = 0.0;
    double ensemble_probs[3];
    ensemble_probs[0] = 0.3333;
    ensemble_probs[1] = 0.3333;
@@ -893,6 +921,12 @@ int SpecialDirectionAI(const string symbol)
          ensemble_buy_ev_sum += meta_w * model_buy_ev;
          ensemble_sell_ev_sum += meta_w * model_sell_ev;
          ensemble_expected_sum += meta_w * expected_move;
+         ensemble_expected_sq_sum += meta_w * expected_move * expected_move;
+         ensemble_conf_sum += meta_w * FXAI_Clamp(pred.confidence, 0.0, 1.0);
+         ensemble_rel_sum += meta_w * FXAI_Clamp(pred.reliability, 0.0, 1.0);
+         ensemble_margin_sum += meta_w * FXAI_Clamp(MathAbs(class_probs_pred[(int)FXAI_LABEL_BUY] - class_probs_pred[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+         if(manifest.family >= 0 && manifest.family <= FXAI_FAMILY_OTHER)
+            family_support[manifest.family] += meta_w;
 
          if(signal == 1) ensemble_buy_support += meta_w;
          else if(signal == 0) ensemble_sell_support += meta_w;
@@ -915,6 +949,24 @@ int SpecialDirectionAI(const string symbol)
          double avg_buy_ev = ensemble_buy_ev_sum / ensemble_meta_total;
          double avg_sell_ev = ensemble_sell_ev_sum / ensemble_meta_total;
          double avg_expected = ensemble_expected_sum / ensemble_meta_total;
+         double avg_expected_sq = ensemble_expected_sq_sum / ensemble_meta_total;
+         double avg_conf = ensemble_conf_sum / ensemble_meta_total;
+         double avg_rel = ensemble_rel_sum / ensemble_meta_total;
+         double avg_margin = ensemble_margin_sum / ensemble_meta_total;
+         double move_dispersion = MathSqrt(MathMax(avg_expected_sq - avg_expected * avg_expected, 0.0));
+         int active_family_count = 0;
+         double dominant_family_support = 0.0;
+         for(int fam_i=0; fam_i<=FXAI_FAMILY_OTHER; fam_i++)
+         {
+            if(family_support[fam_i] > 0.0)
+            {
+               active_family_count++;
+               if(family_support[fam_i] > dominant_family_support)
+                  dominant_family_support = family_support[fam_i];
+            }
+         }
+         double active_family_ratio = (double)active_family_count / (double)MathMax(FXAI_FAMILY_OTHER + 1, 1);
+         double dominant_family_ratio = dominant_family_support / MathMax(ensemble_meta_total, 1e-6);
          double vote_probs[3];
          vote_probs[(int)FXAI_LABEL_SELL] = FXAI_Clamp(ensemble_sell_support / ensemble_meta_total, 0.0, 1.0);
          vote_probs[(int)FXAI_LABEL_BUY] = FXAI_Clamp(ensemble_buy_support / ensemble_meta_total, 0.0, 1.0);
@@ -932,13 +984,24 @@ int SpecialDirectionAI(const string symbol)
                                  avg_expected,
                                  vol_proxy_abs,
                                  H,
+                                 avg_conf,
+                                 avg_rel,
+                                 move_dispersion,
+                                 avg_margin,
+                                 active_family_ratio,
+                                 dominant_family_ratio,
+                                 context_strength,
+                                 context_quality,
                                  stack_feat);
          double stack_probs_dyn[];
          ArrayResize(stack_probs_dyn, 3);
          FXAI_StackPredict(regime_id, stack_feat, stack_probs_dyn);
-         ensemble_probs[0] = FXAI_Clamp(0.65 * stack_probs_dyn[0] + 0.35 * vote_probs[0], 0.0005, 0.9990);
-         ensemble_probs[1] = FXAI_Clamp(0.65 * stack_probs_dyn[1] + 0.35 * vote_probs[1], 0.0005, 0.9990);
-         ensemble_probs[2] = FXAI_Clamp(0.65 * stack_probs_dyn[2] + 0.35 * vote_probs[2], 0.0005, 0.9990);
+         double stack_blend = FXAI_Clamp(0.40 + 0.20 * avg_conf + 0.18 * avg_rel + 0.12 * dominant_family_ratio + 0.08 * FXAI_Clamp(context_quality, 0.0, 1.5) - 0.06 * FXAI_Clamp(move_dispersion / MathMax(min_move_pred, 0.10), 0.0, 1.0),
+                                         0.45,
+                                         0.85);
+         ensemble_probs[0] = FXAI_Clamp(stack_blend * stack_probs_dyn[0] + (1.0 - stack_blend) * vote_probs[0], 0.0005, 0.9990);
+         ensemble_probs[1] = FXAI_Clamp(stack_blend * stack_probs_dyn[1] + (1.0 - stack_blend) * vote_probs[1], 0.0005, 0.9990);
+         ensemble_probs[2] = FXAI_Clamp(stack_blend * stack_probs_dyn[2] + (1.0 - stack_blend) * vote_probs[2], 0.0005, 0.9990);
          double ps = ensemble_probs[0] + ensemble_probs[1] + ensemble_probs[2];
          if(ps <= 0.0) ps = 1.0;
          ensemble_probs[0] /= ps; ensemble_probs[1] /= ps; ensemble_probs[2] /= ps;

@@ -8,10 +8,10 @@ Built with zero external libraries or DLLs, FXAI runs entirely on highly optimiz
 
 Core benefits at a glance:
 - Multi-model plugin architecture with one unified API and shared data pipeline.
-- Manifest-driven feature schemas so each plugin family can consume a more appropriate view of the data.
+- Manifest-driven feature schemas and schema-specific projectors so each plugin family can consume a more appropriate view of the data.
 - Cost-aware `BUY / SELL / SKIP` decisions tuned for realistic FX execution conditions.
 - Strong equity-level protection logic to reduce overtrading and uncontrolled drawdowns.
-- High-speed MT5-native backtesting, market replay certification, and optimization without external libraries or DLLs.
+- High-speed MT5-native backtesting, richer meta-policy routing, dynamic market-context selection, market replay certification, and optimization without external libraries or DLLs.
 
 ## Table of Contents
 
@@ -32,6 +32,7 @@ FXAI is an MT5 Expert Advisor project that combines:
 - Online model updates during backtest/live runtime
 - Ensemble support to compare and combine models
 - Dynamic market-context selection from a larger symbol candidate pool
+- Richer meta-policy inputs for horizon routing and ensemble blending
 - Equity-level risk management and trade protection logic
 
 The project is designed to keep MT5 execution practical while enabling advanced model experimentation.
@@ -84,6 +85,11 @@ The project is designed to keep MT5 execution practical while enabling advanced 
 ## Audit Lab
 
 FXAI includes a drill-sergeant Audit Lab for plugin stress testing, market replay certification, regression checks, optimization planning, and release gating.
+
+Recent Audit Lab capabilities include:
+- release-grade market replay packs alongside synthetic stress tests
+- schema and feature-mask override testing
+- audit-guided optimization campaign generation for schemas, normalizers, sequence lengths, and feature groups
 
 The full operator handbook now lives here:
 - [Audit Lab Handbook](FXAI/Audit%20Lab.txt)

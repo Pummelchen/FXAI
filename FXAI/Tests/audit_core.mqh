@@ -20,6 +20,7 @@ int FXAI_AuditGetSequenceBarsOverride(void);
 int FXAI_AuditGetSchemaOverride(void);
 double FXAI_AuditGetCommissionPerLotSide(void);
 double FXAI_AuditGetCostBufferPoints(void);
+ulong FXAI_AuditGetFeatureGroupsMaskOverride(void);
 
 struct FXAIAuditScenarioSpec
 {
@@ -339,6 +340,18 @@ void FXAI_AuditFillScenarioSpec(const int scenario_id,
          spec.name = "market_chop";
          spec.spread_points = 1.4;
          break;
+      case 11:
+         spec.name = "market_session_edges";
+         spec.spread_points = 1.6;
+         break;
+      case 12:
+         spec.name = "market_spread_shock";
+         spec.spread_points = 2.2;
+         break;
+      case 13:
+         spec.name = "market_walkforward";
+         spec.spread_points = 1.5;
+         break;
       default:
          break;
    }
@@ -652,8 +665,38 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
             score = -0.001 * (double)start;
          else if(spec.id == 9)
             score = trendiness + 0.05 * (avg_range / MathMax(point, 1e-6));
-         else
+         else if(spec.id == 10)
             score = (1.0 - trendiness) + 0.03 * (avg_range / MathMax(point, 1e-6));
+         else if(spec.id == 11)
+         {
+            MqlDateTime dt0;
+            TimeToStruct(rates_m1[start + bars / 2].time, dt0);
+            double session_edge = 1.0 - MathMin(MathAbs((double)dt0.hour - 8.0), MathAbs((double)dt0.hour - 16.0)) / 8.0;
+            score = 0.60 * session_edge + 0.25 * (avg_range / MathMax(point, 1e-6)) + 0.15 * (1.0 - trendiness);
+         }
+         else if(spec.id == 12)
+         {
+            double avg_spread = 0.0;
+            double max_spread = 0.0;
+            for(int j=start; j<start + bars; j++)
+            {
+               double sp = (double)rates_m1[j].spread;
+               avg_spread += sp;
+               if(sp > max_spread) max_spread = sp;
+            }
+            avg_spread /= MathMax((double)bars, 1.0);
+            score = (max_spread - avg_spread) + 0.04 * (avg_range / MathMax(point, 1e-6));
+         }
+         else
+         {
+            double first_a = rates_m1[start].close;
+            double first_b = rates_m1[start + bars / 3].close;
+            double last_a = rates_m1[start + (2 * bars) / 3].close;
+            double last_b = rates_m1[start + bars - 1].close;
+            double first_ret = (first_b > 0.0 ? (first_a - first_b) / first_b : 0.0);
+            double last_ret = (last_b > 0.0 ? (last_a - last_b) / last_b : 0.0);
+            score = (1.0 - MathAbs(first_ret - last_ret)) + 0.20 * (1.0 - trendiness) + 0.03 * (avg_range / MathMax(point, 1e-6));
+         }
 
          if(score > best_score)
          {
@@ -1026,14 +1069,15 @@ void FXAI_AuditFinalizeMetrics(FXAIAuditScenarioMetrics &m)
 
    double score = 100.0;
    if(m.invalid_preds > 0) score -= 35.0;
-   if(m.skip_ratio < 0.45 && (m.scenario == "random_walk" || m.scenario == "market_chop")) score -= 18.0;
-   if(m.active_ratio > 0.80 && (m.scenario == "random_walk" || m.scenario == "market_chop")) score -= 12.0;
+   if(m.skip_ratio < 0.45 && (m.scenario == "random_walk" || m.scenario == "market_chop" || m.scenario == "market_spread_shock")) score -= 18.0;
+   if(m.active_ratio > 0.80 && (m.scenario == "random_walk" || m.scenario == "market_chop" || m.scenario == "market_spread_shock")) score -= 12.0;
    if(m.trend_alignment_count > 0)
    {
       double align = m.trend_alignment_sum / (double)m.trend_alignment_count;
-      if((m.scenario == "drift_up" || m.scenario == "drift_down" || m.scenario == "monotonic_up" || m.scenario == "monotonic_down" || m.scenario == "market_trend") && align < 0.20)
+      if((m.scenario == "drift_up" || m.scenario == "drift_down" || m.scenario == "monotonic_up" || m.scenario == "monotonic_down" || m.scenario == "market_trend" || m.scenario == "market_walkforward") && align < 0.20)
          score -= 18.0;
    }
+   if(m.scenario == "market_session_edges" && m.conf_drift > 0.18) score -= 8.0;
    if(m.conf_drift > 0.22) score -= 10.0;
    if(m.reset_delta > 0.30) score -= 12.0;
    if(m.sequence_delta < 0.005 && m.sequence_delta >= 0.0) score -= 6.0;
@@ -1042,16 +1086,16 @@ void FXAI_AuditFinalizeMetrics(FXAIAuditScenarioMetrics &m)
    m.score = score;
 
    if(m.invalid_preds > 0) m.issue_flags |= FXAI_AUDIT_ISSUE_INVALID_PRED;
-   if((m.scenario == "random_walk" || m.scenario == "market_chop") && (m.skip_ratio < 0.55 || m.active_ratio > 0.70))
+   if((m.scenario == "random_walk" || m.scenario == "market_chop" || m.scenario == "market_spread_shock" || m.scenario == "market_session_edges") && (m.skip_ratio < 0.55 || m.active_ratio > 0.70))
       m.issue_flags |= FXAI_AUDIT_ISSUE_OVERTRADES_NOISE;
-   if((m.scenario == "drift_up" || m.scenario == "drift_down" || m.scenario == "monotonic_up" || m.scenario == "monotonic_down" || m.scenario == "market_trend") &&
+   if((m.scenario == "drift_up" || m.scenario == "drift_down" || m.scenario == "monotonic_up" || m.scenario == "monotonic_down" || m.scenario == "market_trend" || m.scenario == "market_walkforward") &&
       m.trend_alignment_count > 0 && (m.trend_alignment_sum / (double)m.trend_alignment_count) < 0.25)
       m.issue_flags |= FXAI_AUDIT_ISSUE_MISSES_TREND;
    if(m.conf_drift > 0.22) m.issue_flags |= FXAI_AUDIT_ISSUE_CALIBRATION_DRIFT;
    if(m.reset_delta > 0.30) m.issue_flags |= FXAI_AUDIT_ISSUE_RESET_DRIFT;
    if(m.sequence_delta >= 0.0 && m.sequence_delta < 0.005) m.issue_flags |= FXAI_AUDIT_ISSUE_SEQUENCE_WEAK;
    if(m.move_sum <= 0.0) m.issue_flags |= FXAI_AUDIT_ISSUE_DEAD_OUTPUT;
-   if((m.scenario == "random_walk" || m.scenario == "market_chop") && m.bias_abs > 0.85 && active > 24)
+   if((m.scenario == "random_walk" || m.scenario == "market_chop" || m.scenario == "market_spread_shock") && m.bias_abs > 0.85 && active > 24)
       m.issue_flags |= FXAI_AUDIT_ISSUE_SIDE_COLLAPSE;
 }
 
@@ -1139,6 +1183,9 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
    int schema_id = manifest.feature_schema_id;
    int schema_override = FXAI_AuditGetSchemaOverride();
    if(schema_override > 0) schema_id = schema_override;
+   ulong feature_groups_mask = manifest.feature_groups_mask;
+   ulong feature_groups_override = FXAI_AuditGetFeatureGroupsMaskOverride();
+   if(feature_groups_override != 0) feature_groups_mask = feature_groups_override;
 
    int n = ArraySize(close_arr);
    int start_idx = horizon_minutes + 1;
@@ -1203,7 +1250,7 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
       req.valid = true;
       req.ctx = ctx;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++) req.x[k] = x[k];
-      FXAI_ApplyFeatureSchemaToInput(schema_id, manifest.feature_groups_mask, req.x);
+      FXAI_ApplyFeatureSchemaToInput(schema_id, feature_groups_mask, req.x);
 
       FXAIAIPredictionV4 pred;
       bool ok = FXAI_PredictViaV4(*plugin, req, hp, pred);
@@ -1235,7 +1282,7 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
             else if(decision == (int)FXAI_LABEL_BUY) out.trend_alignment_sum -= 1.0;
             out.trend_alignment_count++;
          }
-         else if(spec.name == "market_trend")
+         else if(spec.name == "market_trend" || spec.name == "market_walkforward")
          {
             if(label_class == (int)FXAI_LABEL_BUY)
             {
@@ -1274,7 +1321,7 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
       train_req.move_points = move_points;
       train_req.sample_weight = sample_weight;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++) train_req.x[k] = x[k];
-      FXAI_ApplyFeatureSchemaToInput(schema_id, manifest.feature_groups_mask, train_req.x);
+      FXAI_ApplyFeatureSchemaToInput(schema_id, feature_groups_mask, train_req.x);
       FXAI_TrainViaV4(*plugin, train_req, hp);
 
       if(!held_req_ready && i > start_idx + 128)

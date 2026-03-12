@@ -30,9 +30,12 @@ Framework Strengths
 - API-driven plugin architecture with explicit manifests, context, and prediction contracts.
 - Shared feature and normalization pipeline across all plugins.
 - Manifest-driven feature schemas and feature-group masks so different model families can consume different data views without forking the engine.
+- Schema-specific feature projectors so sparse, tree, sequence, contextual, and rule plugins do not all receive the same raw representation.
 - Online learning and replay support for adaptive intraday models.
 - Multi-model routing, ensemble stacking, horizon policy, and compliance validation inside the same engine.
+- Richer meta-policy inputs that incorporate confidence, reliability, family support, dispersion, and context quality when selecting horizons and blending ensemble decisions.
 - Dynamic market-context ranking so the engine can prioritize the most useful context symbols instead of treating the configured list as fixed order.
+- Audit Lab certification that now covers both synthetic stress scenarios and release-grade market replay scenarios.
 - MT5-native workflow suitable for large Strategy Tester and MQL5 Cloud Network runs.
 
 Plugin Naming Convention
@@ -111,6 +114,8 @@ Use `Audit Lab.txt` when you need to understand:
 - how the MT5 audit runner and the external drill-sergeant tool work together
 - which commands to run for compile, audit, baseline, compare, optimize, and release-gate workflows
 - where audit outputs are written and how to interpret them
+
+The current Audit Lab is not only a checker. It can now enforce market replay certification packs, apply schema and feature-mask overrides during audits, and generate audit-guided optimization campaigns for schema, normalization, sequence-length, and feature-group experiments.
 
 The short version is simple: the Audit Lab exists to certify plugin quality before expensive backtests or releases. The detailed operating instructions now live in the dedicated handbook so this framework guide stays compact.
 

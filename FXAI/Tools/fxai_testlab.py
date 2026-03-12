@@ -424,11 +424,11 @@ def build_summary(rows, oracles: dict):
 
 
 def summary_has_market_replay(summary: dict) -> bool:
+    required = {"market_recent", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward"}
+    seen = set()
     for plugin in summary.get("plugins", {}).values():
-        for scenario in plugin.get("scenarios", {}).keys():
-            if scenario.startswith("market_"):
-                return True
-    return False
+        seen.update(plugin.get("scenarios", {}).keys())
+    return required.issubset(seen)
 
 
 def render_report(rows, oracles: dict):
@@ -474,7 +474,7 @@ def build_optimization_campaign(summary: dict, oracles: dict) -> dict:
         schema_candidates = []
         norm_candidates = []
         seq_candidates = []
-        scenario_focus = ["random_walk", "drift_up", "drift_down", "market_trend", "market_chop"]
+        scenario_focus = ["random_walk", "drift_up", "drift_down", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward"]
 
         if family in (2, 3, 4, 5):  # recurrent/conv/transformer/state-space
             schema_candidates.extend([3, 6])
@@ -536,6 +536,18 @@ def build_optimization_campaign(summary: dict, oracles: dict) -> dict:
             "sequence_bars": uniq(seq_candidates)[:6],
             "focus": scenario_focus,
         })
+        feature_masks = []
+        if family == 10:
+            feature_masks.extend([0x29, 0x21])
+        elif family in (0, 1, 6):
+            feature_masks.extend([0x37, 0x3F, 0x77])
+        else:
+            feature_masks.extend([0x7F, 0x3F, 0x5F])
+        experiments.append({
+            "name": "feature_mask_ablation",
+            "feature_masks": uniq(feature_masks)[:4],
+            "focus": scenario_focus,
+        })
 
         campaign["plugins"][name] = {
             "score": float(info.get("score", 0.0)),
@@ -563,10 +575,20 @@ def render_optimization_campaign(campaign: dict) -> str:
         for exp in info.get("experiments", []):
             if exp["name"] == "schema_ablation":
                 out.append(f"- Schema sweep: {exp['schemas']} | focus={exp['focus']}")
+                for schema in exp['schemas']:
+                    out.append(f"  run: run-audit --plugin-list '{{{name}}}' --scenario-list '{{{', '.join(exp['focus'])}}}' --schema-id {schema}")
             elif exp["name"] == "normalization_sweep":
                 out.append(f"- Normalization sweep: {exp['normalizations']} | focus={exp['focus']}")
+                for norm in exp['normalizations']:
+                    out.append(f"  run: run-audit --plugin-list '{{{name}}}' --scenario-list '{{{', '.join(exp['focus'])}}}' --normalization {norm}")
             elif exp["name"] == "sequence_sweep":
                 out.append(f"- Sequence sweep: {exp['sequence_bars']} | focus={exp['focus']}")
+                for seq in exp['sequence_bars']:
+                    out.append(f"  run: run-audit --plugin-list '{{{name}}}' --scenario-list '{{{', '.join(exp['focus'])}}}' --sequence-bars {seq}")
+            elif exp["name"] == "feature_mask_ablation":
+                out.append(f"- Feature-mask sweep: {exp['feature_masks']} | focus={exp['focus']}")
+                for mask in exp['feature_masks']:
+                    out.append(f"  run: run-audit --plugin-list '{{{name}}}' --scenario-list '{{{', '.join(exp['focus'])}}}' --feature-mask {mask}")
         out.append("")
     return "\n".join(out)
 
@@ -717,6 +739,7 @@ def write_audit_set(path: Path, args) -> None:
         f"Audit_Normalization={args.normalization}||0||0||14||N",
         f"Audit_SequenceBarsOverride={args.sequence_bars}||0||0||256||N",
         f"Audit_SchemaOverride={args.schema_id}||0||0||6||N",
+        f"Audit_FeatureGroupsMaskOverride={args.feature_mask}||0||0||9223372036854775807||N",
         f"Audit_Seed={args.seed}||0||1||1000000||N",
         "Audit_ResetOutput=true||false||0||true||N",
         "Audit_StopOnFailure=false||false||0||true||N",
@@ -1004,7 +1027,7 @@ def cmd_release_gate(args):
         gate_failures.extend(cmp["regressions"])
 
     if args.require_market_replay and not summary_has_market_replay(current_summary):
-        gate_failures.append("current audit report does not contain market replay scenarios")
+        gate_failures.append("current audit report does not contain the full required market replay certification pack")
 
     for name, info in sorted(current_summary.get("plugins", {}).items()):
         score = float(info.get("score", 0.0))
@@ -1061,13 +1084,14 @@ def main():
     ra.add_argument("--all-plugins", action="store_true")
     ra.add_argument("--plugin-id", type=int, default=28)
     ra.add_argument("--plugin-list", default="{all}")
-    ra.add_argument("--scenario-list", default="{random_walk, drift_up, drift_down, mean_revert, vol_cluster, monotonic_up, monotonic_down, regime_shift, market_recent, market_trend, market_chop}")
+    ra.add_argument("--scenario-list", default="{random_walk, drift_up, drift_down, mean_revert, vol_cluster, monotonic_up, monotonic_down, regime_shift, market_recent, market_trend, market_chop, market_session_edges, market_spread_shock, market_walkforward}")
     ra.add_argument("--bars", type=int, default=20000)
     ra.add_argument("--horizon", type=int, default=5)
     ra.add_argument("--m1sync-bars", type=int, default=3)
     ra.add_argument("--normalization", type=int, default=0)
     ra.add_argument("--sequence-bars", type=int, default=0)
     ra.add_argument("--schema-id", type=int, default=0)
+    ra.add_argument("--feature-mask", type=int, default=0)
     ra.add_argument("--seed", type=int, default=42)
     ra.add_argument("--symbol", default="EURUSD")
     ra.add_argument("--login")

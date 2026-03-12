@@ -370,6 +370,9 @@ void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
       int select_idx[FXAI_MAX_CONTEXT_SYMBOLS];
       int keep_n = ctx_count;
       if(keep_n > FXAI_CONTEXT_DYNAMIC_POOL) keep_n = FXAI_CONTEXT_DYNAMIC_POOL;
+      if(main_vol < 0.00025 && keep_n > 4) keep_n = 4;
+      if(main_vol > 0.00120 && keep_n < FXAI_CONTEXT_DYNAMIC_POOL)
+         keep_n++;
       for(int s=0; s<FXAI_MAX_CONTEXT_SYMBOLS; s++)
       {
          select_score[s] = -1e18;
@@ -382,28 +385,54 @@ void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
          double util = FXAI_ContextSeriesUtilityAt(main_time, main_close, ctx_series[s], i);
          if(util <= -1e8) continue;
 
+         int idx_prior = (i < ArraySize(ctx_series[s].aligned_idx) ? ctx_series[s].aligned_idx[i] : -1);
+         if(idx_prior < 0) continue;
+         double freshness_prior = FXAI_AlignedFreshnessWeight(ctx_series[s].time, idx_prior, t_ref, lag_m1);
+         double ctx_ret_prior = FXAI_SafeReturn(ctx_series[s].close, idx_prior, idx_prior + 1);
+         double ctx_lag_prior = FXAI_SafeReturn(ctx_series[s].close, idx_prior + 1, idx_prior + 2);
+         double ctx_corr_prior = FXAI_ContextAlignedCorr(main_close, i, ctx_series[s], 20);
+         double stability_local = 1.0 - FXAI_Clamp(MathAbs(ctx_ret_prior - ctx_lag_prior) / MathMax(main_vol, 1e-4), 0.0, 1.0);
+         double lead_local = FXAI_Clamp(MathAbs(ctx_lag_prior) / MathMax(main_vol, 1e-4), 0.0, 4.0) / 4.0;
+         double coverage_local = freshness_prior;
+         double prior_util = (g_context_symbol_utility_ready[s] ? g_context_symbol_utility[s] : util);
+         double prior_stability = (g_context_symbol_utility_ready[s] ? g_context_symbol_stability[s] : stability_local);
+         double prior_lead = (g_context_symbol_utility_ready[s] ? g_context_symbol_lead[s] : lead_local);
+         double prior_coverage = (g_context_symbol_utility_ready[s] ? g_context_symbol_coverage[s] : coverage_local);
+         double rank_score = 0.48 * util +
+                             0.18 * FXAI_Clamp(ctx_corr_prior, -1.0, 1.0) +
+                             0.12 * prior_util +
+                             0.10 * prior_stability +
+                             0.07 * prior_lead +
+                             0.05 * prior_coverage;
+
          if(i == 0)
          {
             if(!g_context_symbol_utility_ready[s])
             {
                g_context_symbol_utility[s] = util;
+               g_context_symbol_stability[s] = stability_local;
+               g_context_symbol_lead[s] = lead_local;
+               g_context_symbol_coverage[s] = coverage_local;
                g_context_symbol_utility_ready[s] = true;
             }
             else
             {
                g_context_symbol_utility[s] = 0.85 * g_context_symbol_utility[s] + 0.15 * util;
+               g_context_symbol_stability[s] = 0.85 * g_context_symbol_stability[s] + 0.15 * stability_local;
+               g_context_symbol_lead[s] = 0.85 * g_context_symbol_lead[s] + 0.15 * lead_local;
+               g_context_symbol_coverage[s] = 0.85 * g_context_symbol_coverage[s] + 0.15 * coverage_local;
             }
          }
 
          for(int slot=0; slot<keep_n; slot++)
          {
-            if(util <= select_score[slot]) continue;
+            if(rank_score <= select_score[slot]) continue;
             for(int shift=keep_n - 1; shift>slot; shift--)
             {
                select_score[shift] = select_score[shift - 1];
                select_idx[shift] = select_idx[shift - 1];
             }
-            select_score[slot] = util;
+            select_score[slot] = rank_score;
             select_idx[slot] = s;
             break;
          }
@@ -449,10 +478,16 @@ void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
          double ret_edge = FXAI_Clamp(MathAbs(ctx_ret_raw) / main_vol, 0.0, 4.0);
          double lag_edge = FXAI_Clamp(MathAbs(ctx_lag_raw) / main_vol, 0.0, 4.0);
          double corr_edge = MathAbs(ctx_corr_raw);
-         double symbol_score = freshness * ((0.40 * corr_edge) +
-                                            (0.30 * rel_edge) +
-                                            (0.20 * lag_edge) +
-                                            (0.10 * ret_edge));
+         double stability_edge = 1.0 - FXAI_Clamp(MathAbs(ctx_ret_raw - ctx_lag_raw) / MathMax(main_vol, 1e-4), 0.0, 1.0);
+         double prior_util = (g_context_symbol_utility_ready[s] ? g_context_symbol_utility[s] : 0.0);
+         double prior_stability = (g_context_symbol_utility_ready[s] ? g_context_symbol_stability[s] : stability_edge);
+         double symbol_score = freshness * ((0.28 * corr_edge) +
+                                            (0.24 * rel_edge) +
+                                            (0.18 * lag_edge) +
+                                            (0.12 * ret_edge) +
+                                            (0.10 * stability_edge) +
+                                            (0.08 * FXAI_Clamp(prior_util, -1.0, 1.0)));
+         symbol_score += 0.05 * prior_stability;
 
          double w = 0.20 + symbol_score;
          weighted_sum += w * ctx_ret_raw;
@@ -508,6 +543,39 @@ void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
    }
 }
 
+void FXAI_GetDynamicContextState(double &utility_out,
+                                 double &stability_out,
+                                 double &lead_out,
+                                 double &coverage_out)
+{
+   utility_out = 0.0;
+   stability_out = 0.0;
+   lead_out = 0.0;
+   coverage_out = 0.0;
+
+   double util_sum = 0.0;
+   double stab_sum = 0.0;
+   double lead_sum = 0.0;
+   double cov_sum = 0.0;
+   int used = 0;
+
+   for(int s=0; s<ArraySize(g_context_symbols) && s<FXAI_MAX_CONTEXT_SYMBOLS; s++)
+   {
+      if(!g_context_symbol_utility_ready[s]) continue;
+      util_sum += g_context_symbol_utility[s];
+      stab_sum += g_context_symbol_stability[s];
+      lead_sum += g_context_symbol_lead[s];
+      cov_sum += g_context_symbol_coverage[s];
+      used++;
+   }
+
+   if(used <= 0) return;
+   utility_out = util_sum / (double)used;
+   stability_out = stab_sum / (double)used;
+   lead_out = lead_sum / (double)used;
+   coverage_out = cov_sum / (double)used;
+}
+
 //--------------------------- INIT -----------------------------------
 void ResetAIState(const string symbol)
 {
@@ -527,6 +595,9 @@ void ResetAIState(const string symbol)
    for(int s=0; s<FXAI_MAX_CONTEXT_SYMBOLS; s++)
    {
       g_context_symbol_utility[s] = 0.0;
+      g_context_symbol_stability[s] = 0.0;
+      g_context_symbol_lead[s] = 0.0;
+      g_context_symbol_coverage[s] = 0.0;
       g_context_symbol_utility_ready[s] = false;
    }
 
