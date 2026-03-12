@@ -91,8 +91,8 @@ Recent Audit Lab capabilities include:
 - schema and feature-mask override testing
 - audit-guided optimization campaign generation for schemas, normalizers, sequence lengths, and feature groups
 
-The full operator handbook now lives here:
-- [Audit Lab Handbook](FXAI/Audit%20Lab.txt)
+The full operator handbook now lives in the GitHub wiki:
+- [Audit Lab Wiki](https://github.com/Pummelchen/FXAI/wiki/Audit-Lab)
 
 Use that guide for:
 - what the Audit Lab does
@@ -105,8 +105,11 @@ Use that guide for:
 
 The main framework handbook explains the architecture, naming convention, model families, and core design choices. The Audit Lab handbook explains the plugin certification toolchain and how to operate it.
 
-- [FXAI Handbook](FXAI/FXAI.txt)
-- [Audit Lab Handbook](FXAI/Audit%20Lab.txt)
+- [FXAI Wiki Home](https://github.com/Pummelchen/FXAI/wiki)
+- [FXAI Framework](https://github.com/Pummelchen/FXAI/wiki/FXAI-Framework)
+- [Getting Started](https://github.com/Pummelchen/FXAI/wiki/Getting-Started)
+- [Audit Lab](https://github.com/Pummelchen/FXAI/wiki/Audit-Lab)
+- [Project Structure](https://github.com/Pummelchen/FXAI/wiki/Project-Structure)
 
 ## Notes
 
