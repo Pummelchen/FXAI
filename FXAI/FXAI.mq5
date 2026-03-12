@@ -93,6 +93,10 @@ input double Lot    = 0.01;
 // Models: all (execution sizing for all model signals).
 // Purpose: order volume before broker min/max/step normalization.
 // Importance/Range: broker-dependent, often 0.01..1.00; main driver of PnL volatility.
+input ulong  TradeMagic = 6206001;
+// Models: all (execution ownership / trade isolation).
+// Purpose: magic number attached to FXAI orders and used to manage only this EA's own trades.
+// Importance/Range: any positive integer; change it when multiple EAs share one account.
 input double MaxDD  = 50;
 // Models: all (EA-level safety brake).
 // Purpose: stops EA when equity drops below allowed drawdown fraction.
@@ -507,6 +511,7 @@ datetime g_replay_last_sample_time[FXAI_MAX_HORIZONS];
 int OnInit()
 {
    MathSrand((uint)TimeLocal());
+   trade.SetExpertMagicNumber((long)TradeMagic);
 
    double buy_init = AI_BuyThreshold;
    double sell_init = AI_SellThreshold;
@@ -572,20 +577,57 @@ void ResetCycleState()
 
 datetime FXAI_GetOldestPositionTime()
 {
-   int total = PositionsTotal();
-   if(total <= 0) return 0;
-
    datetime oldest = 0;
-   for(int i=0; i<total; i++)
+   for(int i=PositionsTotal() - 1; i>=0; i--)
    {
       ulong ticket = PositionGetTicket(i);
       if(ticket == 0) continue;
+      if(!PositionSelectByTicket(ticket)) continue;
+      if((ulong)PositionGetInteger(POSITION_MAGIC) != TradeMagic) continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
 
       datetime t = (datetime)PositionGetInteger(POSITION_TIME);
       if(t <= 0) continue;
       if(oldest == 0 || t < oldest) oldest = t;
    }
    return oldest;
+}
+
+int FXAI_ManagedPositionsTotal(const string symbol = "")
+{
+   int count = 0;
+   for(int i=PositionsTotal() - 1; i>=0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(!PositionSelectByTicket(ticket)) continue;
+      if((ulong)PositionGetInteger(POSITION_MAGIC) != TradeMagic) continue;
+      if(StringLen(symbol) > 0 && PositionGetString(POSITION_SYMBOL) != symbol) continue;
+      count++;
+   }
+   return count;
+}
+
+int FXAI_ManagedOrdersTotal(const string symbol = "")
+{
+   int count = 0;
+   for(int i=OrdersTotal() - 1; i>=0; i--)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket == 0) continue;
+      if(!OrderSelect(ticket)) continue;
+      if((ulong)OrderGetInteger(ORDER_MAGIC) != TradeMagic) continue;
+      if(StringLen(symbol) > 0 && OrderGetString(ORDER_SYMBOL) != symbol) continue;
+      count++;
+   }
+   return count;
+}
+
+bool FXAI_IsTradeRetcodeSuccess(const uint retcode)
+{
+   return (retcode == TRADE_RETCODE_DONE ||
+           retcode == TRADE_RETCODE_PLACED ||
+           retcode == TRADE_RETCODE_DONE_PARTIAL);
 }
 
 double FXAI_NormalizeLot(const string symbol, const double requested_lot)
@@ -620,21 +662,27 @@ void CloseAll()
 
    for(int pass=0; pass<max_passes; pass++)
    {
-      int pos_before = PositionsTotal();
-      int ord_before = OrdersTotal();
+      int pos_before = FXAI_ManagedPositionsTotal(_Symbol);
+      int ord_before = FXAI_ManagedOrdersTotal(_Symbol);
 
-      for(int i=pos_before - 1; i>=0; i--)
+      for(int i=PositionsTotal() - 1; i>=0; i--)
       {
          ulong ticket = PositionGetTicket(i);
          if(ticket == 0) continue;
+         if(!PositionSelectByTicket(ticket)) continue;
+         if((ulong)PositionGetInteger(POSITION_MAGIC) != TradeMagic) continue;
+         if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
          trade.PositionClose(ticket);
          if(op_pause_ms > 0) Sleep(op_pause_ms);
       }
 
-      for(int i=ord_before - 1; i>=0; i--)
+      for(int i=OrdersTotal() - 1; i>=0; i--)
       {
          ulong ticket = OrderGetTicket(i);
          if(ticket == 0) continue;
+         if(!OrderSelect(ticket)) continue;
+         if((ulong)OrderGetInteger(ORDER_MAGIC) != TradeMagic) continue;
+         if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
 
          long orderType = OrderGetInteger(ORDER_TYPE);
          if(orderType == ORDER_TYPE_BUY_LIMIT      || orderType == ORDER_TYPE_SELL_LIMIT ||
@@ -646,8 +694,8 @@ void CloseAll()
          }
       }
 
-      int pos_after = PositionsTotal();
-      int ord_after = OrdersTotal();
+      int pos_after = FXAI_ManagedPositionsTotal(_Symbol);
+      int ord_after = FXAI_ManagedOrdersTotal(_Symbol);
       if(pos_after == 0 && ord_after == 0)
          return;
 
@@ -656,8 +704,9 @@ void CloseAll()
          break;
    }
 
-   Print("FXAI warning: CloseAll incomplete. Remaining positions=", PositionsTotal(),
-         ", orders=", OrdersTotal());
+   Print("FXAI warning: CloseAll incomplete. Remaining managed positions=",
+         FXAI_ManagedPositionsTotal(_Symbol),
+         ", managed orders=", FXAI_ManagedOrdersTotal(_Symbol));
 }
 
 //---------------------- TRADE POSSIBLE ------------------------------
@@ -767,7 +816,7 @@ void TPCheck()
 void TradeKillerManage()
 {
    if(TradeKiller <= 0) return;
-   if(PositionsTotal() <= 0) return;
+   if(FXAI_ManagedPositionsTotal(_Symbol) <= 0) return;
 
    datetime start_t = CycleStartTime;
    if(start_t <= 0)
@@ -794,7 +843,7 @@ void TradeKillerManage()
 void EquitySLManage()
 {
    if(SL_USD <= 0.0) return;
-   if(PositionsTotal() <= 0) return;
+   if(FXAI_ManagedPositionsTotal(_Symbol) <= 0) return;
    if(!CycleActive) return;
 
    double eq = AccountInfoDouble(ACCOUNT_EQUITY);
@@ -812,7 +861,7 @@ void EquitySLManage()
 void EquityTrailManage()
 {
    if(!TrailEnabled) return;
-   if(PositionsTotal() <= 0) return;
+   if(FXAI_ManagedPositionsTotal(_Symbol) <= 0) return;
    if(!CycleActive) return;
 
    if(!TrailTracking)
@@ -882,14 +931,16 @@ void SendTrade(const int precomputed_direction = -2)
    bool ok = false;
    if(direction == 1) ok = trade.Buy(trade_lot, _Symbol, 0, 0, 0, "Buy");
    else               ok = trade.Sell(trade_lot, _Symbol, 0, 0, 0, "Sell");
+   uint retcode = trade.ResultRetcode();
+   bool exec_ok = (ok && FXAI_IsTradeRetcodeSuccess(retcode));
 
-   if(!ok && emit_debug)
-      Print("FXAI debug: Order send failed. retcode=", (int)trade.ResultRetcode(),
+   if(!exec_ok && emit_debug)
+      Print("FXAI debug: Order send failed. retcode=", (int)retcode,
             " desc=", trade.ResultRetcodeDescription());
-   else if(ok && emit_debug)
+   else if(exec_ok && emit_debug)
       Print("FXAI debug: Order sent. direction=", direction, " lot=", DoubleToString(trade_lot, 2));
 
-   if(ok)
+   if(exec_ok)
    {
       ResetCycleState();
       CycleActive      = true;
@@ -915,18 +966,18 @@ void OnTick()
       new_m1_bar = true;
    }
 
-   int total = OrdersTotal() + PositionsTotal();
+   int total = FXAI_ManagedOrdersTotal(_Symbol) + FXAI_ManagedPositionsTotal(_Symbol);
 
    if(total > 0)
    {
       TradeKillerManage();
-      if(OrdersTotal() + PositionsTotal() == 0) return;
+      if(FXAI_ManagedOrdersTotal(_Symbol) + FXAI_ManagedPositionsTotal(_Symbol) == 0) return;
 
       EquitySLManage();
-      if(OrdersTotal() + PositionsTotal() == 0) return;
+      if(FXAI_ManagedOrdersTotal(_Symbol) + FXAI_ManagedPositionsTotal(_Symbol) == 0) return;
 
       EquityTrailManage();
-      if(OrdersTotal() + PositionsTotal() == 0) return;
+      if(FXAI_ManagedOrdersTotal(_Symbol) + FXAI_ManagedPositionsTotal(_Symbol) == 0) return;
 
       if(MaxDD > 0) EAStop();
       TPCheck();
@@ -938,7 +989,7 @@ void OnTick()
    FXAI_ProcessReliabilityBar(_Symbol);
    int precomputed_signal = SpecialDirectionAI(_Symbol);
 
-   if(OrdersTotal() + PositionsTotal() == 0)
+   if(FXAI_ManagedOrdersTotal(_Symbol) + FXAI_ManagedPositionsTotal(_Symbol) == 0)
       SendTrade(precomputed_signal);
 }
 //+------------------------------------------------------------------+
