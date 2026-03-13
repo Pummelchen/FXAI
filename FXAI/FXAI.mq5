@@ -344,9 +344,9 @@ datetime g_last_debug_bar = 0;
 #define FXAI_REL_MAX_PENDING 2048
 #define FXAI_REGIME_COUNT 12
 #define FXAI_MAX_HORIZONS 8
-#define FXAI_STACK_FEATS 28
-#define FXAI_STACK_HIDDEN 12
-#define FXAI_HPOL_FEATS 24
+#define FXAI_STACK_FEATS 36
+#define FXAI_STACK_HIDDEN 16
+#define FXAI_HPOL_FEATS 32
 #define FXAI_NORM_CAND_MAX 8
 #define FXAI_REPLAY_CAPACITY 384
 #define FXAI_REPLAY_DRAWS 12
@@ -539,6 +539,7 @@ int OnInit()
 
    FXAI_ParseContextSymbols(AI_ContextSymbols, g_context_symbols);
    FXAI_FilterContextSymbols(_Symbol, g_context_symbols);
+   FXAI_ExtendContextSymbolsFromMarketWatch(_Symbol, g_context_symbols);
 
    ResetAIState(_Symbol);
    return(INIT_SUCCEEDED);

@@ -99,6 +99,7 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
          if(i < 0 || i >= ArraySize(samples)) continue;
          if(!samples[i].valid) continue;
          FXAIAITrainRequestV4 s3;
+         FXAI_ClearTrainRequest(s3);
          s3.valid = samples[i].valid;
          s3.ctx.api_version = FXAI_API_VERSION_V4;
          s3.ctx.regime_id = samples[i].regime_id;
@@ -116,9 +117,13 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
          s3.sample_weight = 1.0;
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
             s3.x[k] = samples[i].x[k];
-         FXAI_ApplyFeatureSchemaToInput(trial_manifest.feature_schema_id,
-                                        trial_manifest.feature_groups_mask,
-                                        s3.x);
+         FXAI_BuildPreparedSampleWindow(samples, i, s3.ctx.sequence_bars, s3.x_window, s3.window_size);
+         FXAI_ApplyFeatureSchemaToInputEx(trial_manifest.feature_schema_id,
+                                          trial_manifest.feature_groups_mask,
+                                          s3.ctx.sequence_bars,
+                                          s3.x_window,
+                                          s3.window_size,
+                                          s3.x);
          FXAI_TrainViaV4(*trial, s3, hp);
       }
    }
@@ -733,6 +738,7 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
       if(!samples[i].valid) continue;
 
       FXAIAIPredictRequestV4 req;
+      FXAI_ClearPredictRequest(req);
       req.valid = samples[i].valid;
       req.ctx.api_version = FXAI_API_VERSION_V4;
       req.ctx.regime_id = samples[i].regime_id;
@@ -747,9 +753,13 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
       req.ctx.sample_time = samples[i].sample_time;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = samples[i].x[k];
-      FXAI_ApplyFeatureSchemaToInput(plugin_manifest.feature_schema_id,
-                                     plugin_manifest.feature_groups_mask,
-                                     req.x);
+      FXAI_BuildPreparedSampleWindow(samples, i, req.ctx.sequence_bars, req.x_window, req.window_size);
+      FXAI_ApplyFeatureSchemaToInputEx(plugin_manifest.feature_schema_id,
+                                       plugin_manifest.feature_groups_mask,
+                                       req.ctx.sequence_bars,
+                                       req.x_window,
+                                       req.window_size,
+                                       req.x);
 
       FXAIAIPredictionV4 pred;
       FXAI_PredictViaV4(plugin, req, hp, pred);
@@ -862,6 +872,7 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
       if(!eval_sample.valid) continue;
 
       FXAIAIPredictRequestV4 req;
+      FXAI_ClearPredictRequest(req);
       req.valid = eval_sample.valid;
       req.ctx.api_version = FXAI_API_VERSION_V4;
       req.ctx.regime_id = eval_sample.regime_id;
@@ -878,9 +889,13 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
       req.ctx.sample_time = eval_sample.sample_time;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = eval_sample.x[k];
-      FXAI_ApplyFeatureSchemaToInput(plugin_manifest.feature_schema_id,
-                                     plugin_manifest.feature_groups_mask,
-                                     req.x);
+      FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, i, caches, req.ctx.sequence_bars, req.x_window, req.window_size);
+      FXAI_ApplyFeatureSchemaToInputEx(plugin_manifest.feature_schema_id,
+                                       plugin_manifest.feature_groups_mask,
+                                       req.ctx.sequence_bars,
+                                       req.x_window,
+                                       req.window_size,
+                                       req.x);
 
       FXAIAIPredictionV4 pred;
       FXAI_PredictViaV4(plugin, req, hp, pred);
@@ -1324,6 +1339,7 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             FXAIPreparedSample pred_sample;
             FXAI_GetCachedPreparedSample(ai_idx, samples[i], i, norm_caches, pred_sample);
             FXAIAIPredictRequestV4 req;
+            FXAI_ClearPredictRequest(req);
             req.valid = pred_sample.valid;
             req.ctx.api_version = FXAI_API_VERSION_V4;
             req.ctx.regime_id = pred_sample.regime_id;
@@ -1342,9 +1358,13 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             req.ctx.sample_time = pred_sample.sample_time;
             for(int k=0; k<FXAI_AI_WEIGHTS; k++)
                req.x[k] = pred_sample.x[k];
-            FXAI_ApplyFeatureSchemaToInput(plugin_manifest.feature_schema_id,
-                                           plugin_manifest.feature_groups_mask,
-                                           req.x);
+            FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, i, norm_caches, req.ctx.sequence_bars, req.x_window, req.window_size);
+            FXAI_ApplyFeatureSchemaToInputEx(plugin_manifest.feature_schema_id,
+                                             plugin_manifest.feature_groups_mask,
+                                             req.ctx.sequence_bars,
+                                             req.x_window,
+                                             req.window_size,
+                                             req.x);
 
             FXAIAIPredictionV4 pred;
             FXAI_PredictViaV4(*plugin, req, hp_model, pred);

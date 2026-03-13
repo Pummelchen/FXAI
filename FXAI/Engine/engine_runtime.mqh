@@ -631,36 +631,6 @@ int SpecialDirectionAI(const string symbol)
       if(!needed_ai) continue;
 
       int method_id = (int)FXAI_GetModelNormMethodRouted(ai_pass, regime_id, H);
-      if(FXAI_FindNormInputCache(method_id, input_caches) < 0)
-      {
-         FXAI_EnsureNormInputCache(method_id,
-                                   spread_pred,
-                                   spread_m1,
-                                   snapshot,
-                                   time_arr,
-                                   open_arr,
-                                   high_arr,
-                                   low_arr,
-                                   close_arr,
-                                   time_m5,
-                                   close_m5,
-                                   map_m5,
-                                   time_m15,
-                                   close_m15,
-                                   map_m15,
-                                   time_m30,
-                                   close_m30,
-                                   map_m30,
-                                   time_h1,
-                                   close_h1,
-                                   map_h1,
-                                   ctx_mean_arr,
-                                   ctx_std_arr,
-                                   ctx_up_arr,
-                                   ctx_extra_arr,
-                                   input_caches);
-      }
-
       if(precompute_end >= 1)
       {
          FXAI_EnsureRoutedNormCachesForSamples(ai_pass,
@@ -695,6 +665,36 @@ int SpecialDirectionAI(const string symbol)
                                                ctx_extra_arr,
                                                samples,
                                                runtime_norm_caches);
+      }
+
+      if(FXAI_FindNormInputCache(method_id, input_caches) < 0)
+      {
+         FXAI_EnsureNormInputCache(method_id,
+                                   spread_pred,
+                                   spread_m1,
+                                   snapshot,
+                                   time_arr,
+                                   open_arr,
+                                   high_arr,
+                                   low_arr,
+                                   close_arr,
+                                   time_m5,
+                                   close_m5,
+                                   map_m5,
+                                   time_m15,
+                                   close_m15,
+                                   map_m15,
+                                   time_m30,
+                                   close_m30,
+                                   map_m30,
+                                   time_h1,
+                                   close_h1,
+                                   map_h1,
+                                   ctx_mean_arr,
+                                   ctx_std_arr,
+                                   ctx_up_arr,
+                                   ctx_extra_arr,
+                                   input_caches);
       }
    }
 
@@ -816,6 +816,7 @@ int SpecialDirectionAI(const string symbol)
       }
 
       FXAIAIPredictRequestV4 req;
+      FXAI_ClearPredictRequest(req);
       req.valid = true;
       req.ctx.api_version = FXAI_API_VERSION_V4;
       req.ctx.regime_id = regime_id;
@@ -832,9 +833,13 @@ int SpecialDirectionAI(const string symbol)
       int input_idx = FXAI_FindNormInputCache(method_id, input_caches);
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = (input_idx >= 0 ? input_caches[input_idx].x[k] : x_pred[k]);
-      FXAI_ApplyFeatureSchemaToInput(manifest.feature_schema_id,
-                                     manifest.feature_groups_mask,
-                                     req.x);
+      FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, 0, runtime_norm_caches, req.ctx.sequence_bars, req.x_window, req.window_size);
+      FXAI_ApplyFeatureSchemaToInputEx(manifest.feature_schema_id,
+                                       manifest.feature_groups_mask,
+                                       req.ctx.sequence_bars,
+                                       req.x_window,
+                                       req.window_size,
+                                       req.x);
 
       FXAIAIPredictionV4 pred;
       FXAI_PredictViaV4(*plugin, req, hp_model, pred);

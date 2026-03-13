@@ -64,6 +64,39 @@ void FXAI_FilterContextSymbols(const string main_symbol, string &symbols[])
       ArrayResize(symbols, w);
 }
 
+void FXAI_ExtendContextSymbolsFromMarketWatch(const string main_symbol, string &symbols[])
+{
+   int total = SymbolsTotal(true);
+   if(total <= 0) return;
+
+   for(int i=0; i<total; i++)
+   {
+      string sym = SymbolName(i, true);
+      StringTrimLeft(sym);
+      StringTrimRight(sym);
+      if(StringLen(sym) <= 0) continue;
+      if(StringCompare(sym, main_symbol, false) == 0) continue;
+
+      bool exists = false;
+      for(int j=0; j<ArraySize(symbols); j++)
+      {
+         if(StringCompare(symbols[j], sym, false) == 0)
+         {
+            exists = true;
+            break;
+         }
+      }
+      if(exists) continue;
+      if(!SymbolSelect(sym, true)) continue;
+
+      int sz = ArraySize(symbols);
+      if(sz >= FXAI_MAX_CONTEXT_SYMBOLS)
+         break;
+      ArrayResize(symbols, sz + 1);
+      symbols[sz] = sym;
+   }
+}
+
 double FXAI_ContextAlignedCorr(const double &main_close[],
                                const int main_i,
                                const FXAIContextSeries &ctx,
@@ -342,6 +375,20 @@ void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
    for(int i=0; i<ArraySize(ctx_extra_arr); i++)
       ctx_extra_arr[i] = 0.0;
 
+   double local_util[FXAI_MAX_CONTEXT_SYMBOLS];
+   double local_stability[FXAI_MAX_CONTEXT_SYMBOLS];
+   double local_lead[FXAI_MAX_CONTEXT_SYMBOLS];
+   double local_coverage[FXAI_MAX_CONTEXT_SYMBOLS];
+   bool local_ready[FXAI_MAX_CONTEXT_SYMBOLS];
+   for(int s=0; s<FXAI_MAX_CONTEXT_SYMBOLS; s++)
+   {
+      local_util[s] = 0.0;
+      local_stability[s] = 0.0;
+      local_lead[s] = 0.0;
+      local_coverage[s] = 0.0;
+      local_ready[s] = false;
+   }
+
    for(int s=0; s<ctx_count; s++)
    {
       if(!ctx_series[s].loaded)
@@ -356,7 +403,7 @@ void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
                                     ctx_series[s].aligned_idx);
    }
 
-   for(int i=0; i<=upto_fill; i++)
+   for(int i=upto_fill; i>=0; i--)
    {
       datetime t_ref = main_time[i];
       if(t_ref <= 0 || ctx_count <= 0) continue;
@@ -394,35 +441,16 @@ void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
          double stability_local = 1.0 - FXAI_Clamp(MathAbs(ctx_ret_prior - ctx_lag_prior) / MathMax(main_vol, 1e-4), 0.0, 1.0);
          double lead_local = FXAI_Clamp(MathAbs(ctx_lag_prior) / MathMax(main_vol, 1e-4), 0.0, 4.0) / 4.0;
          double coverage_local = freshness_prior;
-         double prior_util = (g_context_symbol_utility_ready[s] ? g_context_symbol_utility[s] : util);
-         double prior_stability = (g_context_symbol_utility_ready[s] ? g_context_symbol_stability[s] : stability_local);
-         double prior_lead = (g_context_symbol_utility_ready[s] ? g_context_symbol_lead[s] : lead_local);
-         double prior_coverage = (g_context_symbol_utility_ready[s] ? g_context_symbol_coverage[s] : coverage_local);
+         double prior_util = (local_ready[s] ? local_util[s] : util);
+         double prior_stability = (local_ready[s] ? local_stability[s] : stability_local);
+         double prior_lead = (local_ready[s] ? local_lead[s] : lead_local);
+         double prior_coverage = (local_ready[s] ? local_coverage[s] : coverage_local);
          double rank_score = 0.48 * util +
                              0.18 * FXAI_Clamp(ctx_corr_prior, -1.0, 1.0) +
                              0.12 * prior_util +
                              0.10 * prior_stability +
                              0.07 * prior_lead +
                              0.05 * prior_coverage;
-
-         if(i == 0)
-         {
-            if(!g_context_symbol_utility_ready[s])
-            {
-               g_context_symbol_utility[s] = util;
-               g_context_symbol_stability[s] = stability_local;
-               g_context_symbol_lead[s] = lead_local;
-               g_context_symbol_coverage[s] = coverage_local;
-               g_context_symbol_utility_ready[s] = true;
-            }
-            else
-            {
-               g_context_symbol_utility[s] = 0.85 * g_context_symbol_utility[s] + 0.15 * util;
-               g_context_symbol_stability[s] = 0.85 * g_context_symbol_stability[s] + 0.15 * stability_local;
-               g_context_symbol_lead[s] = 0.85 * g_context_symbol_lead[s] + 0.15 * lead_local;
-               g_context_symbol_coverage[s] = 0.85 * g_context_symbol_coverage[s] + 0.15 * coverage_local;
-            }
-         }
 
          for(int slot=0; slot<keep_n; slot++)
          {
@@ -479,8 +507,8 @@ void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
          double lag_edge = FXAI_Clamp(MathAbs(ctx_lag_raw) / main_vol, 0.0, 4.0);
          double corr_edge = MathAbs(ctx_corr_raw);
          double stability_edge = 1.0 - FXAI_Clamp(MathAbs(ctx_ret_raw - ctx_lag_raw) / MathMax(main_vol, 1e-4), 0.0, 1.0);
-         double prior_util = (g_context_symbol_utility_ready[s] ? g_context_symbol_utility[s] : 0.0);
-         double prior_stability = (g_context_symbol_utility_ready[s] ? g_context_symbol_stability[s] : stability_edge);
+         double prior_util = (local_ready[s] ? local_util[s] : 0.0);
+         double prior_stability = (local_ready[s] ? local_stability[s] : stability_edge);
          double symbol_score = freshness * ((0.28 * corr_edge) +
                                             (0.24 * rel_edge) +
                                             (0.18 * lag_edge) +
@@ -540,6 +568,50 @@ void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
          FXAI_SetContextExtraValue(ctx_extra_arr, i, top_slot * 4 + 2, top_ctx_rel[top_slot]);
          FXAI_SetContextExtraValue(ctx_extra_arr, i, top_slot * 4 + 3, top_ctx_corr[top_slot]);
       }
+
+      for(int s=0; s<ctx_count && s<FXAI_MAX_CONTEXT_SYMBOLS; s++)
+      {
+         if(!ctx_series[s].loaded) continue;
+         if(i >= ArraySize(ctx_series[s].aligned_idx)) continue;
+
+         int idx_prior = ctx_series[s].aligned_idx[i];
+         if(idx_prior < 0) continue;
+
+         double util = FXAI_ContextSeriesUtilityAt(main_time, main_close, ctx_series[s], i);
+         if(util <= -1e8) continue;
+
+         double freshness_prior = FXAI_AlignedFreshnessWeight(ctx_series[s].time, idx_prior, t_ref, lag_m1);
+         double ctx_ret_prior = FXAI_SafeReturn(ctx_series[s].close, idx_prior, idx_prior + 1);
+         double ctx_lag_prior = FXAI_SafeReturn(ctx_series[s].close, idx_prior + 1, idx_prior + 2);
+         double stability_local = 1.0 - FXAI_Clamp(MathAbs(ctx_ret_prior - ctx_lag_prior) / MathMax(main_vol, 1e-4), 0.0, 1.0);
+         double lead_local = FXAI_Clamp(MathAbs(ctx_lag_prior) / MathMax(main_vol, 1e-4), 0.0, 4.0) / 4.0;
+         double coverage_local = freshness_prior;
+
+         if(!local_ready[s])
+         {
+            local_util[s] = util;
+            local_stability[s] = stability_local;
+            local_lead[s] = lead_local;
+            local_coverage[s] = coverage_local;
+            local_ready[s] = true;
+         }
+         else
+         {
+            local_util[s] = 0.85 * local_util[s] + 0.15 * util;
+            local_stability[s] = 0.85 * local_stability[s] + 0.15 * stability_local;
+            local_lead[s] = 0.85 * local_lead[s] + 0.15 * lead_local;
+            local_coverage[s] = 0.85 * local_coverage[s] + 0.15 * coverage_local;
+         }
+      }
+   }
+
+   for(int s=0; s<FXAI_MAX_CONTEXT_SYMBOLS; s++)
+   {
+      g_context_symbol_utility[s] = local_util[s];
+      g_context_symbol_stability[s] = local_stability[s];
+      g_context_symbol_lead[s] = local_lead[s];
+      g_context_symbol_coverage[s] = local_coverage[s];
+      g_context_symbol_utility_ready[s] = local_ready[s];
    }
 }
 
@@ -655,6 +727,7 @@ bool FXAI_ValidateNativePluginAPI()
       }
 
       FXAIAIPredictRequestV4 req_v4;
+      FXAI_ClearPredictRequest(req_v4);
       req_v4.valid = true;
       req_v4.ctx.api_version = FXAI_API_VERSION_V4;
       req_v4.ctx.regime_id = 0;
@@ -669,9 +742,13 @@ bool FXAI_ValidateNativePluginAPI()
       req_v4.ctx.sample_time = TimeCurrent();
       for(int kk=0; kk<FXAI_AI_WEIGHTS; kk++)
          req_v4.x[kk] = x_dummy[kk];
-      FXAI_ApplyFeatureSchemaToInput(manifest.feature_schema_id,
-                                     manifest.feature_groups_mask,
-                                     req_v4.x);
+      FXAI_FillComplianceWindow(req_v4.ctx, req_v4.x, req_v4.x_window, req_v4.window_size);
+      FXAI_ApplyFeatureSchemaToInputEx(manifest.feature_schema_id,
+                                       manifest.feature_groups_mask,
+                                       req_v4.ctx.sequence_bars,
+                                       req_v4.x_window,
+                                       req_v4.window_size,
+                                       req_v4.x);
 
       FXAIAIPredictionV4 pred_v4;
       if(!plugin.Predict(req_v4, hp, pred_v4))
@@ -722,6 +799,25 @@ void FXAI_FillComplianceContext(CFXAIAIPlugin &plugin,
    ctx.sample_time = sample_time;
 }
 
+void FXAI_FillComplianceWindow(const FXAIAIContextV4 &ctx,
+                               const double &x[],
+                               double &x_window[][FXAI_AI_WEIGHTS],
+                               int &window_size)
+{
+   FXAI_ClearInputWindow(x_window, window_size);
+   int seq = ctx.sequence_bars;
+   if(seq < 1) seq = 1;
+   if(seq > FXAI_MAX_SEQUENCE_BARS) seq = FXAI_MAX_SEQUENCE_BARS;
+   for(int b=0; b<seq-1; b++)
+   {
+      double decay = 1.0 - 0.08 * (double)(b + 1);
+      if(decay < 0.30) decay = 0.30;
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         x_window[b][k] = x[k] * decay;
+      window_size++;
+   }
+}
+
 void FXAI_FillComplianceTrainRequest(CFXAIAIPlugin &plugin,
                                      FXAIAITrainRequestV4 &req,
                                      const int label_class,
@@ -734,6 +830,7 @@ void FXAI_FillComplianceTrainRequest(CFXAIAIPlugin &plugin,
                                      const int regime_id,
                                      const int horizon_minutes)
 {
+   FXAI_ClearTrainRequest(req);
    req.valid = true;
    FXAI_FillComplianceContext(plugin, req.ctx, cost_points, sample_time, regime_id, horizon_minutes);
    req.label_class = label_class;
@@ -751,9 +848,13 @@ void FXAI_FillComplianceTrainRequest(CFXAIAIPlugin &plugin,
    req.x[7] = req.ctx.cost_points;
    FXAIAIManifestV4 manifest;
    FXAI_GetPluginManifest(plugin, manifest);
-   FXAI_ApplyFeatureSchemaToInput(manifest.feature_schema_id,
-                                  manifest.feature_groups_mask,
-                                  req.x);
+   FXAI_FillComplianceWindow(req.ctx, req.x, req.x_window, req.window_size);
+   FXAI_ApplyFeatureSchemaToInputEx(manifest.feature_schema_id,
+                                    manifest.feature_groups_mask,
+                                    req.ctx.sequence_bars,
+                                    req.x_window,
+                                    req.window_size,
+                                    req.x);
 }
 
 void FXAI_FillCompliancePredictRequest(CFXAIAIPlugin &plugin,
@@ -766,6 +867,7 @@ void FXAI_FillCompliancePredictRequest(CFXAIAIPlugin &plugin,
                                        const int regime_id,
                                        const int horizon_minutes)
 {
+   FXAI_ClearPredictRequest(req);
    req.valid = true;
    FXAI_FillComplianceContext(plugin, req.ctx, cost_points, sample_time, regime_id, horizon_minutes);
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
@@ -780,9 +882,13 @@ void FXAI_FillCompliancePredictRequest(CFXAIAIPlugin &plugin,
    req.x[7] = req.ctx.cost_points;
    FXAIAIManifestV4 manifest;
    FXAI_GetPluginManifest(plugin, manifest);
-   FXAI_ApplyFeatureSchemaToInput(manifest.feature_schema_id,
-                                  manifest.feature_groups_mask,
-                                  req.x);
+   FXAI_FillComplianceWindow(req.ctx, req.x, req.x_window, req.window_size);
+   FXAI_ApplyFeatureSchemaToInputEx(manifest.feature_schema_id,
+                                    manifest.feature_groups_mask,
+                                    req.ctx.sequence_bars,
+                                    req.x_window,
+                                    req.window_size,
+                                    req.x);
 }
 
 bool FXAI_ValidatePredictionOutput(const CFXAIAIPlugin &plugin,
@@ -920,12 +1026,33 @@ bool FXAI_RunSequenceWindowCompliance(CFXAIAIPlugin &plugin,
    FXAI_FillComplianceTrainRequest(plugin, train_req, (int)FXAI_LABEL_SELL, -5.0, 0.9,
                                    -0.75, -0.42, -0.18, now_t - 150, 3, horizon);
    train_req.ctx.sequence_bars = seq;
+   FXAI_FillComplianceWindow(train_req.ctx, train_req.x, train_req.x_window, train_req.window_size);
+   FXAI_ApplyFeatureSchemaToInputEx(manifest.feature_schema_id,
+                                    manifest.feature_groups_mask,
+                                    train_req.ctx.sequence_bars,
+                                    train_req.x_window,
+                                    train_req.window_size,
+                                    train_req.x);
 
    FXAIAIPredictRequestV4 pred_req_seq, pred_req_one;
    FXAI_FillCompliancePredictRequest(plugin, pred_req_seq, 0.9, -0.75, -0.42, -0.18, now_t - 10, 3, horizon);
    FXAI_FillCompliancePredictRequest(plugin, pred_req_one, 0.9, -0.75, -0.42, -0.18, now_t - 10, 3, horizon);
    pred_req_seq.ctx.sequence_bars = seq;
+   FXAI_FillComplianceWindow(pred_req_seq.ctx, pred_req_seq.x, pred_req_seq.x_window, pred_req_seq.window_size);
+   FXAI_ApplyFeatureSchemaToInputEx(manifest.feature_schema_id,
+                                    manifest.feature_groups_mask,
+                                    pred_req_seq.ctx.sequence_bars,
+                                    pred_req_seq.x_window,
+                                    pred_req_seq.window_size,
+                                    pred_req_seq.x);
    pred_req_one.ctx.sequence_bars = 1;
+   FXAI_FillComplianceWindow(pred_req_one.ctx, pred_req_one.x, pred_req_one.x_window, pred_req_one.window_size);
+   FXAI_ApplyFeatureSchemaToInputEx(manifest.feature_schema_id,
+                                    manifest.feature_groups_mask,
+                                    pred_req_one.ctx.sequence_bars,
+                                    pred_req_one.x_window,
+                                    pred_req_one.window_size,
+                                    pred_req_one.x);
 
    for(int i=0; i<4; i++)
       FXAI_TrainViaV4(plugin, train_req, hp);

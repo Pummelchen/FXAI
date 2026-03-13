@@ -33,6 +33,8 @@ protected:
    int      m_ctx_normalization_method_id;
    int      m_ctx_sequence_bars;
    double   m_ctx_point_value;
+   int      m_ctx_window_size;
+   double   m_ctx_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
 
    double m_bank_class_mass[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS][3];
    double m_bank_total[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
@@ -125,6 +127,27 @@ protected:
                            ? ctx.point_value : (_Point > 0.0 ? _Point : 1.0));
    }
 
+   void SetWindowPayload(const int window_size,
+                         const double &x_window[][FXAI_AI_WEIGHTS])
+   {
+      m_ctx_window_size = window_size;
+      if(m_ctx_window_size < 0) m_ctx_window_size = 0;
+      if(m_ctx_window_size > FXAI_MAX_SEQUENCE_BARS) m_ctx_window_size = FXAI_MAX_SEQUENCE_BARS;
+      for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+      {
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            m_ctx_window[b][k] = (b < m_ctx_window_size ? x_window[b][k] : 0.0);
+      }
+   }
+
+   void ClearWindowPayload(void)
+   {
+      m_ctx_window_size = 0;
+      for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            m_ctx_window[b][k] = 0.0;
+   }
+
    void SetContext(const datetime sample_time,
                    const double cost_points,
                    const double min_move_points,
@@ -195,6 +218,10 @@ protected:
       m_ctx_normalization_method_id = 0;
       m_ctx_sequence_bars = 1;
       m_ctx_point_value = (_Point > 0.0 ? _Point : 1.0);
+      m_ctx_window_size = 0;
+      for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            m_ctx_window[b][k] = 0.0;
 
       for(int r=0; r<FXAI_PLUGIN_REGIME_BUCKETS; r++)
       {
@@ -481,7 +508,7 @@ protected:
          return 0.60 * head + 0.40 * m_move_ema_abs;
       if(head > 0.0) return head;
       if(m_move_ready && m_move_ema_abs > 0.0) return m_move_ema_abs;
-      return MathMax(ResolveMinMovePoints(), 0.10);
+      return 0.0;
    }
 
    void ApplyContextCalibrationBank(double &probs[])
@@ -520,7 +547,9 @@ protected:
 
    double ApplyExpectedMoveCalibrationBank(const double expected_move_points)
    {
-      double ev = (expected_move_points > 0.0 ? expected_move_points : MathMax(ResolveMinMovePoints(), 0.10));
+      double ev = expected_move_points;
+      if(!MathIsValidNumber(ev) || ev <= 0.0)
+         return 0.0;
       int r = m_ctx_regime_id;
       if(r < 0) r = 0;
       if(r >= FXAI_PLUGIN_REGIME_BUCKETS) r = FXAI_PLUGIN_REGIME_BUCKETS - 1;
@@ -529,7 +558,7 @@ protected:
 
       ev = ev * m_bank_ev_scale[r][s][h] + m_bank_ev_bias[r][s][h];
       if(!MathIsValidNumber(ev) || ev <= 0.0)
-         ev = MathMax(ResolveMinMovePoints(), 0.10);
+         return 0.0;
       return ev;
    }
 
@@ -739,7 +768,7 @@ protected:
       out.class_probs[0] = 0.10;
       out.class_probs[1] = 0.10;
       out.class_probs[2] = 0.80;
-      out.move_mean_points = MathMax(ResolveMinMovePoints(), 0.10);
+      out.move_mean_points = 0.0;
       out.move_q25_points = 0.0;
       out.move_q50_points = 0.0;
       out.move_q75_points = 0.0;
@@ -757,7 +786,7 @@ protected:
       double move_mean_points = out.move_mean_points;
       if(!PredictModelCore(x, hp, out.class_probs, move_mean_points))
          return false;
-      out.move_mean_points = MathMax(move_mean_points, MathMax(ResolveMinMovePoints(), 0.10));
+      out.move_mean_points = (MathIsValidNumber(move_mean_points) && move_mean_points > 0.0 ? move_mean_points : 0.0);
       return true;
    }
 
@@ -773,27 +802,55 @@ protected:
       double skip_p = dst.class_probs[(int)FXAI_LABEL_SKIP];
       double directional_conf = MathMax(buy_p, sell_p);
       double uncertainty = FXAI_Clamp(1.0 - directional_conf + 0.50 * skip_p, 0.10, 1.50);
-      double mean_move = MathMax(calibrated_move_mean_points, ResolveMinMovePoints());
+      double mean_move = (MathIsValidNumber(calibrated_move_mean_points) && calibrated_move_mean_points > 0.0 ? calibrated_move_mean_points : 0.0);
 
       dst.move_mean_points = mean_move;
-      double raw_mean = MathMax(model_out.move_mean_points, ResolveMinMovePoints());
+      double raw_mean = (MathIsValidNumber(model_out.move_mean_points) && model_out.move_mean_points > 0.0 ? model_out.move_mean_points : 0.0);
       double scale = (raw_mean > 1e-9 ? mean_move / raw_mean : 1.0);
 
-      if(model_out.has_quantiles)
+      if(model_out.has_quantiles && mean_move > 0.0)
       {
-         dst.move_q25_points = MathMax(ResolveMinMovePoints(), model_out.move_q25_points * scale);
+         dst.move_q25_points = MathMax(0.0, model_out.move_q25_points * scale);
          dst.move_q50_points = MathMax(dst.move_q25_points, model_out.move_q50_points * scale);
          dst.move_q75_points = MathMax(dst.move_q50_points, model_out.move_q75_points * scale);
       }
-      else
+      else if(mean_move > 0.0)
       {
-         dst.move_q25_points = MathMax(ResolveMinMovePoints(), mean_move * MathMax(0.25, 1.0 - 0.45 * uncertainty));
+         dst.move_q25_points = MathMax(0.0, mean_move * MathMax(0.25, 1.0 - 0.45 * uncertainty));
          dst.move_q50_points = mean_move;
          dst.move_q75_points = MathMax(dst.move_q50_points, mean_move * (1.0 + 0.45 * uncertainty));
+      }
+      else
+      {
+         dst.move_q25_points = 0.0;
+         dst.move_q50_points = 0.0;
+         dst.move_q75_points = 0.0;
       }
 
       dst.confidence = FXAI_Clamp(model_out.has_confidence ? model_out.confidence : directional_conf, 0.0, 1.0);
       dst.reliability = FXAI_Clamp(model_out.has_confidence ? model_out.reliability : (1.0 - 0.50 * skip_p), 0.0, 1.0);
+   }
+
+   int CurrentWindowSize(void) const
+   {
+      return m_ctx_window_size;
+   }
+
+   double CurrentWindowValue(const int bar_idx, const int input_idx) const
+   {
+      if(bar_idx < 0 || bar_idx >= m_ctx_window_size) return 0.0;
+      if(input_idx < 0 || input_idx >= FXAI_AI_WEIGHTS) return 0.0;
+      return m_ctx_window[bar_idx][input_idx];
+   }
+
+   double CurrentWindowFeatureMean(const int feature_idx) const
+   {
+      int input_idx = feature_idx + 1;
+      if(input_idx < 1 || input_idx >= FXAI_AI_WEIGHTS || m_ctx_window_size <= 0) return 0.0;
+      double sum = 0.0;
+      for(int b=0; b<m_ctx_window_size; b++)
+         sum += m_ctx_window[b][input_idx];
+      return sum / (double)m_ctx_window_size;
    }
 
 public:
@@ -837,6 +894,7 @@ public:
       if(!req.valid) return;
       EnsureInitialized(hp);
       SetContext(req.ctx);
+      SetWindowPayload(req.window_size, req.x_window);
 
       FXAIAIManifestV4 manifest;
       Describe(manifest);
@@ -879,6 +937,7 @@ public:
       if(!req.valid) return false;
       EnsureInitialized(hp);
       SetContext(req.ctx);
+      SetWindowPayload(req.window_size, req.x_window);
 
       FXAIAIModelOutputV4 model_out;
       ResetModelOutput(model_out);

@@ -1902,6 +1902,8 @@ public:
       if(cur_t <= 0) cur_t = TimeCurrent();
       double cur_cost = ResolveCostPoints(x);
       double cur_min = ResolveMinMovePoints();
+      int cur_regime = m_ctx_regime_id;
+      int cur_horizon = m_ctx_horizon_minutes;
       int cur_sess = SessionBucket(cur_t);
 
       UpdateWeighted(y, x, h, w, move_points, false);
@@ -1930,7 +1932,7 @@ public:
          UpdateWeighted(m_replay_y[p], replay_x, h, rw, m_mlp_replay_move[p], true);
       }
 
-      SetContext(cur_t, cur_cost, cur_min, m_ctx_regime_id, m_ctx_horizon_minutes);
+      SetContext(cur_t, cur_cost, cur_min, cur_regime, cur_horizon);
    }
 
    virtual double PredictProb(const double &x[],

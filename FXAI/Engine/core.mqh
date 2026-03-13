@@ -17,6 +17,7 @@
 #define FXAI_CONTEXT_EXTRA_FEATS (FXAI_CONTEXT_TOP_SYMBOLS * 4)
 #define FXAI_CONTEXT_DYNAMIC_POOL 8
 #define FXAI_API_VERSION_V4 4
+#define FXAI_MAX_SEQUENCE_BARS 96
 
 
 enum ENUM_AI_TYPE
@@ -222,14 +223,18 @@ struct FXAIAITrainRequestV4
    int label_class;
    double move_points;
    double sample_weight;
+   int window_size;
    double x[FXAI_AI_WEIGHTS];
+   double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
 };
 
 struct FXAIAIPredictRequestV4
 {
    bool valid;
    FXAIAIContextV4 ctx;
+   int window_size;
    double x[FXAI_AI_WEIGHTS];
+   double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
 };
 
 struct FXAIAIPredictionV4
@@ -379,6 +384,21 @@ void FXAI_BuildInputVector(const double &features[], double &x[])
    x[0] = 1.0;
    for(int i=0; i<FXAI_AI_FEATURES; i++)
       x[i + 1] = features[i];
+}
+
+void FXAI_ClearInputWindow(double &x_window[][FXAI_AI_WEIGHTS], int &window_size)
+{
+   window_size = 0;
+   for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         x_window[b][k] = 0.0;
+}
+
+void FXAI_CopyInputVector(const double &src[], double &dst[])
+{
+   int n = MathMin(ArraySize(src), ArraySize(dst));
+   for(int i=0; i<n; i++)
+      dst[i] = src[i];
 }
 
 double FXAI_GetInputFeature(const double &x[], const int feature_idx)
@@ -545,9 +565,12 @@ bool FXAI_IsFeatureEnabledForSchema(const int feature_idx,
    }
 }
 
-void FXAI_ApplyFeatureSchemaToInput(const int schema_id,
-                                    const ulong groups_mask,
-                                    double &x[])
+void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
+                                      const ulong groups_mask,
+                                      const int sequence_bars,
+                                      const double &x_window[][FXAI_AI_WEIGHTS],
+                                      const int window_size,
+                                      double &x[])
 {
    if(ArraySize(x) < FXAI_AI_WEIGHTS)
       return;
@@ -561,6 +584,44 @@ void FXAI_ApplyFeatureSchemaToInput(const int schema_id,
    {
       if(!FXAI_IsFeatureEnabledForSchema(f, schema_id, groups_mask))
          x[f + 1] = 0.0;
+   }
+
+   int seq_n = sequence_bars;
+   if(seq_n < 1) seq_n = 1;
+   if(seq_n > FXAI_MAX_SEQUENCE_BARS) seq_n = FXAI_MAX_SEQUENCE_BARS;
+   if(window_size > 0 && window_size < seq_n) seq_n = window_size;
+
+   double seq_mean[FXAI_AI_WEIGHTS];
+   double seq_delta[FXAI_AI_WEIGHTS];
+   for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+   {
+      seq_mean[k] = raw_x[k];
+      seq_delta[k] = 0.0;
+   }
+
+   if(seq_n > 1)
+   {
+      int used = 0;
+      for(int b=0; b<seq_n; b++)
+      {
+         if(b >= window_size) break;
+         used++;
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            seq_mean[k] += x_window[b][k];
+      }
+      if(used > 0)
+      {
+         double denom = (double)(used + 1);
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            seq_mean[k] /= denom;
+      }
+
+      int last_idx = seq_n - 2;
+      if(last_idx >= 0 && last_idx < window_size)
+      {
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            seq_delta[k] = raw_x[k] - x_window[last_idx][k];
+      }
    }
 
    // Schema-specific projection stage. This is intentionally stronger than
@@ -622,6 +683,11 @@ void FXAI_ApplyFeatureSchemaToInput(const int schema_id,
          double ret_long = FXAI_GetInputFeature(x, 2);
          double mtf_fast = 0.5 * (FXAI_GetInputFeature(x, 7) + FXAI_GetInputFeature(x, 13));
          double mtf_slow = 0.5 * (FXAI_GetInputFeature(x, 9) + FXAI_GetInputFeature(x, 14));
+         double seq_ret_short = FXAI_GetInputFeature(seq_mean, 0);
+         double seq_ret_mid = FXAI_GetInputFeature(seq_mean, 1);
+         double seq_ret_long = FXAI_GetInputFeature(seq_mean, 2);
+         double seq_ctx = FXAI_GetInputFeature(seq_mean, 10);
+         double seq_vol = FXAI_GetInputFeature(seq_mean, 41);
 
          FXAI_SetInputFeature(x, 13, ret_short - ret_mid);
          FXAI_SetInputFeature(x, 14, ret_mid - ret_long);
@@ -636,6 +702,13 @@ void FXAI_ApplyFeatureSchemaToInput(const int schema_id,
          FXAI_SetInputFeature(x, 30, mtf_fast);
          FXAI_SetInputFeature(x, 31, mtf_slow);
          FXAI_SetInputFeature(x, 32, mtf_fast - mtf_slow);
+         FXAI_SetInputFeature(x, 33, seq_ret_short - seq_ret_mid);
+         FXAI_SetInputFeature(x, 34, seq_ret_mid - seq_ret_long);
+         FXAI_SetInputFeature(x, 35, FXAI_GetInputFeature(seq_delta, 0));
+         FXAI_SetInputFeature(x, 36, FXAI_GetInputFeature(seq_delta, 1));
+         FXAI_SetInputFeature(x, 37, FXAI_GetInputFeature(seq_delta, 2));
+         FXAI_SetInputFeature(x, 38, seq_ctx);
+         FXAI_SetInputFeature(x, 39, seq_vol);
          break;
       }
 
@@ -720,6 +793,53 @@ void FXAI_SetContextExtraValue(double &arr[],
    int idx = FXAI_ContextExtraIndex(sample_idx, feat_idx);
    if(idx >= 0 && idx < ArraySize(arr))
       arr[idx] = value;
+}
+
+
+void FXAI_ApplyFeatureSchemaToInput(const int schema_id,
+                                    const ulong groups_mask,
+                                    double &x[])
+{
+   double dummy_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+   for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         dummy_window[b][k] = 0.0;
+   FXAI_ApplyFeatureSchemaToInputEx(schema_id, groups_mask, 1, dummy_window, 0, x);
+}
+
+void FXAI_ClearPredictRequest(FXAIAIPredictRequestV4 &req)
+{
+   req.valid = false;
+   req.window_size = 0;
+   for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      req.x[k] = 0.0;
+   for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         req.x_window[b][k] = 0.0;
+}
+
+void FXAI_ClearTrainRequest(FXAIAITrainRequestV4 &req)
+{
+   req.valid = false;
+   req.label_class = (int)FXAI_LABEL_SKIP;
+   req.move_points = 0.0;
+   req.sample_weight = 0.0;
+   req.window_size = 0;
+   for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      req.x[k] = 0.0;
+   for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         req.x_window[b][k] = 0.0;
+}
+
+void FXAI_CopyWindowPayload(const double &src[][FXAI_AI_WEIGHTS], const int src_size, double &dst[][FXAI_AI_WEIGHTS], int &dst_size)
+{
+   dst_size = src_size;
+   if(dst_size < 0) dst_size = 0;
+   if(dst_size > FXAI_MAX_SEQUENCE_BARS) dst_size = FXAI_MAX_SEQUENCE_BARS;
+   for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         dst[b][k] = (b < dst_size ? src[b][k] : 0.0);
 }
 
 #endif // __FXAI_CORE_MQH__

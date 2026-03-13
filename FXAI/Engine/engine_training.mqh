@@ -307,6 +307,55 @@ void FXAI_GetCachedPreparedSample(const int ai_idx,
    out_sample = caches[cache_idx].samples[sample_index];
 }
 
+void FXAI_BuildPreparedSampleWindow(const FXAIPreparedSample &samples[],
+                                    const int anchor_idx,
+                                    const int requested_bars,
+                                    double &x_window[][FXAI_AI_WEIGHTS],
+                                    int &window_size)
+{
+   FXAI_ClearInputWindow(x_window, window_size);
+   int seq = requested_bars;
+   if(seq < 1) seq = 1;
+   if(seq > FXAI_MAX_SEQUENCE_BARS) seq = FXAI_MAX_SEQUENCE_BARS;
+   int n = ArraySize(samples);
+   for(int b=0; b<seq; b++)
+   {
+      int idx = anchor_idx + 1 + b;
+      if(idx < 0 || idx >= n) break;
+      if(!samples[idx].valid) break;
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         x_window[b][k] = samples[idx].x[k];
+      window_size++;
+   }
+}
+
+void FXAI_BuildPreparedSampleWindowCached(const int ai_idx,
+                                          const FXAIPreparedSample &samples[],
+                                          const int anchor_idx,
+                                          FXAINormSampleCache &caches[],
+                                          const int requested_bars,
+                                          double &x_window[][FXAI_AI_WEIGHTS],
+                                          int &window_size)
+{
+   FXAI_ClearInputWindow(x_window, window_size);
+   int seq = requested_bars;
+   if(seq < 1) seq = 1;
+   if(seq > FXAI_MAX_SEQUENCE_BARS) seq = FXAI_MAX_SEQUENCE_BARS;
+   int n = ArraySize(samples);
+   for(int b=0; b<seq; b++)
+   {
+      int idx = anchor_idx + 1 + b;
+      if(idx < 0 || idx >= n) break;
+      if(!samples[idx].valid) break;
+      FXAIPreparedSample win_sample;
+      FXAI_GetCachedPreparedSample(ai_idx, samples[idx], idx, caches, win_sample);
+      if(!win_sample.valid) break;
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         x_window[b][k] = win_sample.x[k];
+      window_size++;
+   }
+}
+
 int FXAI_FindNormInputCache(const int method_id,
                             FXAINormInputCache &caches[])
 {
@@ -438,7 +487,9 @@ int FXAI_EnsureNormInputCache(const int method_id,
 void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
                                     CFXAIAIPlugin &plugin,
                                     const FXAIPreparedSample &sample,
-                                    const FXAIAIHyperParams &hp)
+                                    const FXAIAIHyperParams &hp,
+                                    const int window_size,
+                                    const double &x_window[][FXAI_AI_WEIGHTS])
 {
    if(!sample.valid) return;
 
@@ -446,6 +497,7 @@ void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
    FXAI_GetPluginManifest(plugin, manifest);
 
    FXAIAITrainRequestV4 s3;
+   FXAI_ClearTrainRequest(s3);
    s3.valid = sample.valid;
    s3.ctx.api_version = FXAI_API_VERSION_V4;
    s3.ctx.regime_id = sample.regime_id;
@@ -465,9 +517,16 @@ void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
    s3.sample_weight = sample.sample_weight;
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
       s3.x[k] = sample.x[k];
-   FXAI_ApplyFeatureSchemaToInput(manifest.feature_schema_id,
-                                  manifest.feature_groups_mask,
-                                  s3.x);
+   s3.window_size = window_size;
+   for(int b=0; b<window_size && b<FXAI_MAX_SEQUENCE_BARS; b++)
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         s3.x_window[b][k] = x_window[b][k];
+   FXAI_ApplyFeatureSchemaToInputEx(manifest.feature_schema_id,
+                                    manifest.feature_groups_mask,
+                                    s3.ctx.sequence_bars,
+                                    s3.x_window,
+                                    s3.window_size,
+                                    s3.x);
 
    FXAI_TrainViaV4(plugin, s3, hp);
    FXAI_UpdateModelMoveStats(ai_idx, sample.move_points);
@@ -494,18 +553,25 @@ void FXAI_TrainModelWindowPrepared(const int ai_idx,
    for(int epoch=0; epoch<epochs; epoch++)
    {
       for(int i=end; i>=start; i--)
-         FXAI_ApplyPreparedSampleToModel(ai_idx, plugin, samples[i], hp);
+      {
+         double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+         int window_size = 0;
+         FXAI_BuildPreparedSampleWindow(samples, i, FXAI_GetPluginSequenceBars(plugin, samples[i].horizon_minutes), x_window, window_size);
+         FXAI_ApplyPreparedSampleToModel(ai_idx, plugin, samples[i], hp, window_size, x_window);
+      }
    }
 }
 
 void FXAI_ApplyPreparedSampleToModelRouted(const int ai_idx,
                                            CFXAIAIPlugin &plugin,
-                                           const FXAIPreparedSample &sample)
+                                           const FXAIPreparedSample &sample,
+                                           const int window_size,
+                                           const double &x_window[][FXAI_AI_WEIGHTS])
 {
    if(!sample.valid) return;
    FXAIAIHyperParams hp_sample;
    FXAI_GetModelHyperParamsRouted(ai_idx, sample.regime_id, sample.horizon_minutes, hp_sample);
-   FXAI_ApplyPreparedSampleToModel(ai_idx, plugin, sample, hp_sample);
+   FXAI_ApplyPreparedSampleToModel(ai_idx, plugin, sample, hp_sample, window_size, x_window);
 }
 
 void FXAI_TrainModelWindowPreparedRouted(const int ai_idx,
@@ -528,7 +594,12 @@ void FXAI_TrainModelWindowPreparedRouted(const int ai_idx,
    for(int epoch=0; epoch<epochs; epoch++)
    {
       for(int i=end; i>=start; i--)
-         FXAI_ApplyPreparedSampleToModelRouted(ai_idx, plugin, samples[i]);
+      {
+         double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+         int window_size = 0;
+         FXAI_BuildPreparedSampleWindow(samples, i, FXAI_GetPluginSequenceBars(plugin, samples[i].horizon_minutes), x_window, window_size);
+         FXAI_ApplyPreparedSampleToModelRouted(ai_idx, plugin, samples[i], window_size, x_window);
+      }
    }
 }
 
@@ -558,7 +629,10 @@ void FXAI_TrainModelWindowPreparedRoutedCached(const int ai_idx,
          if(!samples[i].valid) continue;
          FXAIPreparedSample train_sample;
          FXAI_GetCachedPreparedSample(ai_idx, samples[i], i, caches, train_sample);
-         FXAI_ApplyPreparedSampleToModelRouted(ai_idx, plugin, train_sample);
+         double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+         int window_size = 0;
+         FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, i, caches, FXAI_GetPluginSequenceBars(plugin, train_sample.horizon_minutes), x_window, window_size);
+         FXAI_ApplyPreparedSampleToModelRouted(ai_idx, plugin, train_sample, window_size, x_window);
       }
    }
 }
@@ -765,7 +839,10 @@ void FXAI_TrainModelReplay(const int ai_idx,
          }
 
          if(best_idx < 0) continue;
-         FXAI_ApplyPreparedSampleToModelRouted(ai_idx, plugin, g_replay_samples[best_idx]);
+         double replay_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+         int replay_window_size = 0;
+         FXAI_ClearInputWindow(replay_window, replay_window_size);
+         FXAI_ApplyPreparedSampleToModelRouted(ai_idx, plugin, g_replay_samples[best_idx], replay_window_size, replay_window);
          g_replay_cursor = (best_idx + 1) % FXAI_REPLAY_CAPACITY;
       }
    }

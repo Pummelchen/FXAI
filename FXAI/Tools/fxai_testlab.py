@@ -548,6 +548,14 @@ def build_optimization_campaign(summary: dict, oracles: dict) -> dict:
             "feature_masks": uniq(feature_masks)[:4],
             "focus": scenario_focus,
         })
+        experiments.append({
+            "name": "market_replay_cert",
+            "focus": ["market_recent", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward"],
+        })
+        experiments.append({
+            "name": "walkforward_gate",
+            "focus": ["market_walkforward", "market_session_edges", "market_spread_shock"],
+        })
 
         campaign["plugins"][name] = {
             "score": float(info.get("score", 0.0)),
@@ -561,7 +569,7 @@ def build_optimization_campaign(summary: dict, oracles: dict) -> dict:
 
 def render_optimization_campaign(campaign: dict) -> str:
     out = ["# FXAI Optimization Campaign", ""]
-    out.append("This plan is generated from the latest audit summary. It proposes targeted schema, normalization, and sequence sweeps instead of blind brute force.")
+    out.append("This plan is generated from the latest audit summary. It proposes targeted schema, normalization, sequence, feature-mask, and market-replay certification sweeps instead of blind brute force.")
     out.append("")
     for name, info in sorted(campaign.get("plugins", {}).items()):
         out.append(f"## {name} | {info.get('score', 0.0):.1f}/100 | Grade {info.get('grade', 'F')}")
@@ -589,6 +597,12 @@ def render_optimization_campaign(campaign: dict) -> str:
                 out.append(f"- Feature-mask sweep: {exp['feature_masks']} | focus={exp['focus']}")
                 for mask in exp['feature_masks']:
                     out.append(f"  run: run-audit --plugin-list '{{{name}}}' --scenario-list '{{{', '.join(exp['focus'])}}}' --feature-mask {mask}")
+            elif exp["name"] == "market_replay_cert":
+                out.append(f"- Market replay certification: {exp['focus']}")
+                out.append(f"  run: run-audit --plugin-list '{{{name}}}' --scenario-list '{{{', '.join(exp['focus'])}}}'")
+            elif exp["name"] == "walkforward_gate":
+                out.append(f"- Walk-forward release gate: {exp['focus']}")
+                out.append("  run: release-gate --baseline <baseline-name> --require-market-replay")
         out.append("")
     return "\n".join(out)
 

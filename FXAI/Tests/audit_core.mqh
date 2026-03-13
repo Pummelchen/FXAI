@@ -1038,6 +1038,88 @@ bool FXAI_AuditBuildSample(const int i,
    return true;
 }
 
+void FXAI_AuditBuildWindow(const int i,
+                           const int requested_bars,
+                           const int horizon_minutes,
+                           const double point,
+                           const double ev_threshold_points,
+                           const ENUM_FXAI_FEATURE_NORMALIZATION norm_method,
+                           const datetime &time_arr[],
+                           const double &open_arr[],
+                           const double &high_arr[],
+                           const double &low_arr[],
+                           const double &close_arr[],
+                           const int &spread_arr[],
+                           const datetime &time_m5[],
+                           const double &close_m5[],
+                           const int &map_m5[],
+                           const datetime &time_m15[],
+                           const double &close_m15[],
+                           const int &map_m15[],
+                           const datetime &time_m30[],
+                           const double &close_m30[],
+                           const int &map_m30[],
+                           const datetime &time_h1[],
+                           const double &close_h1[],
+                           const int &map_h1[],
+                           const double &ctx_mean_arr[],
+                           const double &ctx_std_arr[],
+                           const double &ctx_up_arr[],
+                           const double &ctx_extra_arr[],
+                           double &x_window[][FXAI_AI_WEIGHTS],
+                           int &window_size)
+{
+   FXAI_ClearInputWindow(x_window, window_size);
+   int seq = requested_bars;
+   if(seq < 1) seq = 1;
+   if(seq > FXAI_MAX_SEQUENCE_BARS) seq = FXAI_MAX_SEQUENCE_BARS;
+   for(int b=0; b<seq; b++)
+   {
+      int wi = i + 1 + b;
+      FXAIAIContextV4 wctx;
+      int wlabel = (int)FXAI_LABEL_SKIP;
+      double wmove = 0.0;
+      double wweight = 1.0;
+      double wx[];
+      if(!FXAI_AuditBuildSample(wi,
+                                horizon_minutes,
+                                point,
+                                ev_threshold_points,
+                                norm_method,
+                                time_arr,
+                                open_arr,
+                                high_arr,
+                                low_arr,
+                                close_arr,
+                                spread_arr,
+                                time_m5,
+                                close_m5,
+                                map_m5,
+                                time_m15,
+                                close_m15,
+                                map_m15,
+                                time_m30,
+                                close_m30,
+                                map_m30,
+                                time_h1,
+                                close_h1,
+                                map_h1,
+                                ctx_mean_arr,
+                                ctx_std_arr,
+                                ctx_up_arr,
+                                ctx_extra_arr,
+                                wctx,
+                                wlabel,
+                                wmove,
+                                wweight,
+                                wx))
+         break;
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         x_window[b][k] = wx[k];
+      window_size++;
+   }
+}
+
 void FXAI_AuditComparePredictions(const FXAIAIPredictionV4 &a,
                                   const FXAIAIPredictionV4 &b,
                                   double &delta_out)
@@ -1137,7 +1219,7 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
    double ctx_std_arr[];
    double ctx_up_arr[];
    double ctx_extra_arr[];
-   double point = 0.0001;
+   double point = (_Point > 0.0 ? _Point : 0.0001);
 
    if(!FXAI_AuditGenerateScenarioSeries(spec,
                                         bars,
@@ -1247,10 +1329,41 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
       else out.true_skip_count++;
 
       FXAIAIPredictRequestV4 req;
+      FXAI_ClearPredictRequest(req);
       req.valid = true;
       req.ctx = ctx;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++) req.x[k] = x[k];
-      FXAI_ApplyFeatureSchemaToInput(schema_id, feature_groups_mask, req.x);
+      FXAI_AuditBuildWindow(i,
+                            req.ctx.sequence_bars,
+                            horizon_minutes,
+                            point,
+                            0.25,
+                            norm_method,
+                            time_arr,
+                            open_arr,
+                            high_arr,
+                            low_arr,
+                            close_arr,
+                            spread_arr,
+                            time_m5,
+                            close_m5,
+                            map_m5,
+                            time_m15,
+                            close_m15,
+                            map_m15,
+                            time_m30,
+                            close_m30,
+                            map_m30,
+                            time_h1,
+                            close_h1,
+                            map_h1,
+                            ctx_mean_arr,
+                            ctx_std_arr,
+                            ctx_up_arr,
+                            ctx_extra_arr,
+                            req.x_window,
+                            req.window_size);
+      FXAI_ApplyFeatureSchemaToInputEx(schema_id, feature_groups_mask, req.ctx.sequence_bars, req.x_window, req.window_size, req.x);
 
       FXAIAIPredictionV4 pred;
       bool ok = FXAI_PredictViaV4(*plugin, req, hp, pred);
@@ -1315,13 +1428,15 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
       }
 
       FXAIAITrainRequestV4 train_req;
+      FXAI_ClearTrainRequest(train_req);
       train_req.valid = true;
       train_req.ctx = ctx;
       train_req.label_class = label_class;
       train_req.move_points = move_points;
       train_req.sample_weight = sample_weight;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++) train_req.x[k] = x[k];
-      FXAI_ApplyFeatureSchemaToInput(schema_id, feature_groups_mask, train_req.x);
+      FXAI_CopyWindowPayload(req.x_window, req.window_size, train_req.x_window, train_req.window_size);
+      FXAI_ApplyFeatureSchemaToInputEx(schema_id, feature_groups_mask, train_req.ctx.sequence_bars, train_req.x_window, train_req.window_size, train_req.x);
       FXAI_TrainViaV4(*plugin, train_req, hp);
 
       if(!held_req_ready && i > start_idx + 128)
@@ -1357,8 +1472,47 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
       {
          FXAIAIPredictRequestV4 seq_short = held_req;
          seq_short.ctx.sequence_bars = 1;
+         seq_short.window_size = 0;
+         FXAI_ClearInputWindow(seq_short.x_window, seq_short.window_size);
+         FXAI_ApplyFeatureSchemaToInputEx(schema_id, feature_groups_mask, seq_short.ctx.sequence_bars, seq_short.x_window, seq_short.window_size, seq_short.x);
          FXAIAIPredictRequestV4 seq_long = held_req;
          seq_long.ctx.sequence_bars = seq_bars;
+         FXAI_AuditBuildWindow(start_idx,
+                               seq_long.ctx.sequence_bars,
+                               horizon_minutes,
+                               point,
+                               0.25,
+                               norm_method,
+                               time_arr,
+                               open_arr,
+                               high_arr,
+                               low_arr,
+                               close_arr,
+                               spread_arr,
+                               time_m5,
+                               close_m5,
+                               map_m5,
+                               time_m15,
+                               close_m15,
+                               map_m15,
+                               time_m30,
+                               close_m30,
+                               map_m30,
+                               time_h1,
+                               close_h1,
+                               map_h1,
+                               ctx_mean_arr,
+                               ctx_std_arr,
+                               ctx_up_arr,
+                               ctx_extra_arr,
+                               seq_long.x_window,
+                               seq_long.window_size);
+         FXAI_ApplyFeatureSchemaToInputEx(schema_id,
+                                          feature_groups_mask,
+                                          seq_long.ctx.sequence_bars,
+                                          seq_long.x_window,
+                                          seq_long.window_size,
+                                          seq_long.x);
          FXAIAIPredictionV4 pred_short;
          FXAIAIPredictionV4 pred_long;
          FXAI_PredictViaV4(*plugin, seq_short, hp, pred_short);

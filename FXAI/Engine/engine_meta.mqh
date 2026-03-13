@@ -197,6 +197,9 @@ void FXAI_BuildHorizonPolicyFeatures(const int horizon_minutes,
                                      const double model_reliability_hint,
                                      double &feat[])
 {
+   for(int k=0; k<FXAI_HPOL_FEATS; k++)
+      feat[k] = 0.0;
+
    MqlDateTime dt;
    TimeToStruct(snapshot.bar_time, dt);
    double hold_penalty = FXAI_Clamp(AI_HorizonPenaltyPerMinute, 0.0, 0.02);
@@ -205,15 +208,19 @@ void FXAI_BuildHorizonPolicyFeatures(const int horizon_minutes,
    double ctx_quality = FXAI_Clamp(context_quality, -1.0, 2.0);
    double rel_hint = FXAI_Clamp(model_reliability_hint, 0.0, 1.0);
    int session_bucket = FXAI_DeriveSessionBucket(snapshot.bar_time);
+   double vol_points = current_vol / MathMax(snapshot.point, 1e-6);
+   double net_edge = expected_abs_points - min_move_points;
+   double regime_edge = FXAI_GetHorizonRegimeEdge(regime_id, horizon_minutes) / mm;
+   double model_edge = (ai_hint >= 0 ? FXAI_GetModelRegimeEdge(ai_hint, regime_id) / mm : 0.0);
 
    feat[0] = 1.0;
    feat[1] = FXAI_Clamp((expected_abs_points - min_move_points) / mm, -4.0, 6.0) / 4.0;
    feat[2] = FXAI_Clamp(expected_abs_points / mm, 0.0, 8.0) / 4.0;
    feat[3] = 1.0 / MathSqrt((double)MathMax(horizon_minutes, 1));
    feat[4] = -hold_penalty * (double)horizon_minutes;
-   feat[5] = FXAI_Clamp(FXAI_GetHorizonRegimeEdge(regime_id, horizon_minutes) / mm, -3.0, 3.0) / 3.0;
-   feat[6] = (ai_hint >= 0 ? FXAI_Clamp(FXAI_GetModelRegimeEdge(ai_hint, regime_id) / mm, -3.0, 3.0) / 3.0 : 0.0);
-   feat[7] = FXAI_Clamp(current_vol / MathMax(snapshot.point, 1e-6), 0.0, 50.0) / 25.0;
+   feat[5] = FXAI_Clamp(regime_edge, -3.0, 3.0) / 3.0;
+   feat[6] = FXAI_Clamp(model_edge, -3.0, 3.0) / 3.0;
+   feat[7] = FXAI_Clamp(vol_points, 0.0, 50.0) / 25.0;
    feat[8] = FXAI_Clamp(snapshot.spread_points / mm, 0.0, 2.0) - 0.5;
    feat[9] = ((double)dt.hour - 11.5) / 11.5;
    feat[10] = ((double)dt.min - 29.5) / 29.5;
@@ -226,10 +233,18 @@ void FXAI_BuildHorizonPolicyFeatures(const int horizon_minutes,
    feat[17] = FXAI_Clamp(ctx_quality, -1.0, 2.0) / 2.0;
    feat[18] = rel_hint - 0.5;
    feat[19] = FXAI_Clamp(((expected_abs_points - min_move_points) / mm) * (0.5 + ctx_quality), -6.0, 6.0) / 6.0;
-   feat[20] = FXAI_Clamp((current_vol / MathMax(snapshot.point, 1e-6)) * (0.25 + ctx_strength), 0.0, 80.0) / 40.0;
-   feat[21] = FXAI_Clamp(snapshot.spread_points / MathMax(current_vol / MathMax(snapshot.point, 1e-6), 1.0), 0.0, 4.0) / 2.0 - 0.5;
+   feat[20] = FXAI_Clamp(vol_points * (0.25 + ctx_strength), 0.0, 80.0) / 40.0;
+   feat[21] = FXAI_Clamp(snapshot.spread_points / MathMax(vol_points, 1.0), 0.0, 4.0) / 2.0 - 0.5;
    feat[22] = ((double)session_bucket / (double)MathMax(FXAI_PLUGIN_SESSION_BUCKETS - 1, 1)) - 0.5;
    feat[23] = ((double)FXAI_GetHorizonSlot(horizon_minutes) / (double)MathMax(FXAI_MAX_HORIZONS - 1, 1)) - 0.5;
+   feat[24] = FXAI_Clamp((net_edge / mm) * rel_hint, -6.0, 6.0) / 6.0;
+   feat[25] = FXAI_Clamp(expected_abs_points / MathMax(vol_points * MathSqrt((double)MathMax(horizon_minutes, 1)), 1.0), 0.0, 6.0) / 3.0 - 0.5;
+   feat[26] = FXAI_Clamp(min_move_points / MathMax(snapshot.spread_points, 0.10), 0.0, 6.0) / 3.0 - 0.5;
+   feat[27] = FXAI_Clamp(snapshot.spread_points / MathMax(expected_abs_points, mm), 0.0, 2.0) - 0.5;
+   feat[28] = FXAI_Clamp((ctx_strength * (ctx_quality + 1.0)) / 4.0, 0.0, 2.0) - 0.5;
+   feat[29] = FXAI_Clamp(rel_hint * (1.0 + FXAI_Clamp(regime_edge + model_edge, -2.0, 2.0)), 0.0, 2.0) - 0.5;
+   feat[30] = ((double)dt.day_of_week - 2.5) / 2.5;
+   feat[31] = FXAI_Clamp((hold_penalty * (double)horizon_minutes) / MathMax(MathAbs(net_edge / mm), 0.25), 0.0, 2.0) - 0.5;
 }
 
 int FXAI_SelectRoutedHorizon(const double &close_arr[],
@@ -347,6 +362,9 @@ void FXAI_StackBuildFeatures(const double buy_pct,
                              const double context_quality,
                              double &feat[])
 {
+   for(int k=0; k<FXAI_STACK_FEATS; k++)
+      feat[k] = 0.0;
+
    double mm = MathMax(min_move_points, 0.10);
    double em = MathMax(expected_move_points, mm);
    double pb = FXAI_Clamp(buy_pct / 100.0, 0.0, 1.0);
@@ -400,6 +418,14 @@ void FXAI_StackBuildFeatures(const double buy_pct,
    feat[25] = FXAI_Clamp(dominant_family_ratio, 0.0, 1.0);
    feat[26] = FXAI_Clamp(context_strength, 0.0, 4.0) / 2.0;
    feat[27] = FXAI_Clamp(context_quality, -1.0, 2.0) / 2.0;
+   feat[28] = FXAI_Clamp(pb + ps, 0.0, 1.0);
+   feat[29] = FXAI_Clamp(avg_confidence * avg_reliability, 0.0, 1.0);
+   feat[30] = FXAI_Clamp((pb - ps) * directional_margin, -1.0, 1.0);
+   feat[31] = FXAI_Clamp(move_dispersion / em, 0.0, 4.0) / 2.0;
+   feat[32] = FXAI_Clamp((context_strength * MathMax(context_quality, 0.0)) / 4.0, 0.0, 2.0) - 0.5;
+   feat[33] = FXAI_Clamp(dominant_family_ratio * avg_reliability, 0.0, 1.0);
+   feat[34] = FXAI_Clamp((avg_buy_ev + avg_sell_ev) / (2.0 * mm), -3.0, 3.0) / 3.0;
+   feat[35] = FXAI_Clamp(entropy_norm * 0.5 * (avg_confidence + avg_reliability), 0.0, 1.0);
 }
 
 void FXAI_StackPredict(const int regime_id, const double &feat[], double &probs[])
@@ -414,9 +440,15 @@ void FXAI_StackPredict(const int regime_id, const double &feat[], double &probs[
 
    if(!g_stack_ready[r])
    {
-      double p_sell = FXAI_Clamp(0.32 + (0.35 * feat[2]) - (0.12 * feat[3]) + (0.18 * feat[5]) - (0.08 * feat[10]), 0.01, 0.98);
-      double p_buy  = FXAI_Clamp(0.32 + (0.35 * feat[1]) - (0.12 * feat[3]) + (0.18 * feat[4]) - (0.08 * feat[10]), 0.01, 0.98);
-      double p_skip = FXAI_Clamp(0.26 + (0.40 * feat[3]) + (0.18 * feat[10]) - (0.10 * feat[8]), 0.01, 0.98);
+      double p_sell = FXAI_Clamp(0.26 + (0.31 * feat[2]) - (0.12 * feat[3]) + (0.16 * feat[5]) -
+                                 (0.07 * feat[10]) + (0.08 * feat[20]) + (0.08 * feat[21]) +
+                                 (0.05 * feat[23]) + (0.05 * feat[30]) + (0.04 * feat[34]), 0.01, 0.98);
+      double p_buy  = FXAI_Clamp(0.26 + (0.31 * feat[1]) - (0.12 * feat[3]) + (0.16 * feat[4]) -
+                                 (0.07 * feat[10]) + (0.08 * feat[20]) + (0.08 * feat[21]) +
+                                 (0.05 * feat[23]) - (0.05 * feat[30]) + (0.04 * feat[34]), 0.01, 0.98);
+      double p_skip = FXAI_Clamp(0.18 + (0.32 * feat[3]) + (0.18 * feat[10]) - (0.08 * feat[8]) -
+                                 (0.07 * feat[20]) - (0.07 * feat[21]) + (0.08 * feat[31]) -
+                                 (0.04 * feat[28]) - (0.03 * feat[32]), 0.01, 0.98);
       double s0 = p_sell + p_buy + p_skip;
       if(s0 <= 0.0) s0 = 1.0;
       probs[0] = p_sell / s0;
