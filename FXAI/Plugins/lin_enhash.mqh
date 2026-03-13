@@ -445,7 +445,49 @@ public:
             expected_move_points += 0.20 * MathSqrt(var);
       }
       if(expected_move_points <= 0.0)
-         expected_move_points = ExpectedMovePrior(xn);
+         expected_move_points = (m_move_ready ? m_move_ema_abs : 0.0);
+      return true;
+   }
+
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      ResetModelOutput(out);
+      EnsureInitialized(hp);
+
+      double xn[FXAI_AI_WEIGHTS];
+      NormalizeInput(x, false, xn);
+
+      int sess = SessionBucket(ResolveContextTime());
+      int reg  = RegimeBucket(x);
+
+      double probs[FXAI_ENH_CLASSES];
+      double p_dir_raw = 0.5;
+      double p_skip = 0.0;
+      double inter_amp = 0.0;
+      double inter_std = 0.0;
+      double collision = 0.0;
+      EvalModel(xn, sess, reg, false, probs, p_dir_raw, p_skip, inter_amp, inter_std, collision);
+
+      for(int c=0; c<3; c++)
+         out.class_probs[c] = probs[c];
+
+      double mean = (probs[(int)FXAI_LABEL_BUY] + probs[(int)FXAI_LABEL_SELL]) * (inter_amp + 0.35 * inter_std);
+      if(m_inter_n > 1)
+      {
+         double var = m_inter_m2 / (double)(m_inter_n - 1);
+         if(var > 0.0) mean += 0.20 * MathSqrt(var);
+      }
+      out.move_mean_points = MathMax(mean, (m_move_ready ? m_move_ema_abs : 0.0));
+      double sigma = MathMax(0.10, 0.40 * inter_std + 0.35 * collision + 0.15 * m_diag_uncert_ema);
+      out.move_q25_points = MathMax(0.0, out.move_mean_points - 0.55 * sigma);
+      out.move_q50_points = out.move_mean_points;
+      out.move_q75_points = MathMax(out.move_q50_points, out.move_mean_points + 0.55 * sigma);
+      out.confidence = FXAI_Clamp(1.0 / (1.0 + 0.60 * inter_std + 0.50 * collision + 0.20 * m_diag_calerr_ema), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.55 + 0.20 * m_diag_edgehit_ema + 0.15 * (1.0 - FXAI_Clamp(m_diag_calerr_ema, 0.0, 1.0)) + 0.10 * (1.0 - FXAI_Clamp(m_diag_collision_ema, 0.0, 1.0)), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
       return true;
    }
 
@@ -715,7 +757,8 @@ public:
       if(ev > 0.0 && m_move_ready && m_move_ema_abs > 0.0)
          return 0.60 * ev + 0.40 * m_move_ema_abs;
       if(ev > 0.0) return ev;
-      return ExpectedMovePrior(xn);
+      if(m_move_ready && m_move_ema_abs > 0.0) return m_move_ema_abs;
+      return 0.0;
    }
 };
 

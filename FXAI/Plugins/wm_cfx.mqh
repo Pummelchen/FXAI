@@ -109,6 +109,29 @@ private:
       return 3;
    }
 
+   void BuildWindowAwareInput(const double &x[], double &xa[]) const
+   {
+      int xn = ArraySize(x);
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+         xa[i] = (i < xn ? SafeX(x, i) : 0.0);
+
+      int win_n = CurrentWindowSize();
+      if(win_n <= 1) return;
+
+      double mean1 = CurrentWindowFeatureMean(0);
+      double mean2 = CurrentWindowFeatureMean(1);
+      double mean6 = CurrentWindowFeatureMean(5);
+      double mean7 = CurrentWindowFeatureMean(6);
+      double first1 = CurrentWindowValue(0, 1);
+      double last1  = CurrentWindowValue(win_n - 1, 1);
+      double drift = last1 - first1;
+
+      xa[1] = FXAI_ClipSym(0.55 * xa[1] + 0.25 * mean1 + 0.20 * drift, 8.0);
+      xa[2] = FXAI_ClipSym(0.65 * xa[2] + 0.35 * mean6, 8.0);
+      xa[5] = FXAI_ClipSym(0.70 * xa[5] + 0.30 * mean2, 8.0);
+      xa[7] = FXAI_ClipSym(0.65 * xa[7] + 0.35 * mean7, 8.0);
+   }
+
    int DynamicParticleCount(const double &f[], const double cost_points, const double min_move_points) const
    {
       double stress = MathAbs(f[2]) + 0.7 * MathAbs(f[4]) + 0.6 * MathAbs(f[5]);
@@ -345,10 +368,12 @@ public:
    {
       EnsureBootstrapped();
 
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       double f[FXAI_CFXW_FEATS];
-      BuildFeatureState(x, f);
+      BuildFeatureState(xa, f);
 
-      double cost = ResolveCostPoints(x);
+      double cost = ResolveCostPoints(xa);
       if(cost < 0.0) cost = 0.0;
       double mm = ResolveMinMovePoints();
       if(mm <= 0.0) mm = MathMax(0.10, cost);
@@ -381,18 +406,44 @@ public:
       return true;
    }
 
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      ResetModelOutput(out);
+      double probs[3];
+      double ev = 0.0;
+      if(!PredictModelCore(x, hp, probs, ev))
+         return false;
+      for(int c=0; c<3; c++)
+         out.class_probs[c] = probs[c];
+
+      double sigma = MathMax(0.10, 0.25 * ev + 0.55 * m_downside_ema + 0.20 * MathAbs(m_session_edge[SessionBucket()]));
+      out.move_mean_points = MathMax(ev, (m_move_ready ? m_move_ema_abs : 0.0));
+      out.move_q25_points = MathMax(0.0, out.move_mean_points - 0.60 * sigma);
+      out.move_q50_points = out.move_mean_points;
+      out.move_q75_points = MathMax(out.move_q50_points, out.move_mean_points + 0.60 * sigma);
+      out.confidence = FXAI_Clamp(0.45 * MathMax(probs[(int)FXAI_LABEL_BUY], probs[(int)FXAI_LABEL_SELL]) + 0.25 * m_confidence_ema + 0.20 * m_consensus_ema - 0.10 * FXAI_Clamp(m_downside_ema / MathMax(out.move_mean_points + 0.10, 0.10), 0.0, 1.0), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.50 + 0.20 * m_consensus_ema + 0.15 * m_confidence_ema + 0.15 * FXAI_Clamp(m_edge_ema / MathMax(out.move_mean_points + 0.10, 0.10), 0.0, 1.0), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
+      return true;
+   }
+
 protected:
    virtual void TrainModelCore(const int y, const double &x[], const FXAIAIHyperParams &hp, const double move_points)
    {
       EnsureBootstrapped();
 
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       double f[FXAI_CFXW_FEATS];
-      BuildFeatureState(x, f);
+      BuildFeatureState(xa, f);
 
       double inferred[FXAI_CFXW_STATE];
       InferStateFromFeatures(f, inferred);
 
-      double cost = ResolveCostPoints(x);
+      double cost = ResolveCostPoints(xa);
       if(cost < 0.0) cost = 0.0;
       double edge = MathMax(0.0, MathAbs(move_points) - cost);
       int dir = 0;
@@ -477,15 +528,11 @@ protected:
    virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
    {
       EnsureBootstrapped();
-      double probs[3];
-      double exp_move = 0.0;
-      if(PredictModelCore(x, hp, probs, exp_move))
-      {
-         double base = ExpectedMovePrior(x);
-         if(base > 0.0) return 0.75 * exp_move + 0.25 * base;
-         return exp_move;
-      }
-      return ExpectedMovePrior(x);
+      FXAIAIModelOutputV4 out;
+      if(PredictDistributionCore(x, hp, out) && out.move_mean_points > 0.0)
+         return out.move_mean_points;
+      if(m_move_ready && m_move_ema_abs > 0.0) return m_move_ema_abs;
+      return 0.0;
    }
 };
 

@@ -106,7 +106,12 @@ protected:
       double mu = MathMax(0.0, Dot(m_move_mu_w, f));
       double logv = FXAI_Clamp(Dot(m_move_logv_w, f), -4.0, 4.0);
       double sigma = MathSqrt(MathExp(logv));
-      return MathMax(mu + 0.25 * sigma, 0.0);
+      double ev = MathMax(mu + 0.25 * sigma, 0.0);
+      if(ev > 0.0 && m_move_ready && m_move_ema_abs > 0.0)
+         return 0.70 * ev + 0.30 * m_move_ema_abs;
+      if(ev > 0.0) return ev;
+      if(m_move_ready && m_move_ema_abs > 0.0) return m_move_ema_abs;
+      return 0.0;
    }
 
    virtual void TrainModelCore(const int y, const double &x[], const FXAIAIHyperParams &hp, const double move_points)
@@ -237,6 +242,35 @@ public:
          class_probs[i] /= s;
          m_last_probs[i] = class_probs[i];
       }
+      return true;
+   }
+
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      ResetModelOutput(out);
+      double probs[3];
+      double ev = 0.0;
+      if(!PredictModelCore(x, hp, probs, ev))
+         return false;
+
+      double f[]; ArrayResize(f, m_feat_n);
+      BuildGraphFeatures(x, f);
+      double mu = MathMax(0.0, Dot(m_move_mu_w, f));
+      double logv = FXAI_Clamp(Dot(m_move_logv_w, f), -4.0, 4.0);
+      double sigma = MathSqrt(MathExp(logv));
+
+      for(int c=0; c<3; c++)
+         out.class_probs[c] = probs[c];
+      out.move_mean_points = MathMax(ev, (m_move_ready ? m_move_ema_abs : mu));
+      out.move_q25_points = MathMax(0.0, mu - 0.55 * sigma);
+      out.move_q50_points = MathMax(out.move_q25_points, mu);
+      out.move_q75_points = MathMax(out.move_q50_points, mu + 0.55 * sigma);
+      out.confidence = FXAI_Clamp(0.60 * MathMax(probs[(int)FXAI_LABEL_BUY], probs[(int)FXAI_LABEL_SELL]) + 0.20 * (1.0 - probs[(int)FXAI_LABEL_SKIP]) + 0.20 * m_reliability_ema, 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.55 + 0.25 * m_reliability_ema + 0.20 * (1.0 - FXAI_Clamp(m_err_ema, 0.0, 1.0)), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
       return true;
    }
 };

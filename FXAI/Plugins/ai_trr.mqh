@@ -140,6 +140,36 @@ private:
       return FXAI_ClipSym(v, 8.0);
    }
 
+   void BuildWindowAwareInput(const double &x[], double &xa[]) const
+   {
+      int xn = ArraySize(x);
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+         xa[i] = (i < xn ? SafeX(x, i) : 0.0);
+
+      int win_n = CurrentWindowSize();
+      if(win_n <= 1) return;
+
+      double mean1 = CurrentWindowFeatureMean(0);
+      double mean2 = CurrentWindowFeatureMean(1);
+      double mean6 = CurrentWindowFeatureMean(5);
+      double first1 = CurrentWindowValue(0, 1);
+      double last1  = CurrentWindowValue(win_n - 1, 1);
+      double first2 = CurrentWindowValue(0, 2);
+      double last2  = CurrentWindowValue(win_n - 1, 2);
+      double vol1 = 0.0;
+      for(int i=0; i<win_n; i++)
+      {
+         double d = CurrentWindowValue(i, 1) - mean1;
+         vol1 += d * d;
+      }
+      vol1 = MathSqrt(vol1 / (double)win_n);
+
+      xa[1] = FXAI_ClipSym(0.60 * xa[1] + 0.25 * mean1 + 0.15 * (last1 - first1), 8.0);
+      xa[2] = FXAI_ClipSym(0.60 * xa[2] + 0.25 * mean2 + 0.15 * (last2 - first2), 8.0);
+      xa[6] = FXAI_ClipSym(0.65 * xa[6] + 0.35 * vol1, 8.0);
+      xa[7] = FXAI_ClipSym(0.65 * xa[7] + 0.35 * mean6, 8.0);
+   }
+
    void BuildDerived(const double &x[], double &f[]) const
    {
       double a1 = SafeX(x, 1), a2 = SafeX(x, 2), a3 = SafeX(x, 3), a4 = SafeX(x, 4);
@@ -395,10 +425,12 @@ public:
    {
       EnsureBootstrapped();
 
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       double f[FXAI_TRR_DIMS];
       double topo[FXAI_TRR_TOPO];
       double z[FXAI_TRR_ZF];
-      BuildDerived(x, f);
+      BuildDerived(xa, f);
       BuildTopologyLiteFeatures(f, topo);
       BuildReservoirInput(topo, f, z);
       double fast_state[FXAI_TRR_RES];
@@ -446,15 +478,44 @@ public:
       return true;
    }
 
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      ResetModelOutput(out);
+      double probs[3];
+      double ev = 0.0;
+      if(!PredictModelCore(x, hp, probs, ev))
+         return false;
+
+      for(int c=0; c<3; c++)
+         out.class_probs[c] = probs[c];
+
+      double dir_conf = MathMax(probs[(int)FXAI_LABEL_BUY], probs[(int)FXAI_LABEL_SELL]);
+      double skip = probs[(int)FXAI_LABEL_SKIP];
+      double sigma = MathMax(0.10, 0.35 * ev + 0.60 * m_recurrence_ema + 0.40 * m_dispersion_ema);
+      out.move_mean_points = MathMax(ev, (m_move_ready ? m_move_ema_abs : 0.0));
+      out.move_q25_points = MathMax(0.0, out.move_mean_points - 0.55 * sigma);
+      out.move_q50_points = out.move_mean_points;
+      out.move_q75_points = MathMax(out.move_q50_points, out.move_mean_points + 0.55 * sigma);
+      out.confidence = FXAI_Clamp(0.55 * dir_conf + 0.25 * (1.0 - skip) + 0.20 * (1.0 - FXAI_Clamp(m_recurrence_ema, 0.0, 1.0)), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.55 + 0.20 * (1.0 - FXAI_Clamp(m_dispersion_ema, 0.0, 1.0)) + 0.25 * FXAI_Clamp(m_session_move_scale[SessionBucket()] - 0.85, 0.0, 0.5), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
+      return true;
+   }
+
 protected:
    virtual void TrainModelCore(const int y, const double &x[], const FXAIAIHyperParams &hp, const double move_points)
    {
       EnsureBootstrapped();
 
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       double f[FXAI_TRR_DIMS];
       double topo[FXAI_TRR_TOPO];
       double z[FXAI_TRR_ZF];
-      BuildDerived(x, f);
+      BuildDerived(xa, f);
       BuildTopologyLiteFeatures(f, topo);
       BuildReservoirInput(topo, f, z);
       UpdateReservoir(z);
@@ -491,7 +552,7 @@ protected:
          }
       }
 
-      double cost = ResolveCostPoints(x);
+      double cost = ResolveCostPoints(xa);
       if(cost < 0.0) cost = 0.0;
       double target_move = MathMax(0.0, MathAbs(move_points) - cost);
       double mv_err = target_move - pred_move;
@@ -530,15 +591,11 @@ protected:
 
    virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
    {
-      double probs[3];
-      double exp_move = 0.0;
-      if(PredictModelCore(x, hp, probs, exp_move))
-      {
-         double base = ExpectedMovePrior(x);
-         if(base > 0.0) return 0.70 * exp_move + 0.30 * base;
-         return exp_move;
-      }
-      return ExpectedMovePrior(x);
+      FXAIAIModelOutputV4 out;
+      if(PredictDistributionCore(x, hp, out) && out.move_mean_points > 0.0)
+         return out.move_mean_points;
+      if(m_move_ready && m_move_ema_abs > 0.0) return m_move_ema_abs;
+      return 0.0;
    }
 };
 

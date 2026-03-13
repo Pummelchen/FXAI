@@ -177,6 +177,40 @@ private:
       }
    }
 
+   void BuildWindowAwareInput(const double &x[], double &xa[]) const
+   {
+      int xn = ArraySize(x);
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         double v = (i < xn ? x[i] : 0.0);
+         xa[i] = (MathIsValidNumber(v) ? FXAI_ClipSym(v, 8.0) : 0.0);
+      }
+
+      int win_n = CurrentWindowSize();
+      if(win_n <= 1) return;
+
+      double mean1 = CurrentWindowFeatureMean(0);
+      double mean2 = CurrentWindowFeatureMean(1);
+      double mean6 = CurrentWindowFeatureMean(5);
+      double mean7 = CurrentWindowFeatureMean(6);
+      double first1 = CurrentWindowValue(0, 1);
+      double last1 = CurrentWindowValue(win_n - 1, 1);
+      double drift = (last1 - first1) / (double)MathMax(win_n - 1, 1);
+      double vol = 0.0;
+      for(int i=0; i<win_n; i++)
+      {
+         double d = CurrentWindowValue(i, 1) - mean1;
+         vol += d * d;
+      }
+      vol = MathSqrt(vol / (double)win_n);
+
+      xa[1] = FXAI_ClipSym(0.55 * xa[1] + 0.25 * mean1 + 0.20 * drift, 8.0);
+      xa[2] = FXAI_ClipSym(0.60 * xa[2] + 0.25 * mean2 + 0.15 * drift, 8.0);
+      xa[6] = FXAI_ClipSym(0.65 * xa[6] + 0.35 * vol, 8.0);
+      xa[7] = FXAI_ClipSym(0.65 * xa[7] + 0.35 * mean6, 8.0);
+      xa[8] = FXAI_ClipSym(0.65 * xa[8] + 0.35 * mean7, 8.0);
+   }
+
    void ResetOptimizers(void)
    {
       for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
@@ -1308,17 +1342,19 @@ public:
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       double st_re[FXAI_AI_MLP_HIDDEN], st_im[FXAI_AI_MLP_HIDDEN];
       double z = 0.0, p_local = 0.5;
       double mu1 = 0.0, mu3 = 0.0, mu5 = 0.0, logv = 0.0;
-      ForwardNoCommit(x, false, st_re, st_im, z, p_local, mu1, mu3, mu5, logv);
+      ForwardNoCommit(xa, false, st_re, st_im, z, p_local, mu1, mu3, mu5, logv);
 
       double mean_combo = 0.50 * mu1 + 0.30 * mu3 + 0.20 * mu5;
       if(mean_combo < 0.0) mean_combo = 0.0;
       double sigma = FXAI_Clamp(MathExp(0.5 * logv), 0.05, 20.0);
       expected_move_points = mean_combo + 0.30 * sigma;
       if(expected_move_points <= 0.0)
-         expected_move_points = ExpectedMovePrior(x);
+         expected_move_points = (m_move_ready ? m_move_ema_abs : 0.0);
 
       double min_move = MathMax(ResolveMinMovePoints(), 0.10);
       double cost = MathMax(ResolveCostPoints(x), 0.0);
@@ -1327,6 +1363,40 @@ public:
       class_probs[(int)FXAI_LABEL_BUY] = p_dir * active;
       class_probs[(int)FXAI_LABEL_SELL] = (1.0 - p_dir) * active;
       class_probs[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+      return true;
+   }
+
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      ResetModelOutput(out);
+      EnsureInitialized(hp);
+
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
+      double st_re[FXAI_AI_MLP_HIDDEN], st_im[FXAI_AI_MLP_HIDDEN];
+      double z = 0.0, p_local = 0.5;
+      double mu1 = 0.0, mu3 = 0.0, mu5 = 0.0, logv = 0.0;
+      ForwardNoCommit(xa, false, st_re, st_im, z, p_local, mu1, mu3, mu5, logv);
+
+      double probs[3];
+      double ev = 0.0;
+      if(!PredictModelCore(x, hp, probs, ev))
+         return false;
+      for(int c=0; c<3; c++)
+         out.class_probs[c] = probs[c];
+
+      double mean_combo = MathMax(0.0, 0.50 * mu1 + 0.30 * mu3 + 0.20 * mu5);
+      double sigma = FXAI_Clamp(MathExp(0.5 * logv), 0.05, 20.0);
+      out.move_mean_points = MathMax(ev, (m_move_ready ? m_move_ema_abs : mean_combo));
+      out.move_q25_points = MathMax(0.0, mean_combo - 0.60 * sigma);
+      out.move_q50_points = MathMax(out.move_q25_points, mean_combo);
+      out.move_q75_points = MathMax(out.move_q50_points, mean_combo + 0.60 * sigma);
+      out.confidence = FXAI_Clamp(0.60 * MathMax(probs[(int)FXAI_LABEL_BUY], probs[(int)FXAI_LABEL_SELL]) + 0.20 * (1.0 - probs[(int)FXAI_LABEL_SKIP]) + 0.20 * (1.0 - FXAI_Clamp(m_margin_ema / 2.0, 0.0, 1.0)), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.55 + 0.20 * (m_margin_ready ? 1.0 - MathAbs(m_prob_bias) / 2.0 : 0.0) + 0.15 * (m_move_ready ? 1.0 : 0.0) + 0.10 * (1.0 - FXAI_Clamp(MathAbs(m_prob_scale - 1.0), 0.0, 1.0)), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
       return true;
    }
 
@@ -1381,9 +1451,11 @@ public:
          ResetBatch();
       }
 
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       FXAIAIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
-      double w = FXAI_Clamp(MoveSampleWeight(x, move_points) * cls_w, 0.10, 4.00);
-      AppendBatch(y_dir, x, move_points, w);
+      double w = FXAI_Clamp(MoveSampleWeight(xa, move_points) * cls_w, 0.10, 4.00);
+      AppendBatch(y_dir, xa, move_points, w);
 
       if(m_batch_size >= FXAI_S4_TBPTT)
          TrainBatch(h);
@@ -1393,33 +1465,22 @@ public:
    {
       EnsureInitialized(hp);
 
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       double st_re[FXAI_AI_MLP_HIDDEN], st_im[FXAI_AI_MLP_HIDDEN];
       double z = 0.0, p_local = 0.5;
       double mu1 = 0.0, mu3 = 0.0, mu5 = 0.0, logv = 0.0;
-      ForwardNoCommit(x, false, st_re, st_im, z, p_local, mu1, mu3, mu5, logv);
+      ForwardNoCommit(xa, false, st_re, st_im, z, p_local, mu1, mu3, mu5, logv);
       return CalibrateProb(p_local);
    }
 
    virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
    {
-      EnsureInitialized(hp);
-
-      double st_re[FXAI_AI_MLP_HIDDEN], st_im[FXAI_AI_MLP_HIDDEN];
-      double z = 0.0, p_local = 0.5;
-      double mu1 = 0.0, mu3 = 0.0, mu5 = 0.0, logv = 0.0;
-      ForwardNoCommit(x, false, st_re, st_im, z, p_local, mu1, mu3, mu5, logv);
-
-      double mean_combo = 0.50 * mu1 + 0.30 * mu3 + 0.20 * mu5;
-      if(mean_combo < 0.0) mean_combo = 0.0;
-      double sigma = MathExp(0.5 * logv);
-      sigma = FXAI_Clamp(sigma, 0.05, 20.0);
-
-      // Distribution-aware expected move (mean + risk-premium from uncertainty).
-      double ev = mean_combo + 0.30 * sigma;
-      if(ev > 0.0 && m_move_ready && m_move_ema_abs > 0.0)
-         return 0.65 * ev + 0.35 * m_move_ema_abs;
-      if(ev > 0.0) return ev;
-      return ExpectedMovePrior(x);
+      FXAIAIModelOutputV4 out;
+      if(PredictDistributionCore(x, hp, out) && out.move_mean_points > 0.0)
+         return out.move_mean_points;
+      if(m_move_ready && m_move_ema_abs > 0.0) return m_move_ema_abs;
+      return 0.0;
    }
 };
 

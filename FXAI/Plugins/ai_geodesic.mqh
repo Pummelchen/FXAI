@@ -327,6 +327,40 @@ private:
       if(m_x_norm_steps >= 32) m_x_norm_ready = true;
    }
 
+   void BuildWindowAwareInput(const double &x[], double &xa[]) const
+   {
+      int xn = ArraySize(x);
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         double v = (i < xn ? x[i] : 0.0);
+         xa[i] = (MathIsValidNumber(v) ? FXAI_ClipSym(v, 8.0) : 0.0);
+      }
+
+      int win_n = CurrentWindowSize();
+      if(win_n <= 1) return;
+
+      double mean1 = CurrentWindowFeatureMean(0);
+      double mean2 = CurrentWindowFeatureMean(1);
+      double mean4 = CurrentWindowFeatureMean(3);
+      double first1 = CurrentWindowValue(0, 1);
+      double last1 = CurrentWindowValue(win_n - 1, 1);
+      double slope1 = (last1 - first1) / (double)MathMax(win_n - 1, 1);
+      double curv = 0.0;
+      for(int i=2; i<win_n; i++)
+      {
+         double a = CurrentWindowValue(i - 2, 1);
+         double b = CurrentWindowValue(i - 1, 1);
+         double c = CurrentWindowValue(i, 1);
+         curv += MathAbs(c - 2.0 * b + a);
+      }
+      curv /= (double)MathMax(win_n - 2, 1);
+
+      xa[1] = FXAI_ClipSym(0.55 * xa[1] + 0.25 * mean1 + 0.20 * slope1, 8.0);
+      xa[2] = FXAI_ClipSym(0.60 * xa[2] + 0.25 * mean2 + 0.15 * curv, 8.0);
+      xa[4] = FXAI_ClipSym(0.70 * xa[4] + 0.30 * mean4, 8.0);
+      xa[5] = FXAI_ClipSym(0.70 * xa[5] + 0.30 * curv, 8.0);
+   }
+
    void NormalizeInput(const double &x[], double &xn[]) const
    {
       xn[0] = 1.0;
@@ -1721,6 +1755,8 @@ public:
    {
       EnsureInitialized(hp);
 
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       double emb[FXAI_GA_D_MODEL];
       double loc[FXAI_GA_D_MODEL];
       double fin[FXAI_GA_D_MODEL];
@@ -1729,7 +1765,7 @@ public:
       double gcons[FXAI_GA_BLOCKS][FXAI_GA_HEADS];
       double bin[FXAI_GA_BLOCKS][FXAI_GA_D_MODEL];
       double bout[FXAI_GA_BLOCKS][FXAI_GA_D_MODEL];
-      ForwardStep(x, false, emb, loc, fin, grp, ctx, gcons, bin, bout);
+      ForwardStep(xa, false, emb, loc, fin, grp, ctx, gcons, bin, bout);
 
       double logits[FXAI_GA_CLASS_COUNT];
       double probs[FXAI_GA_CLASS_COUNT];
@@ -1740,12 +1776,54 @@ public:
       Calibrate3(probs, class_probs);
 
       double ev = ExpectedMoveFromHeads(mu, logv, q_all, class_probs[FXAI_GA_SKIP]);
-      double base_ev = ExpectedMovePrior(x);
-      if(ev > 0.0 && base_ev > 0.0) expected_move_points = 0.75 * ev + 0.25 * base_ev;
-      else if(ev > 0.0) expected_move_points = ev;
-      else expected_move_points = base_ev;
+      expected_move_points = (ev > 0.0 ? ev : (m_move_ready ? m_move_ema_abs : 0.0));
+      return true;
+   }
 
-      if(expected_move_points <= 0.0) expected_move_points = MathMax(ResolveMinMovePoints(), 0.10);
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      ResetModelOutput(out);
+      EnsureInitialized(hp);
+
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
+      double emb[FXAI_GA_D_MODEL];
+      double loc[FXAI_GA_D_MODEL];
+      double fin[FXAI_GA_D_MODEL];
+      double grp[3];
+      double ctx[FXAI_GA_BLOCKS][FXAI_GA_HEADS][FXAI_GA_D_HEAD];
+      double gcons[FXAI_GA_BLOCKS][FXAI_GA_HEADS];
+      double bin[FXAI_GA_BLOCKS][FXAI_GA_D_MODEL];
+      double bout[FXAI_GA_BLOCKS][FXAI_GA_D_MODEL];
+      ForwardStep(xa, false, emb, loc, fin, grp, ctx, gcons, bin, bout);
+
+      double logits[FXAI_GA_CLASS_COUNT];
+      double probs[FXAI_GA_CLASS_COUNT];
+      double mu = 0.0, logv = 0.0;
+      double q_all[FXAI_GA_QUANTILES];
+      ComputeHeads(fin, logits, probs, mu, logv, q_all);
+      Calibrate3(probs, out.class_probs);
+
+      double sigma = FXAI_Clamp(MathExp(0.5 * logv), 0.05, 50.0);
+      double ev = ExpectedMoveFromHeads(mu, logv, q_all, out.class_probs[FXAI_GA_SKIP]);
+      out.move_mean_points = (ev > 0.0 ? ev : (m_move_ready ? m_move_ema_abs : 0.0));
+      out.move_q25_points = MathMax(0.0, q_all[1]);
+      out.move_q50_points = MathMax(out.move_q25_points, q_all[3]);
+      out.move_q75_points = MathMax(out.move_q50_points, q_all[5]);
+      if(out.move_q75_points <= 0.0)
+      {
+         out.move_q25_points = MathMax(0.0, out.move_mean_points - 0.55 * sigma);
+         out.move_q50_points = out.move_mean_points;
+         out.move_q75_points = MathMax(out.move_q50_points, out.move_mean_points + 0.55 * sigma);
+      }
+
+      double dir_conf = MathMax(out.class_probs[FXAI_GA_BUY], out.class_probs[FXAI_GA_SELL]);
+      out.confidence = FXAI_Clamp(0.60 * dir_conf + 0.20 * (1.0 - out.class_probs[FXAI_GA_SKIP]) + 0.20 * (1.0 - FXAI_Clamp(m_val_ece_slow, 0.0, 1.0)), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.55 + 0.20 * (1.0 - FXAI_Clamp(m_val_ece_fast, 0.0, 1.0)) + 0.15 * (1.0 - FXAI_Clamp(m_val_nll_fast / 2.5, 0.0, 1.0)) + 0.10 * (m_quality_degraded ? -0.5 : 0.5), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
       return true;
    }
 
@@ -1780,18 +1858,21 @@ public:
       FXAIAIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
 
       // Controlled reset policy to avoid state bleed in non-stationary jumps.
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
+
       if((m_step % 768) == 0) ResetSequence();
-      if(MathAbs(x[1]) > 8.0 || MathAbs(x[2]) > 8.0) ResetSequence();
+      if(MathAbs(xa[1]) > 8.0 || MathAbs(xa[2]) > 8.0) ResetSequence();
 
-      UpdateInputStats(x);
+      UpdateInputStats(xa);
 
-      int cls = MapClass(y, x, move_points);
-      double sw = MoveSampleWeight(x, move_points);
+      int cls = MapClass(y, xa, move_points);
+      double sw = MoveSampleWeight(xa, move_points);
       sw = FXAI_Clamp(sw, 0.20, 8.00);
       double cost = InputCostProxyPoints(x);
 
-      AppendTrainSample(cls, x, move_points, cost, sw);
-      ReplayPush(cls, x, move_points, cost, sw);
+      AppendTrainSample(cls, xa, move_points, cost, sw);
+      ReplayPush(cls, xa, move_points, cost, sw);
 
       TrainTBPTT(h);
       TrainReplayMiniBatch(h);
@@ -1805,7 +1886,7 @@ public:
       double gcons[FXAI_GA_BLOCKS][FXAI_GA_HEADS];
       double bin[FXAI_GA_BLOCKS][FXAI_GA_D_MODEL];
       double bout[FXAI_GA_BLOCKS][FXAI_GA_D_MODEL];
-      ForwardStep(x, true, emb, loc, fin, grp, ctx, gcons, bin, bout);
+      ForwardStep(xa, true, emb, loc, fin, grp, ctx, gcons, bin, bout);
    }
 
    virtual double PredictProb(const double &x[], const FXAIAIHyperParams &hp)
@@ -1822,10 +1903,10 @@ public:
    virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
    {
       EnsureInitialized(hp);
-      double probs[3];
-      double ev = -1.0;
-      if(PredictModelCore(x, hp, probs, ev) && ev > 0.0) return ev;
-      return ExpectedMovePrior(x);
+      FXAIAIModelOutputV4 out;
+      if(PredictDistributionCore(x, hp, out) && out.move_mean_points > 0.0) return out.move_mean_points;
+      if(m_move_ready && m_move_ema_abs > 0.0) return m_move_ema_abs;
+      return 0.0;
    }
 };
 

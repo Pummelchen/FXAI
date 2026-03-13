@@ -498,6 +498,58 @@ public:
       return true;
    }
 
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      ResetModelOutput(out);
+      if(!m_initialized) return false;
+
+      double d[FXAI_LOFFM_DERIVED];
+      double g[FXAI_LOFFM_EXPERTS];
+      BuildDerived(x, d);
+      SoftmaxExperts(d, g);
+
+      double p_buy = 0.0;
+      double p_sell = 0.0;
+      double exp_move = 0.0;
+      double p_skip = 0.0;
+      double p_mean = 0.0;
+      double disagreement = 0.0;
+
+      for(int e=0; e<FXAI_LOFFM_EXPERTS; e++)
+      {
+         double pe = PredictExpertUp(e, d);
+         double me = PredictExpertMove(e, d);
+         double ps = PredictExpertSkip(e, d);
+         p_buy += g[e] * (1.0 - ps) * pe;
+         p_sell += g[e] * (1.0 - ps) * (1.0 - pe);
+         p_skip += g[e] * ps;
+         exp_move += g[e] * me;
+         p_mean += g[e] * pe;
+      }
+      for(int e=0; e<FXAI_LOFFM_EXPERTS; e++)
+         disagreement += g[e] * MathAbs(PredictExpertUp(e, d) - p_mean);
+
+      double probs[3];
+      double ev = 0.0;
+      if(!PredictModelCore(x, hp, probs, ev))
+         return false;
+      for(int c=0; c<3; c++)
+         out.class_probs[c] = probs[c];
+
+      out.move_mean_points = MathMax(ev, (m_move_ready ? m_move_ema_abs : exp_move));
+      double sigma = MathMax(0.10, 0.35 * MathAbs(exp_move) + 0.60 * disagreement + 0.20 * (1.0 - m_global_hit_ema));
+      out.move_q25_points = MathMax(0.0, out.move_mean_points - 0.50 * sigma);
+      out.move_q50_points = out.move_mean_points;
+      out.move_q75_points = MathMax(out.move_q50_points, out.move_mean_points + 0.50 * sigma);
+      out.confidence = FXAI_Clamp(0.60 * MathMax(probs[(int)FXAI_LABEL_BUY], probs[(int)FXAI_LABEL_SELL]) + 0.25 * (1.0 - disagreement) + 0.15 * (1.0 - probs[(int)FXAI_LABEL_SKIP]), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.45 + 0.20 * m_global_hit_ema + 0.20 * FXAI_Clamp(m_global_edge_ema / MathMax(out.move_mean_points + 0.10, 0.10), 0.0, 1.0) + 0.15 * (1.0 - disagreement), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
+      return true;
+   }
+
 protected:
    virtual void TrainModelCore(const int y, const double &x[], const FXAIAIHyperParams &hp, const double move_points)
    {
@@ -547,7 +599,7 @@ protected:
 
    virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
    {
-      if(!m_initialized) return ExpectedMovePrior(x);
+      if(!m_initialized) return (m_move_ready ? m_move_ema_abs : 0.0);
 
       double d[FXAI_LOFFM_DERIVED];
       double g[FXAI_LOFFM_EXPERTS];
@@ -558,9 +610,11 @@ protected:
       for(int e=0; e<FXAI_LOFFM_EXPERTS; e++)
          exp_move += g[e] * PredictExpertMove(e, d);
 
-      double base = ExpectedMovePrior(x);
-      if(base > 0.0) return 0.70 * exp_move + 0.30 * base;
-      return exp_move;
+      if(exp_move > 0.0 && m_move_ready && m_move_ema_abs > 0.0)
+         return 0.70 * exp_move + 0.30 * m_move_ema_abs;
+      if(exp_move > 0.0) return exp_move;
+      if(m_move_ready && m_move_ema_abs > 0.0) return m_move_ema_abs;
+      return 0.0;
    }
 };
 
