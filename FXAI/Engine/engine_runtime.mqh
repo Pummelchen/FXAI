@@ -427,7 +427,7 @@ int SpecialDirectionAI(const string symbol)
                                                                       evLookback,
                                                                       snapshot.point);
    if(fallback_expected_move <= 0.0)
-      fallback_expected_move = min_move_pred;
+      fallback_expected_move = 0.0;
    double vol_proxy_abs = MathAbs(feat_pred[5]);
    FXAI_UpdateRegimeEMAs(spread_pred, vol_proxy_abs);
    int regime_id = FXAI_GetRegimeId(snapshot.bar_time, spread_pred, vol_proxy_abs);
@@ -834,7 +834,7 @@ int SpecialDirectionAI(const string symbol)
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = (input_idx >= 0 ? input_caches[input_idx].x[k] : x_pred[k]);
       FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, 0, runtime_norm_caches, req.ctx.sequence_bars, req.x_window, req.window_size);
-      FXAI_ApplyFeatureSchemaToInputEx(manifest.feature_schema_id,
+      FXAI_ApplyFeatureSchemaToPayloadEx(manifest.feature_schema_id,
                                        manifest.feature_groups_mask,
                                        req.ctx.sequence_bars,
                                        req.x_window,
@@ -852,9 +852,9 @@ int SpecialDirectionAI(const string symbol)
 
       double expected_move = pred.move_mean_points;
       if(expected_move <= 0.0)
-         expected_move = FXAI_GetModelExpectedMove(ai_idx, fallback_expected_move);
+         expected_move = FXAI_GetModelExpectedMove(ai_idx, 0.0);
       if(expected_move <= 0.0)
-         expected_move = fallback_expected_move;
+         expected_move = 0.0;
 
       double modelBuyThr = buyThr;
       double modelSellThr = sellThr;
@@ -1011,8 +1011,9 @@ int SpecialDirectionAI(const string symbol)
          if(ps <= 0.0) ps = 1.0;
          ensemble_probs[0] /= ps; ensemble_probs[1] /= ps; ensemble_probs[2] /= ps;
 
-         double stack_buy_ev = ((2.0 * ensemble_probs[(int)FXAI_LABEL_BUY]) - 1.0) * MathMax(fallback_expected_move, min_move_pred) - min_move_pred;
-         double stack_sell_ev = ((2.0 * ensemble_probs[(int)FXAI_LABEL_SELL]) - 1.0) * MathMax(fallback_expected_move, min_move_pred) - min_move_pred;
+         double stack_move = MathMax(avg_expected, 0.0);
+         double stack_buy_ev = ((2.0 * ensemble_probs[(int)FXAI_LABEL_BUY]) - 1.0) * stack_move - min_move_pred;
+         double stack_sell_ev = ((2.0 * ensemble_probs[(int)FXAI_LABEL_SELL]) - 1.0) * stack_move - min_move_pred;
 
          if(ensemble_probs[(int)FXAI_LABEL_SKIP] >= 0.58 || skipPct >= 75.0)
             decision = -1;

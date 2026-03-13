@@ -20,6 +20,10 @@ int FXAI_AuditGetSequenceBarsOverride(void);
 int FXAI_AuditGetSchemaOverride(void);
 double FXAI_AuditGetCommissionPerLotSide(void);
 double FXAI_AuditGetCostBufferPoints(void);
+double FXAI_AuditGetSlippagePoints(void);
+double FXAI_AuditGetFillPenaltyPoints(void);
+int FXAI_AuditGetWalkForwardTrainBars(void);
+int FXAI_AuditGetWalkForwardTestBars(void);
 ulong FXAI_AuditGetFeatureGroupsMaskOverride(void);
 
 struct FXAIAuditScenarioSpec
@@ -947,7 +951,11 @@ bool FXAI_AuditBuildSample(const int i,
    snapshot.point = point;
    snapshot.spread_points = FXAI_GetSpreadAtIndex(i, spread_arr, 1.0);
    snapshot.commission_points = FXAI_GetCommissionPointsRoundTripPerLot(snapshot.symbol, FXAI_AuditGetCommissionPerLotSide());
-   snapshot.min_move_points = snapshot.spread_points + snapshot.commission_points + MathMax(FXAI_AuditGetCostBufferPoints(), 0.0);
+   snapshot.min_move_points = snapshot.spread_points +
+                              snapshot.commission_points +
+                              MathMax(FXAI_AuditGetCostBufferPoints(), 0.0) +
+                              MathMax(FXAI_AuditGetSlippagePoints(), 0.0) +
+                              MathMax(FXAI_AuditGetFillPenaltyPoints(), 0.0);
    if(snapshot.min_move_points < 0.0) snapshot.min_move_points = 0.0;
 
    double feat[FXAI_AI_FEATURES];
@@ -1028,9 +1036,13 @@ bool FXAI_AuditBuildSample(const int i,
    ctx.regime_id = FXAI_AuditGetStaticRegimeId(snapshot.bar_time, snapshot.spread_points, spread_ref, vol_proxy, vol_ref);
    ctx.session_bucket = FXAI_DeriveSessionBucket(snapshot.bar_time);
    ctx.horizon_minutes = horizon_minutes;
-   ctx.feature_schema_id = (int)FXAI_SCHEMA_FULL;
+   int schema_default = FXAI_AuditGetSchemaOverride();
+   if(schema_default <= 0) schema_default = (int)FXAI_SCHEMA_FULL;
+   ctx.feature_schema_id = schema_default;
    ctx.normalization_method_id = (int)norm_method;
-   ctx.sequence_bars = 1;
+   int seq_default = FXAI_AuditGetSequenceBarsOverride();
+   if(seq_default <= 0) seq_default = 1;
+   ctx.sequence_bars = seq_default;
    ctx.cost_points = cost_points;
    ctx.min_move_points = cost_points;
    ctx.point_value = point;
@@ -1274,6 +1286,10 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
    int end_idx = n - 220;
    if(end_idx <= start_idx) end_idx = n - 32;
    if(end_idx <= start_idx) end_idx = n - 2;
+   int wf_train_bars = FXAI_AuditGetWalkForwardTrainBars();
+   int wf_test_bars = FXAI_AuditGetWalkForwardTestBars();
+   if(wf_train_bars < 96) wf_train_bars = 96;
+   if(wf_test_bars < 24) wf_test_bars = 24;
 
    FXAIAIPredictionV4 held_pred_reset;
    FXAIAIPredictRequestV4 held_req;
@@ -1363,7 +1379,7 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
                             ctx_extra_arr,
                             req.x_window,
                             req.window_size);
-      FXAI_ApplyFeatureSchemaToInputEx(schema_id, feature_groups_mask, req.ctx.sequence_bars, req.x_window, req.window_size, req.x);
+      FXAI_ApplyFeatureSchemaToPayloadEx(schema_id, feature_groups_mask, req.ctx.sequence_bars, req.x_window, req.window_size, req.x);
 
       FXAIAIPredictionV4 pred;
       bool ok = FXAI_PredictViaV4(*plugin, req, hp, pred);
@@ -1428,16 +1444,26 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
       }
 
       FXAIAITrainRequestV4 train_req;
-      FXAI_ClearTrainRequest(train_req);
-      train_req.valid = true;
-      train_req.ctx = ctx;
-      train_req.label_class = label_class;
-      train_req.move_points = move_points;
-      train_req.sample_weight = sample_weight;
-      for(int k=0; k<FXAI_AI_WEIGHTS; k++) train_req.x[k] = x[k];
-      FXAI_CopyWindowPayload(req.x_window, req.window_size, train_req.x_window, train_req.window_size);
-      FXAI_ApplyFeatureSchemaToInputEx(schema_id, feature_groups_mask, train_req.ctx.sequence_bars, train_req.x_window, train_req.window_size, train_req.x);
-      FXAI_TrainViaV4(*plugin, train_req, hp);
+      bool train_enabled = true;
+      if(spec.name == "market_walkforward")
+      {
+         int phase = (i - start_idx) % MathMax(wf_train_bars + wf_test_bars, 1);
+         train_enabled = (phase >= 0 && phase < wf_train_bars);
+      }
+
+      if(train_enabled)
+      {
+         FXAI_ClearTrainRequest(train_req);
+         train_req.valid = true;
+         train_req.ctx = ctx;
+         train_req.label_class = label_class;
+         train_req.move_points = move_points;
+         train_req.sample_weight = sample_weight;
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++) train_req.x[k] = x[k];
+         FXAI_CopyWindowPayload(req.x_window, req.window_size, train_req.x_window, train_req.window_size);
+         FXAI_ApplyFeatureSchemaToPayloadEx(schema_id, feature_groups_mask, train_req.ctx.sequence_bars, train_req.x_window, train_req.window_size, train_req.x);
+         FXAI_TrainViaV4(*plugin, train_req, hp);
+      }
 
       if(!held_req_ready && i > start_idx + 128)
       {
@@ -1474,7 +1500,7 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
          seq_short.ctx.sequence_bars = 1;
          seq_short.window_size = 0;
          FXAI_ClearInputWindow(seq_short.x_window, seq_short.window_size);
-         FXAI_ApplyFeatureSchemaToInputEx(schema_id, feature_groups_mask, seq_short.ctx.sequence_bars, seq_short.x_window, seq_short.window_size, seq_short.x);
+         FXAI_ApplyFeatureSchemaToPayloadEx(schema_id, feature_groups_mask, seq_short.ctx.sequence_bars, seq_short.x_window, seq_short.window_size, seq_short.x);
          FXAIAIPredictRequestV4 seq_long = held_req;
          seq_long.ctx.sequence_bars = seq_bars;
          FXAI_AuditBuildWindow(start_idx,
@@ -1507,7 +1533,7 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
                                ctx_extra_arr,
                                seq_long.x_window,
                                seq_long.window_size);
-         FXAI_ApplyFeatureSchemaToInputEx(schema_id,
+         FXAI_ApplyFeatureSchemaToPayloadEx(schema_id,
                                           feature_groups_mask,
                                           seq_long.ctx.sequence_bars,
                                           seq_long.x_window,

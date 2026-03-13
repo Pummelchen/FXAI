@@ -245,6 +245,14 @@ void FXAI_BuildHorizonPolicyFeatures(const int horizon_minutes,
    feat[29] = FXAI_Clamp(rel_hint * (1.0 + FXAI_Clamp(regime_edge + model_edge, -2.0, 2.0)), 0.0, 2.0) - 0.5;
    feat[30] = ((double)dt.day_of_week - 2.5) / 2.5;
    feat[31] = FXAI_Clamp((hold_penalty * (double)horizon_minutes) / MathMax(MathAbs(net_edge / mm), 0.25), 0.0, 2.0) - 0.5;
+   feat[32] = FXAI_Clamp(net_edge / MathMax(expected_abs_points, mm), -1.0, 1.0);
+   feat[33] = FXAI_Clamp(ctx_quality * rel_hint, -1.0, 2.0) / 2.0;
+   feat[34] = FXAI_Clamp(ctx_strength * rel_hint, 0.0, 4.0) / 2.0 - 0.5;
+   feat[35] = FXAI_Clamp(regime_edge * MathMax(ctx_quality, 0.0), -4.0, 4.0) / 4.0;
+   feat[36] = FXAI_Clamp(model_edge * MathMax(ctx_quality, 0.0), -4.0, 4.0) / 4.0;
+   feat[37] = FXAI_Clamp((expected_abs_points / MathMax((double)horizon_minutes, 1.0)) / MathMax(vol_points, 0.50), 0.0, 6.0) / 3.0 - 0.5;
+   feat[38] = FXAI_Clamp((double)session_bucket / (double)MathMax(FXAI_PLUGIN_SESSION_BUCKETS - 1, 1), 0.0, 1.0) * rel_hint - 0.5;
+   feat[39] = FXAI_Clamp((MathAbs(net_edge) / mm) * (0.50 + MathAbs(ctx_quality)), 0.0, 8.0) / 4.0 - 0.5;
 }
 
 int FXAI_SelectRoutedHorizon(const double &close_arr[],
@@ -426,6 +434,18 @@ void FXAI_StackBuildFeatures(const double buy_pct,
    feat[33] = FXAI_Clamp(dominant_family_ratio * avg_reliability, 0.0, 1.0);
    feat[34] = FXAI_Clamp((avg_buy_ev + avg_sell_ev) / (2.0 * mm), -3.0, 3.0) / 3.0;
    feat[35] = FXAI_Clamp(entropy_norm * 0.5 * (avg_confidence + avg_reliability), 0.0, 1.0);
+   feat[36] = FXAI_Clamp(MathMax(avg_buy_ev, avg_sell_ev) / MathMax(expected_move_points, mm), -2.0, 6.0) / 4.0;
+   feat[37] = FXAI_Clamp(avg_confidence - avg_reliability, -1.0, 1.0);
+   feat[38] = FXAI_Clamp(avg_reliability * MathMax(context_quality, 0.0), 0.0, 1.5) - 0.25;
+   feat[39] = FXAI_Clamp(directional_margin * context_strength, 0.0, 4.0) / 2.0 - 0.5;
+   feat[40] = FXAI_Clamp(active_family_ratio * dominant_family_ratio, 0.0, 1.0);
+   feat[41] = FXAI_Clamp(move_dispersion / MathMax(expected_move_points, mm), 0.0, 4.0) / 2.0;
+   feat[42] = FXAI_Clamp((pb + ps - pk) * avg_confidence, -1.0, 1.0);
+   feat[43] = FXAI_Clamp(((avg_buy_ev - avg_sell_ev) / MathMax(expected_move_points, mm)) * directional_margin, -2.0, 2.0) / 2.0;
+   feat[44] = FXAI_Clamp(entropy_norm * dominant_family_ratio, 0.0, 1.0);
+   feat[45] = FXAI_Clamp(avg_confidence * directional_margin * (1.0 - pk), 0.0, 1.0);
+   feat[46] = FXAI_Clamp(context_strength * dominant_family_ratio * avg_reliability, 0.0, 4.0) / 2.0 - 0.5;
+   feat[47] = FXAI_Clamp((avg_buy_ev + avg_sell_ev) / MathMax(expected_move_points + mm, mm), -2.0, 2.0) / 2.0;
 }
 
 void FXAI_StackPredict(const int regime_id, const double &feat[], double &probs[])
@@ -1446,19 +1466,33 @@ void FXAI_UpdateStackFromPending(const int current_signal_seq,
                if(min_move_i < 0.0) min_move_i = 0.0;
 
                double move_points = 0.0;
-               int label_class = FXAI_BuildTripleBarrierLabel(idx_pred,
-                                                              pending_h,
-                                                              min_move_i,
-                                                              ev_threshold_points,
-                                                              snapshot,
-                                                              high_arr,
-                                                              low_arr,
-                                                              close_arr,
-                                                              move_points);
+               double mfe_points = 0.0;
+               double mae_points = 0.0;
+               double time_to_hit_frac = 1.0;
+               int path_flags = 0;
+               int label_class = FXAI_BuildTripleBarrierLabelEx(idx_pred,
+                                                                pending_h,
+                                                                min_move_i,
+                                                                ev_threshold_points,
+                                                                snapshot,
+                                                                high_arr,
+                                                                low_arr,
+                                                                close_arr,
+                                                                move_points,
+                                                                mfe_points,
+                                                                mae_points,
+                                                                time_to_hit_frac,
+                                                                path_flags);
                double feat[FXAI_STACK_FEATS];
                for(int j=0; j<FXAI_STACK_FEATS; j++)
                   feat[j] = g_stack_pending_feat[idx][j];
                double sw = FXAI_MoveEdgeWeight(move_points, min_move_i);
+               double speed_bonus = 1.0 - FXAI_Clamp(time_to_hit_frac, 0.0, 1.0);
+               double mae_ratio = FXAI_Clamp(mae_points / MathMax(mfe_points, min_move_i), 0.0, 3.0);
+               double quality = 1.0 + 0.25 * speed_bonus - 0.15 * mae_ratio;
+               if((path_flags & FXAI_PATHFLAG_DUAL_HIT) != 0) quality -= 0.10;
+               if((path_flags & FXAI_PATHFLAG_SPREAD_STRESS) != 0) quality -= 0.08;
+               sw *= FXAI_Clamp(quality, 0.25, 1.75);
                if(pending_signal == -1 && label_class != (int)FXAI_LABEL_SKIP)
                   sw *= 0.80;
                FXAI_StackUpdate(pending_regime, label_class, feat, sw);

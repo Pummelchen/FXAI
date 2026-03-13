@@ -1,6 +1,132 @@
 #ifndef __FXAI_ENGINE_LIFECYCLE_MQH__
 #define __FXAI_ENGINE_LIFECYCLE_MQH__
 
+#define FXAI_CONTEXT_CAT_FX 0
+#define FXAI_CONTEXT_CAT_METAL 1
+#define FXAI_CONTEXT_CAT_INDEX 2
+#define FXAI_CONTEXT_CAT_ENERGY 3
+#define FXAI_CONTEXT_CAT_CRYPTO 4
+#define FXAI_CONTEXT_CAT_OTHER 5
+#define FXAI_CONTEXT_CAT_COUNT 6
+
+int FXAI_ContextSymbolCategory(const string symbol)
+{
+   string sym = symbol;
+   StringToUpper(sym);
+
+   if(StringFind(sym, "XAU") >= 0 || StringFind(sym, "XAG") >= 0 ||
+      StringFind(sym, "XPT") >= 0 || StringFind(sym, "XPD") >= 0)
+      return FXAI_CONTEXT_CAT_METAL;
+
+   if(StringFind(sym, "US30") >= 0 || StringFind(sym, "DE40") >= 0 ||
+      StringFind(sym, "GER40") >= 0 || StringFind(sym, "JP225") >= 0 ||
+      StringFind(sym, "NAS100") >= 0 || StringFind(sym, "USTEC") >= 0 ||
+      StringFind(sym, "SPX500") >= 0 || StringFind(sym, "US500") >= 0 ||
+      StringFind(sym, "UK100") >= 0 || StringFind(sym, "HK50") >= 0 ||
+      StringFind(sym, "AUS200") >= 0 || StringFind(sym, "FRA40") >= 0)
+      return FXAI_CONTEXT_CAT_INDEX;
+
+   if(StringFind(sym, "WTI") >= 0 || StringFind(sym, "XTI") >= 0 ||
+      StringFind(sym, "BRENT") >= 0 || StringFind(sym, "NATGAS") >= 0 ||
+      StringFind(sym, "NGAS") >= 0)
+      return FXAI_CONTEXT_CAT_ENERGY;
+
+   if(StringFind(sym, "BTC") >= 0 || StringFind(sym, "ETH") >= 0 ||
+      StringFind(sym, "XRP") >= 0 || StringFind(sym, "SOL") >= 0 ||
+      StringFind(sym, "ADA") >= 0 || StringFind(sym, "LTC") >= 0)
+      return FXAI_CONTEXT_CAT_CRYPTO;
+
+   if(StringLen(sym) >= 6)
+   {
+      string a = StringSubstr(sym, 0, 3);
+      string b = StringSubstr(sym, 3, 3);
+      bool a_alpha = true;
+      bool b_alpha = true;
+      for(int i=0; i<3; i++)
+      {
+         ushort ca = StringGetCharacter(a, i);
+         ushort cb = StringGetCharacter(b, i);
+         if(ca < 'A' || ca > 'Z') a_alpha = false;
+         if(cb < 'A' || cb > 'Z') b_alpha = false;
+      }
+      if(a_alpha && b_alpha)
+         return FXAI_CONTEXT_CAT_FX;
+   }
+
+   return FXAI_CONTEXT_CAT_OTHER;
+}
+
+double FXAI_ContextCategoryPriority(const int category)
+{
+   switch(category)
+   {
+      case FXAI_CONTEXT_CAT_FX: return 1.00;
+      case FXAI_CONTEXT_CAT_METAL: return 0.92;
+      case FXAI_CONTEXT_CAT_INDEX: return 0.88;
+      case FXAI_CONTEXT_CAT_ENERGY: return 0.76;
+      case FXAI_CONTEXT_CAT_CRYPTO: return 0.60;
+      default: return 0.50;
+   }
+}
+
+double FXAI_ContextSharedSymbolScore(const string main_symbol,
+                                     const string candidate_symbol)
+{
+   string main_sym = main_symbol;
+   string cand_sym = candidate_symbol;
+   StringToUpper(main_sym);
+   StringToUpper(cand_sym);
+
+   if(StringLen(main_sym) < 6 || StringLen(cand_sym) < 6)
+      return 0.0;
+
+   string main_a = StringSubstr(main_sym, 0, 3);
+   string main_b = StringSubstr(main_sym, 3, 3);
+   string cand_a = StringSubstr(cand_sym, 0, 3);
+   string cand_b = StringSubstr(cand_sym, 3, 3);
+
+   double score = 0.0;
+   if(main_a == cand_a || main_a == cand_b) score += 0.35;
+   if(main_b == cand_a || main_b == cand_b) score += 0.35;
+   if(StringFind(cand_sym, main_a) >= 0) score += 0.10;
+   if(StringFind(cand_sym, main_b) >= 0) score += 0.10;
+   return FXAI_Clamp(score, 0.0, 1.0);
+}
+
+double FXAI_ContextLiquidityScore(const string symbol)
+{
+   if(!SymbolSelect(symbol, true))
+      return -1.0;
+
+   long trade_mode = SymbolInfoInteger(symbol, SYMBOL_TRADE_MODE);
+   if(trade_mode == SYMBOL_TRADE_MODE_DISABLED)
+      return -1.0;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(symbol, tick))
+      return 0.20;
+
+   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   if(point <= 0.0) point = 0.0001;
+   double spread_pts = 0.0;
+   if(tick.ask > 0.0 && tick.bid > 0.0)
+      spread_pts = (tick.ask - tick.bid) / point;
+   if(spread_pts <= 0.0)
+      spread_pts = (double)SymbolInfoInteger(symbol, SYMBOL_SPREAD);
+
+   return FXAI_Clamp(1.25 - 0.06 * spread_pts, 0.0, 1.0);
+}
+
+double FXAI_ContextCandidateScore(const string main_symbol,
+                                  const string candidate_symbol)
+{
+   int category = FXAI_ContextSymbolCategory(candidate_symbol);
+   double score = FXAI_ContextCategoryPriority(category);
+   score += 0.55 * FXAI_ContextSharedSymbolScore(main_symbol, candidate_symbol);
+   score += 0.35 * FXAI_ContextLiquidityScore(candidate_symbol);
+   return score;
+}
+
 void FXAI_ParseContextSymbols(const string raw, string &symbols[])
 {
    ArrayResize(symbols, 0);
@@ -69,6 +195,31 @@ void FXAI_ExtendContextSymbolsFromMarketWatch(const string main_symbol, string &
    int total = SymbolsTotal(true);
    if(total <= 0) return;
 
+   int cat_caps[FXAI_CONTEXT_CAT_COUNT];
+   cat_caps[FXAI_CONTEXT_CAT_FX] = 24;
+   cat_caps[FXAI_CONTEXT_CAT_METAL] = 8;
+   cat_caps[FXAI_CONTEXT_CAT_INDEX] = 8;
+   cat_caps[FXAI_CONTEXT_CAT_ENERGY] = 4;
+   cat_caps[FXAI_CONTEXT_CAT_CRYPTO] = 2;
+   cat_caps[FXAI_CONTEXT_CAT_OTHER] = 4;
+
+   int cat_used[FXAI_CONTEXT_CAT_COUNT];
+   for(int c=0; c<FXAI_CONTEXT_CAT_COUNT; c++)
+      cat_used[c] = 0;
+   for(int j=0; j<ArraySize(symbols); j++)
+   {
+      int cat = FXAI_ContextSymbolCategory(symbols[j]);
+      if(cat >= 0 && cat < FXAI_CONTEXT_CAT_COUNT)
+         cat_used[cat]++;
+   }
+
+   string best_sym[];
+   double best_score[];
+   int best_cat[];
+   ArrayResize(best_sym, 0);
+   ArrayResize(best_score, 0);
+   ArrayResize(best_cat, 0);
+
    for(int i=0; i<total; i++)
    {
       string sym = SymbolName(i, true);
@@ -89,11 +240,51 @@ void FXAI_ExtendContextSymbolsFromMarketWatch(const string main_symbol, string &
       if(exists) continue;
       if(!SymbolSelect(sym, true)) continue;
 
+      int cat = FXAI_ContextSymbolCategory(sym);
+      if(cat < 0 || cat >= FXAI_CONTEXT_CAT_COUNT)
+         cat = FXAI_CONTEXT_CAT_OTHER;
+      if(cat_used[cat] >= cat_caps[cat])
+         continue;
+
+      double score = FXAI_ContextCandidateScore(main_symbol, sym);
+      if(score <= 0.0)
+         continue;
+
+      int sz = ArraySize(best_sym);
+      ArrayResize(best_sym, sz + 1);
+      ArrayResize(best_score, sz + 1);
+      ArrayResize(best_cat, sz + 1);
+      best_sym[sz] = sym;
+      best_score[sz] = score;
+      best_cat[sz] = cat;
+
+      for(int k=sz; k>0; k--)
+      {
+         if(best_score[k] <= best_score[k - 1]) break;
+         double tmp_score = best_score[k - 1];
+         best_score[k - 1] = best_score[k];
+         best_score[k] = tmp_score;
+         string tmp_sym = best_sym[k - 1];
+         best_sym[k - 1] = best_sym[k];
+         best_sym[k] = tmp_sym;
+         int tmp_cat = best_cat[k - 1];
+         best_cat[k - 1] = best_cat[k];
+         best_cat[k] = tmp_cat;
+      }
+   }
+
+   for(int i=0; i<ArraySize(best_sym); i++)
+   {
       int sz = ArraySize(symbols);
       if(sz >= FXAI_MAX_CONTEXT_SYMBOLS)
          break;
+      int cat = best_cat[i];
+      if(cat >= 0 && cat < FXAI_CONTEXT_CAT_COUNT && cat_used[cat] >= cat_caps[cat])
+         continue;
       ArrayResize(symbols, sz + 1);
-      symbols[sz] = sym;
+      symbols[sz] = best_sym[i];
+      if(cat >= 0 && cat < FXAI_CONTEXT_CAT_COUNT)
+         cat_used[cat]++;
    }
 }
 
@@ -743,7 +934,7 @@ bool FXAI_ValidateNativePluginAPI()
       for(int kk=0; kk<FXAI_AI_WEIGHTS; kk++)
          req_v4.x[kk] = x_dummy[kk];
       FXAI_FillComplianceWindow(req_v4.ctx, req_v4.x, req_v4.x_window, req_v4.window_size);
-      FXAI_ApplyFeatureSchemaToInputEx(manifest.feature_schema_id,
+      FXAI_ApplyFeatureSchemaToPayloadEx(manifest.feature_schema_id,
                                        manifest.feature_groups_mask,
                                        req_v4.ctx.sequence_bars,
                                        req_v4.x_window,
@@ -849,7 +1040,7 @@ void FXAI_FillComplianceTrainRequest(CFXAIAIPlugin &plugin,
    FXAIAIManifestV4 manifest;
    FXAI_GetPluginManifest(plugin, manifest);
    FXAI_FillComplianceWindow(req.ctx, req.x, req.x_window, req.window_size);
-   FXAI_ApplyFeatureSchemaToInputEx(manifest.feature_schema_id,
+   FXAI_ApplyFeatureSchemaToPayloadEx(manifest.feature_schema_id,
                                     manifest.feature_groups_mask,
                                     req.ctx.sequence_bars,
                                     req.x_window,
@@ -883,7 +1074,7 @@ void FXAI_FillCompliancePredictRequest(CFXAIAIPlugin &plugin,
    FXAIAIManifestV4 manifest;
    FXAI_GetPluginManifest(plugin, manifest);
    FXAI_FillComplianceWindow(req.ctx, req.x, req.x_window, req.window_size);
-   FXAI_ApplyFeatureSchemaToInputEx(manifest.feature_schema_id,
+   FXAI_ApplyFeatureSchemaToPayloadEx(manifest.feature_schema_id,
                                     manifest.feature_groups_mask,
                                     req.ctx.sequence_bars,
                                     req.x_window,
@@ -1027,7 +1218,7 @@ bool FXAI_RunSequenceWindowCompliance(CFXAIAIPlugin &plugin,
                                    -0.75, -0.42, -0.18, now_t - 150, 3, horizon);
    train_req.ctx.sequence_bars = seq;
    FXAI_FillComplianceWindow(train_req.ctx, train_req.x, train_req.x_window, train_req.window_size);
-   FXAI_ApplyFeatureSchemaToInputEx(manifest.feature_schema_id,
+   FXAI_ApplyFeatureSchemaToPayloadEx(manifest.feature_schema_id,
                                     manifest.feature_groups_mask,
                                     train_req.ctx.sequence_bars,
                                     train_req.x_window,
@@ -1039,7 +1230,7 @@ bool FXAI_RunSequenceWindowCompliance(CFXAIAIPlugin &plugin,
    FXAI_FillCompliancePredictRequest(plugin, pred_req_one, 0.9, -0.75, -0.42, -0.18, now_t - 10, 3, horizon);
    pred_req_seq.ctx.sequence_bars = seq;
    FXAI_FillComplianceWindow(pred_req_seq.ctx, pred_req_seq.x, pred_req_seq.x_window, pred_req_seq.window_size);
-   FXAI_ApplyFeatureSchemaToInputEx(manifest.feature_schema_id,
+   FXAI_ApplyFeatureSchemaToPayloadEx(manifest.feature_schema_id,
                                     manifest.feature_groups_mask,
                                     pred_req_seq.ctx.sequence_bars,
                                     pred_req_seq.x_window,
@@ -1047,7 +1238,7 @@ bool FXAI_RunSequenceWindowCompliance(CFXAIAIPlugin &plugin,
                                     pred_req_seq.x);
    pred_req_one.ctx.sequence_bars = 1;
    FXAI_FillComplianceWindow(pred_req_one.ctx, pred_req_one.x, pred_req_one.x_window, pred_req_one.window_size);
-   FXAI_ApplyFeatureSchemaToInputEx(manifest.feature_schema_id,
+   FXAI_ApplyFeatureSchemaToPayloadEx(manifest.feature_schema_id,
                                     manifest.feature_groups_mask,
                                     pred_req_one.ctx.sequence_bars,
                                     pred_req_one.x_window,

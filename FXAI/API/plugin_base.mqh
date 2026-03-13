@@ -219,7 +219,6 @@ protected:
 
    int      m_core_predict_calls;
    int      m_core_predict_failures;
-   int      m_expected_prior_calls;
    int      m_replay_rehearsals;
    bool m_rng_seeded;
    uint m_rng_state;
@@ -429,7 +428,6 @@ protected:
 
       m_core_predict_calls = 0;
       m_core_predict_failures = 0;
-      m_expected_prior_calls = 0;
       m_replay_rehearsals = 0;
       m_rng_seeded = false;
       m_rng_state = 0u;
@@ -669,17 +667,6 @@ protected:
 
       for(int c=0; c<3; c++)
          probs[c] /= s;
-   }
-
-   double ExpectedMovePrior(const double &x[])
-   {
-      m_expected_prior_calls++;
-      double head = (m_move_head_ready ? PredictMoveHeadRaw(x) : -1.0);
-      if(head > 0.0 && m_move_ready && m_move_ema_abs > 0.0)
-         return 0.60 * head + 0.40 * m_move_ema_abs;
-      if(head > 0.0) return head;
-      if(m_move_ready && m_move_ema_abs > 0.0) return m_move_ema_abs;
-      return 0.0;
    }
 
    void ApplyContextCalibrationBank(double &probs[])
@@ -1140,7 +1127,6 @@ public:
    virtual void EnsureInitialized(const FXAIAIHyperParams &hp) {}
 
    int CorePredictFailures(void) const { return m_core_predict_failures; }
-   int ExpectedPriorCalls(void) const { return m_expected_prior_calls; }
    int ReplayRehearsals(void) const { return m_replay_rehearsals; }
 
    void Train(const FXAIAITrainRequestV4 &req, const FXAIAIHyperParams &hp)
@@ -1161,12 +1147,13 @@ public:
       pre_probs[0] = 0.10;
       pre_probs[1] = 0.10;
       pre_probs[2] = 0.80;
-      double pre_move = MathMax(req.ctx.min_move_points, 0.10);
+      double pre_move = 0.0;
       bool have_pre = PredictModelCore(req.x, hp, pre_probs, pre_move);
       if(!have_pre)
          m_core_predict_failures++;
       NormalizeClassDistribution(pre_probs);
-      pre_move = MathMax(pre_move, MathMax(req.ctx.min_move_points, 0.10));
+      if(!MathIsValidNumber(pre_move) || pre_move < 0.0)
+         pre_move = 0.0;
 
       double sample_w = (req.sample_weight > 0.0 ? req.sample_weight : MoveSampleWeight(req.x, req.move_points));
       if(have_pre)
@@ -1203,7 +1190,7 @@ public:
          model_out.class_probs[(int)FXAI_LABEL_SELL] = 0.05;
          model_out.class_probs[(int)FXAI_LABEL_BUY] = 0.05;
          model_out.class_probs[(int)FXAI_LABEL_SKIP] = 0.90;
-         model_out.move_mean_points = MathMax(req.ctx.min_move_points, 0.10);
+         model_out.move_mean_points = 0.0;
          FillPredictionV4(model_out, model_out.move_mean_points, out);
          return false;
       }

@@ -15,7 +15,7 @@
 #define FXAI_PLUGIN_REPLAY_STEPS 2
 #define FXAI_CONTEXT_TOP_SYMBOLS 3
 #define FXAI_CONTEXT_EXTRA_FEATS (FXAI_CONTEXT_TOP_SYMBOLS * 4)
-#define FXAI_CONTEXT_DYNAMIC_POOL 8
+#define FXAI_CONTEXT_DYNAMIC_POOL 12
 #define FXAI_API_VERSION_V4 4
 #define FXAI_MAX_SEQUENCE_BARS 96
 
@@ -768,6 +768,62 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
    }
 }
 
+void FXAI_ApplyFeatureSchemaToPayloadEx(const int schema_id,
+                                        const ulong groups_mask,
+                                        const int sequence_bars,
+                                        double &x_window[][FXAI_AI_WEIGHTS],
+                                        const int window_size,
+                                        double &x[])
+{
+   int ws = window_size;
+   if(ws < 0) ws = 0;
+   if(ws > FXAI_MAX_SEQUENCE_BARS) ws = FXAI_MAX_SEQUENCE_BARS;
+
+   double raw_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+   for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+   {
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      {
+         raw_window[b][k] = 0.0;
+         if(b < ws)
+            raw_window[b][k] = x_window[b][k];
+      }
+   }
+
+   // Project each historical row using only older rows. This gives plugins a
+   // schema-native rolling payload instead of a raw normalized shared vector.
+   for(int b=0; b<ws; b++)
+   {
+      double row[FXAI_AI_WEIGHTS];
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         row[k] = raw_window[b][k];
+
+      double tail_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      int tail_size = 0;
+      for(int tb=b + 1; tb<ws && tail_size<FXAI_MAX_SEQUENCE_BARS; tb++, tail_size++)
+      {
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            tail_window[tail_size][k] = raw_window[tb][k];
+      }
+
+      FXAI_ApplyFeatureSchemaToInputEx(schema_id,
+                                       groups_mask,
+                                       sequence_bars,
+                                       tail_window,
+                                       tail_size,
+                                       row);
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         x_window[b][k] = row[k];
+   }
+
+   FXAI_ApplyFeatureSchemaToInputEx(schema_id,
+                                    groups_mask,
+                                    sequence_bars,
+                                    x_window,
+                                    ws,
+                                    x);
+}
+
 int FXAI_ContextExtraIndex(const int sample_idx, const int feat_idx)
 {
    if(sample_idx < 0) return -1;
@@ -804,7 +860,7 @@ void FXAI_ApplyFeatureSchemaToInput(const int schema_id,
    for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          dummy_window[b][k] = 0.0;
-   FXAI_ApplyFeatureSchemaToInputEx(schema_id, groups_mask, 1, dummy_window, 0, x);
+   FXAI_ApplyFeatureSchemaToPayloadEx(schema_id, groups_mask, 1, dummy_window, 0, x);
 }
 
 void FXAI_ClearPredictRequest(FXAIAIPredictRequestV4 &req)

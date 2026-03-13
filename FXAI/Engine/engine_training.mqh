@@ -521,7 +521,7 @@ void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
    for(int b=0; b<window_size && b<FXAI_MAX_SEQUENCE_BARS; b++)
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          s3.x_window[b][k] = x_window[b][k];
-   FXAI_ApplyFeatureSchemaToInputEx(manifest.feature_schema_id,
+   FXAI_ApplyFeatureSchemaToPayloadEx(manifest.feature_schema_id,
                                     manifest.feature_groups_mask,
                                     s3.ctx.sequence_bars,
                                     s3.x_window,

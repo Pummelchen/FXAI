@@ -553,8 +553,15 @@ def build_optimization_campaign(summary: dict, oracles: dict) -> dict:
             "focus": ["market_recent", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward"],
         })
         experiments.append({
+            "name": "execution_sweep",
+            "slippage_points": [0.0, 0.5, 1.0],
+            "fill_penalty_points": [0.0, 0.25, 0.50],
+            "focus": ["market_recent", "market_session_edges", "market_spread_shock", "market_walkforward"],
+        })
+        experiments.append({
             "name": "walkforward_gate",
             "focus": ["market_walkforward", "market_session_edges", "market_spread_shock"],
+            "train_test_pairs": [(256, 64), (384, 96), (512, 128)],
         })
 
         campaign["plugins"][name] = {
@@ -600,8 +607,15 @@ def render_optimization_campaign(campaign: dict) -> str:
             elif exp["name"] == "market_replay_cert":
                 out.append(f"- Market replay certification: {exp['focus']}")
                 out.append(f"  run: run-audit --plugin-list '{{{name}}}' --scenario-list '{{{', '.join(exp['focus'])}}}'")
+            elif exp["name"] == "execution_sweep":
+                out.append(f"- Execution sweep: slippage={exp['slippage_points']} fill_penalty={exp['fill_penalty_points']} | focus={exp['focus']}")
+                for slip in exp["slippage_points"]:
+                    for fillp in exp["fill_penalty_points"]:
+                        out.append(f"  run: run-audit --plugin-list '{{{name}}}' --scenario-list '{{{', '.join(exp['focus'])}}}' --slippage-points {slip} --fill-penalty-points {fillp}")
             elif exp["name"] == "walkforward_gate":
-                out.append(f"- Walk-forward release gate: {exp['focus']}")
+                out.append(f"- Walk-forward release gate: {exp['focus']} | windows={exp['train_test_pairs']}")
+                for train_bars, test_bars in exp["train_test_pairs"]:
+                    out.append(f"  run: run-audit --plugin-list '{{{name}}}' --scenario-list '{{{', '.join(exp['focus'])}}}' --wf-train-bars {train_bars} --wf-test-bars {test_bars}")
                 out.append("  run: release-gate --baseline <baseline-name> --require-market-replay")
         out.append("")
     return "\n".join(out)
@@ -754,6 +768,12 @@ def write_audit_set(path: Path, args) -> None:
         f"Audit_SequenceBarsOverride={args.sequence_bars}||0||0||256||N",
         f"Audit_SchemaOverride={args.schema_id}||0||0||6||N",
         f"Audit_FeatureGroupsMaskOverride={args.feature_mask}||0||0||9223372036854775807||N",
+        f"Audit_CommissionPerLotSide={args.commission_per_lot_side}||0||0||100||N",
+        f"Audit_CostBufferPoints={args.cost_buffer_points}||0||0||100||N",
+        f"Audit_SlippagePoints={args.slippage_points}||0||0||100||N",
+        f"Audit_FillPenaltyPoints={args.fill_penalty_points}||0||0||100||N",
+        f"Audit_WalkForwardTrainBars={args.wf_train_bars}||64||1||50000||N",
+        f"Audit_WalkForwardTestBars={args.wf_test_bars}||16||1||50000||N",
         f"Audit_Seed={args.seed}||0||1||1000000||N",
         "Audit_ResetOutput=true||false||0||true||N",
         "Audit_StopOnFailure=false||false||0||true||N",
@@ -1106,6 +1126,12 @@ def main():
     ra.add_argument("--sequence-bars", type=int, default=0)
     ra.add_argument("--schema-id", type=int, default=0)
     ra.add_argument("--feature-mask", type=int, default=0)
+    ra.add_argument("--commission-per-lot-side", type=float, default=0.0)
+    ra.add_argument("--cost-buffer-points", type=float, default=2.0)
+    ra.add_argument("--slippage-points", type=float, default=0.0)
+    ra.add_argument("--fill-penalty-points", type=float, default=0.0)
+    ra.add_argument("--wf-train-bars", type=int, default=256)
+    ra.add_argument("--wf-test-bars", type=int, default=64)
     ra.add_argument("--seed", type=int, default=42)
     ra.add_argument("--symbol", default="EURUSD")
     ra.add_argument("--login")

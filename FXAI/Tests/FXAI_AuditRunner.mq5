@@ -16,6 +16,10 @@ input int    Audit_SchemaOverride = 0;
 input ulong  Audit_FeatureGroupsMaskOverride = 0;
 input double Audit_CommissionPerLotSide = 0.0;
 input double Audit_CostBufferPoints = 2.0;
+input double Audit_SlippagePoints = 0.0;
+input double Audit_FillPenaltyPoints = 0.0;
+input int    Audit_WalkForwardTrainBars = 256;
+input int    Audit_WalkForwardTestBars = 64;
 input int    Audit_Seed = 42;
 input bool   Audit_ResetOutput = true;
 input bool   Audit_StopOnFailure = false;
@@ -52,6 +56,26 @@ double FXAI_AuditGetCommissionPerLotSide(void)
 double FXAI_AuditGetCostBufferPoints(void)
 {
    return Audit_CostBufferPoints;
+}
+
+double FXAI_AuditGetSlippagePoints(void)
+{
+   return Audit_SlippagePoints;
+}
+
+double FXAI_AuditGetFillPenaltyPoints(void)
+{
+   return Audit_FillPenaltyPoints;
+}
+
+int FXAI_AuditGetWalkForwardTrainBars(void)
+{
+   return Audit_WalkForwardTrainBars;
+}
+
+int FXAI_AuditGetWalkForwardTestBars(void)
+{
+   return Audit_WalkForwardTestBars;
 }
 
 ulong FXAI_AuditGetFeatureGroupsMaskOverride(void)

@@ -340,13 +340,13 @@ int      g_ai_last_signal_key = -1;
 string   g_ai_last_reason = "init";
 datetime g_last_debug_bar = 0;
 
-#define FXAI_MAX_CONTEXT_SYMBOLS 32
+#define FXAI_MAX_CONTEXT_SYMBOLS 48
 #define FXAI_REL_MAX_PENDING 2048
 #define FXAI_REGIME_COUNT 12
 #define FXAI_MAX_HORIZONS 8
-#define FXAI_STACK_FEATS 36
-#define FXAI_STACK_HIDDEN 16
-#define FXAI_HPOL_FEATS 32
+#define FXAI_STACK_FEATS 48
+#define FXAI_STACK_HIDDEN 24
+#define FXAI_HPOL_FEATS 40
 #define FXAI_NORM_CAND_MAX 8
 #define FXAI_REPLAY_CAPACITY 384
 #define FXAI_REPLAY_DRAWS 12

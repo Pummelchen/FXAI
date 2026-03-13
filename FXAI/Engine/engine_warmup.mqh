@@ -118,7 +118,7 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
             s3.x[k] = samples[i].x[k];
          FXAI_BuildPreparedSampleWindow(samples, i, s3.ctx.sequence_bars, s3.x_window, s3.window_size);
-         FXAI_ApplyFeatureSchemaToInputEx(trial_manifest.feature_schema_id,
+         FXAI_ApplyFeatureSchemaToPayloadEx(trial_manifest.feature_schema_id,
                                           trial_manifest.feature_groups_mask,
                                           s3.ctx.sequence_bars,
                                           s3.x_window,
@@ -754,7 +754,7 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = samples[i].x[k];
       FXAI_BuildPreparedSampleWindow(samples, i, req.ctx.sequence_bars, req.x_window, req.window_size);
-      FXAI_ApplyFeatureSchemaToInputEx(plugin_manifest.feature_schema_id,
+      FXAI_ApplyFeatureSchemaToPayloadEx(plugin_manifest.feature_schema_id,
                                        plugin_manifest.feature_groups_mask,
                                        req.ctx.sequence_bars,
                                        req.x_window,
@@ -890,7 +890,7 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = eval_sample.x[k];
       FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, i, caches, req.ctx.sequence_bars, req.x_window, req.window_size);
-      FXAI_ApplyFeatureSchemaToInputEx(plugin_manifest.feature_schema_id,
+      FXAI_ApplyFeatureSchemaToPayloadEx(plugin_manifest.feature_schema_id,
                                        plugin_manifest.feature_groups_mask,
                                        req.ctx.sequence_bars,
                                        req.x_window,
@@ -1359,7 +1359,7 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             for(int k=0; k<FXAI_AI_WEIGHTS; k++)
                req.x[k] = pred_sample.x[k];
             FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, i, norm_caches, req.ctx.sequence_bars, req.x_window, req.window_size);
-            FXAI_ApplyFeatureSchemaToInputEx(plugin_manifest.feature_schema_id,
+            FXAI_ApplyFeatureSchemaToPayloadEx(plugin_manifest.feature_schema_id,
                                              plugin_manifest.feature_groups_mask,
                                              req.ctx.sequence_bars,
                                              req.x_window,
