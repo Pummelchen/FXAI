@@ -677,10 +677,8 @@ public:
       Calibrate3(p_raw, class_probs);
 
       expected_move_points = PredictExpectedMovePoints(x, hp);
-      if(expected_move_points <= 0.0)
-         expected_move_points = ResolveMinMovePoints();
-      if(expected_move_points <= 0.0)
-         expected_move_points = 0.10;
+      if(expected_move_points < 0.0)
+         expected_move_points = 0.0;
       return true;
    }
 

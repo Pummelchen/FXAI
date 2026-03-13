@@ -332,7 +332,7 @@ public:
          p_up    += ge * FXAI_Clamp(FXAI_Sigmoid(DotDir(e, f)),  0.001, 0.999);
          p_move  += ge * MathAbs(DotMove(e, f));
       }
-      expected_move_points = MathMax(p_move, ResolveMinMovePoints());
+      expected_move_points = MathMax(0.0, p_move);
 
       int bucket = BucketIndex(x);
       double q = Quantile90(bucket);

@@ -1840,7 +1840,7 @@ public:
       double ev = ExpectedMoveFromHeads(mu, logv, q25, q75, class_probs[(int)FXAI_LABEL_SKIP]);
       if(ev > 0.0 && m_move_ready && m_move_ema_abs > 0.0) expected_move_points = 0.70 * ev + 0.30 * m_move_ema_abs;
       else if(ev > 0.0) expected_move_points = ev;
-      else expected_move_points = (m_move_ready ? m_move_ema_abs : MathMax(ResolveMinMovePoints(), 0.10));
+      else expected_move_points = (m_move_ready ? m_move_ema_abs : 0.0);
 
       return true;
    }

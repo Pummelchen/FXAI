@@ -43,6 +43,24 @@ protected:
       return true;
    }
 
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      ResetModelOutput(out);
+      if(!PredictModelCore(x, hp, out.class_probs, out.move_mean_points))
+         return false;
+      double sigma = MathMax(0.10, 0.30 * out.move_mean_points);
+      out.move_q25_points = MathMax(0.0, out.move_mean_points - 0.50 * sigma);
+      out.move_q50_points = MathMax(out.move_q25_points, out.move_mean_points);
+      out.move_q75_points = MathMax(out.move_q50_points, out.move_mean_points + 0.50 * sigma);
+      out.confidence = out.class_probs[(int)FXAI_LABEL_SELL];
+      out.reliability = 0.55;
+      out.has_quantiles = true;
+      out.has_confidence = true;
+      return true;
+   }
+
    virtual void TrainModelCore(const int y,
                                const double &x[],
                                const FXAIAIHyperParams &hp,

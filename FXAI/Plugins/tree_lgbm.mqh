@@ -1079,7 +1079,7 @@ public:
       else if(ev > 0.0) expected_move_points = ev;
       else expected_move_points = (m_move_ready ? m_move_ema_abs : 0.0);
 
-      if(expected_move_points <= 0.0) expected_move_points = MathMax(ResolveMinMovePoints(), 0.10);
+      if(expected_move_points < 0.0) expected_move_points = 0.0;
       return true;
    }
 

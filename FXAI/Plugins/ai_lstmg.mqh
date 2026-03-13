@@ -1967,7 +1967,7 @@ public:
       double ev_cal = CalibrateEV(ev_raw);
       if(ev_cal > 0.0 && m_move_ready && m_move_ema_abs > 0.0) expected_move_points = 0.70 * ev_cal + 0.30 * m_move_ema_abs;
       else if(ev_cal > 0.0) expected_move_points = ev_cal;
-      else expected_move_points = (m_move_ready ? m_move_ema_abs : MathMax(ResolveMinMovePoints(), 0.10));
+      else expected_move_points = (m_move_ready ? m_move_ema_abs : 0.0);
 
       return true;
    }
