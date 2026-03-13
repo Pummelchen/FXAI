@@ -166,6 +166,37 @@ private:
       }
    }
 
+   void BuildWindowAwareInput(const double &x[], double &xa[]) const
+   {
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+         xa[i] = x[i];
+
+      int win_n = CurrentWindowSize();
+      if(win_n <= 1) return;
+
+      double mean1 = CurrentWindowFeatureMean(0);
+      double mean2 = CurrentWindowFeatureMean(1);
+      double mean4 = CurrentWindowFeatureMean(3);
+      double first1 = CurrentWindowValue(0, 1);
+      double last1 = CurrentWindowValue(win_n - 1, 1);
+      double first2 = CurrentWindowValue(0, 2);
+      double last2 = CurrentWindowValue(win_n - 1, 2);
+      double trend1 = (last1 - first1) / (double)(win_n - 1);
+      double trend2 = (last2 - first2) / (double)(win_n - 1);
+      double var1 = 0.0;
+      for(int i=0; i<win_n; i++)
+      {
+         double d1 = CurrentWindowValue(i, 1) - mean1;
+         var1 += d1 * d1;
+      }
+      var1 = MathSqrt(var1 / (double)win_n);
+
+      xa[1] = 0.55 * xa[1] + 0.25 * mean1 + 0.20 * trend1;
+      xa[2] = 0.55 * xa[2] + 0.25 * mean2 + 0.20 * trend2;
+      xa[4] = 0.70 * xa[4] + 0.30 * mean4;
+      xa[5] = 0.75 * xa[5] + 0.25 * var1;
+   }
+
    void ResetSequence(void)
    {
       m_seq_ptr = -1;
@@ -1137,9 +1168,11 @@ public:
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       double probs[FXAI_STMN_CLASS_COUNT];
       double mu = 0.0, logv = 0.0, q25 = 0.0, q75 = 0.0;
-      ForwardInference(x, probs, mu, logv, q25, q75);
+      ForwardInference(xa, probs, mu, logv, q25, q75);
 
       double den = probs[FXAI_STMN_BUY] + probs[FXAI_STMN_SELL];
       if(den < 1e-9) den = 1e-9;
@@ -1155,7 +1188,47 @@ public:
       double amp = MathMax(0.0, 0.55 * MathAbs(mu) + 0.25 * spread_amp + 0.20 * sigma);
       expected_move_points = amp * active;
       if(expected_move_points <= 0.0)
-         expected_move_points = ExpectedMovePrior(x);
+         expected_move_points = MathMax(PredictMoveHeadRaw(xa), m_move_ema_abs);
+      return true;
+   }
+
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      ResetModelOutput(out);
+      EnsureInitialized(hp);
+
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
+      double probs[FXAI_STMN_CLASS_COUNT];
+      double mu = 0.0, logv = 0.0, q25 = 0.0, q75 = 0.0;
+      ForwardInference(xa, probs, mu, logv, q25, q75);
+
+      double den = probs[FXAI_STMN_BUY] + probs[FXAI_STMN_SELL];
+      if(den < 1e-9) den = 1e-9;
+      double p_dir_raw = probs[FXAI_STMN_BUY] / den;
+      double p_dir_cal = CalibrateProb(p_dir_raw);
+      double active = FXAI_Clamp(1.0 - probs[FXAI_STMN_SKIP], 0.0, 1.0);
+      out.class_probs[(int)FXAI_LABEL_BUY] = p_dir_cal * active;
+      out.class_probs[(int)FXAI_LABEL_SELL] = (1.0 - p_dir_cal) * active;
+      out.class_probs[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+      NormalizeClassDistribution(out.class_probs);
+
+      double spread_amp = MathMax(0.0, q75 - q25);
+      double sigma = MathSqrt(MathMax(MathExp(logv), 1e-6));
+      double amp = MathMax(0.0, 0.55 * MathAbs(mu) + 0.25 * spread_amp + 0.20 * sigma);
+      out.move_mean_points = MathMax(0.0, amp * active);
+      out.move_q25_points = MathMax(0.0, q25 * active);
+      out.move_q50_points = MathMax(out.move_q25_points, MathAbs(mu) * active);
+      out.move_q75_points = MathMax(out.move_q50_points, q75 * active);
+      double dir_conf = MathMax(out.class_probs[(int)FXAI_LABEL_BUY], out.class_probs[(int)FXAI_LABEL_SELL]);
+      out.confidence = FXAI_Clamp(0.75 * dir_conf + 0.25 * active, 0.0, 1.0);
+      out.reliability = FXAI_Clamp(1.0 / (1.0 + sigma), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
+      if(out.move_mean_points <= 0.0)
+         out.move_mean_points = MathMax(PredictMoveHeadRaw(xa), m_move_ema_abs);
       return true;
    }
 
@@ -1189,8 +1262,10 @@ public:
 
       FXAIAIHyperParams hs = ScaleHyperParamsForMove(hp, move_points);
       double sw = FXAI_Clamp(MoveSampleWeight(x, move_points), 0.25, 8.00);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
 
-      UpdateInputStats(x);
+      UpdateInputStats(xa);
 
       int cls = ResolveClass(y, x, move_points);
       double cost = InputCostProxyPoints(x);
@@ -1198,7 +1273,7 @@ public:
       double h_prev[FXAI_AI_MLP_HIDDEN];
       GetLastHidden(h_prev);
 
-      PushTrainSample(cls, x, move_points, cost, sw, h_prev);
+      PushTrainSample(cls, xa, move_points, cost, sw, h_prev);
       if(m_train_len >= 4)
          TrainTBPTT(hs);
 
@@ -1206,7 +1281,7 @@ public:
       double mu = 0.0, logv = 0.0, q25 = 0.0, q75 = 0.0;
 
       double xn[FXAI_AI_WEIGHTS];
-      NormalizeInput(x, xn);
+      NormalizeInput(xa, xn);
 
       double node_z[FXAI_STMN_NODES][FXAI_AI_MLP_HIDDEN];
       double attn[FXAI_STMN_NODES][FXAI_STMN_NODES];
@@ -1240,7 +1315,7 @@ public:
          UpdateCalibration(p_dir, (move_points >= 0.0 ? 1 : 0), 0.25 * cw);
 
       FXAI_UpdateMoveEMA(m_move_ema_abs, m_move_ready, move_points, 0.05);
-      UpdateMoveHead(x, move_points, hs, sw);
+      UpdateMoveHead(xa, move_points, hs, sw);
 
       m_step++;
    }
@@ -1276,10 +1351,10 @@ public:
       double active = FXAI_Clamp(1.0 - probs[FXAI_STMN_SKIP], 0.0, 1.0);
       double ev = amp * active;
 
-      double base_ev = ExpectedMovePrior(x);
-      if(ev > 0.0 && base_ev > 0.0) return 0.65 * ev + 0.35 * base_ev;
       if(ev > 0.0) return ev;
-      return base_ev;
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
+      return MathMax(PredictMoveHeadRaw(xa), m_move_ema_abs);
    }
 };
 

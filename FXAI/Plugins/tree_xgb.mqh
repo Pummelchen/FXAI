@@ -24,6 +24,8 @@ struct FXAIXGBNode
    int    right;
    double leaf_value;
    double move_mean;
+   double move_var;
+   double class_mass[3];
    int    sample_count;
 };
 
@@ -45,6 +47,7 @@ private:
 
    double m_buf_x[FXAI_XGB_BUFFER][FXAI_AI_WEIGHTS];
    int    m_buf_y[FXAI_XGB_BUFFER];
+   int    m_buf_cls[FXAI_XGB_BUFFER];
    double m_buf_move[FXAI_XGB_BUFFER];
    double m_buf_w[FXAI_XGB_BUFFER];
    int    m_buf_head;
@@ -63,6 +66,9 @@ private:
          tree.nodes[n].right = -1;
          tree.nodes[n].leaf_value = 0.0;
          tree.nodes[n].move_mean = 0.0;
+         tree.nodes[n].move_var = 0.0;
+         for(int c=0; c<3; c++)
+            tree.nodes[n].class_mass[c] = (c == (int)FXAI_LABEL_SKIP ? 1.0 : 0.5);
          tree.nodes[n].sample_count = 0;
       }
    }
@@ -78,6 +84,7 @@ private:
    }
 
    void PushSample(const int y,
+                   const int cls,
                    const double &x[],
                    const double move_points,
                    const double sample_w)
@@ -85,6 +92,7 @@ private:
       int pos = m_buf_head;
       for(int i=0; i<FXAI_AI_WEIGHTS; i++) m_buf_x[pos][i] = x[i];
       m_buf_y[pos] = y;
+      m_buf_cls[pos] = cls;
       m_buf_move[pos] = move_points;
       m_buf_w[pos] = sample_w;
 
@@ -139,17 +147,21 @@ private:
                 const double &g[],
                 const double &h[],
                 const double &mv[],
+                const int &cls_all[],
+                const double &w_all[],
                 const double lambda,
                 const double eta) const
    {
-      double G = 0.0, H = 0.0, sum_mv = 0.0;
+      double G = 0.0, H = 0.0, sum_mv = 0.0, sum_mv2 = 0.0;
       int n = ArraySize(sidx);
       for(int i=0; i<n; i++)
       {
          int id = sidx[i];
          G += g[id];
          H += h[id];
-         sum_mv += MathAbs(mv[id]);
+         double amv = MathAbs(mv[id]);
+         sum_mv += amv;
+         sum_mv2 += amv * amv;
       }
 
       tree.nodes[node_idx].is_leaf = true;
@@ -160,6 +172,17 @@ private:
       tree.nodes[node_idx].right = -1;
       tree.nodes[node_idx].sample_count = n;
       tree.nodes[node_idx].move_mean = (n > 0 ? sum_mv / (double)n : 0.0);
+      tree.nodes[node_idx].move_var = (n > 0 ? MathMax(0.0, sum_mv2 / (double)n - tree.nodes[node_idx].move_mean * tree.nodes[node_idx].move_mean) : 0.0);
+      for(int c=0; c<3; c++)
+         tree.nodes[node_idx].class_mass[c] = 1e-3;
+      for(int i=0; i<n; i++)
+      {
+         int id = sidx[i];
+         int cls = cls_all[id];
+         if(cls < (int)FXAI_LABEL_SELL || cls > (int)FXAI_LABEL_SKIP)
+            cls = (mv[id] >= 0.0 ? (int)FXAI_LABEL_BUY : (int)FXAI_LABEL_SELL);
+         tree.nodes[node_idx].class_mass[cls] += MathMax(0.05, w_all[id]);
+      }
 
       double leaf = 0.0;
       if(H > 1e-9)
@@ -310,13 +333,15 @@ private:
                   const double &h[],
                   const double &x_all[][FXAI_AI_WEIGHTS],
                   const double &mv[],
+                  const int &cls_all[],
+                  const double &w_all[],
                   const double lambda,
                   const double eta) const
    {
       if(node_idx < 0 || node_idx >= FXAI_XGB_MAX_NODES) return;
       if(ArraySize(sidx) < FXAI_XGB_MIN_SPLIT_SAMPLES || depth >= FXAI_XGB_MAX_DEPTH)
       {
-         SetLeaf(tree, node_idx, sidx, g, h, mv, lambda, eta);
+         SetLeaf(tree, node_idx, sidx, g, h, mv, cls_all, w_all, lambda, eta);
          return;
       }
 
@@ -326,7 +351,7 @@ private:
       double best_gain = 0.0;
       if(!FindBestSplit(sidx, g, h, x_all, lambda, best_f, best_thr, best_def_left, best_gain))
       {
-         SetLeaf(tree, node_idx, sidx, g, h, mv, lambda, eta);
+         SetLeaf(tree, node_idx, sidx, g, h, mv, cls_all, w_all, lambda, eta);
          return;
       }
 
@@ -359,7 +384,7 @@ private:
          ArraySize(right_idx) < FXAI_XGB_MIN_SPLIT_SAMPLES ||
          tree.node_count + 2 > FXAI_XGB_MAX_NODES)
       {
-         SetLeaf(tree, node_idx, sidx, g, h, mv, lambda, eta);
+         SetLeaf(tree, node_idx, sidx, g, h, mv, cls_all, w_all, lambda, eta);
          return;
       }
 
@@ -374,10 +399,13 @@ private:
       tree.nodes[node_idx].left = left_node;
       tree.nodes[node_idx].right = right_node;
       tree.nodes[node_idx].leaf_value = 0.0;
+      tree.nodes[node_idx].move_var = 0.0;
       tree.nodes[node_idx].sample_count = n;
+      for(int c=0; c<3; c++)
+         tree.nodes[node_idx].class_mass[c] = 0.0;
 
-      BuildNode(tree, left_node, depth + 1, left_idx, g, h, x_all, mv, lambda, eta);
-      BuildNode(tree, right_node, depth + 1, right_idx, g, h, x_all, mv, lambda, eta);
+      BuildNode(tree, left_node, depth + 1, left_idx, g, h, x_all, mv, cls_all, w_all, lambda, eta);
+      BuildNode(tree, right_node, depth + 1, right_idx, g, h, x_all, mv, cls_all, w_all, lambda, eta);
    }
 
    bool BuildOneTree(const FXAIAIHyperParams &hp)
@@ -387,10 +415,12 @@ private:
       int n = m_buf_size;
       double x_all[][FXAI_AI_WEIGHTS];
       int y_all[];
+      int cls_all[];
       double mv_all[];
       double w_all[];
       ArrayResize(x_all, n);
       ArrayResize(y_all, n);
+      ArrayResize(cls_all, n);
       ArrayResize(mv_all, n);
       ArrayResize(w_all, n);
 
@@ -399,6 +429,7 @@ private:
          int p = BufPos(i);
          for(int k=0; k<FXAI_AI_WEIGHTS; k++) x_all[i][k] = m_buf_x[p][k];
          y_all[i] = m_buf_y[p];
+         cls_all[i] = m_buf_cls[p];
          mv_all[i] = m_buf_move[p];
          w_all[i] = m_buf_w[p];
       }
@@ -415,6 +446,7 @@ private:
          double margin = ModelMargin(xloc);
          double p = FXAI_Sigmoid(margin);
          double wi = FXAI_Clamp(w_all[i], 0.25, 4.00);
+         if(cls_all[i] == (int)FXAI_LABEL_SKIP) wi *= 0.05;
          g[i] = ((double)y_all[i] - p) * wi;
          h[i] = FXAI_Clamp(p * (1.0 - p) * wi, 0.02, 4.00);
       }
@@ -433,7 +465,7 @@ private:
 
       FXAIXGBTree tree;
       InitTree(tree);
-      BuildNode(tree, 0, 0, root_idx, g, h, x_all, mv_all, lambda, eta);
+      BuildNode(tree, 0, 0, root_idx, g, h, x_all, mv_all, cls_all, w_all, lambda, eta);
       if(tree.node_count <= 0) return false;
 
       if(m_tree_count < FXAI_XGB_MAX_TREES)
@@ -476,15 +508,74 @@ public:
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
-      double p_dir = CalibrateProb(FXAI_Sigmoid(ModelMargin(x)));
-      expected_move_points = PredictExpectedMovePoints(x, hp);
-
-      double min_move = MathMax(ResolveMinMovePoints(), 0.10);
-      double cost = MathMax(ResolveCostPoints(x), 0.0);
-      double active = FXAI_Clamp((expected_move_points - 0.35 * cost) / MathMax(min_move, 0.10), 0.0, 1.0);
-      class_probs[(int)FXAI_LABEL_BUY] = p_dir * active;
-      class_probs[(int)FXAI_LABEL_SELL] = (1.0 - p_dir) * active;
+      double margin = ModelMargin(x);
+      double p_dir = CalibrateProb(FXAI_Sigmoid(margin));
+      double cls_mass[3] = {1e-3, 1e-3, 1e-3};
+      double sum = 0.0, wsum = 0.0, mvsum = 0.0, mv2sum = 0.0;
+      for(int t=0; t<m_tree_count; t++)
+      {
+         int leaf = TraverseLeafIndex(m_trees[t], x);
+         if(leaf < 0 || leaf >= m_trees[t].node_count) continue;
+         double lw = MathAbs(m_trees[t].nodes[leaf].leaf_value) + 0.20;
+         for(int c=0; c<3; c++)
+            cls_mass[c] += lw * m_trees[t].nodes[leaf].class_mass[c];
+         mvsum += lw * m_trees[t].nodes[leaf].move_mean;
+         mv2sum += lw * (m_trees[t].nodes[leaf].move_var + m_trees[t].nodes[leaf].move_mean * m_trees[t].nodes[leaf].move_mean);
+         wsum += lw;
+      }
+      sum = cls_mass[0] + cls_mass[1] + cls_mass[2];
+      if(sum <= 0.0) sum = 1.0;
+      double leaf_buy = cls_mass[(int)FXAI_LABEL_BUY] / sum;
+      double leaf_sell = cls_mass[(int)FXAI_LABEL_SELL] / sum;
+      double leaf_skip = cls_mass[(int)FXAI_LABEL_SKIP] / sum;
+      double active = FXAI_Clamp(1.0 - leaf_skip, 0.0, 1.0);
+      double dir_mix = (leaf_buy + leaf_sell > 1e-9 ? leaf_buy / (leaf_buy + leaf_sell) : p_dir);
+      double p_up = FXAI_Clamp(0.55 * p_dir + 0.45 * dir_mix, 0.001, 0.999);
+      class_probs[(int)FXAI_LABEL_BUY] = active * p_up;
+      class_probs[(int)FXAI_LABEL_SELL] = active * (1.0 - p_up);
       class_probs[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+      NormalizeClassDistribution(class_probs);
+      if(wsum > 0.0)
+      {
+         double mean_mv = MathMax(0.0, mvsum / wsum);
+         double var_mv = MathMax(0.0, mv2sum / wsum - mean_mv * mean_mv);
+         expected_move_points = mean_mv + 0.10 * MathSqrt(var_mv + 1e-6);
+      }
+      else
+         expected_move_points = MathMax(PredictMoveHeadRaw(x), m_move_ema_abs);
+      return true;
+   }
+
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      ResetModelOutput(out);
+      double ev = 0.0;
+      if(!PredictModelCore(x, hp, out.class_probs, ev))
+         return false;
+      double mvsum = 0.0, mv2sum = 0.0, wsum = 0.0;
+      for(int t=0; t<m_tree_count; t++)
+      {
+         int leaf = TraverseLeafIndex(m_trees[t], x);
+         if(leaf < 0 || leaf >= m_trees[t].node_count) continue;
+         double lw = MathAbs(m_trees[t].nodes[leaf].leaf_value) + 0.20;
+         mvsum += lw * m_trees[t].nodes[leaf].move_mean;
+         mv2sum += lw * (m_trees[t].nodes[leaf].move_var + m_trees[t].nodes[leaf].move_mean * m_trees[t].nodes[leaf].move_mean);
+         wsum += lw;
+      }
+      double mean_mv = (wsum > 0.0 ? MathMax(0.0, mvsum / wsum) : MathMax(0.0, ev));
+      double var_mv = (wsum > 0.0 ? MathMax(0.0, mv2sum / wsum - mean_mv * mean_mv) : 0.25 * mean_mv * mean_mv);
+      double sigma = MathSqrt(var_mv + 1e-6);
+      out.move_mean_points = mean_mv;
+      out.move_q25_points = MathMax(0.0, mean_mv - 0.674 * sigma);
+      out.move_q50_points = MathMax(out.move_q25_points, mean_mv);
+      out.move_q75_points = MathMax(out.move_q50_points, mean_mv + 0.674 * sigma);
+      double dir_mass = MathMax(out.class_probs[(int)FXAI_LABEL_BUY], out.class_probs[(int)FXAI_LABEL_SELL]);
+      out.confidence = FXAI_Clamp(dir_mass, 0.0, 1.0);
+      out.reliability = FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
       return true;
    }
 
@@ -502,6 +593,7 @@ public:
       for(int i=0; i<FXAI_XGB_BUFFER; i++)
       {
          m_buf_y[i] = 0;
+         m_buf_cls[i] = (int)FXAI_LABEL_SKIP;
          m_buf_move[i] = 0.0;
          m_buf_w[i] = 1.0;
          for(int k=0; k<FXAI_AI_WEIGHTS; k++) m_buf_x[i][k] = 0.0;
@@ -528,7 +620,6 @@ public:
                                const double move_points)
    {
       int cls = NormalizeClassLabel(y, x, move_points);
-      if(cls == (int)FXAI_LABEL_SKIP) return;
       int y_dir = (cls == (int)FXAI_LABEL_BUY ? 1 : 0);
 
       EnsureInitialized(hp);
@@ -542,10 +633,13 @@ public:
       double p_raw = FXAI_Sigmoid(margin);
 
       // Keep bias adaptive between tree builds.
-      double g_now = ((double)y_dir - p_raw) * w;
-      m_bias += 0.01 * FXAI_ClipSym(g_now, 2.0);
+      if(cls != (int)FXAI_LABEL_SKIP)
+      {
+         double g_now = ((double)y_dir - p_raw) * w;
+         m_bias += 0.01 * FXAI_ClipSym(g_now, 2.0);
+      }
 
-      PushSample(y_dir, x, move_points, w);
+      PushSample(y_dir, cls, x, move_points, w);
 
       if(m_buf_size >= FXAI_XGB_MIN_BUFFER && (m_step % FXAI_XGB_BUILD_EVERY) == 0)
          BuildOneTree(h);
@@ -567,6 +661,7 @@ public:
       EnsureInitialized(hp);
 
       double sum = 0.0;
+      double sum2 = 0.0;
       double wsum = 0.0;
       for(int t=0; t<m_tree_count; t++)
       {
@@ -576,11 +671,17 @@ public:
          double lw = MathAbs(m_trees[t].nodes[leaf].leaf_value) + 0.10;
          if(mv <= 0.0) continue;
          sum += lw * mv;
+         sum2 += lw * (m_trees[t].nodes[leaf].move_var + mv * mv);
          wsum += lw;
       }
 
-      if(wsum > 0.0) return sum / wsum;
-      return ExpectedMovePrior(x);
+      if(wsum > 0.0)
+      {
+         double mean_mv = sum / wsum;
+         double var_mv = MathMax(0.0, sum2 / wsum - mean_mv * mean_mv);
+         return MathMax(0.0, mean_mv + 0.10 * MathSqrt(var_mv + 1e-6));
+      }
+      return MathMax(PredictMoveHeadRaw(x), m_move_ema_abs);
    }
 };
 
