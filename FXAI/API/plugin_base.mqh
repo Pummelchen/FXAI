@@ -840,7 +840,52 @@ protected:
       double move_mean_points = out.move_mean_points;
       if(!PredictModelCore(x, hp, out.class_probs, move_mean_points))
          return false;
+      NormalizeClassDistribution(out.class_probs);
       out.move_mean_points = (MathIsValidNumber(move_mean_points) && move_mean_points > 0.0 ? move_mean_points : 0.0);
+
+      double buy_p = out.class_probs[(int)FXAI_LABEL_BUY];
+      double sell_p = out.class_probs[(int)FXAI_LABEL_SELL];
+      double skip_p = out.class_probs[(int)FXAI_LABEL_SKIP];
+      double directional_conf = MathMax(buy_p, sell_p);
+      double entropy = 0.0;
+      for(int c=0; c<3; c++)
+      {
+         double p = MathMax(out.class_probs[c], 1e-9);
+         entropy -= p * MathLog(p);
+      }
+      entropy /= MathLog(3.0);
+
+      double move_scale = MathMax(ResolveMinMovePoints(), 0.10);
+      if(m_move_ready && m_move_ema_abs > 0.0)
+         move_scale = MathMax(move_scale, 0.60 * m_move_ema_abs);
+      if(CurrentWindowSize() > 1)
+      {
+         double mean1 = CurrentWindowFeatureMean(0);
+         double var1 = 0.0;
+         for(int b=0; b<CurrentWindowSize(); b++)
+         {
+            double d = CurrentWindowValue(b, 1) - mean1;
+            var1 += d * d;
+         }
+         var1 = MathSqrt(var1 / (double)CurrentWindowSize());
+         move_scale = MathMax(move_scale, 0.35 * var1);
+      }
+
+      double sigma = MathMax(0.10, 0.35 * out.move_mean_points + 0.35 * move_scale + 0.20 * skip_p + 0.15 * entropy);
+      out.move_q25_points = MathMax(0.0, out.move_mean_points - 0.55 * sigma);
+      out.move_q50_points = MathMax(out.move_q25_points, out.move_mean_points);
+      out.move_q75_points = MathMax(out.move_q50_points, out.move_mean_points + 0.55 * sigma);
+      out.confidence = FXAI_Clamp(0.60 * directional_conf + 0.20 * (1.0 - skip_p) + 0.20 * (1.0 - entropy), 0.0, 1.0);
+      int r = m_ctx_regime_id;
+      if(r < 0) r = 0;
+      if(r >= FXAI_PLUGIN_REGIME_BUCKETS) r = FXAI_PLUGIN_REGIME_BUCKETS - 1;
+      int s = ContextSessionBucket();
+      int h = ContextHorizonBucket();
+      double bank_mass = m_bank_total[r][s][h];
+      double bank_rel = FXAI_Clamp(bank_mass / 120.0, 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.45 + 0.25 * bank_rel + 0.20 * (1.0 - entropy) + 0.10 * (m_move_ready ? 1.0 : 0.0), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
       return true;
    }
 
