@@ -1903,7 +1903,17 @@ public:
       double cur_cost = ResolveCostPoints(x);
       double cur_min = ResolveMinMovePoints();
       int cur_regime = m_ctx_regime_id;
+      int cur_session = m_ctx_session_bucket;
       int cur_horizon = m_ctx_horizon_minutes;
+      int cur_feature_schema = m_ctx_feature_schema_id;
+      int cur_norm_method = m_ctx_normalization_method_id;
+      int cur_sequence_bars = m_ctx_sequence_bars;
+      double cur_point_value = m_ctx_point_value;
+      int cur_window_size = m_ctx_window_size;
+      double cur_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            cur_window[b][k] = m_ctx_window[b][k];
       int cur_sess = SessionBucket(cur_t);
 
       UpdateWeighted(y, x, h, w, move_points, false);
@@ -1926,6 +1936,7 @@ public:
                     m_mlp_replay_min_move[p],
                     m_mlp_replay_regime[p],
                     m_mlp_replay_horizon[p]);
+         m_ctx_session_bucket = m_replay_session[p];
          double replay_x[FXAI_AI_WEIGHTS];
          for(int i=0; i<FXAI_AI_WEIGHTS; i++)
             replay_x[i] = m_mlp_replay_x[p][i];
@@ -1933,6 +1944,15 @@ public:
       }
 
       SetContext(cur_t, cur_cost, cur_min, cur_regime, cur_horizon);
+      m_ctx_session_bucket = cur_session;
+      m_ctx_feature_schema_id = cur_feature_schema;
+      m_ctx_normalization_method_id = cur_norm_method;
+      m_ctx_sequence_bars = cur_sequence_bars;
+      m_ctx_point_value = cur_point_value;
+      m_ctx_window_size = cur_window_size;
+      for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            m_ctx_window[b][k] = cur_window[b][k];
    }
 
    virtual double PredictProb(const double &x[],

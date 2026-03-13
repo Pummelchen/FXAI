@@ -52,7 +52,14 @@ protected:
    double   m_replay_min_move[FXAI_PLUGIN_REPLAY_CAPACITY];
    datetime m_replay_time[FXAI_PLUGIN_REPLAY_CAPACITY];
    int      m_replay_regime[FXAI_PLUGIN_REPLAY_CAPACITY];
+   int      m_replay_session_bucket[FXAI_PLUGIN_REPLAY_CAPACITY];
    int      m_replay_horizon[FXAI_PLUGIN_REPLAY_CAPACITY];
+   int      m_replay_feature_schema[FXAI_PLUGIN_REPLAY_CAPACITY];
+   int      m_replay_norm_method[FXAI_PLUGIN_REPLAY_CAPACITY];
+   int      m_replay_sequence_bars[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_replay_point_value[FXAI_PLUGIN_REPLAY_CAPACITY];
+   int      m_replay_window_size[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_replay_window[FXAI_PLUGIN_REPLAY_CAPACITY][FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
    double   m_replay_priority[FXAI_PLUGIN_REPLAY_CAPACITY];
 
    int      m_core_predict_calls;
@@ -250,8 +257,17 @@ protected:
          m_replay_min_move[i] = 0.0;
          m_replay_time[i] = 0;
          m_replay_regime[i] = 0;
+         m_replay_session_bucket[i] = 0;
          m_replay_horizon[i] = 1;
+         m_replay_feature_schema[i] = 1;
+         m_replay_norm_method[i] = 0;
+         m_replay_sequence_bars[i] = 1;
+         m_replay_point_value[i] = (_Point > 0.0 ? _Point : 1.0);
+         m_replay_window_size[i] = 0;
          m_replay_priority[i] = 0.0;
+         for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+            for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+               m_replay_window[i][b][k] = 0.0;
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
             m_replay_x[i][k] = 0.0;
       }
@@ -640,7 +656,20 @@ protected:
       m_replay_min_move[slot] = sample.ctx.min_move_points;
       m_replay_time[slot] = sample.ctx.sample_time;
       m_replay_regime[slot] = sample.ctx.regime_id;
+      m_replay_session_bucket[slot] = sample.ctx.session_bucket;
       m_replay_horizon[slot] = sample.ctx.horizon_minutes;
+      m_replay_feature_schema[slot] = sample.ctx.feature_schema_id;
+      m_replay_norm_method[slot] = sample.ctx.normalization_method_id;
+      m_replay_sequence_bars[slot] = sample.ctx.sequence_bars;
+      m_replay_point_value[slot] = sample.ctx.point_value;
+      m_replay_window_size[slot] = sample.window_size;
+      if(m_replay_window_size[slot] < 0) m_replay_window_size[slot] = 0;
+      if(m_replay_window_size[slot] > FXAI_MAX_SEQUENCE_BARS) m_replay_window_size[slot] = FXAI_MAX_SEQUENCE_BARS;
+      for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+      {
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            m_replay_window[slot][b][k] = (b < m_replay_window_size[slot] ? sample.x_window[b][k] : 0.0);
+      }
       m_replay_priority[slot] = priority;
 
       m_replay_head = (m_replay_head + 1) % FXAI_PLUGIN_REPLAY_CAPACITY;
@@ -696,16 +725,37 @@ protected:
       int keep_norm_method = m_ctx_normalization_method_id;
       int keep_sequence_bars = m_ctx_sequence_bars;
       double keep_point_value = m_ctx_point_value;
+      int keep_window_size = m_ctx_window_size;
+      double keep_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            keep_window[b][k] = m_ctx_window[b][k];
 
       for(int j=0; j<FXAI_PLUGIN_REPLAY_STEPS; j++)
       {
          int idx = best_idx[j];
          if(idx < 0 || idx >= m_replay_size) continue;
-         SetContext(m_replay_time[idx],
-                    m_replay_cost[idx],
-                    m_replay_min_move[idx],
-                    m_replay_regime[idx],
-                    m_replay_horizon[idx]);
+         FXAIAIContextV4 replay_ctx;
+         replay_ctx.api_version = FXAI_API_VERSION_V4;
+         replay_ctx.regime_id = m_replay_regime[idx];
+         replay_ctx.session_bucket = m_replay_session_bucket[idx];
+         replay_ctx.horizon_minutes = m_replay_horizon[idx];
+         replay_ctx.feature_schema_id = m_replay_feature_schema[idx];
+         replay_ctx.normalization_method_id = m_replay_norm_method[idx];
+         replay_ctx.sequence_bars = m_replay_sequence_bars[idx];
+         replay_ctx.cost_points = m_replay_cost[idx];
+         replay_ctx.min_move_points = m_replay_min_move[idx];
+         replay_ctx.point_value = m_replay_point_value[idx];
+         replay_ctx.sample_time = m_replay_time[idx];
+         SetContext(replay_ctx);
+         m_ctx_window_size = m_replay_window_size[idx];
+         if(m_ctx_window_size < 0) m_ctx_window_size = 0;
+         if(m_ctx_window_size > FXAI_MAX_SEQUENCE_BARS) m_ctx_window_size = FXAI_MAX_SEQUENCE_BARS;
+         for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+         {
+            for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+               m_ctx_window[b][k] = (b < m_ctx_window_size ? m_replay_window[idx][b][k] : 0.0);
+         }
          double replay_x[FXAI_AI_WEIGHTS];
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
             replay_x[k] = m_replay_x[idx][k];
@@ -725,6 +775,10 @@ protected:
       m_ctx_normalization_method_id = keep_norm_method;
       m_ctx_sequence_bars = keep_sequence_bars;
       m_ctx_point_value = keep_point_value;
+      m_ctx_window_size = keep_window_size;
+      for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            m_ctx_window[b][k] = keep_window[b][k];
    }
 
    ulong DefaultFeatureGroupsMask(void) const

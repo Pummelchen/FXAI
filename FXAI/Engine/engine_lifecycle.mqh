@@ -916,7 +916,7 @@ bool FXAI_ValidatePredictionOutput(const CFXAIAIPlugin &plugin,
       }
    }
 
-   if(!MathIsValidNumber(pred.move_mean_points) || pred.move_mean_points <= 0.0)
+   if(!MathIsValidNumber(pred.move_mean_points) || pred.move_mean_points < 0.0)
    {
       Print("FXAI compliance error: expected move invalid. model=", plugin.AIName(),
             " tag=", tag, " ev=", DoubleToString(pred.move_mean_points, 6));
