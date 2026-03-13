@@ -2635,6 +2635,36 @@ public:
 
    }
 
+   void BuildWindowAwareInput(const double &x[], double &xa[]) const
+   {
+      int xn = ArraySize(x);
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         double v = (i < xn && MathIsValidNumber(x[i]) ? x[i] : 0.0);
+         xa[i] = (i == 0 ? 1.0 : FXAI_ClipSym(v, 8.0));
+      }
+      int win_n = CurrentWindowSize();
+      if(win_n <= 1) return;
+      double mean1 = CurrentWindowFeatureMean(0);
+      double mean2 = CurrentWindowFeatureMean(1);
+      double mean6 = CurrentWindowFeatureMean(5);
+      double first1 = CurrentWindowValue(0, 1);
+      double last1  = CurrentWindowValue(win_n - 1, 1);
+      double first2 = CurrentWindowValue(0, 2);
+      double last2  = CurrentWindowValue(win_n - 1, 2);
+      double vol1 = 0.0;
+      for(int i=0; i<win_n; i++)
+      {
+         double d = CurrentWindowValue(i, 1) - mean1;
+         vol1 += d * d;
+      }
+      vol1 = MathSqrt(vol1 / (double)win_n);
+      xa[1] = FXAI_ClipSym(0.60 * xa[1] + 0.25 * mean1 + 0.15 * (last1 - first1), 8.0);
+      xa[2] = FXAI_ClipSym(0.60 * xa[2] + 0.25 * mean2 + 0.15 * (last2 - first2), 8.0);
+      xa[6] = FXAI_ClipSym(0.65 * xa[6] + 0.35 * vol1, 8.0);
+      xa[7] = FXAI_ClipSym(0.65 * xa[7] + 0.35 * mean6, 8.0);
+   }
+
 
    virtual bool PredictModelCore(const double &x[],
                                         const FXAIAIHyperParams &hp,
@@ -2642,10 +2672,12 @@ public:
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       double ps = 0.3333, pb = 0.3333, pk = 0.3333;
       double mu = 0.0, logv = MathLog(1.0), q25 = 0.0, q75 = 0.0;
 
-      ForwardInference(x, m_shadow_ready, ps, pb, pk, mu, logv, q25, q75);
+      ForwardInference(xa, m_shadow_ready, ps, pb, pk, mu, logv, q25, q75);
       double den = pb + ps;
       if(den < 1e-9) den = 1e-9;
       double p_dir_raw = pb / den;
@@ -2666,7 +2698,43 @@ public:
       double iqr = MathAbs(q75 - q25);
       expected_move_points = MathMax(0.0, (0.55 * MathAbs(mu) + 0.25 * sigma + 0.20 * iqr) * active);
       if(expected_move_points <= 0.0)
-         expected_move_points = ExpectedMovePrior(x);
+         expected_move_points = (m_move_ready ? m_move_ema_abs : 0.0);
+      return true;
+   }
+
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      EnsureInitialized(hp);
+      ResetModelOutput(out);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
+      double ps = 0.3333, pb = 0.3333, pk = 0.3333;
+      double mu = 0.0, logv = MathLog(1.0), q25 = 0.0, q75 = 0.0;
+      ForwardInference(xa, m_shadow_ready, ps, pb, pk, mu, logv, q25, q75);
+      double den = pb + ps;
+      if(den < 1e-9) den = 1e-9;
+      double p_dir_raw = pb / den;
+      double p_cal = ApplySessionCalibration(SessionBucket(ResolveContextTime()), CalibrateProb(p_dir_raw));
+      double active = FXAI_Clamp(1.0 - pk, 0.0, 1.0);
+      if(pk > m_thr_skip) active *= 0.25;
+      else if(p_cal < m_thr_buy && p_cal > m_thr_sell) active *= 0.35;
+      out.class_probs[(int)FXAI_LABEL_BUY] = p_cal * active;
+      out.class_probs[(int)FXAI_LABEL_SELL] = (1.0 - p_cal) * active;
+      out.class_probs[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+      NormalizeClassDistribution(out.class_probs);
+      double sigma = MathSqrt(MathMax(MathExp(logv), 1e-6));
+      double ev = MathMax(0.0, (0.55 * MathAbs(mu) + 0.25 * sigma + 0.20 * MathAbs(q75 - q25)) * active);
+      if(ev <= 0.0 && m_move_ready) ev = m_move_ema_abs;
+      out.move_mean_points = MathMax(0.0, ev);
+      out.move_q25_points = MathMax(0.0, MathAbs(q25) * active);
+      out.move_q50_points = MathMax(out.move_q25_points, out.move_mean_points);
+      out.move_q75_points = MathMax(out.move_q50_points, MathAbs(q75) * active);
+      out.confidence = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY], out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.45 + 0.35 * active + 0.20 * (m_move_ready ? 1.0 : 0.0), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
       return true;
    }
 
@@ -2732,18 +2800,20 @@ public:
          ResetTrainBuffer();
       }
 
-      UpdateNorm(x);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
+      UpdateNorm(xa);
 
-      int cls = MapClass(y, x, move_points);
-      double sw = FXAI_Clamp(MoveSampleWeight(x, move_points), 0.25, 4.00);
-      double cost = InputCostProxyPoints(x);
+      int cls = MapClass(y, xa, move_points);
+      double sw = FXAI_Clamp(MoveSampleWeight(xa, move_points), 0.25, 4.00);
+      double cost = InputCostProxyPoints(xa);
 
-      AppendTrainSample(cls, x, move_points, cost, sw);
+      AppendTrainSample(cls, xa, move_points, cost, sw);
 
       FXAIAIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
       TrainTBPTT(h);
 
-      PushHistory(x);
+      PushHistory(xa);
    }
 
    virtual double PredictProb(const double &x[],
@@ -2754,7 +2824,9 @@ public:
       double ps = 0.3333, pb = 0.3333, pk = 0.3333;
       double mu = 0.0, logv = MathLog(1.0), q25 = 0.0, q75 = 0.0;
 
-      ForwardInference(x, m_shadow_ready, ps, pb, pk, mu, logv, q25, q75);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
+      ForwardInference(xa, m_shadow_ready, ps, pb, pk, mu, logv, q25, q75);
 
       double den = pb + ps;
       if(den < 1e-9) den = 1e-9;
@@ -2780,7 +2852,9 @@ public:
       double ps = 0.3333, pb = 0.3333, pk = 0.3333;
       double mu = 0.0, logv = MathLog(1.0), q25 = 0.0, q75 = 0.0;
 
-      ForwardInference(x, m_shadow_ready, ps, pb, pk, mu, logv, q25, q75);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
+      ForwardInference(xa, m_shadow_ready, ps, pb, pk, mu, logv, q25, q75);
 
       double sigma = MathSqrt(MathMax(MathExp(logv), 1e-6));
       double iqr = MathAbs(q75 - q25);
@@ -2788,10 +2862,9 @@ public:
       double active = FXAI_Clamp(1.0 - pk, 0.0, 1.0);
       double ev = MathMax(0.0, (0.55 * MathAbs(mu) + 0.25 * sigma + 0.20 * iqr) * active);
 
-      double base_ev = ExpectedMovePrior(x);
-      if(ev > 0.0 && base_ev > 0.0) return 0.65 * ev + 0.35 * base_ev;
+      if(ev > 0.0 && m_move_ready && m_move_ema_abs > 0.0) return 0.65 * ev + 0.35 * m_move_ema_abs;
       if(ev > 0.0) return ev;
-      return base_ev;
+      return (m_move_ready ? m_move_ema_abs : 0.0);
    }
 };
 

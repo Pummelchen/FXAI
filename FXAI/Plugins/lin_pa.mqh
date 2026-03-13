@@ -995,6 +995,39 @@ public:
       return true;
    }
 
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      ResetModelOutput(out);
+      bool averaged = (m_guard_ready ? m_guard_use_avg : (m_steps > 24));
+      double scores[FXAI_PA_CLASS_COUNT];
+      ComputeScores(x, averaged, scores);
+      double den = (m_margin_ready ? m_margin_ema : FXAI_Clamp(hp.pa_margin, 0.25, 4.0));
+      if(den < 0.25) den = 0.25;
+      double logits[FXAI_PA_CLASS_COUNT];
+      for(int c=0; c<FXAI_PA_CLASS_COUNT; c++)
+         logits[c] = FXAI_ClipSym(scores[c] / den, 20.0);
+      double p_raw[FXAI_PA_CLASS_COUNT];
+      Softmax3(logits, p_raw);
+      Calibrate3(p_raw, out.class_probs);
+      NormalizeClassDistribution(out.class_probs);
+      double mu = 0.0, logv = 0.0;
+      PredictMoveDistRaw(x, mu, logv);
+      double sigma = MathSqrt(MathMax(MathExp(logv), 1e-6));
+      double head = PredictMoveRaw(x);
+      if(head <= 0.0 && m_move_ready) head = m_move_ema_abs;
+      out.move_mean_points = MathMax(0.0, head);
+      out.move_q25_points = MathMax(0.0, MathMax(0.0, mu - 0.60 * sigma));
+      out.move_q50_points = MathMax(out.move_q25_points, MathMax(0.0, mu));
+      out.move_q75_points = MathMax(out.move_q50_points, MathMax(0.0, mu + 0.60 * sigma));
+      out.confidence = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY], out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.45 + 0.25 * (m_move_ready ? 1.0 : 0.0) + 0.30 * MathMin((double)m_mv_steps / 64.0, 1.0), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
+      return true;
+   }
+
    virtual void Reset(void)
    {
       CFXAIAIPlugin::Reset();
@@ -1187,14 +1220,12 @@ protected:
    virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
    {
       double head = PredictMoveRaw(x);
-      double base = ExpectedMovePrior(x);
 
       if(m_mv_steps >= 24 && m_move_ready && m_move_ema_abs > 0.0)
          head = 0.70 * head + 0.30 * m_move_ema_abs;
 
-      if(head > 0.0 && base > 0.0) return 0.65 * head + 0.35 * base;
       if(head > 0.0) return head;
-      return base;
+      return (m_move_ready ? m_move_ema_abs : 0.0);
    }
 };
 

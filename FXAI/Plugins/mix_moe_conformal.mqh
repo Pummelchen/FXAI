@@ -359,6 +359,27 @@ public:
       for(int i=0; i<3; i++) class_probs[i] /= s;
       return true;
    }
+
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      ResetModelOutput(out);
+      double expected = 0.0;
+      if(!PredictModelCore(x, hp, out.class_probs, expected))
+         return false;
+      NormalizeClassDistribution(out.class_probs);
+      out.move_mean_points = MathMax(0.0, expected);
+      double sigma = MathMax(0.10, 0.30 * out.move_mean_points + 0.25 * (m_steps > 0 ? 1.0 : 0.0));
+      out.move_q25_points = MathMax(0.0, out.move_mean_points - 0.55 * sigma);
+      out.move_q50_points = MathMax(out.move_q25_points, out.move_mean_points);
+      out.move_q75_points = MathMax(out.move_q50_points, out.move_mean_points + 0.55 * sigma);
+      out.confidence = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY], out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.45 + 0.25 * MathMin((double)m_steps / 64.0, 1.0) + 0.20 * (1.0 - out.class_probs[(int)FXAI_LABEL_SKIP]), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
+      return true;
+   }
 };
 
 #endif

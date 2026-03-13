@@ -545,6 +545,31 @@ public:
       return true;
    }
 
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      ResetModelOutput(out);
+      double logits[FXAI_SGD_CLASS_COUNT], p_raw[FXAI_SGD_CLASS_COUNT];
+      BuildClassLogits(x, logits);
+      Softmax3(logits, p_raw);
+      Calibrate3(p_raw, out.class_probs);
+      NormalizeClassDistribution(out.class_probs);
+      double head_est = PredictMoveRaw(x);
+      if(m_mv_ready && m_mv_ema_abs > 0.0)
+         head_est = 0.65 * head_est + 0.35 * m_mv_ema_abs;
+      out.move_mean_points = MathMax(0.0, head_est);
+      double sigma = MathMax(0.10, 0.35 * out.move_mean_points + 0.25 * (m_mv_ready ? m_mv_ema_abs : 0.0));
+      out.move_q25_points = MathMax(0.0, out.move_mean_points - 0.55 * sigma);
+      out.move_q50_points = MathMax(out.move_q25_points, out.move_mean_points);
+      out.move_q75_points = MathMax(out.move_q50_points, out.move_mean_points + 0.55 * sigma);
+      out.confidence = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY], out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.45 + 0.25 * (m_mv_ready ? 1.0 : 0.0) + 0.30 * MathMin((double)m_step / 64.0, 1.0), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
+      return true;
+   }
+
    virtual void Reset(void)
    {
       CFXAIAIPlugin::Reset();
@@ -634,14 +659,12 @@ protected:
 
    virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
    {
-      double base_est = ExpectedMovePrior(x);
       double head_est = PredictMoveRaw(x);
       if(m_mv_ready && m_mv_ema_abs > 0.0)
          head_est = 0.65 * head_est + 0.35 * m_mv_ema_abs;
 
-      if(head_est > 0.0 && base_est > 0.0) return 0.65 * head_est + 0.35 * base_est;
       if(head_est > 0.0) return head_est;
-      return base_est;
+      return (m_mv_ready ? m_mv_ema_abs : 0.0);
    }
 };
 

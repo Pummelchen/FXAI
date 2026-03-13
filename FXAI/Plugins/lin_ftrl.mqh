@@ -684,6 +684,33 @@ public:
       return true;
    }
 
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      ResetModelOutput(out);
+      double alpha,beta,l1,l2;
+      ComputeAdaptiveParams(hp, 1.0, alpha, beta, l1, l2);
+      BuildWeights(alpha, beta, l1, l2);
+      double logits[FXAI_FTRL_CLASS_COUNT], p_raw[FXAI_FTRL_CLASS_COUNT];
+      for(int c=0; c<FXAI_FTRL_CLASS_COUNT; c++)
+         logits[c] = FXAI_ClipSym(ScoreRawClass(x, c), 35.0);
+      Softmax3(logits, p_raw);
+      Calibrate3(p_raw, out.class_probs);
+      NormalizeClassDistribution(out.class_probs);
+      double pred = PredictExpectedMovePoints(x, hp);
+      out.move_mean_points = MathMax(0.0, pred);
+      double sigma = MathMax(0.10, 0.35 * out.move_mean_points + 0.25 * (m_move_ready ? m_move_ema_abs : 0.0));
+      out.move_q25_points = MathMax(0.0, out.move_mean_points - 0.55 * sigma);
+      out.move_q50_points = MathMax(out.move_q25_points, out.move_mean_points);
+      out.move_q75_points = MathMax(out.move_q50_points, out.move_mean_points + 0.55 * sigma);
+      out.confidence = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY], out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.45 + 0.25 * (m_move_ready ? 1.0 : 0.0) + 0.30 * MathMin((double)m_mv_steps / 64.0, 1.0), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
+      return true;
+   }
+
    virtual void Reset(void)
    {
       CFXAIAIPlugin::Reset();
@@ -821,10 +848,9 @@ protected:
 
       if(pred < 0.0) pred = 0.0;
 
-      double base = ExpectedMovePrior(x);
-      if(m_mv_steps >= 24 && base > 0.0) return 0.65 * pred + 0.35 * base;
+      if(m_mv_steps >= 24 && m_move_ready && m_move_ema_abs > 0.0) return 0.65 * pred + 0.35 * m_move_ema_abs;
       if(m_mv_steps >= 24) return pred;
-      if(base > 0.0) return base;
+      if(m_move_ready && m_move_ema_abs > 0.0) return m_move_ema_abs;
       return pred;
    }
 };

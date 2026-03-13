@@ -1756,6 +1756,32 @@ public:
       return true;
    }
 
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      EnsureInitialized(hp);
+      ResetModelOutput(out);
+      double x_ext[FXAI_CAT_EXT_WEIGHTS];
+      BuildInferenceExtended(x, x_ext);
+      double margins[FXAI_CAT_CLASS_COUNT], p_raw[FXAI_CAT_CLASS_COUNT];
+      ModelMarginsExt(x_ext, margins);
+      Softmax3(margins, p_raw);
+      Calibrate3(p_raw, out.class_probs);
+      NormalizeClassDistribution(out.class_probs);
+      double pred = PredictExpectedMovePoints(x, hp);
+      out.move_mean_points = MathMax(0.0, pred);
+      double sigma = MathMax(0.10, 0.30 * out.move_mean_points + 0.25 * (m_move_ready ? m_move_ema_abs : 0.0));
+      out.move_q25_points = MathMax(0.0, out.move_mean_points - 0.55 * sigma);
+      out.move_q50_points = MathMax(out.move_q25_points, out.move_mean_points);
+      out.move_q75_points = MathMax(out.move_q50_points, out.move_mean_points + 0.55 * sigma);
+      out.confidence = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY], out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.45 + 0.25 * (m_move_ready ? 1.0 : 0.0) + 0.30 * MathMin((double)m_tree_count / 32.0, 1.0), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
+      return true;
+   }
+
    virtual void Update(const int y, const double &x[], const FXAIAIHyperParams &hp)
    {
       int cls = (y > 0 ? (int)FXAI_LABEL_BUY : (int)FXAI_LABEL_SELL);
@@ -1869,11 +1895,9 @@ protected:
       }
 
       double tree_est = (wsum > 0.0 ? sum / wsum : -1.0);
-      double base_est = ExpectedMovePrior(x);
-
-      if(tree_est > 0.0 && base_est > 0.0) return 0.70 * tree_est + 0.30 * base_est;
+      if(tree_est > 0.0 && m_move_ready && m_move_ema_abs > 0.0) return 0.70 * tree_est + 0.30 * m_move_ema_abs;
       if(tree_est > 0.0) return tree_est;
-      return base_est;
+      return (m_move_ready ? m_move_ema_abs : 0.0);
    }
 };
 

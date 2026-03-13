@@ -1889,6 +1889,36 @@ public:
          RunSelfTests();
    }
 
+   void BuildWindowAwareInput(const double &x[], double &xa[]) const
+   {
+      int xn = ArraySize(x);
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         double v = (i < xn && MathIsValidNumber(x[i]) ? x[i] : 0.0);
+         xa[i] = (i == 0 ? 1.0 : FXAI_ClipSym(v, 8.0));
+      }
+      int win_n = CurrentWindowSize();
+      if(win_n <= 1) return;
+      double mean1 = CurrentWindowFeatureMean(0);
+      double mean2 = CurrentWindowFeatureMean(1);
+      double mean6 = CurrentWindowFeatureMean(5);
+      double first1 = CurrentWindowValue(0, 1);
+      double last1  = CurrentWindowValue(win_n - 1, 1);
+      double first2 = CurrentWindowValue(0, 2);
+      double last2  = CurrentWindowValue(win_n - 1, 2);
+      double vol1 = 0.0;
+      for(int i=0; i<win_n; i++)
+      {
+         double d = CurrentWindowValue(i, 1) - mean1;
+         vol1 += d * d;
+      }
+      vol1 = MathSqrt(vol1 / (double)win_n);
+      xa[1] = FXAI_ClipSym(0.60 * xa[1] + 0.25 * mean1 + 0.15 * (last1 - first1), 8.0);
+      xa[2] = FXAI_ClipSym(0.60 * xa[2] + 0.25 * mean2 + 0.15 * (last2 - first2), 8.0);
+      xa[6] = FXAI_ClipSym(0.65 * xa[6] + 0.35 * vol1, 8.0);
+      xa[7] = FXAI_ClipSym(0.65 * xa[7] + 0.35 * mean6, 8.0);
+   }
+
    virtual bool PredictModelCore(const double &x[],
                                         const FXAIAIHyperParams &hp,
                                         double &class_probs[],
@@ -1897,6 +1927,8 @@ public:
       EnsureInitialized(hp);
       if(ArraySize(class_probs) < FXAI_LSTMG_CLASS_COUNT)
          ArrayResize(class_probs, FXAI_LSTMG_CLASS_COUNT);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
 
       bool use_ema = UseEMAInference();
 
@@ -1918,7 +1950,7 @@ public:
       double c_new[FXAI_AI_MLP_HIDDEN];
       double h_new[FXAI_AI_MLP_HIDDEN];
 
-      ForwardOne(x, h_state, c_state, false, use_ema, 0,
+      ForwardOne(xa, h_state, c_state, false, use_ema, 0,
                  drop_mask, zone_mask,
                  zi_hat, zf_hat, zo_hat, zg_hat,
                  inv_i, inv_f, inv_o, inv_g,
@@ -1933,14 +1965,9 @@ public:
 
       double ev_raw = ExpectedMoveFromHeads(mu, logv, q25, q75, class_probs[(int)FXAI_LABEL_SKIP]);
       double ev_cal = CalibrateEV(ev_raw);
-      double base_ev = ExpectedMovePrior(x);
-
-      if(ev_cal > 0.0 && base_ev > 0.0) expected_move_points = 0.70 * ev_cal + 0.30 * base_ev;
+      if(ev_cal > 0.0 && m_move_ready && m_move_ema_abs > 0.0) expected_move_points = 0.70 * ev_cal + 0.30 * m_move_ema_abs;
       else if(ev_cal > 0.0) expected_move_points = ev_cal;
-      else expected_move_points = base_ev;
-
-      if(expected_move_points <= 0.0)
-         expected_move_points = MathMax(ResolveMinMovePoints(), 0.10);
+      else expected_move_points = (m_move_ready ? m_move_ema_abs : MathMax(ResolveMinMovePoints(), 0.10));
 
       return true;
    }
@@ -1953,6 +1980,45 @@ public:
       TrainModelCore(y, x, hp, pseudo_move);
    }
 
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      EnsureInitialized(hp);
+      ResetModelOutput(out);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
+      bool use_ema = UseEMAInference();
+      double h_state[FXAI_AI_MLP_HIDDEN], c_state[FXAI_AI_MLP_HIDDEN];
+      BuildStateWithPending(h_state, c_state, use_ema);
+      double drop_mask[FXAI_AI_MLP_HIDDEN], zone_mask[FXAI_AI_MLP_HIDDEN];
+      double zi_hat[FXAI_AI_MLP_HIDDEN], zf_hat[FXAI_AI_MLP_HIDDEN], zo_hat[FXAI_AI_MLP_HIDDEN], zg_hat[FXAI_AI_MLP_HIDDEN];
+      double inv_i, inv_f, inv_o, inv_g;
+      double ig[FXAI_AI_MLP_HIDDEN], fg[FXAI_AI_MLP_HIDDEN], og[FXAI_AI_MLP_HIDDEN], gg[FXAI_AI_MLP_HIDDEN];
+      double c_new[FXAI_AI_MLP_HIDDEN], h_new[FXAI_AI_MLP_HIDDEN];
+      ForwardOne(xa, h_state, c_state, false, use_ema, 0,
+                 drop_mask, zone_mask,
+                 zi_hat, zf_hat, zo_hat, zg_hat,
+                 inv_i, inv_f, inv_o, inv_g,
+                 ig, fg, og, gg, c_new, h_new);
+      double logits[FXAI_LSTMG_CLASS_COUNT], probs_raw[FXAI_LSTMG_CLASS_COUNT];
+      double mu, logv, q25, q75;
+      ComputeHeads(h_new, use_ema, logits, probs_raw, mu, logv, q25, q75);
+      Calibrate3(probs_raw, out.class_probs);
+      NormalizeClassDistribution(out.class_probs);
+      double ev = CalibrateEV(ExpectedMoveFromHeads(mu, logv, q25, q75, out.class_probs[(int)FXAI_LABEL_SKIP]));
+      if(ev <= 0.0 && m_move_ready) ev = m_move_ema_abs;
+      out.move_mean_points = MathMax(0.0, ev);
+      out.move_q25_points = MathMax(0.0, MathAbs(q25) * FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0));
+      out.move_q50_points = MathMax(out.move_q25_points, out.move_mean_points);
+      out.move_q75_points = MathMax(out.move_q50_points, MathAbs(q75) * FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0));
+      out.confidence = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY], out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.45 + 0.35 * (1.0 - out.class_probs[(int)FXAI_LABEL_SKIP]) + 0.20 * (m_move_ready ? 1.0 : 0.0), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
+      return true;
+   }
+
    virtual void TrainModelCore(const int y,
                                const double &x[],
                                const FXAIAIHyperParams &hp,
@@ -1960,8 +2026,10 @@ public:
    {
       EnsureInitialized(hp);
       m_seen_updates++;
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
 
-      double cost_points = ResolveCostPoints(x);
+      double cost_points = ResolveCostPoints(xa);
       if(cost_points < 0.0) cost_points = 0.0;
 
       double min_move_points = ResolveMinMovePoints();
@@ -1971,7 +2039,7 @@ public:
       FXAIAIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
 
       int sess = 0;
-      int boundary = CheckRegimeBoundary(x, sess);
+      int boundary = CheckRegimeBoundary(xa, sess);
       if(boundary > 0 && m_batch_size > 0)
          TrainBatch(h);
 
@@ -1988,12 +2056,12 @@ public:
 
       double reset_flag = (boundary > 0 ? 1.0 : 0.0);
 
-      int cls = DeriveClassLabel(y, x, move_points, cost_points, min_move_points);
-      double w = MoveSampleWeight(x, move_points) * ClassBalanceWeight(sess, cls);
+      int cls = DeriveClassLabel(y, xa, move_points, cost_points, min_move_points);
+      double w = MoveSampleWeight(xa, move_points) * ClassBalanceWeight(sess, cls);
       if(cls == (int)FXAI_LABEL_SKIP) w *= 0.80;
       w = FXAI_Clamp(w, 0.10, 6.00);
 
-      AppendBatch(cls, x, move_points, cost_points, w, reset_flag);
+      AppendBatch(cls, xa, move_points, cost_points, w, reset_flag);
       UpdateClassStats(sess, cls);
 
       if(m_batch_size >= FXAI_LSTMG_TBPTT ||
@@ -2026,7 +2094,7 @@ public:
       if(PredictModelCore(x, hp, probs, ev) && ev > 0.0)
          return ev;
 
-      return ExpectedMovePrior(x);
+      return (m_move_ready ? m_move_ema_abs : 0.0);
    }
 };
 

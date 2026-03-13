@@ -1075,12 +1075,39 @@ public:
       if(cost < 0.0) cost = 0.0;
       ev = MathMax(0.0, ev - 0.35 * cost);
 
-      double base_ev = ExpectedMovePrior(x);
-      if(ev > 0.0 && base_ev > 0.0) expected_move_points = 0.75 * ev + 0.25 * base_ev;
+      if(ev > 0.0 && m_move_ready && m_move_ema_abs > 0.0) expected_move_points = 0.75 * ev + 0.25 * m_move_ema_abs;
       else if(ev > 0.0) expected_move_points = ev;
-      else expected_move_points = base_ev;
+      else expected_move_points = (m_move_ready ? m_move_ema_abs : 0.0);
 
       if(expected_move_points <= 0.0) expected_move_points = MathMax(ResolveMinMovePoints(), 0.10);
+      return true;
+   }
+
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      EnsureInitialized(hp);
+      ResetModelOutput(out);
+      double logits[FXAI_LGB_CLASS_COUNT];
+      ModelRawLogits(x, logits);
+      double p_raw[FXAI_LGB_CLASS_COUNT];
+      Softmax3(logits, p_raw);
+      Calibrate3(p_raw, out.class_probs);
+      NormalizeClassDistribution(out.class_probs);
+      double ev_buy = ClassExpectedMove((int)FXAI_LABEL_BUY, x);
+      double ev_sell = ClassExpectedMove((int)FXAI_LABEL_SELL, x);
+      double ev = out.class_probs[(int)FXAI_LABEL_BUY] * ev_buy + out.class_probs[(int)FXAI_LABEL_SELL] * ev_sell;
+      if(ev <= 0.0 && m_move_ready) ev = m_move_ema_abs;
+      out.move_mean_points = MathMax(0.0, ev);
+      double sigma = MathMax(0.10, 0.30 * out.move_mean_points + 0.25 * (m_move_ready ? m_move_ema_abs : 0.0));
+      out.move_q25_points = MathMax(0.0, out.move_mean_points - 0.55 * sigma);
+      out.move_q50_points = MathMax(out.move_q25_points, out.move_mean_points);
+      out.move_q75_points = MathMax(out.move_q50_points, out.move_mean_points + 0.55 * sigma);
+      out.confidence = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY], out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.45 + 0.25 * (m_move_ready ? 1.0 : 0.0) + 0.30 * MathMin((double)m_tree_count[(int)FXAI_LABEL_BUY] / 32.0, 1.0), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
       return true;
    }
 
@@ -1217,7 +1244,7 @@ public:
       double probs[3];
       double ev = -1.0;
       if(PredictModelCore(x, hp, probs, ev) && ev > 0.0) return ev;
-      return ExpectedMovePrior(x);
+      return (m_move_ready ? m_move_ema_abs : 0.0);
    }
 };
 

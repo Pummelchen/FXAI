@@ -754,7 +754,42 @@ public:
       double amp = 0.5 * (MathAbs(q_blend[FXAI_QT_Q - 1]) + MathAbs(q_blend[0]));
       expected_move_points = MathMax(ev, 0.35 * amp) * FXAI_Clamp(m_rel_weight, 0.50, 1.50);
       if(expected_move_points <= 0.0)
-         expected_move_points = ExpectedMovePrior(x);
+         expected_move_points = (m_move_ready ? m_move_ema_abs : 0.0);
+      return true;
+   }
+
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      EnsureInitialized(hp);
+      ResetModelOutput(out);
+      int sess = SessionBucket(ResolveContextTime());
+      int reg = RegimeBucket(x);
+      double cost = InputCostProxyPoints(x);
+      double q_short[FXAI_QT_Q], q_medium[FXAI_QT_Q], q_blend[FXAI_QT_Q];
+      BuildBlendedQuantiles(x, sess, reg, q_short, q_medium, q_blend);
+      double zf[FXAI_QT_ZF];
+      BuildClassFeatures(q_short, q_medium, q_blend, cost, x, zf);
+      PredictClassProbs(zf, out.class_probs);
+      NormalizeClassDistribution(out.class_probs);
+      double buy_tail = 0.5 * MathMax(0.0, q_blend[FXAI_QT_Q - 1] - cost)
+                      + 0.5 * MathMax(0.0, q_blend[FXAI_QT_Q - 2] - cost);
+      double sell_tail = 0.5 * MathMax(0.0, -q_blend[0] - cost)
+                       + 0.5 * MathMax(0.0, -q_blend[1] - cost);
+      double ev = out.class_probs[(int)FXAI_LABEL_BUY] * buy_tail
+                + out.class_probs[(int)FXAI_LABEL_SELL] * sell_tail;
+      double amp = 0.5 * (MathAbs(q_blend[FXAI_QT_Q - 1]) + MathAbs(q_blend[0]));
+      double pred = MathMax(ev, 0.35 * amp) * FXAI_Clamp(m_rel_weight, 0.50, 1.50);
+      if(pred <= 0.0 && m_move_ready) pred = m_move_ema_abs;
+      out.move_mean_points = MathMax(0.0, pred);
+      out.move_q25_points = MathMax(0.0, MathAbs(q_blend[1]));
+      out.move_q50_points = MathMax(out.move_q25_points, MathAbs(q_blend[FXAI_QT_MID]));
+      out.move_q75_points = MathMax(out.move_q50_points, MathAbs(q_blend[FXAI_QT_Q - 2]));
+      out.confidence = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY], out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(m_rel_weight / 1.5, 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
       return true;
    }
 
@@ -993,12 +1028,11 @@ public:
       double pred = MathMax(ev, 0.35 * amp);
       pred *= FXAI_Clamp(m_rel_weight, 0.50, 1.50);
 
-      double base = ExpectedMovePrior(x);
-      if(pred > 0.0 && base > 0.0)
-         return 0.65 * pred + 0.35 * base;
+      if(pred > 0.0 && m_move_ready && m_move_ema_abs > 0.0)
+         return 0.65 * pred + 0.35 * m_move_ema_abs;
       if(pred > 0.0)
          return pred;
-      return base;
+      return (m_move_ready ? m_move_ema_abs : 0.0);
    }
 };
 

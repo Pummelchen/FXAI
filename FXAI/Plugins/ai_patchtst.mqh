@@ -932,12 +932,44 @@ public:
       InitWeights();
    }
 
+   void BuildWindowAwareInput(const double &x[], double &xa[]) const
+   {
+      int xn = ArraySize(x);
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         double v = (i < xn && MathIsValidNumber(x[i]) ? x[i] : 0.0);
+         xa[i] = (i == 0 ? 1.0 : FXAI_ClipSym(v, 8.0));
+      }
+      int win_n = CurrentWindowSize();
+      if(win_n <= 1) return;
+      double mean1 = CurrentWindowFeatureMean(0);
+      double mean2 = CurrentWindowFeatureMean(1);
+      double mean6 = CurrentWindowFeatureMean(5);
+      double first1 = CurrentWindowValue(0, 1);
+      double last1  = CurrentWindowValue(win_n - 1, 1);
+      double first2 = CurrentWindowValue(0, 2);
+      double last2  = CurrentWindowValue(win_n - 1, 2);
+      double vol1 = 0.0;
+      for(int i=0; i<win_n; i++)
+      {
+         double d = CurrentWindowValue(i, 1) - mean1;
+         vol1 += d * d;
+      }
+      vol1 = MathSqrt(vol1 / (double)win_n);
+      xa[1] = FXAI_ClipSym(0.60 * xa[1] + 0.25 * mean1 + 0.15 * (last1 - first1), 8.0);
+      xa[2] = FXAI_ClipSym(0.60 * xa[2] + 0.25 * mean2 + 0.15 * (last2 - first2), 8.0);
+      xa[6] = FXAI_ClipSym(0.65 * xa[6] + 0.35 * vol1, 8.0);
+      xa[7] = FXAI_ClipSym(0.65 * xa[7] + 0.35 * mean6, 8.0);
+   }
+
    virtual bool PredictModelCore(const double &x[],
                                         const FXAIAIHyperParams &hp,
                                         double &class_probs[],
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
 
       double rep[FXAI_PTST_D_MODEL];
       double p_raw[FXAI_PTST_CLASS_COUNT];
@@ -948,7 +980,7 @@ public:
       double layer_ff_mean[FXAI_PTST_LAYERS][FXAI_PTST_D_FF];
       int token_count = 0;
 
-      ForwardPass(x,
+      ForwardPass(xa,
                   false,
                   rep,
                   p_raw,
@@ -965,14 +997,12 @@ public:
       Calibrate3(p_raw, class_probs);
 
       double ev = ExpectedMoveFromHeads(mu, logv, q25, q75, class_probs[(int)FXAI_LABEL_SKIP]);
-      double base_ev = ExpectedMovePrior(x);
-
-      if(ev > 0.0 && base_ev > 0.0)
-         expected_move_points = 0.70 * ev + 0.30 * base_ev;
+      if(ev > 0.0 && m_move_ready && m_move_ema_abs > 0.0)
+         expected_move_points = 0.70 * ev + 0.30 * m_move_ema_abs;
       else if(ev > 0.0)
          expected_move_points = ev;
       else
-         expected_move_points = base_ev;
+         expected_move_points = (m_move_ready ? m_move_ema_abs : 0.0);
 
       if(expected_move_points <= 0.0)
          expected_move_points = MathMax(ResolveMinMovePoints(), 0.10);
@@ -985,6 +1015,39 @@ public:
       int cls = (y > 0 ? (int)FXAI_LABEL_BUY : (int)FXAI_LABEL_SELL);
       double pseudo_move = (y > 0 ? 1.0 : -1.0);
       TrainModelCore(cls, x, hp, pseudo_move);
+   }
+
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      EnsureInitialized(hp);
+      ResetModelOutput(out);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
+      double rep[FXAI_PTST_D_MODEL];
+      double p_raw[FXAI_PTST_CLASS_COUNT];
+      double mu = 0.0, logv = 0.0, q25 = 0.0, q75 = 0.0;
+      double patch_stat[FXAI_AI_FEATURES][FXAI_PTST_PATCH_LEN];
+      double layer_in_mean[FXAI_PTST_LAYERS][FXAI_PTST_D_MODEL];
+      double layer_ctx_mean[FXAI_PTST_LAYERS][FXAI_PTST_D_MODEL];
+      double layer_ff_mean[FXAI_PTST_LAYERS][FXAI_PTST_D_FF];
+      int token_count = 0;
+      ForwardPass(xa, false, rep, p_raw, mu, logv, q25, q75,
+                  patch_stat, layer_in_mean, layer_ctx_mean, layer_ff_mean, token_count);
+      Calibrate3(p_raw, out.class_probs);
+      NormalizeClassDistribution(out.class_probs);
+      double ev = ExpectedMoveFromHeads(mu, logv, q25, q75, out.class_probs[(int)FXAI_LABEL_SKIP]);
+      if(ev <= 0.0 && m_move_ready) ev = m_move_ema_abs;
+      out.move_mean_points = MathMax(0.0, ev);
+      out.move_q25_points = MathMax(0.0, MathAbs(q25) * FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0));
+      out.move_q50_points = MathMax(out.move_q25_points, out.move_mean_points);
+      out.move_q75_points = MathMax(out.move_q50_points, MathAbs(q75) * FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0));
+      out.confidence = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY], out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.45 + 0.35 * (1.0 - out.class_probs[(int)FXAI_LABEL_SKIP]) + 0.20 * (m_move_ready ? 1.0 : 0.0), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
+      return true;
    }
 
 protected:
@@ -1004,7 +1067,9 @@ protected:
       if(MathAbs(x[1]) > 9.0 || MathAbs(x[2]) > 9.0)
          ResetSequence();
 
-      UpdateInputStats(x);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
+      UpdateInputStats(xa);
 
       const bool do_train = ShouldTrainOnNewM1Bar();
 
@@ -1034,8 +1099,8 @@ protected:
       double base_lr = ScheduledLR(h);
       double l2 = FXAI_Clamp(h.l2, 0.0, 0.0800);
 
-      double cost = InputCostProxyPoints(x);
-      double sample_w = MoveSampleWeight(x, move_points);
+      double cost = InputCostProxyPoints(xa);
+      double sample_w = MoveSampleWeight(xa, move_points);
       sample_w = FXAI_Clamp(sample_w * cls_bal, 0.10, 6.00);
 
       double rep[FXAI_PTST_D_MODEL];
@@ -1047,7 +1112,7 @@ protected:
       double layer_ff_mean[FXAI_PTST_LAYERS][FXAI_PTST_D_FF];
       int token_count = 0;
 
-      ForwardPass(x,
+      ForwardPass(xa,
                   true,
                   rep,
                   p_raw,
@@ -1252,7 +1317,7 @@ protected:
 
       // Update shared move estimators in base plugin.
       FXAI_UpdateMoveEMA(m_move_ema_abs, m_move_ready, move_points, 0.05);
-      UpdateMoveHead(x, move_points, h, sample_w);
+      UpdateMoveHead(xa, move_points, h, sample_w);
    }
 
    virtual double PredictProb(const double &x[], const FXAIAIHyperParams &hp)
@@ -1278,7 +1343,7 @@ protected:
       if(PredictModelCore(x, hp, probs, ev) && ev > 0.0)
          return ev;
 
-      return ExpectedMovePrior(x);
+      return (m_move_ready ? m_move_ema_abs : 0.0);
    }
 };
 

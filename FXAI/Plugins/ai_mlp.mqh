@@ -357,6 +357,37 @@ private:
          ctx_raw[i] = FXAI_ClipSym(ctx_raw[i], 8.0);
    }
 
+    void BuildWindowAwareInput(const double &x[],
+                               double &xa[]) const
+   {
+      int xn = ArraySize(x);
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         double v = (i < xn && MathIsValidNumber(x[i]) ? x[i] : 0.0);
+         xa[i] = FXAI_ClipSym(v, 8.0);
+      }
+      int win_n = CurrentWindowSize();
+      if(win_n <= 1) return;
+      double mean1 = CurrentWindowFeatureMean(0);
+      double mean2 = CurrentWindowFeatureMean(1);
+      double mean6 = CurrentWindowFeatureMean(5);
+      double first1 = CurrentWindowValue(0, 1);
+      double last1  = CurrentWindowValue(win_n - 1, 1);
+      double first2 = CurrentWindowValue(0, 2);
+      double last2  = CurrentWindowValue(win_n - 1, 2);
+      double vol1 = 0.0;
+      for(int i=0; i<win_n; i++)
+      {
+         double d = CurrentWindowValue(i, 1) - mean1;
+         vol1 += d * d;
+      }
+      vol1 = MathSqrt(vol1 / (double)win_n);
+      xa[1] = FXAI_ClipSym(0.60 * xa[1] + 0.25 * mean1 + 0.15 * (last1 - first1), 8.0);
+      xa[2] = FXAI_ClipSym(0.60 * xa[2] + 0.25 * mean2 + 0.15 * (last2 - first2), 8.0);
+      xa[6] = FXAI_ClipSym(0.65 * xa[6] + 0.35 * vol1, 8.0);
+      xa[7] = FXAI_ClipSym(0.65 * xa[7] + 0.35 * mean6, 8.0);
+   }
+
    void AdaptContext(const double &ctx_raw[],
                      double &ctx[],
                      double &ctx_act[]) const
@@ -1682,11 +1713,13 @@ public:
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       double x_norm[FXAI_AI_WEIGHTS];
-      NormalizeInput(x, x_norm);
+      NormalizeInput(xa, x_norm);
 
       double ctx_raw[FXAI_MLP_CTX], ctx_act[FXAI_MLP_CTX], ctx[FXAI_MLP_CTX];
-      BuildTemporalContext(x, ctx_raw);
+      BuildTemporalContext(xa, ctx_raw);
       AdaptContext(ctx_raw, ctx, ctx_act);
 
       double h1_raw[FXAI_MLP_H1], h1[FXAI_MLP_H1], h2[FXAI_MLP_H2], h2_norm[FXAI_MLP_H2];
@@ -1707,15 +1740,53 @@ public:
       double active = FXAI_Clamp(1.0 - class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0);
       double ev = amp * active;
 
-      double base_ev = ExpectedMovePrior(x);
-      if(ev > 0.0 && base_ev > 0.0) expected_move_points = 0.65 * ev + 0.35 * base_ev;
+      if(ev > 0.0 && m_move_ready && m_move_ema_abs > 0.0) expected_move_points = 0.65 * ev + 0.35 * m_move_ema_abs;
       else if(ev > 0.0) expected_move_points = ev;
-      else expected_move_points = base_ev;
+      else expected_move_points = (m_move_ready ? m_move_ema_abs : 0.0);
       if(expected_move_points <= 0.0)
       {
          expected_move_points = ResolveMinMovePoints();
          if(expected_move_points <= 0.0) expected_move_points = 0.10;
       }
+      return true;
+   }
+
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      EnsureInitialized(hp);
+      ResetModelOutput(out);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
+      double x_norm[FXAI_AI_WEIGHTS];
+      NormalizeInput(xa, x_norm);
+      double ctx_raw[FXAI_MLP_CTX], ctx_act[FXAI_MLP_CTX], ctx[FXAI_MLP_CTX];
+      BuildTemporalContext(xa, ctx_raw);
+      AdaptContext(ctx_raw, ctx, ctx_act);
+      double h1_raw[FXAI_MLP_H1], h1[FXAI_MLP_H1], h2[FXAI_MLP_H2], h2_norm[FXAI_MLP_H2];
+      double h3_tanh[FXAI_MLP_H2], h3_gate[FXAI_MLP_H2], h3[FXAI_MLP_H2];
+      double ln_inv_std = 1.0, drop1[FXAI_MLP_H1];
+      double logits[FXAI_MLP_CLASSES], probs[FXAI_MLP_CLASSES];
+      double mu = 0.0, logv = 0.0, q25 = 0.0, q75 = 0.0;
+      Forward(x_norm, ctx, m_shadow_ready, false, h1_raw, h1, h2, h2_norm, h3_tanh, h3_gate, h3, ln_inv_std, drop1, logits, probs, mu, logv, q25, q75);
+      for(int c=0; c<FXAI_MLP_CLASSES; c++)
+         out.class_probs[c] = FXAI_Clamp(probs[c], 0.0005, 0.9990);
+      Calibrate3(out.class_probs, out.class_probs);
+      NormalizeClassDistribution(out.class_probs);
+      double sigma = MathSqrt(MathMax(MathExp(logv), 1e-6));
+      double amp = MathMax(0.0, 0.55 * MathAbs(mu) + 0.25 * sigma + 0.20 * MathAbs(q75 - q25));
+      double active = FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0);
+      double ev = amp * active;
+      if(ev <= 0.0 && m_move_ready) ev = m_move_ema_abs;
+      out.move_mean_points = MathMax(0.0, ev);
+      out.move_q25_points = MathMax(0.0, MathAbs(q25) * active);
+      out.move_q50_points = MathMax(out.move_q25_points, out.move_mean_points);
+      out.move_q75_points = MathMax(out.move_q50_points, MathAbs(q75) * active);
+      out.confidence = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY], out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.45 + 0.35 * active + 0.20 * (m_move_ready ? 1.0 : 0.0), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
       return true;
    }
 
@@ -1896,11 +1967,13 @@ public:
                                const FXAIAIHyperParams &hp,
                                const double move_points)
    {
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       FXAIAIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
-      double w = MoveSampleWeight(x, move_points);
+      double w = MoveSampleWeight(xa, move_points);
       datetime cur_t = ResolveContextTime();
       if(cur_t <= 0) cur_t = TimeCurrent();
-      double cur_cost = ResolveCostPoints(x);
+      double cur_cost = ResolveCostPoints(xa);
       double cur_min = ResolveMinMovePoints();
       int cur_regime = m_ctx_regime_id;
       int cur_session = m_ctx_session_bucket;
@@ -1916,7 +1989,7 @@ public:
             cur_window[b][k] = m_ctx_window[b][k];
       int cur_sess = SessionBucket(cur_t);
 
-      UpdateWeighted(y, x, h, w, move_points, false);
+      UpdateWeighted(y, xa, h, w, move_points, false);
 
       int replay_n = 0;
       if(m_mlp_replay_size >= 96) replay_n = 3;

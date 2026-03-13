@@ -1009,7 +1009,45 @@ public:
       if(unc < 0.0) unc = 0.0;
       expected_move_points = base + 0.15 * MathSqrt(unc) + 0.10 * (probs[FXAI_XGBF_BUY] * q_buy + probs[FXAI_XGBF_SELL] * q_sell);
       if(expected_move_points <= 0.0)
-         expected_move_points = ExpectedMovePrior(x);
+         expected_move_points = (m_move_ready ? m_move_ema_abs : 0.0);
+      return true;
+   }
+
+   virtual bool PredictDistributionCore(const double &x[],
+                                        const FXAIAIHyperParams &hp,
+                                        FXAIAIModelOutputV4 &out)
+   {
+      EnsureInitialized(hp);
+      ResetModelOutput(out);
+      double probs[FXAI_XGBF_CLASS_COUNT];
+      PredictRawClassProbs(x, probs);
+      double dir_den = probs[FXAI_XGBF_BUY] + probs[FXAI_XGBF_SELL];
+      if(dir_den < 1e-9) dir_den = 1e-9;
+      double p_dir_raw = probs[FXAI_XGBF_BUY] / dir_den;
+      double p_dir_cal = CalibrateProb(p_dir_raw);
+      double active = FXAI_Clamp(1.0 - probs[FXAI_XGBF_SKIP], 0.0, 1.0);
+      out.class_probs[(int)FXAI_LABEL_BUY] = p_dir_cal * active;
+      out.class_probs[(int)FXAI_LABEL_SELL] = (1.0 - p_dir_cal) * active;
+      out.class_probs[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+      NormalizeClassDistribution(out.class_probs);
+      double mu_buy, var_buy, q_buy, mu_sell, var_sell, q_sell, mu_skip, var_skip, q_skip;
+      ClassMoveStats(FXAI_XGBF_BUY, x, mu_buy, var_buy, q_buy);
+      ClassMoveStats(FXAI_XGBF_SELL, x, mu_sell, var_sell, q_sell);
+      ClassMoveStats(FXAI_XGBF_SKIP, x, mu_skip, var_skip, q_skip);
+      double buy_abs = (MathMax(0.0, mu_buy) > 0.0 ? MathMax(0.0, mu_buy) : q_buy);
+      double sell_abs = (MathMax(0.0, -mu_sell) > 0.0 ? MathMax(0.0, -mu_sell) : q_sell);
+      double base = probs[FXAI_XGBF_BUY] * buy_abs + probs[FXAI_XGBF_SELL] * sell_abs;
+      double unc = MathSqrt(MathMax(0.0, probs[FXAI_XGBF_BUY] * var_buy + probs[FXAI_XGBF_SELL] * var_sell));
+      double pred = base + 0.15 * unc + 0.10 * (probs[FXAI_XGBF_BUY] * q_buy + probs[FXAI_XGBF_SELL] * q_sell);
+      if(pred <= 0.0 && m_move_ready) pred = m_move_ema_abs;
+      out.move_mean_points = MathMax(0.0, pred);
+      out.move_q25_points = MathMax(0.0, probs[FXAI_XGBF_BUY] * q_buy * 0.5 + probs[FXAI_XGBF_SELL] * q_sell * 0.5);
+      out.move_q50_points = MathMax(out.move_q25_points, out.move_mean_points);
+      out.move_q75_points = MathMax(out.move_q50_points, out.move_mean_points + 0.55 * unc);
+      out.confidence = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY], out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.45 + 0.25 * (m_move_ready ? 1.0 : 0.0) + 0.30 * MathMin((double)m_tree_count[FXAI_XGBF_BUY] / 32.0, 1.0), 0.0, 1.0);
+      out.has_quantiles = true;
+      out.has_confidence = true;
       return true;
    }
 
@@ -1170,7 +1208,7 @@ public:
       if(edge > 0.0 && m_move_ready && m_move_ema_abs > 0.0)
          return 0.70 * edge + 0.30 * m_move_ema_abs;
       if(edge > 0.0) return edge;
-      return ExpectedMovePrior(x);
+      return (m_move_ready ? m_move_ema_abs : 0.0);
    }
 };
 
