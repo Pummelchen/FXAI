@@ -1659,6 +1659,14 @@ public:
       Calibrate3(p_raw, class_probs);
 
       double ev = ExpectedMoveFromHeads(mu, logv, q25, q75, mu_h, class_probs[(int)FXAI_LABEL_SKIP]);
+      double h_mean = 0.0;
+      for(int h=0; h<FXAI_CHR_HORIZONS; h++)
+         h_mean += MathAbs(mu_h[h]);
+      h_mean /= (double)FXAI_CHR_HORIZONS;
+      double h_disp = 0.0;
+      for(int h=0; h<FXAI_CHR_HORIZONS; h++)
+         h_disp += MathAbs(MathAbs(mu_h[h]) - h_mean);
+      h_disp /= (double)FXAI_CHR_HORIZONS;
 
       double tok_prob[FXAI_CHR_CODEBOOK];
       int tok_top = 0;
@@ -1670,7 +1678,12 @@ public:
          tok_entropy += -pt * MathLog(pt);
       }
       double tok_conf = 1.0 - FXAI_Clamp(tok_entropy / MathLog((double)FXAI_CHR_CODEBOOK), 0.0, 1.0);
-      ev *= (0.85 + 0.15 * tok_conf);
+      double val_quality = 0.75;
+      if(m_val_ready)
+         val_quality = FXAI_Clamp(0.50 + 0.30 * (1.0 - FXAI_Clamp(m_val_ece_fast, 0.0, 1.0)) + 0.20 * (1.0 - FXAI_Clamp(m_val_nll_fast / 2.0, 0.0, 1.0)), 0.35, 1.00);
+      if(m_reference_ready) val_quality = MathMin(1.0, val_quality + 0.10);
+      double horizon_cons = 1.0 - FXAI_Clamp(h_disp / MathMax(h_mean + 0.25, 0.25), 0.0, 1.0);
+      ev *= (0.80 + 0.10 * tok_conf + 0.10 * horizon_cons) * val_quality;
       expected_move_points = ev;
       if(expected_move_points <= 0.0)
          expected_move_points = MathMax(PredictMoveHeadRaw(xa), m_move_ema_abs);
@@ -1740,8 +1753,21 @@ public:
       double mem_peak = 0.0;
       for(int m=0; m<FXAI_CHR_MEMORY; m++)
          if(mem_attn[m] > mem_peak) mem_peak = mem_attn[m];
-      out.confidence = FXAI_Clamp(0.55 * tok_conf + 0.25 * mem_peak + 0.20 * (1.0 - out.class_probs[(int)FXAI_LABEL_SKIP]), 0.0, 1.0);
-      out.reliability = FXAI_Clamp(0.50 * mem_peak + 0.50 * tok_conf, 0.0, 1.0);
+      double h_mean = 0.0;
+      for(int h=0; h<FXAI_CHR_HORIZONS; h++)
+         h_mean += MathAbs(mu_h[h]);
+      h_mean /= (double)FXAI_CHR_HORIZONS;
+      double h_disp = 0.0;
+      for(int h=0; h<FXAI_CHR_HORIZONS; h++)
+         h_disp += MathAbs(MathAbs(mu_h[h]) - h_mean);
+      h_disp /= (double)FXAI_CHR_HORIZONS;
+      double horizon_cons = 1.0 - FXAI_Clamp(h_disp / MathMax(h_mean + 0.25, 0.25), 0.0, 1.0);
+      double val_quality = 0.75;
+      if(m_val_ready)
+         val_quality = FXAI_Clamp(0.45 + 0.25 * (1.0 - FXAI_Clamp(m_val_ece_fast, 0.0, 1.0)) + 0.15 * (1.0 - FXAI_Clamp(m_val_nll_fast / 2.0, 0.0, 1.0)) + 0.15 * FXAI_Clamp(m_val_ev_after_cost_fast / MathMax(out.move_mean_points + 0.10, 0.10), 0.0, 1.0), 0.30, 1.00);
+      if(m_reference_ready) val_quality = MathMin(1.0, val_quality + 0.10);
+      out.confidence = FXAI_Clamp(0.45 * tok_conf + 0.20 * mem_peak + 0.20 * horizon_cons + 0.15 * (1.0 - out.class_probs[(int)FXAI_LABEL_SKIP]), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.35 * mem_peak + 0.25 * tok_conf + 0.20 * horizon_cons + 0.20 * val_quality, 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
       if(out.move_mean_points <= 0.0)

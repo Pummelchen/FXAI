@@ -51,6 +51,7 @@ private:
    int    m_inter_n;
    double m_inter_mean;
    double m_inter_m2;
+   CFXAITernaryCalibrator m_cal3;
 
    int SessionBucket(const datetime t) const
    {
@@ -433,9 +434,12 @@ public:
       double p_dir = FXAI_Clamp(0.5 + (p_dir_raw - 0.5) * conf, 0.001, 0.999);
       double active = FXAI_Clamp(1.0 - p_skip, 0.0, 1.0);
 
-      class_probs[(int)FXAI_LABEL_BUY] = p_dir * active;
-      class_probs[(int)FXAI_LABEL_SELL] = (1.0 - p_dir) * active;
-      class_probs[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+      double p_raw3[3];
+      p_raw3[(int)FXAI_LABEL_BUY] = p_dir * active;
+      p_raw3[(int)FXAI_LABEL_SELL] = (1.0 - p_dir) * active;
+      p_raw3[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+      m_cal3.Calibrate(p_raw3, class_probs);
+      NormalizeClassDistribution(class_probs);
 
       expected_move_points = (probs[(int)FXAI_LABEL_BUY] + probs[(int)FXAI_LABEL_SELL]) * (inter_amp + 0.35 * inter_std);
       if(m_inter_n > 1)
@@ -495,6 +499,7 @@ public:
    virtual void Reset(void)
    {
       CFXAIAIPlugin::Reset();
+      m_cal3.Reset();
 
       for(int c=0; c<FXAI_ENH_CLASSES; c++)
       {
@@ -666,6 +671,12 @@ public:
       conf = FXAI_Clamp(conf, 0.25, 1.00);
       double p_dir_conf = 0.5 + (p_dir_raw - 0.5) * conf;
       double p_up_raw = FXAI_Clamp(p_dir_conf * (1.0 - p_skip), 0.001, 0.999);
+      double p_raw3[3];
+      p_raw3[(int)FXAI_LABEL_BUY] = p_dir_conf * (1.0 - p_skip);
+      p_raw3[(int)FXAI_LABEL_SELL] = (1.0 - p_dir_conf) * (1.0 - p_skip);
+      p_raw3[(int)FXAI_LABEL_SKIP] = p_skip;
+      NormalizeClassDistribution(p_raw3);
+      m_cal3.Update(p_raw3, cls, sw, alpha);
 
       int y_dir = (cls == (int)FXAI_LABEL_BUY ? 1 : (cls == (int)FXAI_LABEL_SELL ? 0 : (move_points >= 0.0 ? 1 : 0)));
       double w_dir = (cls == (int)FXAI_LABEL_SKIP ? 0.35 * sw : sw);

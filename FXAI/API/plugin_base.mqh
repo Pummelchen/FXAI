@@ -4,6 +4,161 @@
 #include <Object.mqh>
 #include "..\Engine\core.mqh"
 
+class CFXAITernaryCalibrator
+{
+private:
+   enum { CAL_BINS = 12 };
+
+   int    m_steps;
+   double m_w[3][3];
+   double m_b[3];
+   double m_iso_pos[3][CAL_BINS];
+   double m_iso_cnt[3][CAL_BINS];
+
+   void Softmax3(const double &logits[], double &probs[]) const
+   {
+      double mx = logits[0];
+      for(int c=1; c<3; c++)
+         if(logits[c] > mx) mx = logits[c];
+
+      double den = 0.0;
+      for(int c=0; c<3; c++)
+      {
+         probs[c] = MathExp(FXAI_ClipSym(logits[c] - mx, 30.0));
+         den += probs[c];
+      }
+      if(den <= 0.0) den = 1.0;
+      for(int c=0; c<3; c++)
+         probs[c] /= den;
+   }
+
+   void BuildCalLogits(const double &p_raw[], double &logits[]) const
+   {
+      double lraw[3];
+      for(int c=0; c<3; c++)
+         lraw[c] = MathLog(FXAI_Clamp(p_raw[c], 0.0005, 0.9990));
+
+      for(int c=0; c<3; c++)
+      {
+         double z = m_b[c];
+         for(int j=0; j<3; j++)
+            z += m_w[c][j] * lraw[j];
+         logits[c] = z;
+      }
+   }
+
+public:
+   CFXAITernaryCalibrator(void) { Reset(); }
+
+   void Reset(void)
+   {
+      m_steps = 0;
+      for(int c=0; c<3; c++)
+      {
+         m_b[c] = 0.0;
+         for(int j=0; j<3; j++)
+            m_w[c][j] = (c == j ? 1.0 : 0.0);
+         for(int b=0; b<CAL_BINS; b++)
+         {
+            m_iso_pos[c][b] = 0.0;
+            m_iso_cnt[c][b] = 0.0;
+         }
+      }
+   }
+
+   void Calibrate(const double &p_raw[], double &p_cal[]) const
+   {
+      double logits[3];
+      BuildCalLogits(p_raw, logits);
+      Softmax3(logits, p_cal);
+
+      if(m_steps < 30)
+         return;
+
+      double p_iso[3];
+      for(int c=0; c<3; c++)
+      {
+         double total = 0.0;
+         for(int b=0; b<CAL_BINS; b++)
+            total += m_iso_cnt[c][b];
+         if(total < 40.0)
+         {
+            p_iso[c] = p_cal[c];
+            continue;
+         }
+
+         double mono[CAL_BINS];
+         double prev = 0.01;
+         for(int b=0; b<CAL_BINS; b++)
+         {
+            double r = prev;
+            if(m_iso_cnt[c][b] > 1e-9)
+               r = m_iso_pos[c][b] / m_iso_cnt[c][b];
+            r = FXAI_Clamp(r, 0.001, 0.999);
+            if(r < prev) r = prev;
+            mono[b] = r;
+            prev = r;
+         }
+
+         int bi = (int)MathFloor(p_cal[c] * (double)CAL_BINS);
+         if(bi < 0) bi = 0;
+         if(bi >= CAL_BINS) bi = CAL_BINS - 1;
+         p_iso[c] = mono[bi];
+      }
+
+      for(int c=0; c<3; c++)
+         p_cal[c] = FXAI_Clamp(0.75 * p_cal[c] + 0.25 * p_iso[c], 0.0005, 0.9990);
+
+      double s = p_cal[0] + p_cal[1] + p_cal[2];
+      if(s <= 0.0) s = 1.0;
+      for(int c=0; c<3; c++)
+         p_cal[c] /= s;
+   }
+
+   void Update(const double &p_raw[],
+               const int cls,
+               const double sample_w,
+               const double lr)
+   {
+      double logits[3];
+      BuildCalLogits(p_raw, logits);
+
+      double p_cal[3];
+      Softmax3(logits, p_cal);
+
+      double lraw[3];
+      for(int c=0; c<3; c++)
+         lraw[c] = MathLog(FXAI_Clamp(p_raw[c], 0.0005, 0.9990));
+
+      double w = FXAI_Clamp(sample_w, 0.20, 8.00);
+      double cal_lr = FXAI_Clamp(0.25 * lr * w, 0.0002, 0.0200);
+      double reg_l2 = 0.0005;
+
+      for(int c=0; c<3; c++)
+      {
+         double target = (c == cls ? 1.0 : 0.0);
+         double e = target - p_cal[c];
+
+         m_b[c] = FXAI_ClipSym(m_b[c] + cal_lr * e, 4.0);
+         for(int j=0; j<3; j++)
+         {
+            double target_w = (c == j ? 1.0 : 0.0);
+            double grad = e * lraw[j] - reg_l2 * (m_w[c][j] - target_w);
+            m_w[c][j] = FXAI_ClipSym(m_w[c][j] + cal_lr * grad, 4.0);
+         }
+
+         int bi = (int)MathFloor(p_cal[c] * (double)CAL_BINS);
+         if(bi < 0) bi = 0;
+         if(bi >= CAL_BINS) bi = CAL_BINS - 1;
+         m_iso_cnt[c][bi] += w;
+         m_iso_pos[c][bi] += w * target;
+      }
+      m_steps++;
+   }
+
+   int Steps(void) const { return m_steps; }
+};
+
 class CFXAIAIPlugin : public CObject
 {
 protected:

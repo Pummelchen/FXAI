@@ -39,6 +39,7 @@ private:
    double m_margin_ema;
    double m_prob_scale;
    double m_prob_bias;
+   CFXAITernaryCalibrator m_cal3;
 
    // Distributional multi-horizon move heads: means for {1,3,5}, shared log-variance.
    double m_w_move_mu[FXAI_S4_HORIZONS][FXAI_AI_MLP_HIDDEN];
@@ -1360,9 +1361,12 @@ public:
       double cost = MathMax(ResolveCostPoints(x), 0.0);
       double active = FXAI_Clamp((expected_move_points - 0.35 * cost) / MathMax(min_move, 0.10), 0.0, 1.0);
       double p_dir = FXAI_Clamp(p_local, 0.001, 0.999);
-      class_probs[(int)FXAI_LABEL_BUY] = p_dir * active;
-      class_probs[(int)FXAI_LABEL_SELL] = (1.0 - p_dir) * active;
-      class_probs[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+      double p_raw3[3];
+      p_raw3[(int)FXAI_LABEL_BUY] = p_dir * active;
+      p_raw3[(int)FXAI_LABEL_SELL] = (1.0 - p_dir) * active;
+      p_raw3[(int)FXAI_LABEL_SKIP] = 1.0 - active;
+      m_cal3.Calibrate(p_raw3, class_probs);
+      NormalizeClassDistribution(class_probs);
       return true;
    }
 
@@ -1416,6 +1420,7 @@ public:
       m_margin_ema = 1.0;
       m_prob_scale = 1.0;
       m_prob_bias = 0.0;
+      m_cal3.Reset();
    }
 
    virtual void EnsureInitialized(const FXAIAIHyperParams &hp)
@@ -1455,6 +1460,10 @@ public:
       BuildWindowAwareInput(x, xa);
       FXAIAIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
       double w = FXAI_Clamp(MoveSampleWeight(xa, move_points) * cls_w, 0.10, 4.00);
+      double pre_probs[3];
+      double pre_ev = 0.0;
+      if(PredictModelCore(x, h, pre_probs, pre_ev))
+         m_cal3.Update(pre_probs, cls, w, h.lr);
       AppendBatch(y_dir, xa, move_points, w);
 
       if(m_batch_size >= FXAI_S4_TBPTT)

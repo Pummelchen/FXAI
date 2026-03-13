@@ -17,6 +17,7 @@ private:
    double m_last_probs[3];
    double m_reliability_ema;
    double m_err_ema;
+   CFXAITernaryCalibrator m_cal3;
 
    double SafeX(const double &x[], const int i) const
    {
@@ -32,6 +33,26 @@ private:
       double z = w[0];
       for(int i=0; i<n; i++) z += w[i + 1] * f[i];
       return z;
+   }
+
+   void BuildWindowAwareInput(const double &x[], double &xa[]) const
+   {
+      int xn = ArraySize(x);
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+         xa[i] = (i < xn ? SafeX(x, i) : 0.0);
+
+      int win_n = CurrentWindowSize();
+      if(win_n <= 1) return;
+
+      double mean1 = CurrentWindowFeatureMean(0);
+      double mean2 = CurrentWindowFeatureMean(1);
+      double mean6 = CurrentWindowFeatureMean(5);
+      double first1 = CurrentWindowValue(0, 1);
+      double last1  = CurrentWindowValue(win_n - 1, 1);
+      double trend = (last1 - first1) / (double)MathMax(win_n - 1, 1);
+      xa[1] = FXAI_ClipSym(0.55 * xa[1] + 0.25 * mean1 + 0.20 * trend, 8.0);
+      xa[2] = FXAI_ClipSym(0.60 * xa[2] + 0.25 * mean2 + 0.15 * trend, 8.0);
+      xa[6] = FXAI_ClipSym(0.70 * xa[6] + 0.30 * mean6, 8.0);
    }
 
    void BuildGraphFeatures(const double &x[], double &f[]) const
@@ -94,15 +115,19 @@ private:
 protected:
    virtual double PredictProb(const double &x[], const FXAIAIHyperParams &hp)
    {
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       double f[]; ArrayResize(f, m_feat_n);
-      BuildGraphFeatures(x, f);
+      BuildGraphFeatures(xa, f);
       return FXAI_Clamp(FXAI_Sigmoid(Dot(m_dir_w, f)), 0.001, 0.999);
    }
 
    virtual double PredictExpectedMovePoints(const double &x[], const FXAIAIHyperParams &hp)
    {
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       double f[]; ArrayResize(f, m_feat_n);
-      BuildGraphFeatures(x, f);
+      BuildGraphFeatures(xa, f);
       double mu = MathMax(0.0, Dot(m_move_mu_w, f));
       double logv = FXAI_Clamp(Dot(m_move_logv_w, f), -4.0, 4.0);
       double sigma = MathSqrt(MathExp(logv));
@@ -117,8 +142,10 @@ protected:
    virtual void TrainModelCore(const int y, const double &x[], const FXAIAIHyperParams &hp, const double move_points)
    {
       EnsureInitialized(hp);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       double f[]; ArrayResize(f, m_feat_n);
-      BuildGraphFeatures(x, f);
+      BuildGraphFeatures(xa, f);
 
       double lr = FXAI_Clamp(hp.lr, 0.0001, 0.05);
       double l2 = FXAI_Clamp(hp.l2, 0.0, 0.10);
@@ -134,6 +161,15 @@ protected:
       double predicted_side = (p_up >= 0.5 ? 1.0 : -1.0);
       double realized_side = (y == (int)FXAI_LABEL_BUY ? 1.0 : (y == (int)FXAI_LABEL_SELL ? -1.0 : 0.0));
       double hit = (realized_side == 0.0 ? (p_trade < 0.5 ? 1.0 : 0.0) : (predicted_side == realized_side ? 1.0 : 0.0));
+      double p_buy = p_trade * p_up;
+      double p_sell = p_trade * (1.0 - p_up);
+      double p_skip = 1.0 - p_trade;
+      double p_raw3[3];
+      p_raw3[(int)FXAI_LABEL_SELL] = FXAI_Clamp(p_sell, 0.0005, 0.9990);
+      p_raw3[(int)FXAI_LABEL_BUY]  = FXAI_Clamp(p_buy, 0.0005, 0.9990);
+      p_raw3[(int)FXAI_LABEL_SKIP] = FXAI_Clamp(p_skip, 0.0005, 0.9990);
+      NormalizeClassDistribution(p_raw3);
+      m_cal3.Update(p_raw3, NormalizeClassLabel(y, x, move_points), FXAI_Clamp(MoveSampleWeight(x, move_points), 0.20, 4.00), lr);
 
       UpdateLinear(m_gate_w, f, t_trade, p_trade, lr, l2);
       if(y != (int)FXAI_LABEL_SKIP)
@@ -170,6 +206,7 @@ public:
       m_last_probs[0] = m_last_probs[1] = m_last_probs[2] = 1.0/3.0;
       m_reliability_ema = 0.50;
       m_err_ema = 0.0;
+      m_cal3.Reset();
    }
 
    virtual int AIId(void) const { return (int)AI_GRAPHWM; }
@@ -180,9 +217,8 @@ public:
 
    {
 
-      const ulong caps = (ulong)(FXAI_CAP_ONLINE_LEARNING|FXAI_CAP_REPLAY|FXAI_CAP_MULTI_HORIZON|FXAI_CAP_SELF_TEST);
-
-      FillManifest(out, (int)FXAI_FAMILY_WORLD_MODEL, caps, 1, 1);
+      const ulong caps = (ulong)(FXAI_CAP_ONLINE_LEARNING|FXAI_CAP_REPLAY|FXAI_CAP_MULTI_HORIZON|FXAI_CAP_SELF_TEST|FXAI_CAP_WINDOW_CONTEXT);
+      FillManifest(out, (int)FXAI_FAMILY_WORLD_MODEL, caps, 8, 64);
 
    }
 
@@ -199,6 +235,7 @@ public:
       m_last_probs[0] = m_last_probs[1] = m_last_probs[2] = 1.0/3.0;
       m_reliability_ema = 0.50;
       m_err_ema = 0.0;
+      m_cal3.Reset();
    }
 
    virtual void EnsureInitialized(const FXAIAIHyperParams &hp)
@@ -212,8 +249,10 @@ public:
    virtual bool PredictModelCore(const double &x[], const FXAIAIHyperParams &hp, double &class_probs[], double &expected_move_points)
    {
       EnsureInitialized(hp);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       double f[]; ArrayResize(f, m_feat_n);
-      BuildGraphFeatures(x, f);
+      BuildGraphFeatures(xa, f);
 
       double p_trade = FXAI_Clamp(FXAI_Sigmoid(Dot(m_gate_w, f)), 0.001, 0.999);
       double p_up    = FXAI_Clamp(FXAI_Sigmoid(Dot(m_dir_w, f)), 0.001, 0.999);
@@ -232,9 +271,11 @@ public:
       p_sell *= MathMin(move_gate, 1.0) * reliability_gate;
       p_skip  = MathMax(0.001, 1.0 - (p_buy + p_sell));
 
-      class_probs[(int)FXAI_LABEL_SELL] = FXAI_Clamp(p_sell, 0.0005, 0.9990);
-      class_probs[(int)FXAI_LABEL_BUY]  = FXAI_Clamp(p_buy,  0.0005, 0.9990);
-      class_probs[(int)FXAI_LABEL_SKIP] = FXAI_Clamp(p_skip, 0.0005, 0.9990);
+      double p_raw3[3];
+      p_raw3[(int)FXAI_LABEL_SELL] = FXAI_Clamp(p_sell, 0.0005, 0.9990);
+      p_raw3[(int)FXAI_LABEL_BUY]  = FXAI_Clamp(p_buy,  0.0005, 0.9990);
+      p_raw3[(int)FXAI_LABEL_SKIP] = FXAI_Clamp(p_skip, 0.0005, 0.9990);
+      m_cal3.Calibrate(p_raw3, class_probs);
       double s = class_probs[0] + class_probs[1] + class_probs[2];
       if(s <= 0.0) s = 1.0;
       for(int i=0; i<3; i++)
@@ -255,8 +296,10 @@ public:
       if(!PredictModelCore(x, hp, probs, ev))
          return false;
 
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       double f[]; ArrayResize(f, m_feat_n);
-      BuildGraphFeatures(x, f);
+      BuildGraphFeatures(xa, f);
       double mu = MathMax(0.0, Dot(m_move_mu_w, f));
       double logv = FXAI_Clamp(Dot(m_move_logv_w, f), -4.0, 4.0);
       double sigma = MathSqrt(MathExp(logv));

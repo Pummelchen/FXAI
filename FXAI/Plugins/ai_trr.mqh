@@ -33,6 +33,7 @@ private:
    double m_move_edge_ema;
    double m_session_bias[4][3];
    double m_session_move_scale[4];
+   CFXAITernaryCalibrator m_cal3;
 
    double ClampProb(const double p) const
    {
@@ -413,6 +414,7 @@ public:
    {
       CFXAIAIPlugin::Reset();
       ResetModel();
+      m_cal3.Reset();
    }
 
    virtual void EnsureInitialized(const FXAIAIHyperParams &hp)
@@ -463,12 +465,14 @@ public:
          p_sell = class_probs[(int)FXAI_LABEL_SELL] / dir_mass;
       }
 
-      class_probs[(int)FXAI_LABEL_BUY]  = ClampProb(active * p_buy);
-      class_probs[(int)FXAI_LABEL_SELL] = ClampProb(active * p_sell);
-      class_probs[(int)FXAI_LABEL_SKIP] = ClampProb(MathMax(1.0 - active, recurrence * 0.40 + noise * 0.25));
+      double p_raw[3];
+      p_raw[(int)FXAI_LABEL_BUY]  = ClampProb(active * p_buy);
+      p_raw[(int)FXAI_LABEL_SELL] = ClampProb(active * p_sell);
+      p_raw[(int)FXAI_LABEL_SKIP] = ClampProb(MathMax(1.0 - active, recurrence * 0.40 + noise * 0.25));
       double logits_cal[3];
-      for(int c=0; c<3; c++) logits_cal[c] = MathLog(MathMax(class_probs[c], 1e-6)) + m_session_bias[sb][c];
-      Softmax3(logits_cal, class_probs);
+      for(int c=0; c<3; c++) logits_cal[c] = MathLog(MathMax(p_raw[c], 1e-6)) + m_session_bias[sb][c];
+      Softmax3(logits_cal, p_raw);
+      m_cal3.Calibrate(p_raw, class_probs);
       double s = class_probs[0] + class_probs[1] + class_probs[2];
       if(s <= 0.0) s = 1.0;
       for(int c=0; c<3; c++) class_probs[c] /= s;
@@ -538,6 +542,36 @@ protected:
       double sw = FXAI_Clamp(MoveSampleWeight(x, move_points), 0.25, 4.0);
       double lr = FXAI_Clamp(0.18 * hp.lr * sw, 0.0002, 0.04);
       double l2 = FXAI_Clamp(hp.l2, 0.0, 0.05);
+
+      double raw_probs[3];
+      {
+         double cost_now = ResolveCostPoints(xa);
+         if(cost_now < 0.0) cost_now = 0.0;
+         double mm = ResolveMinMovePoints();
+         if(mm <= 0.0) mm = MathMax(0.10, cost_now);
+         double transition = FXAI_Clamp(topo[10] / 6.0, 0.0, 1.5);
+         double recurrence = FXAI_Clamp(topo[3], 0.0, 1.0);
+         double noise = FXAI_Clamp(topo[11] / 6.0, 0.0, 1.5);
+         double edge_hat = MathMax(0.0, pred_move * m_session_move_scale[SessionBucket()]);
+         double active = FXAI_Clamp(0.55 * transition + 0.35 * FXAI_Sigmoid(edge_hat / MathMax(mm, 0.10)) - 0.25 * recurrence - 0.20 * noise, 0.0, 1.0);
+         double dir_mass = probs[(int)FXAI_LABEL_BUY] + probs[(int)FXAI_LABEL_SELL];
+         double p_buy = 0.5;
+         double p_sell = 0.5;
+         if(dir_mass > 1e-9)
+         {
+            p_buy = probs[(int)FXAI_LABEL_BUY] / dir_mass;
+            p_sell = probs[(int)FXAI_LABEL_SELL] / dir_mass;
+         }
+         raw_probs[(int)FXAI_LABEL_BUY] = ClampProb(active * p_buy);
+         raw_probs[(int)FXAI_LABEL_SELL] = ClampProb(active * p_sell);
+         raw_probs[(int)FXAI_LABEL_SKIP] = ClampProb(MathMax(1.0 - active, recurrence * 0.40 + noise * 0.25));
+         double logits_cal[3];
+         int sb = SessionBucket();
+         for(int c=0; c<3; c++)
+            logits_cal[c] = MathLog(MathMax(raw_probs[c], 1e-6)) + m_session_bias[sb][c];
+         Softmax3(logits_cal, raw_probs);
+      }
+      m_cal3.Update(raw_probs, label, sw, lr);
 
       for(int c=0; c<3; c++)
       {

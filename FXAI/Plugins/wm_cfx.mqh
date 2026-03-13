@@ -23,6 +23,7 @@ private:
    double m_edge_ema;
    double m_downside_ema;
    double m_session_edge[4];
+   CFXAITernaryCalibrator m_cal3;
 
    double ClampProb(const double p) const
    {
@@ -34,6 +35,7 @@ private:
       m_initialized = false;
       m_steps = 0;
       m_seed = (uint)2166136261;
+      m_cal3.Reset();
       for(int s=0; s<FXAI_CFXW_STATE; s++)
       {
          m_state[s] = 0.0;
@@ -395,9 +397,11 @@ public:
          p_sell = sell_mass / total_dir;
       }
 
-      class_probs[(int)FXAI_LABEL_BUY]  = ClampProb(active * p_buy);
-      class_probs[(int)FXAI_LABEL_SELL] = ClampProb(active * p_sell);
-      class_probs[(int)FXAI_LABEL_SKIP] = ClampProb(MathMax(skip_mass, 1.0 - active));
+      double p_raw3[3];
+      p_raw3[(int)FXAI_LABEL_BUY]  = ClampProb(active * p_buy);
+      p_raw3[(int)FXAI_LABEL_SELL] = ClampProb(active * p_sell);
+      p_raw3[(int)FXAI_LABEL_SKIP] = ClampProb(MathMax(skip_mass, 1.0 - active));
+      m_cal3.Calibrate(p_raw3, class_probs);
       double s = class_probs[0] + class_probs[1] + class_probs[2];
       if(s <= 0.0) s = 1.0;
       for(int c=0; c<3; c++) class_probs[c] /= s;
@@ -470,6 +474,28 @@ protected:
       double sw = FXAI_Clamp(MoveSampleWeight(x, move_points), 0.25, 4.0);
       double lr = FXAI_Clamp(0.20 * hp.lr * sw, 0.0002, 0.04);
       double l2 = FXAI_Clamp(hp.l2, 0.0, 0.05);
+      double total_dir = buy_mass + sell_mass;
+      double consensus = MathAbs(buy_mass - sell_mass);
+      double act = FXAI_Clamp(consensus + 0.35 * m_confidence_ema + 0.25 * m_consensus_ema, 0.0, 1.2);
+      double mm = ResolveMinMovePoints();
+      if(mm <= 0.0) mm = MathMax(0.10, cost);
+      double edge_ratio = (exp_move - cost) / MathMax(mm, 0.10);
+      double downside_ratio = adverse_mean / MathMax(exp_move + mm, 0.10);
+      double risk_gate = 1.0 - FXAI_Clamp(0.55 * downside_ratio + 0.20 * m_downside_ema, 0.0, 0.90);
+      double active = FXAI_Clamp((0.50 * FXAI_Sigmoid(1.25 * edge_ratio) + 0.35 * act + 0.15 * (1.0 - skip_mass)) * risk_gate, 0.0, 1.0);
+      double p_buy = 0.5, p_sell = 0.5;
+      if(total_dir > 1e-9)
+      {
+         p_buy = buy_mass / total_dir;
+         p_sell = sell_mass / total_dir;
+      }
+      double p_raw3[3];
+      p_raw3[(int)FXAI_LABEL_BUY] = ClampProb(active * p_buy);
+      p_raw3[(int)FXAI_LABEL_SELL] = ClampProb(active * p_sell);
+      p_raw3[(int)FXAI_LABEL_SKIP] = ClampProb(MathMax(skip_mass, 1.0 - active));
+      NormalizeClassDistribution(p_raw3);
+      int cls = (dir == 0 ? (int)FXAI_LABEL_SKIP : (dir > 0 ? (int)FXAI_LABEL_BUY : (int)FXAI_LABEL_SELL));
+      m_cal3.Update(p_raw3, cls, sw, lr);
 
       for(int s=0; s<FXAI_CFXW_STATE; s++)
       {

@@ -1328,6 +1328,14 @@ public:
       Calibrate3(p_raw, class_probs);
 
       double ev = ExpectedMoveFromHeads(mu, logv, q25, q75, mu_h, class_probs[(int)FXAI_LABEL_SKIP]);
+      double h_mean = 0.0;
+      for(int h=0; h<FXAI_TFM_HORIZONS; h++)
+         h_mean += MathAbs(mu_h[h]);
+      h_mean /= (double)FXAI_TFM_HORIZONS;
+      double h_disp = 0.0;
+      for(int h=0; h<FXAI_TFM_HORIZONS; h++)
+         h_disp += MathAbs(MathAbs(mu_h[h]) - h_mean);
+      h_disp /= (double)FXAI_TFM_HORIZONS;
 
       double tok_prob[FXAI_TFM_CODEBOOK];
       int tok_top = 0;
@@ -1339,7 +1347,8 @@ public:
          tok_entropy += -pt * MathLog(pt);
       }
       double tok_conf = 1.0 - FXAI_Clamp(tok_entropy / MathLog((double)FXAI_TFM_CODEBOOK), 0.0, 1.0);
-      ev *= (0.85 + 0.15 * tok_conf);
+      double horizon_cons = 1.0 - FXAI_Clamp(h_disp / MathMax(h_mean + 0.25, 0.25), 0.0, 1.0);
+      ev *= (0.78 + 0.12 * tok_conf + 0.10 * horizon_cons);
       expected_move_points = ev;
       if(expected_move_points <= 0.0)
          expected_move_points = MathMax(PredictMoveHeadRaw(xa), m_move_ema_abs);
@@ -1403,11 +1412,20 @@ public:
          tok_entropy += -pt * MathLog(pt);
       }
       double tok_conf = 1.0 - FXAI_Clamp(tok_entropy / MathLog((double)FXAI_TFM_CODEBOOK), 0.0, 1.0);
+      double h_mean = 0.0;
+      for(int h=0; h<FXAI_TFM_HORIZONS; h++)
+         h_mean += MathAbs(mu_h[h]);
+      h_mean /= (double)FXAI_TFM_HORIZONS;
+      double h_disp = 0.0;
+      for(int h=0; h<FXAI_TFM_HORIZONS; h++)
+         h_disp += MathAbs(MathAbs(mu_h[h]) - h_mean);
+      h_disp /= (double)FXAI_TFM_HORIZONS;
+      double horizon_cons = 1.0 - FXAI_Clamp(h_disp / MathMax(h_mean + 0.25, 0.25), 0.0, 1.0);
       out.confidence = FXAI_Clamp(0.55 * tok_conf + 0.45 * (1.0 - out.class_probs[(int)FXAI_LABEL_SKIP]), 0.0, 1.0);
       double mem_peak = 0.0;
       for(int m=0; m<FXAI_TFM_MEMORY; m++)
          if(mem_attn[m] > mem_peak) mem_peak = mem_attn[m];
-      out.reliability = FXAI_Clamp(0.60 * mem_peak + 0.40 * tok_conf, 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.40 * mem_peak + 0.30 * tok_conf + 0.30 * horizon_cons, 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
       if(out.move_mean_points <= 0.0)

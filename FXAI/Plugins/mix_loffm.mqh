@@ -36,6 +36,7 @@ private:
    int    m_loffm_replay_label[FXAI_LOFFM_EXPERTS][FXAI_LOFFM_REPLAY];
    int    m_loffm_replay_head[FXAI_LOFFM_EXPERTS];
    int    m_replay_count[FXAI_LOFFM_EXPERTS];
+   CFXAITernaryCalibrator m_cal3;
 
    double ClampProb(const double p) const
    {
@@ -46,6 +47,7 @@ private:
    {
       m_initialized = false;
       m_steps = 0;
+      m_cal3.Reset();
       for(int e=0; e<FXAI_LOFFM_EXPERTS; e++)
       {
          for(int k=0; k<FXAI_LOFFM_DERIVED; k++) m_gate_w[e][k] = 0.0;
@@ -485,9 +487,11 @@ public:
       p_buy /= dir_total;
       p_sell /= dir_total;
 
-      class_probs[(int)FXAI_LABEL_BUY]  = ClampProb(active * p_buy);
-      class_probs[(int)FXAI_LABEL_SELL] = ClampProb(active * p_sell);
-      class_probs[(int)FXAI_LABEL_SKIP] = ClampProb(MathMax(p_skip, 1.0 - active + 0.15 * disagreement));
+      double p_raw3[3];
+      p_raw3[(int)FXAI_LABEL_BUY]  = ClampProb(active * p_buy);
+      p_raw3[(int)FXAI_LABEL_SELL] = ClampProb(active * p_sell);
+      p_raw3[(int)FXAI_LABEL_SKIP] = ClampProb(MathMax(p_skip, 1.0 - active + 0.15 * disagreement));
+      m_cal3.Calibrate(p_raw3, class_probs);
 
       double s = class_probs[0] + class_probs[1] + class_probs[2];
       if(s <= 0.0) s = 1.0;
@@ -566,6 +570,42 @@ protected:
       double target_move = MathMax(0.0, edge);
       double sample_w = FXAI_Clamp(MoveSampleWeight(x, move_points), 0.25, 4.0);
       int dir_target = TargetDirFromLabel(y, move_points);
+      double p_buy = 0.0;
+      double p_sell = 0.0;
+      double p_skip = 0.0;
+      double p_mean = 0.0;
+      double disagreement = 0.0;
+      double exp_move = 0.0;
+      for(int e=0; e<FXAI_LOFFM_EXPERTS; e++)
+      {
+         double pe = PredictExpertUp(e, d);
+         double me = PredictExpertMove(e, d);
+         double ps = PredictExpertSkip(e, d);
+         p_buy += g[e] * (1.0 - ps) * pe;
+         p_sell += g[e] * (1.0 - ps) * (1.0 - pe);
+         p_skip += g[e] * ps;
+         exp_move += g[e] * me;
+         p_mean += g[e] * pe;
+      }
+      for(int e=0; e<FXAI_LOFFM_EXPERTS; e++)
+         disagreement += g[e] * MathAbs(PredictExpertUp(e, d) - p_mean);
+      double total_dir = p_buy + p_sell;
+      double consensus = MathAbs(p_buy - p_sell);
+      double min_move = ResolveMinMovePoints();
+      if(min_move <= 0.0) min_move = MathMax(0.10, cost);
+      double tradable_ratio = MathMax(0.0, exp_move) / MathMax(min_move, 0.10);
+      double stress = FXAI_Clamp(0.55 * MathAbs(d[5]) + 0.45 * MathAbs(d[8]), 0.0, 8.0);
+      double conf_penalty = FXAI_Clamp(0.70 * disagreement + 0.12 * stress, 0.0, 0.95);
+      double active = FXAI_Clamp((0.45 * FXAI_Sigmoid(1.2 * tradable_ratio) + 0.40 * (1.0 - conf_penalty) + 0.15 * (1.0 - p_skip)) * (1.0 - 0.35 * p_skip), 0.0, 1.0);
+      if(total_dir <= 0.0) total_dir = 1.0;
+      p_buy /= total_dir;
+      p_sell /= total_dir;
+      double p_raw3[3];
+      p_raw3[(int)FXAI_LABEL_BUY] = ClampProb(active * p_buy);
+      p_raw3[(int)FXAI_LABEL_SELL] = ClampProb(active * p_sell);
+      p_raw3[(int)FXAI_LABEL_SKIP] = ClampProb(MathMax(p_skip, 1.0 - active + 0.15 * disagreement));
+      NormalizeClassDistribution(p_raw3);
+      m_cal3.Update(p_raw3, dir_target == 0 ? (int)FXAI_LABEL_SKIP : (dir_target > 0 ? (int)FXAI_LABEL_BUY : (int)FXAI_LABEL_SELL), sample_w, hp.lr);
 
       UpdateLatentState(d, g, move_points);
       FXAI_UpdateMoveEMA(m_global_edge_ema, m_move_ready, target_move, 0.03);

@@ -1775,7 +1775,18 @@ public:
 
       Calibrate3(probs, class_probs);
 
+      double geo_mean = 0.0;
+      int geo_n = 0;
+      for(int b=0; b<FXAI_GA_BLOCKS; b++)
+         for(int hd=0; hd<FXAI_GA_HEADS; hd++)
+         {
+            geo_mean += gcons[b][hd];
+            geo_n++;
+         }
+      if(geo_n <= 0) geo_n = 1;
+      geo_mean /= (double)geo_n;
       double ev = ExpectedMoveFromHeads(mu, logv, q_all, class_probs[FXAI_GA_SKIP]);
+      ev *= (0.82 + 0.18 * (1.0 - FXAI_Clamp(geo_mean / 2.0, 0.0, 1.0)));
       expected_move_points = (ev > 0.0 ? ev : (m_move_ready ? m_move_ema_abs : 0.0));
       return true;
    }
@@ -1807,8 +1818,19 @@ public:
       Calibrate3(probs, out.class_probs);
 
       double sigma = FXAI_Clamp(MathExp(0.5 * logv), 0.05, 50.0);
+      double geo_mean = 0.0;
+      int geo_n = 0;
+      for(int b=0; b<FXAI_GA_BLOCKS; b++)
+         for(int hd=0; hd<FXAI_GA_HEADS; hd++)
+         {
+            geo_mean += gcons[b][hd];
+            geo_n++;
+         }
+      if(geo_n <= 0) geo_n = 1;
+      geo_mean /= (double)geo_n;
+      double geo_cons = 1.0 - FXAI_Clamp(geo_mean / 2.0, 0.0, 1.0);
       double ev = ExpectedMoveFromHeads(mu, logv, q_all, out.class_probs[FXAI_GA_SKIP]);
-      out.move_mean_points = (ev > 0.0 ? ev : (m_move_ready ? m_move_ema_abs : 0.0));
+      out.move_mean_points = (ev > 0.0 ? ev * (0.82 + 0.18 * geo_cons) : (m_move_ready ? m_move_ema_abs : 0.0));
       out.move_q25_points = MathMax(0.0, q_all[1]);
       out.move_q50_points = MathMax(out.move_q25_points, q_all[3]);
       out.move_q75_points = MathMax(out.move_q50_points, q_all[5]);
@@ -1820,8 +1842,8 @@ public:
       }
 
       double dir_conf = MathMax(out.class_probs[FXAI_GA_BUY], out.class_probs[FXAI_GA_SELL]);
-      out.confidence = FXAI_Clamp(0.60 * dir_conf + 0.20 * (1.0 - out.class_probs[FXAI_GA_SKIP]) + 0.20 * (1.0 - FXAI_Clamp(m_val_ece_slow, 0.0, 1.0)), 0.0, 1.0);
-      out.reliability = FXAI_Clamp(0.55 + 0.20 * (1.0 - FXAI_Clamp(m_val_ece_fast, 0.0, 1.0)) + 0.15 * (1.0 - FXAI_Clamp(m_val_nll_fast / 2.5, 0.0, 1.0)) + 0.10 * (m_quality_degraded ? -0.5 : 0.5), 0.0, 1.0);
+      out.confidence = FXAI_Clamp(0.50 * dir_conf + 0.15 * (1.0 - out.class_probs[FXAI_GA_SKIP]) + 0.20 * (1.0 - FXAI_Clamp(m_val_ece_slow, 0.0, 1.0)) + 0.15 * geo_cons, 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.45 + 0.18 * (1.0 - FXAI_Clamp(m_val_ece_fast, 0.0, 1.0)) + 0.12 * (1.0 - FXAI_Clamp(m_val_nll_fast / 2.5, 0.0, 1.0)) + 0.10 * (m_quality_degraded ? -0.5 : 0.5) + 0.15 * geo_cons, 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
       return true;
