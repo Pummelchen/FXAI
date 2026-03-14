@@ -6,8 +6,9 @@
 #define FXAI_CONTEXT_CAT_INDEX 2
 #define FXAI_CONTEXT_CAT_ENERGY 3
 #define FXAI_CONTEXT_CAT_CRYPTO 4
-#define FXAI_CONTEXT_CAT_OTHER 5
-#define FXAI_CONTEXT_CAT_COUNT 6
+#define FXAI_CONTEXT_CAT_RISK 5
+#define FXAI_CONTEXT_CAT_OTHER 6
+#define FXAI_CONTEXT_CAT_COUNT 7
 
 int FXAI_ContextSymbolCategory(const string symbol)
 {
@@ -35,6 +36,14 @@ int FXAI_ContextSymbolCategory(const string symbol)
       StringFind(sym, "XRP") >= 0 || StringFind(sym, "SOL") >= 0 ||
       StringFind(sym, "ADA") >= 0 || StringFind(sym, "LTC") >= 0)
       return FXAI_CONTEXT_CAT_CRYPTO;
+
+   if(StringFind(sym, "VIX") >= 0 || StringFind(sym, "VOL") >= 0 ||
+      StringFind(sym, "DXY") >= 0 || StringFind(sym, "USDX") >= 0 ||
+      StringFind(sym, "DOLLAR") >= 0 || StringFind(sym, "TNX") >= 0 ||
+      StringFind(sym, "USB10") >= 0 || StringFind(sym, "US10Y") >= 0 ||
+      StringFind(sym, "US02Y") >= 0 || StringFind(sym, "BUND") >= 0 ||
+      StringFind(sym, "GILT") >= 0 || StringFind(sym, "JGB") >= 0)
+      return FXAI_CONTEXT_CAT_RISK;
 
    if(StringLen(sym) >= 6)
    {
@@ -65,6 +74,7 @@ double FXAI_ContextCategoryPriority(const int category)
       case FXAI_CONTEXT_CAT_INDEX: return 0.88;
       case FXAI_CONTEXT_CAT_ENERGY: return 0.76;
       case FXAI_CONTEXT_CAT_CRYPTO: return 0.60;
+      case FXAI_CONTEXT_CAT_RISK: return 0.94;
       default: return 0.50;
    }
 }
@@ -198,6 +208,7 @@ void FXAI_ExtendContextSymbolsFromMarketWatch(const string main_symbol, string &
    cat_caps[FXAI_CONTEXT_CAT_INDEX] = 8;
    cat_caps[FXAI_CONTEXT_CAT_ENERGY] = 4;
    cat_caps[FXAI_CONTEXT_CAT_CRYPTO] = 2;
+   cat_caps[FXAI_CONTEXT_CAT_RISK] = 8;
    cat_caps[FXAI_CONTEXT_CAT_OTHER] = 4;
 
    int cat_used[FXAI_CONTEXT_CAT_COUNT];
