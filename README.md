@@ -17,8 +17,10 @@ Core benefits at a glance:
 
 - [What It Is](#what-it-is)
 - [Core Benefits](#core-benefits)
+- [Quick Start](#quick-start)
 - [Project Structure](#project-structure)
 - [Typical Workflow](#typical-workflow)
+- [Audit Lab](#audit-lab)
 - [Reference Guides](#reference-guides)
 - [Notes](#notes)
 
@@ -54,6 +56,43 @@ The project is designed to keep MT5 execution practical while enabling advanced 
 - **Production-oriented workflow**
   - MT5 Experts folder remains source-of-truth, GitHub is used as the synchronized repository copy.
 
+## Quick Start
+
+Runtime source-of-truth:
+- Live MT5 tree: `MQL5/Experts/FXAI`
+
+Versioned mirror:
+- Git repo copy: `FXAI/`
+
+Important clarification:
+- `fxai_testlab.py` compiles and launches the live MT5 tree.
+- If you edit only the git mirror, sync those changes into the MT5 Experts folder before compiling.
+
+Compile from the repo root:
+
+```bash
+cd /Users/andreborchert/Documents/New\ project/FXAI
+python3 FXAI/Tools/fxai_testlab.py compile-main
+python3 FXAI/Tools/fxai_testlab.py compile-audit
+```
+
+Focused Audit Lab example:
+
+```bash
+cd /Users/andreborchert/Documents/New\ project/FXAI
+python3 FXAI/Tools/fxai_testlab.py run-audit \
+  --plugin-list "{ai_mlp}" \
+  --scenario-list "{market_recent, market_walkforward}" \
+  --symbol EURUSD
+```
+
+Typical baseline workflow:
+
+```bash
+python3 FXAI/Tools/fxai_testlab.py baseline-save --name eurusd_smoke
+python3 FXAI/Tools/fxai_testlab.py release-gate --baseline eurusd_smoke --require-market-replay
+```
+
 ## Project Structure
 
 - `FXAI/FXAI.mq5`  
@@ -65,13 +104,19 @@ The project is designed to keep MT5 execution practical while enabling advanced 
 - `FXAI/Engine/core.mqh`  
   Shared types, enums, manifest helpers, feature-schema helpers, and common math
 - `FXAI/Engine/data_pipeline.mqh`  
-  Feature generation, normalization, and data/context pipeline
+  Aggregated data-pipeline include that pulls in the split data and feature modules
 - `FXAI/Engine/*.mqh`  
   Runtime, training, warmup, lifecycle, sample, and meta orchestration layers
+- `FXAI/Engine/data_*.mqh`, `FXAI/Engine/feature_*.mqh`  
+  Split market-data, alignment, normalization-window, feature-math, normalization, and feature-build modules
+- `FXAI/Engine/meta_*.mqh`  
+  Split horizon, stacker, calibration, reliability, threshold, and support subsystems
 - `FXAI/Plugins/*.mqh`  
   Individual AI model implementations
 - `FXAI/Tests/FXAI_AuditRunner.mq5`  
   MT5-side synthetic and market-replay plugin audit runner
+- `FXAI/Tests/audit_*.mqh`  
+  Split scenario, sample-build, scoring, report, and audit utility modules
 - `FXAI/Tools/fxai_testlab.py`  
   External drill-sergeant analyzer, optimization planner, baseline comparator, and release gate
 
