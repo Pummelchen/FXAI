@@ -1017,6 +1017,43 @@ private:
       return 0.50 * leaf.move_q50 + 0.30 * leaf.move_mean + 0.15 * leaf.move_q90 + 0.05 * sigma;
    }
 
+   void ClassMoveStats(const int cls,
+                       const double &x[],
+                       double &mean,
+                       double &q10,
+                       double &q50,
+                       double &q90,
+                       double &support) const
+   {
+      mean = 0.0;
+      q10 = 0.0;
+      q50 = 0.0;
+      q90 = 0.0;
+      support = 0.0;
+      double wsum = 0.0;
+      for(int t=0; t<m_tree_count[cls]; t++)
+      {
+         int leaf = TraverseLeafIndex(m_trees[cls][t], x);
+         if(leaf < 0 || leaf >= m_trees[cls][t].node_count) continue;
+         FXAILGBNode nd = m_trees[cls][t].nodes[leaf];
+         if(nd.sample_count <= 0) continue;
+         double lw = MathAbs(nd.leaf_value) + 0.10;
+         mean += lw * MathMax(0.0, nd.move_mean);
+         q10 += lw * MathMax(0.0, nd.move_q10);
+         q50 += lw * MathMax(0.0, nd.move_q50);
+         q90 += lw * MathMax(0.0, nd.move_q90);
+         support += lw * (double)nd.sample_count;
+         wsum += lw;
+      }
+      if(wsum > 0.0)
+      {
+         mean /= wsum;
+         q10 /= wsum;
+         q50 /= wsum;
+         q90 /= wsum;
+      }
+   }
+
    double ClassExpectedMove(const int cls, const double &x[]) const
    {
       double sum = 0.0;
@@ -1095,19 +1132,28 @@ public:
       Softmax3(logits, p_raw);
       Calibrate3(p_raw, out.class_probs);
       NormalizeClassDistribution(out.class_probs);
-      double ev_buy = ClassExpectedMove((int)FXAI_LABEL_BUY, x);
-      double ev_sell = ClassExpectedMove((int)FXAI_LABEL_SELL, x);
+      double ev_buy = 0.0, q10_buy = 0.0, q50_buy = 0.0, q90_buy = 0.0, sup_buy = 0.0;
+      double ev_sell = 0.0, q10_sell = 0.0, q50_sell = 0.0, q90_sell = 0.0, sup_sell = 0.0;
+      ClassMoveStats((int)FXAI_LABEL_BUY, x, ev_buy, q10_buy, q50_buy, q90_buy, sup_buy);
+      ClassMoveStats((int)FXAI_LABEL_SELL, x, ev_sell, q10_sell, q50_sell, q90_sell, sup_sell);
+      if(ev_buy <= 0.0) ev_buy = ClassExpectedMove((int)FXAI_LABEL_BUY, x);
+      if(ev_sell <= 0.0) ev_sell = ClassExpectedMove((int)FXAI_LABEL_SELL, x);
       double ev = out.class_probs[(int)FXAI_LABEL_BUY] * ev_buy + out.class_probs[(int)FXAI_LABEL_SELL] * ev_sell;
       if(ev <= 0.0 && m_move_ready) ev = m_move_ema_abs;
       out.move_mean_points = MathMax(0.0, ev);
-      double sigma = MathMax(0.10, 0.30 * out.move_mean_points + 0.25 * (m_move_ready ? m_move_ema_abs : 0.0));
-      out.move_q25_points = MathMax(0.0, out.move_mean_points - 0.55 * sigma);
-      out.move_q50_points = MathMax(out.move_q25_points, out.move_mean_points);
-      out.move_q75_points = MathMax(out.move_q50_points, out.move_mean_points + 0.55 * sigma);
+      double mix_q10 = out.class_probs[(int)FXAI_LABEL_BUY] * q10_buy + out.class_probs[(int)FXAI_LABEL_SELL] * q10_sell;
+      double mix_q50 = out.class_probs[(int)FXAI_LABEL_BUY] * q50_buy + out.class_probs[(int)FXAI_LABEL_SELL] * q50_sell;
+      double mix_q90 = out.class_probs[(int)FXAI_LABEL_BUY] * q90_buy + out.class_probs[(int)FXAI_LABEL_SELL] * q90_sell;
+      double sigma = MathMax(0.10, 0.25 * out.move_mean_points + 0.20 * (m_move_ready ? m_move_ema_abs : 0.0));
+      out.move_q25_points = MathMax(0.0, mix_q10 > 0.0 ? mix_q10 : (out.move_mean_points - 0.55 * sigma));
+      out.move_q50_points = MathMax(out.move_q25_points, mix_q50 > 0.0 ? mix_q50 : out.move_mean_points);
+      out.move_q75_points = MathMax(out.move_q50_points, mix_q90 > 0.0 ? mix_q90 : (out.move_mean_points + 0.55 * sigma));
       out.confidence = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY], out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
-      out.reliability = FXAI_Clamp(0.45 + 0.25 * (m_move_ready ? 1.0 : 0.0) + 0.30 * MathMin((double)m_tree_count[(int)FXAI_LABEL_BUY] / 32.0, 1.0), 0.0, 1.0);
+      double support_rel = FXAI_Clamp((sup_buy + sup_sell) / 240.0, 0.0, 1.0);
+      out.reliability = FXAI_Clamp(0.40 + 0.20 * (m_move_ready ? 1.0 : 0.0) + 0.20 * MathMin((double)m_tree_count[(int)FXAI_LABEL_BUY] / 32.0, 1.0) + 0.20 * support_rel, 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
+      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
       return true;
    }
 

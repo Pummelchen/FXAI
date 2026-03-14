@@ -1430,6 +1430,7 @@ public:
       out.has_confidence = true;
       if(out.move_mean_points <= 0.0)
          out.move_mean_points = MathMax(PredictMoveHeadRaw(xa), m_move_ema_abs);
+      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), 0.55 * horizon_cons + 0.45 * tok_conf, out.confidence);
       return true;
    }
 

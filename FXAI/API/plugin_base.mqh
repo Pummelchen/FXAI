@@ -658,7 +658,18 @@ protected:
                            const double move_points) const
    {
       double cost = ResolveCostPoints(x);
-      return FXAI_MoveEdgeWeight(move_points, cost);
+      double w = FXAI_MoveEdgeWeight(move_points, cost);
+      if(!m_target_quality_ready)
+         return w;
+
+      double move_scale = MathMax(MathAbs(move_points), MathMax(ResolveMinMovePoints(), 0.10));
+      double mfe_bonus = FXAI_Clamp(m_target_mfe_points / MathMax(move_scale, 0.10), 0.0, 2.0);
+      double mae_penalty = FXAI_Clamp(m_target_mae_points / MathMax(MathMax(m_target_mfe_points, move_scale), 0.10), 0.0, 1.5);
+      double timing_bonus = 1.0 - FXAI_Clamp(m_target_hit_time_frac, 0.0, 1.0);
+      double execution_drag = 0.60 * FXAI_Clamp(m_target_path_risk, 0.0, 1.0) +
+                              0.40 * FXAI_Clamp(m_target_fill_risk, 0.0, 1.0);
+      double q = 1.0 + 0.18 * mfe_bonus + 0.14 * timing_bonus - 0.16 * mae_penalty - 0.18 * execution_drag;
+      return w * FXAI_Clamp(q, 0.45, 1.85);
    }
 
    void Softmax3(const double &logits[], double &probs[]) const
@@ -1211,6 +1222,31 @@ protected:
       dst.reliability = FXAI_Clamp(model_out.has_confidence ? model_out.reliability : (1.0 - 0.50 * skip_p), 0.0, 1.0);
    }
 
+   double CurrentWindowSliceMean(const int input_idx,
+                                 const int start_bar,
+                                 const int count) const
+   {
+      if(input_idx < 0 || input_idx >= FXAI_AI_WEIGHTS || m_ctx_window_size <= 0 || count <= 0)
+         return 0.0;
+
+      int first = start_bar;
+      if(first < 0) first = 0;
+      if(first >= m_ctx_window_size) return 0.0;
+      int last = first + count;
+      if(last > m_ctx_window_size) last = m_ctx_window_size;
+      if(last <= first) return 0.0;
+
+      double sum = 0.0;
+      int n = 0;
+      for(int b=first; b<last; b++)
+      {
+         sum += m_ctx_window[b][input_idx];
+         n++;
+      }
+      if(n <= 0) return 0.0;
+      return sum / (double)n;
+   }
+
    int CurrentWindowSize(void) const
    {
       return m_ctx_window_size;
@@ -1227,10 +1263,99 @@ protected:
    {
       int input_idx = feature_idx + 1;
       if(input_idx < 1 || input_idx >= FXAI_AI_WEIGHTS || m_ctx_window_size <= 0) return 0.0;
-      double sum = 0.0;
+      double full = CurrentWindowSliceMean(input_idx, 0, m_ctx_window_size);
+      int half_n = MathMax(m_ctx_window_size / 2, 1);
+      int quarter_n = MathMax(m_ctx_window_size / 4, 1);
+      double half = CurrentWindowSliceMean(input_idx, m_ctx_window_size - half_n, half_n);
+      double quarter = CurrentWindowSliceMean(input_idx, m_ctx_window_size - quarter_n, quarter_n);
+      return 0.40 * full + 0.35 * half + 0.25 * quarter;
+   }
+
+   double CurrentWindowFeatureStd(const int feature_idx) const
+   {
+      int input_idx = feature_idx + 1;
+      if(input_idx < 1 || input_idx >= FXAI_AI_WEIGHTS || m_ctx_window_size <= 1) return 0.0;
+      double mean = CurrentWindowSliceMean(input_idx, 0, m_ctx_window_size);
+      double acc = 0.0;
       for(int b=0; b<m_ctx_window_size; b++)
-         sum += m_ctx_window[b][input_idx];
-      return sum / (double)m_ctx_window_size;
+      {
+         double d = m_ctx_window[b][input_idx] - mean;
+         acc += d * d;
+      }
+      return MathSqrt(acc / (double)MathMax(m_ctx_window_size, 1));
+   }
+
+   double CurrentWindowFeatureSlope(const int feature_idx) const
+   {
+      int input_idx = feature_idx + 1;
+      if(input_idx < 1 || input_idx >= FXAI_AI_WEIGHTS || m_ctx_window_size <= 1) return 0.0;
+      double first = m_ctx_window[0][input_idx];
+      double last = m_ctx_window[m_ctx_window_size - 1][input_idx];
+      return (last - first) / (double)MathMax(m_ctx_window_size - 1, 1);
+   }
+
+   void PopulatePathQualityHeads(FXAIAIModelOutputV4 &out,
+                                 const double &x[],
+                                 const double activity_gate,
+                                 const double structural_quality,
+                                 const double execution_quality = -1.0) const
+   {
+      double active = FXAI_Clamp(activity_gate, 0.0, 1.0);
+      double structure = FXAI_Clamp(structural_quality, 0.0, 1.0);
+      double exec_q = (execution_quality >= 0.0 ? FXAI_Clamp(execution_quality, 0.0, 1.0) : structure);
+      double move_scale = MathMax(out.move_mean_points,
+                          MathMax(out.move_q50_points,
+                          MathMax(ResolveMinMovePoints(), 0.10)));
+      double qspan = MathMax(0.0, out.move_q75_points - out.move_q25_points);
+      double sigma = MathMax(0.10, 0.30 * move_scale + 0.45 * qspan);
+      double directional = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY],
+                                              out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+      double skip = FXAI_Clamp(out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0);
+      double cost_ratio = FXAI_Clamp(ResolveCostPoints(x) / MathMax(move_scale + 0.40 * sigma, 0.25), 0.0, 1.0);
+      double trend = 0.0;
+      double noise = 0.0;
+      if(CurrentWindowSize() > 1)
+      {
+         double slope = MathAbs(CurrentWindowFeatureSlope(0));
+         double stdv = CurrentWindowFeatureStd(0);
+         double level = MathAbs(CurrentWindowFeatureMean(0));
+         trend = FXAI_Clamp(slope / MathMax(stdv + 0.20 * MathAbs(level), 0.10), 0.0, 1.25);
+         noise = FXAI_Clamp(stdv / MathMax(MathAbs(level) + 0.10, 0.10), 0.0, 1.25);
+      }
+
+      double mfe_scale = 1.10 + 0.35 * directional + 0.20 * active + 0.18 * structure + 0.12 * trend;
+      double mae_scale = 0.16 + 0.26 * (1.0 - active) + 0.18 * (1.0 - structure) + 0.14 * cost_ratio + 0.10 * noise + 0.08 * skip;
+      if(m_quality_head_ready)
+      {
+         double quality_base = MathMax(move_scale, 0.10);
+         mfe_scale = 0.50 * mfe_scale + 0.50 * FXAI_Clamp(m_quality_mfe_ema / quality_base, 0.80, 3.20);
+         mae_scale = 0.50 * mae_scale + 0.50 * FXAI_Clamp(m_quality_mae_ema / MathMax(MathMax(m_quality_mfe_ema, quality_base), 0.10), 0.05, 1.60);
+      }
+      out.mfe_mean_points = MathMax(out.move_q75_points, move_scale * FXAI_Clamp(mfe_scale, 0.80, 3.50));
+      out.mae_mean_points = MathMax(0.0, move_scale * FXAI_Clamp(mae_scale, 0.05, 1.80));
+
+      double hit_frac = 0.68 - 0.22 * active - 0.12 * structure - 0.08 * trend + 0.18 * noise + 0.16 * cost_ratio + 0.10 * skip;
+      if(m_quality_head_ready)
+         hit_frac = 0.45 * hit_frac + 0.55 * m_quality_hit_ema;
+      out.hit_time_frac = FXAI_Clamp(hit_frac, 0.0, 1.0);
+
+      double path_risk = 0.34 * FXAI_Clamp(out.mae_mean_points / MathMax(out.mfe_mean_points, move_scale), 0.0, 1.0) +
+                         0.22 * out.hit_time_frac +
+                         0.18 * cost_ratio +
+                         0.14 * (1.0 - structure) +
+                         0.12 * noise;
+      if(m_quality_head_ready)
+         path_risk = 0.50 * path_risk + 0.50 * m_quality_path_risk_ema;
+      out.path_risk = FXAI_Clamp(path_risk, 0.0, 1.0);
+
+      double fill_risk = 0.46 * cost_ratio +
+                         0.26 * (1.0 - exec_q) +
+                         0.16 * skip +
+                         0.12 * noise;
+      if(m_quality_head_ready)
+         fill_risk = 0.50 * fill_risk + 0.50 * m_quality_fill_risk_ema;
+      out.fill_risk = FXAI_Clamp(fill_risk, 0.0, 1.0);
+      out.has_path_quality = true;
    }
 
    double TargetMFEPoints(void) const { return m_target_quality_ready ? m_target_mfe_points : 0.0; }
@@ -1344,6 +1469,12 @@ public:
       }
 
       NormalizeClassDistribution(model_out.class_probs);
+      if(!model_out.has_path_quality)
+      {
+         double structural = (model_out.has_confidence ? model_out.reliability : 0.50);
+         double execution = (model_out.has_confidence ? model_out.confidence : 0.50);
+         PopulatePathQualityHeads(model_out, req.x, FXAI_Clamp(1.0 - model_out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), structural, execution);
+      }
       ApplyContextCalibrationBank(model_out.class_probs);
       double calibrated_move = ApplyExpectedMoveCalibrationBank(model_out.move_mean_points);
       FillPredictionV4(model_out, calibrated_move, out);

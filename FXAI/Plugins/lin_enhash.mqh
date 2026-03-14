@@ -492,6 +492,7 @@ public:
       out.reliability = FXAI_Clamp(0.55 + 0.20 * m_diag_edgehit_ema + 0.15 * (1.0 - FXAI_Clamp(m_diag_calerr_ema, 0.0, 1.0)) + 0.10 * (1.0 - FXAI_Clamp(m_diag_collision_ema, 0.0, 1.0)), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
+      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
       return true;
    }
 

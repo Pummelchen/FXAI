@@ -266,6 +266,20 @@ public:
       double strength = 0.0;
       int signal = EvaluateSyncSignal(ResolveContextTime(), expected_move_points, strength);
       double reliability = FXAI_Clamp(m_hit_ema, 0.25, 0.95);
+      double cost_points = ResolveCostPoints(x);
+      double move_scale = MathMax(expected_move_points, MathMax(ResolveMinMovePoints(), 0.10));
+      double execution_drag = FXAI_Clamp(cost_points / MathMax(move_scale, 0.25), 0.0, 1.5);
+      int sess = ContextSessionBucket();
+      double session_penalty = ((sess == 0 || sess == FXAI_PLUGIN_SESSION_BUCKETS - 1) ? 0.10 : 0.0);
+      reliability = FXAI_Clamp(reliability * (1.0 - 0.22 * execution_drag - session_penalty), 0.10, 0.95);
+      strength = FXAI_Clamp(strength * (1.0 - 0.28 * execution_drag - 0.50 * session_penalty), 0.0, 1.0);
+      expected_move_points = MathMax(0.0, expected_move_points * (1.0 - 0.25 * execution_drag - 0.35 * session_penalty));
+      if(execution_drag >= 0.95)
+      {
+         signal = (int)FXAI_LABEL_SKIP;
+         expected_move_points = 0.0;
+         strength = 0.0;
+      }
 
       if(signal == (int)FXAI_LABEL_BUY)
       {
@@ -343,6 +357,7 @@ protected:
       out.reliability = FXAI_Clamp(m_hit_ema, 0.25, 0.95);
       out.has_quantiles = true;
       out.has_confidence = true;
+      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
       return true;
    }
 

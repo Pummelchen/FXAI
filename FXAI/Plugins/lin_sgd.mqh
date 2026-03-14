@@ -565,6 +565,7 @@ public:
       out.reliability = FXAI_Clamp(0.45 + 0.25 * (m_mv_ready ? 1.0 : 0.0) + 0.30 * MathMin((double)m_step / 64.0, 1.0), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
+      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
       return true;
    }
 

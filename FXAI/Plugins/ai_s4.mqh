@@ -1401,6 +1401,7 @@ public:
       out.reliability = FXAI_Clamp(0.55 + 0.20 * (m_margin_ready ? 1.0 - MathAbs(m_prob_bias) / 2.0 : 0.0) + 0.15 * (m_move_ready ? 1.0 : 0.0) + 0.10 * (1.0 - FXAI_Clamp(MathAbs(m_prob_scale - 1.0), 0.0, 1.0)), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
+      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
       return true;
    }
 
