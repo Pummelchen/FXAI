@@ -318,11 +318,13 @@ input double ENHash_L2           = 0.0020;
 double InitialEquity;
 double TP_Value = 0;
 double EquiMax  = 0;
+double RealizedManagedProfit = 0.0;
 
 int CloseCounter = 1;
 
 bool   CycleActive      = false;
 double CycleEntryEquity = 0.0;
+double CycleEntryManagedPnl = 0.0;
 datetime CycleStartTime = 0;
 
 bool   TrailTracking   = false;
@@ -510,7 +512,7 @@ datetime g_replay_last_sample_time[FXAI_MAX_HORIZONS];
 
 int OnInit()
 {
-   MathSrand((uint)TimeLocal());
+   FXAI_SetRandomSeed((ulong)((long)TimeLocal() > 0 ? (long)TimeLocal() : 1));
    trade.SetExpertMagicNumber((long)TradeMagic);
 
    double buy_init = AI_BuyThreshold;
@@ -525,7 +527,8 @@ int OnInit()
 
    InitialEquity = AccountInfoDouble(ACCOUNT_EQUITY);
    EquiMax       = InitialEquity;
-   TP_Value      = InitialEquity + TP_USD;
+   RealizedManagedProfit = 0.0;
+   TP_Value      = 0.0;
 
    g_plugins_ready = g_plugins.Initialize();
    if(!g_plugins_ready)
@@ -563,13 +566,14 @@ int FXAI_GetM1SyncBars(void)
 void Calc_TP()
 {
    double tp_usd = (TP_USD > 0.0 ? TP_USD : 0.0);
-   TP_Value = InitialEquity + (tp_usd * CloseCounter);
+   TP_Value = tp_usd * CloseCounter;
 }
 
 void ResetCycleState()
 {
    CycleActive      = false;
    CycleEntryEquity = 0.0;
+   CycleEntryManagedPnl = 0.0;
    CycleStartTime   = 0;
 
    TrailTracking    = false;
@@ -592,6 +596,53 @@ datetime FXAI_GetOldestPositionTime()
       if(oldest == 0 || t < oldest) oldest = t;
    }
    return oldest;
+}
+
+double FXAI_ManagedOpenProfit(const string symbol = "")
+{
+   double total = 0.0;
+   for(int i=PositionsTotal() - 1; i>=0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(!PositionSelectByTicket(ticket)) continue;
+      if((ulong)PositionGetInteger(POSITION_MAGIC) != TradeMagic) continue;
+      if(StringLen(symbol) > 0 && PositionGetString(POSITION_SYMBOL) != symbol) continue;
+
+      double pos_total = PositionGetDouble(POSITION_PROFIT) +
+                         PositionGetDouble(POSITION_SWAP);
+
+      ulong position_id = (ulong)PositionGetInteger(POSITION_IDENTIFIER);
+      if(position_id != 0 && HistorySelectByPosition(position_id))
+      {
+         int deal_count = HistoryDealsTotal();
+         for(int d=deal_count - 1; d>=0; d--)
+         {
+            ulong deal_ticket = HistoryDealGetTicket(d);
+            if(deal_ticket == 0) continue;
+            if((ulong)HistoryDealGetInteger(deal_ticket, DEAL_POSITION_ID) != position_id) continue;
+
+            long entry = HistoryDealGetInteger(deal_ticket, DEAL_ENTRY);
+            if(entry != DEAL_ENTRY_IN && entry != DEAL_ENTRY_INOUT) continue;
+
+            pos_total += HistoryDealGetDouble(deal_ticket, DEAL_COMMISSION);
+         }
+      }
+
+      total += pos_total;
+   }
+   return total;
+}
+
+double FXAI_CurrentCycleProfit()
+{
+   if(!CycleActive) return 0.0;
+   return FXAI_ManagedOpenProfit(_Symbol) - CycleEntryManagedPnl;
+}
+
+double FXAI_TotalManagedProfit()
+{
+   return RealizedManagedProfit + FXAI_CurrentCycleProfit();
 }
 
 int FXAI_ManagedPositionsTotal(const string symbol = "")
@@ -802,9 +853,9 @@ void EAStop()
 //--------------------------- TP CHECK -------------------------------
 void TPCheck()
 {
-   if(AccountInfoDouble(ACCOUNT_EQUITY) < 100) TP_Value = 110;
+   if(TP_USD <= 0.0) return;
 
-   if(AccountInfoDouble(ACCOUNT_EQUITY) > TP_Value)
+   if(FXAI_TotalManagedProfit() >= TP_Value)
    {
       CloseAll();
       ResetCycleState();
@@ -847,8 +898,7 @@ void EquitySLManage()
    if(FXAI_ManagedPositionsTotal(_Symbol) <= 0) return;
    if(!CycleActive) return;
 
-   double eq = AccountInfoDouble(ACCOUNT_EQUITY);
-   double dd = eq - CycleEntryEquity;
+   double dd = FXAI_CurrentCycleProfit();
 
    if(dd <= -SL_USD)
    {
@@ -871,15 +921,14 @@ void EquityTrailManage()
       TrailPeakProfit = 0.0;
    }
 
-   double eq = AccountInfoDouble(ACCOUNT_EQUITY);
-   double profit = eq - CycleEntryEquity;
+   double profit = FXAI_CurrentCycleProfit();
 
    if(profit > TrailPeakProfit) TrailPeakProfit = profit;
    double trail_start = (TrailStartUSD > 0.0 ? TrailStartUSD : 0.0);
    if(TrailPeakProfit < trail_start) return;
 
    double tp_breath = (TrailTPBreathUSD > 0.0 ? TrailTPBreathUSD : 0.0);
-   double desiredTP = CycleEntryEquity + TrailPeakProfit + tp_breath;
+   double desiredTP = RealizedManagedProfit + TrailPeakProfit + tp_breath;
    if(desiredTP > TP_Value) TP_Value = desiredTP;
 
    double giveback = TrailGivebackPct;
@@ -887,9 +936,9 @@ void EquityTrailManage()
    if(giveback > 99.0) giveback = 99.0;
 
    double lockedProfit = TrailPeakProfit * (1.0 - (giveback / 100.0));
-   double stopEquity = CycleEntryEquity + lockedProfit;
+   double stopProfit = lockedProfit;
 
-   if(eq <= stopEquity)
+   if(profit <= stopProfit)
    {
       CloseAll();
       ResetCycleState();
@@ -946,6 +995,7 @@ void SendTrade(const int precomputed_direction = -2)
       ResetCycleState();
       CycleActive      = true;
       CycleEntryEquity = AccountInfoDouble(ACCOUNT_EQUITY);
+      CycleEntryManagedPnl = FXAI_ManagedOpenProfit(_Symbol);
       CycleStartTime   = TimeCurrent();
       if(CycleStartTime <= 0) CycleStartTime = TimeTradeServer();
       if(CycleStartTime <= 0) CycleStartTime = iTime(_Symbol, PERIOD_M1, 0);
@@ -953,6 +1003,33 @@ void SendTrade(const int precomputed_direction = -2)
       TrailTracking    = true;
       TrailPeakProfit  = 0.0;
    }
+}
+
+void OnTradeTransaction(const MqlTradeTransaction &trans,
+                        const MqlTradeRequest &request,
+                        const MqlTradeResult &result)
+{
+   if(trans.type != TRADE_TRANSACTION_DEAL_ADD)
+      return;
+
+   ulong deal_ticket = trans.deal;
+   if(deal_ticket == 0 || !HistoryDealSelect(deal_ticket))
+      return;
+
+   if((ulong)HistoryDealGetInteger(deal_ticket, DEAL_MAGIC) != TradeMagic)
+      return;
+   if(HistoryDealGetString(deal_ticket, DEAL_SYMBOL) != _Symbol)
+      return;
+
+   long entry = HistoryDealGetInteger(deal_ticket, DEAL_ENTRY);
+   if(entry != DEAL_ENTRY_OUT && entry != DEAL_ENTRY_OUT_BY)
+      return;
+
+   double net = HistoryDealGetDouble(deal_ticket, DEAL_PROFIT) +
+                HistoryDealGetDouble(deal_ticket, DEAL_SWAP) +
+                HistoryDealGetDouble(deal_ticket, DEAL_COMMISSION);
+   if(MathIsValidNumber(net))
+      RealizedManagedProfit += net;
 }
 
 //--------------------------- ON TICK --------------------------------

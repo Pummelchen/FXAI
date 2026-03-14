@@ -1,6 +1,20 @@
 #ifndef __FXAI_ENGINE_TRAINING_MQH__
 #define __FXAI_ENGINE_TRAINING_MQH__
 
+ulong g_fxai_random_state = 1;
+
+void FXAI_SetRandomSeed(const ulong seed)
+{
+   g_fxai_random_state = (seed == 0 ? 1 : seed);
+}
+
+double FXAI_RandUnit()
+{
+   g_fxai_random_state = (ulong)(6364136223846793005) * g_fxai_random_state + (ulong)(1442695040888963407);
+   ulong sample = (g_fxai_random_state >> 11);
+   return FXAI_Clamp((double)sample / 9007199254740991.0, 0.0, 1.0);
+}
+
 void FXAI_PrecomputeTrainingSamples(const int i_start,
                                    const int i_end,
                                    const int H,
@@ -884,7 +898,7 @@ void FXAI_BuildHyperParams(FXAIAIHyperParams &hp)
 double FXAI_RandRange(const double lo, const double hi)
 {
    if(hi <= lo) return lo;
-   double u = (double)MathRand() / 32767.0;
+   double u = FXAI_RandUnit();
    return lo + (hi - lo) * FXAI_Clamp(u, 0.0, 1.0);
 }
 

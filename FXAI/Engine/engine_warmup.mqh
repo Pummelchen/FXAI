@@ -1069,7 +1069,7 @@ void FXAI_WarmupSelectBanksForHorizon(const int H,
                                             samples,
                                             norm_caches);
 
-      MathSrand((uint)(seed + (ai_idx + 1) * 104729 + (int)(bar_time % 65521) + H * 97));
+      FXAI_SetRandomSeed((ulong)(seed + (ulong)((ai_idx + 1) * 104729) + (ulong)((int)(bar_time % 65521)) + (ulong)(H * 97) + 1));
 
       CFXAIAIPlugin *fold_pool[];
       ArrayResize(fold_pool, warmup_folds);

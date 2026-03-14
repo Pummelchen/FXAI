@@ -1339,10 +1339,22 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
 
       ctx.sequence_bars = seq_bars;
       ctx.feature_schema_id = schema_id;
-      out.samples_total++;
-      if(label_class == (int)FXAI_LABEL_BUY) out.true_buy_count++;
-      else if(label_class == (int)FXAI_LABEL_SELL) out.true_sell_count++;
-      else out.true_skip_count++;
+      bool train_enabled = true;
+      bool eval_enabled = true;
+      if(spec.name == "market_walkforward")
+      {
+         int phase = (i - start_idx) % MathMax(wf_train_bars + wf_test_bars, 1);
+         train_enabled = (phase >= 0 && phase < wf_train_bars);
+         eval_enabled = !train_enabled;
+      }
+
+      if(eval_enabled)
+      {
+         out.samples_total++;
+         if(label_class == (int)FXAI_LABEL_BUY) out.true_buy_count++;
+         else if(label_class == (int)FXAI_LABEL_SELL) out.true_sell_count++;
+         else out.true_skip_count++;
+      }
 
       FXAIAIPredictRequestV4 req;
       FXAI_ClearPredictRequest(req);
@@ -1381,75 +1393,72 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
                             req.window_size);
       FXAI_ApplyFeatureSchemaToPayloadEx(schema_id, feature_groups_mask, req.ctx.sequence_bars, req.x_window, req.window_size, req.x);
 
-      FXAIAIPredictionV4 pred;
-      bool ok = FXAI_PredictViaV4(*plugin, req, hp, pred);
-      string pred_reason = "";
-      bool pred_valid = FXAI_ValidatePredictionV4(pred, pred_reason);
-      if(!ok || !pred_valid)
+      if(eval_enabled)
       {
-         out.invalid_preds++;
-      }
-      else
-      {
-         out.valid_preds++;
-         int decision = FXAI_AuditDecisionFromPred(pred);
-         if(decision == (int)FXAI_LABEL_BUY) out.buy_count++;
-         else if(decision == (int)FXAI_LABEL_SELL) out.sell_count++;
-         else out.skip_count++;
-
-         if(decision == label_class) out.exact_match_count++;
-
-         if(spec.name == "drift_up" || spec.name == "monotonic_up")
+         FXAIAIPredictionV4 pred;
+         bool ok = FXAI_PredictViaV4(*plugin, req, hp, pred);
+         string pred_reason = "";
+         bool pred_valid = FXAI_ValidatePredictionV4(pred, pred_reason);
+         if(!ok || !pred_valid)
          {
-            if(decision == (int)FXAI_LABEL_BUY) out.trend_alignment_sum += 1.0;
-            else if(decision == (int)FXAI_LABEL_SELL) out.trend_alignment_sum -= 1.0;
-            out.trend_alignment_count++;
+            out.invalid_preds++;
          }
-         else if(spec.name == "drift_down" || spec.name == "monotonic_down")
+         else
          {
-            if(decision == (int)FXAI_LABEL_SELL) out.trend_alignment_sum += 1.0;
-            else if(decision == (int)FXAI_LABEL_BUY) out.trend_alignment_sum -= 1.0;
-            out.trend_alignment_count++;
-         }
-         else if(spec.name == "market_trend" || spec.name == "market_walkforward")
-         {
-            if(label_class == (int)FXAI_LABEL_BUY)
+            out.valid_preds++;
+            int decision = FXAI_AuditDecisionFromPred(pred);
+            if(decision == (int)FXAI_LABEL_BUY) out.buy_count++;
+            else if(decision == (int)FXAI_LABEL_SELL) out.sell_count++;
+            else out.skip_count++;
+
+            if(decision == label_class) out.exact_match_count++;
+
+            if(spec.name == "drift_up" || spec.name == "monotonic_up")
             {
                if(decision == (int)FXAI_LABEL_BUY) out.trend_alignment_sum += 1.0;
                else if(decision == (int)FXAI_LABEL_SELL) out.trend_alignment_sum -= 1.0;
                out.trend_alignment_count++;
             }
-            else if(label_class == (int)FXAI_LABEL_SELL)
+            else if(spec.name == "drift_down" || spec.name == "monotonic_down")
             {
                if(decision == (int)FXAI_LABEL_SELL) out.trend_alignment_sum += 1.0;
                else if(decision == (int)FXAI_LABEL_BUY) out.trend_alignment_sum -= 1.0;
                out.trend_alignment_count++;
             }
-         }
+            else if(spec.name == "market_trend" || spec.name == "market_walkforward")
+            {
+               if(label_class == (int)FXAI_LABEL_BUY)
+               {
+                  if(decision == (int)FXAI_LABEL_BUY) out.trend_alignment_sum += 1.0;
+                  else if(decision == (int)FXAI_LABEL_SELL) out.trend_alignment_sum -= 1.0;
+                  out.trend_alignment_count++;
+               }
+               else if(label_class == (int)FXAI_LABEL_SELL)
+               {
+                  if(decision == (int)FXAI_LABEL_SELL) out.trend_alignment_sum += 1.0;
+                  else if(decision == (int)FXAI_LABEL_BUY) out.trend_alignment_sum -= 1.0;
+                  out.trend_alignment_count++;
+               }
+            }
 
-         out.conf_sum += pred.confidence;
-         out.rel_sum += pred.reliability;
-         out.move_sum += pred.move_mean_points;
+            out.conf_sum += pred.confidence;
+            out.rel_sum += pred.reliability;
+            out.move_sum += pred.move_mean_points;
 
-         if(decision != (int)FXAI_LABEL_SKIP)
-         {
-            out.directional_eval_count++;
-            double dir_conf = MathMax(pred.class_probs[(int)FXAI_LABEL_BUY], pred.class_probs[(int)FXAI_LABEL_SELL]);
-            out.dir_conf_sum += dir_conf;
-            bool dir_ok = ((decision == (int)FXAI_LABEL_BUY && label_class == (int)FXAI_LABEL_BUY) ||
-                           (decision == (int)FXAI_LABEL_SELL && label_class == (int)FXAI_LABEL_SELL));
-            if(dir_ok) out.directional_correct_count++;
-            out.dir_hit_sum += (dir_ok ? 1.0 : 0.0);
+            if(decision != (int)FXAI_LABEL_SKIP)
+            {
+               out.directional_eval_count++;
+               double dir_conf = MathMax(pred.class_probs[(int)FXAI_LABEL_BUY], pred.class_probs[(int)FXAI_LABEL_SELL]);
+               out.dir_conf_sum += dir_conf;
+               bool dir_ok = ((decision == (int)FXAI_LABEL_BUY && label_class == (int)FXAI_LABEL_BUY) ||
+                              (decision == (int)FXAI_LABEL_SELL && label_class == (int)FXAI_LABEL_SELL));
+               if(dir_ok) out.directional_correct_count++;
+               out.dir_hit_sum += (dir_ok ? 1.0 : 0.0);
+            }
          }
       }
 
       FXAIAITrainRequestV4 train_req;
-      bool train_enabled = true;
-      if(spec.name == "market_walkforward")
-      {
-         int phase = (i - start_idx) % MathMax(wf_train_bars + wf_test_bars, 1);
-         train_enabled = (phase >= 0 && phase < wf_train_bars);
-      }
 
       if(train_enabled)
       {
@@ -1465,7 +1474,7 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
          FXAI_TrainViaV4(*plugin, train_req, hp);
       }
 
-      if(!held_req_ready && i > start_idx + 128)
+      if(eval_enabled && !held_req_ready && i > start_idx + 128)
       {
          held_req = req;
          held_req_ready = true;
