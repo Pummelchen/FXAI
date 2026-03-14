@@ -300,9 +300,15 @@ protected:
          m_ctx_session_bucket = FXAI_DeriveSessionBucket(ctx.sample_time);
 
       m_ctx_horizon_minutes = (ctx.horizon_minutes > 0 ? ctx.horizon_minutes : 1);
-      m_ctx_feature_schema_id = (ctx.feature_schema_id > 0 ? ctx.feature_schema_id : 1);
+      m_ctx_feature_schema_id = ctx.feature_schema_id;
+      if(m_ctx_feature_schema_id < FXAI_SCHEMA_FULL || m_ctx_feature_schema_id > FXAI_SCHEMA_CONTEXTUAL)
+         m_ctx_feature_schema_id = FXAI_SCHEMA_FULL;
       m_ctx_normalization_method_id = ctx.normalization_method_id;
+      if(m_ctx_normalization_method_id < 0 || m_ctx_normalization_method_id >= FXAI_NORM_METHOD_COUNT)
+         m_ctx_normalization_method_id = FXAI_NORM_EXISTING;
       m_ctx_sequence_bars = (ctx.sequence_bars > 0 ? ctx.sequence_bars : 1);
+      if(m_ctx_sequence_bars > FXAI_MAX_SEQUENCE_BARS)
+         m_ctx_sequence_bars = FXAI_MAX_SEQUENCE_BARS;
       m_ctx_point_value = (MathIsValidNumber(ctx.point_value) && ctx.point_value > 0.0
                            ? ctx.point_value : (_Point > 0.0 ? _Point : 1.0));
    }
@@ -1402,7 +1408,9 @@ public:
 
    void Train(const FXAIAITrainRequestV4 &req, const FXAIAIHyperParams &hp)
    {
-      if(!req.valid) return;
+      string reason = "";
+      if(!FXAI_ValidateTrainRequestV4(req, reason))
+         return;
       EnsureInitialized(hp);
       SetContext(req.ctx);
       SetWindowPayload(req.window_size, req.x_window);
@@ -1448,7 +1456,24 @@ public:
                 const FXAIAIHyperParams &hp,
                 FXAIAIPredictionV4 &out)
    {
-      if(!req.valid) return false;
+      string reason = "";
+      if(!FXAI_ValidatePredictRequestV4(req, reason))
+      {
+         for(int c=0; c<3; c++)
+            out.class_probs[c] = (c == (int)FXAI_LABEL_SKIP ? 1.0 : 0.0);
+         out.move_mean_points = 0.0;
+         out.move_q25_points = 0.0;
+         out.move_q50_points = 0.0;
+         out.move_q75_points = 0.0;
+         out.mfe_mean_points = 0.0;
+         out.mae_mean_points = 0.0;
+         out.hit_time_frac = 1.0;
+         out.path_risk = 0.0;
+         out.fill_risk = 0.0;
+         out.confidence = 0.0;
+         out.reliability = 0.0;
+         return false;
+      }
       EnsureInitialized(hp);
       SetContext(req.ctx);
       SetWindowPayload(req.window_size, req.x_window);

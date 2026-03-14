@@ -26,7 +26,7 @@ bool FXAI_ValidateManifestV4(const FXAIAIManifestV4 &manifest,
       reason = "family";
       return false;
    }
-   if(manifest.feature_schema_id <= 0)
+   if(manifest.feature_schema_id < FXAI_SCHEMA_FULL || manifest.feature_schema_id > FXAI_SCHEMA_CONTEXTUAL)
    {
       reason = "feature_schema_id";
       return false;
@@ -46,7 +46,8 @@ bool FXAI_ValidateManifestV4(const FXAIAIManifestV4 &manifest,
       reason = "horizon_range";
       return false;
    }
-   if(manifest.min_sequence_bars <= 0 || manifest.max_sequence_bars < manifest.min_sequence_bars)
+   if(manifest.min_sequence_bars <= 0 || manifest.max_sequence_bars < manifest.min_sequence_bars ||
+      manifest.max_sequence_bars > FXAI_MAX_SEQUENCE_BARS)
    {
       reason = "sequence_range";
       return false;
@@ -156,6 +157,8 @@ int FXAI_ResolveManifestSequenceBars(const FXAIAIManifestV4 &manifest,
    int max_seq = manifest.max_sequence_bars;
    if(min_seq < 1) min_seq = 1;
    if(max_seq < min_seq) max_seq = min_seq;
+   if(max_seq > FXAI_MAX_SEQUENCE_BARS) max_seq = FXAI_MAX_SEQUENCE_BARS;
+   if(min_seq > max_seq) min_seq = max_seq;
 
    int h = (horizon_minutes > 0 ? horizon_minutes : 1);
    int seq = h * 8;
@@ -200,6 +203,9 @@ void FXAI_TrainViaV4(CFXAIAIPlugin &plugin,
                      const FXAIAITrainRequestV4 &req,
                      const FXAIAIHyperParams &hp)
 {
+   string reason = "";
+   if(!FXAI_ValidateTrainRequestV4(req, reason))
+      return;
    plugin.Train(req, hp);
 }
 
@@ -208,6 +214,9 @@ bool FXAI_PredictViaV4(CFXAIAIPlugin &plugin,
                        const FXAIAIHyperParams &hp,
                        FXAIAIPredictionV4 &out)
 {
+   string reason = "";
+   if(!FXAI_ValidatePredictRequestV4(req, reason))
+      return false;
    return plugin.Predict(req, hp, out);
 }
 

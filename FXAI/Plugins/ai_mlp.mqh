@@ -128,6 +128,12 @@ private:
    int      m_mlp_replay_regime[FXAI_MLP_REPLAY];
    int      m_mlp_replay_horizon[FXAI_MLP_REPLAY];
    int      m_replay_session[FXAI_MLP_REPLAY];
+   int      m_mlp_replay_feature_schema[FXAI_MLP_REPLAY];
+   int      m_mlp_replay_norm_method[FXAI_MLP_REPLAY];
+   int      m_mlp_replay_sequence_bars[FXAI_MLP_REPLAY];
+   double   m_mlp_replay_point_value[FXAI_MLP_REPLAY];
+   int      m_mlp_replay_window_size[FXAI_MLP_REPLAY];
+   double   m_mlp_replay_window[FXAI_MLP_REPLAY][FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
    int      m_mlp_replay_head;
    int      m_mlp_replay_size;
 
@@ -589,7 +595,13 @@ private:
                    const datetime t_sample,
                    const int sess,
                    const int regime_id,
-                   const int horizon_minutes)
+                   const int horizon_minutes,
+                   const int feature_schema_id,
+                   const int norm_method_id,
+                   const int sequence_bars,
+                   const double point_value,
+                   const int window_size,
+                   const double &x_window[][FXAI_AI_WEIGHTS])
    {
       int p = m_mlp_replay_head;
       for(int i=0; i<FXAI_AI_WEIGHTS; i++) m_mlp_replay_x[p][i] = x[i];
@@ -602,6 +614,16 @@ private:
       m_mlp_replay_regime[p] = regime_id;
       m_mlp_replay_horizon[p] = horizon_minutes;
       m_replay_session[p] = sess;
+      m_mlp_replay_feature_schema[p] = feature_schema_id;
+      m_mlp_replay_norm_method[p] = norm_method_id;
+      m_mlp_replay_sequence_bars[p] = MathMax(1, MathMin(sequence_bars, FXAI_MAX_SEQUENCE_BARS));
+      m_mlp_replay_point_value[p] = (point_value > 0.0 ? point_value : (_Point > 0.0 ? _Point : 1.0));
+      m_mlp_replay_window_size[p] = window_size;
+      if(m_mlp_replay_window_size[p] < 0) m_mlp_replay_window_size[p] = 0;
+      if(m_mlp_replay_window_size[p] > FXAI_MAX_SEQUENCE_BARS) m_mlp_replay_window_size[p] = FXAI_MAX_SEQUENCE_BARS;
+      for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            m_mlp_replay_window[p][b][k] = (b < m_mlp_replay_window_size[p] ? x_window[b][k] : 0.0);
 
       m_mlp_replay_head++;
       if(m_mlp_replay_head >= FXAI_MLP_REPLAY) m_mlp_replay_head = 0;
@@ -1024,7 +1046,15 @@ private:
          m_mlp_replay_regime[i] = 0;
          m_mlp_replay_horizon[i] = 1;
          m_replay_session[i] = -1;
+         m_mlp_replay_feature_schema[i] = FXAI_SCHEMA_FULL;
+         m_mlp_replay_norm_method[i] = FXAI_NORM_EXISTING;
+         m_mlp_replay_sequence_bars[i] = 1;
+         m_mlp_replay_point_value[i] = (_Point > 0.0 ? _Point : 1.0);
+         m_mlp_replay_window_size[i] = 0;
          for(int k=0; k<FXAI_AI_WEIGHTS; k++) m_mlp_replay_x[i][k] = 0.0;
+         for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+            for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+               m_mlp_replay_window[i][b][k] = 0.0;
       }
 
       m_cal3_steps = 0;
@@ -1683,7 +1713,22 @@ private:
          datetime t_sample = ResolveContextTime();
          if(t_sample <= 0) t_sample = TimeCurrent();
          int sess = SessionBucket(t_sample);
-         PushReplay(cls, x, move_points, cost, ResolveMinMovePoints(), sw, t_sample, sess, m_ctx_regime_id, m_ctx_horizon_minutes);
+         PushReplay(cls,
+                    x,
+                    move_points,
+                    cost,
+                    ResolveMinMovePoints(),
+                    sw,
+                    t_sample,
+                    sess,
+                    m_ctx_regime_id,
+                    m_ctx_horizon_minutes,
+                    m_ctx_feature_schema_id,
+                    m_ctx_normalization_method_id,
+                    m_ctx_sequence_bars,
+                    m_ctx_point_value,
+                    m_ctx_window_size,
+                    m_ctx_window);
          UpdateNormStats(x);
          PushHistory(x);
       }
@@ -1939,8 +1984,16 @@ public:
          m_mlp_replay_regime[r] = 0;
          m_mlp_replay_horizon[r] = 1;
          m_replay_session[r] = -1;
+         m_mlp_replay_feature_schema[r] = FXAI_SCHEMA_FULL;
+         m_mlp_replay_norm_method[r] = FXAI_NORM_EXISTING;
+         m_mlp_replay_sequence_bars[r] = 1;
+         m_mlp_replay_point_value[r] = (_Point > 0.0 ? _Point : 1.0);
+         m_mlp_replay_window_size[r] = 0;
          for(int i=0; i<FXAI_AI_WEIGHTS; i++)
             m_mlp_replay_x[r][i] = 0.0;
+         for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+            for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+               m_mlp_replay_window[r][b][k] = 0.0;
       }
 
       InitMoments();
@@ -2002,24 +2055,43 @@ public:
          double rw = FXAI_Clamp(m_replay_w[p], 0.20, 4.00);
          rw *= ReplayAgeWeight(m_mlp_replay_time[p], cur_t);
          if(m_replay_session[p] >= 0 && m_replay_session[p] != cur_sess) rw *= 0.85;
-         SetContext(m_mlp_replay_time[p],
-                    m_mlp_replay_cost[p],
-                    m_mlp_replay_min_move[p],
-                    m_mlp_replay_regime[p],
-                    m_mlp_replay_horizon[p]);
-         m_ctx_session_bucket = m_replay_session[p];
+         FXAIAIContextV4 replay_ctx;
+         FXAI_ClearContextV4(replay_ctx);
+         replay_ctx.sample_time = m_mlp_replay_time[p];
+         replay_ctx.cost_points = m_mlp_replay_cost[p];
+         replay_ctx.min_move_points = m_mlp_replay_min_move[p];
+         replay_ctx.regime_id = m_mlp_replay_regime[p];
+         replay_ctx.session_bucket = (m_replay_session[p] >= 0 ? m_replay_session[p] : cur_sess);
+         replay_ctx.horizon_minutes = m_mlp_replay_horizon[p];
+         replay_ctx.feature_schema_id = m_mlp_replay_feature_schema[p];
+         replay_ctx.normalization_method_id = m_mlp_replay_norm_method[p];
+         replay_ctx.sequence_bars = m_mlp_replay_sequence_bars[p];
+         replay_ctx.point_value = m_mlp_replay_point_value[p];
+         SetContext(replay_ctx);
+         double replay_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+         for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+            for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+               replay_window[b][k] = m_mlp_replay_window[p][b][k];
+         SetWindowPayload(m_mlp_replay_window_size[p], replay_window);
          double replay_x[FXAI_AI_WEIGHTS];
          for(int i=0; i<FXAI_AI_WEIGHTS; i++)
             replay_x[i] = m_mlp_replay_x[p][i];
          UpdateWeighted(m_replay_y[p], replay_x, h, rw, m_mlp_replay_move[p], true);
       }
 
-      SetContext(cur_t, cur_cost, cur_min, cur_regime, cur_horizon);
-      m_ctx_session_bucket = cur_session;
-      m_ctx_feature_schema_id = cur_feature_schema;
-      m_ctx_normalization_method_id = cur_norm_method;
-      m_ctx_sequence_bars = cur_sequence_bars;
-      m_ctx_point_value = cur_point_value;
+      FXAIAIContextV4 cur_ctx;
+      FXAI_ClearContextV4(cur_ctx);
+      cur_ctx.sample_time = cur_t;
+      cur_ctx.cost_points = cur_cost;
+      cur_ctx.min_move_points = cur_min;
+      cur_ctx.regime_id = cur_regime;
+      cur_ctx.session_bucket = cur_session;
+      cur_ctx.horizon_minutes = cur_horizon;
+      cur_ctx.feature_schema_id = cur_feature_schema;
+      cur_ctx.normalization_method_id = cur_norm_method;
+      cur_ctx.sequence_bars = cur_sequence_bars;
+      cur_ctx.point_value = cur_point_value;
+      SetContext(cur_ctx);
       m_ctx_window_size = cur_window_size;
       for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
