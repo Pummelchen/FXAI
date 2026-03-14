@@ -1,23 +1,29 @@
 # FXAI
 
-FXAI is the most advanced, state-of-the-art AI framework for Forex trading with MetaTrader 5.
+FXAI is a professional MetaTrader 5 framework for building, testing, and operating AI-driven FX trading systems inside MT5.
 
-Engineered for serious FX & AI research, it combines institutional-grade multi-model architecture, online learning, strict risk controls, and high-speed backtesting workflows in one unified framework.
+It is designed for serious traders and researchers who want one disciplined workflow for:
+- comparing different model families
+- backtesting on realistic FX costs
+- filtering weak models before cloud optimization
+- running release-style audit checks before live use
 
-Built with zero external libraries or DLLs, FXAI runs entirely on highly optimized, pure MQL5 CPU code. Fully compatible with backtesting on the MQL5 Cloud Network, it enables massive parallel speedups and much faster optimization results.
+FXAI runs fully inside MT5 and MQL5. There are no external inference servers, no DLL dependency, and no separate Python model runtime in live trading.
 
 Core benefits at a glance:
-- Multi-model plugin architecture with one unified API and shared data pipeline.
-- Manifest-driven feature schemas and schema-specific projectors so each plugin family can consume a more appropriate view of the data.
-- Cost-aware `BUY / SELL / SKIP` decisions tuned for realistic FX execution conditions.
-- Strong equity-level protection logic to reduce overtrading and uncontrolled drawdowns.
-- High-speed MT5-native backtesting, richer meta-policy routing, dynamic market-context selection, market replay certification, and optimization without external libraries or DLLs.
+- Many model plugins under one execution and risk framework
+- Cost-aware `BUY / SELL / SKIP` decisions
+- Built-in equity and execution protection logic
+- MT5-native backtesting and cloud optimization compatibility
+- A dedicated Audit Lab for plugin certification, regression checks, and release gating
+- One workflow for research, backtesting, audit, and deployment
 
 ## Table of Contents
 
 - [What It Is](#what-it-is)
 - [Core Benefits](#core-benefits)
 - [Quick Start](#quick-start)
+- [How Traders Use FXAI](#how-traders-use-fxai)
 - [Project Structure](#project-structure)
 - [Typical Workflow](#typical-workflow)
 - [Audit Lab](#audit-lab)
@@ -26,18 +32,22 @@ Core benefits at a glance:
 
 ## What It Is
 
-FXAI is an MT5 Expert Advisor project that combines:
-- A plugin-based AI architecture (many models, one unified API)
-- Baseline control plugins such as `rule_buyonly`, `rule_sellonly`, and `rule_random`
-- 3-class decision logic: `BUY / SELL / SKIP`
-- Cost-aware training (spread/commission-aware labeling)
-- Online model updates during backtest/live runtime
-- Ensemble support to compare and combine models
-- Dynamic market-context selection from a larger symbol candidate pool
-- Richer meta-policy inputs for horizon routing and ensemble blending
-- Equity-level risk management and trade protection logic
+FXAI is an MT5 Expert Advisor project with a plugin-based model layer.
 
-The project is designed to keep MT5 execution practical while enabling advanced model experimentation.
+In practical trading terms:
+- the EA is the execution shell
+- a plugin is the prediction engine or "model brain"
+- the data pipeline builds the market inputs
+- the meta layer decides how to combine or route model outputs
+- the risk layer decides whether the signal is safe enough to trade
+- the Audit Lab checks whether a plugin behaves correctly before you trust it
+
+You do not need to be an MQL5 programmer to use FXAI as an operator. For normal usage, the main tasks are:
+- choose the symbol and tester settings
+- choose the plugin or plugin set you want to test
+- run backtests and focused audits
+- save baselines for stable behavior
+- reject weak model changes before live deployment
 
 ## Core Benefits
 
@@ -57,6 +67,13 @@ The project is designed to keep MT5 execution practical while enabling advanced 
   - MT5 Experts folder remains source-of-truth, GitHub is used as the synchronized repository copy.
 
 ## Quick Start
+
+If you are an MT5 trader with basic AI understanding, the shortest correct path is:
+1. Compile the EA and the Audit Runner
+2. Run a simple Strategy Tester pass on one symbol
+3. Run a focused Audit Lab pass on the plugin you care about
+4. Save a baseline once behavior is acceptable
+5. Only then scale to optimization or live evaluation
 
 Runtime source-of-truth:
 - Live MT5 tree: `MQL5/Experts/FXAI`
@@ -93,10 +110,29 @@ python3 FXAI/Tools/fxai_testlab.py baseline-save --name eurusd_smoke
 python3 FXAI/Tools/fxai_testlab.py release-gate --baseline eurusd_smoke --require-market-replay
 ```
 
+## How Traders Use FXAI
+
+Typical operator use cases:
+- **Compare model candidates**
+  - Example: test `ai_mlp` versus `tree_lgbm` on `EURUSD`
+- **Check whether a model is still trustworthy**
+  - Use the Audit Lab before a long optimization or before promoting a configuration
+- **Validate execution realism**
+  - Re-run audits with spread, slippage, and fill penalties that match your broker conditions
+- **Create a baseline**
+  - Save a known-good audit result so future changes can be compared against it
+- **Reject weak changes early**
+  - Use `release-gate` to stop regressions before they reach large backtests or live trading
+
+What FXAI is not:
+- not a guaranteed-profit black box
+- not a one-click live trading promise
+- not a substitute for realistic cost settings and disciplined validation
+
 ## Project Structure
 
 - `FXAI/FXAI.mq5`  
-  Main EA entry point
+  Main EA entry point and live trading shell
 - `FXAI/API/api.mqh`  
   API v4 registry, validation, and plugin wiring
 - `FXAI/API/plugin_base.mqh`  
@@ -120,12 +156,19 @@ python3 FXAI/Tools/fxai_testlab.py release-gate --baseline eurusd_smoke --requir
 - `FXAI/Tools/fxai_testlab.py`  
   External drill-sergeant analyzer, optimization planner, baseline comparator, and release gate
 
+If you are not a programmer, the most important folders are:
+- `FXAI/` for the main EA
+- `FXAI/Tests/` for the Audit Runner
+- `FXAI/Tools/` for the command-line helper and audit outputs
+
 ## Typical Workflow
 
-1. Develop and compile in MT5 (`MQL5/Experts/FXAI`).
-2. Backtest/optimize model and risk parameters in Strategy Tester.
-3. Sync MT5 project state into this GitHub repo after a clean MT5 compile.
-4. Repeat with walk-forward validation before live deployment.
+1. Compile in the live MT5 Experts folder.
+2. Run a clean single-symbol Strategy Tester pass with realistic spread and commission settings.
+3. Run a focused Audit Lab pass on the plugin you want to trust.
+4. Save a baseline once the plugin behavior is stable.
+5. Only then move to larger optimization, walk-forward, or live-demo evaluation.
+6. Sync MT5 project state into GitHub only after the live code compiles cleanly.
 
 ## Audit Lab
 
@@ -145,6 +188,11 @@ Use that guide for:
 - unattended tester launch and credentials
 - baseline, comparison, optimization, and release-gate workflows
 - output files, troubleshooting, and recommended usage
+
+Short version:
+- Use Strategy Tester to measure trading behavior
+- Use Audit Lab to decide whether a plugin deserves further trust
+- A plugin that backtests well but fails Audit Lab is not production-ready
 
 ## Reference Guides
 
