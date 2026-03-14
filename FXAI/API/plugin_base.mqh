@@ -203,6 +203,13 @@ protected:
    double   m_quality_hit_ema;
    double   m_quality_path_risk_ema;
    double   m_quality_fill_risk_ema;
+   bool     m_quality_bank_ready[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
+   double   m_quality_bank_obs[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
+   double   m_quality_bank_mfe[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
+   double   m_quality_bank_mae[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
+   double   m_quality_bank_hit[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
+   double   m_quality_bank_path[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
+   double   m_quality_bank_fill[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
 
    double m_bank_class_mass[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS][3];
    double m_bank_total[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
@@ -433,6 +440,13 @@ protected:
                m_bank_ev_bias[r][s][h] = 0.0;
                m_bank_ev_g2_scale[r][s][h] = 0.0;
                m_bank_ev_g2_bias[r][s][h] = 0.0;
+               m_quality_bank_ready[r][s][h] = false;
+               m_quality_bank_obs[r][s][h] = 0.0;
+               m_quality_bank_mfe[r][s][h] = 0.0;
+               m_quality_bank_mae[r][s][h] = 0.0;
+               m_quality_bank_hit[r][s][h] = 1.0;
+               m_quality_bank_path[r][s][h] = 0.5;
+               m_quality_bank_fill[r][s][h] = 0.5;
                for(int c=0; c<3; c++)
                   m_bank_class_mass[r][s][h][c] = (c == (int)FXAI_LABEL_SKIP ? 1.2 : 1.0);
             }
@@ -563,6 +577,52 @@ protected:
       m_quality_hit_ema = (1.0 - alpha) * m_quality_hit_ema + alpha * FXAI_Clamp(req.time_to_hit_frac, 0.0, 1.0);
       m_quality_path_risk_ema = (1.0 - alpha) * m_quality_path_risk_ema + alpha * FXAI_Clamp(req.path_risk, 0.0, 1.0);
       m_quality_fill_risk_ema = (1.0 - alpha) * m_quality_fill_risk_ema + alpha * FXAI_Clamp(req.fill_risk, 0.0, 1.0);
+
+      int r = req.ctx.regime_id;
+      if(r < 0) r = 0;
+      if(r >= FXAI_PLUGIN_REGIME_BUCKETS) r = FXAI_PLUGIN_REGIME_BUCKETS - 1;
+      int s = req.ctx.session_bucket;
+      if(s < 0) s = 0;
+      if(s >= FXAI_PLUGIN_SESSION_BUCKETS) s = FXAI_PLUGIN_SESSION_BUCKETS - 1;
+      int h = ContextHorizonBucket();
+      if(req.ctx.horizon_minutes > 0)
+      {
+         int hh = req.ctx.horizon_minutes;
+         if(hh <= 1) h = 0;
+         else if(hh <= 3) h = 1;
+         else if(hh <= 5) h = 2;
+         else if(hh <= 8) h = 3;
+         else if(hh <= 13) h = 4;
+         else if(hh <= 21) h = 5;
+         else if(hh <= 34) h = 6;
+         else h = FXAI_PLUGIN_HORIZON_BUCKETS - 1;
+      }
+
+      double obs = m_quality_bank_obs[r][s][h];
+      double bank_alpha = FXAI_Clamp(0.12 * FXAI_Clamp(sample_w, 0.25, 4.0) / MathSqrt(1.0 + 0.02 * obs), 0.02, 0.25);
+      double mfe_now = MathMax(req.mfe_points, 0.0);
+      double mae_now = MathMax(req.mae_points, 0.0);
+      double hit_now = FXAI_Clamp(req.time_to_hit_frac, 0.0, 1.0);
+      double path_now = FXAI_Clamp(req.path_risk, 0.0, 1.0);
+      double fill_now = FXAI_Clamp(req.fill_risk, 0.0, 1.0);
+      if(!m_quality_bank_ready[r][s][h])
+      {
+         m_quality_bank_mfe[r][s][h] = mfe_now;
+         m_quality_bank_mae[r][s][h] = mae_now;
+         m_quality_bank_hit[r][s][h] = hit_now;
+         m_quality_bank_path[r][s][h] = path_now;
+         m_quality_bank_fill[r][s][h] = fill_now;
+         m_quality_bank_ready[r][s][h] = true;
+      }
+      else
+      {
+         m_quality_bank_mfe[r][s][h] = (1.0 - bank_alpha) * m_quality_bank_mfe[r][s][h] + bank_alpha * mfe_now;
+         m_quality_bank_mae[r][s][h] = (1.0 - bank_alpha) * m_quality_bank_mae[r][s][h] + bank_alpha * mae_now;
+         m_quality_bank_hit[r][s][h] = (1.0 - bank_alpha) * m_quality_bank_hit[r][s][h] + bank_alpha * hit_now;
+         m_quality_bank_path[r][s][h] = (1.0 - bank_alpha) * m_quality_bank_path[r][s][h] + bank_alpha * path_now;
+         m_quality_bank_fill[r][s][h] = (1.0 - bank_alpha) * m_quality_bank_fill[r][s][h] + bank_alpha * fill_now;
+      }
+      m_quality_bank_obs[r][s][h] = MathMin(obs + FXAI_Clamp(sample_w, 0.25, 4.0), 50000.0);
    }
 
    double PredictMoveHeadRaw(const double &x[]) const
@@ -1277,6 +1337,18 @@ protected:
       return 0.40 * full + 0.35 * half + 0.25 * quarter;
    }
 
+   double CurrentWindowFeatureRecentMean(const int feature_idx,
+                                         const int recent_bars) const
+   {
+      int input_idx = feature_idx + 1;
+      if(input_idx < 1 || input_idx >= FXAI_AI_WEIGHTS || m_ctx_window_size <= 0)
+         return 0.0;
+      int n = recent_bars;
+      if(n <= 0) n = 1;
+      if(n > m_ctx_window_size) n = m_ctx_window_size;
+      return CurrentWindowSliceMean(input_idx, 0, n);
+   }
+
    double CurrentWindowFeatureStd(const int feature_idx) const
    {
       int input_idx = feature_idx + 1;
@@ -1291,6 +1363,25 @@ protected:
       return MathSqrt(acc / (double)MathMax(m_ctx_window_size, 1));
    }
 
+   double CurrentWindowFeatureRange(const int feature_idx,
+                                    const int recent_bars = 0) const
+   {
+      int input_idx = feature_idx + 1;
+      if(input_idx < 1 || input_idx >= FXAI_AI_WEIGHTS || m_ctx_window_size <= 0)
+         return 0.0;
+      int n = recent_bars;
+      if(n <= 0 || n > m_ctx_window_size) n = m_ctx_window_size;
+      double lo = CurrentWindowValue(0, input_idx);
+      double hi = lo;
+      for(int b=0; b<n; b++)
+      {
+         double v = CurrentWindowValue(b, input_idx);
+         if(v < lo) lo = v;
+         if(v > hi) hi = v;
+      }
+      return hi - lo;
+   }
+
    double CurrentWindowFeatureSlope(const int feature_idx) const
    {
       int input_idx = feature_idx + 1;
@@ -1300,12 +1391,88 @@ protected:
       return (last - first) / (double)MathMax(m_ctx_window_size - 1, 1);
    }
 
+   double CurrentWindowFeatureRecentDelta(const int feature_idx,
+                                          const int recent_bars) const
+   {
+      int input_idx = feature_idx + 1;
+      if(input_idx < 1 || input_idx >= FXAI_AI_WEIGHTS || m_ctx_window_size <= 0)
+         return 0.0;
+      int n = recent_bars;
+      if(n <= 1) n = MathMax(m_ctx_window_size / 4, 2);
+      if(n > m_ctx_window_size) n = m_ctx_window_size;
+      int last_idx = n - 1;
+      if(last_idx < 0) last_idx = 0;
+      return CurrentWindowValue(0, input_idx) - CurrentWindowValue(last_idx, input_idx);
+   }
+
+   double CurrentWindowFeatureEMAMean(const int feature_idx,
+                                      const double decay = 0.72) const
+   {
+      int input_idx = feature_idx + 1;
+      if(input_idx < 1 || input_idx >= FXAI_AI_WEIGHTS || m_ctx_window_size <= 0)
+         return 0.0;
+      double a = FXAI_Clamp(decay, 0.05, 0.98);
+      double w = 1.0;
+      double sw = 0.0;
+      double sum = 0.0;
+      for(int b=0; b<m_ctx_window_size; b++)
+      {
+         double v = CurrentWindowValue(b, input_idx);
+         sum += w * v;
+         sw += w;
+         w *= a;
+      }
+      if(sw <= 0.0) return 0.0;
+      return sum / sw;
+   }
+
+   void GetQualityBankPriors(double &mfe_out,
+                             double &mae_out,
+                             double &hit_out,
+                             double &path_out,
+                             double &fill_out,
+                             double &trust_out) const
+   {
+      mfe_out = m_quality_mfe_ema;
+      mae_out = m_quality_mae_ema;
+      hit_out = m_quality_hit_ema;
+      path_out = m_quality_path_risk_ema;
+      fill_out = m_quality_fill_risk_ema;
+      trust_out = (m_quality_head_ready ? 0.35 : 0.0);
+
+      int r = m_ctx_regime_id;
+      if(r < 0) r = 0;
+      if(r >= FXAI_PLUGIN_REGIME_BUCKETS) r = FXAI_PLUGIN_REGIME_BUCKETS - 1;
+      int s = ContextSessionBucket();
+      int h = ContextHorizonBucket();
+      if(!m_quality_bank_ready[r][s][h])
+         return;
+
+      double bank_trust = FXAI_Clamp(m_quality_bank_obs[r][s][h] / 120.0, 0.10, 0.85);
+      mfe_out = (1.0 - bank_trust) * mfe_out + bank_trust * m_quality_bank_mfe[r][s][h];
+      mae_out = (1.0 - bank_trust) * mae_out + bank_trust * m_quality_bank_mae[r][s][h];
+      hit_out = (1.0 - bank_trust) * hit_out + bank_trust * m_quality_bank_hit[r][s][h];
+      path_out = (1.0 - bank_trust) * path_out + bank_trust * m_quality_bank_path[r][s][h];
+      fill_out = (1.0 - bank_trust) * fill_out + bank_trust * m_quality_bank_fill[r][s][h];
+      trust_out = FXAI_Clamp(trust_out + 0.65 * bank_trust, 0.0, 1.0);
+   }
+
    void PopulatePathQualityHeads(FXAIAIModelOutputV4 &out,
                                  const double &x[],
                                  const double activity_gate,
                                  const double structural_quality,
                                  const double execution_quality = -1.0) const
    {
+      FXAIAIManifestV4 manifest;
+      Describe(manifest);
+      double bank_mfe = 0.0;
+      double bank_mae = 0.0;
+      double bank_hit = 1.0;
+      double bank_path = 0.5;
+      double bank_fill = 0.5;
+      double bank_trust = 0.0;
+      GetQualityBankPriors(bank_mfe, bank_mae, bank_hit, bank_path, bank_fill, bank_trust);
+
       double active = FXAI_Clamp(activity_gate, 0.0, 1.0);
       double structure = FXAI_Clamp(structural_quality, 0.0, 1.0);
       double exec_q = (execution_quality >= 0.0 ? FXAI_Clamp(execution_quality, 0.0, 1.0) : structure);
@@ -1319,47 +1486,93 @@ protected:
       double skip = FXAI_Clamp(out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0);
       double cost_ratio = FXAI_Clamp(ResolveCostPoints(x) / MathMax(move_scale + 0.40 * sigma, 0.25), 0.0, 1.0);
       double trend = 0.0;
+      double trend_fast = 0.0;
       double noise = 0.0;
+      double ctx_shape = 0.0;
       if(CurrentWindowSize() > 1)
       {
          double slope = MathAbs(CurrentWindowFeatureSlope(0));
+         double slope_fast = MathAbs(CurrentWindowFeatureRecentDelta(0, MathMax(CurrentWindowSize() / 4, 2)));
          double stdv = CurrentWindowFeatureStd(0);
-         double level = MathAbs(CurrentWindowFeatureMean(0));
+         double level = MathAbs(CurrentWindowFeatureEMAMean(0));
+         double local_range = CurrentWindowFeatureRange(0, MathMax(CurrentWindowSize() / 2, 2));
+         double ctx_recent = MathAbs(CurrentWindowFeatureRecentMean(10, MathMax(CurrentWindowSize() / 4, 1)));
+         double ctx_slow = MathAbs(CurrentWindowFeatureMean(10));
          trend = FXAI_Clamp(slope / MathMax(stdv + 0.20 * MathAbs(level), 0.10), 0.0, 1.25);
-         noise = FXAI_Clamp(stdv / MathMax(MathAbs(level) + 0.10, 0.10), 0.0, 1.25);
+         trend_fast = FXAI_Clamp(slope_fast / MathMax(local_range + 0.10, 0.10), 0.0, 1.25);
+         noise = FXAI_Clamp((0.65 * stdv + 0.35 * local_range) / MathMax(MathAbs(level) + 0.10, 0.10), 0.0, 1.25);
+         ctx_shape = FXAI_Clamp((ctx_recent + 0.50 * ctx_slow) / MathMax(local_range + 0.10, 0.10), 0.0, 1.25);
       }
 
-      double mfe_scale = 1.10 + 0.35 * directional + 0.20 * active + 0.18 * structure + 0.12 * trend;
-      double mae_scale = 0.16 + 0.26 * (1.0 - active) + 0.18 * (1.0 - structure) + 0.14 * cost_ratio + 0.10 * noise + 0.08 * skip;
-      if(m_quality_head_ready)
+      double fam_trend = 1.0;
+      double fam_ctx = 1.0;
+      double fam_exec = 1.0;
+      switch(manifest.family)
+      {
+         case FXAI_FAMILY_RECURRENT:
+         case FXAI_FAMILY_CONVOLUTIONAL:
+         case FXAI_FAMILY_TRANSFORMER:
+         case FXAI_FAMILY_STATE_SPACE:
+            fam_trend = 1.12;
+            fam_ctx = 1.08;
+            break;
+         case FXAI_FAMILY_WORLD_MODEL:
+         case FXAI_FAMILY_RETRIEVAL:
+         case FXAI_FAMILY_MIXTURE:
+            fam_ctx = 1.15;
+            fam_exec = 0.92;
+            break;
+         case FXAI_FAMILY_TREE:
+         case FXAI_FAMILY_LINEAR:
+            fam_trend = 0.92;
+            fam_exec = 1.06;
+            break;
+         case FXAI_FAMILY_RULE_BASED:
+            fam_trend = 0.80;
+            fam_ctx = 0.85;
+            fam_exec = 1.18;
+            break;
+         default:
+            break;
+      }
+
+      double mfe_scale = 1.05 + 0.30 * directional + 0.18 * active + 0.16 * structure +
+                         0.16 * trend * fam_trend + 0.10 * trend_fast + 0.08 * ctx_shape * fam_ctx;
+      double mae_scale = 0.14 + 0.24 * (1.0 - active) + 0.18 * (1.0 - structure) +
+                         0.16 * cost_ratio * fam_exec + 0.12 * noise + 0.08 * skip;
+      if(m_quality_head_ready || bank_trust > 0.0)
       {
          double quality_base = MathMax(move_scale, 0.10);
-         mfe_scale = 0.50 * mfe_scale + 0.50 * FXAI_Clamp(m_quality_mfe_ema / quality_base, 0.80, 3.20);
-         mae_scale = 0.50 * mae_scale + 0.50 * FXAI_Clamp(m_quality_mae_ema / MathMax(MathMax(m_quality_mfe_ema, quality_base), 0.10), 0.05, 1.60);
+         double bank_mfe_scale = FXAI_Clamp(bank_mfe / quality_base, 0.80, 3.40);
+         double bank_mae_scale = FXAI_Clamp(bank_mae / MathMax(MathMax(bank_mfe, quality_base), 0.10), 0.05, 1.70);
+         mfe_scale = (1.0 - 0.55 * bank_trust) * mfe_scale + 0.55 * bank_trust * bank_mfe_scale;
+         mae_scale = (1.0 - 0.55 * bank_trust) * mae_scale + 0.55 * bank_trust * bank_mae_scale;
       }
       out.mfe_mean_points = MathMax(out.move_q75_points, move_scale * FXAI_Clamp(mfe_scale, 0.80, 3.50));
       out.mae_mean_points = MathMax(0.0, move_scale * FXAI_Clamp(mae_scale, 0.05, 1.80));
 
-      double hit_frac = 0.68 - 0.22 * active - 0.12 * structure - 0.08 * trend + 0.18 * noise + 0.16 * cost_ratio + 0.10 * skip;
-      if(m_quality_head_ready)
-         hit_frac = 0.45 * hit_frac + 0.55 * m_quality_hit_ema;
+      double hit_frac = 0.70 - 0.20 * active - 0.12 * structure - 0.08 * trend_fast -
+                        0.06 * ctx_shape + 0.18 * noise + 0.16 * cost_ratio + 0.10 * skip;
+      if(m_quality_head_ready || bank_trust > 0.0)
+         hit_frac = (1.0 - 0.60 * bank_trust) * hit_frac + 0.60 * bank_trust * bank_hit;
       out.hit_time_frac = FXAI_Clamp(hit_frac, 0.0, 1.0);
 
       double path_risk = 0.34 * FXAI_Clamp(out.mae_mean_points / MathMax(out.mfe_mean_points, move_scale), 0.0, 1.0) +
                          0.22 * out.hit_time_frac +
                          0.18 * cost_ratio +
                          0.14 * (1.0 - structure) +
-                         0.12 * noise;
-      if(m_quality_head_ready)
-         path_risk = 0.50 * path_risk + 0.50 * m_quality_path_risk_ema;
+                         0.12 * noise +
+                         0.08 * (1.0 - exec_q);
+      if(m_quality_head_ready || bank_trust > 0.0)
+         path_risk = (1.0 - 0.60 * bank_trust) * path_risk + 0.60 * bank_trust * bank_path;
       out.path_risk = FXAI_Clamp(path_risk, 0.0, 1.0);
 
       double fill_risk = 0.46 * cost_ratio +
                          0.26 * (1.0 - exec_q) +
                          0.16 * skip +
                          0.12 * noise;
-      if(m_quality_head_ready)
-         fill_risk = 0.50 * fill_risk + 0.50 * m_quality_fill_risk_ema;
+      if(m_quality_head_ready || bank_trust > 0.0)
+         fill_risk = (1.0 - 0.60 * bank_trust) * fill_risk + 0.60 * bank_trust * bank_fill;
       out.fill_risk = FXAI_Clamp(fill_risk, 0.0, 1.0);
       out.has_path_quality = true;
    }

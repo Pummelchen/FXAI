@@ -1531,6 +1531,18 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
                                     avg_mae_ratio,
                                     feat);
             FXAI_StackUpdate(regime_id, samples[i].label_class, feat, samples[i].sample_weight);
+            double realized_edge = 0.0;
+            if(samples[i].label_class == (int)FXAI_LABEL_BUY)
+               realized_edge = samples[i].move_points - samples[i].min_move_points;
+            else if(samples[i].label_class == (int)FXAI_LABEL_SELL)
+               realized_edge = -samples[i].move_points - samples[i].min_move_points;
+            else
+               realized_edge = -MathMax(MathAbs(samples[i].move_points) - samples[i].min_move_points, 0.0);
+            bool trade_target = (samples[i].label_class != (int)FXAI_LABEL_SKIP &&
+                                 realized_edge > 0.0 &&
+                                 samples[i].quality_score > 0.70 &&
+                                 samples[i].time_to_hit_frac < 0.95);
+            FXAI_TradeGateUpdate(regime_id, trade_target, feat, samples[i].sample_weight);
          }
       }
 
@@ -2101,6 +2113,8 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
    }
 
    g_ai_warmup_done = true;
+   FXAI_MarkMetaArtifactsDirty();
+   FXAI_SaveMetaArtifacts(symbol);
    Print("FXAI warmup completed: symbol=", symbol,
          ", samples=", warmup_samples,
          ", loops=", warmup_loops,

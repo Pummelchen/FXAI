@@ -1021,6 +1021,25 @@ int SpecialDirectionAI(const string symbol)
          double stack_probs_dyn[];
          ArrayResize(stack_probs_dyn, 3);
          FXAI_StackPredict(regime_id, stack_feat, stack_probs_dyn);
+         double trade_gate_prob = FXAI_TradeGatePredict(regime_id, stack_feat);
+         double trade_gate_floor = FXAI_Clamp(0.34 +
+                                              0.18 * avg_conf +
+                                              0.16 * avg_rel +
+                                              0.10 * dominant_family_ratio +
+                                              0.08 * FXAI_Clamp(context_quality, 0.0, 1.5) +
+                                              0.10 * (1.0 - avg_path_risk) +
+                                              0.08 * (1.0 - avg_fill_risk) -
+                                              0.10 * vote_probs[(int)FXAI_LABEL_SKIP],
+                                              0.05,
+                                              0.95);
+         double trade_gate = FXAI_Clamp(0.65 * trade_gate_prob + 0.35 * trade_gate_floor, 0.0, 1.0);
+         double trade_gate_thr = FXAI_Clamp(0.52 +
+                                            0.06 * vote_probs[(int)FXAI_LABEL_SKIP] +
+                                            0.05 * FXAI_Clamp(move_dispersion / MathMax(min_move_pred, 0.10), 0.0, 1.0) -
+                                            0.05 * avg_conf -
+                                            0.04 * avg_rel,
+                                            0.42,
+                                            0.68);
          double stack_blend = FXAI_Clamp(0.40 + 0.20 * avg_conf + 0.18 * avg_rel + 0.12 * dominant_family_ratio + 0.08 * FXAI_Clamp(context_quality, 0.0, 1.5) - 0.06 * FXAI_Clamp(move_dispersion / MathMax(min_move_pred, 0.10), 0.0, 1.0),
                                          0.45,
                                          0.85);
@@ -1035,7 +1054,9 @@ int SpecialDirectionAI(const string symbol)
          double stack_buy_ev = ((2.0 * ensemble_probs[(int)FXAI_LABEL_BUY]) - 1.0) * stack_move - min_move_pred;
          double stack_sell_ev = ((2.0 * ensemble_probs[(int)FXAI_LABEL_SELL]) - 1.0) * stack_move - min_move_pred;
 
-         if(ensemble_probs[(int)FXAI_LABEL_SKIP] >= 0.58 || skipPct >= 75.0)
+         if(trade_gate < trade_gate_thr)
+            decision = -1;
+         else if(ensemble_probs[(int)FXAI_LABEL_SKIP] >= 0.58 || skipPct >= 75.0)
             decision = -1;
          else if(ensemble_probs[(int)FXAI_LABEL_BUY] >= ensemble_probs[(int)FXAI_LABEL_SELL] &&
                  buyPct >= agreePct &&

@@ -471,6 +471,7 @@ void FXAI_UpdateHorizonPolicy(const int regime_id,
    g_hpolicy_obs[r]++;
    if(g_hpolicy_obs[r] > 200000) g_hpolicy_obs[r] = 200000;
    g_hpolicy_ready[r] = true;
+   FXAI_MarkMetaArtifactsDirty();
 }
 
 void FXAI_UpdateHorizonPolicyFromPending(const int current_signal_seq,

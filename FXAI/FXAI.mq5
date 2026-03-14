@@ -348,6 +348,8 @@ datetime g_last_debug_bar = 0;
 #define FXAI_MAX_HORIZONS 8
 #define FXAI_STACK_FEATS 56
 #define FXAI_STACK_HIDDEN 28
+#define FXAI_TRADE_GATE_FEATS FXAI_STACK_FEATS
+#define FXAI_TRADE_GATE_HIDDEN 16
 #define FXAI_HPOL_FEATS 48
 #define FXAI_HPOL_HIDDEN 16
 #define FXAI_NORM_CAND_MAX 8
@@ -432,6 +434,12 @@ double   g_stack_w2[FXAI_REGIME_COUNT][3][FXAI_STACK_HIDDEN];
 double   g_stack_b2[FXAI_REGIME_COUNT][3];
 bool     g_stack_ready[FXAI_REGIME_COUNT];
 int      g_stack_obs[FXAI_REGIME_COUNT];
+double   g_trade_gate_w1[FXAI_REGIME_COUNT][FXAI_TRADE_GATE_HIDDEN][FXAI_TRADE_GATE_FEATS];
+double   g_trade_gate_b1[FXAI_REGIME_COUNT][FXAI_TRADE_GATE_HIDDEN];
+double   g_trade_gate_w2[FXAI_REGIME_COUNT][FXAI_TRADE_GATE_HIDDEN];
+double   g_trade_gate_b2[FXAI_REGIME_COUNT];
+bool     g_trade_gate_ready[FXAI_REGIME_COUNT];
+int      g_trade_gate_obs[FXAI_REGIME_COUNT];
 double   g_hpolicy_w1[FXAI_REGIME_COUNT][FXAI_HPOL_HIDDEN][FXAI_HPOL_FEATS];
 double   g_hpolicy_b1[FXAI_REGIME_COUNT][FXAI_HPOL_HIDDEN];
 double   g_hpolicy_w2[FXAI_REGIME_COUNT][FXAI_HPOL_HIDDEN];
@@ -455,6 +463,8 @@ bool     g_regime_ema_ready = false;
 int      g_norm_feature_windows[FXAI_AI_FEATURES];
 int      g_norm_default_window = FXAI_NORM_ROLL_WINDOW_DEFAULT;
 bool     g_norm_windows_ready = false;
+bool     g_meta_artifacts_dirty = false;
+datetime g_meta_last_save_time = 0;
 
 struct FXAIContextSeries
 {

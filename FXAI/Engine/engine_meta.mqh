@@ -2,6 +2,7 @@
 #define __FXAI_ENGINE_META_MQH__
 
 #include "meta_horizon.mqh"
+#include "meta_persistence.mqh"
 #include "meta_stacker.mqh"
 #include "meta_support.mqh"
 #include "meta_calibration.mqh"

@@ -639,11 +639,21 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
    double seq_mean[FXAI_AI_WEIGHTS];
    double seq_delta[FXAI_AI_WEIGHTS];
    double seq_std[FXAI_AI_WEIGHTS];
+   double seq_short_mean[FXAI_AI_WEIGHTS];
+   double seq_mid_mean[FXAI_AI_WEIGHTS];
+   double seq_long_mean[FXAI_AI_WEIGHTS];
+   double seq_short_delta[FXAI_AI_WEIGHTS];
+   double seq_mid_delta[FXAI_AI_WEIGHTS];
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
    {
       seq_mean[k] = raw_x[k];
       seq_delta[k] = 0.0;
       seq_std[k] = 0.0;
+      seq_short_mean[k] = raw_x[k];
+      seq_mid_mean[k] = raw_x[k];
+      seq_long_mean[k] = raw_x[k];
+      seq_short_delta[k] = 0.0;
+      seq_mid_delta[k] = 0.0;
    }
 
    if(seq_n > 1)
@@ -674,11 +684,52 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          seq_std[k] = MathSqrt(seq_std[k] / (double)MathMax(seq_n - 1, 1));
 
+      int short_n = MathMax(seq_n / 4, 1);
+      int mid_n = MathMax(seq_n / 2, 1);
+      int long_n = seq_n;
+      int short_used = 0;
+      int mid_used = 0;
+      int long_used = 0;
+      for(int b=0; b<seq_n && b<window_size; b++)
+      {
+         bool use_short = (b < short_n);
+         bool use_mid = (b < mid_n);
+         bool use_long = (b < long_n);
+         if(use_short) short_used++;
+         if(use_mid) mid_used++;
+         if(use_long) long_used++;
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         {
+            if(use_short) seq_short_mean[k] += x_window[b][k];
+            if(use_mid) seq_mid_mean[k] += x_window[b][k];
+            if(use_long) seq_long_mean[k] += x_window[b][k];
+         }
+      }
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      {
+         seq_short_mean[k] /= (double)MathMax(short_used + 1, 1);
+         seq_mid_mean[k] /= (double)MathMax(mid_used + 1, 1);
+         seq_long_mean[k] /= (double)MathMax(long_used + 1, 1);
+      }
+
       int last_idx = seq_n - 2;
       if(last_idx >= 0 && last_idx < window_size)
       {
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
             seq_delta[k] = raw_x[k] - x_window[last_idx][k];
+      }
+
+      int short_last = short_n - 1;
+      if(short_last >= 0 && short_last < window_size)
+      {
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            seq_short_delta[k] = raw_x[k] - x_window[short_last][k];
+      }
+      int mid_last = mid_n - 1;
+      if(mid_last >= 0 && mid_last < window_size)
+      {
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            seq_mid_delta[k] = raw_x[k] - x_window[mid_last][k];
       }
    }
 
@@ -741,11 +792,17 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
          double ret_long = FXAI_GetInputFeature(x, 2);
          double mtf_fast = 0.5 * (FXAI_GetInputFeature(x, 7) + FXAI_GetInputFeature(x, 13));
          double mtf_slow = 0.5 * (FXAI_GetInputFeature(x, 9) + FXAI_GetInputFeature(x, 14));
-         double seq_ret_short = FXAI_GetInputFeature(seq_mean, 0);
-         double seq_ret_mid = FXAI_GetInputFeature(seq_mean, 1);
-         double seq_ret_long = FXAI_GetInputFeature(seq_mean, 2);
-         double seq_ctx = FXAI_GetInputFeature(seq_mean, 10);
-         double seq_vol = FXAI_GetInputFeature(seq_mean, 41);
+         double seq_ret_short = FXAI_GetInputFeature(seq_short_mean, 0);
+         double seq_ret_mid = FXAI_GetInputFeature(seq_mid_mean, 1);
+         double seq_ret_long = FXAI_GetInputFeature(seq_long_mean, 2);
+         double seq_ctx = 0.50 * FXAI_GetInputFeature(seq_short_mean, 10) +
+                          0.30 * FXAI_GetInputFeature(seq_mid_mean, 10) +
+                          0.20 * FXAI_GetInputFeature(seq_long_mean, 10);
+         double seq_vol = 0.50 * FXAI_GetInputFeature(seq_short_mean, 41) +
+                          0.30 * FXAI_GetInputFeature(seq_mid_mean, 41) +
+                          0.20 * FXAI_GetInputFeature(seq_long_mean, 41);
+         double seq_ret_accel = FXAI_GetInputFeature(seq_short_mean, 0) - FXAI_GetInputFeature(seq_mid_mean, 0);
+         double seq_ctx_delta = FXAI_GetInputFeature(seq_short_mean, 10) - FXAI_GetInputFeature(seq_long_mean, 10);
 
          FXAI_SetInputFeature(x, 13, ret_short - ret_mid);
          FXAI_SetInputFeature(x, 14, ret_mid - ret_long);
@@ -762,22 +819,22 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
          FXAI_SetInputFeature(x, 32, mtf_fast - mtf_slow);
          FXAI_SetInputFeature(x, 33, seq_ret_short - seq_ret_mid);
          FXAI_SetInputFeature(x, 34, seq_ret_mid - seq_ret_long);
-         FXAI_SetInputFeature(x, 35, FXAI_GetInputFeature(seq_delta, 0));
-         FXAI_SetInputFeature(x, 36, FXAI_GetInputFeature(seq_delta, 1));
-         FXAI_SetInputFeature(x, 37, FXAI_GetInputFeature(seq_delta, 2));
+         FXAI_SetInputFeature(x, 35, FXAI_GetInputFeature(seq_short_delta, 0));
+         FXAI_SetInputFeature(x, 36, FXAI_GetInputFeature(seq_mid_delta, 1));
+         FXAI_SetInputFeature(x, 37, seq_ret_accel);
          FXAI_SetInputFeature(x, 38, seq_ctx);
          FXAI_SetInputFeature(x, 39, seq_vol);
          // Preserve explicit lag/context blocks for sequence-capable plugins.
-         FXAI_SetInputFeature(x, 50, FXAI_GetInputFeature(x, 50));
-         FXAI_SetInputFeature(x, 51, FXAI_GetInputFeature(x, 51));
-         FXAI_SetInputFeature(x, 52, FXAI_GetInputFeature(x, 52));
-         FXAI_SetInputFeature(x, 53, FXAI_GetInputFeature(x, 53));
-         FXAI_SetInputFeature(x, 54, FXAI_GetInputFeature(x, 54));
-         FXAI_SetInputFeature(x, 55, FXAI_GetInputFeature(x, 55));
-         FXAI_SetInputFeature(x, 56, FXAI_GetInputFeature(x, 56));
-         FXAI_SetInputFeature(x, 57, FXAI_GetInputFeature(x, 57));
-         FXAI_SetInputFeature(x, 58, FXAI_GetInputFeature(seq_delta, 50));
-         FXAI_SetInputFeature(x, 59, FXAI_GetInputFeature(seq_delta, 51));
+         FXAI_SetInputFeature(x, 50, FXAI_GetInputFeature(seq_short_mean, 50));
+         FXAI_SetInputFeature(x, 51, FXAI_GetInputFeature(seq_short_mean, 51));
+         FXAI_SetInputFeature(x, 52, FXAI_GetInputFeature(seq_short_mean, 52));
+         FXAI_SetInputFeature(x, 53, FXAI_GetInputFeature(seq_short_mean, 53));
+         FXAI_SetInputFeature(x, 54, FXAI_GetInputFeature(seq_mid_mean, 50));
+         FXAI_SetInputFeature(x, 55, FXAI_GetInputFeature(seq_mid_mean, 51));
+         FXAI_SetInputFeature(x, 56, FXAI_GetInputFeature(seq_mid_mean, 52));
+         FXAI_SetInputFeature(x, 57, FXAI_GetInputFeature(seq_mid_mean, 53));
+         FXAI_SetInputFeature(x, 58, FXAI_GetInputFeature(seq_short_delta, 50));
+         FXAI_SetInputFeature(x, 59, seq_ctx_delta);
          FXAI_SetInputFeature(x, 60, FXAI_GetInputFeature(seq_std, 50));
          FXAI_SetInputFeature(x, 61, FXAI_GetInputFeature(seq_std, 51));
          break;
@@ -820,16 +877,25 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
                            FXAI_GetInputFeature(x, 60)) / 3.0;
          double ctx_corr = (FXAI_GetInputFeature(x, 53) + FXAI_GetInputFeature(x, 57) +
                             FXAI_GetInputFeature(x, 61)) / 3.0;
+         double ctx_ret_fast = (FXAI_GetInputFeature(seq_short_mean, 50) +
+                                FXAI_GetInputFeature(seq_short_mean, 54) +
+                                FXAI_GetInputFeature(seq_short_mean, 58)) / 3.0;
+         double ctx_ret_slow = (FXAI_GetInputFeature(seq_long_mean, 50) +
+                                FXAI_GetInputFeature(seq_long_mean, 54) +
+                                FXAI_GetInputFeature(seq_long_mean, 58)) / 3.0;
+         double ctx_corr_fast = (FXAI_GetInputFeature(seq_short_mean, 53) +
+                                 FXAI_GetInputFeature(seq_short_mean, 57) +
+                                 FXAI_GetInputFeature(seq_short_mean, 61)) / 3.0;
          double ctx_strength = 0.30 * MathAbs(ctx_ret) +
                                0.30 * MathAbs(ctx_rel) +
                                0.25 * MathAbs(ctx_corr) +
                                0.15 * MathAbs(ctx_lag);
 
-         FXAI_SetInputFeature(x, 10, 0.50 * (FXAI_GetInputFeature(x, 10) + ctx_ret));
-         FXAI_SetInputFeature(x, 11, 0.50 * (FXAI_GetInputFeature(x, 11) + MathAbs(ctx_rel)));
-         FXAI_SetInputFeature(x, 12, 0.50 * (FXAI_GetInputFeature(x, 12) + ctx_corr));
-         FXAI_SetInputFeature(x, 13, ctx_lag);
-         FXAI_SetInputFeature(x, 14, ctx_strength);
+         FXAI_SetInputFeature(x, 10, 0.35 * FXAI_GetInputFeature(x, 10) + 0.35 * ctx_ret + 0.30 * ctx_ret_fast);
+         FXAI_SetInputFeature(x, 11, 0.40 * FXAI_GetInputFeature(x, 11) + 0.35 * MathAbs(ctx_rel) + 0.25 * MathAbs(ctx_ret_fast - ctx_ret_slow));
+         FXAI_SetInputFeature(x, 12, 0.35 * FXAI_GetInputFeature(x, 12) + 0.35 * ctx_corr + 0.30 * ctx_corr_fast);
+         FXAI_SetInputFeature(x, 13, 0.50 * ctx_lag + 0.50 * (ctx_ret_fast - ctx_ret_slow));
+         FXAI_SetInputFeature(x, 14, ctx_strength + 0.20 * MathAbs(ctx_ret_fast - ctx_ret_slow));
          // Keep explicit per-symbol context blocks instead of collapsing them all.
          FXAI_SetInputFeature(x, 15, FXAI_GetInputFeature(x, 50));
          FXAI_SetInputFeature(x, 16, FXAI_GetInputFeature(x, 51));
@@ -848,7 +914,7 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
          FXAI_SetInputFeature(x, 56, FXAI_GetInputFeature(seq_mean, 52));
          FXAI_SetInputFeature(x, 57, FXAI_GetInputFeature(seq_mean, 53));
          FXAI_SetInputFeature(x, 58, FXAI_GetInputFeature(seq_delta, 50));
-         FXAI_SetInputFeature(x, 59, FXAI_GetInputFeature(seq_delta, 51));
+         FXAI_SetInputFeature(x, 59, FXAI_GetInputFeature(seq_short_delta, 51));
          FXAI_SetInputFeature(x, 60, FXAI_GetInputFeature(seq_std, 50));
          FXAI_SetInputFeature(x, 61, FXAI_GetInputFeature(seq_std, 51));
          break;

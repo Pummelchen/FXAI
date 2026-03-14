@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -38,6 +39,39 @@ ISSUE = {
     32: "sequence contract weak",
     64: "dead move output",
     128: "side collapse",
+}
+
+EXECUTION_PROFILES = {
+    "default": {
+        "commission_per_lot_side": 0.0,
+        "cost_buffer_points": 2.0,
+        "slippage_points": 0.0,
+        "fill_penalty_points": 0.0,
+    },
+    "tight-fx": {
+        "commission_per_lot_side": 0.0,
+        "cost_buffer_points": 1.5,
+        "slippage_points": 0.1,
+        "fill_penalty_points": 0.1,
+    },
+    "prime-ecn": {
+        "commission_per_lot_side": 3.5,
+        "cost_buffer_points": 1.5,
+        "slippage_points": 0.2,
+        "fill_penalty_points": 0.15,
+    },
+    "retail-fx": {
+        "commission_per_lot_side": 0.0,
+        "cost_buffer_points": 2.5,
+        "slippage_points": 0.4,
+        "fill_penalty_points": 0.25,
+    },
+    "stress": {
+        "commission_per_lot_side": 5.0,
+        "cost_buffer_points": 3.5,
+        "slippage_points": 1.0,
+        "fill_penalty_points": 0.5,
+    },
 }
 
 
@@ -80,6 +114,100 @@ def deep_merge(base, overlay):
         else:
             out[k] = v
     return out
+
+
+def parse_brace_list(raw: str) -> list[str]:
+    text = (raw or "").strip()
+    text = text.replace("{", "").replace("}", "").replace(";", ",").replace("|", ",")
+    items = []
+    for part in text.split(","):
+        token = part.strip()
+        if token and token not in items:
+            items.append(token)
+    return items
+
+
+def mean_std_ci(values: list[float]) -> tuple[float, float, float]:
+    if not values:
+        return 0.0, 0.0, 0.0
+    mean = sum(values) / len(values)
+    if len(values) <= 1:
+        return mean, 0.0, 0.0
+    var = sum((v - mean) ** 2 for v in values) / (len(values) - 1)
+    std = math.sqrt(max(var, 0.0))
+    ci = 1.96 * std / math.sqrt(len(values))
+    return mean, std, ci
+
+
+def load_current_summary(path: Path, oracles: dict) -> dict:
+    if path.suffix.lower() == ".tsv":
+        return build_summary(load_rows(path), oracles)
+    return load_json(path)
+
+
+def resolve_execution_profile(name: str | None) -> dict:
+    profile = (name or "default").strip().lower()
+    return dict(EXECUTION_PROFILES.get(profile, EXECUTION_PROFILES["default"]))
+
+
+def clone_args(args):
+    return argparse.Namespace(**vars(args))
+
+
+def build_effective_audit_args(args):
+    out = clone_args(args)
+    out.execution_profile = (getattr(args, "execution_profile", None) or "default").strip().lower()
+    profile = resolve_execution_profile(out.execution_profile)
+    if getattr(args, "commission_per_lot_side", None) is None:
+        out.commission_per_lot_side = float(profile["commission_per_lot_side"])
+    if getattr(args, "cost_buffer_points", None) is None:
+        out.cost_buffer_points = float(profile["cost_buffer_points"])
+    if getattr(args, "slippage_points", None) is None:
+        out.slippage_points = float(profile["slippage_points"])
+    if getattr(args, "fill_penalty_points", None) is None:
+        out.fill_penalty_points = float(profile["fill_penalty_points"])
+    if not getattr(args, "symbol_list", None):
+        out.symbol_list = "{" + str(getattr(args, "symbol", "EURUSD")) + "}"
+    return out
+
+
+def resolve_symbol_list(args) -> list[str]:
+    symbols = parse_brace_list(getattr(args, "symbol_list", ""))
+    if not symbols:
+        symbols = [str(getattr(args, "symbol", "EURUSD"))]
+    return symbols
+
+
+def render_summary_report(summary: dict, execution_profile: str = "default", manifest_path: Path | None = None) -> str:
+    if summary.get("_aggregate", {}).get("type") == "multi_symbol":
+        return render_multisymbol_report(summary, execution_profile, manifest_path)
+
+    out = ["# FXAI Audit Summary", ""]
+    out.append(f"execution_profile: {execution_profile}")
+    if manifest_path is not None:
+        out.append(f"manifest: {manifest_path}")
+    out.append("")
+    ranked = sorted(summary.get("plugins", {}).items(), key=lambda item: float(item[1].get("score", 0.0)), reverse=True)
+    for name, info in ranked:
+        out.append(f"## {name} | {float(info.get('score', 0.0)):.1f}/100 | Grade {info.get('grade', 'F')}")
+        issues = list(info.get("issues", [])) + list(info.get("findings", []))
+        if issues:
+            out.append("Issues: " + "; ".join(issues[:8]))
+        else:
+            out.append("Issues: none flagged.")
+        scenarios = sorted(info.get("scenarios", {}).items())
+        if scenarios:
+            top = []
+            for scenario, metrics in scenarios[:6]:
+                top.append(f"{scenario}={float(metrics.get('score', 0.0)):.1f}")
+            out.append("Scenarios: " + ", ".join(top))
+        out.append("")
+    return "\n".join(out)
+
+
+def write_json(path: Path, payload) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def load_oracles():
@@ -424,12 +552,111 @@ def build_summary(rows, oracles: dict):
     return summary
 
 
+def build_multisymbol_summary(symbol_runs: list[dict]) -> dict:
+    summary = {
+        "_aggregate": {
+            "type": "multi_symbol",
+            "symbols": [run["symbol"] for run in symbol_runs],
+            "run_count": len(symbol_runs),
+        },
+        "plugins": {},
+    }
+    plugin_names = sorted({
+        name
+        for run in symbol_runs
+        for name in run.get("summary", {}).get("plugins", {}).keys()
+    })
+
+    for name in plugin_names:
+        per_symbol = []
+        issues = set()
+        findings = set()
+        family = 11
+        scenario_values: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+        for run in symbol_runs:
+            info = run.get("summary", {}).get("plugins", {}).get(name)
+            if not info:
+                continue
+            family = int(info.get("family", family))
+            issues.update(info.get("issues", []))
+            findings.update(info.get("findings", []))
+            per_symbol.append((run["symbol"], float(info.get("score", 0.0))))
+            for scenario, metrics in info.get("scenarios", {}).items():
+                for key, value in metrics.items():
+                    if isinstance(value, (int, float)):
+                        scenario_values[scenario][key].append(float(value))
+
+        scores = [score for _, score in per_symbol]
+        mean_score, std_score, ci_score = mean_std_ci(scores)
+        stability = 1.0
+        if mean_score > 1e-9:
+            stability = max(0.0, 1.0 - min(std_score / max(mean_score, 10.0), 1.0))
+
+        scenarios = {}
+        for scenario, metric_map in scenario_values.items():
+            metrics_out = {}
+            for key, vals in metric_map.items():
+                mean_v, std_v, ci_v = mean_std_ci(vals)
+                metrics_out[key] = mean_v
+                metrics_out[f"{key}_std"] = std_v
+                metrics_out[f"{key}_ci95"] = ci_v
+            scenarios[scenario] = metrics_out
+
+        summary["plugins"][name] = {
+            "family": family,
+            "score": mean_score,
+            "score_std": std_score,
+            "score_ci95": ci_score,
+            "stability": stability,
+            "n_symbols": len(per_symbol),
+            "grade": grade(mean_score),
+            "issues": sorted(issues),
+            "findings": sorted(findings),
+            "symbol_scores": {symbol: score for symbol, score in per_symbol},
+            "scenarios": scenarios,
+        }
+    return summary
+
+
 def summary_has_market_replay(summary: dict) -> bool:
     required = {"market_recent", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward"}
     seen = set()
     for plugin in summary.get("plugins", {}).values():
         seen.update(plugin.get("scenarios", {}).keys())
     return required.issubset(seen)
+
+
+def render_multisymbol_report(summary: dict, execution_profile: str, manifest_path: Path | None = None) -> str:
+    out = ["# FXAI Statistical Audit Certification", ""]
+    agg = summary.get("_aggregate", {})
+    symbols = agg.get("symbols", [])
+    out.append(f"symbols: {', '.join(symbols)}")
+    out.append(f"execution_profile: {execution_profile}")
+    if manifest_path is not None:
+        out.append(f"manifest: {manifest_path}")
+    out.append("")
+    out.append("This report aggregates per-symbol audit runs into a portfolio-style certification view with cross-symbol stability and confidence intervals.")
+    out.append("")
+
+    ranked = sorted(summary.get("plugins", {}).items(), key=lambda item: float(item[1].get("score", 0.0)), reverse=True)
+    for name, info in ranked:
+        out.append(
+            f"## {name} | {float(info.get('score', 0.0)):.1f}/100 | "
+            f"CI95 ±{float(info.get('score_ci95', 0.0)):.2f} | "
+            f"Stability {float(info.get('stability', 0.0)):.2f} | "
+            f"Grade {info.get('grade', 'F')}"
+        )
+        issues = list(info.get("issues", [])) + list(info.get("findings", []))
+        if issues:
+            out.append("Issues: " + "; ".join(issues[:8]))
+        else:
+            out.append("Issues: none flagged across the aggregated pack.")
+        symbol_scores = info.get("symbol_scores", {})
+        if symbol_scores:
+            score_line = ", ".join(f"{sym}={score:.1f}" for sym, score in sorted(symbol_scores.items()))
+            out.append("Per-symbol scores: " + score_line)
+        out.append("")
+    return "\n".join(out)
 
 
 def render_report(rows, oracles: dict):
@@ -673,6 +900,9 @@ def campaign_runs(campaign: dict, limit_plugins: int | None = None, limit_experi
 
 
 def build_run_audit_namespace(base_args, run: dict, output_path: Path):
+    symbol_list = run.get("symbol_list", getattr(base_args, "symbol_list", ""))
+    symbols = parse_brace_list(symbol_list)
+    symbol = run.get("symbol", (symbols[0] if symbols else getattr(base_args, "symbol", "EURUSD")))
     return argparse.Namespace(
         all_plugins=False,
         plugin_id=28,
@@ -685,14 +915,16 @@ def build_run_audit_namespace(base_args, run: dict, output_path: Path):
         sequence_bars=run.get("sequence_bars", base_args.sequence_bars),
         schema_id=run.get("schema_id", base_args.schema_id),
         feature_mask=run.get("feature_mask", base_args.feature_mask),
-        commission_per_lot_side=base_args.commission_per_lot_side,
-        cost_buffer_points=base_args.cost_buffer_points,
+        commission_per_lot_side=run.get("commission_per_lot_side", base_args.commission_per_lot_side),
+        cost_buffer_points=run.get("cost_buffer_points", base_args.cost_buffer_points),
         slippage_points=run.get("slippage_points", base_args.slippage_points),
         fill_penalty_points=run.get("fill_penalty_points", base_args.fill_penalty_points),
         wf_train_bars=run.get("wf_train_bars", base_args.wf_train_bars),
         wf_test_bars=run.get("wf_test_bars", base_args.wf_test_bars),
         seed=base_args.seed,
-        symbol=base_args.symbol,
+        symbol=symbol,
+        symbol_list=("{" + ", ".join(symbols) + "}" if symbols else "{" + symbol + "}"),
+        execution_profile=getattr(base_args, "execution_profile", "default"),
         login=base_args.login,
         server=base_args.server,
         password=base_args.password,
@@ -704,6 +936,7 @@ def build_run_audit_namespace(base_args, run: dict, output_path: Path):
 
 
 def execute_optimization_campaign(campaign: dict, args) -> int:
+    args = build_effective_audit_args(args)
     ts = time.strftime("%Y%m%d_%H%M%S")
     out_dir = Path(args.output_dir) if args.output_dir else (EXPERIMENTS_DIR / ts)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -724,9 +957,11 @@ def execute_optimization_campaign(campaign: dict, args) -> int:
             "status": ("ok" if rc == 0 else "failed"),
             "report": str(report_path),
         }
-        if rc == 0 and DEFAULT_REPORT.exists():
+        summary_path = report_path.with_suffix(".summary.json")
+        result["summary_path"] = str(summary_path)
+        if rc == 0 and summary_path.exists():
             oracles = load_oracles()
-            summary = build_summary(load_rows(DEFAULT_REPORT), oracles)
+            summary = load_current_summary(summary_path, oracles)
             result["summary"] = summary.get("plugins", {}).get(run["plugin"], {})
         results.append(result)
         (out_dir / "results.json").write_text(json.dumps(results, indent=2, sort_keys=True), encoding="utf-8")
@@ -797,20 +1032,28 @@ def compare_summary_data(current: dict, baseline: dict) -> dict:
         cur_score = float(cur.get("score", 0.0))
         base_score = float(base.get("score", 0.0))
         delta = cur_score - base_score
+        cur_ci = float(cur.get("score_ci95", 0.0))
+        base_ci = float(base.get("score_ci95", 0.0))
         cur_issues = set(cur.get("issues", [])) | set(cur.get("findings", []))
         base_issues = set(base.get("issues", [])) | set(base.get("findings", []))
         new_issues = sorted(cur_issues - base_issues)
         fixed_issues = sorted(base_issues - cur_issues)
 
         plugin_notes = []
-        if delta <= -2.0:
+        if delta <= -(2.0 + cur_ci + base_ci):
+            plugin_notes.append(f"statistically significant score down {delta:.1f}")
+        elif delta <= -2.0:
             plugin_notes.append(f"score down {delta:.1f}")
+        elif delta >= (2.0 + cur_ci + base_ci):
+            plugin_notes.append(f"statistically significant score up +{delta:.1f}")
         elif delta >= 2.0:
             plugin_notes.append(f"score up +{delta:.1f}")
         if new_issues:
             plugin_notes.append("new issues: " + "; ".join(new_issues[:4]))
         if fixed_issues:
             plugin_notes.append("fixed issues: " + "; ".join(fixed_issues[:4]))
+        if "stability" in cur and float(cur.get("stability", 1.0)) < 0.55:
+            plugin_notes.append(f"cross-symbol stability weak {float(cur.get('stability', 0.0)):.2f}")
 
         cur_rw = cur.get("scenarios", {}).get("random_walk", {})
         base_rw = base.get("scenarios", {}).get("random_walk", {})
@@ -839,7 +1082,7 @@ def compare_summary_data(current: dict, baseline: dict) -> dict:
             elif trend_delta >= 0.08:
                 plugin_notes.append(f"drift_down align up +{trend_delta:.3f}")
 
-        if any(x.startswith(("score down", "new issues", "random_walk skip down", "drift_up align down", "drift_down align down")) for x in plugin_notes):
+        if any(x.startswith(("score down", "statistically significant score down", "new issues", "random_walk skip down", "drift_up align down", "drift_down align down", "cross-symbol stability weak")) for x in plugin_notes):
             regressions.append(f"{name}: " + ", ".join(plugin_notes))
         elif plugin_notes:
             improvements.append(f"{name}: " + ", ".join(plugin_notes))
@@ -1048,6 +1291,46 @@ def attempt_audit_launch(login: str, server: str, password: str, preset_name: st
         TERMINAL_INI.write_bytes(terminal_backup)
 
 
+def run_single_symbol_audit(args, symbol: str, raw_report_path: Path | None = None) -> dict:
+    run_args = clone_args(args)
+    run_args.symbol = symbol
+    run_args.symbol_list = "{" + symbol + "}"
+
+    preset_name = "fxai_audit_runner.set"
+    preset_path = TESTER_PRESET_DIR / preset_name
+    write_audit_set(preset_path, run_args)
+
+    login, server, password = resolve_credentials(run_args)
+
+    if DEFAULT_REPORT.exists():
+        DEFAULT_REPORT.unlink()
+    success, mode, failure = attempt_audit_launch(login, server, password, preset_name, run_args)
+    if not success:
+        if not failure and not login:
+            failure = "MT5 tester did not produce a report and no login was available from common.ini"
+        elif not failure and not password:
+            failure = "MT5 tester did not produce a report and no password was supplied; set FXAI_MT5_PASSWORD or use --password"
+        elif not failure:
+            failure = "MT5 tester exited without producing the audit report"
+        raise AuditRunError(f"{mode} launch failed for {symbol}: {failure}")
+
+    if raw_report_path is not None:
+        raw_report_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(DEFAULT_REPORT, raw_report_path)
+
+    oracles = load_oracles()
+    rows = load_rows(DEFAULT_REPORT)
+    summary = build_summary(rows, oracles)
+    text = render_report(rows, oracles)
+    return {
+        "symbol": symbol,
+        "rows": rows,
+        "summary": summary,
+        "text": text,
+        "execution_profile": getattr(run_args, "execution_profile", "default"),
+    }
+
+
 def cmd_compile(_args):
     return compile_target(Path("Tests/FXAI_AuditRunner.mq5"), "audit_runner")
 
@@ -1057,44 +1340,82 @@ def cmd_compile_main(_args):
 
 
 def cmd_run_audit(args):
+    args = build_effective_audit_args(args)
     if cmd_compile(args) != 0:
         return 1
 
     BASELINES_DIR.mkdir(parents=True, exist_ok=True)
+    EXPERIMENTS_DIR.mkdir(parents=True, exist_ok=True)
     TESTER_PRESET_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = Path(args.output) if args.output else DEFAULT_TEXT_REPORT
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    preset_name = "fxai_audit_runner.set"
-    preset_path = TESTER_PRESET_DIR / preset_name
-    write_audit_set(preset_path, args)
+    symbols = resolve_symbol_list(args)
+    artifact_dir = output_path.parent / f"{output_path.stem}_artifacts"
+    if len(symbols) > 1:
+        artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    login, server, password = resolve_credentials(args)
-
-    if DEFAULT_REPORT.exists():
-        DEFAULT_REPORT.unlink()
-    success, mode, failure = attempt_audit_launch(login, server, password, preset_name, args)
-    if not success:
-        if not failure and not login:
-            failure = "MT5 tester did not produce a report and no login was available from common.ini"
-        elif not failure and not password:
-            failure = "MT5 tester did not produce a report and no password was supplied; set FXAI_MT5_PASSWORD or use --password"
-        elif not failure:
-            failure = "MT5 tester exited without producing the audit report"
-        print(f"{mode} launch failed: {failure}", file=sys.stderr)
+    try:
+        symbol_runs = []
+        for symbol in symbols:
+            raw_report_path = artifact_dir / f"{symbol}.tsv" if len(symbols) > 1 else None
+            run_result = run_single_symbol_audit(args, symbol, raw_report_path)
+            symbol_runs.append(run_result)
+            if len(symbols) == 1:
+                output_path.write_text(run_result["text"], encoding="utf-8")
+                print(run_result["text"])
+    except AuditRunError as exc:
+        print(str(exc), file=sys.stderr)
         log_path = latest_terminal_log()
         if log_path:
             print(f"terminal log: {log_path}", file=sys.stderr)
         return 1
 
-    oracles = load_oracles()
-    rows = load_rows(DEFAULT_REPORT)
-    text = render_report(rows, oracles)
-    output_path = Path(args.output) if args.output else DEFAULT_TEXT_REPORT
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(text, encoding="utf-8")
-    print(text)
+    current_summary = (build_multisymbol_summary(symbol_runs) if len(symbol_runs) > 1
+                       else symbol_runs[0]["summary"])
+    summary_path = output_path.with_suffix(".summary.json")
+    manifest_path = output_path.with_suffix(".manifest.json")
+
+    if len(symbol_runs) > 1:
+        aggregate_text = render_multisymbol_report(current_summary, args.execution_profile, manifest_path)
+        output_path.write_text(aggregate_text, encoding="utf-8")
+        print(aggregate_text)
+
+    manifest = {
+        "type": ("multi_symbol" if len(symbol_runs) > 1 else "single_symbol"),
+        "symbols": symbols,
+        "symbol_count": len(symbols),
+        "plugin_list": args.plugin_list,
+        "scenario_list": args.scenario_list,
+        "execution_profile": args.execution_profile,
+        "costs": {
+            "commission_per_lot_side": args.commission_per_lot_side,
+            "cost_buffer_points": args.cost_buffer_points,
+            "slippage_points": args.slippage_points,
+            "fill_penalty_points": args.fill_penalty_points,
+        },
+        "walkforward": {
+            "train_bars": args.wf_train_bars,
+            "test_bars": args.wf_test_bars,
+        },
+        "artifacts": {
+            "report": str(output_path),
+            "summary": str(summary_path),
+        },
+        "per_symbol": [
+            {
+                "symbol": run["symbol"],
+                "report_tsv": str(artifact_dir / f"{run['symbol']}.tsv") if len(symbol_runs) > 1 else str(DEFAULT_REPORT),
+                "plugin_count": len(run["summary"].get("plugins", {})),
+            }
+            for run in symbol_runs
+        ],
+    }
+    write_json(summary_path, current_summary)
+    write_json(manifest_path, manifest)
 
     if args.baseline:
-        current_summary = build_summary(rows, oracles)
+        oracles = load_oracles()
         baseline_path = resolve_baseline_path(args.baseline)
         if baseline_path.exists():
             baseline_summary = load_baseline_summary(baseline_path, oracles)
@@ -1114,8 +1435,12 @@ def cmd_analyze(args):
         print(f"report not found: {report}", file=sys.stderr)
         return 1
     oracles = load_oracles()
-    rows = load_rows(report)
-    text = render_report(rows, oracles)
+    summary = load_current_summary(report, oracles)
+    if report.suffix.lower() == ".tsv":
+        text = render_report(load_rows(report), oracles)
+    else:
+        manifest_path = report.with_suffix(".manifest.json")
+        text = render_summary_report(summary, "default", (manifest_path if manifest_path.exists() else None))
     print(text)
     if args.output:
         Path(args.output).write_text(text, encoding="utf-8")
@@ -1129,13 +1454,12 @@ def cmd_baseline_save(args):
         return 1
     BASELINES_DIR.mkdir(parents=True, exist_ok=True)
     oracles = load_oracles()
-    rows = load_rows(report)
-    summary = build_summary(rows, oracles)
+    summary = load_current_summary(report, oracles)
     name = args.name
-    baseline_report = BASELINES_DIR / f"{name}.tsv"
+    baseline_report = BASELINES_DIR / f"{name}{report.suffix.lower()}"
     baseline_summary = BASELINES_DIR / f"{name}.summary.json"
     shutil.copy2(report, baseline_report)
-    baseline_summary.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+    write_json(baseline_summary, summary)
     print(f"saved baseline: {baseline_report}")
     print(f"saved summary: {baseline_summary}")
     return 0
@@ -1152,7 +1476,7 @@ def cmd_baseline_compare(args):
         return 1
 
     oracles = load_oracles()
-    current_summary = build_summary(load_rows(report), oracles)
+    current_summary = load_current_summary(report, oracles)
     baseline_summary = load_baseline_summary(baseline_path, oracles)
     text = compare_summaries(current_summary, baseline_summary)
     print(text)
@@ -1172,7 +1496,7 @@ def cmd_release_gate(args):
         return 1
 
     oracles = load_oracles()
-    current_summary = build_summary(load_rows(report), oracles)
+    current_summary = load_current_summary(report, oracles)
     baseline_summary = load_baseline_summary(baseline_path, oracles)
     cmp = compare_summary_data(current_summary, baseline_summary)
     cmp_text = compare_summaries(current_summary, baseline_summary)
@@ -1188,6 +1512,8 @@ def cmd_release_gate(args):
         score = float(info.get("score", 0.0))
         if score < args.min_score:
             gate_failures.append(f"{name}: score {score:.1f} below minimum {args.min_score:.1f}")
+        if "stability" in info and float(info.get("stability", 1.0)) < args.min_stability:
+            gate_failures.append(f"{name}: cross-symbol stability {float(info.get('stability', 0.0)):.2f} below minimum {args.min_stability:.2f}")
         if args.fail_on_issues:
             issues = list(info.get("issues", []))
             findings = list(info.get("findings", []))
@@ -1214,7 +1540,7 @@ def cmd_optimize_audit(args):
         print(f"report not found: {report}", file=sys.stderr)
         return 1
     oracles = load_oracles()
-    summary = build_summary(load_rows(report), oracles)
+    summary = load_current_summary(report, oracles)
     campaign = build_optimization_campaign(summary, oracles)
     text = render_optimization_campaign(campaign)
     print(text)
@@ -1249,14 +1575,16 @@ def main():
     ra.add_argument("--sequence-bars", type=int, default=0)
     ra.add_argument("--schema-id", type=int, default=0)
     ra.add_argument("--feature-mask", type=int, default=0)
-    ra.add_argument("--commission-per-lot-side", type=float, default=0.0)
-    ra.add_argument("--cost-buffer-points", type=float, default=2.0)
-    ra.add_argument("--slippage-points", type=float, default=0.0)
-    ra.add_argument("--fill-penalty-points", type=float, default=0.0)
+    ra.add_argument("--commission-per-lot-side", type=float, default=None)
+    ra.add_argument("--cost-buffer-points", type=float, default=None)
+    ra.add_argument("--slippage-points", type=float, default=None)
+    ra.add_argument("--fill-penalty-points", type=float, default=None)
     ra.add_argument("--wf-train-bars", type=int, default=256)
     ra.add_argument("--wf-test-bars", type=int, default=64)
     ra.add_argument("--seed", type=int, default=42)
     ra.add_argument("--symbol", default="EURUSD")
+    ra.add_argument("--symbol-list", default="")
+    ra.add_argument("--execution-profile", default="default", choices=sorted(EXECUTION_PROFILES.keys()))
     ra.add_argument("--login")
     ra.add_argument("--server")
     ra.add_argument("--password")
@@ -1286,6 +1614,7 @@ def main():
     rg.add_argument("--report", default=str(DEFAULT_REPORT))
     rg.add_argument("--baseline", required=True)
     rg.add_argument("--min-score", type=float, default=70.0)
+    rg.add_argument("--min-stability", type=float, default=0.55)
     rg.add_argument("--fail-on-issues", action="store_true")
     rg.add_argument("--require-market-replay", action="store_true")
     rg.add_argument("--output")
@@ -1306,14 +1635,16 @@ def main():
     oa.add_argument("--sequence-bars", type=int, default=0)
     oa.add_argument("--schema-id", type=int, default=0)
     oa.add_argument("--feature-mask", type=int, default=0)
-    oa.add_argument("--commission-per-lot-side", type=float, default=0.0)
-    oa.add_argument("--cost-buffer-points", type=float, default=2.0)
-    oa.add_argument("--slippage-points", type=float, default=0.0)
-    oa.add_argument("--fill-penalty-points", type=float, default=0.0)
+    oa.add_argument("--commission-per-lot-side", type=float, default=None)
+    oa.add_argument("--cost-buffer-points", type=float, default=None)
+    oa.add_argument("--slippage-points", type=float, default=None)
+    oa.add_argument("--fill-penalty-points", type=float, default=None)
     oa.add_argument("--wf-train-bars", type=int, default=256)
     oa.add_argument("--wf-test-bars", type=int, default=64)
     oa.add_argument("--seed", type=int, default=42)
     oa.add_argument("--symbol", default="EURUSD")
+    oa.add_argument("--symbol-list", default="")
+    oa.add_argument("--execution-profile", default="default", choices=sorted(EXECUTION_PROFILES.keys()))
     oa.add_argument("--login")
     oa.add_argument("--server")
     oa.add_argument("--password")

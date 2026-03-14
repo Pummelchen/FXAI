@@ -457,6 +457,7 @@ void FXAI_ProcessReliabilityBar(const string symbol)
                                        commission_points,
                                        cost_buffer_points,
                                        evThresholdPoints);
+   FXAI_MaybeSaveMetaArtifacts(symbol, signal_bar);
 }
 
 double FXAI_GetModelVoteWeight(const int ai_idx)

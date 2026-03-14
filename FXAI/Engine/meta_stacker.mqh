@@ -260,6 +260,99 @@ void FXAI_StackUpdate(const int regime_id,
    g_stack_obs[r]++;
    if(g_stack_obs[r] > 200000) g_stack_obs[r] = 200000;
    g_stack_ready[r] = true;
+   FXAI_MarkMetaArtifactsDirty();
+}
+
+double FXAI_TradeGatePredict(const int regime_id,
+                             const double &feat[])
+{
+   int r = regime_id;
+   if(r < 0 || r >= FXAI_REGIME_COUNT) r = 0;
+
+   double heuristic = FXAI_Clamp(0.46 +
+                                 0.16 * feat[7] +
+                                 0.12 * feat[20] +
+                                 0.12 * feat[21] +
+                                 0.10 * feat[23] +
+                                 0.10 * feat[53] +
+                                 0.08 * feat[54] -
+                                 0.10 * feat[3] -
+                                 0.08 * feat[49] -
+                                 0.08 * feat[50],
+                                 0.01,
+                                 0.99);
+   if(!g_trade_gate_ready[r])
+      return heuristic;
+
+   double hidden[FXAI_TRADE_GATE_HIDDEN];
+   for(int h=0; h<FXAI_TRADE_GATE_HIDDEN; h++)
+   {
+      double z = g_trade_gate_b1[r][h];
+      for(int k=0; k<FXAI_TRADE_GATE_FEATS; k++)
+         z += g_trade_gate_w1[r][h][k] * feat[k];
+      hidden[h] = FXAI_Tanh(z);
+   }
+
+   double z = g_trade_gate_b2[r];
+   for(int h=0; h<FXAI_TRADE_GATE_HIDDEN; h++)
+      z += g_trade_gate_w2[r][h] * hidden[h];
+   double learned = FXAI_Sigmoid(z);
+   double mix = FXAI_Clamp((double)g_trade_gate_obs[r] / 180.0, 0.20, 0.85);
+   return FXAI_Clamp((1.0 - mix) * heuristic + mix * learned, 0.0, 1.0);
+}
+
+void FXAI_TradeGateUpdate(const int regime_id,
+                          const bool trade_target,
+                          const double &feat[],
+                          const double sample_weight)
+{
+   int r = regime_id;
+   if(r < 0 || r >= FXAI_REGIME_COUNT) r = 0;
+
+   double hidden[FXAI_TRADE_GATE_HIDDEN];
+   for(int h=0; h<FXAI_TRADE_GATE_HIDDEN; h++)
+   {
+      double z = g_trade_gate_b1[r][h];
+      for(int k=0; k<FXAI_TRADE_GATE_FEATS; k++)
+         z += g_trade_gate_w1[r][h][k] * feat[k];
+      hidden[h] = FXAI_Tanh(z);
+   }
+
+   double z = g_trade_gate_b2[r];
+   for(int h=0; h<FXAI_TRADE_GATE_HIDDEN; h++)
+      z += g_trade_gate_w2[r][h] * hidden[h];
+   double p = FXAI_Sigmoid(z);
+   double target = (trade_target ? 1.0 : 0.0);
+   double err = FXAI_Clamp((target - p) * FXAI_Clamp(sample_weight, 0.20, 8.00), -3.0, 3.0);
+   double lr = 0.020 / MathSqrt(1.0 + 0.02 * (double)g_trade_gate_obs[r]);
+   lr = FXAI_Clamp(lr, 0.0015, 0.020);
+
+   double w2_old[FXAI_TRADE_GATE_HIDDEN];
+   for(int h=0; h<FXAI_TRADE_GATE_HIDDEN; h++)
+      w2_old[h] = g_trade_gate_w2[r][h];
+
+   g_trade_gate_b2[r] += lr * err;
+   for(int h=0; h<FXAI_TRADE_GATE_HIDDEN; h++)
+   {
+      double reg2 = 0.0006 * g_trade_gate_w2[r][h];
+      g_trade_gate_w2[r][h] += lr * (err * hidden[h] - reg2);
+   }
+
+   for(int h=0; h<FXAI_TRADE_GATE_HIDDEN; h++)
+   {
+      double dh = (1.0 - hidden[h] * hidden[h]) * w2_old[h] * err;
+      g_trade_gate_b1[r][h] += lr * dh;
+      for(int k=0; k<FXAI_TRADE_GATE_FEATS; k++)
+      {
+         double reg1 = (k == 0 ? 0.0 : 0.0004 * g_trade_gate_w1[r][h][k]);
+         g_trade_gate_w1[r][h][k] += lr * (dh * feat[k] - reg1);
+      }
+   }
+
+   g_trade_gate_obs[r]++;
+   if(g_trade_gate_obs[r] > 200000) g_trade_gate_obs[r] = 200000;
+   g_trade_gate_ready[r] = true;
+   FXAI_MarkMetaArtifactsDirty();
 }
 
 void FXAI_ResetStackPending()
@@ -305,6 +398,8 @@ void FXAI_ResetAdaptiveRoutingState()
       g_horizon_regime_total_obs[r] = 0.0;
       g_stack_ready[r] = false;
       g_stack_obs[r] = 0;
+      g_trade_gate_ready[r] = false;
+      g_trade_gate_obs[r] = 0;
       g_hpolicy_ready[r] = false;
       g_hpolicy_obs[r] = 0;
       for(int h=0; h<FXAI_STACK_HIDDEN; h++)
@@ -318,6 +413,14 @@ void FXAI_ResetAdaptiveRoutingState()
          g_stack_b2[r][c] = 0.0;
          for(int h=0; h<FXAI_STACK_HIDDEN; h++)
             g_stack_w2[r][c][h] = 0.0;
+      }
+      g_trade_gate_b2[r] = 0.0;
+      for(int h=0; h<FXAI_TRADE_GATE_HIDDEN; h++)
+      {
+         g_trade_gate_b1[r][h] = 0.0;
+         g_trade_gate_w2[r][h] = 0.0;
+         for(int k=0; k<FXAI_TRADE_GATE_FEATS; k++)
+            g_trade_gate_w1[r][h][k] = 0.0;
       }
       g_hpolicy_b2[r] = 0.0;
       for(int h=0; h<FXAI_HPOL_HIDDEN; h++)
@@ -479,6 +582,19 @@ void FXAI_UpdateStackFromPending(const int current_signal_seq,
                if(pending_signal == -1 && label_class != (int)FXAI_LABEL_SKIP)
                   sw *= 0.80;
                FXAI_StackUpdate(pending_regime, label_class, feat, sw);
+
+               double realized_edge = 0.0;
+               if(label_class == (int)FXAI_LABEL_BUY)
+                  realized_edge = move_points - min_move_i;
+               else if(label_class == (int)FXAI_LABEL_SELL)
+                  realized_edge = -move_points - min_move_i;
+               else
+                  realized_edge = -MathMax(MathAbs(move_points) - min_move_i, 0.0);
+               bool trade_target = (label_class != (int)FXAI_LABEL_SKIP &&
+                                    realized_edge > 0.0 &&
+                                    quality > 0.70 &&
+                                    time_to_hit_frac < 0.95);
+               FXAI_TradeGateUpdate(pending_regime, trade_target, feat, sw);
             }
             consumed = true;
          }

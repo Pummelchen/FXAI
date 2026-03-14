@@ -127,14 +127,154 @@ double FXAI_ContextLiquidityScore(const string symbol)
    return FXAI_Clamp(1.25 - 0.06 * spread_pts, 0.0, 1.0);
 }
 
+double FXAI_ContextDataHealthScore(const string symbol)
+{
+   if(!SymbolSelect(symbol, true))
+      return -1.0;
+
+   MqlRates rates[];
+   int copied = CopyRates(symbol, PERIOD_M1, 0, 4, rates);
+   if(copied <= 0)
+      return 0.10;
+
+   datetime last_bar = rates[0].time;
+   datetime now = TimeCurrent();
+   if(now <= 0) now = TimeTradeServer();
+   if(now <= 0) now = last_bar;
+   double age_minutes = (double)MathAbs((int)(now - last_bar)) / 60.0;
+   double freshness = FXAI_Clamp(1.15 - 0.02 * age_minutes, 0.0, 1.0);
+   return freshness;
+}
+
+double FXAI_ContextSessionOverlapScore(const string main_symbol,
+                                       const string candidate_symbol)
+{
+   MqlDateTime dt;
+   datetime now = TimeCurrent();
+   if(now <= 0) now = TimeTradeServer();
+   TimeToStruct(now, dt);
+   int session = FXAI_DeriveSessionBucket(now);
+   int cat = FXAI_ContextSymbolCategory(candidate_symbol);
+   string main_sym = main_symbol;
+   string cand_sym = candidate_symbol;
+   StringToUpper(main_sym);
+   StringToUpper(cand_sym);
+
+   double score = 0.45;
+   if(cat == FXAI_CONTEXT_CAT_FX)
+   {
+      if(session == 0 && (StringFind(cand_sym, "JPY") >= 0 || StringFind(cand_sym, "AUD") >= 0 || StringFind(cand_sym, "NZD") >= 0))
+         score += 0.35;
+      if(session == 1 && (StringFind(cand_sym, "EUR") >= 0 || StringFind(cand_sym, "GBP") >= 0 || StringFind(cand_sym, "CHF") >= 0))
+         score += 0.35;
+      if(session == 2 && (StringFind(cand_sym, "USD") >= 0 || StringFind(cand_sym, "CAD") >= 0))
+         score += 0.35;
+   }
+   else if(cat == FXAI_CONTEXT_CAT_METAL || cat == FXAI_CONTEXT_CAT_RISK)
+   {
+      if(session >= 1) score += 0.30;
+   }
+   else if(cat == FXAI_CONTEXT_CAT_INDEX || cat == FXAI_CONTEXT_CAT_ENERGY)
+   {
+      if(session == 2) score += 0.30;
+      else if(session == 1) score += 0.15;
+   }
+
+   if(StringFind(cand_sym, StringSubstr(main_sym, 0, 3)) >= 0 || StringFind(cand_sym, StringSubstr(main_sym, 3, 3)) >= 0)
+      score += 0.10;
+   if(dt.hour >= 21 || dt.hour <= 1)
+      score -= 0.08;
+   return FXAI_Clamp(score, 0.0, 1.0);
+}
+
+double FXAI_ContextRedundancyPenalty(const string main_symbol,
+                                     const string candidate_symbol,
+                                     const string &selected[])
+{
+   double penalty = 0.0;
+   int cand_cat = FXAI_ContextSymbolCategory(candidate_symbol);
+   for(int i=0; i<ArraySize(selected); i++)
+   {
+      string picked = selected[i];
+      if(StringLen(picked) <= 0) continue;
+      if(StringCompare(picked, candidate_symbol, false) == 0)
+         return 1.0;
+
+      penalty = MathMax(penalty, 0.55 * FXAI_ContextSharedSymbolScore(candidate_symbol, picked));
+      if(FXAI_ContextSymbolCategory(picked) == cand_cat)
+         penalty = MathMax(penalty, 0.18);
+   }
+   penalty -= 0.10 * FXAI_ContextSharedSymbolScore(main_symbol, candidate_symbol);
+   return FXAI_Clamp(penalty, 0.0, 1.0);
+}
+
+double FXAI_ContextPersistenceBonus(const string candidate_symbol,
+                                    const string &selected[])
+{
+   for(int i=0; i<ArraySize(selected); i++)
+   {
+      if(StringCompare(selected[i], candidate_symbol, false) == 0)
+         return 0.12;
+   }
+   return 0.0;
+}
+
+double FXAI_ContextIncrementalValueScore(const string main_symbol,
+                                         const string candidate_symbol,
+                                         const string &selected[])
+{
+   double shared = FXAI_ContextSharedSymbolScore(main_symbol, candidate_symbol);
+   double redundancy = FXAI_ContextRedundancyPenalty(main_symbol, candidate_symbol, selected);
+   return FXAI_Clamp(0.70 * shared + 0.30 * (1.0 - redundancy), 0.0, 1.0);
+}
+
 double FXAI_ContextCandidateScore(const string main_symbol,
-                                  const string candidate_symbol)
+                                  const string candidate_symbol,
+                                  const string &selected[])
 {
    int category = FXAI_ContextSymbolCategory(candidate_symbol);
    double score = FXAI_ContextCategoryPriority(category);
-   score += 0.55 * FXAI_ContextSharedSymbolScore(main_symbol, candidate_symbol);
-   score += 0.35 * FXAI_ContextLiquidityScore(candidate_symbol);
+   score += 0.40 * FXAI_ContextIncrementalValueScore(main_symbol, candidate_symbol, selected);
+   score += 0.24 * FXAI_ContextLiquidityScore(candidate_symbol);
+   score += 0.18 * FXAI_ContextDataHealthScore(candidate_symbol);
+   score += 0.14 * FXAI_ContextSessionOverlapScore(main_symbol, candidate_symbol);
+   score += FXAI_ContextPersistenceBonus(candidate_symbol, selected);
    return score;
+}
+
+void FXAI_AppendUniqueContextCandidate(string &arr[],
+                                       const string symbol)
+{
+   if(StringLen(symbol) <= 0) return;
+   for(int i=0; i<ArraySize(arr); i++)
+   {
+      if(StringCompare(arr[i], symbol, false) == 0)
+         return;
+   }
+   int sz = ArraySize(arr);
+   ArrayResize(arr, sz + 1);
+   arr[sz] = symbol;
+}
+
+void FXAI_BuildCuratedContextUniverse(const string main_symbol,
+                                      string &candidates[])
+{
+   ArrayResize(candidates, 0);
+   string curated[] =
+   {
+      "EURUSD","GBPUSD","USDJPY","AUDUSD","NZDUSD","USDCAD","USDCHF","EURJPY","GBPJPY","EURGBP",
+      "XAUUSD","XAGUSD",
+      "US500","SPX500","NAS100","USTEC","US30","DE40","GER40","UK100","JP225",
+      "WTI","BRENT",
+      "VIX","DXY","USDX","TNX","USB10","US10Y","BUND"
+   };
+   for(int i=0; i<ArraySize(curated); i++)
+   {
+      string sym = curated[i];
+      if(StringCompare(sym, main_symbol, false) == 0) continue;
+      if(!SymbolSelect(sym, true)) continue;
+      FXAI_AppendUniqueContextCandidate(candidates, sym);
+   }
 }
 
 void FXAI_ParseContextSymbols(const string raw, string &symbols[])
@@ -275,7 +415,7 @@ void FXAI_ExtendContextSymbolsFromMarketWatch(const string main_symbol, string &
          if(cat_used[cat] >= cat_caps[cat])
             continue;
 
-         double score = FXAI_ContextCandidateScore(main_symbol, sym);
+         double score = FXAI_ContextCandidateScore(main_symbol, sym, symbols);
          if(!selected_only)
          {
             // Broader-universe candidates need a slightly higher bar to justify
@@ -308,6 +448,64 @@ void FXAI_ExtendContextSymbolsFromMarketWatch(const string main_symbol, string &
             best_cat[k - 1] = best_cat[k];
             best_cat[k] = tmp_cat;
          }
+      }
+   }
+
+   string curated[];
+   FXAI_BuildCuratedContextUniverse(main_symbol, curated);
+   for(int i=0; i<ArraySize(curated); i++)
+   {
+      string sym = curated[i];
+      bool exists = false;
+      for(int j=0; j<ArraySize(symbols); j++)
+      {
+         if(StringCompare(symbols[j], sym, false) == 0)
+         {
+            exists = true;
+            break;
+         }
+      }
+      if(!exists)
+      {
+         for(int j=0; j<ArraySize(best_sym); j++)
+         {
+            if(StringCompare(best_sym[j], sym, false) == 0)
+            {
+               exists = true;
+               break;
+            }
+         }
+      }
+      if(exists) continue;
+
+      int cat = FXAI_ContextSymbolCategory(sym);
+      if(cat < 0 || cat >= FXAI_CONTEXT_CAT_COUNT)
+         cat = FXAI_CONTEXT_CAT_OTHER;
+      if(cat_used[cat] >= cat_caps[cat])
+         continue;
+
+      double score = FXAI_ContextCandidateScore(main_symbol, sym, symbols) + 0.08;
+      if(score <= 0.0)
+         continue;
+      int sz = ArraySize(best_sym);
+      ArrayResize(best_sym, sz + 1);
+      ArrayResize(best_score, sz + 1);
+      ArrayResize(best_cat, sz + 1);
+      best_sym[sz] = sym;
+      best_score[sz] = score;
+      best_cat[sz] = cat;
+      for(int k=sz; k>0; k--)
+      {
+         if(best_score[k] <= best_score[k - 1]) break;
+         double tmp_score = best_score[k - 1];
+         best_score[k - 1] = best_score[k];
+         best_score[k] = tmp_score;
+         string tmp_sym = best_sym[k - 1];
+         best_sym[k - 1] = best_sym[k];
+         best_sym[k] = tmp_sym;
+         int tmp_cat = best_cat[k - 1];
+         best_cat[k - 1] = best_cat[k];
+         best_cat[k] = tmp_cat;
       }
    }
 
@@ -893,6 +1091,7 @@ void ResetAIState(const string symbol)
    FXAI_ResetAdaptiveRoutingState();
    FXAI_ResetRegimeCalibration();
    FXAI_ResetReplayReservoir();
+   FXAI_LoadMetaArtifacts(symbol);
    for(int s=0; s<FXAI_MAX_CONTEXT_SYMBOLS; s++)
    {
       g_context_symbol_utility[s] = 0.0;
