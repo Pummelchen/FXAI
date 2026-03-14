@@ -346,9 +346,10 @@ datetime g_last_debug_bar = 0;
 #define FXAI_REL_MAX_PENDING 2048
 #define FXAI_REGIME_COUNT 12
 #define FXAI_MAX_HORIZONS 8
-#define FXAI_STACK_FEATS 48
-#define FXAI_STACK_HIDDEN 24
-#define FXAI_HPOL_FEATS 40
+#define FXAI_STACK_FEATS 56
+#define FXAI_STACK_HIDDEN 28
+#define FXAI_HPOL_FEATS 48
+#define FXAI_HPOL_HIDDEN 16
 #define FXAI_NORM_CAND_MAX 8
 #define FXAI_REPLAY_CAPACITY 384
 #define FXAI_REPLAY_DRAWS 12
@@ -431,7 +432,10 @@ double   g_stack_w2[FXAI_REGIME_COUNT][3][FXAI_STACK_HIDDEN];
 double   g_stack_b2[FXAI_REGIME_COUNT][3];
 bool     g_stack_ready[FXAI_REGIME_COUNT];
 int      g_stack_obs[FXAI_REGIME_COUNT];
-double   g_hpolicy_w[FXAI_REGIME_COUNT][FXAI_HPOL_FEATS];
+double   g_hpolicy_w1[FXAI_REGIME_COUNT][FXAI_HPOL_HIDDEN][FXAI_HPOL_FEATS];
+double   g_hpolicy_b1[FXAI_REGIME_COUNT][FXAI_HPOL_HIDDEN];
+double   g_hpolicy_w2[FXAI_REGIME_COUNT][FXAI_HPOL_HIDDEN];
+double   g_hpolicy_b2[FXAI_REGIME_COUNT];
 bool     g_hpolicy_ready[FXAI_REGIME_COUNT];
 int      g_hpolicy_obs[FXAI_REGIME_COUNT];
 int      g_hpolicy_pending_seq[FXAI_REL_MAX_PENDING];

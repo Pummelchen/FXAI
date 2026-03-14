@@ -115,6 +115,12 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
          s3.label_class = samples[i].label_class;
          s3.move_points = samples[i].move_points;
          s3.sample_weight = 1.0;
+         FXAI_SetTrainRequestPathTargets(s3,
+                                         samples[i].mfe_points,
+                                         samples[i].mae_points,
+                                         samples[i].time_to_hit_frac,
+                                         samples[i].path_flags,
+                                         samples[i].spread_stress);
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
             s3.x[k] = samples[i].x[k];
          FXAI_BuildPreparedSampleWindow(samples, i, s3.ctx.sequence_bars, s3.x_window, s3.window_size);
@@ -1325,6 +1331,11 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
          double ensemble_conf_sum = 0.0;
          double ensemble_rel_sum = 0.0;
          double ensemble_margin_sum = 0.0;
+         double ensemble_hit_time_sum = 0.0;
+         double ensemble_path_risk_sum = 0.0;
+         double ensemble_fill_risk_sum = 0.0;
+         double ensemble_mfe_ratio_sum = 0.0;
+         double ensemble_mae_ratio_sum = 0.0;
          double family_support[FXAI_FAMILY_OTHER + 1];
          for(int fam_i=0; fam_i<=FXAI_FAMILY_OTHER; fam_i++) family_support[fam_i] = 0.0;
 
@@ -1440,6 +1451,11 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             ensemble_conf_sum += meta_w * FXAI_Clamp(pred.confidence, 0.0, 1.0);
             ensemble_rel_sum += meta_w * FXAI_Clamp(pred.reliability, 0.0, 1.0);
             ensemble_margin_sum += meta_w * FXAI_Clamp(MathAbs(probs_eval[(int)FXAI_LABEL_BUY] - probs_eval[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+            ensemble_hit_time_sum += meta_w * FXAI_Clamp(pred.hit_time_frac, 0.0, 1.0);
+            ensemble_path_risk_sum += meta_w * FXAI_Clamp(pred.path_risk, 0.0, 1.0);
+            ensemble_fill_risk_sum += meta_w * FXAI_Clamp(pred.fill_risk, 0.0, 1.0);
+            ensemble_mfe_ratio_sum += meta_w * FXAI_Clamp(pred.mfe_mean_points / MathMax(expected_move, samples[i].min_move_points), 0.0, 4.0);
+            ensemble_mae_ratio_sum += meta_w * FXAI_Clamp(pred.mae_mean_points / MathMax(pred.mfe_mean_points, samples[i].min_move_points), 0.0, 2.0);
             if(plugin_manifest.family >= 0 && plugin_manifest.family <= FXAI_FAMILY_OTHER)
                family_support[plugin_manifest.family] += meta_w;
             if(signal == 1) ensemble_buy_support += meta_w;
@@ -1461,6 +1477,11 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             double avg_conf = ensemble_conf_sum / ensemble_meta_total;
             double avg_rel = ensemble_rel_sum / ensemble_meta_total;
             double avg_margin = ensemble_margin_sum / ensemble_meta_total;
+            double avg_hit_time = ensemble_hit_time_sum / ensemble_meta_total;
+            double avg_path_risk = ensemble_path_risk_sum / ensemble_meta_total;
+            double avg_fill_risk = ensemble_fill_risk_sum / ensemble_meta_total;
+            double avg_mfe_ratio = ensemble_mfe_ratio_sum / ensemble_meta_total;
+            double avg_mae_ratio = ensemble_mae_ratio_sum / ensemble_meta_total;
             double move_dispersion = MathSqrt(MathMax(avg_expected_sq - avg_expected * avg_expected, 0.0));
             int active_family_count = 0;
             double dominant_family_support = 0.0;
@@ -1503,6 +1524,11 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
                                     dominant_family_ratio,
                                     warm_ctx_strength,
                                     warm_ctx_quality,
+                                    avg_hit_time,
+                                    avg_path_risk,
+                                    avg_fill_risk,
+                                    avg_mfe_ratio,
+                                    avg_mae_ratio,
                                     feat);
             FXAI_StackUpdate(regime_id, samples[i].label_class, feat, samples[i].sample_weight);
          }

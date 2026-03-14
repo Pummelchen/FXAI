@@ -5,6 +5,19 @@
 #include "..\Engine\data_pipeline.mqh"
 #include "..\API\api.mqh"
 
+#ifndef FXAI_PATHFLAG_DUAL_HIT
+#define FXAI_PATHFLAG_DUAL_HIT 1
+#endif
+#ifndef FXAI_PATHFLAG_KILLED_EARLY
+#define FXAI_PATHFLAG_KILLED_EARLY 2
+#endif
+#ifndef FXAI_PATHFLAG_SPREAD_STRESS
+#define FXAI_PATHFLAG_SPREAD_STRESS 4
+#endif
+#ifndef FXAI_PATHFLAG_SLOW_HIT
+#define FXAI_PATHFLAG_SLOW_HIT 8
+#endif
+
 #define FXAI_AUDIT_REPORT_DIR "FXAI\\Audit"
 #define FXAI_AUDIT_REPORT_FILE "FXAI\\Audit\\fxai_audit_report.tsv"
 #define FXAI_AUDIT_ISSUE_INVALID_PRED     1
@@ -25,6 +38,158 @@ double FXAI_AuditGetFillPenaltyPoints(void);
 int FXAI_AuditGetWalkForwardTrainBars(void);
 int FXAI_AuditGetWalkForwardTestBars(void);
 ulong FXAI_AuditGetFeatureGroupsMaskOverride(void);
+
+void FXAI_AuditAssignExcursionsForRealizedMove(const double realized_move_points,
+                                               const double best_up_points,
+                                               const double best_dn_points,
+                                               double &mfe_points,
+                                               double &mae_points)
+{
+   if(realized_move_points > 0.0)
+   {
+      mfe_points = best_up_points;
+      mae_points = best_dn_points;
+      return;
+   }
+   if(realized_move_points < 0.0)
+   {
+      mfe_points = best_dn_points;
+      mae_points = best_up_points;
+      return;
+   }
+
+   mfe_points = MathMax(best_up_points, best_dn_points);
+   mae_points = MathMax(best_up_points, best_dn_points);
+}
+
+int FXAI_AuditBuildTripleBarrierLabelEx(const int i,
+                                        const int H,
+                                        const double roundtrip_cost_points,
+                                        const double ev_threshold_points,
+                                        const FXAIDataSnapshot &snapshot,
+                                        const double &high_arr[],
+                                        const double &low_arr[],
+                                        const double &close_arr[],
+                                        double &realized_move_points,
+                                        double &mfe_points,
+                                        double &mae_points,
+                                        double &time_to_hit_frac,
+                                        int &path_flags)
+{
+   realized_move_points = 0.0;
+   mfe_points = 0.0;
+   mae_points = 0.0;
+   time_to_hit_frac = 1.0;
+   path_flags = 0;
+   if(i < 0 || H < 1) return (int)FXAI_LABEL_SKIP;
+   if(i >= ArraySize(close_arr) || i >= ArraySize(high_arr) || i >= ArraySize(low_arr))
+      return (int)FXAI_LABEL_SKIP;
+
+   double entry = close_arr[i];
+   if(entry <= 0.0 || snapshot.point <= 0.0)
+      return (int)FXAI_LABEL_SKIP;
+
+   int max_step = H;
+   if(i - max_step < 0) max_step = i;
+   if(max_step < 1) return (int)FXAI_LABEL_SKIP;
+
+   double ev_min = (ev_threshold_points > 0.0 ? ev_threshold_points : 0.0);
+   double barrier = roundtrip_cost_points + ev_min;
+   if(barrier < 0.10) barrier = 0.10;
+
+   double mom = 0.0;
+   if(i + 5 < ArraySize(close_arr) && snapshot.point > 0.0)
+      mom = FXAI_MovePoints(close_arr[i + 5], close_arr[i], snapshot.point);
+   double drift = FXAI_Clamp(mom / MathMax(barrier, 0.10), -1.0, 1.0);
+
+   double range_sum = 0.0;
+   int range_n = 0;
+   for(int k=0; k<10; k++)
+   {
+      int ik = i + k;
+      if(ik < 0 || ik >= ArraySize(high_arr) || ik >= ArraySize(low_arr)) break;
+      range_sum += MathMax(0.0, (high_arr[ik] - low_arr[ik]) / snapshot.point);
+      range_n++;
+   }
+   double range_avg = (range_n > 0 ? (range_sum / (double)range_n) : barrier);
+   double vol_scale = FXAI_Clamp(range_avg / MathMax(barrier, 0.10), 0.7, 1.8);
+
+   double buy_barrier = barrier * vol_scale * (1.0 - 0.10 * drift);
+   double sell_barrier = barrier * vol_scale * (1.0 + 0.10 * drift);
+   if(buy_barrier < 0.10) buy_barrier = 0.10;
+   if(sell_barrier < 0.10) sell_barrier = 0.10;
+
+   double best_up = 0.0;
+   double best_dn = 0.0;
+   for(int step=1; step<=max_step; step++)
+   {
+      int idx = i - step;
+      if(idx < 0) break;
+      if(idx >= ArraySize(high_arr) || idx >= ArraySize(low_arr)) break;
+
+      double up_mv = FXAI_MovePoints(entry, high_arr[idx], snapshot.point);
+      double dn_mv = FXAI_MovePoints(entry, low_arr[idx], snapshot.point);
+      if(up_mv > best_up) best_up = up_mv;
+      double dn_abs = MathAbs(dn_mv);
+      if(dn_abs > best_dn) best_dn = dn_abs;
+      bool hit_up = (up_mv >= buy_barrier);
+      bool hit_dn = (dn_mv <= -sell_barrier);
+
+      if(hit_up && !hit_dn)
+      {
+         realized_move_points = MathMax(up_mv, buy_barrier);
+         mfe_points = best_up;
+         mae_points = best_dn;
+         time_to_hit_frac = FXAI_Clamp((double)step / (double)MathMax(max_step, 1), 0.0, 1.0);
+         if(time_to_hit_frac > 0.75) path_flags |= FXAI_PATHFLAG_SLOW_HIT;
+         return (int)FXAI_LABEL_BUY;
+      }
+      if(hit_dn && !hit_up)
+      {
+         realized_move_points = MathMin(dn_mv, -sell_barrier);
+         mfe_points = best_dn;
+         mae_points = best_up;
+         time_to_hit_frac = FXAI_Clamp((double)step / (double)MathMax(max_step, 1), 0.0, 1.0);
+         if(time_to_hit_frac > 0.75) path_flags |= FXAI_PATHFLAG_SLOW_HIT;
+         return (int)FXAI_LABEL_SELL;
+      }
+      if(hit_up && hit_dn)
+      {
+         path_flags |= FXAI_PATHFLAG_DUAL_HIT;
+         double close_mv = FXAI_MovePoints(entry, close_arr[idx], snapshot.point);
+         double up_excess = up_mv - buy_barrier;
+         double dn_excess = -dn_mv - sell_barrier;
+         if(close_mv > 0.0 && up_excess >= dn_excess)
+         {
+            realized_move_points = MathMax(close_mv, buy_barrier);
+            mfe_points = best_up;
+            mae_points = best_dn;
+            time_to_hit_frac = FXAI_Clamp((double)step / (double)MathMax(max_step, 1), 0.0, 1.0);
+            return (int)FXAI_LABEL_BUY;
+         }
+         if(close_mv < 0.0 && dn_excess >= up_excess)
+         {
+            realized_move_points = MathMin(close_mv, -sell_barrier);
+            mfe_points = best_dn;
+            mae_points = best_up;
+            time_to_hit_frac = FXAI_Clamp((double)step / (double)MathMax(max_step, 1), 0.0, 1.0);
+            return (int)FXAI_LABEL_SELL;
+         }
+         realized_move_points = close_mv;
+         FXAI_AuditAssignExcursionsForRealizedMove(realized_move_points, best_up, best_dn, mfe_points, mae_points);
+         time_to_hit_frac = FXAI_Clamp((double)step / (double)MathMax(max_step, 1), 0.0, 1.0);
+         return FXAI_BuildEVClassLabel(realized_move_points, roundtrip_cost_points, ev_threshold_points);
+      }
+   }
+
+   int idx_term = i - max_step;
+   if(idx_term < 0) idx_term = 0;
+   realized_move_points = FXAI_MovePoints(entry, close_arr[idx_term], snapshot.point);
+   FXAI_AuditAssignExcursionsForRealizedMove(realized_move_points, best_up, best_dn, mfe_points, mae_points);
+   if(TradeKiller > 0 && H > TradeKiller)
+      path_flags |= FXAI_PATHFLAG_KILLED_EARLY;
+   return FXAI_BuildEVClassLabel(realized_move_points, roundtrip_cost_points, ev_threshold_points);
+}
 
 struct FXAIAuditScenarioSpec
 {
@@ -938,6 +1103,11 @@ bool FXAI_AuditBuildSample(const int i,
                            FXAIAIContextV4 &ctx,
                            int &label_class,
                            double &move_points,
+                           double &mfe_points,
+                           double &mae_points,
+                           double &time_to_hit_frac,
+                           int &path_flags,
+                           double &spread_stress,
                            double &sample_weight,
                            double &x[])
 {
@@ -1024,9 +1194,26 @@ bool FXAI_AuditBuildSample(const int i,
    ArrayResize(x, FXAI_AI_WEIGHTS);
    FXAI_BuildInputVector(feat_norm, x);
 
-   move_points = FXAI_MovePoints(close_arr[i], close_arr[i - horizon_minutes], point);
    double cost_points = snapshot.min_move_points;
-   label_class = FXAI_BuildEVClassLabel(move_points, cost_points, ev_threshold_points);
+   move_points = 0.0;
+   mfe_points = 0.0;
+   mae_points = 0.0;
+   time_to_hit_frac = 1.0;
+   path_flags = 0;
+   label_class = FXAI_AuditBuildTripleBarrierLabelEx(i,
+                                                     horizon_minutes,
+                                                     cost_points,
+                                                     ev_threshold_points,
+                                                     snapshot,
+                                                     high_arr,
+                                                     low_arr,
+                                                     close_arr,
+                                                     move_points,
+                                                     mfe_points,
+                                                     mae_points,
+                                                     time_to_hit_frac,
+                                                     path_flags);
+   spread_stress = FXAI_Clamp(snapshot.spread_points / MathMax(snapshot.min_move_points, 0.10), 0.0, 4.0);
    sample_weight = FXAI_Clamp(FXAI_MoveEdgeWeight(move_points, cost_points), 0.25, 4.0);
 
    double spread_ref = FXAI_AuditGetIntArrayMean(spread_arr, i, 64, snapshot.spread_points);
@@ -1091,6 +1278,11 @@ void FXAI_AuditBuildWindow(const int i,
       FXAIAIContextV4 wctx;
       int wlabel = (int)FXAI_LABEL_SKIP;
       double wmove = 0.0;
+      double wmfe = 0.0;
+      double wmae = 0.0;
+      double whit = 1.0;
+      int wflags = 0;
+      double wspread_stress = 0.0;
       double wweight = 1.0;
       double wx[];
       if(!FXAI_AuditBuildSample(wi,
@@ -1123,6 +1315,11 @@ void FXAI_AuditBuildWindow(const int i,
                                 wctx,
                                 wlabel,
                                 wmove,
+                                wmfe,
+                                wmae,
+                                whit,
+                                wflags,
+                                wspread_stress,
                                 wweight,
                                 wx))
          break;
@@ -1140,6 +1337,11 @@ void FXAI_AuditComparePredictions(const FXAIAIPredictionV4 &a,
    for(int c=0; c<3; c++)
       delta_out += MathAbs(a.class_probs[c] - b.class_probs[c]);
    delta_out += 0.10 * MathAbs(a.move_mean_points - b.move_mean_points);
+   delta_out += 0.04 * MathAbs(a.mfe_mean_points - b.mfe_mean_points);
+   delta_out += 0.04 * MathAbs(a.mae_mean_points - b.mae_mean_points);
+   delta_out += 0.05 * MathAbs(a.hit_time_frac - b.hit_time_frac);
+   delta_out += 0.05 * MathAbs(a.path_risk - b.path_risk);
+   delta_out += 0.05 * MathAbs(a.fill_risk - b.fill_risk);
    delta_out += 0.05 * MathAbs(a.confidence - b.confidence);
    delta_out += 0.05 * MathAbs(a.reliability - b.reliability);
 }
@@ -1231,7 +1433,8 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
    double ctx_std_arr[];
    double ctx_up_arr[];
    double ctx_extra_arr[];
-   double point = (_Point > 0.0 ? _Point : 0.0001);
+   double point = (_Point > 0.0 ? _Point : SymbolInfoDouble(_Symbol, SYMBOL_POINT));
+   if(point <= 0.0) point = 0.0001;
 
    if(!FXAI_AuditGenerateScenarioSeries(spec,
                                         bars,
@@ -1301,6 +1504,11 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
       FXAIAIContextV4 ctx;
       int label_class = (int)FXAI_LABEL_SKIP;
       double move_points = 0.0;
+      double mfe_points = 0.0;
+      double mae_points = 0.0;
+      double time_to_hit_frac = 1.0;
+      int path_flags = 0;
+      double spread_stress = 0.0;
       double sample_weight = 1.0;
       double x[];
       if(!FXAI_AuditBuildSample(i,
@@ -1333,6 +1541,11 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
                                 ctx,
                                 label_class,
                                 move_points,
+                                mfe_points,
+                                mae_points,
+                                time_to_hit_frac,
+                                path_flags,
+                                spread_stress,
                                 sample_weight,
                                 x))
          continue;
@@ -1468,6 +1681,12 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
          train_req.label_class = label_class;
          train_req.move_points = move_points;
          train_req.sample_weight = sample_weight;
+         FXAI_SetTrainRequestPathTargets(train_req,
+                                         mfe_points,
+                                         mae_points,
+                                         time_to_hit_frac,
+                                         path_flags,
+                                         spread_stress);
          for(int k=0; k<FXAI_AI_WEIGHTS; k++) train_req.x[k] = x[k];
          FXAI_CopyWindowPayload(req.x_window, req.window_size, train_req.x_window, train_req.window_size);
          FXAI_ApplyFeatureSchemaToPayloadEx(schema_id, feature_groups_mask, train_req.ctx.sequence_bars, train_req.x_window, train_req.window_size, train_req.x);

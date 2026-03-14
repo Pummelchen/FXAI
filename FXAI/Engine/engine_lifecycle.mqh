@@ -192,9 +192,6 @@ void FXAI_FilterContextSymbols(const string main_symbol, string &symbols[])
 
 void FXAI_ExtendContextSymbolsFromMarketWatch(const string main_symbol, string &symbols[])
 {
-   int total = SymbolsTotal(true);
-   if(total <= 0) return;
-
    int cat_caps[FXAI_CONTEXT_CAT_COUNT];
    cat_caps[FXAI_CONTEXT_CAT_FX] = 24;
    cat_caps[FXAI_CONTEXT_CAT_METAL] = 8;
@@ -220,56 +217,86 @@ void FXAI_ExtendContextSymbolsFromMarketWatch(const string main_symbol, string &
    ArrayResize(best_score, 0);
    ArrayResize(best_cat, 0);
 
-   for(int i=0; i<total; i++)
+   // First pass: selected Market Watch symbols. Second pass: broader terminal universe.
+   for(int pass=0; pass<2; pass++)
    {
-      string sym = SymbolName(i, true);
-      StringTrimLeft(sym);
-      StringTrimRight(sym);
-      if(StringLen(sym) <= 0) continue;
-      if(StringCompare(sym, main_symbol, false) == 0) continue;
+      bool selected_only = (pass == 0);
+      int total = SymbolsTotal(selected_only);
+      if(total <= 0) continue;
+      int scan_cap = total;
+      if(!selected_only && scan_cap > 384)
+         scan_cap = 384;
 
-      bool exists = false;
-      for(int j=0; j<ArraySize(symbols); j++)
+      for(int i=0; i<scan_cap; i++)
       {
-         if(StringCompare(symbols[j], sym, false) == 0)
+         string sym = SymbolName(i, selected_only);
+         StringTrimLeft(sym);
+         StringTrimRight(sym);
+         if(StringLen(sym) <= 0) continue;
+         if(StringCompare(sym, main_symbol, false) == 0) continue;
+
+         bool exists = false;
+         for(int j=0; j<ArraySize(symbols); j++)
          {
-            exists = true;
-            break;
+            if(StringCompare(symbols[j], sym, false) == 0)
+            {
+               exists = true;
+               break;
+            }
          }
-      }
-      if(exists) continue;
-      if(!SymbolSelect(sym, true)) continue;
+         if(!exists)
+         {
+            for(int j=0; j<ArraySize(best_sym); j++)
+            {
+               if(StringCompare(best_sym[j], sym, false) == 0)
+               {
+                  exists = true;
+                  break;
+               }
+            }
+         }
+         if(exists) continue;
+         if(!SymbolSelect(sym, true)) continue;
 
-      int cat = FXAI_ContextSymbolCategory(sym);
-      if(cat < 0 || cat >= FXAI_CONTEXT_CAT_COUNT)
-         cat = FXAI_CONTEXT_CAT_OTHER;
-      if(cat_used[cat] >= cat_caps[cat])
-         continue;
+         int cat = FXAI_ContextSymbolCategory(sym);
+         if(cat < 0 || cat >= FXAI_CONTEXT_CAT_COUNT)
+            cat = FXAI_CONTEXT_CAT_OTHER;
+         if(cat_used[cat] >= cat_caps[cat])
+            continue;
 
-      double score = FXAI_ContextCandidateScore(main_symbol, sym);
-      if(score <= 0.0)
-         continue;
+         double score = FXAI_ContextCandidateScore(main_symbol, sym);
+         if(!selected_only)
+         {
+            // Broader-universe candidates need a slightly higher bar to justify
+            // being pulled into context versus already-selected Market Watch symbols.
+            score -= 0.10;
+            if(cat != FXAI_CONTEXT_CAT_OTHER)
+               score += 0.06;
+         }
+         if(score <= 0.0)
+            continue;
 
-      int sz = ArraySize(best_sym);
-      ArrayResize(best_sym, sz + 1);
-      ArrayResize(best_score, sz + 1);
-      ArrayResize(best_cat, sz + 1);
-      best_sym[sz] = sym;
-      best_score[sz] = score;
-      best_cat[sz] = cat;
+         int sz = ArraySize(best_sym);
+         ArrayResize(best_sym, sz + 1);
+         ArrayResize(best_score, sz + 1);
+         ArrayResize(best_cat, sz + 1);
+         best_sym[sz] = sym;
+         best_score[sz] = score;
+         best_cat[sz] = cat;
 
-      for(int k=sz; k>0; k--)
-      {
-         if(best_score[k] <= best_score[k - 1]) break;
-         double tmp_score = best_score[k - 1];
-         best_score[k - 1] = best_score[k];
-         best_score[k] = tmp_score;
-         string tmp_sym = best_sym[k - 1];
-         best_sym[k - 1] = best_sym[k];
-         best_sym[k] = tmp_sym;
-         int tmp_cat = best_cat[k - 1];
-         best_cat[k - 1] = best_cat[k];
-         best_cat[k] = tmp_cat;
+         for(int k=sz; k>0; k--)
+         {
+            if(best_score[k] <= best_score[k - 1]) break;
+            double tmp_score = best_score[k - 1];
+            best_score[k - 1] = best_score[k];
+            best_score[k] = tmp_score;
+            string tmp_sym = best_sym[k - 1];
+            best_sym[k - 1] = best_sym[k];
+            best_sym[k] = tmp_sym;
+            int tmp_cat = best_cat[k - 1];
+            best_cat[k - 1] = best_cat[k];
+            best_cat[k] = tmp_cat;
+         }
       }
    }
 
@@ -1027,6 +1054,16 @@ void FXAI_FillComplianceTrainRequest(CFXAIAIPlugin &plugin,
    req.label_class = label_class;
    req.move_points = move_points;
    req.sample_weight = 1.0;
+   double mfe_points = MathMax(MathAbs(move_points), MathMax(req.ctx.min_move_points, 0.10));
+   double mae_points = (label_class == (int)FXAI_LABEL_SKIP ? mfe_points : 0.35 * mfe_points);
+   double hit_time_frac = (label_class == (int)FXAI_LABEL_SKIP ? 0.75 : 0.40);
+   int path_flags = (label_class == (int)FXAI_LABEL_SKIP ? 1 : 0);
+   FXAI_SetTrainRequestPathTargets(req,
+                                   mfe_points,
+                                   mae_points,
+                                   hit_time_frac,
+                                   path_flags,
+                                   0.0);
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
       req.x[k] = 0.0;
    req.x[0] = 1.0;
@@ -1149,6 +1186,11 @@ double FXAI_PredictionDistance(const FXAIAIPredictionV4 &a,
    d += 0.02 * MathAbs(a.move_q25_points - b.move_q25_points);
    d += 0.02 * MathAbs(a.move_q50_points - b.move_q50_points);
    d += 0.02 * MathAbs(a.move_q75_points - b.move_q75_points);
+   d += 0.02 * MathAbs(a.mfe_mean_points - b.mfe_mean_points);
+   d += 0.02 * MathAbs(a.mae_mean_points - b.mae_mean_points);
+   d += 0.05 * MathAbs(a.hit_time_frac - b.hit_time_frac);
+   d += 0.05 * MathAbs(a.path_risk - b.path_risk);
+   d += 0.05 * MathAbs(a.fill_risk - b.fill_risk);
    d += 0.10 * MathAbs(a.confidence - b.confidence);
    d += 0.10 * MathAbs(a.reliability - b.reliability);
    return d;

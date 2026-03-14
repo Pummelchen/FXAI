@@ -757,6 +757,11 @@ int SpecialDirectionAI(const string symbol)
    double ensemble_conf_sum = 0.0;
    double ensemble_rel_sum = 0.0;
    double ensemble_margin_sum = 0.0;
+   double ensemble_hit_time_sum = 0.0;
+   double ensemble_path_risk_sum = 0.0;
+   double ensemble_fill_risk_sum = 0.0;
+   double ensemble_mfe_ratio_sum = 0.0;
+   double ensemble_mae_ratio_sum = 0.0;
    double family_support[FXAI_FAMILY_OTHER + 1];
    for(int fam_i=0; fam_i<=FXAI_FAMILY_OTHER; fam_i++) family_support[fam_i] = 0.0;
    double ensemble_probs[3];
@@ -930,6 +935,11 @@ int SpecialDirectionAI(const string symbol)
          ensemble_conf_sum += meta_w * FXAI_Clamp(pred.confidence, 0.0, 1.0);
          ensemble_rel_sum += meta_w * FXAI_Clamp(pred.reliability, 0.0, 1.0);
          ensemble_margin_sum += meta_w * FXAI_Clamp(MathAbs(class_probs_pred[(int)FXAI_LABEL_BUY] - class_probs_pred[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+         ensemble_hit_time_sum += meta_w * FXAI_Clamp(pred.hit_time_frac, 0.0, 1.0);
+         ensemble_path_risk_sum += meta_w * FXAI_Clamp(pred.path_risk, 0.0, 1.0);
+         ensemble_fill_risk_sum += meta_w * FXAI_Clamp(pred.fill_risk, 0.0, 1.0);
+         ensemble_mfe_ratio_sum += meta_w * FXAI_Clamp(pred.mfe_mean_points / MathMax(expected_move, min_move_pred), 0.0, 4.0);
+         ensemble_mae_ratio_sum += meta_w * FXAI_Clamp(pred.mae_mean_points / MathMax(pred.mfe_mean_points, min_move_pred), 0.0, 2.0);
          if(manifest.family >= 0 && manifest.family <= FXAI_FAMILY_OTHER)
             family_support[manifest.family] += meta_w;
 
@@ -958,6 +968,11 @@ int SpecialDirectionAI(const string symbol)
          double avg_conf = ensemble_conf_sum / ensemble_meta_total;
          double avg_rel = ensemble_rel_sum / ensemble_meta_total;
          double avg_margin = ensemble_margin_sum / ensemble_meta_total;
+         double avg_hit_time = ensemble_hit_time_sum / ensemble_meta_total;
+         double avg_path_risk = ensemble_path_risk_sum / ensemble_meta_total;
+         double avg_fill_risk = ensemble_fill_risk_sum / ensemble_meta_total;
+         double avg_mfe_ratio = ensemble_mfe_ratio_sum / ensemble_meta_total;
+         double avg_mae_ratio = ensemble_mae_ratio_sum / ensemble_meta_total;
          double move_dispersion = MathSqrt(MathMax(avg_expected_sq - avg_expected * avg_expected, 0.0));
          int active_family_count = 0;
          double dominant_family_support = 0.0;
@@ -997,6 +1012,11 @@ int SpecialDirectionAI(const string symbol)
                                  dominant_family_ratio,
                                  context_strength,
                                  context_quality,
+                                 avg_hit_time,
+                                 avg_path_risk,
+                                 avg_fill_risk,
+                                 avg_mfe_ratio,
+                                 avg_mae_ratio,
                                  stack_feat);
          double stack_probs_dyn[];
          ArrayResize(stack_probs_dyn, 3);

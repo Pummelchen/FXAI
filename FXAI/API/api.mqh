@@ -109,6 +109,27 @@ bool FXAI_ValidatePredictionV4(const FXAIAIPredictionV4 &pred,
       reason = "move_quantiles";
       return false;
    }
+   if(!MathIsValidNumber(pred.mfe_mean_points) || pred.mfe_mean_points < 0.0 ||
+      !MathIsValidNumber(pred.mae_mean_points) || pred.mae_mean_points < 0.0)
+   {
+      reason = "path_excursions";
+      return false;
+   }
+   if(!MathIsValidNumber(pred.hit_time_frac) || pred.hit_time_frac < 0.0 || pred.hit_time_frac > 1.0)
+   {
+      reason = "hit_time_frac";
+      return false;
+   }
+   if(!MathIsValidNumber(pred.path_risk) || pred.path_risk < 0.0 || pred.path_risk > 1.0)
+   {
+      reason = "path_risk";
+      return false;
+   }
+   if(!MathIsValidNumber(pred.fill_risk) || pred.fill_risk < 0.0 || pred.fill_risk > 1.0)
+   {
+      reason = "fill_risk";
+      return false;
+   }
    if(!MathIsValidNumber(pred.confidence) || pred.confidence < 0.0 || pred.confidence > 1.0)
    {
       reason = "confidence";

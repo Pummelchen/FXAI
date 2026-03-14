@@ -223,6 +223,12 @@ struct FXAIAITrainRequestV4
    int label_class;
    double move_points;
    double sample_weight;
+   double mfe_points;
+   double mae_points;
+   double time_to_hit_frac;
+   int    path_flags;
+   double path_risk;
+   double fill_risk;
    int window_size;
    double x[FXAI_AI_WEIGHTS];
    double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
@@ -244,6 +250,11 @@ struct FXAIAIPredictionV4
    double move_q25_points;
    double move_q50_points;
    double move_q75_points;
+   double mfe_mean_points;
+   double mae_mean_points;
+   double hit_time_frac;
+   double path_risk;
+   double fill_risk;
    double confidence;
    double reliability;
 };
@@ -255,10 +266,16 @@ struct FXAIAIModelOutputV4
    double move_q25_points;
    double move_q50_points;
    double move_q75_points;
+   double mfe_mean_points;
+   double mae_mean_points;
+   double hit_time_frac;
+   double path_risk;
+   double fill_risk;
    double confidence;
    double reliability;
    bool   has_quantiles;
    bool   has_confidence;
+   bool   has_path_quality;
 };
 
 bool FXAI_HasCapability(const ulong capability_mask,
@@ -351,6 +368,34 @@ double FXAI_MoveEdgeWeight(const double move_points, const double cost_points)
    double edge = mv - c;
    double denom = MathMax(c, 1.0);
    return FXAI_Clamp(0.50 + (edge / denom), 0.25, 4.00);
+}
+
+double FXAI_PathRiskFromTargets(const double mfe_points,
+                                const double mae_points,
+                                const double min_move_points,
+                                const double time_to_hit_frac,
+                                const int path_flags)
+{
+   double mfe = MathMax(MathAbs(mfe_points), MathMax(min_move_points, 0.10));
+   double mae = MathMax(MathAbs(mae_points), 0.0);
+   double adverse_ratio = FXAI_Clamp(mae / mfe, 0.0, 3.0);
+   double slow = FXAI_Clamp(time_to_hit_frac, 0.0, 1.0);
+   double risk = 0.45 * adverse_ratio + 0.30 * slow;
+   if((path_flags & 1) != 0)
+      risk += 0.15;
+   if((path_flags & 2) != 0)
+      risk += 0.10;
+   if((path_flags & 8) != 0)
+      risk += 0.08;
+   return FXAI_Clamp(risk, 0.0, 1.0);
+}
+
+double FXAI_FillRiskFromTargets(const double spread_stress_points,
+                                const double min_move_points,
+                                const double cost_points)
+{
+   double denom = MathMax(min_move_points + MathMax(cost_points, 0.0), 0.25);
+   return FXAI_Clamp(MathAbs(spread_stress_points) / denom, 0.0, 1.0);
 }
 
 void FXAI_UpdateMoveEMA(double &ema_abs_move,
@@ -593,10 +638,12 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
 
    double seq_mean[FXAI_AI_WEIGHTS];
    double seq_delta[FXAI_AI_WEIGHTS];
+   double seq_std[FXAI_AI_WEIGHTS];
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
    {
       seq_mean[k] = raw_x[k];
       seq_delta[k] = 0.0;
+      seq_std[k] = 0.0;
    }
 
    if(seq_n > 1)
@@ -615,6 +662,17 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
             seq_mean[k] /= denom;
       }
+
+      for(int b=0; b<seq_n && b<window_size; b++)
+      {
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         {
+            double d = x_window[b][k] - seq_mean[k];
+            seq_std[k] += d * d;
+         }
+      }
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         seq_std[k] = MathSqrt(seq_std[k] / (double)MathMax(seq_n - 1, 1));
 
       int last_idx = seq_n - 2;
       if(last_idx >= 0 && last_idx < window_size)
@@ -709,6 +767,19 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
          FXAI_SetInputFeature(x, 37, FXAI_GetInputFeature(seq_delta, 2));
          FXAI_SetInputFeature(x, 38, seq_ctx);
          FXAI_SetInputFeature(x, 39, seq_vol);
+         // Preserve explicit lag/context blocks for sequence-capable plugins.
+         FXAI_SetInputFeature(x, 50, FXAI_GetInputFeature(x, 50));
+         FXAI_SetInputFeature(x, 51, FXAI_GetInputFeature(x, 51));
+         FXAI_SetInputFeature(x, 52, FXAI_GetInputFeature(x, 52));
+         FXAI_SetInputFeature(x, 53, FXAI_GetInputFeature(x, 53));
+         FXAI_SetInputFeature(x, 54, FXAI_GetInputFeature(x, 54));
+         FXAI_SetInputFeature(x, 55, FXAI_GetInputFeature(x, 55));
+         FXAI_SetInputFeature(x, 56, FXAI_GetInputFeature(x, 56));
+         FXAI_SetInputFeature(x, 57, FXAI_GetInputFeature(x, 57));
+         FXAI_SetInputFeature(x, 58, FXAI_GetInputFeature(seq_delta, 50));
+         FXAI_SetInputFeature(x, 59, FXAI_GetInputFeature(seq_delta, 51));
+         FXAI_SetInputFeature(x, 60, FXAI_GetInputFeature(seq_std, 50));
+         FXAI_SetInputFeature(x, 61, FXAI_GetInputFeature(seq_std, 51));
          break;
       }
 
@@ -759,6 +830,27 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
          FXAI_SetInputFeature(x, 12, 0.50 * (FXAI_GetInputFeature(x, 12) + ctx_corr));
          FXAI_SetInputFeature(x, 13, ctx_lag);
          FXAI_SetInputFeature(x, 14, ctx_strength);
+         // Keep explicit per-symbol context blocks instead of collapsing them all.
+         FXAI_SetInputFeature(x, 15, FXAI_GetInputFeature(x, 50));
+         FXAI_SetInputFeature(x, 16, FXAI_GetInputFeature(x, 51));
+         FXAI_SetInputFeature(x, 17, FXAI_GetInputFeature(x, 52));
+         FXAI_SetInputFeature(x, 18, FXAI_GetInputFeature(x, 53));
+         FXAI_SetInputFeature(x, 19, FXAI_GetInputFeature(x, 54));
+         FXAI_SetInputFeature(x, 20, FXAI_GetInputFeature(x, 55));
+         FXAI_SetInputFeature(x, 21, FXAI_GetInputFeature(x, 56));
+         FXAI_SetInputFeature(x, 22, FXAI_GetInputFeature(x, 57));
+         FXAI_SetInputFeature(x, 50, FXAI_GetInputFeature(x, 58));
+         FXAI_SetInputFeature(x, 51, FXAI_GetInputFeature(x, 59));
+         FXAI_SetInputFeature(x, 52, FXAI_GetInputFeature(x, 60));
+         FXAI_SetInputFeature(x, 53, FXAI_GetInputFeature(x, 61));
+         FXAI_SetInputFeature(x, 54, FXAI_GetInputFeature(seq_mean, 50));
+         FXAI_SetInputFeature(x, 55, FXAI_GetInputFeature(seq_mean, 51));
+         FXAI_SetInputFeature(x, 56, FXAI_GetInputFeature(seq_mean, 52));
+         FXAI_SetInputFeature(x, 57, FXAI_GetInputFeature(seq_mean, 53));
+         FXAI_SetInputFeature(x, 58, FXAI_GetInputFeature(seq_delta, 50));
+         FXAI_SetInputFeature(x, 59, FXAI_GetInputFeature(seq_delta, 51));
+         FXAI_SetInputFeature(x, 60, FXAI_GetInputFeature(seq_std, 50));
+         FXAI_SetInputFeature(x, 61, FXAI_GetInputFeature(seq_std, 51));
          break;
       }
 
@@ -880,12 +972,39 @@ void FXAI_ClearTrainRequest(FXAIAITrainRequestV4 &req)
    req.label_class = (int)FXAI_LABEL_SKIP;
    req.move_points = 0.0;
    req.sample_weight = 0.0;
+   req.mfe_points = 0.0;
+   req.mae_points = 0.0;
+   req.time_to_hit_frac = 1.0;
+   req.path_flags = 0;
+   req.path_risk = 0.0;
+   req.fill_risk = 0.0;
    req.window_size = 0;
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
       req.x[k] = 0.0;
    for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x_window[b][k] = 0.0;
+}
+
+void FXAI_SetTrainRequestPathTargets(FXAIAITrainRequestV4 &req,
+                                     const double mfe_points,
+                                     const double mae_points,
+                                     const double time_to_hit_frac,
+                                     const int path_flags,
+                                     const double spread_stress_points)
+{
+   req.mfe_points = MathMax(MathAbs(mfe_points), 0.0);
+   req.mae_points = MathMax(MathAbs(mae_points), 0.0);
+   req.time_to_hit_frac = FXAI_Clamp(time_to_hit_frac, 0.0, 1.0);
+   req.path_flags = path_flags;
+   req.path_risk = FXAI_PathRiskFromTargets(req.mfe_points,
+                                            req.mae_points,
+                                            req.ctx.min_move_points,
+                                            req.time_to_hit_frac,
+                                            req.path_flags);
+   req.fill_risk = FXAI_FillRiskFromTargets(spread_stress_points,
+                                            req.ctx.min_move_points,
+                                            req.ctx.cost_points);
 }
 
 void FXAI_CopyWindowPayload(const double &src[][FXAI_AI_WEIGHTS], const int src_size, double &dst[][FXAI_AI_WEIGHTS], int &dst_size)

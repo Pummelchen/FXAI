@@ -23,6 +23,7 @@ DEFAULT_REPORT = COMMON_FILES / "FXAI/Audit/fxai_audit_report.tsv"
 DEFAULT_TEXT_REPORT = ROOT / "Tools/latest_drill_report.md"
 ORACLES_PATH = ROOT / "Tools/plugin_oracles.json"
 BASELINES_DIR = ROOT / "Tools/Baselines"
+EXPERIMENTS_DIR = ROOT / "Tools/Experiments"
 TESTER_PRESET_DIR = TERMINAL_ROOT / "MQL5/Profiles/Tester"
 COMMON_INI = TERMINAL_ROOT / "config/common.ini"
 TERMINAL_INI = TERMINAL_ROOT / "config/terminal.ini"
@@ -621,6 +622,126 @@ def render_optimization_campaign(campaign: dict) -> str:
     return "\n".join(out)
 
 
+def campaign_runs(campaign: dict, limit_plugins: int | None = None, limit_experiments: int | None = None) -> list[dict]:
+    runs: list[dict] = []
+    plugin_items = sorted(campaign.get("plugins", {}).items())
+    if limit_plugins and limit_plugins > 0:
+        plugin_items = plugin_items[:limit_plugins]
+
+    for name, info in plugin_items:
+        exp_count = 0
+        for exp in info.get("experiments", []):
+            focus = exp.get("focus", [])
+            if exp["name"] == "schema_ablation":
+                for schema in exp.get("schemas", []):
+                    runs.append({"plugin": name, "experiment": exp["name"], "scenario_list": focus, "schema_id": schema})
+            elif exp["name"] == "normalization_sweep":
+                for norm in exp.get("normalizations", []):
+                    runs.append({"plugin": name, "experiment": exp["name"], "scenario_list": focus, "normalization": norm})
+            elif exp["name"] == "sequence_sweep":
+                for seq in exp.get("sequence_bars", []):
+                    runs.append({"plugin": name, "experiment": exp["name"], "scenario_list": focus, "sequence_bars": seq})
+            elif exp["name"] == "feature_mask_ablation":
+                for mask in exp.get("feature_masks", []):
+                    runs.append({"plugin": name, "experiment": exp["name"], "scenario_list": focus, "feature_mask": mask})
+            elif exp["name"] == "execution_sweep":
+                for slip in exp.get("slippage_points", []):
+                    for fillp in exp.get("fill_penalty_points", []):
+                        runs.append({
+                            "plugin": name,
+                            "experiment": exp["name"],
+                            "scenario_list": focus,
+                            "slippage_points": slip,
+                            "fill_penalty_points": fillp,
+                        })
+            elif exp["name"] == "walkforward_gate":
+                for train_bars, test_bars in exp.get("train_test_pairs", []):
+                    runs.append({
+                        "plugin": name,
+                        "experiment": exp["name"],
+                        "scenario_list": focus,
+                        "wf_train_bars": train_bars,
+                        "wf_test_bars": test_bars,
+                    })
+            else:
+                runs.append({"plugin": name, "experiment": exp["name"], "scenario_list": focus})
+
+            exp_count += 1
+            if limit_experiments and limit_experiments > 0 and exp_count >= limit_experiments:
+                break
+    return runs
+
+
+def build_run_audit_namespace(base_args, run: dict, output_path: Path):
+    return argparse.Namespace(
+        all_plugins=False,
+        plugin_id=28,
+        plugin_list=f"{{{run['plugin']}}}",
+        scenario_list="{" + ", ".join(run.get("scenario_list", [])) + "}",
+        bars=base_args.bars,
+        horizon=base_args.horizon,
+        m1sync_bars=base_args.m1sync_bars,
+        normalization=run.get("normalization", base_args.normalization),
+        sequence_bars=run.get("sequence_bars", base_args.sequence_bars),
+        schema_id=run.get("schema_id", base_args.schema_id),
+        feature_mask=run.get("feature_mask", base_args.feature_mask),
+        commission_per_lot_side=base_args.commission_per_lot_side,
+        cost_buffer_points=base_args.cost_buffer_points,
+        slippage_points=run.get("slippage_points", base_args.slippage_points),
+        fill_penalty_points=run.get("fill_penalty_points", base_args.fill_penalty_points),
+        wf_train_bars=run.get("wf_train_bars", base_args.wf_train_bars),
+        wf_test_bars=run.get("wf_test_bars", base_args.wf_test_bars),
+        seed=base_args.seed,
+        symbol=base_args.symbol,
+        login=base_args.login,
+        server=base_args.server,
+        password=base_args.password,
+        timeout=base_args.timeout,
+        baseline=None,
+        output=str(output_path),
+        compare_output=None,
+    )
+
+
+def execute_optimization_campaign(campaign: dict, args) -> int:
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    out_dir = Path(args.output_dir) if args.output_dir else (EXPERIMENTS_DIR / ts)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "campaign.json").write_text(json.dumps(campaign, indent=2, sort_keys=True), encoding="utf-8")
+
+    runs = campaign_runs(campaign, args.limit_plugins, args.limit_experiments)
+    results = []
+    for idx, run in enumerate(runs, start=1):
+        stem = f"{idx:03d}_{run['plugin']}_{run['experiment']}"
+        report_path = out_dir / f"{stem}.md"
+        run_args = build_run_audit_namespace(args, run, report_path)
+        rc = cmd_run_audit(run_args)
+        result = {
+            "index": idx,
+            "plugin": run["plugin"],
+            "experiment": run["experiment"],
+            "parameters": run,
+            "status": ("ok" if rc == 0 else "failed"),
+            "report": str(report_path),
+        }
+        if rc == 0 and DEFAULT_REPORT.exists():
+            oracles = load_oracles()
+            summary = build_summary(load_rows(DEFAULT_REPORT), oracles)
+            result["summary"] = summary.get("plugins", {}).get(run["plugin"], {})
+        results.append(result)
+        (out_dir / "results.json").write_text(json.dumps(results, indent=2, sort_keys=True), encoding="utf-8")
+        if rc != 0:
+            # Keep running, but make failures explicit in the ledger.
+            continue
+
+    print(f"\n# FXAI Optimization Execution Ledger\n")
+    print(f"output_dir: {out_dir}")
+    print(f"runs: {len(results)}")
+    failed = sum(1 for item in results if item["status"] != "ok")
+    print(f"failed: {failed}")
+    return 0 if failed == 0 else 1
+
+
 def resolve_baseline_path(name_or_path: str) -> Path:
     candidate = Path(name_or_path)
     if candidate.exists():
@@ -1101,6 +1222,8 @@ def cmd_optimize_audit(args):
         Path(args.output).write_text(text, encoding="utf-8")
     if args.json_output:
         Path(args.json_output).write_text(json.dumps(campaign, indent=2, sort_keys=True), encoding="utf-8")
+    if args.execute:
+        return execute_optimization_campaign(campaign, args)
     return 0
 
 
@@ -1172,6 +1295,29 @@ def main():
     oa.add_argument("--report", default=str(DEFAULT_REPORT))
     oa.add_argument("--output")
     oa.add_argument("--json-output")
+    oa.add_argument("--execute", action="store_true")
+    oa.add_argument("--output-dir")
+    oa.add_argument("--limit-plugins", type=int, default=0)
+    oa.add_argument("--limit-experiments", type=int, default=0)
+    oa.add_argument("--bars", type=int, default=20000)
+    oa.add_argument("--horizon", type=int, default=5)
+    oa.add_argument("--m1sync-bars", type=int, default=3)
+    oa.add_argument("--normalization", type=int, default=0)
+    oa.add_argument("--sequence-bars", type=int, default=0)
+    oa.add_argument("--schema-id", type=int, default=0)
+    oa.add_argument("--feature-mask", type=int, default=0)
+    oa.add_argument("--commission-per-lot-side", type=float, default=0.0)
+    oa.add_argument("--cost-buffer-points", type=float, default=2.0)
+    oa.add_argument("--slippage-points", type=float, default=0.0)
+    oa.add_argument("--fill-penalty-points", type=float, default=0.0)
+    oa.add_argument("--wf-train-bars", type=int, default=256)
+    oa.add_argument("--wf-test-bars", type=int, default=64)
+    oa.add_argument("--seed", type=int, default=42)
+    oa.add_argument("--symbol", default="EURUSD")
+    oa.add_argument("--login")
+    oa.add_argument("--server")
+    oa.add_argument("--password")
+    oa.add_argument("--timeout", type=int, default=180)
     oa.set_defaults(func=cmd_optimize_audit)
 
     args = ap.parse_args()

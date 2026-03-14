@@ -529,6 +529,12 @@ void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
    s3.label_class = sample.label_class;
    s3.move_points = sample.move_points;
    s3.sample_weight = sample.sample_weight;
+   FXAI_SetTrainRequestPathTargets(s3,
+                                   sample.mfe_points,
+                                   sample.mae_points,
+                                   sample.time_to_hit_frac,
+                                   sample.path_flags,
+                                   sample.spread_stress);
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
       s3.x[k] = sample.x[k];
    s3.window_size = window_size;
@@ -972,8 +978,14 @@ void FXAI_ResetModelHyperParams()
          for(int h=0; h<FXAI_STACK_HIDDEN; h++)
             g_stack_w2[r][c][h] = 0.0;
       }
-      for(int k=0; k<FXAI_HPOL_FEATS; k++)
-         g_hpolicy_w[r][k] = 0.0;
+      g_hpolicy_b2[r] = 0.0;
+      for(int h=0; h<FXAI_HPOL_HIDDEN; h++)
+      {
+         g_hpolicy_b1[r][h] = 0.0;
+         g_hpolicy_w2[r][h] = 0.0;
+         for(int k=0; k<FXAI_HPOL_FEATS; k++)
+            g_hpolicy_w1[r][h][k] = 0.0;
+      }
       for(int h=0; h<FXAI_MAX_HORIZONS; h++)
       {
          g_horizon_regime_edge_ema[r][h] = 0.0;

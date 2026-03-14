@@ -253,6 +253,42 @@ void FXAI_BuildHorizonPolicyFeatures(const int horizon_minutes,
    feat[37] = FXAI_Clamp((expected_abs_points / MathMax((double)horizon_minutes, 1.0)) / MathMax(vol_points, 0.50), 0.0, 6.0) / 3.0 - 0.5;
    feat[38] = FXAI_Clamp((double)session_bucket / (double)MathMax(FXAI_PLUGIN_SESSION_BUCKETS - 1, 1), 0.0, 1.0) * rel_hint - 0.5;
    feat[39] = FXAI_Clamp((MathAbs(net_edge) / mm) * (0.50 + MathAbs(ctx_quality)), 0.0, 8.0) / 4.0 - 0.5;
+   feat[40] = FXAI_Clamp(MathAbs(regime_edge), 0.0, 4.0) / 2.0 - 0.5;
+   feat[41] = FXAI_Clamp(MathAbs(model_edge), 0.0, 4.0) / 2.0 - 0.5;
+   feat[42] = FXAI_Clamp(ctx_strength * MathMax(ctx_quality + 1.0, 0.0), 0.0, 8.0) / 4.0 - 0.5;
+   feat[43] = FXAI_Clamp((net_edge / mm) * MathMax(rel_hint, 0.05) / MathSqrt((double)MathMax(horizon_minutes, 1)), -4.0, 4.0) / 4.0;
+   feat[44] = FXAI_Clamp((hold_penalty * (double)horizon_minutes) * MathMax(vol_points, 0.25), 0.0, 6.0) / 3.0 - 0.5;
+   feat[45] = FXAI_Clamp((snapshot.spread_points / MathMax(expected_abs_points + mm, mm)) * (0.50 + rel_hint), 0.0, 2.0) - 0.5;
+   feat[46] = FXAI_Clamp((double)(session_bucket + 1) / (double)MathMax(FXAI_PLUGIN_SESSION_BUCKETS, 1) * (ctx_strength + 0.50), 0.0, 3.0) / 1.5 - 0.5;
+   feat[47] = FXAI_Clamp(((double)base_h / (double)MathMax(horizon_minutes, 1) - 1.0) * (0.50 + MathMax(ctx_quality, 0.0)), -3.0, 3.0) / 3.0;
+}
+
+double FXAI_HorizonPolicyPredictValue(const int regime_id,
+                                      const double &feat[],
+                                      double &hidden[])
+{
+   int r = regime_id;
+   if(r < 0 || r >= FXAI_REGIME_COUNT) r = 0;
+
+   for(int h=0; h<FXAI_HPOL_HIDDEN; h++)
+   {
+      double z = g_hpolicy_b1[r][h];
+      for(int k=0; k<FXAI_HPOL_FEATS; k++)
+         z += g_hpolicy_w1[r][h][k] * feat[k];
+      hidden[h] = FXAI_Tanh(z);
+   }
+
+   double pred = g_hpolicy_b2[r];
+   for(int h=0; h<FXAI_HPOL_HIDDEN; h++)
+      pred += g_hpolicy_w2[r][h] * hidden[h];
+   return pred;
+}
+
+double FXAI_HorizonPolicyPredictValue(const int regime_id,
+                                      const double &feat[])
+{
+   double hidden[FXAI_HPOL_HIDDEN];
+   return FXAI_HorizonPolicyPredictValue(regime_id, feat, hidden);
 }
 
 int FXAI_SelectRoutedHorizon(const double &close_arr[],
@@ -328,9 +364,7 @@ int FXAI_SelectRoutedHorizon(const double &close_arr[],
                                          model_reliability_hint,
                                          feat);
 
-         double learned = 0.0;
-         for(int k=0; k<FXAI_HPOL_FEATS; k++)
-            learned += g_hpolicy_w[regime_id][k] * feat[k];
+         double learned = FXAI_HorizonPolicyPredictValue(regime_id, feat);
          score += 0.35 * learned;
       }
 
@@ -368,6 +402,11 @@ void FXAI_StackBuildFeatures(const double buy_pct,
                              const double dominant_family_ratio,
                              const double context_strength,
                              const double context_quality,
+                             const double avg_hit_time,
+                             const double avg_path_risk,
+                             const double avg_fill_risk,
+                             const double avg_mfe_ratio,
+                             const double avg_mae_ratio,
                              double &feat[])
 {
    for(int k=0; k<FXAI_STACK_FEATS; k++)
@@ -446,6 +485,14 @@ void FXAI_StackBuildFeatures(const double buy_pct,
    feat[45] = FXAI_Clamp(avg_confidence * directional_margin * (1.0 - pk), 0.0, 1.0);
    feat[46] = FXAI_Clamp(context_strength * dominant_family_ratio * avg_reliability, 0.0, 4.0) / 2.0 - 0.5;
    feat[47] = FXAI_Clamp((avg_buy_ev + avg_sell_ev) / MathMax(expected_move_points + mm, mm), -2.0, 2.0) / 2.0;
+   feat[48] = FXAI_Clamp(avg_hit_time, 0.0, 1.0);
+   feat[49] = FXAI_Clamp(avg_path_risk, 0.0, 1.0);
+   feat[50] = FXAI_Clamp(avg_fill_risk, 0.0, 1.0);
+   feat[51] = FXAI_Clamp(avg_mfe_ratio, 0.0, 4.0) / 2.0 - 0.5;
+   feat[52] = FXAI_Clamp(avg_mae_ratio, 0.0, 2.0) - 0.5;
+   feat[53] = FXAI_Clamp((1.0 - avg_path_risk) * avg_confidence, 0.0, 1.0);
+   feat[54] = FXAI_Clamp((1.0 - avg_fill_risk) * dominant_family_ratio, 0.0, 1.0);
+   feat[55] = FXAI_Clamp(avg_mfe_ratio * (1.0 - avg_mae_ratio) * MathMax(context_quality + 1.0, 0.0), 0.0, 4.0) / 2.0 - 0.5;
 }
 
 void FXAI_StackPredict(const int regime_id, const double &feat[], double &probs[])
@@ -1342,8 +1389,14 @@ void FXAI_ResetAdaptiveRoutingState()
          for(int h=0; h<FXAI_STACK_HIDDEN; h++)
             g_stack_w2[r][c][h] = 0.0;
       }
-      for(int k=0; k<FXAI_HPOL_FEATS; k++)
-         g_hpolicy_w[r][k] = 0.0;
+      g_hpolicy_b2[r] = 0.0;
+      for(int h=0; h<FXAI_HPOL_HIDDEN; h++)
+      {
+         g_hpolicy_b1[r][h] = 0.0;
+         g_hpolicy_w2[r][h] = 0.0;
+         for(int k=0; k<FXAI_HPOL_FEATS; k++)
+            g_hpolicy_w1[r][h][k] = 0.0;
+      }
       for(int h=0; h<FXAI_MAX_HORIZONS; h++)
       {
          g_horizon_regime_edge_ema[r][h] = 0.0;
@@ -1602,18 +1655,32 @@ void FXAI_UpdateHorizonPolicy(const int regime_id,
    int r = regime_id;
    if(r < 0 || r >= FXAI_REGIME_COUNT) r = 0;
 
-   double pred = 0.0;
-   for(int k=0; k<FXAI_HPOL_FEATS; k++)
-      pred += g_hpolicy_w[r][k] * feat[k];
+   double hidden[FXAI_HPOL_HIDDEN];
+   double w2_old[FXAI_HPOL_HIDDEN];
+   for(int h=0; h<FXAI_HPOL_HIDDEN; h++)
+      w2_old[h] = g_hpolicy_w2[r][h];
+   double pred = FXAI_HorizonPolicyPredictValue(r, feat, hidden);
 
    double err = FXAI_Clamp(reward_scaled - pred, -4.0, 4.0);
    double lr = 0.020 / MathSqrt(1.0 + 0.02 * (double)g_hpolicy_obs[r]);
    lr = FXAI_Clamp(lr, 0.0015, 0.020);
 
-   for(int k=0; k<FXAI_HPOL_FEATS; k++)
+   g_hpolicy_b2[r] += lr * err;
+   for(int h=0; h<FXAI_HPOL_HIDDEN; h++)
    {
-      double reg = (k == 0 ? 0.0 : 0.0008 * g_hpolicy_w[r][k]);
-      g_hpolicy_w[r][k] += lr * (err * feat[k] - reg);
+      double reg2 = 0.0008 * g_hpolicy_w2[r][h];
+      g_hpolicy_w2[r][h] += lr * (err * hidden[h] - reg2);
+   }
+
+   for(int h=0; h<FXAI_HPOL_HIDDEN; h++)
+   {
+      double dh = (1.0 - hidden[h] * hidden[h]) * w2_old[h] * err;
+      g_hpolicy_b1[r][h] += lr * dh;
+      for(int k=0; k<FXAI_HPOL_FEATS; k++)
+      {
+         double reg1 = 0.0006 * g_hpolicy_w1[r][h][k];
+         g_hpolicy_w1[r][h][k] += lr * (dh * feat[k] - reg1);
+      }
    }
 
    g_hpolicy_obs[r]++;

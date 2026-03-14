@@ -190,6 +190,19 @@ protected:
    double   m_ctx_point_value;
    int      m_ctx_window_size;
    double   m_ctx_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+   bool     m_target_quality_ready;
+   double   m_target_mfe_points;
+   double   m_target_mae_points;
+   double   m_target_hit_time_frac;
+   int      m_target_path_flags;
+   double   m_target_path_risk;
+   double   m_target_fill_risk;
+   bool     m_quality_head_ready;
+   double   m_quality_mfe_ema;
+   double   m_quality_mae_ema;
+   double   m_quality_hit_ema;
+   double   m_quality_path_risk_ema;
+   double   m_quality_fill_risk_ema;
 
    double m_bank_class_mass[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS][3];
    double m_bank_total[FXAI_PLUGIN_REGIME_BUCKETS][FXAI_PLUGIN_SESSION_BUCKETS][FXAI_PLUGIN_HORIZON_BUCKETS];
@@ -203,6 +216,12 @@ protected:
    double   m_replay_x[FXAI_PLUGIN_REPLAY_CAPACITY][FXAI_AI_WEIGHTS];
    int      m_replay_label[FXAI_PLUGIN_REPLAY_CAPACITY];
    double   m_replay_move[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_replay_mfe[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_replay_mae[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_replay_hit_time[FXAI_PLUGIN_REPLAY_CAPACITY];
+   int      m_replay_path_flags[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_replay_path_risk[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_replay_fill_risk[FXAI_PLUGIN_REPLAY_CAPACITY];
    double   m_replay_cost[FXAI_PLUGIN_REPLAY_CAPACITY];
    double   m_replay_min_move[FXAI_PLUGIN_REPLAY_CAPACITY];
    datetime m_replay_time[FXAI_PLUGIN_REPLAY_CAPACITY];
@@ -380,6 +399,19 @@ protected:
       m_ctx_sequence_bars = 1;
       m_ctx_point_value = (_Point > 0.0 ? _Point : 1.0);
       m_ctx_window_size = 0;
+      m_target_quality_ready = false;
+      m_target_mfe_points = 0.0;
+      m_target_mae_points = 0.0;
+      m_target_hit_time_frac = 1.0;
+      m_target_path_flags = 0;
+      m_target_path_risk = 0.0;
+      m_target_fill_risk = 0.0;
+      m_quality_head_ready = false;
+      m_quality_mfe_ema = 0.0;
+      m_quality_mae_ema = 0.0;
+      m_quality_hit_ema = 1.0;
+      m_quality_path_risk_ema = 0.5;
+      m_quality_fill_risk_ema = 0.5;
       for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
             m_ctx_window[b][k] = 0.0;
@@ -407,6 +439,12 @@ protected:
       {
          m_replay_label[i] = (int)FXAI_LABEL_SKIP;
          m_replay_move[i] = 0.0;
+         m_replay_mfe[i] = 0.0;
+         m_replay_mae[i] = 0.0;
+         m_replay_hit_time[i] = 1.0;
+         m_replay_path_flags[i] = 0;
+         m_replay_path_risk[i] = 0.0;
+         m_replay_fill_risk[i] = 0.0;
          m_replay_cost[i] = 0.0;
          m_replay_min_move[i] = 0.0;
          m_replay_time[i] = 0;
@@ -486,6 +524,39 @@ protected:
 
       m_move_head_steps++;
       if(m_move_head_steps >= 16) m_move_head_ready = true;
+   }
+
+   void SetTrainingTargets(const FXAIAITrainRequestV4 &req)
+   {
+      m_target_quality_ready = true;
+      m_target_mfe_points = MathMax(req.mfe_points, 0.0);
+      m_target_mae_points = MathMax(req.mae_points, 0.0);
+      m_target_hit_time_frac = FXAI_Clamp(req.time_to_hit_frac, 0.0, 1.0);
+      m_target_path_flags = req.path_flags;
+      m_target_path_risk = FXAI_Clamp(req.path_risk, 0.0, 1.0);
+      m_target_fill_risk = FXAI_Clamp(req.fill_risk, 0.0, 1.0);
+   }
+
+   void UpdateQualityHeads(const FXAIAITrainRequestV4 &req,
+                           const double sample_w)
+   {
+      double alpha = FXAI_Clamp(0.06 * FXAI_Clamp(sample_w, 0.25, 4.0), 0.01, 0.20);
+      if(!m_quality_head_ready)
+      {
+         m_quality_mfe_ema = MathMax(req.mfe_points, 0.0);
+         m_quality_mae_ema = MathMax(req.mae_points, 0.0);
+         m_quality_hit_ema = FXAI_Clamp(req.time_to_hit_frac, 0.0, 1.0);
+         m_quality_path_risk_ema = FXAI_Clamp(req.path_risk, 0.0, 1.0);
+         m_quality_fill_risk_ema = FXAI_Clamp(req.fill_risk, 0.0, 1.0);
+         m_quality_head_ready = true;
+         return;
+      }
+
+      m_quality_mfe_ema = (1.0 - alpha) * m_quality_mfe_ema + alpha * MathMax(req.mfe_points, 0.0);
+      m_quality_mae_ema = (1.0 - alpha) * m_quality_mae_ema + alpha * MathMax(req.mae_points, 0.0);
+      m_quality_hit_ema = (1.0 - alpha) * m_quality_hit_ema + alpha * FXAI_Clamp(req.time_to_hit_frac, 0.0, 1.0);
+      m_quality_path_risk_ema = (1.0 - alpha) * m_quality_path_risk_ema + alpha * FXAI_Clamp(req.path_risk, 0.0, 1.0);
+      m_quality_fill_risk_ema = (1.0 - alpha) * m_quality_fill_risk_ema + alpha * FXAI_Clamp(req.fill_risk, 0.0, 1.0);
    }
 
    double PredictMoveHeadRaw(const double &x[]) const
@@ -794,6 +865,12 @@ protected:
          m_replay_x[slot][k] = sample.x[k];
       m_replay_label[slot] = sample.label_class;
       m_replay_move[slot] = sample.move_points;
+      m_replay_mfe[slot] = sample.mfe_points;
+      m_replay_mae[slot] = sample.mae_points;
+      m_replay_hit_time[slot] = sample.time_to_hit_frac;
+      m_replay_path_flags[slot] = sample.path_flags;
+      m_replay_path_risk[slot] = sample.path_risk;
+      m_replay_fill_risk[slot] = sample.fill_risk;
       m_replay_cost[slot] = sample.ctx.cost_points;
       m_replay_min_move[slot] = sample.ctx.min_move_points;
       m_replay_time[slot] = sample.ctx.sample_time;
@@ -890,6 +967,13 @@ protected:
          replay_ctx.point_value = m_replay_point_value[idx];
          replay_ctx.sample_time = m_replay_time[idx];
          SetContext(replay_ctx);
+         m_target_quality_ready = true;
+         m_target_mfe_points = m_replay_mfe[idx];
+         m_target_mae_points = m_replay_mae[idx];
+         m_target_hit_time_frac = m_replay_hit_time[idx];
+         m_target_path_flags = m_replay_path_flags[idx];
+         m_target_path_risk = m_replay_path_risk[idx];
+         m_target_fill_risk = m_replay_fill_risk[idx];
          m_ctx_window_size = m_replay_window_size[idx];
          if(m_ctx_window_size < 0) m_ctx_window_size = 0;
          if(m_ctx_window_size > FXAI_MAX_SEQUENCE_BARS) m_ctx_window_size = FXAI_MAX_SEQUENCE_BARS;
@@ -917,6 +1001,13 @@ protected:
       m_ctx_normalization_method_id = keep_norm_method;
       m_ctx_sequence_bars = keep_sequence_bars;
       m_ctx_point_value = keep_point_value;
+      m_target_quality_ready = false;
+      m_target_mfe_points = 0.0;
+      m_target_mae_points = 0.0;
+      m_target_hit_time_frac = 1.0;
+      m_target_path_flags = 0;
+      m_target_path_risk = 0.0;
+      m_target_fill_risk = 0.0;
       m_ctx_window_size = keep_window_size;
       for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
@@ -968,10 +1059,16 @@ protected:
       out.move_q25_points = 0.0;
       out.move_q50_points = 0.0;
       out.move_q75_points = 0.0;
+      out.mfe_mean_points = 0.0;
+      out.mae_mean_points = 0.0;
+      out.hit_time_frac = 1.0;
+      out.path_risk = 0.0;
+      out.fill_risk = 0.0;
       out.confidence = 0.0;
       out.reliability = 0.0;
       out.has_quantiles = false;
       out.has_confidence = false;
+      out.has_path_quality = false;
    }
 
    virtual bool PredictDistributionCore(const double &x[],
@@ -1017,6 +1114,20 @@ protected:
       out.move_q25_points = MathMax(0.0, out.move_mean_points - 0.55 * sigma);
       out.move_q50_points = MathMax(out.move_q25_points, out.move_mean_points);
       out.move_q75_points = MathMax(out.move_q50_points, out.move_mean_points + 0.55 * sigma);
+      double mfe_scale = 1.20 + 0.35 * directional_conf + 0.20 * (1.0 - skip_p);
+      double mae_scale = 0.35 + 0.25 * skip_p + 0.20 * entropy;
+      if(m_quality_head_ready)
+      {
+         double quality_base = MathMax(m_move_ema_abs, MathMax(move_scale, 0.10));
+         mfe_scale = FXAI_Clamp(m_quality_mfe_ema / MathMax(quality_base, 0.10), 0.80, 3.00);
+         mae_scale = FXAI_Clamp(m_quality_mae_ema / MathMax(MathMax(m_quality_mfe_ema, quality_base), 0.10), 0.05, 1.50);
+      }
+      out.mfe_mean_points = MathMax(out.move_q75_points, out.move_mean_points * mfe_scale);
+      out.mae_mean_points = MathMax(0.0, out.move_mean_points * mae_scale);
+      double hit_frac = 0.60 - 0.25 * directional_conf + 0.20 * skip_p + 0.15 * entropy;
+      if(m_quality_head_ready)
+         hit_frac = 0.55 * m_quality_hit_ema + 0.45 * hit_frac;
+      out.hit_time_frac = FXAI_Clamp(hit_frac, 0.0, 1.0);
       out.confidence = FXAI_Clamp(0.60 * directional_conf + 0.20 * (1.0 - skip_p) + 0.20 * (1.0 - entropy), 0.0, 1.0);
       int r = m_ctx_regime_id;
       if(r < 0) r = 0;
@@ -1026,8 +1137,19 @@ protected:
       double bank_mass = m_bank_total[r][s][h];
       double bank_rel = FXAI_Clamp(bank_mass / 120.0, 0.0, 1.0);
       out.reliability = FXAI_Clamp(0.45 + 0.25 * bank_rel + 0.20 * (1.0 - entropy) + 0.10 * (m_move_ready ? 1.0 : 0.0), 0.0, 1.0);
+      double path_risk = 0.40 * FXAI_Clamp(out.mae_mean_points / MathMax(out.mfe_mean_points, move_scale), 0.0, 1.0) +
+                         0.35 * out.hit_time_frac +
+                         0.25 * skip_p;
+      if(m_quality_head_ready)
+         path_risk = 0.55 * path_risk + 0.45 * m_quality_path_risk_ema;
+      out.path_risk = FXAI_Clamp(path_risk, 0.0, 1.0);
+      double fill_risk = FXAI_Clamp((ResolveCostPoints(x) + 0.50 * ResolveMinMovePoints()) / MathMax(out.move_mean_points + move_scale, 0.25), 0.0, 1.0);
+      if(m_quality_head_ready)
+         fill_risk = 0.50 * fill_risk + 0.50 * m_quality_fill_risk_ema;
+      out.fill_risk = FXAI_Clamp(fill_risk, 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
+      out.has_path_quality = true;
       return true;
    }
 
@@ -1068,6 +1190,23 @@ protected:
          dst.move_q75_points = 0.0;
       }
 
+      if(model_out.has_path_quality)
+      {
+         dst.mfe_mean_points = MathMax(0.0, model_out.mfe_mean_points * scale);
+         dst.mae_mean_points = MathMax(0.0, model_out.mae_mean_points * scale);
+         dst.hit_time_frac = FXAI_Clamp(model_out.hit_time_frac, 0.0, 1.0);
+         dst.path_risk = FXAI_Clamp(model_out.path_risk, 0.0, 1.0);
+         dst.fill_risk = FXAI_Clamp(model_out.fill_risk, 0.0, 1.0);
+      }
+      else
+      {
+         dst.mfe_mean_points = MathMax(dst.move_q75_points, dst.move_mean_points);
+         dst.mae_mean_points = MathMax(0.0, 0.35 * dst.move_mean_points);
+         dst.hit_time_frac = FXAI_Clamp(0.60 - 0.20 * directional_conf + 0.20 * skip_p, 0.0, 1.0);
+         dst.path_risk = FXAI_Clamp(0.40 * skip_p + 0.35 * dst.hit_time_frac, 0.0, 1.0);
+         dst.fill_risk = FXAI_Clamp((m_ctx_cost_points + 0.25 * ResolveMinMovePoints()) / MathMax(dst.move_mean_points + ResolveMinMovePoints(), 0.25), 0.0, 1.0);
+      }
+
       dst.confidence = FXAI_Clamp(model_out.has_confidence ? model_out.confidence : directional_conf, 0.0, 1.0);
       dst.reliability = FXAI_Clamp(model_out.has_confidence ? model_out.reliability : (1.0 - 0.50 * skip_p), 0.0, 1.0);
    }
@@ -1093,6 +1232,13 @@ protected:
          sum += m_ctx_window[b][input_idx];
       return sum / (double)m_ctx_window_size;
    }
+
+   double TargetMFEPoints(void) const { return m_target_quality_ready ? m_target_mfe_points : 0.0; }
+   double TargetMAEPoints(void) const { return m_target_quality_ready ? m_target_mae_points : 0.0; }
+   double TargetHitTimeFrac(void) const { return m_target_quality_ready ? m_target_hit_time_frac : 1.0; }
+   int TargetPathFlags(void) const { return m_target_quality_ready ? m_target_path_flags : 0; }
+   double TargetPathRisk(void) const { return m_target_quality_ready ? m_target_path_risk : 0.0; }
+   double TargetFillRisk(void) const { return m_target_quality_ready ? m_target_fill_risk : 0.0; }
 
 public:
    CFXAIAIPlugin(void) { ResetAuxState(); }
@@ -1135,6 +1281,7 @@ public:
       EnsureInitialized(hp);
       SetContext(req.ctx);
       SetWindowPayload(req.window_size, req.x_window);
+      SetTrainingTargets(req);
 
       FXAIAIManifestV4 manifest;
       Describe(manifest);
@@ -1167,6 +1314,7 @@ public:
          StoreReplaySample(req, replay_pri);
 
       TrainModelCore(req.label_class, req.x, hp, req.move_points);
+      UpdateQualityHeads(req, sample_w);
       if(can_replay)
          RunReplayRehearsal(hp, req.ctx.regime_id, req.ctx.horizon_minutes);
    }
