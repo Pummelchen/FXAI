@@ -3,6 +3,57 @@
 
 #include "..\Engine\core.mqh"
 
+struct FXAITensorDims
+{
+   int model_dim;
+   int hidden_dim;
+   int head_count;
+   int head_dim;
+   int seq_cap;
+   int stride;
+   int patch_size;
+   int dilation;
+   double pos_step_penalty;
+};
+
+FXAITensorDims FXAI_TensorMakeDims(const int model_dim,
+                                   const int hidden_dim,
+                                   const int head_count,
+                                   const int seq_cap,
+                                   const int stride = 1,
+                                   const int patch_size = 1,
+                                   const int dilation = 1,
+                                   const double pos_step_penalty = 0.06)
+{
+   FXAITensorDims cfg;
+   cfg.model_dim = MathMax(MathMin(model_dim, FXAI_AI_FEATURES), 1);
+   cfg.hidden_dim = MathMax(MathMin(hidden_dim, FXAI_AI_MLP_HIDDEN), 1);
+   cfg.head_count = MathMax(MathMin(head_count, FXAI_AI_FEATURES), 1);
+   cfg.head_dim = MathMax(cfg.model_dim / cfg.head_count, 1);
+   cfg.seq_cap = MathMax(MathMin(seq_cap, FXAI_MAX_SEQUENCE_BARS), 1);
+   cfg.stride = MathMax(stride, 1);
+   cfg.patch_size = MathMax(patch_size, 1);
+   cfg.dilation = MathMax(dilation, 1);
+   cfg.pos_step_penalty = FXAI_Clamp(pos_step_penalty, 0.0, 2.0);
+   return cfg;
+}
+
+int FXAI_TensorFeatureDim(const FXAITensorDims &cfg)
+{
+   int d = cfg.model_dim;
+   if(d < 1) d = 1;
+   if(d > FXAI_AI_FEATURES) d = FXAI_AI_FEATURES;
+   return d;
+}
+
+int FXAI_TensorResolvedSeqCap(const FXAITensorDims &cfg)
+{
+   int cap = cfg.seq_cap;
+   if(cap < 1) cap = 1;
+   if(cap > FXAI_MAX_SEQUENCE_BARS) cap = FXAI_MAX_SEQUENCE_BARS;
+   return cap;
+}
+
 void FXAI_TensorClearSequence(double &seq[][FXAI_AI_WEIGHTS],
                               int &seq_len)
 {
@@ -344,6 +395,169 @@ int FXAI_TensorBuildTrailingUnroll(const double &seq[][FXAI_AI_WEIGHTS],
          out[t][k] = seq[src][k];
    }
    return use_n;
+}
+
+void FXAI_TensorCausalConv1DSequence(const double &seq[][FXAI_AI_WEIGHTS],
+                                     const int seq_len,
+                                     const double &kernel[],
+                                     const int kernel_size,
+                                     const FXAITensorDims &cfg,
+                                     double &out[][FXAI_AI_WEIGHTS])
+{
+   int cap = FXAI_TensorResolvedSeqCap(cfg);
+   int feat_n = FXAI_TensorFeatureDim(cfg);
+   int dil = MathMax(cfg.dilation, 1);
+   for(int t=0; t<FXAI_MAX_SEQUENCE_BARS; t++)
+   {
+      out[t][0] = 1.0;
+      for(int k=1; k<FXAI_AI_WEIGHTS; k++)
+         out[t][k] = 0.0;
+   }
+   if(seq_len <= 0 || kernel_size <= 0 || ArraySize(kernel) < kernel_size)
+      return;
+
+   int eff = MathMin(seq_len, cap);
+   for(int t=0; t<eff; t++)
+   {
+      out[t][0] = 1.0;
+      for(int feat=1; feat<=feat_n; feat++)
+      {
+         double acc = 0.0;
+         double den = 0.0;
+         for(int j=0; j<kernel_size; j++)
+         {
+            int idx = t - j * dil;
+            if(idx < 0) break;
+            double wj = kernel[j];
+            acc += wj * seq[idx][feat];
+            den += MathAbs(wj);
+         }
+         if(den <= 0.0) den = 1.0;
+         out[t][feat] = FXAI_ClipSym(acc / den, 8.0);
+      }
+      for(int feat=feat_n + 1; feat<FXAI_AI_WEIGHTS; feat++)
+         out[t][feat] = seq[t][feat];
+   }
+}
+
+void FXAI_TensorCausalSelfAttentionSequence(const double &seq[][FXAI_AI_WEIGHTS],
+                                            const int seq_len,
+                                            const int &mask[],
+                                            const double &pos_bias[],
+                                            const FXAITensorDims &cfg,
+                                            double &out[][FXAI_AI_WEIGHTS])
+{
+   int cap = FXAI_TensorResolvedSeqCap(cfg);
+   int feat_n = FXAI_TensorFeatureDim(cfg);
+   int heads = MathMax(MathMin(cfg.head_count, feat_n), 1);
+   int head_dim = MathMax(cfg.head_dim, 1);
+   for(int t=0; t<FXAI_MAX_SEQUENCE_BARS; t++)
+   {
+      out[t][0] = 1.0;
+      for(int k=1; k<FXAI_AI_WEIGHTS; k++)
+         out[t][k] = 0.0;
+   }
+   if(seq_len <= 0)
+      return;
+
+   int eff = MathMin(seq_len, cap);
+   double scores[FXAI_MAX_SEQUENCE_BARS];
+   for(int t=0; t<eff; t++)
+   {
+      out[t][0] = 1.0;
+      double smax = -1e100;
+      for(int s=0; s<=t; s++)
+      {
+         if(ArraySize(mask) > s && mask[s] <= 0)
+         {
+            scores[s] = -1e100;
+            continue;
+         }
+         double z = 0.0;
+         int active_heads = 0;
+         for(int h=0; h<heads; h++)
+         {
+            int start = 1 + h * head_dim;
+            if(start > feat_n) break;
+            int end = MathMin(feat_n, start + head_dim - 1);
+            double dot = 0.0;
+            int hd = 0;
+            for(int k=start; k<=end; k++)
+            {
+               dot += seq[t][k] * seq[s][k];
+               hd++;
+            }
+            if(hd > 0)
+            {
+               z += dot / MathSqrt((double)hd);
+               active_heads++;
+            }
+         }
+         if(active_heads <= 0) active_heads = 1;
+         z /= (double)active_heads;
+         if(ArraySize(pos_bias) > s)
+            z += pos_bias[s];
+         scores[s] = z;
+         if(z > smax) smax = z;
+      }
+
+      double den = 0.0;
+      for(int s=0; s<=t; s++)
+      {
+         if(scores[s] <= -1e90)
+         {
+            scores[s] = 0.0;
+            continue;
+         }
+         scores[s] = MathExp(FXAI_ClipSym(scores[s] - smax, 30.0));
+         den += scores[s];
+      }
+      if(den <= 0.0) den = 1.0;
+
+      for(int feat=1; feat<=feat_n; feat++)
+      {
+         double acc = 0.0;
+         for(int s=0; s<=t; s++)
+            acc += (scores[s] / den) * seq[s][feat];
+         out[t][feat] = FXAI_ClipSym(acc, 8.0);
+      }
+      for(int feat=feat_n + 1; feat<FXAI_AI_WEIGHTS; feat++)
+         out[t][feat] = seq[t][feat];
+   }
+}
+
+void FXAI_TensorSequencePool(const double &seq[][FXAI_AI_WEIGHTS],
+                             const int seq_len,
+                             const FXAITensorDims &cfg,
+                             double &summary[])
+{
+   ArrayResize(summary, FXAI_AI_WEIGHTS);
+   ArrayInitialize(summary, 0.0);
+   if(seq_len <= 0)
+      return;
+
+   int cap = FXAI_TensorResolvedSeqCap(cfg);
+   int feat_n = FXAI_TensorFeatureDim(cfg);
+   int eff = MathMin(seq_len, cap);
+   int last = eff - 1;
+   int prev = MathMax(last - 1, 0);
+   int mid = MathMax(eff / 2, 0);
+   int root = 0;
+   double inv = 1.0 / (double)MathMax(eff, 1);
+   summary[0] = 1.0;
+   for(int feat=1; feat<=feat_n; feat++)
+   {
+      double mean = 0.0;
+      for(int t=0; t<eff; t++)
+         mean += seq[t][feat];
+      mean *= inv;
+      summary[feat] = FXAI_ClipSym(0.40 * seq[last][feat] +
+                                   0.18 * seq[prev][feat] +
+                                   0.14 * seq[mid][feat] +
+                                   0.12 * seq[root][feat] +
+                                   0.16 * mean,
+                                   8.0);
+   }
 }
 
 #endif // __FXAI_TENSOR_KERNELS_MQH__

@@ -418,38 +418,23 @@ private:
       }
       vol1 = MathSqrt(vol1 / (double)win_n);
 
-      double seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
-      int seq_len = 0;
-      int seq_mask[];
-      double seq_pos_bias[];
-      BuildPackedSequenceTensorCapped(x, SequenceContextSpan(), seq, seq_len, seq_mask, seq_pos_bias, true);
       double attn[];
       double conv_fast[];
       double conv_slow[];
-      ArrayResize(attn, FXAI_AI_WEIGHTS);
-      ArrayResize(conv_fast, FXAI_AI_WEIGHTS);
-      ArrayResize(conv_slow, FXAI_AI_WEIGHTS);
-      ArrayInitialize(attn, 0.0);
-      ArrayInitialize(conv_fast, 0.0);
-      ArrayInitialize(conv_slow, 0.0);
-      if(seq_len > 1)
-      {
-         double query[FXAI_AI_WEIGHTS];
-         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-            query[k] = seq[seq_len - 1][k];
-         double k_fast[3] = {0.58, 0.27, 0.15};
-         double k_slow[5] = {0.34, 0.24, 0.18, 0.14, 0.10};
-         FXAI_ModuleMultiHeadAttentionSummary(seq, seq_len, query, seq_mask, seq_pos_bias, 2, attn);
-         FXAI_ModuleConv1DSummary(seq, seq_len, k_fast, 3, conv_fast);
-         FXAI_ModuleConv1DSummary(seq, seq_len, k_slow, 5, conv_slow);
-      }
+      double block[];
+      double k_fast[3] = {0.58, 0.27, 0.15};
+      double k_slow[5] = {0.34, 0.24, 0.18, 0.14, 0.10};
+      FXAITensorDims dims = TensorContextDims(FXAI_SEQ_STYLE_TRANSFORMER, SequenceContextSpan());
+      dims.patch_size = MathMax(dims.patch_size, 2);
+      FXAISequenceRuntimeConfig seq_cfg = TensorSequenceRuntimeConfig(dims, true, true);
+      BuildSequenceBlockSummaries(x, dims, seq_cfg, k_fast, 3, k_slow, 5, attn, conv_fast, conv_slow, block);
 
-      xa[1] = FXAI_ClipSym(0.50 * xa[1] + 0.20 * mean1 + 0.10 * (first1 - last1) + 0.12 * attn[1] + 0.08 * conv_fast[1], 8.0);
-      xa[2] = FXAI_ClipSym(0.50 * xa[2] + 0.20 * mean2 + 0.10 * (first2 - last2) + 0.12 * attn[2] + 0.08 * conv_fast[2], 8.0);
-      xa[6] = FXAI_ClipSym(0.55 * xa[6] + 0.25 * vol1 + 0.10 * MathAbs(attn[6]) + 0.10 * MathAbs(conv_slow[6]), 8.0);
-      xa[7] = FXAI_ClipSym(0.50 * xa[7] + 0.20 * mean6 + 0.15 * attn[7] + 0.15 * conv_slow[7], 8.0);
-      xa[10] = FXAI_ClipSym(0.75 * xa[10] + 0.15 * attn[10] + 0.10 * conv_fast[10], 8.0);
-      xa[11] = FXAI_ClipSym(0.75 * xa[11] + 0.15 * attn[11] + 0.10 * conv_slow[11], 8.0);
+      xa[1] = FXAI_ClipSym(0.46 * xa[1] + 0.18 * mean1 + 0.10 * (first1 - last1) + 0.10 * attn[1] + 0.08 * conv_fast[1] + 0.08 * block[1], 8.0);
+      xa[2] = FXAI_ClipSym(0.46 * xa[2] + 0.18 * mean2 + 0.10 * (first2 - last2) + 0.10 * attn[2] + 0.08 * conv_fast[2] + 0.08 * block[2], 8.0);
+      xa[6] = FXAI_ClipSym(0.50 * xa[6] + 0.25 * vol1 + 0.08 * MathAbs(attn[6]) + 0.07 * MathAbs(conv_slow[6]) + 0.10 * MathAbs(block[6]), 8.0);
+      xa[7] = FXAI_ClipSym(0.44 * xa[7] + 0.18 * mean6 + 0.14 * attn[7] + 0.12 * conv_slow[7] + 0.12 * block[7], 8.0);
+      xa[10] = FXAI_ClipSym(0.68 * xa[10] + 0.12 * attn[10] + 0.08 * conv_fast[10] + 0.12 * block[10], 8.0);
+      xa[11] = FXAI_ClipSym(0.68 * xa[11] + 0.12 * attn[11] + 0.08 * conv_slow[11] + 0.12 * block[11], 8.0);
    }
 
    void ResetSequence(void)

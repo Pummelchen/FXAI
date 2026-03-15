@@ -301,11 +301,22 @@ private:
          var1 += d1 * d1;
       }
       var1 = MathSqrt(var1 / (double)win_n);
+      double attn[];
+      double conv_fast[];
+      double conv_slow[];
+      double block[];
+      double k_fast[3] = {0.58, 0.27, 0.15};
+      double k_slow[5] = {0.34, 0.24, 0.18, 0.14, 0.10};
+      FXAITensorDims dims = TensorContextDims(FXAI_SEQ_STYLE_TRANSFORMER, SequenceContextSpan());
+      dims.stride = MathMax(dims.stride, 2);
+      dims.patch_size = MathMax(dims.patch_size, 2);
+      FXAISequenceRuntimeConfig seq_cfg = TensorSequenceRuntimeConfig(dims, true, true);
+      BuildSequenceBlockSummaries(x, dims, seq_cfg, k_fast, 3, k_slow, 5, attn, conv_fast, conv_slow, block);
 
-      xa[1] = 0.55 * xa[1] + 0.25 * mean1 + 0.20 * trend1;
-      xa[2] = 0.55 * xa[2] + 0.25 * mean2 + 0.20 * trend2;
-      xa[4] = 0.70 * xa[4] + 0.30 * mean4;
-      xa[5] = 0.75 * xa[5] + 0.25 * var1;
+      xa[1] = FXAI_ClipSym(0.48 * xa[1] + 0.22 * mean1 + 0.14 * trend1 + 0.08 * attn[1] + 0.08 * block[1], 8.0);
+      xa[2] = FXAI_ClipSym(0.48 * xa[2] + 0.22 * mean2 + 0.14 * trend2 + 0.08 * attn[2] + 0.08 * block[2], 8.0);
+      xa[4] = FXAI_ClipSym(0.58 * xa[4] + 0.20 * mean4 + 0.08 * conv_slow[4] + 0.14 * block[4], 8.0);
+      xa[5] = FXAI_ClipSym(0.60 * xa[5] + 0.18 * var1 + 0.10 * MathAbs(conv_fast[5]) + 0.12 * MathAbs(block[5]), 8.0);
    }
 
    void ResetFeatureStats(void)

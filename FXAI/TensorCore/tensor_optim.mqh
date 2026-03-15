@@ -11,6 +11,75 @@ struct FXAIBlockBatchPlan
    double lr_scale;
 };
 
+struct FXAIParamGroupConfig
+{
+   double lr;
+   double wd;
+   double clip_norm;
+   double beta1;
+   double beta2;
+   double decay;
+   double momentum;
+   int tstep;
+};
+
+struct FXAIParamGroupStats
+{
+   int count;
+   double grad_norm;
+   double max_abs_grad;
+   double clip_scale;
+};
+
+FXAIParamGroupConfig FXAI_ParamGroupMakeConfig(const double lr,
+                                               const double wd = 0.0,
+                                               const double clip_norm = 0.0,
+                                               const double beta1 = 0.9,
+                                               const double beta2 = 0.999,
+                                               const double decay = 0.95,
+                                               const double momentum = 0.0,
+                                               const int tstep = 1)
+{
+   FXAIParamGroupConfig cfg;
+   cfg.lr = MathMax(lr, 0.0);
+   cfg.wd = MathMax(wd, 0.0);
+   cfg.clip_norm = MathMax(clip_norm, 0.0);
+   cfg.beta1 = FXAI_Clamp(beta1, 0.0, 0.9999);
+   cfg.beta2 = FXAI_Clamp(beta2, 0.0, 0.999999);
+   cfg.decay = FXAI_Clamp(decay, 0.0, 0.9999);
+   cfg.momentum = FXAI_Clamp(momentum, 0.0, 0.9999);
+   cfg.tstep = MathMax(tstep, 1);
+   return cfg;
+}
+
+void FXAI_ParamGroupStatsReset(FXAIParamGroupStats &stats)
+{
+   stats.count = 0;
+   stats.grad_norm = 0.0;
+   stats.max_abs_grad = 0.0;
+   stats.clip_scale = 1.0;
+}
+
+void FXAI_ParamGroupStatsAdd(FXAIParamGroupStats &stats,
+                             const double grad)
+{
+   double g = (MathIsValidNumber(grad) ? grad : 0.0);
+   stats.count++;
+   stats.grad_norm += g * g;
+   double a = MathAbs(g);
+   if(a > stats.max_abs_grad)
+      stats.max_abs_grad = a;
+}
+
+void FXAI_ParamGroupStatsFinalize(FXAIParamGroupStats &stats,
+                                  const double clip_norm)
+{
+   stats.grad_norm = MathSqrt(MathMax(stats.grad_norm, 0.0));
+   stats.clip_scale = FXAI_GradientScaleFromNorm(stats.grad_norm, MathMax(clip_norm, 1e-9));
+   if(clip_norm <= 0.0)
+      stats.clip_scale = 1.0;
+}
+
 bool FXAI_OptimizerFiniteCandidate(const double v)
 {
    return MathIsValidNumber(v) && MathAbs(v) < 1e12;
@@ -164,6 +233,105 @@ void FXAI_OptRMSPropStep(double &param,
    double upd = g / (MathSqrt(MathMax(cache, 0.0)) + 1e-8);
    double candidate = param - MathMax(lr, 0.0) * upd;
    FXAI_OptimizerCheckpointAssign(param, candidate);
+}
+
+void FXAI_OptSGDVectorStep(double &param[],
+                           double &velocity[],
+                           const double &grad[],
+                           const int n,
+                           const FXAIParamGroupConfig &cfg,
+                           FXAIParamGroupStats &stats)
+{
+   int use_n = MathMin(n, MathMin(ArraySize(param), MathMin(ArraySize(velocity), ArraySize(grad))));
+   FXAI_ParamGroupStatsReset(stats);
+   for(int i=0; i<use_n; i++)
+      FXAI_ParamGroupStatsAdd(stats, grad[i]);
+   FXAI_ParamGroupStatsFinalize(stats, cfg.clip_norm);
+   for(int i=0; i<use_n; i++)
+   {
+      double g = (MathIsValidNumber(grad[i]) ? grad[i] : 0.0) * stats.clip_scale;
+      double wd_i = (i == 0 ? 0.0 : cfg.wd);
+      FXAI_OptSGDStep(param[i], velocity[i], g, cfg.lr, cfg.momentum, wd_i);
+   }
+}
+
+void FXAI_OptAdamWVectorStep(double &param[],
+                             double &m[],
+                             double &v[],
+                             const double &grad[],
+                             const int n,
+                             const FXAIParamGroupConfig &cfg,
+                             FXAIParamGroupStats &stats)
+{
+   int use_n = MathMin(n, MathMin(ArraySize(param), MathMin(ArraySize(m), MathMin(ArraySize(v), ArraySize(grad)))));
+   FXAI_ParamGroupStatsReset(stats);
+   for(int i=0; i<use_n; i++)
+      FXAI_ParamGroupStatsAdd(stats, grad[i]);
+   FXAI_ParamGroupStatsFinalize(stats, cfg.clip_norm);
+   for(int i=0; i<use_n; i++)
+   {
+      double g = (MathIsValidNumber(grad[i]) ? grad[i] : 0.0) * stats.clip_scale;
+      double wd_i = (i == 0 ? 0.0 : cfg.wd);
+      FXAI_OptAdamWStep(param[i], m[i], v[i], g, cfg.lr, cfg.beta1, cfg.beta2, wd_i, cfg.tstep);
+   }
+}
+
+void FXAI_OptRMSPropVectorStep(double &param[],
+                               double &cache[],
+                               const double &grad[],
+                               const int n,
+                               const FXAIParamGroupConfig &cfg,
+                               FXAIParamGroupStats &stats)
+{
+   int use_n = MathMin(n, MathMin(ArraySize(param), MathMin(ArraySize(cache), ArraySize(grad))));
+   FXAI_ParamGroupStatsReset(stats);
+   for(int i=0; i<use_n; i++)
+      FXAI_ParamGroupStatsAdd(stats, grad[i]);
+   FXAI_ParamGroupStatsFinalize(stats, cfg.clip_norm);
+   for(int i=0; i<use_n; i++)
+   {
+      double g = (MathIsValidNumber(grad[i]) ? grad[i] : 0.0) * stats.clip_scale;
+      double wd_i = (i == 0 ? 0.0 : cfg.wd);
+      FXAI_OptRMSPropStep(param[i], cache[i], g, cfg.lr, cfg.decay, wd_i);
+   }
+}
+
+void FXAI_OptAdamWMatrixInputHiddenStep(double &param[][FXAI_AI_MLP_HIDDEN],
+                                        double &m[][FXAI_AI_MLP_HIDDEN],
+                                        double &v[][FXAI_AI_MLP_HIDDEN],
+                                        const double &grad[][FXAI_AI_MLP_HIDDEN],
+                                        const int rows,
+                                        const int cols,
+                                        const FXAIParamGroupConfig &cfg,
+                                        FXAIParamGroupStats &stats)
+{
+   int use_r = MathMax(MathMin(rows, FXAI_AI_WEIGHTS), 0);
+   int use_c = MathMax(MathMin(cols, FXAI_AI_MLP_HIDDEN), 0);
+   FXAI_ParamGroupStatsReset(stats);
+   for(int r=0; r<use_r; r++)
+      for(int c=0; c<use_c; c++)
+         FXAI_ParamGroupStatsAdd(stats, grad[r][c]);
+   FXAI_ParamGroupStatsFinalize(stats, cfg.clip_norm);
+   for(int r=0; r<use_r; r++)
+   {
+      for(int c=0; c<use_c; c++)
+      {
+         double g = (MathIsValidNumber(grad[r][c]) ? grad[r][c] : 0.0) * stats.clip_scale;
+         FXAI_OptAdamWStep(param[r][c], m[r][c], v[r][c], g, cfg.lr, cfg.beta1, cfg.beta2, cfg.wd, cfg.tstep);
+      }
+   }
+}
+
+void FXAI_OptAdamWMatrixHiddenStep(double &param[][FXAI_AI_MLP_HIDDEN],
+                                   double &m[][FXAI_AI_MLP_HIDDEN],
+                                   double &v[][FXAI_AI_MLP_HIDDEN],
+                                   const double &grad[][FXAI_AI_MLP_HIDDEN],
+                                   const int rows,
+                                   const int cols,
+                                   const FXAIParamGroupConfig &cfg,
+                                   FXAIParamGroupStats &stats)
+{
+   FXAI_OptAdamWMatrixInputHiddenStep(param, m, v, grad, MathMin(rows, FXAI_AI_MLP_HIDDEN), MathMin(cols, FXAI_AI_MLP_HIDDEN), cfg, stats);
 }
 
 FXAIBlockBatchPlan FXAI_MakeBlockBatchPlan(const int start_idx,

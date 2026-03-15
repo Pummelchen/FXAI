@@ -187,6 +187,69 @@ void FXAI_ModuleMultiHeadAttentionSummary(const double &seq[][FXAI_AI_WEIGHTS],
    summary[0] = 1.0;
 }
 
+void FXAI_ModuleSequenceConvBlock(const double &seq_in[][FXAI_AI_WEIGHTS],
+                                  const int seq_len,
+                                  const double &kernel[],
+                                  const int kernel_size,
+                                  const FXAITensorDims &cfg,
+                                  double &seq_out[][FXAI_AI_WEIGHTS])
+{
+   FXAI_TensorCausalConv1DSequence(seq_in, seq_len, kernel, kernel_size, cfg, seq_out);
+}
+
+void FXAI_ModuleSequenceAttentionBlock(const double &seq_in[][FXAI_AI_WEIGHTS],
+                                       const int seq_len,
+                                       const int &mask[],
+                                       const double &pos_bias[],
+                                       const FXAITensorDims &cfg,
+                                       double &seq_out[][FXAI_AI_WEIGHTS])
+{
+   FXAI_TensorCausalSelfAttentionSequence(seq_in, seq_len, mask, pos_bias, cfg, seq_out);
+}
+
+void FXAI_ModuleSequenceResidualNormFFN(const double &seq_in[][FXAI_AI_WEIGHTS],
+                                        const int seq_len,
+                                        const FXAITensorDims &cfg,
+                                        double &seq_out[][FXAI_AI_WEIGHTS])
+{
+   int cap = FXAI_TensorResolvedSeqCap(cfg);
+   int feat_n = FXAI_TensorFeatureDim(cfg);
+   for(int t=0; t<FXAI_MAX_SEQUENCE_BARS; t++)
+   {
+      seq_out[t][0] = 1.0;
+      for(int k=1; k<FXAI_AI_WEIGHTS; k++)
+         seq_out[t][k] = 0.0;
+   }
+   int eff = MathMin(seq_len, cap);
+   for(int t=0; t<eff; t++)
+   {
+      double norm_row[FXAI_AI_FEATURES];
+      for(int feat=1; feat<=feat_n; feat++)
+      {
+         double cur = seq_in[t][feat];
+         double prev = seq_in[(t > 0 ? t - 1 : 0)][feat];
+         double next = seq_in[(t + 1 < eff ? t + 1 : eff - 1)][feat];
+         double mix = 0.55 * cur + 0.25 * prev + 0.20 * next;
+         double hidden = FXAI_ModuleSwish(1.15 * cur + 0.35 * mix);
+         norm_row[feat - 1] = FXAI_ClipSym(0.65 * cur + 0.35 * hidden, 8.0);
+      }
+      FXAI_TensorLayerNorm(norm_row, feat_n);
+      seq_out[t][0] = 1.0;
+      for(int feat=1; feat<=feat_n; feat++)
+         seq_out[t][feat] = FXAI_ClipSym(norm_row[feat - 1], 8.0);
+      for(int feat=feat_n + 1; feat<FXAI_AI_WEIGHTS; feat++)
+         seq_out[t][feat] = seq_in[t][feat];
+   }
+}
+
+void FXAI_ModuleSequencePool(const double &seq_in[][FXAI_AI_WEIGHTS],
+                             const int seq_len,
+                             const FXAITensorDims &cfg,
+                             double &summary[])
+{
+   FXAI_TensorSequencePool(seq_in, seq_len, cfg, summary);
+}
+
 void FXAI_ModuleLSTMCellForward(const double &i_gate[],
                                 const double &f_gate[],
                                 const double &o_gate[],

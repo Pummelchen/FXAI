@@ -1908,7 +1908,9 @@ public:
    {
       double seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
       int seq_len = 0;
-      BuildChronologicalSequenceTensorCapped(x, SequenceContextSpan(), seq, seq_len);
+      FXAITensorDims dims = TensorContextDims(FXAI_SEQ_STYLE_RECURRENT, SequenceContextSpan());
+      FXAISequenceRuntimeConfig seq_cfg = TensorSequenceRuntimeConfig(dims, true, true);
+      BuildChronologicalSequenceTensorConfigured(x, seq_cfg, seq, seq_len);
 
       double h_state[FXAI_AI_MLP_HIDDEN];
       double c_state[FXAI_AI_MLP_HIDDEN];

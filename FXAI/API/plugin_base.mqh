@@ -179,6 +179,15 @@ private:
    double m_w_vol[FXAI_AI_WEIGHTS];
    double m_w_shift[FXAI_AI_WEIGHTS];
    double m_w_ctx[FXAI_AI_WEIGHTS];
+   double m_vel_mfe[FXAI_AI_WEIGHTS];
+   double m_vel_mae[FXAI_AI_WEIGHTS];
+   double m_vel_hit[FXAI_AI_WEIGHTS];
+   double m_vel_path[FXAI_AI_WEIGHTS];
+   double m_vel_fill[FXAI_AI_WEIGHTS];
+   double m_vel_mask[FXAI_AI_WEIGHTS];
+   double m_vel_vol[FXAI_AI_WEIGHTS];
+   double m_vel_shift[FXAI_AI_WEIGHTS];
+   double m_vel_ctx[FXAI_AI_WEIGHTS];
    double m_b_mask;
    double m_b_vol;
    double m_b_shift;
@@ -194,6 +203,7 @@ private:
    }
 
    void UpdateHead(double &w[],
+                   double &velocity[],
                    double &bias,
                    const double &x[],
                    const double pred,
@@ -202,10 +212,16 @@ private:
                    const double l2)
    {
       double e = FXAI_Clamp(-0.5 * FXAI_LossMSEGrad(pred, target), -12.0, 12.0);
-      bias = FXAI_ClipSym(bias + lr * e, 12.0);
-      w[0] = bias;
+      double grad[FXAI_AI_WEIGHTS];
+      ArrayInitialize(grad, 0.0);
+      grad[0] = -e;
       for(int i=1; i<FXAI_AI_WEIGHTS; i++)
-         w[i] = FXAI_ClipSym(w[i] + lr * (e * x[i] - l2 * w[i]), 12.0);
+         grad[i] = -e * x[i];
+
+      FXAIParamGroupConfig cfg = FXAI_ParamGroupMakeConfig(lr, l2, 6.0, 0.9, 0.999, 0.95, 0.25, MathMax(m_steps, 1));
+      FXAIParamGroupStats stats;
+      FXAI_OptSGDVectorStep(w, velocity, grad, FXAI_AI_WEIGHTS, cfg, stats);
+      bias = w[0];
    }
 
 public:
@@ -235,6 +251,15 @@ public:
          m_w_vol[i] = 0.0;
          m_w_shift[i] = 0.0;
          m_w_ctx[i] = 0.0;
+         m_vel_mfe[i] = 0.0;
+         m_vel_mae[i] = 0.0;
+         m_vel_hit[i] = 0.0;
+         m_vel_path[i] = 0.0;
+         m_vel_fill[i] = 0.0;
+         m_vel_mask[i] = 0.0;
+         m_vel_vol[i] = 0.0;
+         m_vel_shift[i] = 0.0;
+         m_vel_ctx[i] = 0.0;
       }
       m_w_mfe[0] = m_b_mfe;
       m_w_mae[0] = m_b_mae;
@@ -347,15 +372,15 @@ public:
       double tgt_shift = FXAI_Clamp(target_regime_shift, 0.0, 1.0);
       double tgt_ctx = FXAI_Clamp(target_context_lead, 0.0, 1.0);
 
-      UpdateHead(m_w_mfe, m_b_mfe, x, MathLog(MathMax(pred_mfe, 0.10)), tgt_mfe, step, reg);
-      UpdateHead(m_w_mae, m_b_mae, x, pred_mae, tgt_mae, step, reg);
-      UpdateHead(m_w_hit, m_b_hit, x, pred_hit, tgt_hit, step, reg);
-      UpdateHead(m_w_path, m_b_path, x, pred_path, tgt_path, step, reg);
-      UpdateHead(m_w_fill, m_b_fill, x, pred_fill, tgt_fill, step, reg);
-      UpdateHead(m_w_mask, m_b_mask, x, pred_mask, tgt_mask, 0.80 * step, reg);
-      UpdateHead(m_w_vol, m_b_vol, x, MathLog(MathMax(pred_vol, 0.05)), tgt_vol, 0.70 * step, reg);
-      UpdateHead(m_w_shift, m_b_shift, x, pred_shift, tgt_shift, 0.75 * step, reg);
-      UpdateHead(m_w_ctx, m_b_ctx, x, pred_ctx, tgt_ctx, 0.75 * step, reg);
+      UpdateHead(m_w_mfe, m_vel_mfe, m_b_mfe, x, MathLog(MathMax(pred_mfe, 0.10)), tgt_mfe, step, reg);
+      UpdateHead(m_w_mae, m_vel_mae, m_b_mae, x, pred_mae, tgt_mae, step, reg);
+      UpdateHead(m_w_hit, m_vel_hit, m_b_hit, x, pred_hit, tgt_hit, step, reg);
+      UpdateHead(m_w_path, m_vel_path, m_b_path, x, pred_path, tgt_path, step, reg);
+      UpdateHead(m_w_fill, m_vel_fill, m_b_fill, x, pred_fill, tgt_fill, step, reg);
+      UpdateHead(m_w_mask, m_vel_mask, m_b_mask, x, pred_mask, tgt_mask, 0.80 * step, reg);
+      UpdateHead(m_w_vol, m_vel_vol, m_b_vol, x, MathLog(MathMax(pred_vol, 0.05)), tgt_vol, 0.70 * step, reg);
+      UpdateHead(m_w_shift, m_vel_shift, m_b_shift, x, pred_shift, tgt_shift, 0.75 * step, reg);
+      UpdateHead(m_w_ctx, m_vel_ctx, m_b_ctx, x, pred_ctx, tgt_ctx, 0.75 * step, reg);
       m_ready = true;
       m_steps++;
    }
@@ -1672,14 +1697,8 @@ protected:
                                          double &seq[][FXAI_AI_WEIGHTS],
                                          int &seq_len) const
    {
-      FXAISequenceBuffer buffer;
-      FXAI_SequenceBufferLoadWindow(buffer,
-                                    x,
-                                    m_ctx_window,
-                                    m_ctx_window_size,
-                                    FXAI_MAX_SEQUENCE_BARS,
-                                    false);
-      FXAI_SequenceBufferExport(buffer, seq, seq_len);
+      FXAISequenceRuntimeConfig cfg = FXAI_SequenceRuntimeMakeConfig(FXAI_MAX_SEQUENCE_BARS, 1, 1, false, true, 0.06);
+      BuildChronologicalSequenceTensorConfigured(x, cfg, seq, seq_len);
    }
 
    int ContextSequenceCap(const int max_cap,
@@ -1711,15 +1730,86 @@ protected:
       }
    }
 
+   FXAITensorDims TensorContextDims(const int style,
+                                    const int max_steps = FXAI_MAX_SEQUENCE_BARS) const
+   {
+      int cap = MathMax(MathMin(max_steps, FXAI_MAX_SEQUENCE_BARS), 4);
+      int model_dim = 16;
+      int hidden_dim = FXAI_AI_MLP_HIDDEN;
+      int heads = 2;
+      int stride = 1;
+      int patch = 1;
+      int dilation = 1;
+      double pos_penalty = 0.06;
+      switch(style)
+      {
+         case FXAI_SEQ_STYLE_RECURRENT:
+            model_dim = MathMin(18, FXAI_AI_FEATURES);
+            heads = 2;
+            break;
+         case FXAI_SEQ_STYLE_CONVOLUTIONAL:
+            model_dim = MathMin(18, FXAI_AI_FEATURES);
+            patch = 2;
+            break;
+         case FXAI_SEQ_STYLE_TRANSFORMER:
+            model_dim = MathMin(24, FXAI_AI_FEATURES);
+            heads = 4;
+            patch = (cap >= 24 ? 2 : 1);
+            break;
+         case FXAI_SEQ_STYLE_STATE_SPACE:
+            model_dim = MathMin(20, FXAI_AI_FEATURES);
+            dilation = 2;
+            break;
+         case FXAI_SEQ_STYLE_WORLD:
+            model_dim = MathMin(22, FXAI_AI_FEATURES);
+            heads = 4;
+            stride = (cap >= 32 ? 2 : 1);
+            pos_penalty = 0.04;
+            break;
+         default:
+            model_dim = MathMin(16, FXAI_AI_FEATURES);
+            break;
+      }
+      if(m_ctx_horizon_minutes >= 60)
+         stride = MathMax(stride, 2);
+      return FXAI_TensorMakeDims(model_dim, hidden_dim, heads, cap, stride, patch, dilation, pos_penalty);
+   }
+
+   FXAISequenceRuntimeConfig TensorSequenceRuntimeConfig(const FXAITensorDims &dims,
+                                                         const bool normalize = true,
+                                                         const bool include_current = true) const
+   {
+      return FXAI_SequenceRuntimeMakeConfig(dims.seq_cap,
+                                            dims.stride,
+                                            dims.patch_size,
+                                            normalize,
+                                            include_current,
+                                            dims.pos_step_penalty);
+   }
+
+   void BuildChronologicalSequenceTensorConfigured(const double &x[],
+                                                   const FXAISequenceRuntimeConfig &cfg,
+                                                   double &seq[][FXAI_AI_WEIGHTS],
+                                                   int &seq_len) const
+   {
+      FXAISequenceBuffer buffer;
+      FXAI_SequenceBufferLoadWindowConfig(buffer,
+                                          x,
+                                          m_ctx_window,
+                                          m_ctx_window_size,
+                                          cfg);
+      FXAI_SequenceBufferExport(buffer, seq, seq_len);
+   }
+
    void BuildChronologicalSequenceTensorCapped(const double &x[],
                                                const int max_steps,
                                                double &seq[][FXAI_AI_WEIGHTS],
                                                int &seq_len,
                                                const bool normalize = true) const
    {
-      int mask[];
-      double pos_bias[];
-      BuildPackedSequenceTensorCapped(x, max_steps, seq, seq_len, mask, pos_bias, normalize);
+      FXAITensorDims dims = TensorContextDims(FXAI_SEQ_STYLE_GENERIC, max_steps);
+      FXAISequenceRuntimeConfig cfg = TensorSequenceRuntimeConfig(dims, normalize, true);
+      BuildChronologicalSequenceTensorConfigured(x, cfg, seq, seq_len);
    }
 
    void BuildPackedSequenceTensorCapped(const double &x[],
@@ -1730,14 +1820,67 @@ protected:
                                         double &pos_bias[],
                                         const bool normalize = true) const
    {
+      FXAITensorDims dims = TensorContextDims(FXAI_SEQ_STYLE_GENERIC, max_steps);
+      FXAISequenceRuntimeConfig cfg = TensorSequenceRuntimeConfig(dims, normalize, true);
+      BuildPackedSequenceTensorConfigured(x, cfg, seq, seq_len, mask, pos_bias);
+   }
+
+   void BuildPackedSequenceTensorConfigured(const double &x[],
+                                            const FXAISequenceRuntimeConfig &cfg,
+                                            double &seq[][FXAI_AI_WEIGHTS],
+                                            int &seq_len,
+                                            int &mask[],
+                                            double &pos_bias[]) const
+   {
       FXAISequenceBuffer buffer;
-      FXAI_SequenceBufferLoadWindow(buffer,
-                                    x,
-                                    m_ctx_window,
-                                    m_ctx_window_size,
-                                    max_steps,
-                                    normalize);
+      FXAI_SequenceBufferLoadWindowConfig(buffer,
+                                          x,
+                                          m_ctx_window,
+                                          m_ctx_window_size,
+                                          cfg);
       FXAI_SequenceBufferPreparePacked(buffer, seq, seq_len, mask, pos_bias);
+   }
+
+   void BuildSequenceBlockSummaries(const double &x[],
+                                    const FXAITensorDims &dims,
+                                    const FXAISequenceRuntimeConfig &cfg,
+                                    const double &kernel_fast[],
+                                    const int kernel_fast_size,
+                                    const double &kernel_slow[],
+                                    const int kernel_slow_size,
+                                    double &attn_summary[],
+                                    double &conv_fast_summary[],
+                                    double &conv_slow_summary[],
+                                    double &block_summary[]) const
+   {
+      double seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      double attn_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      double conv_fast_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      double conv_slow_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      double block_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      int seq_len = 0;
+      int seq_mask[];
+      double seq_pos_bias[];
+      BuildPackedSequenceTensorConfigured(x, cfg, seq, seq_len, seq_mask, seq_pos_bias);
+      ArrayResize(attn_summary, FXAI_AI_WEIGHTS);
+      ArrayResize(conv_fast_summary, FXAI_AI_WEIGHTS);
+      ArrayResize(conv_slow_summary, FXAI_AI_WEIGHTS);
+      ArrayResize(block_summary, FXAI_AI_WEIGHTS);
+      ArrayInitialize(attn_summary, 0.0);
+      ArrayInitialize(conv_fast_summary, 0.0);
+      ArrayInitialize(conv_slow_summary, 0.0);
+      ArrayInitialize(block_summary, 0.0);
+      if(seq_len <= 1)
+         return;
+
+      FXAI_ModuleSequenceAttentionBlock(seq, seq_len, seq_mask, seq_pos_bias, dims, attn_seq);
+      FXAI_ModuleSequenceConvBlock(seq, seq_len, kernel_fast, kernel_fast_size, dims, conv_fast_seq);
+      FXAI_ModuleSequenceConvBlock(seq, seq_len, kernel_slow, kernel_slow_size, dims, conv_slow_seq);
+      FXAI_ModuleSequenceResidualNormFFN(attn_seq, seq_len, dims, block_seq);
+      FXAI_ModuleSequencePool(attn_seq, seq_len, dims, attn_summary);
+      FXAI_ModuleSequencePool(conv_fast_seq, seq_len, dims, conv_fast_summary);
+      FXAI_ModuleSequencePool(conv_slow_seq, seq_len, dims, conv_slow_summary);
+      FXAI_ModuleSequencePool(block_seq, seq_len, dims, block_summary);
    }
 
    void BuildTensorEncodedInput(const double &x[],
@@ -1755,22 +1898,30 @@ protected:
       int seq_len = 0;
       int seq_mask[];
       double seq_pos_bias[];
-      BuildPackedSequenceTensorCapped(x, FXAI_MAX_SEQUENCE_BARS, seq, seq_len, seq_mask, seq_pos_bias, true);
+      FXAITensorDims dims = TensorContextDims(style, FXAI_MAX_SEQUENCE_BARS);
+      FXAISequenceRuntimeConfig cfg = TensorSequenceRuntimeConfig(dims, true, true);
+      BuildPackedSequenceTensorConfigured(x, cfg, seq, seq_len, seq_mask, seq_pos_bias);
       if(seq_len <= 1)
          return;
 
-      double query[FXAI_AI_WEIGHTS];
-      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-         query[k] = seq[seq_len - 1][k];
-
+      double attn_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      double conv_slow_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      double conv_fast_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      double block_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
       double attn[];
       double conv_slow[];
       double conv_fast[];
+      double block[];
       double kernel_slow[3] = {0.20, 0.60, 0.20};
       double kernel_fast[3] = {1.00, 0.00, -1.00};
-      FXAI_ModuleMultiHeadAttentionSummary(seq, seq_len, query, seq_mask, seq_pos_bias, 2, attn);
-      FXAI_ModuleConv1DSummary(seq, seq_len, kernel_slow, 3, conv_slow);
-      FXAI_ModuleConv1DSummary(seq, seq_len, kernel_fast, 3, conv_fast);
+      FXAI_ModuleSequenceAttentionBlock(seq, seq_len, seq_mask, seq_pos_bias, dims, attn_seq);
+      FXAI_ModuleSequenceConvBlock(seq, seq_len, kernel_slow, 3, dims, conv_slow_seq);
+      FXAI_ModuleSequenceConvBlock(seq, seq_len, kernel_fast, 3, dims, conv_fast_seq);
+      FXAI_ModuleSequenceResidualNormFFN(attn_seq, seq_len, dims, block_seq);
+      FXAI_ModuleSequencePool(attn_seq, seq_len, dims, attn);
+      FXAI_ModuleSequencePool(conv_slow_seq, seq_len, dims, conv_slow);
+      FXAI_ModuleSequencePool(conv_fast_seq, seq_len, dims, conv_fast);
+      FXAI_ModuleSequencePool(block_seq, seq_len, dims, block);
 
       int last = seq_len - 1;
       int prev = MathMax(last - 1, 0);
@@ -1812,7 +1963,7 @@ protected:
                     w_att * attn[k] +
                     w_slow * conv_slow[k] +
                     w_fast * conv_fast[k];
-         v += 0.04 * seq[root][k];
+         v += 0.04 * seq[root][k] + 0.10 * block[k];
          xa[k] = FXAI_ClipSym(v, 8.0);
       }
       xa[0] = 1.0;

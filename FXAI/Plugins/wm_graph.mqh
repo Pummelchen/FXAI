@@ -49,24 +49,24 @@ private:
 
       double seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
       int seq_len = 0;
+      FXAITensorDims dims = TensorContextDims(FXAI_SEQ_STYLE_WORLD, ContextSequenceCap(64, 40));
+      dims.stride = MathMax(dims.stride, 2);
+      dims.patch_size = MathMax(dims.patch_size, 2);
+      FXAISequenceRuntimeConfig seq_cfg = TensorSequenceRuntimeConfig(dims, true, true);
       int seq_mask[];
       double seq_pos_bias[];
-      BuildPackedSequenceTensorCapped(x, ContextSequenceCap(64, 40), seq, seq_len, seq_mask, seq_pos_bias);
+      BuildPackedSequenceTensorConfigured(x, seq_cfg, seq, seq_len, seq_mask, seq_pos_bias);
       int last = (seq_len > 0 ? seq_len - 1 : 0);
       int prev = (seq_len > 1 ? seq_len - 2 : last);
       int root = 0;
 
-      double query[FXAI_AI_WEIGHTS];
-      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-         query[k] = seq[last][k];
       double attn[FXAI_AI_WEIGHTS];
       double conv_fast[FXAI_AI_WEIGHTS];
       double conv_slow[FXAI_AI_WEIGHTS];
+      double block[FXAI_AI_WEIGHTS];
       double k_fast[3] = {0.58, 0.27, 0.15};
       double k_slow[5] = {0.34, 0.24, 0.18, 0.14, 0.10};
-      FXAI_ModuleMultiHeadAttentionSummary(seq, seq_len, query, seq_mask, seq_pos_bias, 2, attn);
-      FXAI_ModuleConv1DSummary(seq, seq_len, k_fast, 3, conv_fast);
-      FXAI_ModuleConv1DSummary(seq, seq_len, k_slow, 5, conv_slow);
+      BuildSequenceBlockSummaries(x, dims, seq_cfg, k_fast, 3, k_slow, 5, attn, conv_fast, conv_slow, block);
 
       int base_n = MathMin(12, n);
       for(int i=0; i<base_n; i++)
@@ -110,9 +110,9 @@ private:
       if(k < n) f[k++] = FXAI_Clamp(rel_spread, -10.0, 10.0);
       if(k < n) f[k++] = FXAI_Clamp(ctx_disp, -10.0, 10.0);
       if(k < n) f[k++] = FXAI_Clamp(ctx_flow, -10.0, 10.0);
-      if(k < n) f[k++] = FXAI_Clamp(attn[0], -10.0, 10.0);
-      if(k < n) f[k++] = FXAI_Clamp(conv_fast[0], -10.0, 10.0);
-      if(k < n) f[k++] = FXAI_Clamp(conv_slow[0], -10.0, 10.0);
+      if(k < n) f[k++] = FXAI_Clamp(attn[1] + 0.25 * block[1], -10.0, 10.0);
+      if(k < n) f[k++] = FXAI_Clamp(conv_fast[1] + 0.25 * block[2], -10.0, 10.0);
+      if(k < n) f[k++] = FXAI_Clamp(conv_slow[1] + 0.25 * block[3], -10.0, 10.0);
       if(k < n) f[k++] = FXAI_Clamp(m_graph_bias, -10.0, 10.0);
    }
 

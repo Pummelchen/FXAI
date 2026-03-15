@@ -1675,7 +1675,9 @@ public:
 
       double seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
       int seq_len = 0;
-      BuildChronologicalSequenceTensorCapped(x, SequenceContextSpan(), seq, seq_len);
+      FXAITensorDims dims = TensorContextDims(FXAI_SEQ_STYLE_TRANSFORMER, SequenceContextSpan());
+      FXAISequenceRuntimeConfig seq_cfg = TensorSequenceRuntimeConfig(dims, true, true);
+      BuildChronologicalSequenceTensorConfigured(x, seq_cfg, seq, seq_len);
 
       ResetSequence();
       for(int t=0; t<seq_len; t++)

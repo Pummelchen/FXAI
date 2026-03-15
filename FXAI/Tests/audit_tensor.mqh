@@ -48,6 +48,23 @@ bool FXAI_AuditTensorKernelSelfTest(string &reason)
       return false;
    }
 
+   FXAISequenceRuntimeConfig rt_cfg = FXAI_SequenceRuntimeMakeConfig(4, 2, 2, true, true, 0.04);
+   FXAISequenceRuntimeState rt_state;
+   FXAI_SequenceRuntimeReset(rt_state, rt_cfg);
+   FXAI_SequenceRuntimeLoadWindow(rt_state, current_x, window, 5);
+   if(rt_state.buffer.len < 2 || rt_state.buffer.len > 4)
+   {
+      reason = "sequence_runtime_load";
+      return false;
+   }
+   FXAISequenceRuntimeState rt_copy;
+   FXAI_SequenceRuntimeCopy(rt_state, rt_copy);
+   if(rt_copy.steps_seen != rt_state.steps_seen || rt_copy.buffer.len != rt_state.buffer.len)
+   {
+      reason = "sequence_runtime_copy";
+      return false;
+   }
+
    double w_in[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
    double b_in[FXAI_AI_MLP_HIDDEN];
    for(int i=0; i<FXAI_AI_WEIGHTS; i++)
@@ -128,6 +145,41 @@ bool FXAI_AuditTensorKernelSelfTest(string &reason)
    if(ArraySize(attn) != FXAI_AI_WEIGHTS || !MathIsValidNumber(attn[2]))
    {
       reason = "attention_module_forward";
+      return false;
+   }
+
+   FXAITensorDims dims = FXAI_TensorMakeDims(12, FXAI_AI_MLP_HIDDEN, 2, 6, 1, 1, 1, 0.05);
+   double attn_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+   double conv_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+   double ffn_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+   double pooled[];
+   FXAI_ModuleSequenceAttentionBlock(seq, seq_len, seq_mask, seq_pos, dims, attn_seq);
+   FXAI_ModuleSequenceConvBlock(seq, seq_len, kernel, 3, dims, conv_seq);
+   FXAI_ModuleSequenceResidualNormFFN(attn_seq, seq_len, dims, ffn_seq);
+   FXAI_ModuleSequencePool(ffn_seq, seq_len, dims, pooled);
+   if(ArraySize(pooled) != FXAI_AI_WEIGHTS || !MathIsValidNumber(attn_seq[seq_len - 1][2]) || !MathIsValidNumber(conv_seq[seq_len - 1][2]) || !MathIsValidNumber(ffn_seq[seq_len - 1][2]))
+   {
+      reason = "sequence_blocks_forward";
+      return false;
+   }
+
+   double seq_future[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+   for(int t=0; t<FXAI_MAX_SEQUENCE_BARS; t++)
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         seq_future[t][k] = seq[t][k];
+   seq_future[seq_len - 1][1] += 10.0;
+   double conv_future[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+   double attn_future[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+   FXAI_ModuleSequenceConvBlock(seq_future, seq_len, kernel, 3, dims, conv_future);
+   FXAI_ModuleSequenceAttentionBlock(seq_future, seq_len, seq_mask, seq_pos, dims, attn_future);
+   if(MathAbs(conv_future[0][1] - conv_seq[0][1]) > 1e-9)
+   {
+      reason = "sequence_conv_causality";
+      return false;
+   }
+   if(MathAbs(attn_future[0][1] - attn_seq[0][1]) > 1e-9)
+   {
+      reason = "sequence_attention_causality";
       return false;
    }
 
@@ -269,6 +321,39 @@ bool FXAI_AuditTensorKernelSelfTest(string &reason)
    if(!MathIsValidNumber(rms_p) || !MathIsValidNumber(rms_c))
    {
       reason = "rmsprop_step";
+      return false;
+   }
+
+   double vec_p[4] = {1.0, -0.5, 0.25, -0.125};
+   double vec_v[4] = {0.0, 0.0, 0.0, 0.0};
+   double vec_g[4] = {0.5, -0.25, 0.75, -1.0};
+   FXAIParamGroupConfig group_cfg = FXAI_ParamGroupMakeConfig(0.01, 0.01, 1.5, 0.9, 0.999, 0.95, 0.5, 3);
+   FXAIParamGroupStats group_stats;
+   FXAI_OptSGDVectorStep(vec_p, vec_v, vec_g, 4, group_cfg, group_stats);
+   if(group_stats.count != 4 || !(group_stats.grad_norm > 0.0) || !(group_stats.clip_scale > 0.0) || !MathIsValidNumber(vec_p[0]))
+   {
+      reason = "param_group_vector";
+      return false;
+   }
+
+   double mat_p[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
+   double mat_m[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
+   double mat_v[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
+   double mat_g[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
+   for(int r=0; r<FXAI_AI_WEIGHTS; r++)
+   {
+      for(int c=0; c<FXAI_AI_MLP_HIDDEN; c++)
+      {
+         mat_p[r][c] = ((r < 3 && c < 3) ? 0.05 * (double)(r + c + 1) : 0.0);
+         mat_m[r][c] = 0.0;
+         mat_v[r][c] = 0.0;
+         mat_g[r][c] = ((r < 3 && c < 3) ? 0.01 * (double)(r + 1) * (double)(c + 1) : 0.0);
+      }
+   }
+   FXAI_OptAdamWMatrixInputHiddenStep(mat_p, mat_m, mat_v, mat_g, 3, 3, group_cfg, group_stats);
+   if(group_stats.count != 9 || !MathIsValidNumber(mat_p[2][2]) || !MathIsValidNumber(mat_m[2][2]) || !MathIsValidNumber(mat_v[2][2]))
+   {
+      reason = "param_group_matrix";
       return false;
    }
 

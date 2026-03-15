@@ -23,6 +23,7 @@ Core benefits at a glance:
 
 - [What It Is](#what-it-is)
 - [Core Benefits](#core-benefits)
+- [TensorCore](#tensorcore)
 - [Quick Start](#quick-start)
 - [How Traders Use FXAI](#how-traders-use-fxai)
 - [Project Structure](#project-structure)
@@ -55,7 +56,7 @@ You do not need to be an MQL5 programmer to use FXAI as an operator. For normal 
 - **One framework, many models**
   - Swap or benchmark AI plugins without rewriting EA logic.
 - **Internal neural runtime**
-  - Serious neural plugins share one native `TensorCore` layer for tensor math, sequence handling, optimizers, and numeric verification.
+  - Serious neural plugins share one native `TensorCore` layer for tensor math, sequence handling, sequence blocks, optimizers, and numeric verification.
 - **Cost-aware signals**
   - Labels and thresholds account for trading friction, improving realistic expectancy.
 - **Safer execution**
@@ -68,6 +69,30 @@ You do not need to be an MQL5 programmer to use FXAI as an operator. For normal 
   - New models can be added through the plugin API with consistent train/predict flow.
 - **Production-oriented workflow**
   - MT5 Experts folder remains source-of-truth, GitHub is used as the synchronized repository copy.
+
+## TensorCore
+
+If you are familiar with TensorFlow or PyTorch, think of `TensorCore` as FXAI's focused internal neural runtime.
+
+It exists so the stronger FXAI plugins do not each carry their own private version of:
+- sequence packing and masking
+- attention and causal convolution logic
+- normalization and residual sequence blocks
+- optimizer and learning-rate schedule math
+- numeric self-tests and serialization sanity checks
+
+What `TensorCore` now provides inside pure MQL5:
+- fixed-shape tensor kernels for the dimensions FXAI actually uses
+- shared sequence-to-sequence attention and causal convolution blocks
+- dimension-aware runtime configs for model width, heads, stride, patching, and sequence caps
+- shared parameter-group training utilities for vector and matrix updates
+- sequence runtime state helpers for packed windows, resampling, and positional bias handling
+- Audit Lab sanity coverage for the runtime itself, not only for the plugins built on top of it
+
+Why that matters:
+- stronger plugins can use a more realistic shared neural foundation
+- model upgrades land once in TensorCore and benefit multiple plugins
+- TensorCore regressions can be caught by Audit Lab before they leak into live plugin behavior
 
 ## Quick Start
 
