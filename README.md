@@ -164,7 +164,9 @@ What FXAI is not:
 - `FXAI/API/api.mqh`  
   API v4 registry, validation, and plugin wiring
 - `FXAI/API/plugin_base.mqh`  
-  Shared plugin base contract and common model services
+  Public plugin-base aggregator
+- `FXAI/API/plugin_contract.mqh`, `plugin_context.mqh`, `plugin_tensor_bridge.mqh`, `plugin_quality_heads.mqh`
+  Split plugin contract, context/runtime helpers, TensorCore bridge, and quality-head support
 - `FXAI/Engine/core.mqh`  
   Shared types, enums, manifest helpers, feature-schema helpers, and common math
 - `FXAI/TensorCore/TensorCore.mqh`  
@@ -179,8 +181,14 @@ What FXAI is not:
   Split market-data, alignment, normalization-window, feature-math, normalization, and feature-build modules
 - `FXAI/Engine/meta_*.mqh`  
   Split horizon, stacker, calibration, reliability, threshold, and support subsystems
-- `FXAI/Plugins/*.mqh`  
-  Individual AI model implementations
+- `FXAI/Plugins/Sequence/*.mqh`
+  Sequence and transformer-family plugins
+- `FXAI/Plugins/Linear/*.mqh`, `Tree/*.mqh`, `Rule/*.mqh`
+  Linear, tree, and rule-based families
+- `FXAI/Plugins/World/*.mqh`, `Memory/*.mqh`, `Mixture/*.mqh`, `Distribution/*.mqh`
+  World, retrieval/memory, mixture, and distribution plugins
+- `FXAI/Plugins/Sequence/ai_tft/`, `ai_chronos/`, `ai_autoformer/`
+  Internal state/forward/public/training sections for the largest evolving sequence models
 - `FXAI/Tests/FXAI_AuditRunner.mq5`  
   MT5-side synthetic and market-replay plugin audit runner
 - `FXAI/Tests/audit_*.mqh`  
