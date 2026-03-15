@@ -127,11 +127,26 @@ private:
       double first1 = CurrentWindowValue(0, 1);
       double last1  = CurrentWindowValue(win_n - 1, 1);
       double drift = first1 - last1;
+      double attn[];
+      double conv_fast[];
+      double conv_slow[];
+      double block[];
+      double k_fast[3] = {0.60, 0.25, 0.15};
+      double k_slow[5] = {0.30, 0.24, 0.18, 0.16, 0.12};
+      int seq_span = MathMax(MathMin(win_n, FXAI_MAX_SEQUENCE_BARS), 8);
+      FXAITensorDims dims = TensorContextDims(FXAI_SEQ_STYLE_WORLD, seq_span);
+      dims.patch_size = MathMax(dims.patch_size, 2);
+      FXAISequenceRuntimeConfig seq_cfg = TensorSequenceRuntimeConfig(dims, true, true);
+      BuildSequenceBlockSummaries(x, dims, seq_cfg, k_fast, 3, k_slow, 5, attn, conv_fast, conv_slow, block);
 
-      xa[1] = FXAI_ClipSym(0.55 * xa[1] + 0.25 * mean1 + 0.20 * drift, 8.0);
-      xa[2] = FXAI_ClipSym(0.65 * xa[2] + 0.35 * mean6, 8.0);
-      xa[5] = FXAI_ClipSym(0.70 * xa[5] + 0.30 * mean2, 8.0);
-      xa[7] = FXAI_ClipSym(0.65 * xa[7] + 0.35 * mean7, 8.0);
+      xa[1] = FXAI_ClipSym(0.38 * xa[1] + 0.18 * mean1 + 0.14 * drift + 0.12 * attn[1] + 0.08 * conv_fast[1] + 0.10 * block[1], 8.0);
+      xa[2] = FXAI_ClipSym(0.44 * xa[2] + 0.22 * mean6 + 0.12 * attn[2] + 0.10 * conv_slow[2] + 0.12 * block[2], 8.0);
+      xa[5] = FXAI_ClipSym(0.44 * xa[5] + 0.20 * mean2 + 0.12 * attn[5] + 0.10 * conv_fast[5] + 0.14 * block[5], 8.0);
+      xa[7] = FXAI_ClipSym(0.42 * xa[7] + 0.20 * mean7 + 0.14 * attn[7] + 0.10 * conv_slow[7] + 0.14 * block[7], 8.0);
+      xa[9] = FXAI_ClipSym(0.68 * xa[9] + 0.10 * attn[9] + 0.08 * conv_fast[9] + 0.14 * block[9], 8.0);
+      xa[10] = FXAI_ClipSym(0.66 * xa[10] + 0.12 * attn[10] + 0.08 * conv_slow[10] + 0.14 * block[10], 8.0);
+      xa[11] = FXAI_ClipSym(0.64 * xa[11] + 0.12 * attn[11] + 0.10 * conv_fast[11] + 0.14 * block[11], 8.0);
+      xa[12] = FXAI_ClipSym(0.64 * xa[12] + 0.12 * attn[12] + 0.10 * conv_slow[12] + 0.14 * block[12], 8.0);
    }
 
    int DynamicParticleCount(const double &f[], const double cost_points, const double min_move_points) const
@@ -431,7 +446,13 @@ public:
       out.reliability = FXAI_Clamp(0.50 + 0.20 * m_consensus_ema + 0.15 * m_confidence_ema + 0.15 * FXAI_Clamp(m_edge_ema / MathMax(out.move_mean_points + 0.10, 0.10), 0.0, 1.0), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
+      PredictNativeQualityHeads(xa,
+                                FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                out.reliability,
+                                out.confidence,
+                                out);
       return true;
    }
 
@@ -539,6 +560,7 @@ protected:
       m_trans[4] = FXAI_Clamp(0.995 * m_trans[4] + 0.005 * (0.65 + 0.10 * target[4] + 0.06 * downside_pen), 0.20, 0.995);
       m_trans[5] = FXAI_Clamp(0.995 * m_trans[5] + 0.005 * (0.78 + 0.08 * target[5] - 0.04 * downside_pen), 0.20, 0.999);
 
+      UpdateNativeQualityHeads(xa, sw, lr, l2);
       m_seed = (uint)((ulong)1103515245 * (ulong)(m_seed + (uint)(dir + 3)) + (ulong)12345);
       m_steps++;
    }

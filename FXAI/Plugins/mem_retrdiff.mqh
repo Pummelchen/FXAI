@@ -84,13 +84,34 @@ private:
             trend2 = (first2 - last2) / (double)(win_n - 1);
          }
       }
-      b[8] = mean1;
-      b[9] = trend1;
-      b[10] = var1;
-      b[11] = mean2;
-      b[12] = trend2;
-      b[13] = var2;
-      b[14] = mean4;
+      double attn[];
+      double conv_fast[];
+      double conv_slow[];
+      double block[];
+      ArrayResize(attn, FXAI_AI_WEIGHTS);
+      ArrayResize(conv_fast, FXAI_AI_WEIGHTS);
+      ArrayResize(conv_slow, FXAI_AI_WEIGHTS);
+      ArrayResize(block, FXAI_AI_WEIGHTS);
+      ArrayInitialize(attn, 0.0);
+      ArrayInitialize(conv_fast, 0.0);
+      ArrayInitialize(conv_slow, 0.0);
+      ArrayInitialize(block, 0.0);
+      if(win_n > 1)
+      {
+         double k_fast[3] = {0.58, 0.25, 0.17};
+         double k_slow[5] = {0.30, 0.24, 0.20, 0.16, 0.10};
+         int seq_span = MathMax(MathMin(win_n, FXAI_MAX_SEQUENCE_BARS), 8);
+         FXAITensorDims dims = TensorContextDims(FXAI_SEQ_STYLE_WORLD, seq_span);
+         FXAISequenceRuntimeConfig seq_cfg = TensorSequenceRuntimeConfig(dims, true, true);
+         BuildSequenceBlockSummaries(x, dims, seq_cfg, k_fast, 3, k_slow, 5, attn, conv_fast, conv_slow, block);
+      }
+      b[8] = FXAI_ClipSym(0.48 * mean1 + 0.18 * trend1 + 0.16 * attn[1] + 0.08 * conv_fast[1] + 0.10 * block[1], 8.0);
+      b[9] = FXAI_ClipSym(0.42 * trend1 + 0.18 * attn[2] + 0.14 * conv_fast[2] + 0.16 * block[2], 8.0);
+      b[10] = FXAI_ClipSym(0.56 * var1 + 0.18 * MathAbs(attn[6]) + 0.12 * MathAbs(conv_slow[6]) + 0.14 * MathAbs(block[6]), 8.0);
+      b[11] = FXAI_ClipSym(0.48 * mean2 + 0.16 * trend2 + 0.16 * attn[3] + 0.08 * conv_slow[3] + 0.12 * block[3], 8.0);
+      b[12] = FXAI_ClipSym(0.42 * trend2 + 0.16 * attn[4] + 0.14 * conv_fast[4] + 0.16 * block[4], 8.0);
+      b[13] = FXAI_ClipSym(0.56 * var2 + 0.18 * MathAbs(attn[5]) + 0.12 * MathAbs(conv_slow[5]) + 0.14 * MathAbs(block[5]), 8.0);
+      b[14] = FXAI_ClipSym(0.56 * mean4 + 0.14 * attn[7] + 0.12 * conv_slow[7] + 0.18 * block[7], 8.0);
       b[15] = (double)ContextSessionBucket();
    }
 

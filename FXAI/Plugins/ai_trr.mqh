@@ -164,11 +164,23 @@ private:
          vol1 += d * d;
       }
       vol1 = MathSqrt(vol1 / (double)win_n);
+      double attn[];
+      double conv_fast[];
+      double conv_slow[];
+      double block[];
+      double k_fast[3] = {0.62, 0.24, 0.14};
+      double k_slow[5] = {0.32, 0.24, 0.18, 0.16, 0.10};
+      int seq_span = MathMax(MathMin(win_n, FXAI_MAX_SEQUENCE_BARS), 10);
+      FXAITensorDims dims = TensorContextDims(FXAI_SEQ_STYLE_STATE_SPACE, seq_span);
+      FXAISequenceRuntimeConfig seq_cfg = TensorSequenceRuntimeConfig(dims, true, true);
+      BuildSequenceBlockSummaries(x, dims, seq_cfg, k_fast, 3, k_slow, 5, attn, conv_fast, conv_slow, block);
 
-      xa[1] = FXAI_ClipSym(0.60 * xa[1] + 0.25 * mean1 + 0.15 * (first1 - last1), 8.0);
-      xa[2] = FXAI_ClipSym(0.60 * xa[2] + 0.25 * mean2 + 0.15 * (first2 - last2), 8.0);
-      xa[6] = FXAI_ClipSym(0.65 * xa[6] + 0.35 * vol1, 8.0);
-      xa[7] = FXAI_ClipSym(0.65 * xa[7] + 0.35 * mean6, 8.0);
+      xa[1] = FXAI_ClipSym(0.40 * xa[1] + 0.16 * mean1 + 0.12 * (first1 - last1) + 0.12 * attn[1] + 0.10 * conv_fast[1] + 0.10 * block[1], 8.0);
+      xa[2] = FXAI_ClipSym(0.40 * xa[2] + 0.16 * mean2 + 0.12 * (first2 - last2) + 0.12 * attn[2] + 0.10 * conv_slow[2] + 0.10 * block[2], 8.0);
+      xa[6] = FXAI_ClipSym(0.42 * xa[6] + 0.18 * vol1 + 0.12 * MathAbs(attn[6]) + 0.10 * MathAbs(conv_fast[6]) + 0.18 * MathAbs(block[6]), 8.0);
+      xa[7] = FXAI_ClipSym(0.42 * xa[7] + 0.18 * mean6 + 0.12 * attn[7] + 0.12 * conv_slow[7] + 0.16 * block[7], 8.0);
+      xa[10] = FXAI_ClipSym(0.72 * xa[10] + 0.10 * attn[10] + 0.08 * conv_fast[10] + 0.10 * block[10], 8.0);
+      xa[11] = FXAI_ClipSym(0.72 * xa[11] + 0.10 * attn[11] + 0.08 * conv_slow[11] + 0.10 * block[11], 8.0);
    }
 
    void BuildDerived(const double &x[], double &f[]) const
