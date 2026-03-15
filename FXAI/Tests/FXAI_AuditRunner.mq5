@@ -21,6 +21,7 @@ input double Audit_FillPenaltyPoints = 0.0;
 input int    Audit_WalkForwardTrainBars = 256;
 input int    Audit_WalkForwardTestBars = 64;
 input int    Audit_Seed = 42;
+input bool   Audit_RunTensorKernelSanity = true;
 input bool   Audit_ResetOutput = true;
 input bool   Audit_StopOnFailure = false;
 input int    TradeKiller = 0;
@@ -230,6 +231,16 @@ bool FXAI_AuditOpenReport(int &handle)
 
 int OnInit()
 {
+   if(Audit_RunTensorKernelSanity)
+   {
+      string sanity_reason = "";
+      if(!FXAI_AuditTensorKernelSelfTest(sanity_reason))
+      {
+         Print("FXAI audit tensor sanity failed: ", sanity_reason);
+         return INIT_FAILED;
+      }
+   }
+
    int bars = Audit_Bars;
    if(bars < 2048) bars = 2048;
    if(bars > 100000) bars = 100000;

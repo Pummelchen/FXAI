@@ -12,6 +12,7 @@ FXAI runs fully inside MT5 and MQL5. There are no external inference servers, no
 
 Core benefits at a glance:
 - Many model plugins under one execution and risk framework
+- A dedicated internal `TensorCore` runtime for the serious neural and math-heavy models
 - Cost-aware `BUY / SELL / SKIP` decisions
 - Built-in equity and execution protection logic
 - MT5-native backtesting and cloud optimization compatibility
@@ -53,6 +54,8 @@ You do not need to be an MQL5 programmer to use FXAI as an operator. For normal 
 
 - **One framework, many models**
   - Swap or benchmark AI plugins without rewriting EA logic.
+- **Internal neural runtime**
+  - Serious neural plugins share one native `TensorCore` layer for tensor math, sequence handling, optimizers, and numeric verification.
 - **Cost-aware signals**
   - Labels and thresholds account for trading friction, improving realistic expectancy.
 - **Safer execution**
@@ -139,6 +142,10 @@ What FXAI is not:
   Shared plugin base contract and common model services
 - `FXAI/Engine/core.mqh`  
   Shared types, enums, manifest helpers, feature-schema helpers, and common math
+- `FXAI/TensorCore/TensorCore.mqh`  
+  Public entry point for the internal neural runtime used by serious AI plugins
+- `FXAI/TensorCore/tensor_*.mqh`  
+  Split tensor kernels, sequence buffers, modules, losses, and optimizers
 - `FXAI/Engine/data_pipeline.mqh`  
   Aggregated data-pipeline include that pulls in the split data and feature modules
 - `FXAI/Engine/*.mqh`  
@@ -153,6 +160,8 @@ What FXAI is not:
   MT5-side synthetic and market-replay plugin audit runner
 - `FXAI/Tests/audit_*.mqh`  
   Split scenario, sample-build, scoring, report, and audit utility modules
+- `FXAI/Tests/audit_tensor.mqh`  
+  TensorCore numeric sanity and drift checks used by the Audit Runner
 - `FXAI/Tools/fxai_testlab.py`  
   External drill-sergeant analyzer, optimization planner, baseline comparator, and release gate
 

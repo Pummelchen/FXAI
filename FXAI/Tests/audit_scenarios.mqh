@@ -125,10 +125,17 @@ void FXAI_AuditResetMetrics(FXAIAuditScenarioMetrics &m,
    m.move_sum = 0.0;
    m.dir_conf_sum = 0.0;
    m.dir_hit_sum = 0.0;
+   m.brier_sum = 0.0;
+   m.calibration_abs_sum = 0.0;
+   m.path_quality_abs_sum = 0.0;
+   m.path_quality_count = 0;
    m.skip_ratio = 0.0;
    m.active_ratio = 0.0;
    m.bias_abs = 0.0;
    m.conf_drift = 0.0;
+   m.brier_score = 0.0;
+   m.calibration_error = 0.0;
+   m.path_quality_error = 0.0;
    m.reset_delta = 0.0;
    m.sequence_delta = 0.0;
    m.score = 0.0;

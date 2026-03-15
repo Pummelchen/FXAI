@@ -3,8 +3,8 @@
 
 #include "..\API\plugin_base.mqh"
 
-#define FXAI_S4_RANK 2
-#define FXAI_S4_TBPTT 12
+#define FXAI_S4_RANK 4
+#define FXAI_S4_TBPTT 20
 #define FXAI_S4_HORIZONS 3
 
 class CFXAIAIS4 : public CFXAIAIPlugin
@@ -46,6 +46,7 @@ private:
    double m_b_move_mu[FXAI_S4_HORIZONS];
    double m_w_move_logv[FXAI_AI_MLP_HIDDEN];
    double m_b_move_logv;
+   CFXAINativeQualityHeads m_quality_heads;
 
    // Recurrent complex state.
    double m_state_re[FXAI_AI_MLP_HIDDEN];
@@ -123,19 +124,14 @@ private:
 
    void LayerNorm(double &v[]) const
    {
-      double mean = 0.0;
-      for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++) mean += v[h];
-      mean /= (double)FXAI_AI_MLP_HIDDEN;
-
-      double var = 0.0;
+      double g[FXAI_AI_MLP_HIDDEN];
+      double b[FXAI_AI_MLP_HIDDEN];
       for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
       {
-         double d = v[h] - mean;
-         var += d * d;
+         g[h] = 1.0;
+         b[h] = 0.0;
       }
-      double inv = 1.0 / MathSqrt(var / (double)FXAI_AI_MLP_HIDDEN + 1e-6);
-      for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
-         v[h] = FXAI_ClipSym((v[h] - mean) * inv, 8.0);
+      FXAI_ModuleLayerNormAffine(v, FXAI_AI_MLP_HIDDEN, g, b);
    }
 
    void ResetState(void)
@@ -176,40 +172,6 @@ private:
          m_si_mean[h] = 0.0;
          m_si_var[h] = 1.0;
       }
-   }
-
-   void BuildWindowAwareInput(const double &x[], double &xa[]) const
-   {
-      int xn = ArraySize(x);
-      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
-      {
-         double v = (i < xn ? x[i] : 0.0);
-         xa[i] = (MathIsValidNumber(v) ? FXAI_ClipSym(v, 8.0) : 0.0);
-      }
-
-      int win_n = CurrentWindowSize();
-      if(win_n <= 1) return;
-
-      double mean1 = CurrentWindowFeatureMean(0);
-      double mean2 = CurrentWindowFeatureMean(1);
-      double mean6 = CurrentWindowFeatureMean(5);
-      double mean7 = CurrentWindowFeatureMean(6);
-      double first1 = CurrentWindowValue(0, 1);
-      double last1 = CurrentWindowValue(win_n - 1, 1);
-      double drift = (last1 - first1) / (double)MathMax(win_n - 1, 1);
-      double vol = 0.0;
-      for(int i=0; i<win_n; i++)
-      {
-         double d = CurrentWindowValue(i, 1) - mean1;
-         vol += d * d;
-      }
-      vol = MathSqrt(vol / (double)win_n);
-
-      xa[1] = FXAI_ClipSym(0.55 * xa[1] + 0.25 * mean1 + 0.20 * drift, 8.0);
-      xa[2] = FXAI_ClipSym(0.60 * xa[2] + 0.25 * mean2 + 0.15 * drift, 8.0);
-      xa[6] = FXAI_ClipSym(0.65 * xa[6] + 0.35 * vol, 8.0);
-      xa[7] = FXAI_ClipSym(0.65 * xa[7] + 0.35 * mean6, 8.0);
-      xa[8] = FXAI_ClipSym(0.65 * xa[8] + 0.35 * mean7, 8.0);
    }
 
    void ResetOptimizers(void)
@@ -443,11 +405,7 @@ private:
                      const double decay,
                      const double wd)
    {
-      double g = FXAI_ClipSym(grad, 10.0);
-      acc = decay * acc + (1.0 - decay) * g * g;
-      double step = lr * g / MathSqrt(acc + 1e-8);
-      p -= step;
-      p -= lr * wd * p; // decoupled weight decay
+      FXAI_OptRMSPropStep(p, acc, grad, lr, decay, wd);
    }
 
    void AdamWApply(double &p,
@@ -460,19 +418,7 @@ private:
                    const double wd,
                    const int t)
    {
-      double g = FXAI_ClipSym(grad, 10.0);
-      m = beta1 * m + (1.0 - beta1) * g;
-      v = beta2 * v + (1.0 - beta2) * g * g;
-
-      double b1t = 1.0 - MathPow(beta1, (double)t);
-      double b2t = 1.0 - MathPow(beta2, (double)t);
-      if(b1t < 1e-9) b1t = 1e-9;
-      if(b2t < 1e-9) b2t = 1e-9;
-
-      double mhat = m / b1t;
-      double vhat = v / b2t;
-      p -= lr * (mhat / (MathSqrt(vhat) + 1e-8));
-      p -= lr * wd * p; // decoupled weight decay
+      FXAI_OptAdamWStep(p, m, v, grad, lr, beta1, beta2, wd, t);
    }
 
    void AppendBatch(const int y,
@@ -1319,6 +1265,57 @@ private:
       logv = FXAI_Clamp(logv, -4.0, 4.0);
    }
 
+   void BuildWindowAwareInput(const double &x[], double &xa[]) const
+   {
+      CopyCurrentInputClipped(x, xa);
+   }
+
+   int SequenceContextSpan(void) const
+   {
+      return ContextSequenceCap(80, 48);
+   }
+
+   void ForwardSequenceContext(const double &x[],
+                               double &st_re[],
+                               double &st_im[],
+                               double &z_cls,
+                               double &p_local,
+                               double &mu1,
+                               double &mu3,
+                               double &mu5,
+                               double &logv)
+   {
+      double saved_re[FXAI_AI_MLP_HIDDEN];
+      double saved_im[FXAI_AI_MLP_HIDDEN];
+      for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
+      {
+         saved_re[h] = m_state_re[h];
+         saved_im[h] = m_state_im[h];
+      }
+
+      double seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      int seq_len = 0;
+      BuildChronologicalSequenceTensorCapped(x, SequenceContextSpan(), seq, seq_len);
+
+      for(int t=0; t<seq_len; t++)
+      {
+         double x_step[FXAI_AI_WEIGHTS];
+         FXAI_SequenceCopyRow(seq, t, x_step);
+         ForwardNoCommit(x_step, false, st_re, st_im, z_cls, p_local, mu1, mu3, mu5, logv);
+         for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
+         {
+            m_state_re[h] = st_re[h];
+            m_state_im[h] = st_im[h];
+         }
+      }
+
+      for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
+      {
+         m_state_re[h] = saved_re[h];
+         m_state_im[h] = saved_im[h];
+      }
+   }
+
 public:
    CFXAIAIS4(void) { Reset(); }
 
@@ -1336,19 +1333,16 @@ public:
 
    }
 
-
    virtual bool PredictModelCore(const double &x[],
                                         const FXAIAIHyperParams &hp,
                                         double &class_probs[],
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
-      double xa[FXAI_AI_WEIGHTS];
-      BuildWindowAwareInput(x, xa);
       double st_re[FXAI_AI_MLP_HIDDEN], st_im[FXAI_AI_MLP_HIDDEN];
       double z = 0.0, p_local = 0.5;
       double mu1 = 0.0, mu3 = 0.0, mu5 = 0.0, logv = 0.0;
-      ForwardNoCommit(xa, false, st_re, st_im, z, p_local, mu1, mu3, mu5, logv);
+      ForwardSequenceContext(x, st_re, st_im, z, p_local, mu1, mu3, mu5, logv);
 
       double mean_combo = 0.50 * mu1 + 0.30 * mu3 + 0.20 * mu5;
       if(mean_combo < 0.0) mean_combo = 0.0;
@@ -1377,12 +1371,10 @@ public:
       ResetModelOutput(out);
       EnsureInitialized(hp);
 
-      double xa[FXAI_AI_WEIGHTS];
-      BuildWindowAwareInput(x, xa);
       double st_re[FXAI_AI_MLP_HIDDEN], st_im[FXAI_AI_MLP_HIDDEN];
       double z = 0.0, p_local = 0.5;
       double mu1 = 0.0, mu3 = 0.0, mu5 = 0.0, logv = 0.0;
-      ForwardNoCommit(xa, false, st_re, st_im, z, p_local, mu1, mu3, mu5, logv);
+      ForwardSequenceContext(x, st_re, st_im, z, p_local, mu1, mu3, mu5, logv);
 
       double probs[3];
       double ev = 0.0;
@@ -1401,7 +1393,17 @@ public:
       out.reliability = FXAI_Clamp(0.55 + 0.20 * (m_margin_ready ? 1.0 - MathAbs(m_prob_bias) / 2.0 : 0.0) + 0.15 * (m_move_ready ? 1.0 : 0.0) + 0.10 * (1.0 - FXAI_Clamp(MathAbs(m_prob_scale - 1.0), 0.0, 1.0)), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
+      double bank_mfe = 0.0, bank_mae = 0.0, bank_hit = 1.0, bank_path = 0.5, bank_fill = 0.5, bank_trust = 0.0;
+      GetQualityBankPriors(bank_mfe, bank_mae, bank_hit, bank_path, bank_fill, bank_trust);
+      m_quality_heads.Predict(xa,
+                              out.move_mean_points,
+                              FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                              out.reliability,
+                              out.confidence,
+                              bank_mfe, bank_mae, bank_hit, bank_path, bank_fill, bank_trust,
+                              out);
       return true;
    }
 
@@ -1421,6 +1423,7 @@ public:
       m_margin_ema = 1.0;
       m_prob_scale = 1.0;
       m_prob_bias = 0.0;
+      m_quality_heads.Reset();
       m_cal3.Reset();
    }
 
@@ -1461,6 +1464,19 @@ public:
       BuildWindowAwareInput(x, xa);
       FXAIAIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
       double w = FXAI_Clamp(MoveSampleWeight(xa, move_points) * cls_w, 0.10, 4.00);
+      m_quality_heads.Update(xa,
+                             w,
+                             TargetMFEPoints(),
+                             FXAI_Clamp(TargetMAEPoints() / MathMax(TargetMFEPoints() + 0.10, 0.10), 0.0, 1.0),
+                             TargetHitTimeFrac(),
+                             TargetPathRisk(),
+                             TargetFillRisk(),
+                             TargetMaskedStep(),
+                             TargetNextVol(),
+                             TargetRegimeShift(),
+                             TargetContextLead(),
+                             h.lr,
+                             h.l2);
       double pre_probs[3];
       double pre_ev = 0.0;
       if(PredictModelCore(x, h, pre_probs, pre_ev))
@@ -1475,12 +1491,10 @@ public:
    {
       EnsureInitialized(hp);
 
-      double xa[FXAI_AI_WEIGHTS];
-      BuildWindowAwareInput(x, xa);
       double st_re[FXAI_AI_MLP_HIDDEN], st_im[FXAI_AI_MLP_HIDDEN];
       double z = 0.0, p_local = 0.5;
       double mu1 = 0.0, mu3 = 0.0, mu5 = 0.0, logv = 0.0;
-      ForwardNoCommit(xa, false, st_re, st_im, z, p_local, mu1, mu3, mu5, logv);
+      ForwardSequenceContext(x, st_re, st_im, z, p_local, mu1, mu3, mu5, logv);
       return CalibrateProb(p_local);
    }
 

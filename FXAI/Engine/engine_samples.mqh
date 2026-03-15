@@ -242,6 +242,10 @@ void FXAI_ResetPreparedSample(FXAIPreparedSample &sample)
    sample.spread_stress = 0.0;
    sample.time_to_hit_frac = 1.0;
    sample.path_flags = 0;
+   sample.masked_step_target = 0.0;
+   sample.next_vol_target = 0.0;
+   sample.regime_shift_target = 0.0;
+   sample.context_lead_target = 0.5;
    sample.sample_time = 0;
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
       sample.x[k] = 0.0;
@@ -430,6 +434,47 @@ bool FXAI_PrepareTrainingSample(const int i,
    double spread_stress = FXAI_Clamp((spread_peak - spread_avg) / MathMax(min_move_i, 0.50), 0.0, 3.0);
    if(spread_stress > 0.35) sample.path_flags |= FXAI_PATHFLAG_SPREAD_STRESS;
    sample.spread_stress = spread_stress;
+
+   double masked_step_target = 0.0;
+   if(i - 1 >= 0 && i - 1 < ArraySize(close_arr))
+      masked_step_target = FXAI_MovePoints(close_arr[i], close_arr[i - 1], snapshot.point);
+   sample.masked_step_target = masked_step_target;
+
+   int aux_h = H;
+   if(aux_h > 8) aux_h = 8;
+   if(aux_h < 1) aux_h = 1;
+   double vol_sum = 0.0;
+   int vol_n = 0;
+   for(int step=1; step<=aux_h; step++)
+   {
+      int idx_aux = i - step;
+      if(idx_aux < 0 || idx_aux >= ArraySize(close_arr)) break;
+      vol_sum += MathAbs(FXAI_MovePoints(close_arr[i], close_arr[idx_aux], snapshot.point));
+      vol_n++;
+   }
+   sample.next_vol_target = (vol_n > 0 ? vol_sum / (double)vol_n : MathAbs(move_points));
+
+   int future_idx = i - aux_h;
+   int future_regime = sample.regime_id;
+   if(future_idx >= 0)
+   {
+      double spread_f = FXAI_GetSpreadAtIndex(future_idx, spread_m1, spread_i);
+      double vol_f = FXAI_RollingAbsReturn(close_arr, future_idx, 32);
+      if(vol_f < 1e-6) vol_f = vol_ref;
+      future_regime = FXAI_GetStaticRegimeId((future_idx < ArraySize(time_arr) ? time_arr[future_idx] : sample.sample_time),
+                                             spread_f,
+                                             spread_ref,
+                                             vol_f,
+                                             vol_f);
+   }
+   sample.regime_shift_target = (future_regime == sample.regime_id ? 0.0 : 1.0);
+
+   double ctx_signal = 0.0;
+   if(ctx_std_i > 1e-6)
+      ctx_signal = ctx_mean_i / ctx_std_i;
+   else
+      ctx_signal = ctx_mean_i;
+   sample.context_lead_target = FXAI_Clamp(0.5 + 0.5 * FXAI_Sign(ctx_signal) * FXAI_Sign(move_points), 0.0, 1.0);
 
    double quality = 1.0;
    if(label_class == (int)FXAI_LABEL_SKIP)

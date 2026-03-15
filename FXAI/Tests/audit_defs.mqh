@@ -230,10 +230,17 @@ struct FXAIAuditScenarioMetrics
    double move_sum;
    double dir_conf_sum;
    double dir_hit_sum;
+   double brier_sum;
+   double calibration_abs_sum;
+   double path_quality_abs_sum;
+   int path_quality_count;
    double skip_ratio;
    double active_ratio;
    double bias_abs;
    double conf_drift;
+    double brier_score;
+   double calibration_error;
+   double path_quality_error;
    double reset_delta;
    double sequence_delta;
    double score;

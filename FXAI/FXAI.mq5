@@ -494,6 +494,10 @@ struct FXAIPreparedSample
    double spread_stress;
    double time_to_hit_frac;
    int path_flags;
+   double masked_step_target;
+   double next_vol_target;
+   double regime_shift_target;
+   double context_lead_target;
    datetime sample_time;
    double x[FXAI_AI_WEIGHTS];
 };

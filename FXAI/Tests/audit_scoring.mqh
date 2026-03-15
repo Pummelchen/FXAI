@@ -33,7 +33,12 @@ void FXAI_AuditFinalizeMetrics(FXAIAuditScenarioMetrics &m)
       double avg_conf = m.dir_conf_sum / (double)m.directional_eval_count;
       double avg_hit = m.dir_hit_sum / (double)m.directional_eval_count;
       m.conf_drift = MathAbs(avg_conf - avg_hit);
+      m.calibration_error = m.calibration_abs_sum / (double)m.directional_eval_count;
    }
+   if(m.valid_preds > 0)
+      m.brier_score = m.brier_sum / (double)m.valid_preds;
+   if(m.path_quality_count > 0)
+      m.path_quality_error = m.path_quality_abs_sum / (double)m.path_quality_count;
 
    double score = 100.0;
    if(m.invalid_preds > 0) score -= 35.0;
@@ -47,6 +52,9 @@ void FXAI_AuditFinalizeMetrics(FXAIAuditScenarioMetrics &m)
    }
    if(m.scenario == "market_session_edges" && m.conf_drift > 0.18) score -= 8.0;
    if(m.conf_drift > 0.22) score -= 10.0;
+   if(m.brier_score > 0.52) score -= 8.0;
+   if(m.calibration_error > 0.28) score -= 8.0;
+   if(m.path_quality_error > 0.55) score -= 8.0;
    if(m.reset_delta > 0.30) score -= 12.0;
    if(m.sequence_delta < 0.005 && m.sequence_delta >= 0.0) score -= 6.0;
    if(m.move_sum <= 0.0) score -= 8.0;
@@ -330,6 +338,19 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
             out.rel_sum += pred.reliability;
             out.move_sum += pred.move_mean_points;
 
+            double target_probs[3] = {0.0, 0.0, 0.0};
+            int cls_idx = label_class;
+            if(cls_idx < (int)FXAI_LABEL_SELL || cls_idx > (int)FXAI_LABEL_SKIP)
+               cls_idx = (move_points >= 0.0 ? (int)FXAI_LABEL_BUY : (int)FXAI_LABEL_SELL);
+            target_probs[cls_idx] = 1.0;
+            double brier = 0.0;
+            for(int c=0; c<3; c++)
+            {
+               double d = pred.class_probs[c] - target_probs[c];
+               brier += d * d;
+            }
+            out.brier_sum += brier;
+
             if(decision != (int)FXAI_LABEL_SKIP)
             {
                out.directional_eval_count++;
@@ -339,6 +360,15 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
                               (decision == (int)FXAI_LABEL_SELL && label_class == (int)FXAI_LABEL_SELL));
                if(dir_ok) out.directional_correct_count++;
                out.dir_hit_sum += (dir_ok ? 1.0 : 0.0);
+               out.calibration_abs_sum += MathAbs(dir_conf - (dir_ok ? 1.0 : 0.0));
+               double move_scale = MathMax(MathAbs(move_points), MathMax(MathAbs(pred.move_mean_points), 0.50));
+               double pq = 0.25 * FXAI_Clamp(MathAbs(pred.mfe_mean_points - mfe_points) / move_scale, 0.0, 3.0) +
+                           0.20 * FXAI_Clamp(MathAbs(pred.mae_mean_points - mae_points) / move_scale, 0.0, 3.0) +
+                           0.20 * MathAbs(pred.hit_time_frac - time_to_hit_frac) +
+                           0.20 * MathAbs(pred.path_risk - spread_stress) +
+                           0.15 * MathAbs(pred.fill_risk - FXAI_Clamp(spread_stress + (((path_flags & FXAI_PATHFLAG_DUAL_HIT) != 0) ? 0.25 : 0.0), 0.0, 1.0));
+               out.path_quality_abs_sum += pq;
+               out.path_quality_count++;
             }
          }
       }
@@ -359,6 +389,15 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
                                          time_to_hit_frac,
                                          path_flags,
                                          spread_stress);
+         double masked_target = 0.0;
+         double next_vol_target = MathAbs(move_points);
+         double regime_shift_target = ((path_flags & FXAI_PATHFLAG_DUAL_HIT) != 0 ? 1.0 : 0.0);
+         double context_lead_target = FXAI_Clamp(0.5 + 0.5 * FXAI_Sign(FXAI_GetInputFeature(x, 10)) * FXAI_Sign(move_points), 0.0, 1.0);
+         FXAI_SetTrainRequestAuxTargets(train_req,
+                                        masked_target,
+                                        next_vol_target,
+                                        regime_shift_target,
+                                        context_lead_target);
          for(int k=0; k<FXAI_AI_WEIGHTS; k++) train_req.x[k] = x[k];
          FXAI_CopyWindowPayload(req.x_window, req.window_size, train_req.x_window, train_req.window_size);
          FXAI_ApplyFeatureSchemaToPayloadEx(schema_id, feature_groups_mask, train_req.ctx.sequence_bars, train_req.x_window, train_req.window_size, train_req.x);

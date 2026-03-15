@@ -3,7 +3,7 @@
 
 #define FXAI_AI_FEATURES 62
 #define FXAI_AI_WEIGHTS (FXAI_AI_FEATURES + 1)
-#define FXAI_AI_MLP_HIDDEN 8
+#define FXAI_AI_MLP_HIDDEN 12
 #define FXAI_AI_COUNT 32
 #define FXAI_NORM_METHOD_COUNT 15
 #define FXAI_ENHASH_BUCKETS 128
@@ -78,6 +78,24 @@ enum ENUM_FXAI_AI_FAMILY
    FXAI_FAMILY_WORLD_MODEL,
    FXAI_FAMILY_RULE_BASED,
    FXAI_FAMILY_OTHER
+};
+
+enum ENUM_FXAI_REFERENCE_TIER
+{
+   FXAI_REFERENCE_FULL_NATIVE = 0,
+   FXAI_REFERENCE_COMPRESSED_NATIVE,
+   FXAI_REFERENCE_SURROGATE,
+   FXAI_REFERENCE_RULE_BASELINE
+};
+
+enum ENUM_FXAI_SEQUENCE_STYLE
+{
+   FXAI_SEQ_STYLE_GENERIC = 0,
+   FXAI_SEQ_STYLE_RECURRENT,
+   FXAI_SEQ_STYLE_CONVOLUTIONAL,
+   FXAI_SEQ_STYLE_TRANSFORMER,
+   FXAI_SEQ_STYLE_STATE_SPACE,
+   FXAI_SEQ_STYLE_WORLD
 };
 
 enum ENUM_FXAI_PLUGIN_CAPABILITY
@@ -192,6 +210,7 @@ struct FXAIAIManifestV4
    int ai_id;
    string ai_name;
    int family;
+   int reference_tier;
    ulong capability_mask;
    int feature_schema_id;
    ulong feature_groups_mask;
@@ -229,6 +248,10 @@ struct FXAIAITrainRequestV4
    int    path_flags;
    double path_risk;
    double fill_risk;
+   double masked_step_target;
+   double next_vol_target;
+   double regime_shift_target;
+   double context_lead_target;
    int window_size;
    double x[FXAI_AI_WEIGHTS];
    double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
@@ -277,6 +300,51 @@ struct FXAIAIModelOutputV4
    bool   has_confidence;
    bool   has_path_quality;
 };
+
+string FXAI_ReferenceTierName(const int tier)
+{
+   switch(tier)
+   {
+      case FXAI_REFERENCE_FULL_NATIVE: return "full_native";
+      case FXAI_REFERENCE_COMPRESSED_NATIVE: return "compressed_native";
+      case FXAI_REFERENCE_SURROGATE: return "surrogate";
+      case FXAI_REFERENCE_RULE_BASELINE: return "rule_baseline";
+      default: return "unknown";
+   }
+}
+
+int FXAI_DefaultReferenceTierForAI(const int ai_id)
+{
+   switch(ai_id)
+   {
+      case AI_CHRONOS:
+      case AI_TIMESFM:
+      case AI_CFX_WORLD:
+         return (int)FXAI_REFERENCE_SURROGATE;
+
+      case AI_S4:
+      case AI_STMN:
+      case AI_TRR:
+      case AI_GRAPHWM:
+      case AI_RETRDIFF:
+      case AI_LOFFM:
+      case AI_MOE_CONFORMAL:
+      case AI_TST:
+      case AI_AUTOFORMER:
+      case AI_PATCHTST:
+      case AI_GEODESICATTENTION:
+         return (int)FXAI_REFERENCE_COMPRESSED_NATIVE;
+
+      case AI_M1SYNC:
+      case AI_BUY_ONLY:
+      case AI_SELL_ONLY:
+      case AI_RANDOM_NOSKIP:
+         return (int)FXAI_REFERENCE_RULE_BASELINE;
+
+      default:
+         return (int)FXAI_REFERENCE_FULL_NATIVE;
+   }
+}
 
 bool FXAI_HasCapability(const ulong capability_mask,
                         const int capability)
@@ -396,6 +464,88 @@ double FXAI_FillRiskFromTargets(const double spread_stress_points,
 {
    double denom = MathMax(min_move_points + MathMax(cost_points, 0.0), 0.25);
    return FXAI_Clamp(MathAbs(spread_stress_points) / denom, 0.0, 1.0);
+}
+
+int FXAI_CoreClampHorizon(const int horizon_minutes)
+{
+   int h = horizon_minutes;
+   if(h < 1) h = 1;
+   if(h > 1440) h = 1440;
+   return h;
+}
+
+double FXAI_SymbolModelScale(const string symbol)
+{
+   string s = symbol;
+   StringToUpper(s);
+   if(StringFind(s, "XAU") >= 0 || StringFind(s, "GOLD") >= 0 ||
+      StringFind(s, "XAG") >= 0 || StringFind(s, "SILVER") >= 0)
+      return 1.18;
+   if(StringFind(s, "US30") >= 0 || StringFind(s, "NAS") >= 0 ||
+      StringFind(s, "SPX") >= 0 || StringFind(s, "DAX") >= 0 ||
+      StringFind(s, "GER40") >= 0 || StringFind(s, "JP225") >= 0)
+      return 1.15;
+   if(StringFind(s, "OIL") >= 0 || StringFind(s, "WTI") >= 0 ||
+      StringFind(s, "BRENT") >= 0 || StringFind(s, "NGAS") >= 0)
+      return 1.12;
+   if(StringFind(s, "JPY") >= 0 || StringFind(s, "GBP") >= 0)
+      return 1.06;
+   return 1.00;
+}
+
+double FXAI_HorizonModelScale(const int horizon_minutes)
+{
+   int h = FXAI_CoreClampHorizon(horizon_minutes);
+   if(h <= 5) return 0.92;
+   if(h <= 15) return 0.98;
+   if(h <= 60) return 1.00;
+   if(h <= 240) return 1.10;
+   return 1.18;
+}
+
+double FXAI_ModelCapacityScale(const string symbol,
+                               const int horizon_minutes)
+{
+   return FXAI_Clamp(FXAI_SymbolModelScale(symbol) * FXAI_HorizonModelScale(horizon_minutes), 0.85, 1.35);
+}
+
+int FXAI_ContextSequenceSpan(const int max_cap,
+                             const int horizon_minutes,
+                             const string symbol,
+                             const int base_min = 8)
+{
+   int cap = MathMax(base_min, max_cap);
+   double scale = FXAI_ModelCapacityScale(symbol, horizon_minutes);
+   int span = (int)MathRound((double)cap * FXAI_Clamp(0.55 + 0.35 * scale, 0.45, 1.10));
+   if(span < base_min) span = base_min;
+   if(span > max_cap) span = max_cap;
+   return span;
+}
+
+int FXAI_ContextBatchSpan(const int max_cap,
+                          const int horizon_minutes,
+                          const string symbol,
+                          const int base_min = 4)
+{
+   int cap = MathMax(base_min, max_cap);
+   double scale = FXAI_ModelCapacityScale(symbol, horizon_minutes);
+   int span = (int)MathRound((double)cap * FXAI_Clamp(0.60 + 0.30 * scale, 0.45, 1.00));
+   if(span < base_min) span = base_min;
+   if(span > max_cap) span = max_cap;
+   return span;
+}
+
+int FXAI_ContextTreeBudget(const int max_cap,
+                           const int horizon_minutes,
+                           const string symbol,
+                           const int base_min)
+{
+   int cap = MathMax(base_min, max_cap);
+   double scale = FXAI_ModelCapacityScale(symbol, horizon_minutes);
+   int budget = (int)MathRound((double)cap * FXAI_Clamp(0.55 + 0.40 * scale, 0.50, 1.15));
+   if(budget < base_min) budget = base_min;
+   if(budget > max_cap) budget = max_cap;
+   return budget;
 }
 
 void FXAI_UpdateMoveEMA(double &ema_abs_move,
@@ -1118,6 +1268,10 @@ void FXAI_ClearTrainRequest(FXAIAITrainRequestV4 &req)
    req.path_flags = 0;
    req.path_risk = 0.0;
    req.fill_risk = 0.0;
+   req.masked_step_target = 0.0;
+   req.next_vol_target = 0.0;
+   req.regime_shift_target = 0.0;
+   req.context_lead_target = 0.5;
    req.window_size = 0;
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
       req.x[k] = 0.0;
@@ -1222,6 +1376,26 @@ bool FXAI_ValidateTrainRequestV4(const FXAIAITrainRequestV4 &req,
       reason = "req.fill_risk";
       return false;
    }
+   if(!MathIsValidNumber(req.masked_step_target))
+   {
+      reason = "req.masked_step_target";
+      return false;
+   }
+   if(!MathIsValidNumber(req.next_vol_target) || req.next_vol_target < 0.0)
+   {
+      reason = "req.next_vol_target";
+      return false;
+   }
+   if(!MathIsValidNumber(req.regime_shift_target) || req.regime_shift_target < 0.0 || req.regime_shift_target > 1.0)
+   {
+      reason = "req.regime_shift_target";
+      return false;
+   }
+   if(!MathIsValidNumber(req.context_lead_target) || req.context_lead_target < 0.0 || req.context_lead_target > 1.0)
+   {
+      reason = "req.context_lead_target";
+      return false;
+   }
    reason = "";
    return true;
 }
@@ -1245,6 +1419,18 @@ void FXAI_SetTrainRequestPathTargets(FXAIAITrainRequestV4 &req,
    req.fill_risk = FXAI_FillRiskFromTargets(spread_stress_points,
                                             req.ctx.min_move_points,
                                             req.ctx.cost_points);
+}
+
+void FXAI_SetTrainRequestAuxTargets(FXAIAITrainRequestV4 &req,
+                                    const double masked_step_target,
+                                    const double next_vol_target,
+                                    const double regime_shift_target,
+                                    const double context_lead_target)
+{
+   req.masked_step_target = masked_step_target;
+   req.next_vol_target = MathMax(next_vol_target, 0.0);
+   req.regime_shift_target = FXAI_Clamp(regime_shift_target, 0.0, 1.0);
+   req.context_lead_target = FXAI_Clamp(context_lead_target, 0.0, 1.0);
 }
 
 void FXAI_CopyWindowPayload(const double &src[][FXAI_AI_WEIGHTS], const int src_size, double &dst[][FXAI_AI_WEIGHTS], int &dst_size)

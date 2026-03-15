@@ -186,24 +186,7 @@ private:
 
    void LayerNormAffine(double &v[], const double &g[], const double &b[]) const
    {
-      double mean = 0.0;
-      for(int i=0; i<FXAI_GA_D_MODEL; i++)
-         mean += v[i];
-      mean /= (double)FXAI_GA_D_MODEL;
-
-      double var = 0.0;
-      for(int i=0; i<FXAI_GA_D_MODEL; i++)
-      {
-         double d = v[i] - mean;
-         var += d * d;
-      }
-
-      double inv = 1.0 / MathSqrt(var / (double)FXAI_GA_D_MODEL + 1e-6);
-      for(int i=0; i<FXAI_GA_D_MODEL; i++)
-      {
-         double n = (v[i] - mean) * inv;
-         v[i] = FXAI_ClipSym(g[i] * n + b[i], 8.0);
-      }
+      FXAI_ModuleLayerNormAffine(v, FXAI_GA_D_MODEL, g, b);
    }
 
    void LayerNormAffineBlock(const int block, double &v[]) const

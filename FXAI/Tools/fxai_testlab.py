@@ -534,6 +534,9 @@ def build_summary(rows, oracles: dict):
                 "active_ratio": fnum(row, "active_ratio"),
                 "bias_abs": fnum(row, "bias_abs"),
                 "conf_drift": fnum(row, "conf_drift"),
+                "brier_score": fnum(row, "brier_score"),
+                "calibration_error": fnum(row, "calibration_error"),
+                "path_quality_error": fnum(row, "path_quality_error"),
                 "reset_delta": fnum(row, "reset_delta"),
                 "sequence_delta": fnum(row, "sequence_delta"),
                 "avg_move": fnum(row, "avg_move"),
@@ -646,6 +649,14 @@ def render_multisymbol_report(summary: dict, execution_profile: str, manifest_pa
             f"Stability {float(info.get('stability', 0.0)):.2f} | "
             f"Grade {info.get('grade', 'F')}"
         )
+        recent = info.get("scenarios", {}).get("market_recent", {})
+        if recent:
+            out.append(
+                "Market recent: "
+                f"Brier {float(recent.get('brier_score', 0.0)):.3f} | "
+                f"CalErr {float(recent.get('calibration_error', 0.0)):.3f} | "
+                f"PathErr {float(recent.get('path_quality_error', 0.0)):.3f}"
+            )
         issues = list(info.get("issues", [])) + list(info.get("findings", []))
         if issues:
             out.append("Issues: " + "; ".join(issues[:8]))
@@ -1082,7 +1093,20 @@ def compare_summary_data(current: dict, baseline: dict) -> dict:
             elif trend_delta >= 0.08:
                 plugin_notes.append(f"drift_down align up +{trend_delta:.3f}")
 
-        if any(x.startswith(("score down", "statistically significant score down", "new issues", "random_walk skip down", "drift_up align down", "drift_down align down", "cross-symbol stability weak")) for x in plugin_notes):
+        cur_recent = cur.get("scenarios", {}).get("market_recent", {})
+        base_recent = base.get("scenarios", {}).get("market_recent", {})
+        if cur_recent and base_recent:
+            brier_delta = float(cur_recent.get("brier_score", 0.0)) - float(base_recent.get("brier_score", 0.0))
+            cal_delta = float(cur_recent.get("calibration_error", 0.0)) - float(base_recent.get("calibration_error", 0.0))
+            pq_delta = float(cur_recent.get("path_quality_error", 0.0)) - float(base_recent.get("path_quality_error", 0.0))
+            if brier_delta >= 0.04:
+                plugin_notes.append(f"market_recent brier worse +{brier_delta:.3f}")
+            if cal_delta >= 0.04:
+                plugin_notes.append(f"market_recent calibration worse +{cal_delta:.3f}")
+            if pq_delta >= 0.05:
+                plugin_notes.append(f"market_recent path-quality worse +{pq_delta:.3f}")
+
+        if any(x.startswith(("score down", "statistically significant score down", "new issues", "random_walk skip down", "drift_up align down", "drift_down align down", "cross-symbol stability weak", "market_recent brier worse", "market_recent calibration worse", "market_recent path-quality worse")) for x in plugin_notes):
             regressions.append(f"{name}: " + ", ".join(plugin_notes))
         elif plugin_notes:
             improvements.append(f"{name}: " + ", ".join(plugin_notes))

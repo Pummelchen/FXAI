@@ -18,6 +18,7 @@ private:
    double m_reliability_ema;
    double m_err_ema;
    CFXAITernaryCalibrator m_cal3;
+   CFXAINativeQualityHeads m_quality_heads;
 
    double SafeX(const double &x[], const int i) const
    {
@@ -37,22 +38,7 @@ private:
 
    void BuildWindowAwareInput(const double &x[], double &xa[]) const
    {
-      int xn = ArraySize(x);
-      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
-         xa[i] = (i < xn ? SafeX(x, i) : 0.0);
-
-      int win_n = CurrentWindowSize();
-      if(win_n <= 1) return;
-
-      double mean1 = CurrentWindowFeatureMean(0);
-      double mean2 = CurrentWindowFeatureMean(1);
-      double mean6 = CurrentWindowFeatureMean(5);
-      double first1 = CurrentWindowValue(0, 1);
-      double last1  = CurrentWindowValue(win_n - 1, 1);
-      double trend = (last1 - first1) / (double)MathMax(win_n - 1, 1);
-      xa[1] = FXAI_ClipSym(0.55 * xa[1] + 0.25 * mean1 + 0.20 * trend, 8.0);
-      xa[2] = FXAI_ClipSym(0.60 * xa[2] + 0.25 * mean2 + 0.15 * trend, 8.0);
-      xa[6] = FXAI_ClipSym(0.70 * xa[6] + 0.30 * mean6, 8.0);
+      CopyCurrentInputClipped(x, xa);
    }
 
    void BuildGraphFeatures(const double &x[], double &f[]) const
@@ -61,17 +47,37 @@ private:
       for(int i=0; i<n; i++) f[i] = 0.0;
       if(n <= 0) return;
 
-      int xn = ArraySize(x);
-      int base_n = MathMin(xn, n - 8);
-      for(int i=0; i<base_n; i++)
-         f[i] = FXAI_Clamp(SafeX(x, i), -10.0, 10.0);
+      double seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      int seq_len = 0;
+      int seq_mask[];
+      double seq_pos_bias[];
+      BuildPackedSequenceTensorCapped(x, ContextSequenceCap(64, 40), seq, seq_len, seq_mask, seq_pos_bias);
+      int last = (seq_len > 0 ? seq_len - 1 : 0);
+      int prev = (seq_len > 1 ? seq_len - 2 : last);
+      int root = 0;
 
-      double r1  = SafeX(x, 0);
-      double r5  = SafeX(x, 1);
-      double r15 = SafeX(x, 2);
-      double r60 = SafeX(x, 3);
-      double vol = MathAbs(SafeX(x, 4)) + 1e-6;
-      double cost = MathAbs(SafeX(x, 7));
+      double query[FXAI_AI_WEIGHTS];
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         query[k] = seq[last][k];
+      double attn[FXAI_AI_WEIGHTS];
+      double conv_fast[FXAI_AI_WEIGHTS];
+      double conv_slow[FXAI_AI_WEIGHTS];
+      double k_fast[3] = {0.58, 0.27, 0.15};
+      double k_slow[5] = {0.34, 0.24, 0.18, 0.14, 0.10};
+      FXAI_ModuleMultiHeadAttentionSummary(seq, seq_len, query, seq_mask, seq_pos_bias, 2, attn);
+      FXAI_ModuleConv1DSummary(seq, seq_len, k_fast, 3, conv_fast);
+      FXAI_ModuleConv1DSummary(seq, seq_len, k_slow, 5, conv_slow);
+
+      int base_n = MathMin(12, n);
+      for(int i=0; i<base_n; i++)
+         f[i] = FXAI_Clamp(seq[last][i], -10.0, 10.0);
+
+      double r1  = seq[last][0];
+      double r5  = seq[last][1];
+      double r15 = seq[last][2];
+      double r60 = seq[last][3];
+      double vol = MathAbs(seq[last][4]) + 1e-6;
+      double cost = MathAbs(seq[last][7]);
       double carry1 = r1 - r5;
       double carry2 = r5 - r15;
       double accel  = r1 - 2.0 * r5 + r15;
@@ -80,16 +86,20 @@ private:
       double graph1 = carry1 + carry2;
       double graph2 = accel / vol;
       double graph3 = (MathAbs(trend) - cost) / MathMax(vol, 1e-6);
-      double ctx1 = SafeX(x, 13);
-      double ctx2 = SafeX(x, 14);
-      double ctx3 = SafeX(x, 15);
-      double ctx4 = SafeX(x, 16);
+      double lag_flow = seq[last][0] - seq[prev][0];
+      double long_span = seq[last][0] - seq[root][0];
+      double ctx1 = attn[13];
+      double ctx2 = conv_fast[14];
+      double ctx3 = conv_slow[15];
+      double ctx4 = seq[last][16];
       double ctx_mean = (ctx1 + ctx2 + ctx3) / 3.0;
       double ctx_disp = (MathAbs(ctx1 - ctx_mean) + MathAbs(ctx2 - ctx_mean) + MathAbs(ctx3 - ctx_mean)) / 3.0;
       double rel_spread = trend - ctx_mean;
       double ctx_flow = 0.45 * (ctx1 - ctx2) + 0.30 * (ctx2 - ctx3) + 0.20 * ctx4;
 
       int k = base_n;
+      if(k < n) f[k++] = FXAI_Clamp(lag_flow, -10.0, 10.0);
+      if(k < n) f[k++] = FXAI_Clamp(long_span, -10.0, 10.0);
       if(k < n) f[k++] = FXAI_Clamp(carry1, -10.0, 10.0);
       if(k < n) f[k++] = FXAI_Clamp(carry2, -10.0, 10.0);
       if(k < n) f[k++] = FXAI_Clamp(accel, -10.0, 10.0);
@@ -100,6 +110,9 @@ private:
       if(k < n) f[k++] = FXAI_Clamp(rel_spread, -10.0, 10.0);
       if(k < n) f[k++] = FXAI_Clamp(ctx_disp, -10.0, 10.0);
       if(k < n) f[k++] = FXAI_Clamp(ctx_flow, -10.0, 10.0);
+      if(k < n) f[k++] = FXAI_Clamp(attn[0], -10.0, 10.0);
+      if(k < n) f[k++] = FXAI_Clamp(conv_fast[0], -10.0, 10.0);
+      if(k < n) f[k++] = FXAI_Clamp(conv_slow[0], -10.0, 10.0);
       if(k < n) f[k++] = FXAI_Clamp(m_graph_bias, -10.0, 10.0);
    }
 
@@ -189,6 +202,19 @@ protected:
       m_graph_bias = 0.995 * m_graph_bias + 0.005 * FXAI_Clamp(SafeX(x,0) - SafeX(x,1), -5.0, 5.0);
       m_reliability_ema = 0.985 * m_reliability_ema + 0.015 * hit;
       m_err_ema = 0.985 * m_err_ema + 0.015 * MathAbs(err_move) / MathMax(move_t + 1.0, 1.0);
+      m_quality_heads.Update(xa,
+                             FXAI_Clamp(MoveSampleWeight(xa, move_points), 0.20, 4.00),
+                             TargetMFEPoints(),
+                             FXAI_Clamp(TargetMAEPoints() / MathMax(TargetMFEPoints() + 0.10, 0.10), 0.0, 1.0),
+                             TargetHitTimeFrac(),
+                             TargetPathRisk(),
+                             TargetFillRisk(),
+                             TargetMaskedStep(),
+                             TargetNextVol(),
+                             TargetRegimeShift(),
+                             TargetContextLead(),
+                             lr,
+                             l2);
       m_steps++;
    }
 
@@ -206,6 +232,7 @@ public:
       m_last_probs[0] = m_last_probs[1] = m_last_probs[2] = 1.0/3.0;
       m_reliability_ema = 0.50;
       m_err_ema = 0.0;
+      m_quality_heads.Reset();
       m_cal3.Reset();
    }
 
@@ -235,6 +262,7 @@ public:
       m_last_probs[0] = m_last_probs[1] = m_last_probs[2] = 1.0/3.0;
       m_reliability_ema = 0.50;
       m_err_ema = 0.0;
+      m_quality_heads.Reset();
       m_cal3.Reset();
    }
 
@@ -314,7 +342,15 @@ public:
       out.reliability = FXAI_Clamp(0.55 + 0.25 * m_reliability_ema + 0.20 * (1.0 - FXAI_Clamp(m_err_ema, 0.0, 1.0)), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      double bank_mfe = 0.0, bank_mae = 0.0, bank_hit = 1.0, bank_path = 0.5, bank_fill = 0.5, bank_trust = 0.0;
+      GetQualityBankPriors(bank_mfe, bank_mae, bank_hit, bank_path, bank_fill, bank_trust);
+      m_quality_heads.Predict(xa,
+                              out.move_mean_points,
+                              FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                              out.reliability,
+                              out.confidence,
+                              bank_mfe, bank_mae, bank_hit, bank_path, bank_fill, bank_trust,
+                              out);
       return true;
    }
 };

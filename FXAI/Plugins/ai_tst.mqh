@@ -3,9 +3,9 @@
 
 #include "..\API\plugin_base.mqh"
 
-#define FXAI_TST_SEQ 48
-#define FXAI_TST_TBPTT 16
-#define FXAI_TST_HEADS 2
+#define FXAI_TST_SEQ 64
+#define FXAI_TST_TBPTT 24
+#define FXAI_TST_HEADS 3
 #define FXAI_TST_D_HEAD (FXAI_AI_MLP_HIDDEN / FXAI_TST_HEADS)
 #define FXAI_TST_CLASS_COUNT 3
 #define FXAI_TST_MAX_STACK 4
@@ -122,6 +122,7 @@ private:
    double m_b_q25;
    double m_w_q75[FXAI_AI_MLP_HIDDEN];
    double m_b_q75;
+   CFXAINativeQualityHeads m_quality_heads;
    double m_w_mu_h[FXAI_TST_HORIZONS][FXAI_AI_MLP_HIDDEN];
    double m_b_mu_h[FXAI_TST_HORIZONS];
 
@@ -159,24 +160,7 @@ private:
 
    void LayerNormAffine(double &v[], const double &g[], const double &b[]) const
    {
-      double mean = 0.0;
-      for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
-         mean += v[i];
-      mean /= (double)FXAI_AI_MLP_HIDDEN;
-
-      double var = 0.0;
-      for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
-      {
-         double d = v[i] - mean;
-         var += d * d;
-      }
-
-      double inv = 1.0 / MathSqrt(var / (double)FXAI_AI_MLP_HIDDEN + 1e-6);
-      for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
-      {
-         double n = (v[i] - mean) * inv;
-         v[i] = FXAI_ClipSym(g[i] * n + b[i], 8.0);
-      }
+      FXAI_ModuleLayerNormAffine(v, FXAI_AI_MLP_HIDDEN, g, b);
    }
 
    void Softmax3(const double &logits[], double &probs[]) const
@@ -1666,32 +1650,46 @@ public:
 
    void BuildWindowAwareInput(const double &x[], double &xa[]) const
    {
-      int xn = ArraySize(x);
-      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      CopyCurrentInputClipped(x, xa);
+   }
+
+   int SequenceContextSpan(void) const
+   {
+      return ContextSequenceCap(FXAI_TST_SEQ, 56);
+   }
+
+   void ForwardSequenceContext(const double &x[],
+                               double &state_embed[],
+                               double &state_local[],
+                               double &state_attn[],
+                               double &state_final[],
+                               double &group_gate[],
+                               double &head_ctx[][FXAI_TST_D_HEAD])
+   {
+      int saved_ptr = m_seq_ptr;
+      int saved_len = m_seq_len;
+      double saved_seq[FXAI_TST_SEQ][FXAI_AI_MLP_HIDDEN];
+      for(int t=0; t<FXAI_TST_SEQ; t++)
+         for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
+            saved_seq[t][h] = m_seq_h[t][h];
+
+      double seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      int seq_len = 0;
+      BuildChronologicalSequenceTensorCapped(x, SequenceContextSpan(), seq, seq_len);
+
+      ResetSequence();
+      for(int t=0; t<seq_len; t++)
       {
-         double v = (i < xn && MathIsValidNumber(x[i]) ? x[i] : 0.0);
-         xa[i] = (i == 0 ? 1.0 : FXAI_ClipSym(v, 8.0));
+         double x_step[FXAI_AI_WEIGHTS];
+         FXAI_SequenceCopyRow(seq, t, x_step);
+         ForwardStep(x_step, true, false, -1, state_embed, state_local, state_attn, state_final, group_gate, head_ctx);
       }
-      int win_n = CurrentWindowSize();
-      if(win_n <= 1) return;
-      double mean1 = CurrentWindowFeatureMean(0);
-      double mean2 = CurrentWindowFeatureMean(1);
-      double mean6 = CurrentWindowFeatureMean(5);
-      double first1 = CurrentWindowValue(0, 1);
-      double last1  = CurrentWindowValue(win_n - 1, 1);
-      double first2 = CurrentWindowValue(0, 2);
-      double last2  = CurrentWindowValue(win_n - 1, 2);
-      double vol1 = 0.0;
-      for(int i=0; i<win_n; i++)
-      {
-         double d = CurrentWindowValue(i, 1) - mean1;
-         vol1 += d * d;
-      }
-      vol1 = MathSqrt(vol1 / (double)win_n);
-      xa[1] = FXAI_ClipSym(0.60 * xa[1] + 0.25 * mean1 + 0.15 * (last1 - first1), 8.0);
-      xa[2] = FXAI_ClipSym(0.60 * xa[2] + 0.25 * mean2 + 0.15 * (last2 - first2), 8.0);
-      xa[6] = FXAI_ClipSym(0.65 * xa[6] + 0.35 * vol1, 8.0);
-      xa[7] = FXAI_ClipSym(0.65 * xa[7] + 0.35 * mean6, 8.0);
+
+      m_seq_ptr = saved_ptr;
+      m_seq_len = saved_len;
+      for(int t=0; t<FXAI_TST_SEQ; t++)
+         for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
+            m_seq_h[t][h] = saved_seq[t][h];
    }
 
 
@@ -1701,15 +1699,13 @@ public:
                                         double &expected_move_points)
    {
       EnsureInitialized(hp);
-      double xa[FXAI_AI_WEIGHTS];
-      BuildWindowAwareInput(x, xa);
       double emb[FXAI_AI_MLP_HIDDEN];
       double loc[FXAI_AI_MLP_HIDDEN];
       double att[FXAI_AI_MLP_HIDDEN];
       double fin[FXAI_AI_MLP_HIDDEN];
       double grp[3];
       double ctx[FXAI_TST_HEADS][FXAI_TST_D_HEAD];
-      ForwardStep(xa, false, false, -1, emb, loc, att, fin, grp, ctx);
+      ForwardSequenceContext(x, emb, loc, att, fin, grp, ctx);
 
       double logits[FXAI_TST_CLASS_COUNT];
       double probs[FXAI_TST_CLASS_COUNT];
@@ -1741,11 +1737,9 @@ public:
    {
       EnsureInitialized(hp);
       ResetModelOutput(out);
-      double xa[FXAI_AI_WEIGHTS];
-      BuildWindowAwareInput(x, xa);
       double emb[FXAI_AI_MLP_HIDDEN], loc[FXAI_AI_MLP_HIDDEN], att[FXAI_AI_MLP_HIDDEN], fin[FXAI_AI_MLP_HIDDEN], grp[3];
       double ctx[FXAI_TST_HEADS][FXAI_TST_D_HEAD];
-      ForwardStep(xa, false, false, -1, emb, loc, att, fin, grp, ctx);
+      ForwardSequenceContext(x, emb, loc, att, fin, grp, ctx);
       double logits[FXAI_TST_CLASS_COUNT], probs[FXAI_TST_CLASS_COUNT];
       double mu = 0.0, logv = 0.0, q25 = 0.0, q75 = 0.0, mu_h[FXAI_TST_HORIZONS];
       ComputeHeads(fin, logits, probs, mu, logv, q25, q75, mu_h[0], mu_h[1], mu_h[2]);
@@ -1770,7 +1764,17 @@ public:
       out.reliability = FXAI_Clamp(0.45 + 0.35 * active + 0.20 * (m_move_ready ? 1.0 : 0.0), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
+      double bank_mfe = 0.0, bank_mae = 0.0, bank_hit = 1.0, bank_path = 0.5, bank_fill = 0.5, bank_trust = 0.0;
+      GetQualityBankPriors(bank_mfe, bank_mae, bank_hit, bank_path, bank_fill, bank_trust);
+      m_quality_heads.Predict(xa,
+                              out.move_mean_points,
+                              FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                              out.reliability,
+                              out.confidence,
+                              bank_mfe, bank_mae, bank_hit, bank_path, bank_fill, bank_trust,
+                              out);
       return true;
    }
 
@@ -1782,6 +1786,7 @@ public:
       m_cfg_ready = false;
       m_step = 0;
       m_adam_t = 0;
+      m_quality_heads.Reset();
       ResetSequence();
       ResetTrainBuffer();
       ResetInputNorm();
@@ -1828,6 +1833,19 @@ public:
       int cls = MapClass(y, xa, move_points);
       double sw = MoveSampleWeight(xa, move_points);
       sw = FXAI_Clamp(sw, 0.25, 4.00);
+      m_quality_heads.Update(xa,
+                             sw,
+                             TargetMFEPoints(),
+                             FXAI_Clamp(TargetMAEPoints() / MathMax(TargetMFEPoints() + 0.10, 0.10), 0.0, 1.0),
+                             TargetHitTimeFrac(),
+                             TargetPathRisk(),
+                             TargetFillRisk(),
+                             TargetMaskedStep(),
+                             TargetNextVol(),
+                             TargetRegimeShift(),
+                             TargetContextLead(),
+                             hp.lr,
+                             hp.l2);
       double cost = InputCostProxyPoints(xa);
 
       // Hard-example replay and class-balance sampler.
@@ -1885,9 +1903,7 @@ public:
       double fin[FXAI_AI_MLP_HIDDEN];
       double grp[3];
       double ctx[FXAI_TST_HEADS][FXAI_TST_D_HEAD];
-      double xa[FXAI_AI_WEIGHTS];
-      BuildWindowAwareInput(x, xa);
-      ForwardStep(xa, false, false, -1, emb, loc, att, fin, grp, ctx);
+      ForwardSequenceContext(x, emb, loc, att, fin, grp, ctx);
 
       double logits[FXAI_TST_CLASS_COUNT];
       double probs[FXAI_TST_CLASS_COUNT];
@@ -1914,9 +1930,7 @@ public:
       double fin[FXAI_AI_MLP_HIDDEN];
       double grp[3];
       double ctx[FXAI_TST_HEADS][FXAI_TST_D_HEAD];
-      double xa[FXAI_AI_WEIGHTS];
-      BuildWindowAwareInput(x, xa);
-      ForwardStep(xa, false, false, -1, emb, loc, att, fin, grp, ctx);
+      ForwardSequenceContext(x, emb, loc, att, fin, grp, ctx);
 
       double logits[FXAI_TST_CLASS_COUNT];
       double probs[FXAI_TST_CLASS_COUNT];

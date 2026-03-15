@@ -121,6 +121,11 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
                                          samples[i].time_to_hit_frac,
                                          samples[i].path_flags,
                                          samples[i].spread_stress);
+         FXAI_SetTrainRequestAuxTargets(s3,
+                                        samples[i].masked_step_target,
+                                        samples[i].next_vol_target,
+                                        samples[i].regime_shift_target,
+                                        samples[i].context_lead_target);
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
             s3.x[k] = samples[i].x[k];
          FXAI_BuildPreparedSampleWindow(samples, i, s3.ctx.sequence_bars, s3.x_window, s3.window_size);
@@ -451,9 +456,9 @@ double FXAI_ScoreNormMethodCandidate(const int ai_idx,
 
    trial.Reset();
    trial.EnsureInitialized(hp);
-   int train_epochs = warmup_train_epochs;
+   int train_epochs = FXAI_WarmupEpochBudget(ai_idx, H, warmup_train_epochs);
    if(train_epochs < 1) train_epochs = 1;
-   if(train_epochs > 2) train_epochs = 2;
+   if(train_epochs > 4) train_epochs = 4;
    FXAI_TrainModelWindowPrepared(ai_idx,
                                  *trial,
                                  train_start,
@@ -1144,7 +1149,16 @@ void FXAI_WarmupSelectBanksForHorizon(const int H,
             trial.Reset();
             trial.EnsureInitialized(hp_trial);
 
-            for(int epoch=0; epoch<warmup_train_epochs; epoch++)
+            int epoch_budget = FXAI_WarmupEpochBudget(ai_idx, H, warmup_train_epochs);
+            if(epoch_budget < 1) epoch_budget = 1;
+            if(epoch_budget > 8) epoch_budget = 8;
+            int patience = (FXAI_IsSeriousNativeAI(ai_idx) ? 2 : 1);
+            int trades_fold = 0;
+            double regime_scores_fold[];
+            int regime_trades_fold[];
+            double score_fold = -1e18;
+            int stale_epochs = 0;
+            for(int epoch=0; epoch<epoch_budget; epoch++)
             {
                FXAI_TrainModelWindowPreparedRoutedCached(ai_idx,
                                                          *trial,
@@ -1153,24 +1167,38 @@ void FXAI_WarmupSelectBanksForHorizon(const int H,
                                                          1,
                                                          samples,
                                                          norm_caches);
-            }
 
-            int trades_fold = 0;
-            double regime_scores_fold[];
-            int regime_trades_fold[];
-            double score_fold = FXAI_ScoreWarmupTrialRouted(ai_idx,
-                                                            *trial,
-                                                            hp_trial,
-                                                            H,
-                                                            val_start,
-                                                            val_end,
-                                                            buy_trial,
-                                                            sell_trial,
-                                                            samples,
-                                                            norm_caches,
-                                                            trades_fold,
-                                                            regime_scores_fold,
-                                                            regime_trades_fold);
+               int trades_probe = 0;
+               double regime_scores_probe[];
+               int regime_trades_probe[];
+               double score_probe = FXAI_ScoreWarmupTrialRouted(ai_idx,
+                                                                *trial,
+                                                                hp_trial,
+                                                                H,
+                                                                val_start,
+                                                                val_end,
+                                                                buy_trial,
+                                                                sell_trial,
+                                                                samples,
+                                                                norm_caches,
+                                                                trades_probe,
+                                                                regime_scores_probe,
+                                                                regime_trades_probe);
+               if(score_probe > score_fold + 0.05 && trades_probe > 0)
+               {
+                  score_fold = score_probe;
+                  trades_fold = trades_probe;
+                  ArrayCopy(regime_scores_fold, regime_scores_probe);
+                  ArrayCopy(regime_trades_fold, regime_trades_probe);
+                  stale_epochs = 0;
+               }
+               else
+               {
+                  stale_epochs++;
+               }
+               if(stale_epochs >= patience && epoch + 1 >= MathMin(2, epoch_budget))
+                  break;
+            }
 
             if(score_fold <= -1e8 || trades_fold <= 0) continue;
             score_sum += score_fold;
@@ -1302,11 +1330,14 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
          FXAI_GetModelHyperParamsRouted(ai_idx, 0, H, hp_init);
          pool[ai_idx].Reset();
          pool[ai_idx].EnsureInitialized(hp_init);
+         int ai_epochs = FXAI_WarmupEpochBudget(ai_idx, H, warm_epochs);
+         if(ai_epochs < 1) ai_epochs = 1;
+         if(ai_epochs > 6) ai_epochs = 6;
          FXAI_TrainModelWindowPreparedRoutedCached(ai_idx,
                                                    *pool[ai_idx],
                                                    train_start,
                                                    train_end,
-                                                   warm_epochs,
+                                                   ai_epochs,
                                                    samples,
                                                    norm_caches);
       }

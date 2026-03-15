@@ -1,0 +1,363 @@
+#ifndef __FXAI_AUDIT_TENSOR_MQH__
+#define __FXAI_AUDIT_TENSOR_MQH__
+
+#include "..\TensorCore\TensorCore.mqh"
+
+bool FXAI_AuditTensorKernelSelfTest(string &reason)
+{
+   double current_x[FXAI_AI_WEIGHTS];
+   for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      current_x[k] = (k == 0 ? 1.0 : 0.02 * (double)(k + 1));
+
+   double window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+   for(int t=0; t<FXAI_MAX_SEQUENCE_BARS; t++)
+   {
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         window[t][k] = (k == 0 ? 1.0 : 0.01 * (double)(t + 1) * (double)(k + 1));
+   }
+
+   FXAISequenceBuffer buffer;
+   FXAI_SequenceBufferLoadWindow(buffer, current_x, window, 5, 6, false);
+   if(buffer.len != 6 || buffer.mask[0] != 1 || buffer.mask[5] != 1)
+   {
+      reason = "sequence_buffer_load";
+      return false;
+   }
+   if(!(buffer.pos_bias[0] < buffer.pos_bias[5] && MathAbs(buffer.pos_bias[5]) < 1e-9))
+   {
+      reason = "sequence_positional_bias";
+      return false;
+   }
+
+   FXAISequenceBuffer buffer_copy;
+   FXAI_SequenceBufferCopy(buffer, buffer_copy);
+   if(buffer_copy.len != buffer.len || MathAbs(buffer_copy.data[2][3] - buffer.data[2][3]) > 1e-12)
+   {
+      reason = "sequence_copy";
+      return false;
+   }
+
+   double seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+   int seq_len = 0;
+   int seq_mask[];
+   double seq_pos[];
+   FXAI_SequenceBufferPreparePacked(buffer, seq, seq_len, seq_mask, seq_pos);
+   if(seq_len != 6 || ArraySize(seq_mask) != FXAI_MAX_SEQUENCE_BARS || ArraySize(seq_pos) != FXAI_MAX_SEQUENCE_BARS)
+   {
+      reason = "sequence_pack";
+      return false;
+   }
+
+   double w_in[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
+   double b_in[FXAI_AI_MLP_HIDDEN];
+   for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      for(int o=0; o<FXAI_AI_MLP_HIDDEN; o++)
+         w_in[i][o] = ((i < 6 && o < 4) ? 0.01 * (double)(i + 1) * (double)(o + 1) : 0.0);
+   for(int o=0; o<FXAI_AI_MLP_HIDDEN; o++)
+      b_in[o] = (o < 4 ? 0.05 * (double)(o + 1) : 0.0);
+
+   double mm_out[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_MLP_HIDDEN];
+   FXAI_TensorBatchedMatMul(seq, seq_len, w_in, b_in, mm_out, 4);
+   double expect0 = b_in[0];
+   for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      expect0 += seq[0][k] * w_in[k][0];
+   if(MathAbs(mm_out[0][0] - expect0) > 1e-8)
+   {
+      reason = "batched_matmul_forward";
+      return false;
+   }
+
+   double gemv_out[];
+   FXAI_ModuleLinearInputHidden(current_x, w_in, b_in, gemv_out, 4);
+   if(ArraySize(gemv_out) != 4 || MathAbs(gemv_out[0] - expect0) > 1e-8)
+   {
+      reason = "linear_module_forward";
+      return false;
+   }
+
+   double hh_w[FXAI_AI_MLP_HIDDEN][FXAI_AI_MLP_HIDDEN];
+   double hh_b[FXAI_AI_MLP_HIDDEN];
+   double hh_in[FXAI_AI_MLP_HIDDEN];
+   for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
+   {
+      hh_in[i] = 0.03 * (double)(i + 1);
+      hh_b[i] = (i < 3 ? 0.02 * (double)(i + 1) : 0.0);
+      for(int j=0; j<FXAI_AI_MLP_HIDDEN; j++)
+         hh_w[i][j] = ((i < 4 && j < 3) ? 0.015 * (double)(i + 1) * (double)(j + 1) : 0.0);
+   }
+   double hh_out[];
+   FXAI_ModuleLinearHidden(hh_in, hh_w, hh_b, hh_out, 3);
+   if(ArraySize(hh_out) != 3 || !MathIsValidNumber(hh_out[2]))
+   {
+      reason = "linear_hidden_forward";
+      return false;
+   }
+
+   double kernel[3] = {0.25, 0.50, 0.25};
+   double conv[];
+   FXAI_ModuleConv1DSummary(seq, seq_len, kernel, 3, conv);
+   double conv_ref = 0.0;
+   double conv_den = 0.0;
+   for(int t=0; t<seq_len; t++)
+   {
+      double y = 0.0;
+      double kw = 0.0;
+      for(int j=0; j<3; j++)
+      {
+         int idx = t - j;
+         if(idx < 0) break;
+         y += kernel[j] * seq[idx][1];
+         kw += MathAbs(kernel[j]);
+      }
+      if(kw <= 0.0) kw = 1.0;
+      conv_ref += y / kw;
+      conv_den += 1.0;
+   }
+   conv_ref /= MathMax(conv_den, 1.0);
+   if(MathAbs(conv[1] - conv_ref) > 1e-8)
+   {
+      reason = "conv1d_forward";
+      return false;
+   }
+
+   double query[FXAI_AI_WEIGHTS];
+   for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      query[k] = seq[seq_len - 1][k];
+   double attn[];
+   FXAI_ModuleMultiHeadAttentionSummary(seq, seq_len, query, seq_mask, seq_pos, 2, attn);
+   if(ArraySize(attn) != FXAI_AI_WEIGHTS || !MathIsValidNumber(attn[2]))
+   {
+      reason = "attention_module_forward";
+      return false;
+   }
+
+   double ln_vec[4] = {1.0, 2.0, 3.0, 4.0};
+   double ones[4] = {1.0, 1.0, 1.0, 1.0};
+   double zeros[4] = {0.0, 0.0, 0.0, 0.0};
+   FXAI_ModuleLayerNormAffine(ln_vec, 4, ones, zeros);
+   double ln_mean = 0.0;
+   double ln_var = 0.0;
+   for(int i=0; i<4; i++)
+      ln_mean += ln_vec[i];
+   ln_mean /= 4.0;
+   for(int i=0; i<4; i++)
+   {
+      double d = ln_vec[i] - ln_mean;
+      ln_var += d * d;
+   }
+   ln_var /= 4.0;
+   if(MathAbs(ln_mean) > 1e-6 || MathAbs(ln_var - 1.0) > 1e-3)
+   {
+      reason = "layernorm_forward";
+      return false;
+   }
+
+   double rms_vec[4] = {1.0, 2.0, 3.0, 4.0};
+   FXAI_ModuleRMSNormAffine(rms_vec, 4, ones, zeros);
+   double rms_sq = 0.0;
+   for(int i=0; i<4; i++)
+      rms_sq += rms_vec[i] * rms_vec[i];
+   rms_sq /= 4.0;
+   if(MathAbs(rms_sq - 1.0) > 1e-3)
+   {
+      reason = "rmsnorm_forward";
+      return false;
+   }
+
+   double i_gate[FXAI_AI_MLP_HIDDEN], f_gate[FXAI_AI_MLP_HIDDEN], o_gate[FXAI_AI_MLP_HIDDEN], g_gate[FXAI_AI_MLP_HIDDEN];
+   double c_prev[FXAI_AI_MLP_HIDDEN], c_next[FXAI_AI_MLP_HIDDEN], h_next[FXAI_AI_MLP_HIDDEN];
+   double z_gate[FXAI_AI_MLP_HIDDEN], r_gate[FXAI_AI_MLP_HIDDEN], n_gate[FXAI_AI_MLP_HIDDEN], h_prev[FXAI_AI_MLP_HIDDEN], gru_next[FXAI_AI_MLP_HIDDEN];
+   for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
+   {
+      i_gate[h] = 0.4;
+      f_gate[h] = 0.5;
+      o_gate[h] = 0.6;
+      g_gate[h] = 0.2;
+      c_prev[h] = 0.1;
+      z_gate[h] = 0.3;
+      r_gate[h] = 0.4;
+      n_gate[h] = 0.2;
+      h_prev[h] = 0.1;
+   }
+   FXAI_ModuleLSTMCellForward(i_gate, f_gate, o_gate, g_gate, c_prev, c_next, h_next, 3);
+   if(MathAbs(c_next[0] - (0.5 * 0.1 + 0.4 * 0.2)) > 1e-8)
+   {
+      reason = "lstm_cell_forward";
+      return false;
+   }
+   FXAI_ModuleGRUCellForward(z_gate, r_gate, n_gate, h_prev, gru_next, 3);
+   if(!MathIsValidNumber(gru_next[0]))
+   {
+      reason = "gru_cell_forward";
+      return false;
+   }
+
+   double decay[FXAI_AI_MLP_HIDDEN];
+   double mix[FXAI_AI_MLP_HIDDEN][FXAI_AI_WEIGHTS];
+   double skip[FXAI_AI_MLP_HIDDEN];
+   double state_prev[FXAI_AI_MLP_HIDDEN], state_next[FXAI_AI_MLP_HIDDEN], ss_out[];
+   for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
+   {
+      decay[h] = 0.8;
+      skip[h] = 0.05;
+      state_prev[h] = 0.1;
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         mix[h][k] = (h < 2 && k < 6 ? 0.02 * (double)(h + 1) * (double)(k + 1) : 0.0);
+   }
+   FXAI_ModuleStateSpaceBlockForward(current_x, state_prev, decay, mix, skip, state_next, ss_out, 3);
+   if(ArraySize(ss_out) != 3 || !MathIsValidNumber(ss_out[1]))
+   {
+      reason = "state_space_forward";
+      return false;
+   }
+
+   double mix_a[3] = {1.0, 2.0, 3.0};
+   double mix_b[3] = {3.0, 2.0, 1.0};
+   double mix_c[3] = {2.0, 2.0, 2.0};
+   double weights[3] = {0.2, 0.3, 0.5};
+   double mix_out[];
+   FXAI_ModuleGateBlend(mix_a, mix_b, 0.25, mix_out, 3);
+   if(MathAbs(mix_out[0] - 1.5) > 1e-8)
+   {
+      reason = "gate_blend_forward";
+      return false;
+   }
+   FXAI_ModuleMixtureFuse3(mix_a, mix_b, mix_c, weights, mix_out, 3);
+   if(MathAbs(mix_out[0] - (0.2 * 1.0 + 0.3 * 3.0 + 0.5 * 2.0)) > 1e-8)
+   {
+      reason = "mixture_forward";
+      return false;
+   }
+
+   double mse = FXAI_LossMSE(1.5, 1.0);
+   double mse_grad = FXAI_LossMSEGrad(1.5, 1.0);
+   if(MathAbs(mse - 0.25) > 1e-12 || MathAbs(mse_grad - 1.0) > 1e-12)
+   {
+      reason = "mse_loss";
+      return false;
+   }
+
+   double ce_probs[3] = {0.2, 0.7, 0.1};
+   double ce_grad[];
+   FXAI_LossCrossEntropyGrad3(ce_probs, 1, ce_grad);
+   if(ArraySize(ce_grad) != 3 || MathAbs(ce_grad[1] + 0.3) > 1e-8)
+   {
+      reason = "cross_entropy_grad";
+      return false;
+   }
+
+   double param1 = 1.0, vel1 = 0.0;
+   double param2 = 1.0, vel2 = 0.0;
+   FXAI_OptSGDStep(param1, vel1, 0.5, 0.1, 0.9, 0.01);
+   FXAI_OptSGDStep(param2, vel2, 0.5, 0.1, 0.9, 0.01);
+   if(MathAbs(param1 - param2) > 1e-12 || MathAbs(vel1 - vel2) > 1e-12)
+   {
+      reason = "sgd_reproducibility";
+      return false;
+   }
+
+   double adam_p = 1.0, adam_m = 0.0, adam_v = 0.0;
+   FXAI_OptAdamWStep(adam_p, adam_m, adam_v, 0.25, 0.01, 0.9, 0.999, 0.01, 3);
+   if(!MathIsValidNumber(adam_p) || !MathIsValidNumber(adam_m) || !MathIsValidNumber(adam_v))
+   {
+      reason = "adamw_step";
+      return false;
+   }
+
+   double rms_p = 1.0, rms_c = 0.0;
+   FXAI_OptRMSPropStep(rms_p, rms_c, 0.25, 0.01, 0.95, 0.01);
+   if(!MathIsValidNumber(rms_p) || !MathIsValidNumber(rms_c))
+   {
+      reason = "rmsprop_step";
+      return false;
+   }
+
+   double clip_vec[4] = {3.0, 4.0, 0.0, 0.0};
+   FXAI_ClipVectorInPlace(clip_vec, 4, 4.0);
+   double clip_norm = FXAI_VectorNorm(clip_vec, 4);
+   if(MathAbs(clip_norm - 4.0) > 1e-6)
+   {
+      reason = "gradient_clip";
+      return false;
+   }
+
+   double lr_step = FXAI_LRScheduleStepDecay(0.1, 20, 10, 0.5, 0.001);
+   double lr_cos = FXAI_LRScheduleCosineWarm(0.1, 100, 16, 128, 0.2);
+   double lr_inv = FXAI_LRScheduleInvSqrt(0.1, 100, 16, 0.001);
+   if(!(lr_step > 0.0 && lr_cos > 0.0 && lr_inv > 0.0))
+   {
+      reason = "lr_schedule";
+      return false;
+   }
+
+   double eps = 1e-5;
+   double w_plus[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
+   double w_minus[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
+   for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+   {
+      for(int o=0; o<FXAI_AI_MLP_HIDDEN; o++)
+      {
+         w_plus[k][o] = w_in[k][o];
+         w_minus[k][o] = w_in[k][o];
+      }
+   }
+   w_plus[1][0] += eps;
+   w_minus[1][0] -= eps;
+   double mm_plus[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_MLP_HIDDEN];
+   double mm_minus[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_MLP_HIDDEN];
+   FXAI_TensorBatchedMatMul(seq, seq_len, w_plus, b_in, mm_plus, 2);
+   FXAI_TensorBatchedMatMul(seq, seq_len, w_minus, b_in, mm_minus, 2);
+   double loss_plus = 0.0;
+   double loss_minus = 0.0;
+   for(int t=0; t<seq_len; t++)
+   {
+      loss_plus += mm_plus[t][0];
+      loss_minus += mm_minus[t][0];
+   }
+   double grad_fd = (loss_plus - loss_minus) / (2.0 * eps);
+   double grad_ref = 0.0;
+   for(int t=0; t<seq_len; t++)
+      grad_ref += seq[t][1];
+   if(MathAbs(grad_fd - grad_ref) > 1e-4)
+   {
+      reason = "batched_matmul_gradient";
+      return false;
+   }
+
+   string file_name = "FXAI\\runtime_sanity.bin";
+   int hw = FileOpen(file_name, FILE_BIN | FILE_WRITE | FILE_COMMON);
+   if(hw == INVALID_HANDLE)
+   {
+      reason = "serialize_open_write";
+      return false;
+   }
+   double params[4] = {adam_p, rms_p, lr_cos, mix_out[0]};
+   for(int i=0; i<4; i++)
+      FileWriteDouble(hw, params[i]);
+   FileClose(hw);
+
+   int hr = FileOpen(file_name, FILE_BIN | FILE_READ | FILE_COMMON);
+   if(hr == INVALID_HANDLE)
+   {
+      reason = "serialize_open_read";
+      return false;
+   }
+   for(int i=0; i<4; i++)
+   {
+      double v = FileReadDouble(hr);
+      if(MathAbs(v - params[i]) > 1e-12)
+      {
+         FileClose(hr);
+         FileDelete(file_name, FILE_COMMON);
+         reason = "serialize_drift";
+         return false;
+      }
+   }
+   FileClose(hr);
+   FileDelete(file_name, FILE_COMMON);
+
+   reason = "";
+   return true;
+}
+
+#endif // __FXAI_AUDIT_TENSOR_MQH__

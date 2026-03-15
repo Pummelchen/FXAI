@@ -3,6 +3,7 @@
 
 #include <Object.mqh>
 #include "..\Engine\core.mqh"
+#include "..\TensorCore\TensorCore.mqh"
 
 class CFXAITernaryCalibrator
 {
@@ -159,6 +160,207 @@ public:
    int Steps(void) const { return m_steps; }
 };
 
+class CFXAINativeQualityHeads
+{
+private:
+   bool   m_ready;
+   int    m_steps;
+   double m_w_mfe[FXAI_AI_WEIGHTS];
+   double m_w_mae[FXAI_AI_WEIGHTS];
+   double m_w_hit[FXAI_AI_WEIGHTS];
+   double m_w_path[FXAI_AI_WEIGHTS];
+   double m_w_fill[FXAI_AI_WEIGHTS];
+   double m_b_mfe;
+   double m_b_mae;
+   double m_b_hit;
+   double m_b_path;
+   double m_b_fill;
+   double m_w_mask[FXAI_AI_WEIGHTS];
+   double m_w_vol[FXAI_AI_WEIGHTS];
+   double m_w_shift[FXAI_AI_WEIGHTS];
+   double m_w_ctx[FXAI_AI_WEIGHTS];
+   double m_b_mask;
+   double m_b_vol;
+   double m_b_shift;
+   double m_b_ctx;
+
+   double Dot(const double &w[],
+              const double &x[]) const
+   {
+      double z = w[0];
+      for(int i=1; i<FXAI_AI_WEIGHTS; i++)
+         z += w[i] * x[i];
+      return z;
+   }
+
+   void UpdateHead(double &w[],
+                   double &bias,
+                   const double &x[],
+                   const double pred,
+                   const double target,
+                   const double lr,
+                   const double l2)
+   {
+      double e = FXAI_Clamp(-0.5 * FXAI_LossMSEGrad(pred, target), -12.0, 12.0);
+      bias = FXAI_ClipSym(bias + lr * e, 12.0);
+      w[0] = bias;
+      for(int i=1; i<FXAI_AI_WEIGHTS; i++)
+         w[i] = FXAI_ClipSym(w[i] + lr * (e * x[i] - l2 * w[i]), 12.0);
+   }
+
+public:
+   CFXAINativeQualityHeads(void) { Reset(); }
+
+   void Reset(void)
+   {
+      m_ready = false;
+      m_steps = 0;
+      m_b_mfe = 1.0;
+      m_b_mae = -1.5;
+      m_b_hit = 0.0;
+      m_b_path = -0.5;
+      m_b_fill = -0.5;
+      m_b_mask = 0.0;
+      m_b_vol = -1.0;
+      m_b_shift = -1.2;
+      m_b_ctx = 0.0;
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         m_w_mfe[i] = 0.0;
+         m_w_mae[i] = 0.0;
+         m_w_hit[i] = 0.0;
+         m_w_path[i] = 0.0;
+         m_w_fill[i] = 0.0;
+         m_w_mask[i] = 0.0;
+         m_w_vol[i] = 0.0;
+         m_w_shift[i] = 0.0;
+         m_w_ctx[i] = 0.0;
+      }
+      m_w_mfe[0] = m_b_mfe;
+      m_w_mae[0] = m_b_mae;
+      m_w_hit[0] = m_b_hit;
+      m_w_path[0] = m_b_path;
+      m_w_fill[0] = m_b_fill;
+      m_w_mask[0] = m_b_mask;
+      m_w_vol[0] = m_b_vol;
+      m_w_shift[0] = m_b_shift;
+      m_w_ctx[0] = m_b_ctx;
+   }
+
+   bool Ready(void) const { return m_ready; }
+   int Steps(void) const { return m_steps; }
+
+   void Predict(const double &x[],
+                const double move_scale,
+                const double activity_gate,
+                const double structural_quality,
+                const double execution_quality,
+                const double bank_mfe,
+                const double bank_mae,
+                const double bank_hit,
+                const double bank_path,
+                const double bank_fill,
+                const double bank_trust,
+                FXAIAIModelOutputV4 &out) const
+   {
+      double active = FXAI_Clamp(activity_gate, 0.0, 1.0);
+      double structure = FXAI_Clamp(structural_quality, 0.0, 1.0);
+      double exec_q = FXAI_Clamp(execution_quality, 0.0, 1.0);
+      double scale = MathMax(move_scale, 0.10);
+      double self_trust = FXAI_Clamp((double)m_steps / 120.0, 0.0, 0.75);
+      double mix = MathMax(bank_trust, self_trust);
+
+      double mask_self = FXAI_ClipSym(Dot(m_w_mask, x), 8.0);
+      double vol_self = MathExp(FXAI_ClipSym(Dot(m_w_vol, x), 4.0));
+      double shift_self = FXAI_Clamp(FXAI_Sigmoid(Dot(m_w_shift, x)), 0.0, 1.0);
+      double ctx_self = FXAI_Clamp(FXAI_Sigmoid(Dot(m_w_ctx, x)), 0.0, 1.0);
+      double aux_vol_ratio = FXAI_Clamp(vol_self / MathMax(scale, 0.10), 0.0, 2.0);
+      structure = FXAI_Clamp(structure +
+                             0.10 * (1.0 - shift_self) +
+                             0.08 * ctx_self -
+                             0.06 * aux_vol_ratio -
+                             0.05 * FXAI_Clamp(MathAbs(mask_self) / MathMax(scale, 0.10), 0.0, 1.0),
+                             0.0,
+                             1.0);
+      exec_q = FXAI_Clamp(exec_q +
+                          0.08 * ctx_self -
+                          0.10 * shift_self -
+                          0.06 * aux_vol_ratio,
+                          0.0,
+                          1.0);
+
+      double mfe_raw = MathLog(MathMax(scale, 0.10)) + 0.25 * active + 0.15 * structure + Dot(m_w_mfe, x);
+      double mae_raw = -1.0 + 0.20 * (1.0 - structure) + 0.10 * (1.0 - exec_q) + Dot(m_w_mae, x);
+      double hit_raw = 0.40 + 0.20 * active - 0.15 * structure + Dot(m_w_hit, x);
+      double path_raw = -0.35 + 0.25 * (1.0 - structure) + 0.20 * (1.0 - exec_q) + Dot(m_w_path, x);
+      double fill_raw = -0.50 + 0.30 * (1.0 - exec_q) + Dot(m_w_fill, x);
+
+      double mfe_self = MathMax(out.move_q75_points, MathExp(FXAI_ClipSym(mfe_raw, 5.0)));
+      double mae_self = MathMax(0.0, scale * FXAI_Sigmoid(mae_raw));
+      double hit_self = FXAI_Clamp(FXAI_Sigmoid(hit_raw), 0.0, 1.0);
+      double path_self = FXAI_Clamp(FXAI_Sigmoid(path_raw), 0.0, 1.0);
+      double fill_self = FXAI_Clamp(FXAI_Sigmoid(fill_raw), 0.0, 1.0);
+
+      out.mfe_mean_points = (1.0 - mix) * mfe_self + mix * MathMax(bank_mfe, out.move_q75_points);
+      out.mae_mean_points = (1.0 - mix) * mae_self + mix * MathMax(0.0, bank_mae);
+      out.hit_time_frac = (1.0 - mix) * hit_self + mix * FXAI_Clamp(bank_hit, 0.0, 1.0);
+      out.path_risk = FXAI_Clamp((1.0 - mix) * path_self + mix * FXAI_Clamp(bank_path, 0.0, 1.0), 0.0, 1.0);
+      out.fill_risk = FXAI_Clamp((1.0 - mix) * fill_self + mix * FXAI_Clamp(bank_fill, 0.0, 1.0), 0.0, 1.0);
+      out.has_path_quality = true;
+   }
+
+   void Update(const double &x[],
+               const double sample_w,
+               const double target_mfe,
+               const double target_mae,
+               const double target_hit,
+               const double target_path,
+               const double target_fill,
+               const double target_masked_step,
+               const double target_next_vol,
+               const double target_regime_shift,
+               const double target_context_lead,
+               const double lr,
+               const double l2)
+   {
+      double w = FXAI_Clamp(sample_w, 0.10, 6.00);
+      double step = FXAI_Clamp(lr * 0.35 * w, 0.0002, 0.0250);
+      double reg = FXAI_Clamp(l2, 0.0, 0.05);
+
+      double pred_mfe = MathExp(FXAI_ClipSym(MathLog(0.10) + Dot(m_w_mfe, x), 5.0));
+      double pred_mae = FXAI_Sigmoid(Dot(m_w_mae, x));
+      double pred_hit = FXAI_Sigmoid(Dot(m_w_hit, x));
+      double pred_path = FXAI_Sigmoid(Dot(m_w_path, x));
+      double pred_fill = FXAI_Sigmoid(Dot(m_w_fill, x));
+      double pred_mask = FXAI_ClipSym(Dot(m_w_mask, x), 8.0);
+      double pred_vol = MathExp(FXAI_ClipSym(Dot(m_w_vol, x), 4.0));
+      double pred_shift = FXAI_Sigmoid(Dot(m_w_shift, x));
+      double pred_ctx = FXAI_Sigmoid(Dot(m_w_ctx, x));
+
+      double tgt_mfe = MathLog(MathMax(target_mfe, 0.10));
+      double tgt_mae = FXAI_Clamp(target_mae, 0.0, 1.0);
+      double tgt_hit = FXAI_Clamp(target_hit, 0.0, 1.0);
+      double tgt_path = FXAI_Clamp(target_path, 0.0, 1.0);
+      double tgt_fill = FXAI_Clamp(target_fill, 0.0, 1.0);
+      double tgt_mask = FXAI_ClipSym(target_masked_step, 8.0);
+      double tgt_vol = MathLog(MathMax(target_next_vol, 0.05));
+      double tgt_shift = FXAI_Clamp(target_regime_shift, 0.0, 1.0);
+      double tgt_ctx = FXAI_Clamp(target_context_lead, 0.0, 1.0);
+
+      UpdateHead(m_w_mfe, m_b_mfe, x, MathLog(MathMax(pred_mfe, 0.10)), tgt_mfe, step, reg);
+      UpdateHead(m_w_mae, m_b_mae, x, pred_mae, tgt_mae, step, reg);
+      UpdateHead(m_w_hit, m_b_hit, x, pred_hit, tgt_hit, step, reg);
+      UpdateHead(m_w_path, m_b_path, x, pred_path, tgt_path, step, reg);
+      UpdateHead(m_w_fill, m_b_fill, x, pred_fill, tgt_fill, step, reg);
+      UpdateHead(m_w_mask, m_b_mask, x, pred_mask, tgt_mask, 0.80 * step, reg);
+      UpdateHead(m_w_vol, m_b_vol, x, MathLog(MathMax(pred_vol, 0.05)), tgt_vol, 0.70 * step, reg);
+      UpdateHead(m_w_shift, m_b_shift, x, pred_shift, tgt_shift, 0.75 * step, reg);
+      UpdateHead(m_w_ctx, m_b_ctx, x, pred_ctx, tgt_ctx, 0.75 * step, reg);
+      m_ready = true;
+      m_steps++;
+   }
+};
+
 class CFXAIAIPlugin : public CObject
 {
 protected:
@@ -197,6 +399,10 @@ protected:
    int      m_target_path_flags;
    double   m_target_path_risk;
    double   m_target_fill_risk;
+   double   m_target_masked_step;
+   double   m_target_next_vol;
+   double   m_target_regime_shift;
+   double   m_target_context_lead;
    bool     m_quality_head_ready;
    double   m_quality_mfe_ema;
    double   m_quality_mae_ema;
@@ -229,6 +435,10 @@ protected:
    int      m_replay_path_flags[FXAI_PLUGIN_REPLAY_CAPACITY];
    double   m_replay_path_risk[FXAI_PLUGIN_REPLAY_CAPACITY];
    double   m_replay_fill_risk[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_replay_masked_step[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_replay_next_vol[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_replay_regime_shift[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_replay_context_lead[FXAI_PLUGIN_REPLAY_CAPACITY];
    double   m_replay_cost[FXAI_PLUGIN_REPLAY_CAPACITY];
    double   m_replay_min_move[FXAI_PLUGIN_REPLAY_CAPACITY];
    datetime m_replay_time[FXAI_PLUGIN_REPLAY_CAPACITY];
@@ -419,6 +629,10 @@ protected:
       m_target_path_flags = 0;
       m_target_path_risk = 0.0;
       m_target_fill_risk = 0.0;
+      m_target_masked_step = 0.0;
+      m_target_next_vol = 0.0;
+      m_target_regime_shift = 0.0;
+      m_target_context_lead = 0.5;
       m_quality_head_ready = false;
       m_quality_mfe_ema = 0.0;
       m_quality_mae_ema = 0.0;
@@ -465,6 +679,10 @@ protected:
          m_replay_path_flags[i] = 0;
          m_replay_path_risk[i] = 0.0;
          m_replay_fill_risk[i] = 0.0;
+         m_replay_masked_step[i] = 0.0;
+         m_replay_next_vol[i] = 0.0;
+         m_replay_regime_shift[i] = 0.0;
+         m_replay_context_lead[i] = 0.5;
          m_replay_cost[i] = 0.0;
          m_replay_min_move[i] = 0.0;
          m_replay_time[i] = 0;
@@ -555,6 +773,10 @@ protected:
       m_target_path_flags = req.path_flags;
       m_target_path_risk = FXAI_Clamp(req.path_risk, 0.0, 1.0);
       m_target_fill_risk = FXAI_Clamp(req.fill_risk, 0.0, 1.0);
+      m_target_masked_step = req.masked_step_target;
+      m_target_next_vol = MathMax(req.next_vol_target, 0.0);
+      m_target_regime_shift = FXAI_Clamp(req.regime_shift_target, 0.0, 1.0);
+      m_target_context_lead = FXAI_Clamp(req.context_lead_target, 0.0, 1.0);
    }
 
    void UpdateQualityHeads(const FXAIAITrainRequestV4 &req,
@@ -948,6 +1170,10 @@ protected:
       m_replay_path_flags[slot] = sample.path_flags;
       m_replay_path_risk[slot] = sample.path_risk;
       m_replay_fill_risk[slot] = sample.fill_risk;
+      m_replay_masked_step[slot] = sample.masked_step_target;
+      m_replay_next_vol[slot] = sample.next_vol_target;
+      m_replay_regime_shift[slot] = sample.regime_shift_target;
+      m_replay_context_lead[slot] = sample.context_lead_target;
       m_replay_cost[slot] = sample.ctx.cost_points;
       m_replay_min_move[slot] = sample.ctx.min_move_points;
       m_replay_time[slot] = sample.ctx.sample_time;
@@ -1051,6 +1277,10 @@ protected:
          m_target_path_flags = m_replay_path_flags[idx];
          m_target_path_risk = m_replay_path_risk[idx];
          m_target_fill_risk = m_replay_fill_risk[idx];
+         m_target_masked_step = m_replay_masked_step[idx];
+         m_target_next_vol = m_replay_next_vol[idx];
+         m_target_regime_shift = m_replay_regime_shift[idx];
+         m_target_context_lead = m_replay_context_lead[idx];
          m_ctx_window_size = m_replay_window_size[idx];
          if(m_ctx_window_size < 0) m_ctx_window_size = 0;
          if(m_ctx_window_size > FXAI_MAX_SEQUENCE_BARS) m_ctx_window_size = FXAI_MAX_SEQUENCE_BARS;
@@ -1085,6 +1315,10 @@ protected:
       m_target_path_flags = 0;
       m_target_path_risk = 0.0;
       m_target_fill_risk = 0.0;
+      m_target_masked_step = 0.0;
+      m_target_next_vol = 0.0;
+      m_target_regime_shift = 0.0;
+      m_target_context_lead = 0.5;
       m_ctx_window_size = keep_window_size;
       for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
@@ -1114,17 +1348,25 @@ protected:
                      const ulong feature_groups_mask = 0,
                      const int feature_schema_id = 0) const
    {
+      int min_seq = min_sequence_bars;
+      int max_seq = max_sequence_bars;
+      if(min_seq < 1) min_seq = 1;
+      if(min_seq > FXAI_MAX_SEQUENCE_BARS) min_seq = FXAI_MAX_SEQUENCE_BARS;
+      if(max_seq < min_seq) max_seq = min_seq;
+      if(max_seq > FXAI_MAX_SEQUENCE_BARS) max_seq = FXAI_MAX_SEQUENCE_BARS;
+
       out.api_version = FXAI_API_VERSION_V4;
       out.ai_id = AIId();
       out.ai_name = AIName();
       out.family = family;
+      out.reference_tier = FXAI_DefaultReferenceTierForAI(out.ai_id);
       out.capability_mask = capability_mask;
       out.feature_schema_id = (feature_schema_id > 0 ? feature_schema_id : FXAI_DefaultFeatureSchemaForFamily(family));
       out.feature_groups_mask = (feature_groups_mask != 0 ? feature_groups_mask : FXAI_DefaultFeatureGroupsForFamily(family));
       out.min_horizon_minutes = min_horizon_minutes;
       out.max_horizon_minutes = max_horizon_minutes;
-      out.min_sequence_bars = min_sequence_bars;
-      out.max_sequence_bars = max_sequence_bars;
+      out.min_sequence_bars = min_seq;
+      out.max_sequence_bars = max_seq;
    }
 
    void ResetModelOutput(FXAIAIModelOutputV4 &out) const
@@ -1426,6 +1668,156 @@ protected:
       return sum / sw;
    }
 
+   void BuildChronologicalSequenceTensor(const double &x[],
+                                         double &seq[][FXAI_AI_WEIGHTS],
+                                         int &seq_len) const
+   {
+      FXAISequenceBuffer buffer;
+      FXAI_SequenceBufferLoadWindow(buffer,
+                                    x,
+                                    m_ctx_window,
+                                    m_ctx_window_size,
+                                    FXAI_MAX_SEQUENCE_BARS,
+                                    false);
+      FXAI_SequenceBufferExport(buffer, seq, seq_len);
+   }
+
+   int ContextSequenceCap(const int max_cap,
+                          const int base_min = 8) const
+   {
+      return FXAI_ContextSequenceSpan(max_cap,
+                                      (m_ctx_horizon_minutes > 0 ? m_ctx_horizon_minutes : 1),
+                                      _Symbol,
+                                      base_min);
+   }
+
+   int ContextBatchCap(const int max_cap,
+                       const int base_min = 4) const
+   {
+      return FXAI_ContextBatchSpan(max_cap,
+                                   (m_ctx_horizon_minutes > 0 ? m_ctx_horizon_minutes : 1),
+                                   _Symbol,
+                                   base_min);
+   }
+
+   void CopyCurrentInputClipped(const double &x[],
+                                double &xa[]) const
+   {
+      int xn = ArraySize(x);
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         double v = (i < xn && MathIsValidNumber(x[i]) ? x[i] : 0.0);
+         xa[i] = (i == 0 ? 1.0 : FXAI_ClipSym(v, 8.0));
+      }
+   }
+
+   void BuildChronologicalSequenceTensorCapped(const double &x[],
+                                               const int max_steps,
+                                               double &seq[][FXAI_AI_WEIGHTS],
+                                               int &seq_len,
+                                               const bool normalize = true) const
+   {
+      int mask[];
+      double pos_bias[];
+      BuildPackedSequenceTensorCapped(x, max_steps, seq, seq_len, mask, pos_bias, normalize);
+   }
+
+   void BuildPackedSequenceTensorCapped(const double &x[],
+                                        const int max_steps,
+                                        double &seq[][FXAI_AI_WEIGHTS],
+                                        int &seq_len,
+                                        int &mask[],
+                                        double &pos_bias[],
+                                        const bool normalize = true) const
+   {
+      FXAISequenceBuffer buffer;
+      FXAI_SequenceBufferLoadWindow(buffer,
+                                    x,
+                                    m_ctx_window,
+                                    m_ctx_window_size,
+                                    max_steps,
+                                    normalize);
+      FXAI_SequenceBufferPreparePacked(buffer, seq, seq_len, mask, pos_bias);
+   }
+
+   void BuildTensorEncodedInput(const double &x[],
+                                const int style,
+                                double &xa[]) const
+   {
+      int xn = ArraySize(x);
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         double v = (i < xn && MathIsValidNumber(x[i]) ? x[i] : 0.0);
+         xa[i] = (i == 0 ? 1.0 : FXAI_ClipSym(v, 8.0));
+      }
+
+      double seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      int seq_len = 0;
+      int seq_mask[];
+      double seq_pos_bias[];
+      BuildPackedSequenceTensorCapped(x, FXAI_MAX_SEQUENCE_BARS, seq, seq_len, seq_mask, seq_pos_bias, true);
+      if(seq_len <= 1)
+         return;
+
+      double query[FXAI_AI_WEIGHTS];
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         query[k] = seq[seq_len - 1][k];
+
+      double attn[];
+      double conv_slow[];
+      double conv_fast[];
+      double kernel_slow[3] = {0.20, 0.60, 0.20};
+      double kernel_fast[3] = {1.00, 0.00, -1.00};
+      FXAI_ModuleMultiHeadAttentionSummary(seq, seq_len, query, seq_mask, seq_pos_bias, 2, attn);
+      FXAI_ModuleConv1DSummary(seq, seq_len, kernel_slow, 3, conv_slow);
+      FXAI_ModuleConv1DSummary(seq, seq_len, kernel_fast, 3, conv_fast);
+
+      int last = seq_len - 1;
+      int prev = MathMax(last - 1, 0);
+      int mid = MathMax(seq_len / 2, 0);
+      int root = 0;
+      double w_cur = 0.40;
+      double w_prev = 0.20;
+      double w_mid = 0.10;
+      double w_att = 0.15;
+      double w_slow = 0.10;
+      double w_fast = 0.05;
+
+      switch(style)
+      {
+         case FXAI_SEQ_STYLE_RECURRENT:
+            w_cur = 0.34; w_prev = 0.24; w_mid = 0.10; w_att = 0.14; w_slow = 0.10; w_fast = 0.08;
+            break;
+         case FXAI_SEQ_STYLE_CONVOLUTIONAL:
+            w_cur = 0.25; w_prev = 0.18; w_mid = 0.10; w_att = 0.12; w_slow = 0.17; w_fast = 0.18;
+            break;
+         case FXAI_SEQ_STYLE_TRANSFORMER:
+            w_cur = 0.24; w_prev = 0.12; w_mid = 0.14; w_att = 0.28; w_slow = 0.12; w_fast = 0.10;
+            break;
+         case FXAI_SEQ_STYLE_STATE_SPACE:
+            w_cur = 0.28; w_prev = 0.18; w_mid = 0.14; w_att = 0.12; w_slow = 0.18; w_fast = 0.10;
+            break;
+         case FXAI_SEQ_STYLE_WORLD:
+            w_cur = 0.22; w_prev = 0.14; w_mid = 0.18; w_att = 0.24; w_slow = 0.12; w_fast = 0.10;
+            break;
+         default:
+            break;
+      }
+
+      for(int k=1; k<FXAI_AI_WEIGHTS; k++)
+      {
+         double v = w_cur * seq[last][k] +
+                    w_prev * seq[prev][k] +
+                    w_mid * seq[mid][k] +
+                    w_att * attn[k] +
+                    w_slow * conv_slow[k] +
+                    w_fast * conv_fast[k];
+         v += 0.04 * seq[root][k];
+         xa[k] = FXAI_ClipSym(v, 8.0);
+      }
+      xa[0] = 1.0;
+   }
+
    void GetQualityBankPriors(double &mfe_out,
                              double &mae_out,
                              double &hit_out,
@@ -1583,6 +1975,10 @@ protected:
    int TargetPathFlags(void) const { return m_target_quality_ready ? m_target_path_flags : 0; }
    double TargetPathRisk(void) const { return m_target_quality_ready ? m_target_path_risk : 0.0; }
    double TargetFillRisk(void) const { return m_target_quality_ready ? m_target_fill_risk : 0.0; }
+   double TargetMaskedStep(void) const { return m_target_quality_ready ? m_target_masked_step : 0.0; }
+   double TargetNextVol(void) const { return m_target_quality_ready ? m_target_next_vol : 0.0; }
+   double TargetRegimeShift(void) const { return m_target_quality_ready ? m_target_regime_shift : 0.0; }
+   double TargetContextLead(void) const { return m_target_quality_ready ? m_target_context_lead : 0.5; }
 
 public:
    CFXAIAIPlugin(void) { ResetAuxState(); }

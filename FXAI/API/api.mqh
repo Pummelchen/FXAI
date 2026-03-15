@@ -26,6 +26,12 @@ bool FXAI_ValidateManifestV4(const FXAIAIManifestV4 &manifest,
       reason = "family";
       return false;
    }
+   if(manifest.reference_tier < (int)FXAI_REFERENCE_FULL_NATIVE ||
+      manifest.reference_tier > (int)FXAI_REFERENCE_RULE_BASELINE)
+   {
+      reason = "reference_tier";
+      return false;
+   }
    if(manifest.feature_schema_id < FXAI_SCHEMA_FULL || manifest.feature_schema_id > FXAI_SCHEMA_CONTEXTUAL)
    {
       reason = "feature_schema_id";

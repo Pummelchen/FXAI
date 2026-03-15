@@ -1,6 +1,8 @@
 #ifndef __FXAI_ENGINE_TRAINING_MQH__
 #define __FXAI_ENGINE_TRAINING_MQH__
 
+#include "..\TensorCore\tensor_optim.mqh"
+
 ulong g_fxai_random_state = 1;
 
 void FXAI_SetRandomSeed(const ulong seed)
@@ -13,6 +15,67 @@ double FXAI_RandUnit()
    g_fxai_random_state = (ulong)(6364136223846793005) * g_fxai_random_state + (ulong)(1442695040888963407);
    ulong sample = (g_fxai_random_state >> 11);
    return FXAI_Clamp((double)sample / 9007199254740991.0, 0.0, 1.0);
+}
+
+bool FXAI_IsSeriousNativeAI(const int ai_idx)
+{
+   switch(ai_idx)
+   {
+      case AI_MLP_TINY:
+      case AI_LSTM:
+      case AI_LSTMG:
+      case AI_TCN:
+      case AI_TFT:
+      case AI_TST:
+      case AI_LIGHTGBM:
+      case AI_XGB_FAST:
+         return true;
+      default:
+         return false;
+   }
+}
+
+int FXAI_WarmupEpochBudget(const int ai_idx,
+                           const int horizon_minutes,
+                           const int base_epochs)
+{
+   int epochs = MathMax(base_epochs, 1);
+   if(!FXAI_IsSeriousNativeAI(ai_idx))
+      return epochs;
+
+   double scale = FXAI_ModelCapacityScale(_Symbol, MathMax(horizon_minutes, 1));
+   int bonus = 1;
+   if(scale > 1.05) bonus++;
+   if(scale > 1.18) bonus++;
+   if(horizon_minutes >= 15) bonus++;
+   if(horizon_minutes >= 30) bonus++;
+   epochs += bonus;
+   if(epochs > 8) epochs = 8;
+   return epochs;
+}
+
+int FXAI_WarmupBlockSpan(const int ai_idx,
+                         const int horizon_minutes)
+{
+   if(!FXAI_IsSeriousNativeAI(ai_idx))
+      return 1;
+
+   int span = FXAI_ContextBatchSpan(24, MathMax(horizon_minutes, 1), _Symbol, 4);
+   if(horizon_minutes >= 15) span += 4;
+   if(horizon_minutes >= 30) span += 4;
+   if(span < 8) span = 8;
+   if(span > 32) span = 32;
+   return span;
+}
+
+double FXAI_CurriculumPriority(const FXAIPreparedSample &sample)
+{
+   double edge = MathMax(MathAbs(sample.move_points) - MathMax(sample.cost_points, 0.0), 0.0);
+   double timing = 1.0 - FXAI_Clamp(sample.time_to_hit_frac, 0.0, 1.0);
+   double mfe_ratio = sample.mfe_points / MathMax(MathAbs(sample.move_points) + 0.50, 0.50);
+   double mae_ratio = sample.mae_points / MathMax(sample.mfe_points + 0.50, 0.50);
+   double quality = 1.0 + 0.20 * FXAI_Clamp(mfe_ratio, 0.0, 3.0) + 0.12 * timing - 0.10 * FXAI_Clamp(mae_ratio, 0.0, 2.0);
+   return sample.sample_weight * quality + 0.04 * edge + 0.06 * FXAI_Clamp(sample.spread_stress, 0.0, 1.0);
 }
 
 void FXAI_PrecomputeTrainingSamples(const int i_start,
@@ -535,6 +598,11 @@ void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
                                    sample.time_to_hit_frac,
                                    sample.path_flags,
                                    sample.spread_stress);
+   FXAI_SetTrainRequestAuxTargets(s3,
+                                  sample.masked_step_target,
+                                  sample.next_vol_target,
+                                  sample.regime_shift_target,
+                                  sample.context_lead_target);
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
       s3.x[k] = sample.x[k];
    s3.window_size = window_size;
@@ -570,14 +638,60 @@ void FXAI_TrainModelWindowPrepared(const int ai_idx,
    if(end >= n) end = n - 1;
    if(end < start) return;
 
+   int horizon_ref = MathMax(samples[end].horizon_minutes, 1);
+   bool serious = FXAI_IsSeriousNativeAI(ai_idx);
+   int block_span = FXAI_WarmupBlockSpan(ai_idx, horizon_ref);
+
    for(int epoch=0; epoch<epochs; epoch++)
    {
-      for(int i=end; i>=start; i--)
+      int i = end;
+      while(i >= start)
       {
-         double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
-         int window_size = 0;
-         FXAI_BuildPreparedSampleWindow(samples, i, FXAI_GetPluginSequenceBars(plugin, samples[i].horizon_minutes), x_window, window_size);
-         FXAI_ApplyPreparedSampleToModel(ai_idx, plugin, samples[i], hp, window_size, x_window);
+         FXAIBlockBatchPlan plan = FXAI_MakeBlockBatchPlan(start, i, block_span, serious);
+         int block_start = plan.start;
+         int best_idx = -1;
+         int next_idx = -1;
+         double best_pri = -1e18;
+         double next_pri = -1e18;
+         for(int j=i; j>=block_start; j--)
+         {
+            double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+            int window_size = 0;
+            FXAI_BuildPreparedSampleWindow(samples, j, FXAI_GetPluginSequenceBars(plugin, samples[j].horizon_minutes), x_window, window_size);
+            FXAI_ApplyPreparedSampleToModel(ai_idx, plugin, samples[j], hp, window_size, x_window);
+
+            if(serious && samples[j].valid)
+            {
+               double pri = FXAI_CurriculumPriority(samples[j]);
+               if(pri > best_pri)
+               {
+                  next_pri = best_pri;
+                  next_idx = best_idx;
+                  best_pri = pri;
+                  best_idx = j;
+               }
+               else if(pri > next_pri)
+               {
+                  next_pri = pri;
+                  next_idx = j;
+               }
+            }
+         }
+
+         if(serious)
+         {
+            int replay_idx[2] = {best_idx, next_idx};
+            for(int r=0; r<plan.replay_budget; r++)
+            {
+               int idx = replay_idx[r];
+               if(idx < block_start || idx > i) continue;
+               double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+               int window_size = 0;
+               FXAI_BuildPreparedSampleWindow(samples, idx, FXAI_GetPluginSequenceBars(plugin, samples[idx].horizon_minutes), x_window, window_size);
+               FXAI_ApplyPreparedSampleToModel(ai_idx, plugin, samples[idx], hp, window_size, x_window);
+            }
+         }
+         i = block_start - 1;
       }
    }
 }
@@ -611,14 +725,58 @@ void FXAI_TrainModelWindowPreparedRouted(const int ai_idx,
    if(end >= n) end = n - 1;
    if(end < start) return;
 
+   int horizon_ref = MathMax(samples[end].horizon_minutes, 1);
+   bool serious = FXAI_IsSeriousNativeAI(ai_idx);
+   int block_span = FXAI_WarmupBlockSpan(ai_idx, horizon_ref);
+
    for(int epoch=0; epoch<epochs; epoch++)
    {
-      for(int i=end; i>=start; i--)
+      int i = end;
+      while(i >= start)
       {
-         double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
-         int window_size = 0;
-         FXAI_BuildPreparedSampleWindow(samples, i, FXAI_GetPluginSequenceBars(plugin, samples[i].horizon_minutes), x_window, window_size);
-         FXAI_ApplyPreparedSampleToModelRouted(ai_idx, plugin, samples[i], window_size, x_window);
+         FXAIBlockBatchPlan plan = FXAI_MakeBlockBatchPlan(start, i, block_span, serious);
+         int block_start = plan.start;
+         int best_idx = -1;
+         int next_idx = -1;
+         double best_pri = -1e18;
+         double next_pri = -1e18;
+         for(int j=i; j>=block_start; j--)
+         {
+            double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+            int window_size = 0;
+            FXAI_BuildPreparedSampleWindow(samples, j, FXAI_GetPluginSequenceBars(plugin, samples[j].horizon_minutes), x_window, window_size);
+            FXAI_ApplyPreparedSampleToModelRouted(ai_idx, plugin, samples[j], window_size, x_window);
+            if(serious && samples[j].valid)
+            {
+               double pri = FXAI_CurriculumPriority(samples[j]);
+               if(pri > best_pri)
+               {
+                  next_pri = best_pri;
+                  next_idx = best_idx;
+                  best_pri = pri;
+                  best_idx = j;
+               }
+               else if(pri > next_pri)
+               {
+                  next_pri = pri;
+                  next_idx = j;
+               }
+            }
+         }
+         if(serious)
+         {
+            int replay_idx[2] = {best_idx, next_idx};
+            for(int r=0; r<plan.replay_budget; r++)
+            {
+               int idx = replay_idx[r];
+               if(idx < block_start || idx > i) continue;
+               double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+               int window_size = 0;
+               FXAI_BuildPreparedSampleWindow(samples, idx, FXAI_GetPluginSequenceBars(plugin, samples[idx].horizon_minutes), x_window, window_size);
+               FXAI_ApplyPreparedSampleToModelRouted(ai_idx, plugin, samples[idx], window_size, x_window);
+            }
+         }
+         i = block_start - 1;
       }
    }
 }
@@ -641,18 +799,65 @@ void FXAI_TrainModelWindowPreparedRoutedCached(const int ai_idx,
    if(end >= n) end = n - 1;
    if(end < start) return;
 
+   int horizon_ref = MathMax(samples[end].horizon_minutes, 1);
+   bool serious = FXAI_IsSeriousNativeAI(ai_idx);
+   int block_span = FXAI_WarmupBlockSpan(ai_idx, horizon_ref);
+
    for(int epoch=0; epoch<epochs; epoch++)
    {
-      for(int i=end; i>=start; i--)
+      int i = end;
+      while(i >= start)
       {
-         if(i < 0 || i >= ArraySize(samples)) continue;
-         if(!samples[i].valid) continue;
-         FXAIPreparedSample train_sample;
-         FXAI_GetCachedPreparedSample(ai_idx, samples[i], i, caches, train_sample);
-         double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
-         int window_size = 0;
-         FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, i, caches, FXAI_GetPluginSequenceBars(plugin, train_sample.horizon_minutes), x_window, window_size);
-         FXAI_ApplyPreparedSampleToModelRouted(ai_idx, plugin, train_sample, window_size, x_window);
+         FXAIBlockBatchPlan plan = FXAI_MakeBlockBatchPlan(start, i, block_span, serious);
+         int block_start = plan.start;
+         int best_idx = -1;
+         int next_idx = -1;
+         double best_pri = -1e18;
+         double next_pri = -1e18;
+         for(int j=i; j>=block_start; j--)
+         {
+            if(j < 0 || j >= ArraySize(samples)) continue;
+            if(!samples[j].valid) continue;
+            FXAIPreparedSample train_sample;
+            FXAI_GetCachedPreparedSample(ai_idx, samples[j], j, caches, train_sample);
+            double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+            int window_size = 0;
+            FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, j, caches, FXAI_GetPluginSequenceBars(plugin, train_sample.horizon_minutes), x_window, window_size);
+            FXAI_ApplyPreparedSampleToModelRouted(ai_idx, plugin, train_sample, window_size, x_window);
+            if(serious)
+            {
+               double pri = FXAI_CurriculumPriority(train_sample);
+               if(pri > best_pri)
+               {
+                  next_pri = best_pri;
+                  next_idx = best_idx;
+                  best_pri = pri;
+                  best_idx = j;
+               }
+               else if(pri > next_pri)
+               {
+                  next_pri = pri;
+                  next_idx = j;
+               }
+            }
+         }
+
+         if(serious)
+         {
+            int replay_idx[2] = {best_idx, next_idx};
+            for(int r=0; r<plan.replay_budget; r++)
+            {
+               int idx = replay_idx[r];
+               if(idx < block_start || idx > i) continue;
+               FXAIPreparedSample replay_sample;
+               FXAI_GetCachedPreparedSample(ai_idx, samples[idx], idx, caches, replay_sample);
+               double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+               int window_size = 0;
+               FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, idx, caches, FXAI_GetPluginSequenceBars(plugin, replay_sample.horizon_minutes), x_window, window_size);
+               FXAI_ApplyPreparedSampleToModelRouted(ai_idx, plugin, replay_sample, window_size, x_window);
+            }
+         }
+         i = block_start - 1;
       }
    }
 }

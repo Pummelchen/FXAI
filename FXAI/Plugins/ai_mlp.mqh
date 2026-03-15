@@ -52,6 +52,7 @@ private:
    double m_b_q25;
    double m_w_q75[FXAI_MLP_H2];
    double m_b_q75;
+   CFXAINativeQualityHeads m_quality_heads;
 
    // AdamW moments.
    double m_m_w1[FXAI_MLP_H1][FXAI_AI_WEIGHTS], m_v_w1[FXAI_MLP_H1][FXAI_AI_WEIGHTS];
@@ -864,21 +865,7 @@ private:
                   const double lr,
                   const double wd)
    {
-      const double beta1 = 0.90;
-      const double beta2 = 0.999;
-      const double eps = 1e-8;
-
-      double grad = FXAI_ClipSym(g, 10.0);
-      m = beta1 * m + (1.0 - beta1) * grad;
-      v = beta2 * v + (1.0 - beta2) * grad * grad;
-
-      double t = (double)MathMax(m_adam_step, 1);
-      double mhat = m / (1.0 - MathPow(beta1, t));
-      double vhat = v / (1.0 - MathPow(beta2, t));
-
-      p -= lr * (mhat / (MathSqrt(vhat) + eps));
-      if(wd > 0.0)
-         p -= lr * wd * p;
+      FXAI_OptAdamWStep(p, m, v, g, lr, 0.90, 0.999, wd, MathMax(m_adam_step, 1));
    }
 
    void InitMoments(void)
@@ -1829,7 +1816,15 @@ public:
       out.reliability = FXAI_Clamp(0.45 + 0.35 * active + 0.20 * (m_move_ready ? 1.0 : 0.0), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      double bank_mfe = 0.0, bank_mae = 0.0, bank_hit = 1.0, bank_path = 0.5, bank_fill = 0.5, bank_trust = 0.0;
+      GetQualityBankPriors(bank_mfe, bank_mae, bank_hit, bank_path, bank_fill, bank_trust);
+      m_quality_heads.Predict(xa,
+                              out.move_mean_points,
+                              FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                              out.reliability,
+                              out.confidence,
+                              bank_mfe, bank_mae, bank_hit, bank_path, bank_fill, bank_trust,
+                              out);
       return true;
    }
 
@@ -1852,6 +1847,7 @@ public:
       m_val_ready = false;
       m_val_steps = 0;
       m_quality_degraded = false;
+      m_quality_heads.Reset();
 
       ResetHistory();
 
@@ -2022,6 +2018,19 @@ public:
       BuildWindowAwareInput(x, xa);
       FXAIAIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
       double w = MoveSampleWeight(xa, move_points);
+      m_quality_heads.Update(xa,
+                             w,
+                             TargetMFEPoints(),
+                             FXAI_Clamp(TargetMAEPoints() / MathMax(TargetMFEPoints() + 0.10, 0.10), 0.0, 1.0),
+                             TargetHitTimeFrac(),
+                             TargetPathRisk(),
+                             TargetFillRisk(),
+                             TargetMaskedStep(),
+                             TargetNextVol(),
+                             TargetRegimeShift(),
+                             TargetContextLead(),
+                             h.lr,
+                             h.l2);
       datetime cur_t = ResolveContextTime();
       if(cur_t <= 0) cur_t = TimeCurrent();
       double cur_cost = ResolveCostPoints(xa);

@@ -11,5 +11,6 @@
 #include "audit_samples.mqh"
 #include "audit_scoring.mqh"
 #include "audit_report.mqh"
+#include "audit_tensor.mqh"
 
 #endif // __FXAI_AUDIT_CORE_MQH__

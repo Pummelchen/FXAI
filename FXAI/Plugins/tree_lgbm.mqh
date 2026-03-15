@@ -4,11 +4,11 @@
 #include "..\API\plugin_base.mqh"
 
 // Reference-grade LightGBM-style plugin (3-class, histogram trees, 2nd-order, online calibrated).
-#define FXAI_LGB_BINS 64
-#define FXAI_LGB_MAX_LEAVES 31
-#define FXAI_LGB_MAX_DEPTH 8
+#define FXAI_LGB_BINS 80
+#define FXAI_LGB_MAX_LEAVES 63
+#define FXAI_LGB_MAX_DEPTH 10
 #define FXAI_LGB_MAX_NODES (2 * FXAI_LGB_MAX_LEAVES - 1)
-#define FXAI_LGB_MAX_TREES 128
+#define FXAI_LGB_MAX_TREES 192
 #define FXAI_LGB_BUFFER 4096
 #define FXAI_LGB_MIN_DATA 20
 #define FXAI_LGB_MIN_CHILD_HESS 0.20
@@ -87,6 +87,7 @@ private:
    double m_ece_acc[FXAI_LGB_ECE_BINS];
    double m_ece_conf[FXAI_LGB_ECE_BINS];
    bool   m_quality_degraded;
+   CFXAINativeQualityHeads m_quality_heads;
 
    int ClampI(const int v, const int lo, const int hi) const
    {
@@ -1153,7 +1154,15 @@ public:
       out.reliability = FXAI_Clamp(0.40 + 0.20 * (m_move_ready ? 1.0 : 0.0) + 0.20 * MathMin((double)m_tree_count[(int)FXAI_LABEL_BUY] / 32.0, 1.0) + 0.20 * support_rel, 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      double bank_mfe = 0.0, bank_mae = 0.0, bank_hit = 1.0, bank_path = 0.5, bank_fill = 0.5, bank_trust = 0.0;
+      GetQualityBankPriors(bank_mfe, bank_mae, bank_hit, bank_path, bank_fill, bank_trust);
+      m_quality_heads.Predict(x,
+                              out.move_mean_points,
+                              FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                              out.reliability,
+                              out.confidence,
+                              bank_mfe, bank_mae, bank_hit, bank_path, bank_fill, bank_trust,
+                              out);
       return true;
    }
 
@@ -1164,6 +1173,7 @@ public:
       m_step = 0;
       m_buf_head = 0;
       m_buf_size = 0;
+      m_quality_heads.Reset();
 
       for(int c=0; c<FXAI_LGB_CLASS_COUNT; c++)
       {
@@ -1234,6 +1244,19 @@ public:
       FXAIAIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
       double sample_w = MoveSampleWeight(x, move_points);
       sample_w = FXAI_Clamp(sample_w, 0.10, 6.00);
+      m_quality_heads.Update(x,
+                             sample_w,
+                             TargetMFEPoints(),
+                             FXAI_Clamp(TargetMAEPoints() / MathMax(TargetMFEPoints() + 0.10, 0.10), 0.0, 1.0),
+                             TargetHitTimeFrac(),
+                             TargetPathRisk(),
+                             TargetFillRisk(),
+                             TargetMaskedStep(),
+                             TargetNextVol(),
+                             TargetRegimeShift(),
+                             TargetContextLead(),
+                             h.lr,
+                             h.l2);
       double cost = InputCostProxyPoints(x);
 
       // Online pre-update for calibration/metrics before structure update.

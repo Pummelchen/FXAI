@@ -8,10 +8,10 @@
 #define FXAI_XGBF_BUY  1
 #define FXAI_XGBF_SKIP 2
 
-#define FXAI_XGBF_MAX_TREES 128
-#define FXAI_XGBF_MAX_DEPTH 4
-#define FXAI_XGBF_MAX_NODES 31
-#define FXAI_XGBF_MAX_BINS  32
+#define FXAI_XGBF_MAX_TREES 192
+#define FXAI_XGBF_MAX_DEPTH 6
+#define FXAI_XGBF_MAX_NODES 127
+#define FXAI_XGBF_MAX_BINS  48
 #define FXAI_XGBF_BUFFER 4096
 
 #define FXAI_XGBF_MIN_SPLIT_SAMPLES_MIN 8
@@ -84,6 +84,7 @@ private:
    double m_cfg_tree_decay;
    int    m_cfg_refresh_every;
    double m_cfg_refresh_lr;
+   CFXAINativeQualityHeads m_quality_heads;
 
    int ClampInt(const int v, const int lo, const int hi) const
    {
@@ -166,13 +167,21 @@ private:
    void ConfigureRuntime(const FXAIAIHyperParams &hp)
    {
       double complexity = FXAI_Clamp(MathAbs(hp.xgb_split), 0.0, 1.0);
+      int horizon_minutes = MathMax(m_ctx_horizon_minutes, 1);
+      double cap_scale = FXAI_ModelCapacityScale(_Symbol, horizon_minutes);
+      double cap_bias = FXAI_Clamp(cap_scale - 1.0, -0.25, 0.35);
 
       // 1) Capacity controls (tunable via hp.xgb_split and hp.xgb_lr).
-      m_cfg_depth = (complexity >= 0.55 ? 4 : 3);
-      m_cfg_bins = ClampInt(16 + (int)MathRound(16.0 * complexity), 16, FXAI_XGBF_MAX_BINS);
-      m_cfg_max_trees = ClampInt(64 + (int)MathRound(64.0 * complexity), 64, FXAI_XGBF_MAX_TREES);
-      m_cfg_build_every = ClampInt(64 - (int)MathRound(24.0 * complexity), 24, 96);
-      m_cfg_min_buffer = ClampInt(128 + (int)MathRound(256.0 * complexity), 96, 768);
+      m_cfg_depth = ClampInt(3 + (int)MathRound(2.0 * complexity + 2.0 * MathMax(cap_bias, 0.0)), 3, FXAI_XGBF_MAX_DEPTH);
+      m_cfg_bins = ClampInt(20 + (int)MathRound(18.0 * complexity + 12.0 * MathMax(cap_bias, 0.0)), 20, FXAI_XGBF_MAX_BINS);
+      m_cfg_max_trees = ClampInt(FXAI_ContextTreeBudget(96 + (int)MathRound(64.0 * complexity + 32.0 * MathMax(cap_bias, 0.0)),
+                                                        horizon_minutes,
+                                                        _Symbol,
+                                                        96),
+                                 96,
+                                 FXAI_XGBF_MAX_TREES);
+      m_cfg_build_every = ClampInt(64 - (int)MathRound(20.0 * complexity + 10.0 * MathMax(cap_bias, 0.0)), 20, 96);
+      m_cfg_min_buffer = ClampInt(160 + (int)MathRound(320.0 * complexity + 96.0 * MathMax(cap_bias, 0.0)), 128, 960);
 
       // 3) Subsampling / column sampling.
       m_cfg_subsample = FXAI_Clamp(0.70 + (0.20 * (1.0 - complexity)) + (0.10 * hp.xgb_lr), 0.55, 1.00);
@@ -1048,7 +1057,15 @@ public:
       out.reliability = FXAI_Clamp(0.45 + 0.25 * (m_move_ready ? 1.0 : 0.0) + 0.30 * MathMin((double)m_tree_count[FXAI_XGBF_BUY] / 32.0, 1.0), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      double bank_mfe = 0.0, bank_mae = 0.0, bank_hit = 1.0, bank_path = 0.5, bank_fill = 0.5, bank_trust = 0.0;
+      GetQualityBankPriors(bank_mfe, bank_mae, bank_hit, bank_path, bank_fill, bank_trust);
+      m_quality_heads.Predict(x,
+                              out.move_mean_points,
+                              FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                              out.reliability,
+                              out.confidence,
+                              bank_mfe, bank_mae, bank_hit, bank_path, bank_fill, bank_trust,
+                              out);
       return true;
    }
 
@@ -1058,6 +1075,7 @@ public:
       CFXAIAIPlugin::Reset();
       m_initialized = false;
       m_step = 0;
+      m_quality_heads.Reset();
 
       for(int c=0; c<FXAI_XGBF_CLASS_COUNT; c++)
       {
@@ -1129,6 +1147,19 @@ public:
       FXAIAIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
       double sw = MoveSampleWeight(x, move_points);
       sw = FXAI_Clamp(sw, 0.25, 4.00);
+      m_quality_heads.Update(x,
+                             sw,
+                             TargetMFEPoints(),
+                             FXAI_Clamp(TargetMAEPoints() / MathMax(TargetMFEPoints() + 0.10, 0.10), 0.0, 1.0),
+                             TargetHitTimeFrac(),
+                             TargetPathRisk(),
+                             TargetFillRisk(),
+                             TargetMaskedStep(),
+                             TargetNextVol(),
+                             TargetRegimeShift(),
+                             TargetContextLead(),
+                             h.lr,
+                             h.l2);
 
       // Plugin-level binary calibration still targets directional buy vs sell.
       double probs_now[FXAI_XGBF_CLASS_COUNT];
