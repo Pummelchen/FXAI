@@ -963,8 +963,8 @@ public:
          FXAI_ModuleConv1DSummary(seq, seq_len, k_slow, 5, conv_slow);
       }
 
-      xa[1] = FXAI_ClipSym(0.50 * xa[1] + 0.20 * mean1 + 0.10 * (last1 - first1) + 0.12 * attn[1] + 0.08 * conv_fast[1], 8.0);
-      xa[2] = FXAI_ClipSym(0.50 * xa[2] + 0.20 * mean2 + 0.10 * (last2 - first2) + 0.12 * attn[2] + 0.08 * conv_fast[2], 8.0);
+      xa[1] = FXAI_ClipSym(0.50 * xa[1] + 0.20 * mean1 + 0.10 * (first1 - last1) + 0.12 * attn[1] + 0.08 * conv_fast[1], 8.0);
+      xa[2] = FXAI_ClipSym(0.50 * xa[2] + 0.20 * mean2 + 0.10 * (first2 - last2) + 0.12 * attn[2] + 0.08 * conv_fast[2], 8.0);
       xa[6] = FXAI_ClipSym(0.55 * xa[6] + 0.25 * vol1 + 0.10 * MathAbs(attn[6]) + 0.10 * MathAbs(conv_slow[6]), 8.0);
       xa[7] = FXAI_ClipSym(0.50 * xa[7] + 0.20 * mean6 + 0.15 * attn[7] + 0.15 * conv_slow[7], 8.0);
       xa[10] = FXAI_ClipSym(0.75 * xa[10] + 0.15 * attn[10] + 0.10 * conv_fast[10], 8.0);

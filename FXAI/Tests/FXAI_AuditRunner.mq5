@@ -218,15 +218,30 @@ void FXAI_AuditResolvePlugins(CFXAIAIRegistry &registry,
 
 bool FXAI_AuditOpenReport(int &handle)
 {
+   FolderCreate("FXAI", FILE_COMMON);
    FolderCreate(FXAI_AUDIT_REPORT_DIR, FILE_COMMON);
    if(Audit_ResetOutput)
       FileDelete(FXAI_AUDIT_REPORT_FILE, FILE_COMMON);
 
    handle = FileOpen(FXAI_AUDIT_REPORT_FILE,
-                     FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_SHARE_WRITE | FILE_COMMON);
+                     FILE_READ | FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_SHARE_WRITE | FILE_COMMON);
    if(handle == INVALID_HANDLE)
       return false;
-   return FXAI_AuditWriteHeader(handle);
+
+   long file_size = FileSize(handle);
+   bool write_header = (Audit_ResetOutput || file_size <= 0);
+   if(file_size > 0 && !Audit_ResetOutput)
+      FileSeek(handle, 0, SEEK_END);
+   else
+      FileSeek(handle, 0, SEEK_SET);
+
+   if(write_header && !FXAI_AuditWriteHeader(handle))
+   {
+      FileClose(handle);
+      handle = INVALID_HANDLE;
+      return false;
+   }
+   return true;
 }
 
 int OnInit()

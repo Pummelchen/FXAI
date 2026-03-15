@@ -80,8 +80,8 @@ private:
          var2 = MathSqrt(var2 / (double)win_n);
          if(win_n > 1)
          {
-            trend1 = (last1 - first1) / (double)(win_n - 1);
-            trend2 = (last2 - first2) / (double)(win_n - 1);
+            trend1 = (first1 - last1) / (double)(win_n - 1);
+            trend2 = (first2 - last2) / (double)(win_n - 1);
          }
       }
       b[8] = mean1;

@@ -292,8 +292,8 @@ private:
       double last1 = CurrentWindowValue(win_n - 1, 1);
       double first2 = CurrentWindowValue(0, 2);
       double last2 = CurrentWindowValue(win_n - 1, 2);
-      double trend1 = (last1 - first1) / (double)(win_n - 1);
-      double trend2 = (last2 - first2) / (double)(win_n - 1);
+      double trend1 = (first1 - last1) / (double)(win_n - 1);
+      double trend2 = (first2 - last2) / (double)(win_n - 1);
       double var1 = 0.0;
       for(int i=0; i<win_n; i++)
       {

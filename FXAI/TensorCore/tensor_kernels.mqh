@@ -85,20 +85,23 @@ void FXAI_TensorNormalizeSequence(double &seq[][FXAI_AI_WEIGHTS],
 void FXAI_TensorLayerNorm(double &v[],
                           const int n)
 {
-   if(n <= 0) return;
+   int use_n = n;
+   if(use_n < 0) use_n = 0;
+   if(use_n > ArraySize(v)) use_n = ArraySize(v);
+   if(use_n <= 0) return;
    double mean = 0.0;
-   for(int i=0; i<n; i++)
+   for(int i=0; i<use_n; i++)
       mean += v[i];
-   mean /= (double)n;
+   mean /= (double)use_n;
 
    double var = 0.0;
-   for(int i=0; i<n; i++)
+   for(int i=0; i<use_n; i++)
    {
       double d = v[i] - mean;
       var += d * d;
    }
-   double inv = 1.0 / MathSqrt(var / (double)n + 1e-6);
-   for(int i=0; i<n; i++)
+   double inv = 1.0 / MathSqrt(var / (double)use_n + 1e-6);
+   for(int i=0; i<use_n; i++)
       v[i] = FXAI_ClipSym((v[i] - mean) * inv, 8.0);
 }
 
@@ -228,11 +231,15 @@ void FXAI_TensorAttentionSummary(const double &seq[][FXAI_AI_WEIGHTS],
 
    double scores[FXAI_MAX_SEQUENCE_BARS];
    double smax = -1e100;
+   int qn = ArraySize(query);
    for(int t=0; t<seq_len && t<FXAI_MAX_SEQUENCE_BARS; t++)
    {
       double z = 0.0;
       for(int k=1; k<FXAI_AI_WEIGHTS; k++)
-         z += query[k] * seq[t][k];
+      {
+         double qv = (k < qn ? query[k] : 0.0);
+         z += qv * seq[t][k];
+      }
       z /= MathSqrt((double)MathMax(FXAI_AI_FEATURES, 1));
       scores[t] = z;
       if(z > smax) smax = z;
@@ -270,6 +277,7 @@ void FXAI_TensorAttentionSummaryMasked(const double &seq[][FXAI_AI_WEIGHTS],
 
    double scores[FXAI_MAX_SEQUENCE_BARS];
    double smax = -1e100;
+   int qn = ArraySize(query);
    for(int t=0; t<seq_len && t<FXAI_MAX_SEQUENCE_BARS; t++)
    {
       if(ArraySize(mask) > t && mask[t] <= 0)
@@ -279,7 +287,10 @@ void FXAI_TensorAttentionSummaryMasked(const double &seq[][FXAI_AI_WEIGHTS],
       }
       double z = 0.0;
       for(int k=1; k<FXAI_AI_WEIGHTS; k++)
-         z += query[k] * seq[t][k];
+      {
+         double qv = (k < qn ? query[k] : 0.0);
+         z += qv * seq[t][k];
+      }
       z /= MathSqrt((double)MathMax(FXAI_AI_FEATURES, 1));
       if(ArraySize(pos_bias) > t)
          z += pos_bias[t];

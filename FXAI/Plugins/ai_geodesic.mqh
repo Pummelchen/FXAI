@@ -327,7 +327,7 @@ private:
       double mean4 = CurrentWindowFeatureMean(3);
       double first1 = CurrentWindowValue(0, 1);
       double last1 = CurrentWindowValue(win_n - 1, 1);
-      double slope1 = (last1 - first1) / (double)MathMax(win_n - 1, 1);
+      double slope1 = (first1 - last1) / (double)MathMax(win_n - 1, 1);
       double curv = 0.0;
       for(int i=2; i<win_n; i++)
       {

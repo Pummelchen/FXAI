@@ -165,8 +165,8 @@ private:
       }
       vol1 = MathSqrt(vol1 / (double)win_n);
 
-      xa[1] = FXAI_ClipSym(0.60 * xa[1] + 0.25 * mean1 + 0.15 * (last1 - first1), 8.0);
-      xa[2] = FXAI_ClipSym(0.60 * xa[2] + 0.25 * mean2 + 0.15 * (last2 - first2), 8.0);
+      xa[1] = FXAI_ClipSym(0.60 * xa[1] + 0.25 * mean1 + 0.15 * (first1 - last1), 8.0);
+      xa[2] = FXAI_ClipSym(0.60 * xa[2] + 0.25 * mean2 + 0.15 * (first2 - last2), 8.0);
       xa[6] = FXAI_ClipSym(0.65 * xa[6] + 0.35 * vol1, 8.0);
       xa[7] = FXAI_ClipSym(0.65 * xa[7] + 0.35 * mean6, 8.0);
    }

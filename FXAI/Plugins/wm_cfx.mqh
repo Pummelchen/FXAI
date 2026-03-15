@@ -126,7 +126,7 @@ private:
       double mean7 = CurrentWindowFeatureMean(6);
       double first1 = CurrentWindowValue(0, 1);
       double last1  = CurrentWindowValue(win_n - 1, 1);
-      double drift = last1 - first1;
+      double drift = first1 - last1;
 
       xa[1] = FXAI_ClipSym(0.55 * xa[1] + 0.25 * mean1 + 0.20 * drift, 8.0);
       xa[2] = FXAI_ClipSym(0.65 * xa[2] + 0.35 * mean6, 8.0);

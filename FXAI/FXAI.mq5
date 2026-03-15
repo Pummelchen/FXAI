@@ -325,6 +325,7 @@ int CloseCounter = 1;
 bool   CycleActive      = false;
 double CycleEntryEquity = 0.0;
 double CycleEntryManagedPnl = 0.0;
+double CycleEntryRealizedProfit = 0.0;
 datetime CycleStartTime = 0;
 
 bool   TrailTracking   = false;
@@ -563,6 +564,7 @@ int OnInit()
    FXAI_ExtendContextSymbolsFromMarketWatch(_Symbol, g_context_symbols);
 
    ResetAIState(_Symbol);
+   FXAI_RecoverManagedCycleState();
    return(INIT_SUCCEEDED);
 }
 
@@ -592,10 +594,30 @@ void ResetCycleState()
    CycleActive      = false;
    CycleEntryEquity = 0.0;
    CycleEntryManagedPnl = 0.0;
+   CycleEntryRealizedProfit = 0.0;
    CycleStartTime   = 0;
 
    TrailTracking    = false;
    TrailPeakProfit  = 0.0;
+}
+
+void FXAI_RecoverManagedCycleState()
+{
+   int total = FXAI_ManagedOrdersTotal(_Symbol) + FXAI_ManagedPositionsTotal(_Symbol);
+   if(total <= 0)
+      return;
+
+   double open_profit = FXAI_ManagedOpenProfit(_Symbol);
+   CycleActive = true;
+   CycleEntryEquity = AccountInfoDouble(ACCOUNT_EQUITY);
+   CycleEntryManagedPnl = 0.0;
+   CycleEntryRealizedProfit = RealizedManagedProfit;
+   CycleStartTime = FXAI_GetOldestPositionTime();
+   if(CycleStartTime <= 0) CycleStartTime = TimeCurrent();
+   if(CycleStartTime <= 0) CycleStartTime = TimeTradeServer();
+   TrailTracking = true;
+   TrailPeakProfit = MathMax(open_profit, 0.0);
+   Calc_TP();
 }
 
 datetime FXAI_GetOldestPositionTime()
@@ -658,9 +680,17 @@ double FXAI_CurrentCycleProfit()
    return FXAI_ManagedOpenProfit(_Symbol) - CycleEntryManagedPnl;
 }
 
+double FXAI_CurrentCycleRealizedProfit()
+{
+   if(!CycleActive) return 0.0;
+   double realized = RealizedManagedProfit - CycleEntryRealizedProfit;
+   if(!MathIsValidNumber(realized)) return 0.0;
+   return realized;
+}
+
 double FXAI_TotalManagedProfit()
 {
-   return RealizedManagedProfit + FXAI_CurrentCycleProfit();
+   return FXAI_CurrentCycleRealizedProfit() + FXAI_CurrentCycleProfit();
 }
 
 int FXAI_ManagedPositionsTotal(const string symbol = "")
@@ -724,7 +754,7 @@ double FXAI_NormalizeLot(const string symbol, const double requested_lot)
 }
 
 //------------------------- CLOSE ALL --------------------------------
-void CloseAll()
+bool CloseAll()
 {
    const int max_passes = 25;
    bool in_tester = (MQLInfoInteger(MQL_TESTER) != 0);
@@ -767,7 +797,7 @@ void CloseAll()
       int pos_after = FXAI_ManagedPositionsTotal(_Symbol);
       int ord_after = FXAI_ManagedOrdersTotal(_Symbol);
       if(pos_after == 0 && ord_after == 0)
-         return;
+         return true;
 
       // no progress; avoid hard lock in OnTick if broker rejects close/delete
       if(pos_after >= pos_before && ord_after >= ord_before)
@@ -777,6 +807,8 @@ void CloseAll()
    Print("FXAI warning: CloseAll incomplete. Remaining managed positions=",
          FXAI_ManagedPositionsTotal(_Symbol),
          ", managed orders=", FXAI_ManagedOrdersTotal(_Symbol));
+   return (FXAI_ManagedPositionsTotal(_Symbol) == 0 &&
+           FXAI_ManagedOrdersTotal(_Symbol) == 0);
 }
 
 //---------------------- TRADE POSSIBLE ------------------------------
@@ -875,11 +907,12 @@ void TPCheck()
 
    if(FXAI_TotalManagedProfit() >= TP_Value)
    {
-      CloseAll();
-      ResetCycleState();
-
-      CloseCounter++;
-      Calc_TP();
+      if(CloseAll())
+      {
+         ResetCycleState();
+         CloseCounter++;
+         Calc_TP();
+      }
    }
 }
 
@@ -903,9 +936,11 @@ void TradeKillerManage()
    long held_sec = (long)(now_t - start_t);
    if(held_sec >= (long)minutes_limit * 60L)
    {
-      CloseAll();
-      ResetCycleState();
-      Calc_TP();
+      if(CloseAll())
+      {
+         ResetCycleState();
+         Calc_TP();
+      }
    }
 }
 
@@ -920,9 +955,11 @@ void EquitySLManage()
 
    if(dd <= -SL_USD)
    {
-      CloseAll();
-      ResetCycleState();
-      Calc_TP();
+      if(CloseAll())
+      {
+         ResetCycleState();
+         Calc_TP();
+      }
    }
 }
 
@@ -946,7 +983,7 @@ void EquityTrailManage()
    if(TrailPeakProfit < trail_start) return;
 
    double tp_breath = (TrailTPBreathUSD > 0.0 ? TrailTPBreathUSD : 0.0);
-   double desiredTP = RealizedManagedProfit + TrailPeakProfit + tp_breath;
+   double desiredTP = FXAI_CurrentCycleRealizedProfit() + TrailPeakProfit + tp_breath;
    if(desiredTP > TP_Value) TP_Value = desiredTP;
 
    double giveback = TrailGivebackPct;
@@ -958,9 +995,11 @@ void EquityTrailManage()
 
    if(profit <= stopProfit)
    {
-      CloseAll();
-      ResetCycleState();
-      Calc_TP();
+      if(CloseAll())
+      {
+         ResetCycleState();
+         Calc_TP();
+      }
    }
 }
 
@@ -1014,6 +1053,7 @@ void SendTrade(const int precomputed_direction = -2)
       CycleActive      = true;
       CycleEntryEquity = AccountInfoDouble(ACCOUNT_EQUITY);
       CycleEntryManagedPnl = FXAI_ManagedOpenProfit(_Symbol);
+      CycleEntryRealizedProfit = RealizedManagedProfit;
       CycleStartTime   = TimeCurrent();
       if(CycleStartTime <= 0) CycleStartTime = TimeTradeServer();
       if(CycleStartTime <= 0) CycleStartTime = iTime(_Symbol, PERIOD_M1, 0);
@@ -1063,6 +1103,8 @@ void OnTick()
    }
 
    int total = FXAI_ManagedOrdersTotal(_Symbol) + FXAI_ManagedPositionsTotal(_Symbol);
+   if(total > 0 && !CycleActive)
+      FXAI_RecoverManagedCycleState();
 
    if(total > 0)
    {

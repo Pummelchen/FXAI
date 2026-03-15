@@ -325,6 +325,7 @@ bool FXAI_AuditTensorKernelSelfTest(string &reason)
    }
 
    string file_name = "FXAI\\runtime_sanity.bin";
+   FolderCreate("FXAI", FILE_COMMON);
    int hw = FileOpen(file_name, FILE_BIN | FILE_WRITE | FILE_COMMON);
    if(hw == INVALID_HANDLE)
    {

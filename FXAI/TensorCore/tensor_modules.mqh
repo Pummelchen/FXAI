@@ -56,8 +56,12 @@ void FXAI_ModuleLayerNormAffine(double &v[],
                                 const double &g[],
                                 const double &b[])
 {
-   FXAI_TensorLayerNorm(v, n);
-   for(int i=0; i<n && i<ArraySize(v); i++)
+   int use_n = n;
+   if(use_n < 0) use_n = 0;
+   if(use_n > ArraySize(v)) use_n = ArraySize(v);
+   if(use_n <= 0) return;
+   FXAI_TensorLayerNorm(v, use_n);
+   for(int i=0; i<use_n; i++)
    {
       double gi = (ArraySize(g) > i ? g[i] : 1.0);
       double bi = (ArraySize(b) > i ? b[i] : 0.0);
@@ -70,13 +74,16 @@ void FXAI_ModuleRMSNormAffine(double &v[],
                               const double &g[],
                               const double &b[])
 {
-   if(n <= 0) return;
+   int use_n = n;
+   if(use_n < 0) use_n = 0;
+   if(use_n > ArraySize(v)) use_n = ArraySize(v);
+   if(use_n <= 0) return;
    double rms = 0.0;
-   for(int i=0; i<n && i<ArraySize(v); i++)
+   for(int i=0; i<use_n; i++)
       rms += v[i] * v[i];
-   rms = MathSqrt(rms / (double)MathMax(n, 1) + 1e-6);
+   rms = MathSqrt(rms / (double)use_n + 1e-6);
    if(rms <= 0.0) rms = 1.0;
-   for(int i=0; i<n && i<ArraySize(v); i++)
+   for(int i=0; i<use_n; i++)
    {
       double gi = (ArraySize(g) > i ? g[i] : 1.0);
       double bi = (ArraySize(b) > i ? b[i] : 0.0);
@@ -112,6 +119,13 @@ void FXAI_ModuleMultiHeadAttentionSummary(const double &seq[][FXAI_AI_WEIGHTS],
    if(heads > FXAI_HIDDEN_HEADS_MAX) heads = FXAI_HIDDEN_HEADS_MAX;
    int feat_n = FXAI_AI_WEIGHTS - 1;
    int head_dim = MathMax(feat_n / heads, 1);
+   int qn = ArraySize(query);
+   int qmax = MathMin(FXAI_AI_WEIGHTS - 1, qn - 1);
+   if(qmax < 1)
+   {
+      summary[0] = 1.0;
+      return;
+   }
 
    double scores[FXAI_MAX_SEQUENCE_BARS];
    double smax = -1e100;
@@ -128,7 +142,8 @@ void FXAI_ModuleMultiHeadAttentionSummary(const double &seq[][FXAI_AI_WEIGHTS],
       {
          int start = 1 + h * head_dim;
          int end = (h == heads - 1 ? FXAI_AI_WEIGHTS - 1 : MathMin(FXAI_AI_WEIGHTS - 1, start + head_dim - 1));
-         if(start > FXAI_AI_WEIGHTS - 1) break;
+         if(start > qmax) break;
+         if(end > qmax) end = qmax;
          double dot = 0.0;
          int hd = 0;
          for(int k=start; k<=end; k++)

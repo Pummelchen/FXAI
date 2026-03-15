@@ -1630,7 +1630,7 @@ protected:
       if(input_idx < 1 || input_idx >= FXAI_AI_WEIGHTS || m_ctx_window_size <= 1) return 0.0;
       double first = m_ctx_window[0][input_idx];
       double last = m_ctx_window[m_ctx_window_size - 1][input_idx];
-      return (last - first) / (double)MathMax(m_ctx_window_size - 1, 1);
+      return (first - last) / (double)MathMax(m_ctx_window_size - 1, 1);
    }
 
    double CurrentWindowFeatureRecentDelta(const int feature_idx,
