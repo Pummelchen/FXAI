@@ -264,6 +264,7 @@ protected:
          m_head = (m_head + 1) % FXAI_RETRDIFF_MEM;
          if(m_count < FXAI_RETRDIFF_MEM) m_count++;
       }
+      UpdateNativeQualityHeads(x, FXAI_Clamp(MoveSampleWeight(x, move_points), 0.20, 4.00), hp.lr, hp.l2);
       m_steps++;
    }
 
@@ -359,7 +360,11 @@ public:
          out.reliability = 0.0;
          out.has_quantiles = true;
          out.has_confidence = true;
-         PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+         PredictNativeQualityHeads(x,
+                                   FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                   out.reliability,
+                                   out.confidence,
+                                   out);
          return true;
       }
 
@@ -421,7 +426,11 @@ public:
       out.reliability = FXAI_Clamp((1.0 / (1.0 + nearest)) * MathMin(1.0, support / 8.0), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      PredictNativeQualityHeads(x,
+                                FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                out.reliability,
+                                out.confidence,
+                                out);
       return true;
    }
 

@@ -551,7 +551,11 @@ public:
       out.reliability = FXAI_Clamp(0.45 + 0.20 * m_global_hit_ema + 0.20 * FXAI_Clamp(m_global_edge_ema / MathMax(out.move_mean_points + 0.10, 0.10), 0.0, 1.0) + 0.15 * (1.0 - disagreement), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      PredictNativeQualityHeads(x,
+                                FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                out.reliability,
+                                out.confidence,
+                                out);
       return true;
    }
 
@@ -626,6 +630,7 @@ protected:
       StoreReplay(best_e, d, y, move_points);
       ReplayExpert(best_e, hp);
 
+      UpdateNativeQualityHeads(x, sample_w, hp.lr, hp.l2);
       m_steps++;
    }
 

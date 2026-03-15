@@ -211,10 +211,7 @@ private:
    double ScheduledLR(const FXAIAIHyperParams &hp) const
    {
       double base = FXAI_Clamp(hp.lr, 0.0002, 0.0800);
-      double st = (double)MathMax(m_step, 1);
-      double warm = FXAI_Clamp(st / 160.0, 0.08, 1.00);
-      double invsqrt = 1.0 / MathSqrt(1.0 + 0.0011 * MathMax(0.0, st - 160.0));
-      double lr = base * warm * invsqrt;
+      double lr = FXAI_LRScheduleInvSqrt(base, m_step, 160, 0.0011);
       return FXAI_Clamp(lr, 0.00005, 0.05000);
    }
 
@@ -1413,7 +1410,11 @@ public:
       out.has_confidence = true;
       if(out.move_mean_points <= 0.0)
          out.move_mean_points = MathMax(PredictMoveHeadRaw(xa), m_move_ema_abs);
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), 0.55 * horizon_cons + 0.45 * tok_conf, out.confidence);
+      PredictNativeQualityHeads(xa,
+                                FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                0.55 * horizon_cons + 0.45 * tok_conf,
+                                out.confidence,
+                                out);
       return true;
    }
 
@@ -1799,6 +1800,7 @@ protected:
       // Update shared move estimators in base plugin.
       FXAI_UpdateMoveEMA(m_move_ema_abs, m_move_ready, move_points, 0.05);
       UpdateMoveHead(xa, move_points, h, sample_w);
+      UpdateNativeQualityHeads(xa, sample_w, h.lr, h.l2);
    }
 
    virtual double PredictProb(const double &x[], const FXAIAIHyperParams &hp)

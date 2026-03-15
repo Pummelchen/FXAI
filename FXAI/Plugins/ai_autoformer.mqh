@@ -308,23 +308,9 @@ private:
                         const double &b[],
                         double &out[]) const
    {
-      double mean = 0.0;
-      for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++) mean += in[i];
-      mean /= (double)FXAI_AI_MLP_HIDDEN;
-
-      double var = 0.0;
       for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
-      {
-         double d = in[i] - mean;
-         var += d * d;
-      }
-      double inv = 1.0 / MathSqrt(var / (double)FXAI_AI_MLP_HIDDEN + 1e-6);
-
-      for(int i=0; i<FXAI_AI_MLP_HIDDEN; i++)
-      {
-         double n = (in[i] - mean) * inv;
-         out[i] = FXAI_ClipSym(g[i] * n + b[i], 8.0);
-      }
+         out[i] = in[i];
+      FXAI_ModuleLayerNormAffine(out, FXAI_AI_MLP_HIDDEN, g, b);
    }
 
    void ResetNorm(void)
@@ -432,10 +418,38 @@ private:
       }
       vol1 = MathSqrt(vol1 / (double)win_n);
 
-      xa[1] = FXAI_ClipSym(0.60 * xa[1] + 0.25 * mean1 + 0.15 * (last1 - first1), 8.0);
-      xa[2] = FXAI_ClipSym(0.60 * xa[2] + 0.25 * mean2 + 0.15 * (last2 - first2), 8.0);
-      xa[6] = FXAI_ClipSym(0.65 * xa[6] + 0.35 * vol1, 8.0);
-      xa[7] = FXAI_ClipSym(0.65 * xa[7] + 0.35 * mean6, 8.0);
+      double seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      int seq_len = 0;
+      int seq_mask[];
+      double seq_pos_bias[];
+      BuildPackedSequenceTensorCapped(x, SequenceContextSpan(), seq, seq_len, seq_mask, seq_pos_bias, true);
+      double attn[];
+      double conv_fast[];
+      double conv_slow[];
+      ArrayResize(attn, FXAI_AI_WEIGHTS);
+      ArrayResize(conv_fast, FXAI_AI_WEIGHTS);
+      ArrayResize(conv_slow, FXAI_AI_WEIGHTS);
+      ArrayInitialize(attn, 0.0);
+      ArrayInitialize(conv_fast, 0.0);
+      ArrayInitialize(conv_slow, 0.0);
+      if(seq_len > 1)
+      {
+         double query[FXAI_AI_WEIGHTS];
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            query[k] = seq[seq_len - 1][k];
+         double k_fast[3] = {0.58, 0.27, 0.15};
+         double k_slow[5] = {0.34, 0.24, 0.18, 0.14, 0.10};
+         FXAI_ModuleMultiHeadAttentionSummary(seq, seq_len, query, seq_mask, seq_pos_bias, 2, attn);
+         FXAI_ModuleConv1DSummary(seq, seq_len, k_fast, 3, conv_fast);
+         FXAI_ModuleConv1DSummary(seq, seq_len, k_slow, 5, conv_slow);
+      }
+
+      xa[1] = FXAI_ClipSym(0.50 * xa[1] + 0.20 * mean1 + 0.10 * (last1 - first1) + 0.12 * attn[1] + 0.08 * conv_fast[1], 8.0);
+      xa[2] = FXAI_ClipSym(0.50 * xa[2] + 0.20 * mean2 + 0.10 * (last2 - first2) + 0.12 * attn[2] + 0.08 * conv_fast[2], 8.0);
+      xa[6] = FXAI_ClipSym(0.55 * xa[6] + 0.25 * vol1 + 0.10 * MathAbs(attn[6]) + 0.10 * MathAbs(conv_slow[6]), 8.0);
+      xa[7] = FXAI_ClipSym(0.50 * xa[7] + 0.20 * mean6 + 0.15 * attn[7] + 0.15 * conv_slow[7], 8.0);
+      xa[10] = FXAI_ClipSym(0.75 * xa[10] + 0.15 * attn[10] + 0.10 * conv_fast[10], 8.0);
+      xa[11] = FXAI_ClipSym(0.75 * xa[11] + 0.15 * attn[11] + 0.10 * conv_slow[11], 8.0);
    }
 
    void ResetSequence(void)
@@ -761,14 +775,7 @@ private:
                     const double lr,
                     const double wd)
    {
-      double g = FXAI_ClipSym(grad, 10.0);
-      m = 0.9 * m + 0.1 * g;
-      v = 0.999 * v + 0.001 * g * g;
-      double mhat = m / (1.0 - m_beta1_pow);
-      double vhat = v / (1.0 - m_beta2_pow);
-      double upd = mhat / (MathSqrt(vhat) + 1e-8);
-      w -= lr * (upd + wd * w);
-      if(!MathIsValidNumber(w)) w = 0.0;
+      FXAI_OptAdamWStep(w, m, v, grad, lr, 0.90, 0.999, wd, MathMax(m_adam_t, 1));
    }
 
    void UpdateShadowHeads(void)
@@ -2019,7 +2026,11 @@ public:
       out.reliability = FXAI_Clamp(0.45 + 0.35 * active + 0.20 * (m_move_ready ? 1.0 : 0.0), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      PredictNativeQualityHeads(xa,
+                                FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                out.reliability,
+                                out.confidence,
+                                out);
       return true;
    }
 
@@ -2078,6 +2089,7 @@ public:
       double p_raw[FXAI_AF_CLASS_COUNT];
       double mu = 0.0, lv = 0.0, q25 = 0.0, q75 = 0.0;
       ForwardStep(xa, true, false, -1, fin, p_raw, mu, lv, q25, q75);
+      UpdateNativeQualityHeads(xa, sw, h.lr, h.l2);
    }
 
    virtual double PredictProb(const double &x[], const FXAIAIHyperParams &hp)

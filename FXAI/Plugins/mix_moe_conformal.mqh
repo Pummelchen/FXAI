@@ -256,6 +256,7 @@ protected:
       m_bucket_scores[bucket][slot] = score;
       if(m_bucket_counts[bucket] < FXAI_MOE_BUCKET_DEPTH) m_bucket_counts[bucket]++;
       UpdateCalibrator3((y >= 0 && y <= 2 ? y : (int)FXAI_LABEL_SKIP), probs, em, hp);
+      UpdateNativeQualityHeads(x, FXAI_Clamp(MoveSampleWeight(x, move_points), 0.20, 4.00), hp.lr, hp.l2);
       m_steps++;
    }
 
@@ -378,7 +379,11 @@ public:
       out.reliability = FXAI_Clamp(0.45 + 0.25 * MathMin((double)m_steps / 64.0, 1.0) + 0.20 * (1.0 - out.class_probs[(int)FXAI_LABEL_SKIP]), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      PredictNativeQualityHeads(x,
+                                FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                out.reliability,
+                                out.confidence,
+                                out);
       return true;
    }
 };

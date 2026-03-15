@@ -506,7 +506,11 @@ public:
       out.reliability = FXAI_Clamp(0.55 + 0.20 * (1.0 - FXAI_Clamp(m_dispersion_ema, 0.0, 1.0)) + 0.25 * FXAI_Clamp(m_session_move_scale[SessionBucket()] - 0.85, 0.0, 0.5), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      PredictNativeQualityHeads(xa,
+                                FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                out.reliability,
+                                out.confidence,
+                                out);
       return true;
    }
 
@@ -612,6 +616,7 @@ protected:
       m_session_move_scale[sb] = FXAI_Clamp(0.995 * m_session_move_scale[sb] + 0.005 * (target_move / MathMax(pred_move, 0.10)), 0.70, 1.50);
 
       PushFeatures(f);
+      UpdateNativeQualityHeads(xa, sw, hp.lr, hp.l2);
       m_steps++;
    }
 

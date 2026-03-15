@@ -143,24 +143,7 @@ private:
                         const double &g[],
                         const double &b[]) const
    {
-      double mean = 0.0;
-      for(int i=0; i<FXAI_PTST_D_MODEL; i++)
-         mean += v[i];
-      mean /= (double)FXAI_PTST_D_MODEL;
-
-      double var = 0.0;
-      for(int i=0; i<FXAI_PTST_D_MODEL; i++)
-      {
-         double d = v[i] - mean;
-         var += d * d;
-      }
-
-      double inv = 1.0 / MathSqrt(var / (double)FXAI_PTST_D_MODEL + 1e-6);
-      for(int i=0; i<FXAI_PTST_D_MODEL; i++)
-      {
-         double n = (v[i] - mean) * inv;
-         v[i] = FXAI_ClipSym(g[i] * n + b[i], 8.0);
-      }
+      FXAI_ModuleLayerNormAffine(v, FXAI_PTST_D_MODEL, g, b);
    }
 
    void Softmax3(const double &logits[], double &probs[]) const
@@ -189,10 +172,7 @@ private:
    double ScheduledLR(const FXAIAIHyperParams &hp) const
    {
       double base = FXAI_Clamp(hp.lr, 0.0002, 0.0800);
-      double st = (double)MathMax(m_step, 1);
-      double warm = FXAI_Clamp(st / 160.0, 0.08, 1.00);
-      double invsqrt = 1.0 / MathSqrt(1.0 + 0.0011 * MathMax(0.0, st - 160.0));
-      double lr = base * warm * invsqrt;
+      double lr = FXAI_LRScheduleInvSqrt(base, m_step, 160, 0.0011);
       return FXAI_Clamp(lr, 0.00005, 0.05000);
    }
 
@@ -956,10 +936,39 @@ public:
          vol1 += d * d;
       }
       vol1 = MathSqrt(vol1 / (double)win_n);
-      xa[1] = FXAI_ClipSym(0.60 * xa[1] + 0.25 * mean1 + 0.15 * (last1 - first1), 8.0);
-      xa[2] = FXAI_ClipSym(0.60 * xa[2] + 0.25 * mean2 + 0.15 * (last2 - first2), 8.0);
-      xa[6] = FXAI_ClipSym(0.65 * xa[6] + 0.35 * vol1, 8.0);
-      xa[7] = FXAI_ClipSym(0.65 * xa[7] + 0.35 * mean6, 8.0);
+
+      double seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      int seq_len = 0;
+      int seq_mask[];
+      double seq_pos_bias[];
+      BuildPackedSequenceTensorCapped(x, SequenceContextSpan(), seq, seq_len, seq_mask, seq_pos_bias, true);
+      double attn[];
+      double conv_fast[];
+      double conv_slow[];
+      ArrayResize(attn, FXAI_AI_WEIGHTS);
+      ArrayResize(conv_fast, FXAI_AI_WEIGHTS);
+      ArrayResize(conv_slow, FXAI_AI_WEIGHTS);
+      ArrayInitialize(attn, 0.0);
+      ArrayInitialize(conv_fast, 0.0);
+      ArrayInitialize(conv_slow, 0.0);
+      if(seq_len > 1)
+      {
+         double query[FXAI_AI_WEIGHTS];
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            query[k] = seq[seq_len - 1][k];
+         double k_fast[3] = {0.58, 0.27, 0.15};
+         double k_slow[5] = {0.34, 0.24, 0.18, 0.14, 0.10};
+         FXAI_ModuleMultiHeadAttentionSummary(seq, seq_len, query, seq_mask, seq_pos_bias, 2, attn);
+         FXAI_ModuleConv1DSummary(seq, seq_len, k_fast, 3, conv_fast);
+         FXAI_ModuleConv1DSummary(seq, seq_len, k_slow, 5, conv_slow);
+      }
+
+      xa[1] = FXAI_ClipSym(0.50 * xa[1] + 0.20 * mean1 + 0.10 * (last1 - first1) + 0.12 * attn[1] + 0.08 * conv_fast[1], 8.0);
+      xa[2] = FXAI_ClipSym(0.50 * xa[2] + 0.20 * mean2 + 0.10 * (last2 - first2) + 0.12 * attn[2] + 0.08 * conv_fast[2], 8.0);
+      xa[6] = FXAI_ClipSym(0.55 * xa[6] + 0.25 * vol1 + 0.10 * MathAbs(attn[6]) + 0.10 * MathAbs(conv_slow[6]), 8.0);
+      xa[7] = FXAI_ClipSym(0.50 * xa[7] + 0.20 * mean6 + 0.15 * attn[7] + 0.15 * conv_slow[7], 8.0);
+      xa[10] = FXAI_ClipSym(0.75 * xa[10] + 0.15 * attn[10] + 0.10 * conv_fast[10], 8.0);
+      xa[11] = FXAI_ClipSym(0.75 * xa[11] + 0.15 * attn[11] + 0.10 * conv_slow[11], 8.0);
    }
 
    virtual bool PredictModelCore(const double &x[],
@@ -1047,7 +1056,11 @@ public:
       out.reliability = FXAI_Clamp(0.45 + 0.35 * (1.0 - out.class_probs[(int)FXAI_LABEL_SKIP]) + 0.20 * (m_move_ready ? 1.0 : 0.0), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      PredictNativeQualityHeads(xa,
+                                FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                out.reliability,
+                                out.confidence,
+                                out);
       return true;
    }
 
@@ -1319,6 +1332,7 @@ protected:
       // Update shared move estimators in base plugin.
       FXAI_UpdateMoveEMA(m_move_ema_abs, m_move_ready, move_points, 0.05);
       UpdateMoveHead(xa, move_points, h, sample_w);
+      UpdateNativeQualityHeads(xa, sample_w, h.lr, h.l2);
    }
 
    virtual double PredictProb(const double &x[], const FXAIAIHyperParams &hp)

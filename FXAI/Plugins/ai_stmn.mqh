@@ -1229,7 +1229,11 @@ public:
       out.has_confidence = true;
       if(out.move_mean_points <= 0.0)
          out.move_mean_points = MathMax(PredictMoveHeadRaw(xa), m_move_ema_abs);
-      PopulatePathQualityHeads(out, x, active, FXAI_Clamp(1.0 / (1.0 + spread_amp + sigma), 0.0, 1.0), out.confidence);
+      PredictNativeQualityHeads(xa,
+                                active,
+                                FXAI_Clamp(1.0 / (1.0 + spread_amp + sigma), 0.0, 1.0),
+                                out.confidence,
+                                out);
       return true;
    }
 
@@ -1317,6 +1321,7 @@ public:
 
       FXAI_UpdateMoveEMA(m_move_ema_abs, m_move_ready, move_points, 0.05);
       UpdateMoveHead(xa, move_points, hs, sw);
+      UpdateNativeQualityHeads(xa, sw, hs.lr, hs.l2);
 
       m_step++;
    }

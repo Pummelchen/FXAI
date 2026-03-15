@@ -1829,7 +1829,11 @@ public:
       out.reliability = FXAI_Clamp(0.45 + 0.18 * (1.0 - FXAI_Clamp(m_val_ece_fast, 0.0, 1.0)) + 0.12 * (1.0 - FXAI_Clamp(m_val_nll_fast / 2.5, 0.0, 1.0)) + 0.10 * (m_quality_degraded ? -0.5 : 0.5) + 0.15 * geo_cons, 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      PredictNativeQualityHeads(xa,
+                                FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                out.reliability,
+                                out.confidence,
+                                out);
       return true;
    }
 
@@ -1893,6 +1897,7 @@ public:
       double bin[FXAI_GA_BLOCKS][FXAI_GA_D_MODEL];
       double bout[FXAI_GA_BLOCKS][FXAI_GA_D_MODEL];
       ForwardStep(xa, true, emb, loc, fin, grp, ctx, gcons, bin, bout);
+      UpdateNativeQualityHeads(xa, sw, h.lr, h.l2);
    }
 
    virtual double PredictProb(const double &x[], const FXAIAIHyperParams &hp)
