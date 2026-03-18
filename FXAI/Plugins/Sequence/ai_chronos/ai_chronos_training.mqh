@@ -544,4 +544,3 @@
       BuildWindowAwareInput(x, xa);
       return MathMax(PredictMoveHeadRaw(xa), m_move_ema_abs);
    }
-};

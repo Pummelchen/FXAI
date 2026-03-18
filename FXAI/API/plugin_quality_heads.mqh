@@ -162,18 +162,18 @@
       double bank_fill = 0.5;
       double bank_trust = 0.0;
       GetQualityBankPriors(bank_mfe, bank_mae, bank_hit, bank_path, bank_fill, bank_trust);
-      m_quality_heads.Predict(x,
-                              out.move_mean_points,
-                              activity_gate,
-                              structural_quality,
-                              execution_quality,
-                              bank_mfe,
-                              bank_mae,
-                              bank_hit,
-                              bank_path,
-                              bank_fill,
-                              bank_trust,
-                              out);
+      m_native_quality_heads.Predict(x,
+                                     out.move_mean_points,
+                                     activity_gate,
+                                     structural_quality,
+                                     execution_quality,
+                                     bank_mfe,
+                                     bank_mae,
+                                     bank_hit,
+                                     bank_path,
+                                     bank_fill,
+                                     bank_trust,
+                                     out);
    }
 
    void UpdateNativeQualityHeads(const double &x[],
@@ -181,19 +181,19 @@
                                  const double lr,
                                  const double l2)
    {
-      m_quality_heads.Update(x,
-                             sample_w,
-                             TargetMFEPoints(),
-                             FXAI_Clamp(TargetMAEPoints() / MathMax(TargetMFEPoints() + 0.10, 0.10), 0.0, 1.0),
-                             TargetHitTimeFrac(),
-                             TargetPathRisk(),
-                             TargetFillRisk(),
-                             TargetMaskedStep(),
-                             TargetNextVol(),
-                             TargetRegimeShift(),
-                             TargetContextLead(),
-                             lr,
-                             l2);
+      m_native_quality_heads.Update(x,
+                                    sample_w,
+                                    TargetMFEPoints(),
+                                    FXAI_Clamp(TargetMAEPoints() / MathMax(TargetMFEPoints() + 0.10, 0.10), 0.0, 1.0),
+                                    TargetHitTimeFrac(),
+                                    TargetPathRisk(),
+                                    TargetFillRisk(),
+                                    TargetMaskedStep(),
+                                    TargetNextVol(),
+                                    TargetRegimeShift(),
+                                    TargetContextLead(),
+                                    lr,
+                                    l2);
    }
 
    double TargetMFEPoints(void) const { return m_target_quality_ready ? m_target_mfe_points : 0.0; }

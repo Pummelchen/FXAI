@@ -518,6 +518,8 @@ public:
       out.reliability = FXAI_Clamp(0.55 + 0.20 * (1.0 - FXAI_Clamp(m_dispersion_ema, 0.0, 1.0)) + 0.25 * FXAI_Clamp(m_session_move_scale[SessionBucket()] - 0.85, 0.0, 0.5), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
+      double xa[FXAI_AI_WEIGHTS];
+      BuildWindowAwareInput(x, xa);
       PredictNativeQualityHeads(xa,
                                 FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
                                 out.reliability,

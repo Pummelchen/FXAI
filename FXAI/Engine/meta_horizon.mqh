@@ -322,14 +322,14 @@ void FXAI_UpdateOOFHorizonPriors(const int regime_id,
    double score = FXAI_Clamp(score_proxy, -4.0, 8.0);
    double edge = FXAI_Clamp(edge_ratio, -2.0, 4.0);
    double qual = FXAI_Clamp(quality, 0.0, 1.0);
-   double trade = (trade_target ? 1.0 : 0.0);
+   double trade_rate = (trade_target ? 1.0 : 0.0);
 
    if(!g_meta_oof_ready[r][slot])
    {
       g_meta_oof_score_ema[r][slot] = score;
       g_meta_oof_edge_ema[r][slot] = edge;
       g_meta_oof_quality_ema[r][slot] = qual;
-      g_meta_oof_trade_rate_ema[r][slot] = trade;
+      g_meta_oof_trade_rate_ema[r][slot] = trade_rate;
       g_meta_oof_ready[r][slot] = true;
       g_meta_oof_obs[r][slot] = 1;
       FXAI_MarkMetaArtifactsDirty();
@@ -341,7 +341,7 @@ void FXAI_UpdateOOFHorizonPriors(const int regime_id,
    g_meta_oof_score_ema[r][slot] = (1.0 - alpha) * g_meta_oof_score_ema[r][slot] + alpha * score;
    g_meta_oof_edge_ema[r][slot] = (1.0 - alpha) * g_meta_oof_edge_ema[r][slot] + alpha * edge;
    g_meta_oof_quality_ema[r][slot] = (1.0 - alpha) * g_meta_oof_quality_ema[r][slot] + alpha * qual;
-   g_meta_oof_trade_rate_ema[r][slot] = (1.0 - alpha) * g_meta_oof_trade_rate_ema[r][slot] + alpha * trade;
+   g_meta_oof_trade_rate_ema[r][slot] = (1.0 - alpha) * g_meta_oof_trade_rate_ema[r][slot] + alpha * trade_rate;
    g_meta_oof_obs[r][slot] = MathMin(obs + 1, 200000);
    FXAI_MarkMetaArtifactsDirty();
 }

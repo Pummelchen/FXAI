@@ -399,7 +399,11 @@ public:
    virtual int AIId(void) const = 0;
    virtual string AIName(void) const = 0;
 
-   virtual void Reset(void) { ResetAuxState(); }
+   virtual void Reset(void)
+   {
+      ResetAuxState();
+      m_native_quality_heads.Reset();
+   }
    virtual void Describe(FXAIAIManifestV4 &out) const = 0;
    virtual bool SupportsSyntheticSeries(void) const { return false; }
    virtual bool SetSyntheticSeries(const datetime &time_arr[],
@@ -539,9 +543,6 @@ protected:
                                const double &x[],
                                const FXAIAIHyperParams &hp,
                                const double move_points) = 0;
-};
-
-
 };
 
 #endif // __FXAI_PLUGIN_CONTRACT_MQH__

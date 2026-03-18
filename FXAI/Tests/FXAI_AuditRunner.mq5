@@ -228,7 +228,7 @@ bool FXAI_AuditOpenReport(int &handle)
    if(handle == INVALID_HANDLE)
       return false;
 
-   long file_size = FileSize(handle);
+   int file_size = (int)FileSize(handle);
    bool write_header = (Audit_ResetOutput || file_size <= 0);
    if(file_size > 0 && !Audit_ResetOutput)
       FileSeek(handle, 0, SEEK_END);

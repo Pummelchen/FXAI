@@ -957,6 +957,11 @@ public:
       xa[11] = FXAI_ClipSym(0.68 * xa[11] + 0.12 * attn[11] + 0.08 * conv_slow[11] + 0.12 * block[11], 8.0);
    }
 
+   int SequenceContextSpan(void) const
+   {
+      return ContextSequenceCap(FXAI_PTST_SEQ, 72);
+   }
+
    virtual bool PredictModelCore(const double &x[],
                                         const FXAIAIHyperParams &hp,
                                         double &class_probs[],

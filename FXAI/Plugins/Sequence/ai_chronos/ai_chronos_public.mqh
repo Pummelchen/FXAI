@@ -45,6 +45,11 @@
       InitWeights();
    }
 
+   int SequenceContextSpan(void) const
+   {
+      return ContextSequenceCap(FXAI_CHR_SEQ, 96);
+   }
+
    virtual bool PredictModelCore(const double &x[],
                                         const FXAIAIHyperParams &hp,
                                         double &class_probs[],
@@ -218,4 +223,3 @@
       double pseudo_move = (y > 0 ? 1.0 : -1.0);
       TrainModelCore(cls, x, hp, pseudo_move);
    }
-

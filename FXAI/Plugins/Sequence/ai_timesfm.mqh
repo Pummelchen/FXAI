@@ -319,6 +319,11 @@ private:
       xa[5] = FXAI_ClipSym(0.60 * xa[5] + 0.18 * var1 + 0.10 * MathAbs(conv_fast[5]) + 0.12 * MathAbs(block[5]), 8.0);
    }
 
+   int SequenceContextSpan(void) const
+   {
+      return ContextSequenceCap(FXAI_TFM_SEQ, 72);
+   }
+
    void ResetFeatureStats(void)
    {
       m_feat_stats_ready = false;

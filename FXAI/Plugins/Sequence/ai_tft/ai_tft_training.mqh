@@ -98,4 +98,3 @@
       if(ev > 0.0) return ev;
       return (m_move_ready ? m_move_ema_abs : 0.0);
    }
-};
