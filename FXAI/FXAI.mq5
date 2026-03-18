@@ -892,18 +892,34 @@ void HardExit()
    else ExpertRemove();
 }
 
-void EAStop()
+bool EAStop()
 {
-   if(EquiMax <= 0.0) return;
+   if(EquiMax <= 0.0) return false;
 
    double eq = AccountInfoDouble(ACCOUNT_EQUITY);
    if(eq > EquiMax) EquiMax = eq;
 
    double maxdd = FXAI_Clamp(MaxDD, 0.0, 99.9);
-   if(maxdd <= 0.0) return;
+   if(maxdd <= 0.0) return false;
 
    if((eq / EquiMax) < ((100.0 - maxdd) / 100.0))
+   {
+      int managed_total = FXAI_ManagedOrdersTotal(_Symbol) + FXAI_ManagedPositionsTotal(_Symbol);
+      if(managed_total > 0)
+      {
+         if(!CloseAll())
+         {
+            Print("FXAI warning: MaxDD stop triggered but managed exposure could not be flattened yet.");
+            return true;
+         }
+         ResetCycleState();
+         Calc_TP();
+      }
+
       HardExit();
+      return true;
+   }
+   return false;
 }
 
 //--------------------------- TP CHECK -------------------------------
@@ -1123,8 +1139,9 @@ void OnTick()
       EquityTrailManage();
       if(FXAI_ManagedOrdersTotal(_Symbol) + FXAI_ManagedPositionsTotal(_Symbol) == 0) return;
 
-      if(MaxDD > 0) EAStop();
+      if(MaxDD > 0 && EAStop()) return;
       TPCheck();
+      if(FXAI_ManagedOrdersTotal(_Symbol) + FXAI_ManagedPositionsTotal(_Symbol) == 0) return;
    }
 
    if(!new_m1_bar) return;

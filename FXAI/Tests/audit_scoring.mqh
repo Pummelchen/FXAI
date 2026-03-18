@@ -179,6 +179,7 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
    FXAIAIPredictRequestV4 held_req;
    held_req.valid = false;
    bool held_req_ready = false;
+   int held_req_idx = -1;
 
    for(int i=start_idx; i<end_idx; i++)
    {
@@ -409,29 +410,26 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
       {
          held_req = req;
          held_req_ready = true;
+         held_req_idx = i;
       }
    }
 
    if(held_req_ready)
    {
-      FXAI_PredictViaV4(*plugin, held_req, hp, held_pred_reset);
+      bool held_ok = FXAI_PredictViaV4(*plugin, held_req, hp, held_pred_reset);
+      string held_reason = "";
+      bool held_valid = (held_ok && FXAI_ValidatePredictionV4(held_pred_reset, held_reason));
       plugin.ResetState((int)FXAI_RESET_MANUAL, held_req.ctx.sample_time);
       if(plugin.SupportsSyntheticSeries())
          plugin.SetSyntheticSeries(time_arr, open_arr, high_arr, low_arr, close_arr);
       FXAIAIPredictionV4 pred_after_reset;
-      FXAI_PredictViaV4(*plugin, held_req, hp, pred_after_reset);
-
-      CFXAIAIPlugin *fresh = registry.CreateInstance(ai_idx);
-      if(fresh != NULL)
-      {
-         fresh.EnsureInitialized(hp);
-         if(fresh.SupportsSyntheticSeries())
-            fresh.SetSyntheticSeries(time_arr, open_arr, high_arr, low_arr, close_arr);
-         FXAIAIPredictionV4 pred_fresh;
-         FXAI_PredictViaV4(*fresh, held_req, hp, pred_fresh);
-         FXAI_AuditComparePredictions(pred_after_reset, pred_fresh, out.reset_delta);
-         delete fresh;
-      }
+      bool reset_ok = FXAI_PredictViaV4(*plugin, held_req, hp, pred_after_reset);
+      string reset_reason = "";
+      bool reset_valid = (reset_ok && FXAI_ValidatePredictionV4(pred_after_reset, reset_reason));
+      if(held_valid && reset_valid)
+         FXAI_AuditComparePredictions(held_pred_reset, pred_after_reset, out.reset_delta);
+      else
+         out.reset_delta = -1.0;
 
       if(FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_WINDOW_CONTEXT) ||
          FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL))
@@ -443,47 +441,69 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
          FXAI_ApplyFeatureSchemaToPayloadEx(schema_id, feature_groups_mask, seq_short.ctx.sequence_bars, seq_short.x_window, seq_short.window_size, seq_short.x);
          FXAIAIPredictRequestV4 seq_long = held_req;
          seq_long.ctx.sequence_bars = seq_bars;
-         FXAI_AuditBuildWindow(start_idx,
-                               seq_long.ctx.sequence_bars,
-                               horizon_minutes,
-                               point,
-                               0.25,
-                               norm_method,
-                               time_arr,
-                               open_arr,
-                               high_arr,
-                               low_arr,
-                               close_arr,
-                               spread_arr,
-                               time_m5,
-                               close_m5,
-                               map_m5,
-                               time_m15,
-                               close_m15,
-                               map_m15,
-                               time_m30,
-                               close_m30,
-                               map_m30,
-                               time_h1,
-                               close_h1,
-                               map_h1,
-                               ctx_mean_arr,
-                               ctx_std_arr,
-                               ctx_up_arr,
-                               ctx_extra_arr,
-                               seq_long.x_window,
-                               seq_long.window_size);
-         FXAI_ApplyFeatureSchemaToPayloadEx(schema_id,
-                                          feature_groups_mask,
-                                          seq_long.ctx.sequence_bars,
-                                          seq_long.x_window,
-                                          seq_long.window_size,
-                                          seq_long.x);
-         FXAIAIPredictionV4 pred_short;
-         FXAIAIPredictionV4 pred_long;
-         FXAI_PredictViaV4(*plugin, seq_short, hp, pred_short);
-         FXAI_PredictViaV4(*plugin, seq_long, hp, pred_long);
-         FXAI_AuditComparePredictions(pred_short, pred_long, out.sequence_delta);
+         if(held_req_idx >= 0)
+         {
+            FXAI_AuditBuildWindow(held_req_idx,
+                                  seq_long.ctx.sequence_bars,
+                                  horizon_minutes,
+                                  point,
+                                  0.25,
+                                  norm_method,
+                                  time_arr,
+                                  open_arr,
+                                  high_arr,
+                                  low_arr,
+                                  close_arr,
+                                  spread_arr,
+                                  time_m5,
+                                  close_m5,
+                                  map_m5,
+                                  time_m15,
+                                  close_m15,
+                                  map_m15,
+                                  time_m30,
+                                  close_m30,
+                                  map_m30,
+                                  time_h1,
+                                  close_h1,
+                                  map_h1,
+                                  ctx_mean_arr,
+                                  ctx_std_arr,
+                                  ctx_up_arr,
+                                  ctx_extra_arr,
+                                  seq_long.x_window,
+                                  seq_long.window_size);
+            FXAI_ApplyFeatureSchemaToPayloadEx(schema_id,
+                                             feature_groups_mask,
+                                             seq_long.ctx.sequence_bars,
+                                             seq_long.x_window,
+                                             seq_long.window_size,
+                                             seq_long.x);
+            plugin.ResetState((int)FXAI_RESET_MANUAL, held_req.ctx.sample_time);
+            if(plugin.SupportsSyntheticSeries())
+               plugin.SetSyntheticSeries(time_arr, open_arr, high_arr, low_arr, close_arr);
+            FXAIAIPredictionV4 pred_short;
+            bool short_ok = FXAI_PredictViaV4(*plugin, seq_short, hp, pred_short);
+            string short_reason = "";
+            bool short_valid = (short_ok && FXAI_ValidatePredictionV4(pred_short, short_reason));
+
+            plugin.ResetState((int)FXAI_RESET_MANUAL, held_req.ctx.sample_time);
+            if(plugin.SupportsSyntheticSeries())
+               plugin.SetSyntheticSeries(time_arr, open_arr, high_arr, low_arr, close_arr);
+            FXAIAIPredictionV4 pred_long;
+            bool long_ok = FXAI_PredictViaV4(*plugin, seq_long, hp, pred_long);
+            string long_reason = "";
+            bool long_valid = (long_ok && FXAI_ValidatePredictionV4(pred_long, long_reason));
+
+            if(short_valid && long_valid)
+               FXAI_AuditComparePredictions(pred_short, pred_long, out.sequence_delta);
+            else
+               out.sequence_delta = -1.0;
+         }
+         else
+         {
+            out.sequence_delta = -1.0;
+         }
       }
       else
       {

@@ -26,6 +26,8 @@ struct FXAISequenceRuntimeState
    FXAISequenceRuntimeConfig cfg;
    FXAISequenceBuffer buffer;
    int steps_seen;
+   int raw_len;
+   double raw_data[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
 };
 
 FXAISequenceRuntimeConfig FXAI_SequenceRuntimeMakeConfig(const int max_steps,
@@ -95,6 +97,10 @@ void FXAI_SequenceRuntimeReset(FXAISequenceRuntimeState &state,
    state.cfg = cfg;
    FXAI_SequenceBufferReset(state.buffer);
    state.steps_seen = 0;
+   state.raw_len = 0;
+   for(int t=0; t<FXAI_MAX_SEQUENCE_BARS; t++)
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         state.raw_data[t][k] = 0.0;
 }
 
 void FXAI_SequenceRuntimeCopy(const FXAISequenceRuntimeState &src,
@@ -103,6 +109,24 @@ void FXAI_SequenceRuntimeCopy(const FXAISequenceRuntimeState &src,
    dst.cfg = src.cfg;
    FXAI_SequenceBufferCopy(src.buffer, dst.buffer);
    dst.steps_seen = src.steps_seen;
+   dst.raw_len = src.raw_len;
+   for(int t=0; t<FXAI_MAX_SEQUENCE_BARS; t++)
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         dst.raw_data[t][k] = src.raw_data[t][k];
+}
+
+void FXAI_SequenceRuntimeRebuildBuffer(FXAISequenceRuntimeState &state)
+{
+   FXAI_SequenceBufferReset(state.buffer);
+   double resampled[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+   int seq_len = FXAI_SequenceResampleChronological(state.raw_data, state.raw_len, state.cfg, resampled);
+   for(int t=0; t<seq_len; t++)
+      FXAI_SequenceBufferPushRow(state.buffer, resampled, t);
+
+   if(state.cfg.normalize && state.buffer.len > 1)
+      FXAI_TensorNormalizeSequence(state.buffer.data, state.buffer.len);
+   FXAI_SequenceBufferBuildMask(state.buffer);
+   FXAI_SequenceBufferBuildPositionalBias(state.buffer, state.cfg.pos_step_penalty);
 }
 
 bool FXAI_SequenceBufferPush(FXAISequenceBuffer &buffer,
@@ -243,10 +267,27 @@ void FXAI_SequenceBufferLoadWindowConfig(FXAISequenceBuffer &buffer,
 bool FXAI_SequenceRuntimePush(FXAISequenceRuntimeState &state,
                               const double &x[])
 {
+   if(state.raw_len >= FXAI_MAX_SEQUENCE_BARS)
+   {
+      for(int t=1; t<FXAI_MAX_SEQUENCE_BARS; t++)
+      {
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            state.raw_data[t - 1][k] = state.raw_data[t][k];
+      }
+      state.raw_len = FXAI_MAX_SEQUENCE_BARS - 1;
+   }
+
+   int idx = state.raw_len;
+   int xn = ArraySize(x);
+   for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+   {
+      double v = (k < xn && MathIsValidNumber(x[k]) ? x[k] : 0.0);
+      state.raw_data[idx][k] = (k == 0 ? 1.0 : FXAI_ClipSym(v, 8.0));
+   }
+   state.raw_len++;
    state.steps_seen++;
-   bool ok = FXAI_SequenceBufferPush(state.buffer, x);
-   FXAI_SequenceBufferBuildPositionalBias(state.buffer, state.cfg.pos_step_penalty);
-   return ok;
+   FXAI_SequenceRuntimeRebuildBuffer(state);
+   return true;
 }
 
 void FXAI_SequenceRuntimeLoadWindow(FXAISequenceRuntimeState &state,
@@ -254,8 +295,22 @@ void FXAI_SequenceRuntimeLoadWindow(FXAISequenceRuntimeState &state,
                                     const double &window[][FXAI_AI_WEIGHTS],
                                     const int window_size)
 {
-   FXAI_SequenceBufferLoadWindowConfig(state.buffer, current_x, window, window_size, state.cfg);
-   state.steps_seen = state.buffer.len;
+   int dummy_len = 0;
+   FXAI_TensorClearSequence(state.raw_data, dummy_len);
+   double raw[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+   int raw_len = 0;
+   FXAI_TensorBuildChronologicalSequence(current_x, window, window_size, raw, raw_len);
+   if(!state.cfg.include_current && raw_len > 0)
+      raw_len--;
+   if(raw_len < 0) raw_len = 0;
+   if(raw_len > FXAI_MAX_SEQUENCE_BARS) raw_len = FXAI_MAX_SEQUENCE_BARS;
+   state.raw_len = raw_len;
+   for(int t=0; t<state.raw_len; t++)
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         state.raw_data[t][k] = raw[t][k];
+
+   FXAI_SequenceRuntimeRebuildBuffer(state);
+   state.steps_seen = state.raw_len;
 }
 
 void FXAI_SequenceRuntimePreparePacked(const FXAISequenceRuntimeState &state,

@@ -59,9 +59,25 @@ bool FXAI_AuditTensorKernelSelfTest(string &reason)
    }
    FXAISequenceRuntimeState rt_copy;
    FXAI_SequenceRuntimeCopy(rt_state, rt_copy);
-   if(rt_copy.steps_seen != rt_state.steps_seen || rt_copy.buffer.len != rt_state.buffer.len)
+   if(rt_copy.steps_seen != rt_state.steps_seen || rt_copy.buffer.len != rt_state.buffer.len || rt_copy.raw_len != rt_state.raw_len)
    {
       reason = "sequence_runtime_copy";
+      return false;
+   }
+
+   FXAISequenceRuntimeConfig push_cfg = FXAI_SequenceRuntimeMakeConfig(4, 2, 2, false, true, 0.04);
+   FXAISequenceRuntimeState push_state;
+   FXAI_SequenceRuntimeReset(push_state, push_cfg);
+   for(int step=0; step<5; step++)
+   {
+      double push_x[FXAI_AI_WEIGHTS];
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         push_x[k] = (k == 0 ? 1.0 : 0.05 * (double)(step + 1) * (double)(k + 1));
+      FXAI_SequenceRuntimePush(push_state, push_x);
+   }
+   if(push_state.raw_len != 5 || push_state.buffer.len != 2 || push_state.buffer.mask[0] != 1 || push_state.buffer.mask[1] != 1)
+   {
+      reason = "sequence_runtime_push";
       return false;
    }
 

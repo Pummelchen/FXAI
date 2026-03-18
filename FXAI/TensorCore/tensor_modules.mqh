@@ -305,14 +305,21 @@ void FXAI_ModuleStateSpaceBlockForward(const double &x_in[],
    if(hd < 1) hd = 1;
    if(hd > FXAI_AI_MLP_HIDDEN) hd = FXAI_AI_MLP_HIDDEN;
    ArrayResize(out, hd);
+   int xn = ArraySize(x_in);
    for(int h=0; h<hd; h++)
    {
       double drive = 0.0;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-         drive += input_mix[h][k] * x_in[k];
-      double a = FXAI_Clamp(decay[h], 0.0, 1.0);
-      next_state[h] = FXAI_ClipSym(a * prev_state[h] + (1.0 - a) * drive, 8.0);
-      double s = (ArraySize(skip) > h ? skip[h] * x_in[MathMin(h + 1, FXAI_AI_WEIGHTS - 1)] : 0.0);
+      {
+         double xv = (k < xn ? x_in[k] : 0.0);
+         drive += input_mix[h][k] * xv;
+      }
+      double prev = (ArraySize(prev_state) > h ? prev_state[h] : 0.0);
+      double a = FXAI_Clamp((ArraySize(decay) > h ? decay[h] : 0.0), 0.0, 1.0);
+      next_state[h] = FXAI_ClipSym(a * prev + (1.0 - a) * drive, 8.0);
+      int skip_idx = MathMin(h + 1, FXAI_AI_WEIGHTS - 1);
+      double skip_x = (skip_idx < xn ? x_in[skip_idx] : 0.0);
+      double s = (ArraySize(skip) > h ? skip[h] * skip_x : 0.0);
       out[h] = FXAI_ClipSym(next_state[h] + s, 8.0);
    }
 }
