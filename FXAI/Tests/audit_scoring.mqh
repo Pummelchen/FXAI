@@ -148,6 +148,7 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
    }
 
    FXAI_ResetNormalizationWindows(192);
+   FXAI_ResetFeatureNormalizationState();
    if(plugin.SupportsSyntheticSeries())
       plugin.SetSyntheticSeries(time_arr, open_arr, high_arr, low_arr, close_arr);
 

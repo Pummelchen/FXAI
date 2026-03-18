@@ -79,6 +79,7 @@ int SpecialDirectionAI(const string symbol)
    }
    // Keep cache/training keyed to the same closed bar anchor.
    snapshot.bar_time = signal_bar;
+   FXAI_ResetFeatureNormalizationState();
 
    const int FEATURE_LB = 10;
    int horizon_load_max = FXAI_GetMaxConfiguredHorizon(base_h);
@@ -370,57 +371,6 @@ int SpecialDirectionAI(const string symbol)
       g_ai_last_reason = "predict_features_failed";
       return -1;
    }
-
-   bool need_prev = FXAI_FeatureNormNeedsPrevious(norm_method);
-   bool has_prev_feat = false;
-   double feat_prev[FXAI_AI_FEATURES];
-   for(int f=0; f<FXAI_AI_FEATURES; f++)
-      feat_prev[f] = 0.0;
-
-   if(need_prev && ArraySize(close_arr) > 1)
-   {
-      double spread_prev = FXAI_GetSpreadAtIndex(1, spread_m1, spread_pred);
-      double ctx_mean_prev = FXAI_GetArrayValue(ctx_mean_arr, 1, ctx_mean_pred);
-      double ctx_std_prev = FXAI_GetArrayValue(ctx_std_arr, 1, ctx_std_pred);
-      double ctx_up_prev = FXAI_GetArrayValue(ctx_up_arr, 1, ctx_up_pred);
-
-      has_prev_feat = FXAI_ComputeFeatureVector(1,
-                                               spread_prev,
-                                               time_arr,
-                                               open_arr,
-                                               high_arr,
-                                               low_arr,
-                                               close_arr,
-                                               time_m5,
-                                               close_m5,
-                                               map_m5,
-                                               time_m15,
-                                               close_m15,
-                                               map_m15,
-                                               time_m30,
-                                               close_m30,
-                                               map_m30,
-                                               time_h1,
-                                               close_h1,
-                                               map_h1,
-                                               ctx_mean_prev,
-                                               ctx_std_prev,
-                                               ctx_up_prev,
-                                               ctx_extra_arr,
-                                               norm_method,
-                                               feat_prev);
-   }
-
-   double feat_pred_norm[FXAI_AI_FEATURES];
-   FXAI_ApplyFeatureNormalization(norm_method,
-                                  feat_pred,
-                                  feat_prev,
-                                  has_prev_feat,
-                                  snapshot.bar_time,
-                                  feat_pred_norm);
-
-   double x_pred[FXAI_AI_WEIGHTS];
-   FXAI_BuildInputVector(feat_pred_norm, x_pred);
 
    double fallback_expected_move = FXAI_EstimateExpectedAbsMovePoints(close_arr,
                                                                       H,
@@ -836,8 +786,39 @@ int SpecialDirectionAI(const string symbol)
       req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
       req.ctx.sample_time = snapshot.bar_time;
       int input_idx = FXAI_FindNormInputCache(method_id, input_caches);
+      if(input_idx < 0)
+      {
+         input_idx = FXAI_EnsureNormInputCache(method_id,
+                                               spread_pred,
+                                               spread_m1,
+                                               snapshot,
+                                               time_arr,
+                                               open_arr,
+                                               high_arr,
+                                               low_arr,
+                                               close_arr,
+                                               time_m5,
+                                               close_m5,
+                                               map_m5,
+                                               time_m15,
+                                               close_m15,
+                                               map_m15,
+                                               time_m30,
+                                               close_m30,
+                                               map_m30,
+                                               time_h1,
+                                               close_h1,
+                                               map_h1,
+                                               ctx_mean_arr,
+                                               ctx_std_arr,
+                                               ctx_up_arr,
+                                               ctx_extra_arr,
+                                               input_caches);
+      }
+      if(input_idx < 0)
+         continue;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-         req.x[k] = (input_idx >= 0 ? input_caches[input_idx].x[k] : x_pred[k]);
+         req.x[k] = input_caches[input_idx].x[k];
       FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, 0, runtime_norm_caches, req.ctx.sequence_bars, req.x_window, req.window_size);
       FXAI_ApplyFeatureSchemaToPayloadEx(manifest.feature_schema_id,
                                        manifest.feature_groups_mask,
@@ -1021,7 +1002,7 @@ int SpecialDirectionAI(const string symbol)
          double stack_probs_dyn[];
          ArrayResize(stack_probs_dyn, 3);
          FXAI_StackPredict(regime_id, stack_feat, stack_probs_dyn);
-         double trade_gate_prob = FXAI_TradeGatePredict(regime_id, stack_feat);
+         double trade_gate_prob = FXAI_TradeGatePredict(regime_id, H, stack_feat);
          double trade_gate_floor = FXAI_Clamp(0.34 +
                                               0.18 * avg_conf +
                                               0.16 * avg_rel +

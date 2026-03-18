@@ -21,7 +21,7 @@
 
    int SequenceContextSpan(void) const
    {
-      return ContextSequenceCap(FXAI_TFT_SEQ, 56);
+      return ContextSequenceCap(FXAI_TFT_SEQ, 72);
    }
 
    void ForwardSequenceContext(const double &x[],
@@ -43,9 +43,13 @@
 
       double seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
       int seq_len = 0;
+      int seq_mask[];
+      double seq_pos_bias[];
       FXAITensorDims dims = TensorContextDims(FXAI_SEQ_STYLE_TRANSFORMER, SequenceContextSpan());
       FXAISequenceRuntimeConfig seq_cfg = TensorSequenceRuntimeConfig(dims, true, true);
-      BuildChronologicalSequenceTensorConfigured(x, seq_cfg, seq, seq_len);
+      double k_fast[3] = {1.00, 0.00, -1.00};
+      double k_slow[5] = {0.10, 0.20, 0.40, 0.20, 0.10};
+      BuildSequenceBlockSequence(x, dims, seq_cfg, k_fast, 3, k_slow, 5, seq, seq_len, seq_mask, seq_pos_bias);
 
       ResetHistory();
       for(int t=0; t<seq_len - 1; t++)

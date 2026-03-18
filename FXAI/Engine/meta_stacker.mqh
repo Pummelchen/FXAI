@@ -264,10 +264,12 @@ void FXAI_StackUpdate(const int regime_id,
 }
 
 double FXAI_TradeGatePredict(const int regime_id,
+                             const int horizon_minutes,
                              const double &feat[])
 {
    int r = regime_id;
    if(r < 0 || r >= FXAI_REGIME_COUNT) r = 0;
+   int slot = FXAI_GetHorizonSlot(horizon_minutes);
 
    double heuristic = FXAI_Clamp(0.46 +
                                  0.16 * feat[7] +
@@ -281,6 +283,9 @@ double FXAI_TradeGatePredict(const int regime_id,
                                  0.08 * feat[50],
                                  0.01,
                                  0.99);
+   double oof_prior = FXAI_GetOOFTradeGatePrior(r, slot);
+   if(oof_prior >= 0.0)
+      heuristic = FXAI_Clamp(0.78 * heuristic + 0.22 * oof_prior, 0.01, 0.99);
    if(!g_trade_gate_ready[r])
       return heuristic;
 
@@ -298,7 +303,19 @@ double FXAI_TradeGatePredict(const int regime_id,
       z += g_trade_gate_w2[r][h] * hidden[h];
    double learned = FXAI_Sigmoid(z);
    double mix = FXAI_Clamp((double)g_trade_gate_obs[r] / 180.0, 0.20, 0.85);
-   return FXAI_Clamp((1.0 - mix) * heuristic + mix * learned, 0.0, 1.0);
+   double pred = FXAI_Clamp((1.0 - mix) * heuristic + mix * learned, 0.0, 1.0);
+   if(oof_prior >= 0.0)
+   {
+      double oof_mix = FXAI_Clamp((double)g_meta_oof_obs[r][slot] / 96.0, 0.08, 0.28);
+      pred = FXAI_Clamp((1.0 - oof_mix) * pred + oof_mix * oof_prior, 0.0, 1.0);
+   }
+   return pred;
+}
+
+double FXAI_TradeGatePredict(const int regime_id,
+                             const double &feat[])
+{
+   return FXAI_TradeGatePredict(regime_id, PredictionTargetMinutes, feat);
 }
 
 void FXAI_TradeGateUpdate(const int regime_id,
@@ -435,6 +452,12 @@ void FXAI_ResetAdaptiveRoutingState()
          g_horizon_regime_edge_ema[r][h] = 0.0;
          g_horizon_regime_edge_ready[r][h] = false;
          g_horizon_regime_obs[r][h] = 0;
+         g_meta_oof_score_ema[r][h] = 0.0;
+         g_meta_oof_edge_ema[r][h] = 0.0;
+         g_meta_oof_quality_ema[r][h] = 0.0;
+         g_meta_oof_trade_rate_ema[r][h] = 0.0;
+         g_meta_oof_ready[r][h] = false;
+         g_meta_oof_obs[r][h] = 0;
       }
    }
 }

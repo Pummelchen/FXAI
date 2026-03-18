@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import os
@@ -15,6 +16,7 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path("/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI")
+REPO_ROOT = Path(__file__).resolve().parents[2]
 TERMINAL_ROOT = Path("/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5")
 METAEDITOR = TERMINAL_ROOT / "MetaEditor64.exe"
 TERMINAL = TERMINAL_ROOT / "terminal64.exe"
@@ -72,6 +74,14 @@ EXECUTION_PROFILES = {
         "slippage_points": 1.0,
         "fill_penalty_points": 0.5,
     },
+}
+
+SYMBOL_PACKS = {
+    "majors": ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "NZDUSD", "USDCAD", "USDCHF"],
+    "dollar-core": ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF"],
+    "yen-cross": ["USDJPY", "EURJPY", "GBPJPY", "AUDJPY", "CADJPY", "CHFJPY"],
+    "commodity-fx": ["AUDUSD", "NZDUSD", "USDCAD", "XAUUSD", "XAGUSD"],
+    "metals-risk": ["XAUUSD", "XAGUSD", "US500", "NAS100", "USDX"],
 }
 
 
@@ -172,6 +182,9 @@ def build_effective_audit_args(args):
 
 
 def resolve_symbol_list(args) -> list[str]:
+    pack_name = (getattr(args, "symbol_pack", "") or "").strip().lower()
+    if pack_name:
+        return list(SYMBOL_PACKS.get(pack_name, [str(getattr(args, "symbol", "EURUSD"))]))
     symbols = parse_brace_list(getattr(args, "symbol_list", ""))
     if not symbols:
         symbols = [str(getattr(args, "symbol", "EURUSD"))]
@@ -208,6 +221,32 @@ def render_summary_report(summary: dict, execution_profile: str = "default", man
 def write_json(path: Path, payload) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def sha256_path(path: Path) -> str:
+    if not path.exists():
+        return ""
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def git_head_commit(repo_root: Path) -> str:
+    try:
+        out = subprocess.check_output(["git", "-C", str(repo_root), "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL)
+        return out.strip()
+    except Exception:
+        return ""
+
+
+def git_dirty(repo_root: Path) -> bool:
+    try:
+        out = subprocess.check_output(["git", "-C", str(repo_root), "status", "--porcelain"], text=True, stderr=subprocess.DEVNULL)
+        return bool(out.strip())
+    except Exception:
+        return False
 
 
 def load_oracles():
@@ -1065,6 +1104,10 @@ def compare_summary_data(current: dict, baseline: dict) -> dict:
             plugin_notes.append("fixed issues: " + "; ".join(fixed_issues[:4]))
         if "stability" in cur and float(cur.get("stability", 1.0)) < 0.55:
             plugin_notes.append(f"cross-symbol stability weak {float(cur.get('stability', 0.0)):.2f}")
+        if "score_std" in cur and "score_std" in base:
+            std_delta = float(cur.get("score_std", 0.0)) - float(base.get("score_std", 0.0))
+            if std_delta >= 1.50:
+                plugin_notes.append(f"cross-symbol dispersion worse +{std_delta:.2f}")
 
         cur_rw = cur.get("scenarios", {}).get("random_walk", {})
         base_rw = base.get("scenarios", {}).get("random_walk", {})
@@ -1105,8 +1148,19 @@ def compare_summary_data(current: dict, baseline: dict) -> dict:
                 plugin_notes.append(f"market_recent calibration worse +{cal_delta:.3f}")
             if pq_delta >= 0.05:
                 plugin_notes.append(f"market_recent path-quality worse +{pq_delta:.3f}")
+            if float(cur_recent.get("brier_score_ci95", 0.0)) >= float(base_recent.get("brier_score_ci95", 0.0)) + 0.02:
+                plugin_notes.append("market_recent brier stability weaker")
 
-        if any(x.startswith(("score down", "statistically significant score down", "new issues", "random_walk skip down", "drift_up align down", "drift_down align down", "cross-symbol stability weak", "market_recent brier worse", "market_recent calibration worse", "market_recent path-quality worse")) for x in plugin_notes):
+        cur_wf = cur.get("scenarios", {}).get("market_walkforward", {})
+        base_wf = base.get("scenarios", {}).get("market_walkforward", {})
+        if cur_wf and base_wf:
+            wf_delta = float(cur_wf.get("score", 0.0)) - float(base_wf.get("score", 0.0))
+            if wf_delta <= -3.0:
+                plugin_notes.append(f"walkforward score down {wf_delta:.1f}")
+            if float(cur_wf.get("score_ci95", 0.0)) >= float(base_wf.get("score_ci95", 0.0)) + 1.0:
+                plugin_notes.append("walkforward stability weaker")
+
+        if any(x.startswith(("score down", "statistically significant score down", "new issues", "random_walk skip down", "drift_up align down", "drift_down align down", "cross-symbol stability weak", "cross-symbol dispersion worse", "market_recent brier worse", "market_recent calibration worse", "market_recent path-quality worse", "market_recent brier stability weaker", "walkforward score down", "walkforward stability weaker")) for x in plugin_notes):
             regressions.append(f"{name}: " + ", ".join(plugin_notes))
         elif plugin_notes:
             improvements.append(f"{name}: " + ", ".join(plugin_notes))
@@ -1408,10 +1462,12 @@ def cmd_run_audit(args):
     manifest = {
         "type": ("multi_symbol" if len(symbol_runs) > 1 else "single_symbol"),
         "symbols": symbols,
+        "symbol_pack": getattr(args, "symbol_pack", "") or "",
         "symbol_count": len(symbols),
         "plugin_list": args.plugin_list,
         "scenario_list": args.scenario_list,
         "execution_profile": args.execution_profile,
+        "generated_at": int(time.time()),
         "costs": {
             "commission_per_lot_side": args.commission_per_lot_side,
             "cost_buffer_points": args.cost_buffer_points,
@@ -1426,6 +1482,13 @@ def cmd_run_audit(args):
             "report": str(output_path),
             "summary": str(summary_path),
         },
+        "reproducibility": {
+            "repo_root": str(REPO_ROOT),
+            "repo_head": git_head_commit(REPO_ROOT),
+            "repo_dirty": git_dirty(REPO_ROOT),
+            "tool_sha256": sha256_path(Path(__file__).resolve()),
+            "oracle_sha256": sha256_path(ORACLES_PATH),
+        },
         "per_symbol": [
             {
                 "symbol": run["symbol"],
@@ -1436,6 +1499,8 @@ def cmd_run_audit(args):
         ],
     }
     write_json(summary_path, current_summary)
+    manifest["artifacts"]["report_sha256"] = sha256_path(output_path)
+    manifest["artifacts"]["summary_sha256"] = sha256_path(summary_path)
     write_json(manifest_path, manifest)
 
     if args.baseline:
@@ -1608,6 +1673,7 @@ def main():
     ra.add_argument("--seed", type=int, default=42)
     ra.add_argument("--symbol", default="EURUSD")
     ra.add_argument("--symbol-list", default="")
+    ra.add_argument("--symbol-pack", default="", choices=[""] + sorted(SYMBOL_PACKS.keys()))
     ra.add_argument("--execution-profile", default="default", choices=sorted(EXECUTION_PROFILES.keys()))
     ra.add_argument("--login")
     ra.add_argument("--server")
@@ -1668,6 +1734,7 @@ def main():
     oa.add_argument("--seed", type=int, default=42)
     oa.add_argument("--symbol", default="EURUSD")
     oa.add_argument("--symbol-list", default="")
+    oa.add_argument("--symbol-pack", default="", choices=[""] + sorted(SYMBOL_PACKS.keys()))
     oa.add_argument("--execution-profile", default="default", choices=sorted(EXECUTION_PROFILES.keys()))
     oa.add_argument("--login")
     oa.add_argument("--server")

@@ -12,6 +12,7 @@
 class CFXAIAIPA : public CFXAIAIPlugin
 {
 private:
+   CFXAINativeQualityHeads m_quality_heads;
    // Crammer-Singer multiclass PA weights.
    double m_w[FXAI_PA_CLASS_COUNT][FXAI_AI_WEIGHTS];
    double m_w_avg[FXAI_PA_CLASS_COUNT][FXAI_AI_WEIGHTS];
@@ -1023,13 +1024,18 @@ public:
       out.reliability = FXAI_Clamp(0.45 + 0.25 * (m_move_ready ? 1.0 : 0.0) + 0.30 * MathMin((double)m_mv_steps / 64.0, 1.0), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      PredictNativeQualityHeads(x,
+                                FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                out.reliability,
+                                out.confidence,
+                                out);
       return true;
    }
 
    virtual void Reset(void)
    {
       CFXAIAIPlugin::Reset();
+      m_quality_heads.Reset();
 
       m_steps = 0;
       m_mv_steps = 0;
@@ -1185,6 +1191,7 @@ protected:
 
       double spread_scale = FXAI_Clamp(1.0 + 0.08 * (cost_proxy - 1.0), 0.80, 1.30);
       margin_scale = FXAI_Clamp(margin_scale * sess_scale * regime_scale * spread_scale, 0.50, 5.00);
+      UpdateNativeQualityHeads(x, ev_w, h.lr, h.l2);
 
       UpdateWeighted(cls, x, h, margin_scale, ev_w, move_points, false);
 

@@ -27,6 +27,12 @@ bool FXAI_IsSeriousNativeAI(const int ai_idx)
       case AI_TCN:
       case AI_TFT:
       case AI_TST:
+      case AI_S4:
+      case AI_AUTOFORMER:
+      case AI_PATCHTST:
+      case AI_CHRONOS:
+      case AI_TIMESFM:
+      case AI_GRAPHWM:
       case AI_LIGHTGBM:
       case AI_XGB_FAST:
          return true;
@@ -47,10 +53,12 @@ int FXAI_WarmupEpochBudget(const int ai_idx,
    int bonus = 1;
    if(scale > 1.05) bonus++;
    if(scale > 1.18) bonus++;
+   if(scale > 1.28) bonus++;
    if(horizon_minutes >= 15) bonus++;
    if(horizon_minutes >= 30) bonus++;
+   if(horizon_minutes >= 60) bonus++;
    epochs += bonus;
-   if(epochs > 8) epochs = 8;
+   if(epochs > 10) epochs = 10;
    return epochs;
 }
 
@@ -63,8 +71,9 @@ int FXAI_WarmupBlockSpan(const int ai_idx,
    int span = FXAI_ContextBatchSpan(24, MathMax(horizon_minutes, 1), _Symbol, 4);
    if(horizon_minutes >= 15) span += 4;
    if(horizon_minutes >= 30) span += 4;
+   if(horizon_minutes >= 60) span += 4;
    if(span < 8) span = 8;
-   if(span > 32) span = 32;
+    if(span > 40) span = 40;
    return span;
 }
 
@@ -378,9 +387,16 @@ void FXAI_GetCachedPreparedSample(const int ai_idx,
                                                       reference_sample.regime_id,
                                                       reference_sample.horizon_minutes);
    int cache_idx = FXAI_FindNormSampleCache(method_id, caches);
-   if(cache_idx < 0) return;
-   if(sample_index < 0 || sample_index >= ArraySize(caches[cache_idx].samples))
+   if(cache_idx < 0)
+   {
+      out_sample.valid = false;
       return;
+   }
+   if(sample_index < 0 || sample_index >= ArraySize(caches[cache_idx].samples))
+   {
+      out_sample.valid = false;
+      return;
+   }
    out_sample = caches[cache_idx].samples[sample_index];
 }
 
@@ -1196,6 +1212,12 @@ void FXAI_ResetModelHyperParams()
          g_horizon_regime_edge_ema[r][h] = 0.0;
          g_horizon_regime_edge_ready[r][h] = false;
          g_horizon_regime_obs[r][h] = 0;
+         g_meta_oof_score_ema[r][h] = 0.0;
+         g_meta_oof_edge_ema[r][h] = 0.0;
+         g_meta_oof_quality_ema[r][h] = 0.0;
+         g_meta_oof_trade_rate_ema[r][h] = 0.0;
+         g_meta_oof_ready[r][h] = false;
+         g_meta_oof_obs[r][h] = 0;
       }
    }
 }

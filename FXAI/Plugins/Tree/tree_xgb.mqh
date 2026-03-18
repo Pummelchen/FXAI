@@ -41,6 +41,7 @@ private:
    bool   m_initialized;
    int    m_step;
    double m_bias;
+   CFXAINativeQualityHeads m_quality_heads;
 
    FXAIXGBTree m_trees[FXAI_XGB_MAX_TREES];
    int        m_tree_count;
@@ -576,7 +577,11 @@ public:
       out.reliability = FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      PredictNativeQualityHeads(x,
+                                FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                out.reliability,
+                                out.confidence,
+                                out);
       return true;
    }
 
@@ -585,6 +590,7 @@ public:
    {
       CFXAIAIPlugin::Reset();
       m_initialized = false;
+      m_quality_heads.Reset();
       m_step = 0;
       m_bias = 0.0;
       m_tree_count = 0;
@@ -629,6 +635,7 @@ public:
       FXAIAIHyperParams h = ScaleHyperParamsForMove(hp, move_points);
       double cls_w = 1.0;
       double w = FXAI_Clamp(MoveSampleWeight(x, move_points) * cls_w, 0.10, 4.00);
+      UpdateNativeQualityHeads(x, w, h.lr, h.l2);
 
       double margin = ModelMargin(x);
       double p_raw = FXAI_Sigmoid(margin);

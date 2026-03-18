@@ -120,6 +120,62 @@
       FXAI_SequenceBufferPreparePacked(buffer, seq, seq_len, mask, pos_bias);
    }
 
+   void BuildSequenceBlockSequence(const double &x[],
+                                   const FXAITensorDims &dims,
+                                   const FXAISequenceRuntimeConfig &cfg,
+                                   const double &kernel_fast[],
+                                   const int kernel_fast_size,
+                                   const double &kernel_slow[],
+                                   const int kernel_slow_size,
+                                   double &seq_out[][FXAI_AI_WEIGHTS],
+                                   int &seq_len,
+                                   int &seq_mask[],
+                                   double &seq_pos_bias[]) const
+   {
+      double seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      double attn_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      double conv_fast_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      double conv_slow_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      double block_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      BuildPackedSequenceTensorConfigured(x, cfg, seq, seq_len, seq_mask, seq_pos_bias);
+
+      for(int t=0; t<FXAI_MAX_SEQUENCE_BARS; t++)
+      {
+         seq_out[t][0] = 1.0;
+         for(int k=1; k<FXAI_AI_WEIGHTS; k++)
+            seq_out[t][k] = 0.0;
+      }
+
+      if(seq_len <= 0)
+         return;
+
+      if(seq_len == 1)
+      {
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            seq_out[0][k] = seq[0][k];
+         return;
+      }
+
+      FXAI_ModuleSequenceAttentionBlock(seq, seq_len, seq_mask, seq_pos_bias, dims, attn_seq);
+      FXAI_ModuleSequenceConvBlock(seq, seq_len, kernel_fast, kernel_fast_size, dims, conv_fast_seq);
+      FXAI_ModuleSequenceConvBlock(seq, seq_len, kernel_slow, kernel_slow_size, dims, conv_slow_seq);
+      FXAI_ModuleSequenceResidualNormFFN(attn_seq, seq_len, dims, block_seq);
+
+      for(int t=0; t<seq_len && t<FXAI_MAX_SEQUENCE_BARS; t++)
+      {
+         seq_out[t][0] = 1.0;
+         for(int k=1; k<FXAI_AI_WEIGHTS; k++)
+         {
+            double mixed = 0.30 * seq[t][k] +
+                           0.22 * attn_seq[t][k] +
+                           0.18 * conv_fast_seq[t][k] +
+                           0.12 * conv_slow_seq[t][k] +
+                           0.18 * block_seq[t][k];
+            seq_out[t][k] = FXAI_ClipSym(mixed, 8.0);
+         }
+      }
+   }
+
    void BuildSequenceBlockSummaries(const double &x[],
                                     const FXAITensorDims &dims,
                                     const FXAISequenceRuntimeConfig &cfg,
@@ -247,4 +303,3 @@
       }
       xa[0] = 1.0;
    }
-

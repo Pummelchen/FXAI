@@ -14,6 +14,7 @@
 class CFXAIAIENHash : public CFXAIAIPlugin
 {
 private:
+   CFXAINativeQualityHeads m_quality_heads;
    // Native 3-class FTRL-prox weights.
    double m_z_lin[FXAI_ENH_CLASSES][FXAI_AI_WEIGHTS];
    double m_n_lin[FXAI_ENH_CLASSES][FXAI_AI_WEIGHTS];
@@ -492,7 +493,11 @@ public:
       out.reliability = FXAI_Clamp(0.55 + 0.20 * m_diag_edgehit_ema + 0.15 * (1.0 - FXAI_Clamp(m_diag_calerr_ema, 0.0, 1.0)) + 0.10 * (1.0 - FXAI_Clamp(m_diag_collision_ema, 0.0, 1.0)), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      PredictNativeQualityHeads(x,
+                                FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                out.reliability,
+                                out.confidence,
+                                out);
       return true;
    }
 
@@ -501,6 +506,7 @@ public:
    {
       CFXAIAIPlugin::Reset();
       m_cal3.Reset();
+      m_quality_heads.Reset();
 
       for(int c=0; c<FXAI_ENH_CLASSES; c++)
       {
@@ -604,6 +610,7 @@ public:
       AdaptHyperParams(hp, alpha, beta, l1, l2);
       alpha *= FXAI_Clamp(sw, 0.25, 4.00);
       alpha = FXAI_Clamp(alpha, 0.00005, 0.1500);
+      UpdateNativeQualityHeads(x, sw, alpha, l2);
 
       // FTRL-prox multiclass updates (native 3-class training).
       for(int c=0; c<FXAI_ENH_CLASSES; c++)

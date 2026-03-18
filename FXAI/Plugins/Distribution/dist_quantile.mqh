@@ -15,6 +15,7 @@ class CFXAIAIQuantile : public CFXAIAIPlugin
 {
 private:
    bool   m_initialized;
+   CFXAINativeQualityHeads m_quality_heads;
 
    // Quantile levels: 5%..95% (dense tails for FX).
    double m_tau[FXAI_QT_Q];
@@ -790,7 +791,11 @@ public:
       out.reliability = FXAI_Clamp(m_rel_weight / 1.5, 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      PredictNativeQualityHeads(x,
+                                FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                out.reliability,
+                                out.confidence,
+                                out);
       return true;
    }
 
@@ -799,6 +804,7 @@ public:
    {
       CFXAIAIPlugin::Reset();
       m_initialized = false;
+      m_quality_heads.Reset();
 
       m_tau[0] = 0.05;
       m_tau[1] = 0.15;
@@ -921,6 +927,7 @@ public:
          lr *= 0.85;
 
       double sw = FXAI_Clamp(MoveSampleWeight(x, move_points) * m_rel_weight, 0.10, 6.00);
+      UpdateNativeQualityHeads(x, sw, lr, wd);
 
       // Short and medium horizon quantile heads.
       TrainQuantileHead(0, x, sess, reg, move_points, sw, lr, wd);

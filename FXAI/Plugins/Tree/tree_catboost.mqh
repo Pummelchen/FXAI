@@ -50,6 +50,7 @@ private:
    int    m_step;
    int    m_tree_count;
    double m_bias[FXAI_CAT_CLASS_COUNT];
+   CFXAINativeQualityHeads m_quality_heads;
 
    FXAICatTree m_trees[FXAI_CAT_MAX_TREES];
 
@@ -1649,6 +1650,7 @@ public:
    {
       CFXAIAIPlugin::Reset();
       m_initialized = false;
+      m_quality_heads.Reset();
       m_step = 0;
       m_tree_count = 0;
       m_buf_head = 0;
@@ -1777,7 +1779,11 @@ public:
       out.reliability = FXAI_Clamp(0.45 + 0.25 * (m_move_ready ? 1.0 : 0.0) + 0.30 * MathMin((double)m_tree_count / 32.0, 1.0), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      PredictNativeQualityHeads(x,
+                                FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                out.reliability,
+                                out.confidence,
+                                out);
       return true;
    }
 
@@ -1813,6 +1819,7 @@ protected:
       double ev_w = FXAI_Clamp(0.35 + (edge / MathMax(cost, 0.50)), 0.10, 6.00);
       if(cls == (int)FXAI_LABEL_SKIP) ev_w *= 0.85;
       double w = FXAI_Clamp(ev_w * cls_bal, 0.10, 6.00);
+      UpdateNativeQualityHeads(x, w, h.lr, h.l2);
 
       double x_ext[FXAI_CAT_EXT_WEIGHTS];
       BuildInferenceExtended(x, x_ext);

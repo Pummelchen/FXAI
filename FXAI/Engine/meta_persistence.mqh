@@ -2,7 +2,7 @@
 #define __FXAI_META_PERSISTENCE_MQH__
 
 #define FXAI_META_ARTIFACT_DIR "FXAI\\Meta"
-#define FXAI_META_ARTIFACT_VERSION 1
+#define FXAI_META_ARTIFACT_VERSION 2
 
 string FXAI_MetaArtifactFile(const string symbol)
 {
@@ -83,6 +83,16 @@ bool FXAI_SaveMetaArtifacts(const string symbol)
       FileWriteDouble(handle, g_hpolicy_b2[r]);
       for(int h=0; h<FXAI_HPOL_HIDDEN; h++)
          FileWriteDouble(handle, g_hpolicy_w2[r][h]);
+
+      for(int slot=0; slot<FXAI_MAX_HORIZONS; slot++)
+      {
+         FileWriteInteger(handle, (g_meta_oof_ready[r][slot] ? 1 : 0));
+         FileWriteInteger(handle, g_meta_oof_obs[r][slot]);
+         FileWriteDouble(handle, g_meta_oof_score_ema[r][slot]);
+         FileWriteDouble(handle, g_meta_oof_edge_ema[r][slot]);
+         FileWriteDouble(handle, g_meta_oof_quality_ema[r][slot]);
+         FileWriteDouble(handle, g_meta_oof_trade_rate_ema[r][slot]);
+      }
    }
 
    FileClose(handle);
@@ -161,6 +171,16 @@ bool FXAI_LoadMetaArtifacts(const string symbol)
          g_hpolicy_b2[r] = FileReadDouble(handle);
          for(int h=0; h<FXAI_HPOL_HIDDEN; h++)
             g_hpolicy_w2[r][h] = FileReadDouble(handle);
+
+         for(int slot=0; slot<FXAI_MAX_HORIZONS; slot++)
+         {
+            g_meta_oof_ready[r][slot] = (FileReadInteger(handle) != 0);
+            g_meta_oof_obs[r][slot] = FileReadInteger(handle);
+            g_meta_oof_score_ema[r][slot] = FileReadDouble(handle);
+            g_meta_oof_edge_ema[r][slot] = FileReadDouble(handle);
+            g_meta_oof_quality_ema[r][slot] = FileReadDouble(handle);
+            g_meta_oof_trade_rate_ema[r][slot] = FileReadDouble(handle);
+         }
       }
    }
 

@@ -10,6 +10,7 @@
 class CFXAIAISGD : public CFXAIAIPlugin
 {
 private:
+   CFXAINativeQualityHeads m_quality_heads;
    double m_w[FXAI_SGD_CLASS_COUNT][FXAI_AI_WEIGHTS];
    double m_m[FXAI_SGD_CLASS_COUNT][FXAI_AI_WEIGHTS];
    double m_v[FXAI_SGD_CLASS_COUNT][FXAI_AI_WEIGHTS];
@@ -565,13 +566,18 @@ public:
       out.reliability = FXAI_Clamp(0.45 + 0.25 * (m_mv_ready ? 1.0 : 0.0) + 0.30 * MathMin((double)m_step / 64.0, 1.0), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      PredictNativeQualityHeads(x,
+                                FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                out.reliability,
+                                out.confidence,
+                                out);
       return true;
    }
 
    virtual void Reset(void)
    {
       CFXAIAIPlugin::Reset();
+      m_quality_heads.Reset();
 
       m_step = 0;
       m_loss_ready = false;
@@ -639,6 +645,7 @@ protected:
 
       double cls_w = (cls == (int)FXAI_LABEL_SKIP ? 0.80 : 1.0);
       double w = FXAI_Clamp(edge_w * cls_w, 0.10, 6.00);
+      UpdateNativeQualityHeads(x, w, h.lr, h.l2);
       UpdateWeighted(cls, x, h, w, move_points);
    }
 

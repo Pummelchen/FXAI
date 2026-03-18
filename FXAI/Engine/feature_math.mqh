@@ -46,7 +46,10 @@ double FXAI_NormalizedSlope(const double &arr[],
    double c = arr[start_idx];
    if(c == 0.0) return 0.0;
 
-   return slope / c;
+   // Arrays are stored as-series: start_idx is the most recent bar and larger
+   // indices move backward in time. Reverse the regression sign so an upward
+   // move into the present yields a positive slope.
+   return (-slope) / c;
 }
 
 double FXAI_EstimateExpectedAbsMovePoints(const double &close_arr[],

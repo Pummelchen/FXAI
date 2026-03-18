@@ -291,6 +291,96 @@ double FXAI_HorizonPolicyPredictValue(const int regime_id,
    return FXAI_HorizonPolicyPredictValue(regime_id, feat, hidden);
 }
 
+void FXAI_ResetOOFHorizonPriors()
+{
+   for(int r=0; r<FXAI_REGIME_COUNT; r++)
+   {
+      for(int h=0; h<FXAI_MAX_HORIZONS; h++)
+      {
+         g_meta_oof_score_ema[r][h] = 0.0;
+         g_meta_oof_edge_ema[r][h] = 0.0;
+         g_meta_oof_quality_ema[r][h] = 0.0;
+         g_meta_oof_trade_rate_ema[r][h] = 0.0;
+         g_meta_oof_ready[r][h] = false;
+         g_meta_oof_obs[r][h] = 0;
+      }
+   }
+}
+
+void FXAI_UpdateOOFHorizonPriors(const int regime_id,
+                                 const int horizon_minutes,
+                                 const double score_proxy,
+                                 const double edge_ratio,
+                                 const double quality,
+                                 const bool trade_target)
+{
+   int r = regime_id;
+   if(r < 0 || r >= FXAI_REGIME_COUNT) r = 0;
+   int slot = FXAI_GetHorizonSlot(horizon_minutes);
+   if(slot < 0 || slot >= FXAI_MAX_HORIZONS) return;
+
+   double score = FXAI_Clamp(score_proxy, -4.0, 8.0);
+   double edge = FXAI_Clamp(edge_ratio, -2.0, 4.0);
+   double qual = FXAI_Clamp(quality, 0.0, 1.0);
+   double trade = (trade_target ? 1.0 : 0.0);
+
+   if(!g_meta_oof_ready[r][slot])
+   {
+      g_meta_oof_score_ema[r][slot] = score;
+      g_meta_oof_edge_ema[r][slot] = edge;
+      g_meta_oof_quality_ema[r][slot] = qual;
+      g_meta_oof_trade_rate_ema[r][slot] = trade;
+      g_meta_oof_ready[r][slot] = true;
+      g_meta_oof_obs[r][slot] = 1;
+      FXAI_MarkMetaArtifactsDirty();
+      return;
+   }
+
+   int obs = g_meta_oof_obs[r][slot];
+   double alpha = FXAI_Clamp(0.18 / MathSqrt(1.0 + 0.03 * (double)obs), 0.025, 0.12);
+   g_meta_oof_score_ema[r][slot] = (1.0 - alpha) * g_meta_oof_score_ema[r][slot] + alpha * score;
+   g_meta_oof_edge_ema[r][slot] = (1.0 - alpha) * g_meta_oof_edge_ema[r][slot] + alpha * edge;
+   g_meta_oof_quality_ema[r][slot] = (1.0 - alpha) * g_meta_oof_quality_ema[r][slot] + alpha * qual;
+   g_meta_oof_trade_rate_ema[r][slot] = (1.0 - alpha) * g_meta_oof_trade_rate_ema[r][slot] + alpha * trade;
+   g_meta_oof_obs[r][slot] = MathMin(obs + 1, 200000);
+   FXAI_MarkMetaArtifactsDirty();
+}
+
+double FXAI_GetOOFHorizonPriorScore(const int regime_id,
+                                    const int horizon_slot)
+{
+   int r = regime_id;
+   if(r < 0 || r >= FXAI_REGIME_COUNT) r = 0;
+   int slot = horizon_slot;
+   if(slot < 0 || slot >= FXAI_MAX_HORIZONS) return 0.0;
+   if(!g_meta_oof_ready[r][slot]) return 0.0;
+
+   double trust = FXAI_Clamp((double)g_meta_oof_obs[r][slot] / 48.0, 0.05, 0.35);
+   double prior = 0.28 * g_meta_oof_score_ema[r][slot] +
+                  0.22 * g_meta_oof_edge_ema[r][slot] +
+                  0.28 * (2.0 * g_meta_oof_quality_ema[r][slot] - 1.0) +
+                  0.22 * (2.0 * g_meta_oof_trade_rate_ema[r][slot] - 1.0);
+   return trust * FXAI_Clamp(prior, -3.0, 3.0);
+}
+
+double FXAI_GetOOFTradeGatePrior(const int regime_id,
+                                 const int horizon_slot)
+{
+   int r = regime_id;
+   if(r < 0 || r >= FXAI_REGIME_COUNT) r = 0;
+   int slot = horizon_slot;
+   if(slot < 0 || slot >= FXAI_MAX_HORIZONS) return -1.0;
+   if(!g_meta_oof_ready[r][slot]) return -1.0;
+
+   double trust = FXAI_Clamp((double)g_meta_oof_obs[r][slot] / 64.0, 0.10, 0.45);
+   double prior = 0.18 +
+                  0.42 * g_meta_oof_trade_rate_ema[r][slot] +
+                  0.20 * g_meta_oof_quality_ema[r][slot] +
+                  0.12 * FXAI_Clamp(g_meta_oof_edge_ema[r][slot], 0.0, 2.0) / 2.0 +
+                  0.08 * FXAI_Clamp(g_meta_oof_score_ema[r][slot], 0.0, 4.0) / 4.0;
+   return FXAI_Clamp((1.0 - trust) * 0.50 + trust * prior, 0.01, 0.99);
+}
+
 int FXAI_SelectRoutedHorizon(const double &close_arr[],
                              const FXAIDataSnapshot &snapshot,
                              const double min_move_points,
@@ -367,6 +457,8 @@ int FXAI_SelectRoutedHorizon(const double &close_arr[],
          double learned = FXAI_HorizonPolicyPredictValue(regime_id, feat);
          score += 0.35 * learned;
       }
+
+      score += FXAI_GetOOFHorizonPriorScore(regime_id, slot);
 
       if(score > best_score)
       {

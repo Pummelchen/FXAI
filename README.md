@@ -138,6 +138,16 @@ python3 FXAI/Tools/fxai_testlab.py baseline-save --name eurusd_smoke
 python3 FXAI/Tools/fxai_testlab.py release-gate --baseline eurusd_smoke --require-market-replay
 ```
 
+Portfolio-style audit pack example:
+
+```bash
+python3 FXAI/Tools/fxai_testlab.py run-audit \
+  --plugin-list "{ai_tft, tree_lgbm}" \
+  --scenario-list "{market_recent, market_walkforward}" \
+  --symbol-pack majors \
+  --execution-profile prime-ecn
+```
+
 ## How Traders Use FXAI
 
 Typical operator use cases:
@@ -218,7 +228,9 @@ FXAI includes a drill-sergeant Audit Lab for plugin stress testing, market repla
 
 Recent Audit Lab capabilities include:
 - release-grade market replay packs alongside synthetic stress tests
+- named multi-symbol packs such as `majors` and `yen-cross` for portfolio-style certification
 - schema and feature-mask override testing
+- reproducible `.summary.json` and `.manifest.json` artifacts with repo and file hashes
 - audit-guided optimization campaign generation for schemas, normalizers, sequence lengths, and feature groups
 
 The full operator handbook now lives in the GitHub wiki:

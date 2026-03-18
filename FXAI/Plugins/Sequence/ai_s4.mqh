@@ -3,8 +3,8 @@
 
 #include "..\..\API\plugin_base.mqh"
 
-#define FXAI_S4_RANK 4
-#define FXAI_S4_TBPTT 20
+#define FXAI_S4_RANK 6
+#define FXAI_S4_TBPTT 28
 #define FXAI_S4_HORIZONS 3
 
 class CFXAIAIS4 : public CFXAIAIPlugin

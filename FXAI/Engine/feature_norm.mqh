@@ -1,6 +1,30 @@
 #ifndef __FXAI_FEATURE_NORM_MQH__
 #define __FXAI_FEATURE_NORM_MQH__
 
+bool g_fxai_norm_hist_inited = false;
+datetime g_fxai_norm_last_sample_time[FXAI_NORM_METHOD_COUNT];
+int g_fxai_norm_last_cfg_version[FXAI_NORM_METHOD_COUNT];
+double g_fxai_norm_hist[FXAI_NORM_METHOD_COUNT][FXAI_AI_FEATURES][FXAI_NORM_ROLL_WINDOW_MAX];
+int g_fxai_norm_hist_count[FXAI_NORM_METHOD_COUNT][FXAI_AI_FEATURES];
+int g_fxai_norm_hist_head[FXAI_NORM_METHOD_COUNT][FXAI_AI_FEATURES];
+
+void FXAI_ResetFeatureNormalizationState()
+{
+   g_fxai_norm_hist_inited = true;
+   for(int m=0; m<FXAI_NORM_METHOD_COUNT; m++)
+   {
+      g_fxai_norm_last_sample_time[m] = 0;
+      g_fxai_norm_last_cfg_version[m] = -1;
+      for(int f=0; f<FXAI_AI_FEATURES; f++)
+      {
+         g_fxai_norm_hist_count[m][f] = 0;
+         g_fxai_norm_hist_head[m][f] = 0;
+         for(int k=0; k<FXAI_NORM_ROLL_WINDOW_MAX; k++)
+            g_fxai_norm_hist[m][f][k] = 0.0;
+      }
+   }
+}
+
 void FXAI_GetFeatureClipBounds(const int f, double &lo, double &hi)
 {
    lo = -8.0;
@@ -226,31 +250,12 @@ void FXAI_ApplyFeatureNormalization(const ENUM_FXAI_FEATURE_NORMALIZATION method
                                     const datetime sample_time,
                                     double &out_features[])
 {
-   static bool hist_inited = false;
-   static datetime last_sample_time[FXAI_NORM_METHOD_COUNT];
-   static int last_cfg_version[FXAI_NORM_METHOD_COUNT];
-   static double hist[FXAI_NORM_METHOD_COUNT][FXAI_AI_FEATURES][FXAI_NORM_ROLL_WINDOW_MAX];
-   static int hist_count[FXAI_NORM_METHOD_COUNT][FXAI_AI_FEATURES];
-   static int hist_head[FXAI_NORM_METHOD_COUNT][FXAI_AI_FEATURES];
-
    if(!g_fxai_norm_window_inited)
       FXAI_ResetNormalizationWindows(FXAI_NORM_ROLL_WINDOW_DEFAULT);
 
-   if(!hist_inited)
+   if(!g_fxai_norm_hist_inited)
    {
-      for(int m=0; m<FXAI_NORM_METHOD_COUNT; m++)
-      {
-         last_sample_time[m] = 0;
-         last_cfg_version[m] = -1;
-         for(int f=0; f<FXAI_AI_FEATURES; f++)
-         {
-            hist_count[m][f] = 0;
-            hist_head[m][f] = 0;
-            for(int k=0; k<FXAI_NORM_ROLL_WINDOW_MAX; k++)
-               hist[m][f][k] = 0.0;
-         }
-      }
-      hist_inited = true;
+      FXAI_ResetFeatureNormalizationState();
    }
 
    int method_idx = (int)method;
@@ -264,19 +269,21 @@ void FXAI_ApplyFeatureNormalization(const ENUM_FXAI_FEATURE_NORMALIZATION method
 
    if(use_full_hist)
    {
-      bool rewind = (sample_time > 0 && last_sample_time[method_idx] > 0 && sample_time <= last_sample_time[method_idx]);
-      bool cfg_changed = (last_cfg_version[method_idx] != g_fxai_norm_window_cfg_version);
+      bool rewind = (sample_time > 0 &&
+                     g_fxai_norm_last_sample_time[method_idx] > 0 &&
+                     sample_time <= g_fxai_norm_last_sample_time[method_idx]);
+      bool cfg_changed = (g_fxai_norm_last_cfg_version[method_idx] != g_fxai_norm_window_cfg_version);
       if(rewind || cfg_changed)
       {
          for(int f=0; f<FXAI_AI_FEATURES; f++)
          {
-            hist_count[method_idx][f] = 0;
-            hist_head[method_idx][f] = 0;
+            g_fxai_norm_hist_count[method_idx][f] = 0;
+            g_fxai_norm_hist_head[method_idx][f] = 0;
          }
       }
-      if(sample_time > 0) last_sample_time[method_idx] = sample_time;
+      if(sample_time > 0) g_fxai_norm_last_sample_time[method_idx] = sample_time;
    }
-   last_cfg_version[method_idx] = g_fxai_norm_window_cfg_version;
+   g_fxai_norm_last_cfg_version[method_idx] = g_fxai_norm_window_cfg_version;
 
    double vec_mean = 0.0;
    double vec_std = 1.0;
@@ -299,7 +306,7 @@ void FXAI_ApplyFeatureNormalization(const ENUM_FXAI_FEATURE_NORMALIZATION method
          window_f = g_fxai_norm_feature_window[f];
       window_f = FXAI_NormalizationWindowClamp(window_f);
 
-      int n_hist_total = hist_count[method_idx][f];
+      int n_hist_total = g_fxai_norm_hist_count[method_idx][f];
       int n_hist = n_hist_total;
       if(n_hist > window_f) n_hist = window_f;
 
@@ -310,15 +317,15 @@ void FXAI_ApplyFeatureNormalization(const ENUM_FXAI_FEATURE_NORMALIZATION method
          {
             if(n_hist >= 2)
             {
-               int idx0 = hist_head[method_idx][f] - 1;
+               int idx0 = g_fxai_norm_hist_head[method_idx][f] - 1;
                if(idx0 < 0) idx0 += FXAI_NORM_ROLL_WINDOW_MAX;
-               double vmin = hist[method_idx][f][idx0];
-               double vmax = hist[method_idx][f][idx0];
+               double vmin = g_fxai_norm_hist[method_idx][f][idx0];
+               double vmax = g_fxai_norm_hist[method_idx][f][idx0];
                for(int k=1; k<n_hist; k++)
                {
-                  int idx = hist_head[method_idx][f] - 1 - k;
+                  int idx = g_fxai_norm_hist_head[method_idx][f] - 1 - k;
                   while(idx < 0) idx += FXAI_NORM_ROLL_WINDOW_MAX;
-                  double v = hist[method_idx][f][idx];
+                  double v = g_fxai_norm_hist[method_idx][f][idx];
                   if(v < vmin) vmin = v;
                   if(v > vmax) vmax = v;
                }
@@ -384,9 +391,9 @@ void FXAI_ApplyFeatureNormalization(const ENUM_FXAI_FEATURE_NORMALIZATION method
                double sum2 = 0.0;
                for(int k=0; k<n_hist; k++)
                {
-                  int idx = hist_head[method_idx][f] - 1 - k;
+                  int idx = g_fxai_norm_hist_head[method_idx][f] - 1 - k;
                   while(idx < 0) idx += FXAI_NORM_ROLL_WINDOW_MAX;
-                  double v = hist[method_idx][f][idx];
+                  double v = g_fxai_norm_hist[method_idx][f][idx];
                   sum += v;
                   sum2 += v * v;
                }
@@ -410,9 +417,9 @@ void FXAI_ApplyFeatureNormalization(const ENUM_FXAI_FEATURE_NORMALIZATION method
                ArrayResize(tmp, n_hist);
                for(int k=0; k<n_hist; k++)
                {
-                  int idx = hist_head[method_idx][f] - 1 - k;
+                  int idx = g_fxai_norm_hist_head[method_idx][f] - 1 - k;
                   while(idx < 0) idx += FXAI_NORM_ROLL_WINDOW_MAX;
-                  tmp[k] = hist[method_idx][f][idx];
+                  tmp[k] = g_fxai_norm_hist[method_idx][f][idx];
                }
                FXAI_SortSmall(tmp, n_hist);
 
@@ -449,9 +456,9 @@ void FXAI_ApplyFeatureNormalization(const ENUM_FXAI_FEATURE_NORMALIZATION method
                ArrayResize(tmp, n_hist);
                for(int k=0; k<n_hist; k++)
                {
-                  int idx = hist_head[method_idx][f] - 1 - k;
+                  int idx = g_fxai_norm_hist_head[method_idx][f] - 1 - k;
                   while(idx < 0) idx += FXAI_NORM_ROLL_WINDOW_MAX;
-                  tmp[k] = hist[method_idx][f][idx];
+                  tmp[k] = g_fxai_norm_hist[method_idx][f][idx];
                }
                FXAI_SortSmall(tmp, n_hist);
 
@@ -523,12 +530,12 @@ void FXAI_ApplyFeatureNormalization(const ENUM_FXAI_FEATURE_NORMALIZATION method
 
       if(use_full_hist)
       {
-         int h = hist_head[method_idx][f];
-         hist[method_idx][f][h] = cur;
+         int h = g_fxai_norm_hist_head[method_idx][f];
+         g_fxai_norm_hist[method_idx][f][h] = cur;
          h++;
          if(h >= FXAI_NORM_ROLL_WINDOW_MAX) h = 0;
-         hist_head[method_idx][f] = h;
-         if(n_hist_total < FXAI_NORM_ROLL_WINDOW_MAX) hist_count[method_idx][f] = n_hist_total + 1;
+         g_fxai_norm_hist_head[method_idx][f] = h;
+         if(n_hist_total < FXAI_NORM_ROLL_WINDOW_MAX) g_fxai_norm_hist_count[method_idx][f] = n_hist_total + 1;
       }
    }
 }

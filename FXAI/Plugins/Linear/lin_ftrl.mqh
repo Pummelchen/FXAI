@@ -10,6 +10,7 @@
 class CFXAIAIFTRL : public CFXAIAIPlugin
 {
 private:
+   CFXAINativeQualityHeads m_quality_heads;
    // Main multiclass FTRL parameters.
    double m_z[FXAI_FTRL_CLASS_COUNT][FXAI_AI_WEIGHTS];
    double m_n[FXAI_FTRL_CLASS_COUNT][FXAI_AI_WEIGHTS];
@@ -706,13 +707,18 @@ public:
       out.reliability = FXAI_Clamp(0.45 + 0.25 * (m_move_ready ? 1.0 : 0.0) + 0.30 * MathMin((double)m_mv_steps / 64.0, 1.0), 0.0, 1.0);
       out.has_quantiles = true;
       out.has_confidence = true;
-      PopulatePathQualityHeads(out, x, FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0), out.reliability, out.confidence);
+      PredictNativeQualityHeads(x,
+                                FXAI_Clamp(1.0 - out.class_probs[(int)FXAI_LABEL_SKIP], 0.0, 1.0),
+                                out.reliability,
+                                out.confidence,
+                                out);
       return true;
    }
 
    virtual void Reset(void)
    {
       CFXAIAIPlugin::Reset();
+      m_quality_heads.Reset();
 
       m_step = 0;
       m_loss_ready = false;
@@ -795,6 +801,7 @@ protected:
       double ev_w = FXAI_Clamp(0.35 + (edge / denom), 0.15, 6.00);
       if(cls == (int)FXAI_LABEL_SKIP) ev_w *= 0.90;
       double w = FXAI_Clamp(ev_w, 0.10, 6.00);
+      UpdateNativeQualityHeads(x, w, h.lr, h.l2);
 
       UpdateWeighted(cls, x, h, w, move_points);
    }

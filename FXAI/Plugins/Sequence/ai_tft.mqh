@@ -3,8 +3,8 @@
 
 #include "..\..\API\plugin_base.mqh"
 
-#define FXAI_TFT_SEQ 64
-#define FXAI_TFT_TBPTT 24
+#define FXAI_TFT_SEQ 80
+#define FXAI_TFT_TBPTT 32
 #define FXAI_TFT_HEADS 3
 #define FXAI_TFT_D_HEAD (FXAI_AI_MLP_HIDDEN / FXAI_TFT_HEADS)
 #define FXAI_TFT_CLASS_COUNT 3

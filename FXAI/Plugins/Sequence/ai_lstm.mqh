@@ -3,13 +3,13 @@
 
 #include "..\..\API\plugin_base.mqh"
 
-#define FXAI_LSTM_TBPTT 24
+#define FXAI_LSTM_TBPTT 32
 #define FXAI_LSTM_CLASS_COUNT 3
 #define FXAI_LSTM_CAL_BINS 12
 #define FXAI_LSTM_DROP_RATE 0.08
 #define FXAI_LSTM_ZONEOUT 0.05
 #define FXAI_LSTM_LN_EPS 0.00001
-#define FXAI_LSTM_REPLAY 384
+#define FXAI_LSTM_REPLAY 512
 #define FXAI_LSTM_ECE_BINS 12
 
 class CFXAIAILSTM : public CFXAIAIPlugin

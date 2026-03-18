@@ -458,7 +458,7 @@ double FXAI_ScoreNormMethodCandidate(const int ai_idx,
    trial.EnsureInitialized(hp);
    int train_epochs = FXAI_WarmupEpochBudget(ai_idx, H, warmup_train_epochs);
    if(train_epochs < 1) train_epochs = 1;
-   if(train_epochs > 4) train_epochs = 4;
+   if(train_epochs > 6) train_epochs = 6;
    FXAI_TrainModelWindowPrepared(ai_idx,
                                  *trial,
                                  train_start,
@@ -1151,8 +1151,8 @@ void FXAI_WarmupSelectBanksForHorizon(const int H,
 
             int epoch_budget = FXAI_WarmupEpochBudget(ai_idx, H, warmup_train_epochs);
             if(epoch_budget < 1) epoch_budget = 1;
-            if(epoch_budget > 8) epoch_budget = 8;
-            int patience = (FXAI_IsSeriousNativeAI(ai_idx) ? 2 : 1);
+            if(epoch_budget > 10) epoch_budget = 10;
+            int patience = (FXAI_IsSeriousNativeAI(ai_idx) ? 3 : 1);
             int trades_fold = 0;
             double regime_scores_fold[];
             int regime_trades_fold[];
@@ -1573,6 +1573,16 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
                                  realized_edge > 0.0 &&
                                  samples[i].quality_score > 0.70 &&
                                  samples[i].time_to_hit_frac < 0.95);
+            double edge_ratio = realized_edge / MathMax(samples[i].min_move_points, 0.50);
+            double oof_score = (samples[i].label_class == (int)FXAI_LABEL_SKIP
+                                ? -0.25
+                                : samples[i].quality_score * edge_ratio);
+            FXAI_UpdateOOFHorizonPriors(regime_id,
+                                        H,
+                                        oof_score,
+                                        edge_ratio,
+                                        samples[i].quality_score,
+                                        trade_target);
             FXAI_TradeGateUpdate(regime_id, trade_target, feat, samples[i].sample_weight);
          }
       }
@@ -1653,6 +1663,7 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
    FXAIDataSnapshot snapshot;
    if(!FXAI_ExportDataSnapshot(symbol, AI_CommissionPerLotSide, AI_CostBufferPoints, snapshot))
       return false;
+   FXAI_ResetFeatureNormalizationState();
 
    MqlRates rates_m1[];
    MqlRates rates_m5[];
