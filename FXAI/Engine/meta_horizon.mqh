@@ -576,6 +576,8 @@ void FXAI_UpdateHorizonPolicyFromPending(const int current_signal_seq,
                                          const double cost_buffer_points,
                                          const double ev_threshold_points)
 {
+   FXAIExecutionProfile exec_profile;
+   FXAI_ResolveExecutionProfile(exec_profile);
    int head = g_hpolicy_pending_head;
    int tail = g_hpolicy_pending_tail;
    if(head == tail) return;
@@ -612,7 +614,10 @@ void FXAI_UpdateHorizonPolicyFromPending(const int current_signal_seq,
                idx_pred < ArraySize(low_arr))
             {
                double spread_i = FXAI_GetSpreadAtIndex(idx_pred, spread_m1, snapshot.spread_points);
-               double min_move_i = spread_i + commission_points + cost_buffer_points;
+               double min_move_i = FXAI_ExecutionEntryCostPoints(spread_i,
+                                                                 commission_points,
+                                                                 cost_buffer_points,
+                                                                 exec_profile);
                if(min_move_i < 0.0) min_move_i = 0.0;
                double move_points = 0.0;
                double mfe_points = 0.0;

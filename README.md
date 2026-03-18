@@ -61,6 +61,8 @@ You do not need to be an MQL5 programmer to use FXAI as an operator. For normal 
   - Labels and thresholds account for trading friction, improving realistic expectancy.
 - **Safer execution**
   - Built-in equity controls, skip class, and conservative calibration reduce overtrading.
+- **Execution parity controls**
+  - Shared execution profiles, risk-aware sizing, correlated exposure caps, and `OrderCheck` preflight keep live trading closer to Audit Lab and tester assumptions.
 - **Backtest efficiency**
   - Lightweight online updates and shared data pipeline support large optimization runs.
 - **Audit discipline**
@@ -157,6 +159,8 @@ Typical operator use cases:
   - Use the Audit Lab before a long optimization or before promoting a configuration
 - **Validate execution realism**
   - Re-run audits with spread, slippage, and fill penalties that match your broker conditions
+- **Deploy with stricter live controls**
+  - Configure execution profile, position sizing mode, and portfolio exposure caps before moving from audit into live evaluation
 - **Create a baseline**
   - Save a known-good audit result so future changes can be compared against it
 - **Reject weak changes early**

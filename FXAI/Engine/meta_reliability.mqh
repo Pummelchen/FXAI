@@ -151,6 +151,9 @@ void FXAI_UpdateReliabilityFromPending(const int ai_idx,
    if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT) return;
    if(current_signal_seq < 0) return;
 
+   FXAIExecutionProfile exec_profile;
+   FXAI_ResolveExecutionProfile(exec_profile);
+
    int head = g_rel_pending_head[ai_idx];
    int tail = g_rel_pending_tail[ai_idx];
    if(head == tail) return;
@@ -204,7 +207,10 @@ void FXAI_UpdateReliabilityFromPending(const int ai_idx,
                idx_future >= 0 && idx_future < ArraySize(close_arr))
             {
                double spread_i = FXAI_GetSpreadAtIndex(idx_pred, spread_m1, snapshot.spread_points);
-               double min_move_i = spread_i + commission_points + cost_buffer_points;
+               double min_move_i = FXAI_ExecutionEntryCostPoints(spread_i,
+                                                                 commission_points,
+                                                                 cost_buffer_points,
+                                                                 exec_profile);
                if(min_move_i < 0.0) min_move_i = 0.0;
 
                double move_points = 0.0;

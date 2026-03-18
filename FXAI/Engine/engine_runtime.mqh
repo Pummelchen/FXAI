@@ -4,6 +4,30 @@
 int SpecialDirectionAI(const string symbol)
 {
    g_ai_last_reason = "start";
+   double cached_expected_move_points = g_ai_last_expected_move_points;
+   double cached_trade_edge_points = g_ai_last_trade_edge_points;
+   double cached_confidence = g_ai_last_confidence;
+   double cached_reliability = g_ai_last_reliability;
+   double cached_path_risk = g_ai_last_path_risk;
+   double cached_fill_risk = g_ai_last_fill_risk;
+   double cached_trade_gate = g_ai_last_trade_gate;
+   double cached_context_quality = g_ai_last_context_quality;
+   double cached_context_strength = g_ai_last_context_strength;
+   double cached_min_move_points = g_ai_last_min_move_points;
+   int cached_horizon_minutes = g_ai_last_horizon_minutes;
+   int cached_regime_id = g_ai_last_regime_id;
+   g_ai_last_expected_move_points = 0.0;
+   g_ai_last_trade_edge_points = 0.0;
+   g_ai_last_confidence = 0.0;
+   g_ai_last_reliability = 0.0;
+   g_ai_last_path_risk = 1.0;
+   g_ai_last_fill_risk = 1.0;
+   g_ai_last_trade_gate = 0.0;
+   g_ai_last_context_quality = 0.0;
+   g_ai_last_context_strength = 0.0;
+   g_ai_last_min_move_points = 0.0;
+   g_ai_last_horizon_minutes = 0;
+   g_ai_last_regime_id = 0;
    if(!g_plugins_ready)
    {
       g_ai_last_reason = "plugins_not_ready";
@@ -67,6 +91,18 @@ int SpecialDirectionAI(const string symbol)
    int decisionKey = (ensembleMode == 1 ? (100000 + pctKey) : aiType);
    if(g_ai_last_signal_bar == signal_bar && g_ai_last_signal_key == decisionKey)
    {
+      g_ai_last_expected_move_points = cached_expected_move_points;
+      g_ai_last_trade_edge_points = cached_trade_edge_points;
+      g_ai_last_confidence = cached_confidence;
+      g_ai_last_reliability = cached_reliability;
+      g_ai_last_path_risk = cached_path_risk;
+      g_ai_last_fill_risk = cached_fill_risk;
+      g_ai_last_trade_gate = cached_trade_gate;
+      g_ai_last_context_quality = cached_context_quality;
+      g_ai_last_context_strength = cached_context_strength;
+      g_ai_last_min_move_points = cached_min_move_points;
+      g_ai_last_horizon_minutes = cached_horizon_minutes;
+      g_ai_last_regime_id = cached_regime_id;
       g_ai_last_reason = "signal_cache_hit";
       return g_ai_last_signal;
    }
@@ -269,11 +305,22 @@ int SpecialDirectionAI(const string symbol)
                                            ctx_up_arr,
                                            ctx_extra_arr);
 
+   FXAIExecutionProfile exec_profile;
+   FXAI_ResolveExecutionProfile(exec_profile);
    double cost_buffer_points = (AI_CostBufferPoints < 0.0 ? 0.0 : AI_CostBufferPoints);
    double commission_points = snapshot.commission_points;
+   double profile_commission_points = FXAI_GetCommissionPointsRoundTripPerLot(symbol,
+                                                                              exec_profile.commission_per_lot_side);
+   if(profile_commission_points > commission_points)
+      commission_points = profile_commission_points;
+   snapshot.commission_points = commission_points;
    double spread_pred = FXAI_GetSpreadAtIndex(0, spread_m1, snapshot.spread_points);
-   double min_move_pred = spread_pred + commission_points + cost_buffer_points;
+   double min_move_pred = FXAI_ExecutionEntryCostPoints(spread_pred,
+                                                        commission_points,
+                                                        cost_buffer_points,
+                                                        exec_profile);
    if(min_move_pred < 0.0) min_move_pred = 0.0;
+   snapshot.min_move_points = min_move_pred;
    double vol_hint = MathAbs(FXAI_SafeReturn(close_arr, 0, 1));
    int regime_hint = FXAI_GetRegimeId(snapshot.bar_time, spread_pred, vol_hint);
    int ai_hint = (ensembleMode ? -1 : aiType);
@@ -290,6 +337,9 @@ int SpecialDirectionAI(const string symbol)
                                        0.10 * ctx_coverage,
                                        -1.0,
                                        2.0);
+   g_ai_last_context_strength = context_strength;
+   g_ai_last_context_quality = context_quality;
+   g_ai_last_min_move_points = min_move_pred;
    double model_reliability_hint = 0.50;
    if(ai_hint >= 0 && ai_hint < FXAI_AI_COUNT)
       model_reliability_hint = FXAI_Clamp(g_model_reliability[ai_hint], 0.0, 1.0);
@@ -382,6 +432,8 @@ int SpecialDirectionAI(const string symbol)
    double vol_proxy_abs = MathAbs(feat_pred[5]);
    FXAI_UpdateRegimeEMAs(spread_pred, vol_proxy_abs);
    int regime_id = FXAI_GetRegimeId(snapshot.bar_time, spread_pred, vol_proxy_abs);
+   g_ai_last_horizon_minutes = H;
+   g_ai_last_regime_id = regime_id;
    double hpolicy_feat[FXAI_HPOL_FEATS];
    FXAI_BuildHorizonPolicyFeatures(H,
                                    base_h,
@@ -902,6 +954,28 @@ int SpecialDirectionAI(const string symbol)
 
       if(ensembleMode == 0)
       {
+         double buy_ev = ((2.0 * class_probs_pred[(int)FXAI_LABEL_BUY]) - 1.0) * expected_move - min_move_pred;
+         double sell_ev = ((2.0 * class_probs_pred[(int)FXAI_LABEL_SELL]) - 1.0) * expected_move - min_move_pred;
+         double single_trade_gate = FXAI_Clamp(0.35 +
+                                               0.25 * FXAI_Clamp(pred.confidence, 0.0, 1.0) +
+                                               0.20 * FXAI_Clamp(pred.reliability, 0.0, 1.0) +
+                                               0.10 * (1.0 - FXAI_Clamp(pred.path_risk, 0.0, 1.0)) +
+                                               0.10 * (1.0 - FXAI_Clamp(pred.fill_risk, 0.0, 1.0)) +
+                                               0.08 * FXAI_Clamp(context_quality, 0.0, 1.5) +
+                                               0.07 * FXAI_Clamp(context_strength / 2.0, 0.0, 1.0) -
+                                               0.10 * class_probs_pred[(int)FXAI_LABEL_SKIP],
+                                               0.0,
+                                               1.0);
+         double chosen_edge = MathMax(buy_ev, sell_ev);
+         if(signal == 1) chosen_edge = buy_ev;
+         else if(signal == 0) chosen_edge = sell_ev;
+         g_ai_last_expected_move_points = MathMax(expected_move, 0.0);
+         g_ai_last_trade_edge_points = chosen_edge;
+         g_ai_last_confidence = FXAI_Clamp(pred.confidence, 0.0, 1.0);
+         g_ai_last_reliability = FXAI_Clamp(pred.reliability, 0.0, 1.0);
+         g_ai_last_path_risk = FXAI_Clamp(pred.path_risk, 0.0, 1.0);
+         g_ai_last_fill_risk = FXAI_Clamp(pred.fill_risk, 0.0, 1.0);
+         g_ai_last_trade_gate = single_trade_gate;
          singleSignal = signal;
       }
       else
@@ -1040,6 +1114,13 @@ int SpecialDirectionAI(const string symbol)
          double stack_move = MathMax(avg_expected, 0.0);
          double stack_buy_ev = ((2.0 * ensemble_probs[(int)FXAI_LABEL_BUY]) - 1.0) * stack_move - min_move_pred;
          double stack_sell_ev = ((2.0 * ensemble_probs[(int)FXAI_LABEL_SELL]) - 1.0) * stack_move - min_move_pred;
+         double chosen_edge = MathMax(stack_buy_ev, stack_sell_ev);
+         g_ai_last_expected_move_points = stack_move;
+         g_ai_last_confidence = FXAI_Clamp(avg_conf, 0.0, 1.0);
+         g_ai_last_reliability = FXAI_Clamp(avg_rel, 0.0, 1.0);
+         g_ai_last_path_risk = FXAI_Clamp(avg_path_risk, 0.0, 1.0);
+         g_ai_last_fill_risk = FXAI_Clamp(avg_fill_risk, 0.0, 1.0);
+         g_ai_last_trade_gate = trade_gate;
 
          if(trade_gate < trade_gate_thr)
             decision = -1;
@@ -1063,6 +1144,10 @@ int SpecialDirectionAI(const string symbol)
             else if(sellPct >= agreePct && avg_sell_ev >= evThresholdPoints && avg_sell_ev > avg_buy_ev)
                decision = 0;
          }
+
+         if(decision == 1) chosen_edge = stack_buy_ev;
+         else if(decision == 0) chosen_edge = stack_sell_ev;
+         g_ai_last_trade_edge_points = chosen_edge;
       }
    }
 

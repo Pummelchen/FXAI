@@ -166,6 +166,9 @@ void FXAI_UpdateConformalFromPending(const int ai_idx,
    if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT) return;
    if(current_signal_seq < 0) return;
 
+   FXAIExecutionProfile exec_profile;
+   FXAI_ResolveExecutionProfile(exec_profile);
+
    int head = g_conf_pending_head[ai_idx];
    int tail = g_conf_pending_tail[ai_idx];
    if(head == tail) return;
@@ -219,7 +222,10 @@ void FXAI_UpdateConformalFromPending(const int ai_idx,
                idx_pred < ArraySize(low_arr))
             {
                double spread_i = FXAI_GetSpreadAtIndex(idx_pred, spread_m1, snapshot.spread_points);
-               double min_move_i = spread_i + commission_points + cost_buffer_points;
+               double min_move_i = FXAI_ExecutionEntryCostPoints(spread_i,
+                                                                 commission_points,
+                                                                 cost_buffer_points,
+                                                                 exec_profile);
                if(min_move_i < 0.0) min_move_i = 0.0;
 
                double move_points = 0.0;
@@ -259,7 +265,7 @@ void FXAI_UpdateConformalFromPending(const int ai_idx,
                                                             path_flags);
                double fill_actual = FXAI_FillRiskFromTargets(spread_stress,
                                                              min_move_i,
-                                                             commission_points + cost_buffer_points);
+                                                             MathMax(min_move_i - spread_i, 0.0));
                double path_score = 0.70 * MathAbs(path_actual - path_pred) +
                                    0.30 * MathAbs(fill_actual - path_pred);
                FXAI_ConformalPushScore(ai_idx,

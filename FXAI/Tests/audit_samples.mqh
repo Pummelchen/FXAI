@@ -49,11 +49,12 @@ bool FXAI_AuditBuildSample(const int i,
    snapshot.point = point;
    snapshot.spread_points = FXAI_GetSpreadAtIndex(i, spread_arr, 1.0);
    snapshot.commission_points = FXAI_GetCommissionPointsRoundTripPerLot(snapshot.symbol, FXAI_AuditGetCommissionPerLotSide());
-   snapshot.min_move_points = snapshot.spread_points +
-                              snapshot.commission_points +
-                              MathMax(FXAI_AuditGetCostBufferPoints(), 0.0) +
-                              MathMax(FXAI_AuditGetSlippagePoints(), 0.0) +
-                              MathMax(FXAI_AuditGetFillPenaltyPoints(), 0.0);
+   FXAIExecutionProfile exec_profile;
+   FXAI_ResolveExecutionProfile(exec_profile);
+   snapshot.min_move_points = FXAI_ExecutionEntryCostPoints(snapshot.spread_points,
+                                                            snapshot.commission_points,
+                                                            FXAI_AuditGetCostBufferPoints(),
+                                                            exec_profile);
    if(snapshot.min_move_points < 0.0) snapshot.min_move_points = 0.0;
 
    double feat[FXAI_AI_FEATURES];

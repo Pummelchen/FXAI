@@ -213,18 +213,17 @@ double FXAI_RealizedNetPointsForSignal(const int signal,
 {
    if(signal != 0 && signal != 1) return 0.0;
 
-   double stress = FXAI_Clamp(spread_stress, 0.0, 4.0);
-   double slippage_points = 0.08 +
-                            (0.04 * MathMax(roundtrip_cost_points, 0.0)) +
-                            (0.18 * stress) +
-                            (0.02 * MathSqrt((double)MathMax(horizon_minutes, 1)));
-   if((path_flags & FXAI_PATHFLAG_DUAL_HIT) != 0)
-      slippage_points += 0.12 * MathMax(roundtrip_cost_points, 0.0) + 0.18 * stress;
-   if((path_flags & FXAI_PATHFLAG_SLOW_HIT) != 0)
-      slippage_points += 0.10 * stress;
-   if((path_flags & FXAI_PATHFLAG_SPREAD_STRESS) != 0)
-      slippage_points += 0.25 + 0.12 * stress;
-   if(slippage_points > 8.0) slippage_points = 8.0;
+   FXAIExecutionProfile exec_profile;
+   FXAI_ResolveExecutionProfile(exec_profile);
+   double slippage_points = FXAI_ExecutionSlippagePoints(exec_profile,
+                                                         roundtrip_cost_points,
+                                                         horizon_minutes,
+                                                         spread_stress,
+                                                         path_flags);
+   double fill_penalty_points = FXAI_ExecutionFillPenaltyPoints(exec_profile,
+                                                                roundtrip_cost_points,
+                                                                spread_stress,
+                                                                path_flags);
 
    double kill_penalty = 0.0;
    if(TradeKiller > 0 && horizon_minutes > TradeKiller)
@@ -234,7 +233,7 @@ double FXAI_RealizedNetPointsForSignal(const int signal,
    }
 
    double gross = (signal == 1 ? realized_move_points : -realized_move_points);
-   return gross - MathMax(roundtrip_cost_points, 0.0) - slippage_points - kill_penalty;
+   return gross - MathMax(roundtrip_cost_points, 0.0) - slippage_points - fill_penalty_points - kill_penalty;
 }
 
 void FXAI_ResetPreparedSample(FXAIPreparedSample &sample)
@@ -312,7 +311,12 @@ bool FXAI_PrepareTrainingSample(const int i,
    double time_to_hit_frac = 1.0;
    int path_flags = 0;
    double spread_i = FXAI_GetSpreadAtIndex(i, spread_m1, snapshot.spread_points);
-   double min_move_i = spread_i + commission_points + cost_buffer_points;
+   FXAIExecutionProfile exec_profile;
+   FXAI_ResolveExecutionProfile(exec_profile);
+   double min_move_i = FXAI_ExecutionEntryCostPoints(spread_i,
+                                                     commission_points,
+                                                     cost_buffer_points,
+                                                     exec_profile);
    if(min_move_i < 0.0) min_move_i = 0.0;
 
    int label_class = (int)FXAI_LABEL_SKIP;

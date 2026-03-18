@@ -43,9 +43,18 @@ bool FXAI_ExportDataSnapshot(const string symbol,
 
    snapshot.spread_points = FXAI_GetCurrentSpreadPoints(symbol);
    snapshot.commission_points = FXAI_GetCommissionPointsRoundTripPerLot(symbol, commission_per_lot_side);
+   FXAIExecutionProfile exec_profile;
+   FXAI_ResolveExecutionProfile(exec_profile);
+   double profile_commission_points = FXAI_GetCommissionPointsRoundTripPerLot(symbol,
+                                                                              exec_profile.commission_per_lot_side);
+   if(profile_commission_points > snapshot.commission_points)
+      snapshot.commission_points = profile_commission_points;
 
    double buffer = (buffer_points < 0.0 ? 0.0 : buffer_points);
-   snapshot.min_move_points = snapshot.spread_points + snapshot.commission_points + buffer;
+   snapshot.min_move_points = FXAI_ExecutionEntryCostPoints(snapshot.spread_points,
+                                                            snapshot.commission_points,
+                                                            buffer,
+                                                            exec_profile);
    if(snapshot.min_move_points < 0.0) snapshot.min_move_points = 0.0;
 
    return true;

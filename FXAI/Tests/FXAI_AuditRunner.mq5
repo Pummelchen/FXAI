@@ -72,6 +72,21 @@ double FXAI_AuditGetFillPenaltyPoints(void)
    return Audit_FillPenaltyPoints;
 }
 
+void FXAI_ResolveExecutionProfile(FXAIExecutionProfile &profile)
+{
+   FXAI_ClearExecutionProfile(profile);
+   profile.profile_id = (int)FXAI_EXEC_DEFAULT;
+   profile.commission_per_lot_side = MathMax(Audit_CommissionPerLotSide, 0.0);
+   profile.cost_buffer_points = 0.0;
+   profile.slippage_points = MathMax(Audit_SlippagePoints, 0.0);
+   profile.fill_penalty_points = MathMax(Audit_FillPenaltyPoints, 0.0);
+   profile.allowed_deviation_points = 2.0 +
+                                      4.0 * FXAI_Clamp(profile.slippage_points +
+                                                       profile.fill_penalty_points,
+                                                       0.0,
+                                                       2.0);
+}
+
 int FXAI_AuditGetWalkForwardTrainBars(void)
 {
    return Audit_WalkForwardTrainBars;

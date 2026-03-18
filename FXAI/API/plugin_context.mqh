@@ -12,8 +12,12 @@
    double m_iso_cnt[12];
    bool   m_shared_adapter_ready;
    int    m_shared_adapter_steps;
-   double m_shared_cls_w[3][5];
-   double m_shared_move_w[5];
+   double m_shared_cls_w[3][FXAI_SHARED_TRANSFER_FEATURES];
+   double m_shared_move_w[FXAI_SHARED_TRANSFER_FEATURES];
+   double m_transfer_slot_obs[FXAI_CONTEXT_TOP_SYMBOLS];
+   double m_transfer_slot_align[FXAI_CONTEXT_TOP_SYMBOLS];
+   double m_transfer_slot_lead[FXAI_CONTEXT_TOP_SYMBOLS];
+   double m_transfer_slot_move[FXAI_CONTEXT_TOP_SYMBOLS];
 
    // V4 context payload (set by Train/Predict).
    bool     m_ctx_time_ready;
@@ -193,21 +197,148 @@
    void BuildSharedAdapterInput(const double &x[],
                                 double &out[]) const
    {
-      ArrayResize(out, 5);
+      ArrayResize(out, FXAI_SHARED_TRANSFER_FEATURES);
       out[0] = 1.0;
       out[1] = FXAI_GetInputFeature(x, 62);
       out[2] = FXAI_GetInputFeature(x, 63);
       out[3] = FXAI_GetInputFeature(x, 64);
       out[4] = FXAI_Clamp(0.5 + 0.5 * FXAI_GetInputFeature(x, 65), 0.0, 1.0);
+      double ret_mix = 0.0;
+      double lag_mix = 0.0;
+      double rel_mix = 0.0;
+      double corr_mix = 0.0;
+      double weight_total = 0.0;
+      for(int slot=0; slot<FXAI_CONTEXT_TOP_SYMBOLS; slot++)
+      {
+         int base = 50 + slot * 4;
+         double ctx_ret = FXAI_GetInputFeature(x, base + 0);
+         double ctx_lag = FXAI_GetInputFeature(x, base + 1);
+         double ctx_rel = FXAI_GetInputFeature(x, base + 2);
+         double ctx_corr = FXAI_GetInputFeature(x, base + 3);
+         double w = FXAI_Clamp((0.30 + 0.70 * MathAbs(ctx_corr)) *
+                               (0.35 + 0.65 * out[4]) *
+                               (0.35 + 0.25 * MathAbs(ctx_ret) + 0.25 * MathAbs(ctx_lag) + 0.15 * MathAbs(ctx_rel)),
+                               0.0,
+                               3.0);
+         if(w <= 1e-6)
+            continue;
+         ret_mix += w * ctx_ret;
+         lag_mix += w * ctx_lag;
+         rel_mix += w * ctx_rel;
+         corr_mix += w * ctx_corr;
+         weight_total += w;
+      }
+      if(weight_total > 1e-6)
+      {
+         out[5] = ret_mix / weight_total;
+         out[6] = lag_mix / weight_total;
+         out[7] = rel_mix / weight_total;
+         out[8] = corr_mix / weight_total;
+      }
+      else
+      {
+         out[5] = 0.0;
+         out[6] = 0.0;
+         out[7] = 0.0;
+         out[8] = 0.0;
+      }
    }
 
    bool HasSharedAdapterSignal(const double &a[]) const
    {
-      if(ArraySize(a) < 5) return false;
+      if(ArraySize(a) < FXAI_SHARED_TRANSFER_FEATURES) return false;
       double mag = 0.0;
-      for(int i=1; i<5; i++)
+      for(int i=1; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
          mag += MathAbs(a[i]);
       return (mag > 1e-6);
+   }
+
+   double BuildTransferSlotSignal(const double &x[],
+                                  const int slot) const
+   {
+      if(slot < 0 || slot >= FXAI_CONTEXT_TOP_SYMBOLS)
+         return 0.0;
+      int base = 50 + slot * 4;
+      double ctx_ret = FXAI_GetInputFeature(x, base + 0);
+      double ctx_lag = FXAI_GetInputFeature(x, base + 1);
+      double ctx_rel = FXAI_GetInputFeature(x, base + 2);
+      double signal = 0.30 * ctx_ret + 0.50 * ctx_lag + 0.20 * ctx_rel;
+      return FXAI_ClipSym(signal, 4.0);
+   }
+
+   void BlendTransferSlotPriors(const double &x[],
+                                double &probs[],
+                                double &move_scale_mult,
+                                double &reliability_boost) const
+   {
+      double coverage = FXAI_Clamp(0.5 + 0.5 * FXAI_GetInputFeature(x, 65), 0.0, 1.0);
+      double domain_buy = 0.0;
+      double domain_sell = 0.0;
+      double domain_skip = 0.0;
+      double domain_move = 0.0;
+      double domain_rel = 0.0;
+      double domain_weight = 0.0;
+      for(int slot=0; slot<FXAI_CONTEXT_TOP_SYMBOLS; slot++)
+      {
+         if(m_transfer_slot_obs[slot] <= 1e-6)
+            continue;
+
+         int base = 50 + slot * 4;
+         double ctx_corr = FXAI_GetInputFeature(x, base + 3);
+         double signal = BuildTransferSlotSignal(x, slot);
+         double obs_trust = FXAI_Clamp(m_transfer_slot_obs[slot] / 24.0, 0.0, 1.0);
+         double w = FXAI_Clamp(obs_trust *
+                               (0.25 + 0.75 * MathAbs(ctx_corr)) *
+                               (0.20 + 0.80 * coverage) *
+                               (0.20 + 0.80 * MathAbs(signal)),
+                               0.0,
+                               2.0);
+         if(w <= 1e-6)
+            continue;
+
+         double align = FXAI_Clamp(m_transfer_slot_align[slot], -1.0, 1.0);
+         double lead = FXAI_Clamp(m_transfer_slot_lead[slot], 0.0, 1.0);
+         double move_scale = FXAI_Clamp(m_transfer_slot_move[slot], 0.50, 2.50);
+         double buy_prior = 0.10;
+         double sell_prior = 0.10;
+         double skip_prior = FXAI_Clamp(0.55 - 0.10 * MathAbs(signal), 0.05, 0.80);
+         if(signal > 0.0)
+         {
+            buy_prior = FXAI_Clamp(0.45 + 0.22 * align + 0.15 * lead + 0.08 * MathAbs(signal), 0.05, 0.95);
+            sell_prior = FXAI_Clamp(0.20 - 0.12 * align, 0.02, 0.60);
+         }
+         else if(signal < 0.0)
+         {
+            sell_prior = FXAI_Clamp(0.45 - 0.22 * align + 0.15 * lead + 0.08 * MathAbs(signal), 0.05, 0.95);
+            buy_prior = FXAI_Clamp(0.20 + 0.12 * align, 0.02, 0.60);
+         }
+
+         double ps = buy_prior + sell_prior + skip_prior;
+         if(ps <= 0.0) ps = 1.0;
+         buy_prior /= ps;
+         sell_prior /= ps;
+         skip_prior /= ps;
+
+         domain_buy += w * buy_prior;
+         domain_sell += w * sell_prior;
+         domain_skip += w * skip_prior;
+         domain_move += w * move_scale;
+         domain_rel += w * (0.50 + 0.25 * MathAbs(align) + 0.25 * lead);
+         domain_weight += w;
+      }
+
+      if(domain_weight <= 1e-6)
+      {
+         move_scale_mult = 1.0;
+         reliability_boost = 0.0;
+         return;
+      }
+
+      probs[0] = domain_sell / domain_weight;
+      probs[1] = domain_buy / domain_weight;
+      probs[2] = domain_skip / domain_weight;
+      move_scale_mult = FXAI_Clamp(domain_move / domain_weight, 0.70, 1.50);
+      reliability_boost = FXAI_Clamp((domain_rel / domain_weight) - 0.50, -0.15, 0.20);
    }
 
    void ApplySharedContextAdapter(FXAIAIModelOutputV4 &out,
@@ -219,7 +350,7 @@
          return;
 
       double trust = FXAI_Clamp((double)m_shared_adapter_steps / 96.0, 0.0, 1.0);
-      trust *= FXAI_Clamp(0.18 + 0.12 * a[4], 0.0, 0.30);
+      trust *= FXAI_Clamp(0.16 + 0.10 * a[4] + 0.04 * MathAbs(a[8]), 0.0, 0.34);
       if(trust <= 1e-6)
          return;
 
@@ -228,7 +359,7 @@
       for(int c=0; c<3; c++)
       {
          double z = 0.0;
-         for(int i=0; i<5; i++)
+         for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
             z += m_shared_cls_w[c][i] * a[i];
          logits[c] = z;
          if(z > mx) mx = z;
@@ -245,14 +376,31 @@
       for(int c=0; c<3; c++)
          probs[c] /= den;
 
+      double transfer_probs[3];
+      transfer_probs[0] = 0.0;
+      transfer_probs[1] = 0.0;
+      transfer_probs[2] = 0.0;
+      double transfer_move_mult = 1.0;
+      double transfer_rel_boost = 0.0;
+      BlendTransferSlotPriors(x, transfer_probs, transfer_move_mult, transfer_rel_boost);
+      double transfer_mass = transfer_probs[0] + transfer_probs[1] + transfer_probs[2];
+      if(transfer_mass > 0.0)
+      {
+         for(int c=0; c<3; c++)
+            transfer_probs[c] /= transfer_mass;
+         double transfer_trust = FXAI_Clamp(0.10 + 0.35 * a[4], 0.0, 0.28);
+         for(int c=0; c<3; c++)
+            probs[c] = FXAI_Clamp((1.0 - transfer_trust) * probs[c] + transfer_trust * transfer_probs[c], 0.0005, 0.9990);
+      }
+
       for(int c=0; c<3; c++)
          out.class_probs[c] = FXAI_Clamp((1.0 - trust) * out.class_probs[c] + trust * probs[c], 0.0005, 0.9990);
       NormalizeClassDistribution(out.class_probs);
 
       double move_adj = 0.0;
-      for(int i=0; i<5; i++)
+      for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
          move_adj += m_shared_move_w[i] * a[i];
-      double scale = FXAI_Clamp(1.0 + 0.16 * trust * FXAI_ClipSym(move_adj, 1.5), 0.75, 1.35);
+      double scale = FXAI_Clamp((1.0 + 0.16 * trust * FXAI_ClipSym(move_adj, 1.5)) * transfer_move_mult, 0.75, 1.45);
       out.move_mean_points = MathMax(0.0, out.move_mean_points * scale);
       out.move_q25_points = MathMax(0.0, out.move_q25_points * scale);
       out.move_q50_points = MathMax(out.move_q25_points, out.move_q50_points * scale);
@@ -260,9 +408,53 @@
       out.confidence = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY],
                                           out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
       out.reliability = FXAI_Clamp(out.reliability * (1.0 - 0.12 * trust) +
-                                   trust * FXAI_Clamp(0.50 + 0.20 * a[2] + 0.15 * a[4], 0.0, 1.0),
+                                   trust * FXAI_Clamp(0.50 + 0.18 * a[2] + 0.12 * a[4] + transfer_rel_boost, 0.0, 1.0),
                                    0.0,
                                    1.0);
+   }
+
+   void UpdateCrossSymbolTransferBank(const double &x[],
+                                      const double move_points,
+                                      const double sample_w)
+   {
+      double move_sign = FXAI_Sign(move_points);
+      if(MathAbs(move_sign) <= 1e-9)
+         return;
+
+      double coverage = FXAI_Clamp(0.5 + 0.5 * FXAI_GetInputFeature(x, 65), 0.0, 1.0);
+      double move_scale = MathMax(MathAbs(move_points), MathMax(ResolveMinMovePoints(), 0.10));
+      for(int slot=0; slot<FXAI_CONTEXT_TOP_SYMBOLS; slot++)
+      {
+         int base = 50 + slot * 4;
+         double ctx_corr = FXAI_GetInputFeature(x, base + 3);
+         double signal = BuildTransferSlotSignal(x, slot);
+         if(MathAbs(signal) <= 1e-6)
+            continue;
+
+         double trust = FXAI_Clamp((0.30 + 0.70 * MathAbs(ctx_corr)) *
+                                   (0.20 + 0.80 * coverage) *
+                                   FXAI_Clamp(sample_w, 0.25, 4.0),
+                                   0.02,
+                                   2.50);
+         double alpha = FXAI_Clamp(0.05 * trust / MathSqrt(1.0 + 0.02 * m_transfer_slot_obs[slot]), 0.01, 0.20);
+         double align_target = FXAI_Clamp(FXAI_Sign(signal) * move_sign, -1.0, 1.0);
+         double lead_target = FXAI_Clamp(0.5 + 0.5 * FXAI_Sign(FXAI_GetInputFeature(x, base + 1)) * move_sign, 0.0, 1.0);
+         double move_target = FXAI_Clamp(move_scale / MathMax(MathAbs(signal), 0.10), 0.50, 2.50);
+
+         if(m_transfer_slot_obs[slot] <= 1e-6)
+         {
+            m_transfer_slot_align[slot] = align_target;
+            m_transfer_slot_lead[slot] = lead_target;
+            m_transfer_slot_move[slot] = move_target;
+         }
+         else
+         {
+            m_transfer_slot_align[slot] = FXAI_Clamp((1.0 - alpha) * m_transfer_slot_align[slot] + alpha * align_target, -1.0, 1.0);
+            m_transfer_slot_lead[slot] = FXAI_Clamp((1.0 - alpha) * m_transfer_slot_lead[slot] + alpha * lead_target, 0.0, 1.0);
+            m_transfer_slot_move[slot] = FXAI_Clamp((1.0 - alpha) * m_transfer_slot_move[slot] + alpha * move_target, 0.50, 2.50);
+         }
+         m_transfer_slot_obs[slot] = MathMin(m_transfer_slot_obs[slot] + trust, 5000.0);
+      }
    }
 
    void UpdateSharedContextAdapter(const double &x[],
@@ -282,7 +474,7 @@
       for(int c=0; c<3; c++)
       {
          double z = 0.0;
-         for(int i=0; i<5; i++)
+         for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
             z += m_shared_cls_w[c][i] * a[i];
          logits[c] = z;
          if(z > mx) mx = z;
@@ -304,16 +496,16 @@
       {
          double target = (c == cls ? 1.0 : 0.0);
          double err = target - probs[c];
-         for(int i=0; i<5; i++)
+         for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
             m_shared_cls_w[c][i] = FXAI_ClipSym(m_shared_cls_w[c][i] + step * err * a[i], 3.0);
       }
 
       double move_pred = 0.0;
-      for(int i=0; i<5; i++)
+      for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
          move_pred += m_shared_move_w[i] * a[i];
       double move_target = FXAI_Clamp(MathLog(1.0 + MathAbs(move_points)), 0.0, 4.0);
       double move_err = FXAI_ClipSym(move_target - move_pred, 3.0);
-      for(int i=0; i<5; i++)
+      for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
          m_shared_move_w[i] = FXAI_ClipSym(m_shared_move_w[i] + 0.80 * step * move_err * a[i], 3.0);
 
       m_shared_adapter_steps++;
@@ -381,10 +573,17 @@
       m_shared_adapter_ready = false;
       m_shared_adapter_steps = 0;
       for(int c=0; c<3; c++)
-         for(int i=0; i<5; i++)
+         for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
             m_shared_cls_w[c][i] = 0.0;
-      for(int i=0; i<5; i++)
+      for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
          m_shared_move_w[i] = 0.0;
+      for(int slot=0; slot<FXAI_CONTEXT_TOP_SYMBOLS; slot++)
+      {
+         m_transfer_slot_obs[slot] = 0.0;
+         m_transfer_slot_align[slot] = 0.0;
+         m_transfer_slot_lead[slot] = 0.5;
+         m_transfer_slot_move[slot] = 1.0;
+      }
 
       m_ctx_time_ready = false;
       m_ctx_time = 0;

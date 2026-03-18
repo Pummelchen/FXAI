@@ -22,6 +22,7 @@
 #define FXAI_CONTEXT_MICRO_OFFSET (FXAI_CONTEXT_SHARED_OFFSET + FXAI_CONTEXT_SHARED_ADAPTER_FEATS)
 #define FXAI_CONTEXT_EXTRA_FEATS (FXAI_CONTEXT_SHARED_OFFSET + FXAI_CONTEXT_SHARED_ADAPTER_FEATS + FXAI_CONTEXT_MICROSTRUCTURE_FEATS)
 #define FXAI_CONTEXT_DYNAMIC_POOL 12
+#define FXAI_SHARED_TRANSFER_FEATURES 9
 #define FXAI_API_VERSION_V4 4
 #define FXAI_MAX_SEQUENCE_BARS 96
 
@@ -102,6 +103,15 @@ enum ENUM_FXAI_SEQUENCE_STYLE
    FXAI_SEQ_STYLE_TRANSFORMER,
    FXAI_SEQ_STYLE_STATE_SPACE,
    FXAI_SEQ_STYLE_WORLD
+};
+
+enum ENUM_FXAI_EXECUTION_PROFILE
+{
+   FXAI_EXEC_DEFAULT = 0,
+   FXAI_EXEC_TIGHT_FX,
+   FXAI_EXEC_PRIME_ECN,
+   FXAI_EXEC_RETAIL_FX,
+   FXAI_EXEC_STRESS
 };
 
 enum ENUM_FXAI_PLUGIN_CAPABILITY
@@ -289,6 +299,24 @@ struct FXAIAIPredictionV4
    double reliability;
 };
 
+struct FXAIExecutionProfile
+{
+   int    profile_id;
+   double commission_per_lot_side;
+   double cost_buffer_points;
+   double slippage_points;
+   double fill_penalty_points;
+   double slippage_cost_weight;
+   double slippage_stress_weight;
+   double slippage_horizon_weight;
+   double dual_hit_penalty;
+   double slow_hit_penalty;
+   double spread_shock_penalty;
+   double partial_fill_penalty;
+   double latency_penalty_points;
+   double allowed_deviation_points;
+};
+
 struct FXAIAIModelOutputV4
 {
    double class_probs[3];
@@ -330,6 +358,7 @@ void FXAI_UpdateConformalFromPending(const int ai_idx,
                                      const double commission_points,
                                      const double cost_buffer_points,
                                      const double ev_threshold_points);
+void FXAI_ResolveExecutionProfile(FXAIExecutionProfile &profile);
 int FXAI_BuildTripleBarrierLabelEx(const int i,
                                    const int H,
                                    const double roundtrip_cost_points,
@@ -512,6 +541,142 @@ double FXAI_FillRiskFromTargets(const double spread_stress_points,
 {
    double denom = MathMax(min_move_points + MathMax(cost_points, 0.0), 0.25);
    return FXAI_Clamp(MathAbs(spread_stress_points) / denom, 0.0, 1.0);
+}
+
+void FXAI_ClearExecutionProfile(FXAIExecutionProfile &profile)
+{
+   profile.profile_id = (int)FXAI_EXEC_DEFAULT;
+   profile.commission_per_lot_side = 0.0;
+   profile.cost_buffer_points = 2.0;
+   profile.slippage_points = 0.0;
+   profile.fill_penalty_points = 0.0;
+   profile.slippage_cost_weight = 0.04;
+   profile.slippage_stress_weight = 0.18;
+   profile.slippage_horizon_weight = 0.02;
+   profile.dual_hit_penalty = 0.12;
+   profile.slow_hit_penalty = 0.10;
+   profile.spread_shock_penalty = 0.25;
+   profile.partial_fill_penalty = 0.0;
+   profile.latency_penalty_points = 0.0;
+   profile.allowed_deviation_points = 2.0;
+}
+
+void FXAI_SetExecutionProfilePreset(const int profile_id,
+                                    FXAIExecutionProfile &profile)
+{
+   FXAI_ClearExecutionProfile(profile);
+   profile.profile_id = profile_id;
+
+   if(profile_id == (int)FXAI_EXEC_TIGHT_FX)
+   {
+      profile.cost_buffer_points = 1.5;
+      profile.slippage_points = 0.10;
+      profile.fill_penalty_points = 0.10;
+      profile.allowed_deviation_points = 2.0;
+      return;
+   }
+   if(profile_id == (int)FXAI_EXEC_PRIME_ECN)
+   {
+      profile.commission_per_lot_side = 3.5;
+      profile.cost_buffer_points = 1.5;
+      profile.slippage_points = 0.20;
+      profile.fill_penalty_points = 0.15;
+      profile.allowed_deviation_points = 2.5;
+      return;
+   }
+   if(profile_id == (int)FXAI_EXEC_RETAIL_FX)
+   {
+      profile.cost_buffer_points = 2.5;
+      profile.slippage_points = 0.40;
+      profile.fill_penalty_points = 0.25;
+      profile.slippage_cost_weight = 0.05;
+      profile.allowed_deviation_points = 4.0;
+      return;
+   }
+   if(profile_id == (int)FXAI_EXEC_STRESS)
+   {
+      profile.commission_per_lot_side = 5.0;
+      profile.cost_buffer_points = 3.5;
+      profile.slippage_points = 1.0;
+      profile.fill_penalty_points = 0.50;
+      profile.slippage_cost_weight = 0.06;
+      profile.slippage_stress_weight = 0.25;
+      profile.slippage_horizon_weight = 0.03;
+      profile.dual_hit_penalty = 0.20;
+      profile.slow_hit_penalty = 0.16;
+      profile.spread_shock_penalty = 0.55;
+      profile.partial_fill_penalty = 0.25;
+      profile.latency_penalty_points = 0.20;
+      profile.allowed_deviation_points = 8.0;
+      return;
+   }
+}
+
+double FXAI_ExecutionEntryCostPoints(const double spread_points,
+                                     const double commission_points,
+                                     const double base_cost_buffer_points,
+                                     const FXAIExecutionProfile &profile)
+{
+   double cost = MathMax(spread_points, 0.0) +
+                 MathMax(commission_points, 0.0) +
+                 MathMax(base_cost_buffer_points, 0.0) +
+                 MathMax(profile.cost_buffer_points, 0.0) +
+                 MathMax(profile.slippage_points, 0.0) +
+                 MathMax(profile.fill_penalty_points, 0.0) +
+                 MathMax(profile.latency_penalty_points, 0.0);
+   if(cost < 0.0) cost = 0.0;
+   return cost;
+}
+
+double FXAI_ExecutionSlippagePoints(const FXAIExecutionProfile &profile,
+                                    const double roundtrip_cost_points,
+                                    const int horizon_minutes,
+                                    const double spread_stress,
+                                    const int path_flags)
+{
+   double stress = FXAI_Clamp(spread_stress, 0.0, 4.0);
+   double slippage_points = MathMax(profile.slippage_points, 0.0) +
+                            profile.slippage_cost_weight * MathMax(roundtrip_cost_points, 0.0) +
+                            profile.slippage_stress_weight * stress +
+                            profile.slippage_horizon_weight * MathSqrt((double)MathMax(horizon_minutes, 1)) +
+                            MathMax(profile.latency_penalty_points, 0.0);
+   if((path_flags & 1) != 0)
+      slippage_points += MathMax(profile.dual_hit_penalty, 0.0) +
+                         0.12 * MathMax(roundtrip_cost_points, 0.0) +
+                         0.12 * stress;
+   if((path_flags & 8) != 0)
+      slippage_points += MathMax(profile.slow_hit_penalty, 0.0);
+   if((path_flags & 4) != 0)
+      slippage_points += MathMax(profile.spread_shock_penalty, 0.0);
+   if(slippage_points > 12.0) slippage_points = 12.0;
+   return slippage_points;
+}
+
+double FXAI_ExecutionFillPenaltyPoints(const FXAIExecutionProfile &profile,
+                                       const double roundtrip_cost_points,
+                                       const double spread_stress,
+                                       const int path_flags)
+{
+   double stress = FXAI_Clamp(spread_stress, 0.0, 4.0);
+   double fill_penalty = MathMax(profile.fill_penalty_points, 0.0) +
+                         MathMax(profile.partial_fill_penalty, 0.0) * (0.20 + 0.20 * stress);
+   if((path_flags & 4) != 0)
+      fill_penalty += 0.10 * MathMax(roundtrip_cost_points, 0.0) + 0.12 * stress;
+   if((path_flags & 1) != 0)
+      fill_penalty += 0.08 * MathMax(roundtrip_cost_points, 0.0);
+   if(fill_penalty > 10.0) fill_penalty = 10.0;
+   return fill_penalty;
+}
+
+double FXAI_ExecutionAllowedDeviationPoints(const FXAIExecutionProfile &profile,
+                                            const double path_risk,
+                                            const double fill_risk)
+{
+   double dev = MathMax(profile.allowed_deviation_points, 0.0) +
+                2.5 * FXAI_Clamp(path_risk, 0.0, 1.0) +
+                3.0 * FXAI_Clamp(fill_risk, 0.0, 1.0);
+   if(dev > 25.0) dev = 25.0;
+   return dev;
 }
 
 int FXAI_CoreClampHorizon(const int horizon_minutes)

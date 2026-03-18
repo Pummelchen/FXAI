@@ -11,6 +11,13 @@
 
 CTrade trade;
 
+enum ENUM_FXAI_POSITION_SIZING
+{
+   FXAI_SIZE_FIXED_LOT = 0,
+   FXAI_SIZE_CONVICTION = 1,
+   FXAI_SIZE_VOL_TARGET = 2
+};
+
 //-------------------------- INPUTS ---------------------------------
 input ENUM_AI_TYPE AI_Type = AI_SGD_LOGIT;
 // Models: all (selector for which plugin runs in single-model mode).
@@ -93,6 +100,58 @@ input double Lot    = 0.01;
 // Models: all (execution sizing for all model signals).
 // Purpose: order volume before broker min/max/step normalization.
 // Importance/Range: broker-dependent, often 0.01..1.00; main driver of PnL volatility.
+input ENUM_FXAI_POSITION_SIZING AI_PositionSizing = FXAI_SIZE_CONVICTION;
+// Models: all (live sizing and allocation layer).
+// Purpose: selects fixed, conviction-scaled, or volatility-targeted live position sizing.
+// Importance/Range: enum 0..2; conviction or vol-target sizing is safer for serious deployment.
+input double RiskPerTradePct = 0.35;
+// Models: all (portfolio/risk layer).
+// Purpose: caps per-trade capital at risk as a percent of account equity.
+// Importance/Range: practical 0.05..2.00; 0 disables risk-budget capping.
+input double RiskTargetMovePoints = 12.0;
+// Models: all (portfolio/risk layer).
+// Purpose: fallback adverse-move estimate used when sizing from volatility/risk budget.
+// Importance/Range: symbol-dependent, practical 3..60 points.
+input double MaxPortfolioExposureLots = 0.30;
+// Models: all (portfolio/risk layer).
+// Purpose: caps total managed gross exposure across all symbols for this magic number.
+// Importance/Range: 0 disables; otherwise set to account/broker appropriate max lots.
+input double MaxCorrelatedExposureLots = 0.20;
+// Models: all (portfolio/risk layer).
+// Purpose: caps FXAI exposure in symbols sharing major currency risk with the active symbol.
+// Importance/Range: 0 disables; practical value is usually below portfolio cap.
+input double RiskMinConfidence = 0.52;
+// Models: all (trade admission layer).
+// Purpose: blocks entries when model confidence is below the live quality floor.
+// Importance/Range: 0..1; higher is stricter.
+input double RiskMinReliability = 0.48;
+// Models: all (trade admission layer).
+// Purpose: blocks entries when recent realized reliability is too weak.
+// Importance/Range: 0..1; higher is stricter.
+input double RiskMaxPathRisk = 0.72;
+// Models: all (trade admission layer).
+// Purpose: blocks entries when path-risk forecasts imply poor MAE/hit-time shape.
+// Importance/Range: 0..1; lower is stricter.
+input double RiskMaxFillRisk = 0.68;
+// Models: all (trade admission layer).
+// Purpose: blocks entries when fill-risk forecasts imply poor execution quality.
+// Importance/Range: 0..1; lower is stricter.
+input double RiskMinTradeGate = 0.52;
+// Models: all (trade admission layer).
+// Purpose: blocks entries when the learned trade gate is below the live acceptance floor.
+// Importance/Range: 0..1; higher is stricter.
+input double RiskKillTradeGate = 0.24;
+// Models: all (open-position safety layer).
+// Purpose: forces exit when the live gate collapses under the post-entry kill threshold.
+// Importance/Range: 0..1; lower reduces unnecessary churn.
+input double RiskKillPathRisk = 0.92;
+// Models: all (open-position safety layer).
+// Purpose: forces exit when path risk rises into a severe adverse-selection regime.
+// Importance/Range: 0..1; lower is more defensive.
+input double RiskKillFillRisk = 0.90;
+// Models: all (open-position safety layer).
+// Purpose: forces exit when fill-risk shifts into a severe execution-stress regime.
+// Importance/Range: 0..1; lower is more defensive.
 input ulong  TradeMagic = 6206001;
 // Models: all (execution ownership / trade isolation).
 // Purpose: magic number attached to FXAI orders and used to manage only this EA's own trades.
@@ -164,10 +223,22 @@ input double AI_CommissionPerLotSide = 0.0;
 // Models: all (cost-aware labeling + EV gating).
 // Purpose: adds per-side commission into roundtrip point cost.
 // Importance/Range: 0..10+ broker-dependent; accurate value is critical for realism.
+input ENUM_FXAI_EXECUTION_PROFILE AI_ExecutionProfile = FXAI_EXEC_DEFAULT;
+// Models: all (execution-parity layer across live, warmup, and audit paths).
+// Purpose: selects a broker or venue style preset for cost/slippage/fill assumptions.
+// Importance/Range: enum 0..4; use the preset closest to the intended deployment venue.
 input double AI_CostBufferPoints     = 2.0;
 // Models: all (cost-aware labeling + EV gating).
 // Purpose: extra safety buffer above spread/commission for slippage/noise.
 // Importance/Range: common 0..5 points; higher reduces false-positive entries.
+input double AI_ExecutionSlippageOverride = -1.0;
+// Models: all (execution-parity layer).
+// Purpose: overrides the preset slippage points when set >= 0.
+// Importance/Range: -1 keeps preset; otherwise use measured live/tester median slippage.
+input double AI_ExecutionFillPenaltyOverride = -1.0;
+// Models: all (execution-parity layer).
+// Purpose: overrides the preset fill penalty points when set >= 0.
+// Importance/Range: -1 keeps preset; otherwise use measured partial-fill/requote drag.
 input double AI_EVThresholdPoints    = 0.30;
 // Models: all (label classing + final EV decision gate).
 // Purpose: minimum expected-value edge (in points) required to trade.
@@ -341,6 +412,18 @@ datetime g_ai_last_signal_bar = 0;
 int      g_ai_last_signal = -1;
 int      g_ai_last_signal_key = -1;
 string   g_ai_last_reason = "init";
+double   g_ai_last_expected_move_points = 0.0;
+double   g_ai_last_trade_edge_points = 0.0;
+double   g_ai_last_confidence = 0.0;
+double   g_ai_last_reliability = 0.0;
+double   g_ai_last_path_risk = 1.0;
+double   g_ai_last_fill_risk = 1.0;
+double   g_ai_last_trade_gate = 0.0;
+double   g_ai_last_context_quality = 0.0;
+double   g_ai_last_context_strength = 0.0;
+double   g_ai_last_min_move_points = 0.0;
+int      g_ai_last_horizon_minutes = 0;
+int      g_ai_last_regime_id = 0;
 datetime g_last_debug_bar = 0;
 
 #define FXAI_MAX_CONTEXT_SYMBOLS 48
@@ -607,6 +690,19 @@ int FXAI_GetM1SyncBars(void)
    return n;
 }
 
+void FXAI_ResolveExecutionProfile(FXAIExecutionProfile &profile)
+{
+   FXAI_SetExecutionProfilePreset((int)AI_ExecutionProfile, profile);
+
+   if(AI_CommissionPerLotSide > profile.commission_per_lot_side)
+      profile.commission_per_lot_side = AI_CommissionPerLotSide;
+
+   if(AI_ExecutionSlippageOverride >= 0.0)
+      profile.slippage_points = AI_ExecutionSlippageOverride;
+   if(AI_ExecutionFillPenaltyOverride >= 0.0)
+      profile.fill_penalty_points = AI_ExecutionFillPenaltyOverride;
+}
+
 //------------------------- UTILS ------------------------------------
 void Calc_TP()
 {
@@ -776,6 +872,444 @@ double FXAI_NormalizeLot(const string symbol, const double requested_lot)
    if(lot > vmax) lot = vmax;
 
    return NormalizeDouble(lot, 8);
+}
+
+void FXAI_ParseSymbolLegs(const string symbol,
+                         string &base_out,
+                         string &quote_out)
+{
+   base_out = "";
+   quote_out = "";
+
+   base_out = SymbolInfoString(symbol, SYMBOL_CURRENCY_BASE);
+   quote_out = SymbolInfoString(symbol, SYMBOL_CURRENCY_PROFIT);
+   StringToUpper(base_out);
+   StringToUpper(quote_out);
+   if(StringLen(base_out) == 3 && StringLen(quote_out) == 3)
+      return;
+
+   string clean = symbol;
+   StringToUpper(clean);
+   string letters = "";
+   int n = StringLen(clean);
+   for(int i=0; i<n; i++)
+   {
+      string ch = StringSubstr(clean, i, 1);
+      ushort code = (ushort)StringGetCharacter(ch, 0);
+      if(code >= 'A' && code <= 'Z')
+         letters += ch;
+      if(StringLen(letters) >= 6)
+         break;
+   }
+
+   if(StringLen(letters) >= 6)
+   {
+      base_out = StringSubstr(letters, 0, 3);
+      quote_out = StringSubstr(letters, 3, 3);
+   }
+}
+
+bool FXAI_SymbolsShareCurrency(const string lhs,
+                               const string rhs)
+{
+   string base_l = "";
+   string quote_l = "";
+   string base_r = "";
+   string quote_r = "";
+   FXAI_ParseSymbolLegs(lhs, base_l, quote_l);
+   FXAI_ParseSymbolLegs(rhs, base_r, quote_r);
+
+   if(StringLen(base_l) != 3 || StringLen(quote_l) != 3 ||
+      StringLen(base_r) != 3 || StringLen(quote_r) != 3)
+      return false;
+
+   return (base_l == base_r || base_l == quote_r ||
+           quote_l == base_r || quote_l == quote_r);
+}
+
+double FXAI_CorrelationExposureWeight(const string anchor_symbol,
+                                      const string other_symbol)
+{
+   if(anchor_symbol == other_symbol)
+      return 1.0;
+
+   string base_a = "";
+   string quote_a = "";
+   string base_b = "";
+   string quote_b = "";
+   FXAI_ParseSymbolLegs(anchor_symbol, base_a, quote_a);
+   FXAI_ParseSymbolLegs(other_symbol, base_b, quote_b);
+   if(StringLen(base_a) != 3 || StringLen(quote_a) != 3 ||
+      StringLen(base_b) != 3 || StringLen(quote_b) != 3)
+      return 0.0;
+
+   if(base_a == quote_b && quote_a == base_b)
+      return 1.0;
+   if(base_a == base_b && quote_a == quote_b)
+      return 1.0;
+   if(base_a == base_b || quote_a == quote_b)
+      return 0.85;
+   if(base_a == quote_b || quote_a == base_b)
+      return 0.70;
+   if(FXAI_SymbolsShareCurrency(anchor_symbol, other_symbol))
+      return 0.55;
+   return 0.0;
+}
+
+double FXAI_ManagedPositionLots(const string symbol = "")
+{
+   double lots = 0.0;
+   for(int i=PositionsTotal() - 1; i>=0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(!PositionSelectByTicket(ticket)) continue;
+      if((ulong)PositionGetInteger(POSITION_MAGIC) != TradeMagic) continue;
+      if(StringLen(symbol) > 0 && PositionGetString(POSITION_SYMBOL) != symbol) continue;
+      lots += MathMax(PositionGetDouble(POSITION_VOLUME), 0.0);
+   }
+   return lots;
+}
+
+double FXAI_ManagedOrderLots(const string symbol = "")
+{
+   double lots = 0.0;
+   for(int i=OrdersTotal() - 1; i>=0; i--)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket == 0) continue;
+      if(!OrderSelect(ticket)) continue;
+      if((ulong)OrderGetInteger(ORDER_MAGIC) != TradeMagic) continue;
+      if(StringLen(symbol) > 0 && OrderGetString(ORDER_SYMBOL) != symbol) continue;
+      lots += MathMax(OrderGetDouble(ORDER_VOLUME_CURRENT), 0.0);
+   }
+   return lots;
+}
+
+double FXAI_ManagedExposureLots(const string symbol = "")
+{
+   return FXAI_ManagedPositionLots(symbol) + FXAI_ManagedOrderLots(symbol);
+}
+
+double FXAI_ManagedCorrelatedExposureLots(const string symbol = "")
+{
+   string anchor = (StringLen(symbol) > 0 ? symbol : _Symbol);
+   double lots = 0.0;
+
+   for(int i=PositionsTotal() - 1; i>=0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(!PositionSelectByTicket(ticket)) continue;
+      if((ulong)PositionGetInteger(POSITION_MAGIC) != TradeMagic) continue;
+      string pos_symbol = PositionGetString(POSITION_SYMBOL);
+      double weight = FXAI_CorrelationExposureWeight(anchor, pos_symbol);
+      if(weight <= 0.0) continue;
+      lots += weight * MathMax(PositionGetDouble(POSITION_VOLUME), 0.0);
+   }
+
+   for(int i=OrdersTotal() - 1; i>=0; i--)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket == 0) continue;
+      if(!OrderSelect(ticket)) continue;
+      if((ulong)OrderGetInteger(ORDER_MAGIC) != TradeMagic) continue;
+      string order_symbol = OrderGetString(ORDER_SYMBOL);
+      double weight = FXAI_CorrelationExposureWeight(anchor, order_symbol);
+      if(weight <= 0.0) continue;
+      lots += weight * MathMax(OrderGetDouble(ORDER_VOLUME_CURRENT), 0.0);
+   }
+
+   return lots;
+}
+
+double FXAI_MoneyPerPointPerLot(const string symbol)
+{
+   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   double tick_size = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+   double tick_value = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE_PROFIT);
+   if(tick_value <= 0.0)
+      tick_value = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+   if(point <= 0.0 || tick_size <= 0.0 || tick_value <= 0.0)
+      return 0.0;
+   return tick_value * (point / tick_size);
+}
+
+double FXAI_EstimatedRiskPointsForDecision()
+{
+   double base_cost = MathMax(g_ai_last_min_move_points, 0.25);
+   double expected_move = MathMax(g_ai_last_expected_move_points, base_cost);
+   double configured_target = MathMax(RiskTargetMovePoints, 0.0);
+   double risk_points = base_cost +
+                        expected_move * (0.45 + 0.65 * FXAI_Clamp(g_ai_last_path_risk, 0.0, 1.0)) +
+                        base_cost * (0.25 + 0.50 * FXAI_Clamp(g_ai_last_fill_risk, 0.0, 1.0));
+   if(configured_target > 0.0 && configured_target > risk_points)
+      risk_points = configured_target;
+   if(!MathIsValidNumber(risk_points) || risk_points <= 0.0)
+      risk_points = MathMax(configured_target, base_cost);
+   return MathMax(risk_points, 0.25);
+}
+
+bool FXAI_RegimeKillSwitchTriggered(string &reason)
+{
+   reason = "ok";
+   if(g_ai_last_trade_gate <= FXAI_Clamp(RiskKillTradeGate, 0.0, 1.0))
+   {
+      reason = "kill_trade_gate";
+      return true;
+   }
+   if(g_ai_last_path_risk >= FXAI_Clamp(RiskKillPathRisk, 0.0, 1.0))
+   {
+      reason = "kill_path_risk";
+      return true;
+   }
+   if(g_ai_last_fill_risk >= FXAI_Clamp(RiskKillFillRisk, 0.0, 1.0))
+   {
+      reason = "kill_fill_risk";
+      return true;
+   }
+   return false;
+}
+
+double FXAI_CalcRiskAwareLot(const string symbol,
+                             const int direction,
+                             string &reason)
+{
+   reason = "ok";
+   if(direction != 0 && direction != 1)
+   {
+      reason = "invalid_direction";
+      return 0.0;
+   }
+
+   if(g_ai_last_confidence < FXAI_Clamp(RiskMinConfidence, 0.0, 1.0))
+   {
+      reason = "risk_confidence_floor";
+      return 0.0;
+   }
+   if(g_ai_last_reliability < FXAI_Clamp(RiskMinReliability, 0.0, 1.0))
+   {
+      reason = "risk_reliability_floor";
+      return 0.0;
+   }
+   if(g_ai_last_path_risk > FXAI_Clamp(RiskMaxPathRisk, 0.0, 1.0))
+   {
+      reason = "risk_path_cap";
+      return 0.0;
+   }
+   if(g_ai_last_fill_risk > FXAI_Clamp(RiskMaxFillRisk, 0.0, 1.0))
+   {
+      reason = "risk_fill_cap";
+      return 0.0;
+   }
+   if(g_ai_last_trade_gate < FXAI_Clamp(RiskMinTradeGate, 0.0, 1.0))
+   {
+      reason = "risk_trade_gate_floor";
+      return 0.0;
+   }
+
+   double requested_lot = Lot;
+   double hard_cap_lot = 1000000.0;
+   double edge_scale = FXAI_Clamp(g_ai_last_trade_edge_points / MathMax(g_ai_last_min_move_points, 0.25), -1.0, 4.0);
+   double conviction = FXAI_Clamp(0.20 +
+                                  0.22 * FXAI_Clamp(g_ai_last_confidence, 0.0, 1.0) +
+                                  0.18 * FXAI_Clamp(g_ai_last_reliability, 0.0, 1.0) +
+                                  0.16 * FXAI_Clamp(g_ai_last_trade_gate, 0.0, 1.0) +
+                                  0.10 * FXAI_Clamp(g_ai_last_context_strength / 2.0, 0.0, 1.0) +
+                                  0.10 * (1.0 - FXAI_Clamp(g_ai_last_path_risk, 0.0, 1.0)) +
+                                  0.08 * (1.0 - FXAI_Clamp(g_ai_last_fill_risk, 0.0, 1.0)) +
+                                  0.10 * FXAI_Clamp(edge_scale / 2.0, 0.0, 1.0),
+                                  0.20,
+                                  1.60);
+
+   if(AI_PositionSizing == FXAI_SIZE_CONVICTION)
+      requested_lot *= conviction;
+
+   double risk_budget_lot = 0.0;
+   double risk_budget_pct = MathMax(RiskPerTradePct, 0.0);
+   double money_per_point = FXAI_MoneyPerPointPerLot(symbol);
+   double risk_points = FXAI_EstimatedRiskPointsForDecision();
+   if(risk_budget_pct > 0.0 && money_per_point > 0.0 && risk_points > 0.0)
+   {
+      double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+      if(equity > 0.0)
+      {
+         double risk_budget_money = equity * (risk_budget_pct / 100.0);
+         risk_budget_lot = risk_budget_money / (money_per_point * risk_points);
+         if(risk_budget_lot > 0.0 && risk_budget_lot < hard_cap_lot)
+            hard_cap_lot = risk_budget_lot;
+      }
+   }
+
+   if(AI_PositionSizing == FXAI_SIZE_VOL_TARGET)
+   {
+      if(risk_budget_lot > 0.0)
+      {
+         double vol_scale = FXAI_Clamp(0.55 +
+                                       0.25 * conviction +
+                                       0.10 * FXAI_Clamp(g_ai_last_expected_move_points / MathMax(risk_points, 0.25), 0.0, 1.5),
+                                       0.35,
+                                       1.00);
+         requested_lot = risk_budget_lot * vol_scale;
+      }
+      else
+      {
+         requested_lot *= FXAI_Clamp(0.50 + 0.35 * conviction, 0.35, 1.10);
+      }
+   }
+   else if(risk_budget_lot > 0.0 && requested_lot > risk_budget_lot)
+   {
+      requested_lot = risk_budget_lot;
+   }
+
+   if(g_ai_last_trade_edge_points < MathMax(AI_EVThresholdPoints * 0.50, 0.0))
+   {
+      reason = "risk_edge_floor";
+      return 0.0;
+   }
+
+   double portfolio_cap = MathMax(MaxPortfolioExposureLots, 0.0);
+   if(portfolio_cap > 0.0)
+   {
+      double available = portfolio_cap - FXAI_ManagedExposureLots("");
+      if(available <= 0.0)
+      {
+         reason = "risk_portfolio_cap";
+         return 0.0;
+      }
+      if(requested_lot > available)
+         requested_lot = available;
+      if(available < hard_cap_lot)
+         hard_cap_lot = available;
+   }
+
+   double corr_cap = MathMax(MaxCorrelatedExposureLots, 0.0);
+   if(corr_cap > 0.0)
+   {
+      double available = corr_cap - FXAI_ManagedCorrelatedExposureLots(symbol);
+      if(available <= 0.0)
+      {
+         reason = "risk_correlated_cap";
+         return 0.0;
+      }
+      if(requested_lot > available)
+         requested_lot = available;
+      if(available < hard_cap_lot)
+         hard_cap_lot = available;
+   }
+
+   requested_lot = FXAI_NormalizeLot(symbol, requested_lot);
+   if(requested_lot > hard_cap_lot + 1e-9)
+   {
+      reason = "risk_min_volume_cap";
+      return 0.0;
+   }
+   if(!MathIsValidNumber(requested_lot) || requested_lot <= 0.0)
+   {
+      reason = "risk_lot_invalid";
+      return 0.0;
+   }
+
+   return requested_lot;
+}
+
+ENUM_ORDER_TYPE_FILLING FXAI_ResolveOrderFilling(const string symbol)
+{
+   long filling_mode = SymbolInfoInteger(symbol, SYMBOL_FILLING_MODE);
+   if((filling_mode & SYMBOL_FILLING_IOC) == SYMBOL_FILLING_IOC)
+      return ORDER_FILLING_IOC;
+   if((filling_mode & SYMBOL_FILLING_FOK) == SYMBOL_FILLING_FOK)
+      return ORDER_FILLING_FOK;
+   return ORDER_FILLING_RETURN;
+}
+
+bool FXAI_SendMarketOrderChecked(const string symbol,
+                                 const int direction,
+                                 const double trade_lot,
+                                 string &reason,
+                                 uint &retcode,
+                                 string &ret_desc)
+{
+   reason = "ok";
+   retcode = 0;
+   ret_desc = "";
+
+   if(direction != 0 && direction != 1)
+   {
+      reason = "invalid_direction";
+      return false;
+   }
+
+   MqlTick tick;
+   if(!SymbolInfoTick(symbol, tick))
+   {
+      reason = "symbol_tick_failed";
+      return false;
+   }
+
+   FXAIExecutionProfile exec_profile;
+   FXAI_ResolveExecutionProfile(exec_profile);
+
+   MqlTradeRequest request;
+   MqlTradeCheckResult check;
+   MqlTradeResult result;
+   ZeroMemory(request);
+   ZeroMemory(check);
+   ZeroMemory(result);
+
+   request.action = TRADE_ACTION_DEAL;
+   request.magic = TradeMagic;
+   request.symbol = symbol;
+   request.volume = trade_lot;
+   request.type = (direction == 1 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL);
+   request.type_filling = FXAI_ResolveOrderFilling(symbol);
+   request.price = (direction == 1 ? tick.ask : tick.bid);
+   request.deviation = (ulong)MathRound(FXAI_ExecutionAllowedDeviationPoints(exec_profile,
+                                                                             g_ai_last_path_risk,
+                                                                             g_ai_last_fill_risk));
+   request.comment = StringFormat("FXAI|%s|H%d|R%d",
+                                  (direction == 1 ? "BUY" : "SELL"),
+                                  g_ai_last_horizon_minutes,
+                                  g_ai_last_regime_id);
+
+   if(request.price <= 0.0)
+   {
+      reason = "invalid_order_price";
+      return false;
+   }
+
+   if(!OrderCheck(request, check))
+   {
+      retcode = (uint)check.retcode;
+      ret_desc = check.comment;
+      reason = "order_check_failed";
+      return false;
+   }
+   if(!FXAI_IsTradeRetcodeSuccess((uint)check.retcode))
+   {
+      retcode = (uint)check.retcode;
+      ret_desc = check.comment;
+      reason = "order_check_rejected";
+      return false;
+   }
+
+   if(!OrderSend(request, result))
+   {
+      retcode = (uint)result.retcode;
+      ret_desc = result.comment;
+      reason = "order_send_failed";
+      return false;
+   }
+
+   retcode = (uint)result.retcode;
+   ret_desc = result.comment;
+   if(!FXAI_IsTradeRetcodeSuccess(retcode))
+   {
+      reason = "order_send_rejected";
+      return false;
+   }
+
+   return true;
 }
 
 //------------------------- CLOSE ALL --------------------------------
@@ -1073,18 +1607,32 @@ void SendTrade(const int precomputed_direction = -2)
       return;
    }
 
-   double trade_lot = FXAI_NormalizeLot(_Symbol, Lot);
-   if(trade_lot <= 0.0) return;
+   double trade_lot = FXAI_CalcRiskAwareLot(_Symbol, direction, trade_reason);
+   if(trade_lot <= 0.0)
+   {
+      if(emit_debug)
+         Print("FXAI debug: Trade sizing blocked. reason=", trade_reason,
+               " conf=", DoubleToString(g_ai_last_confidence, 3),
+               " rel=", DoubleToString(g_ai_last_reliability, 3),
+               " gate=", DoubleToString(g_ai_last_trade_gate, 3),
+               " path=", DoubleToString(g_ai_last_path_risk, 3),
+               " fill=", DoubleToString(g_ai_last_fill_risk, 3));
+      return;
+   }
 
-   bool ok = false;
-   if(direction == 1) ok = trade.Buy(trade_lot, _Symbol, 0, 0, 0, "Buy");
-   else               ok = trade.Sell(trade_lot, _Symbol, 0, 0, 0, "Sell");
-   uint retcode = trade.ResultRetcode();
-   bool exec_ok = (ok && FXAI_IsTradeRetcodeSuccess(retcode));
+   uint retcode = 0;
+   string ret_desc = "";
+   bool exec_ok = FXAI_SendMarketOrderChecked(_Symbol,
+                                              direction,
+                                              trade_lot,
+                                              trade_reason,
+                                              retcode,
+                                              ret_desc);
 
    if(!exec_ok && emit_debug)
       Print("FXAI debug: Order send failed. retcode=", (int)retcode,
-            " desc=", trade.ResultRetcodeDescription());
+            " desc=", ret_desc,
+            " reason=", trade_reason);
    else if(exec_ok && emit_debug)
       Print("FXAI debug: Order sent. direction=", direction, " lot=", DoubleToString(trade_lot, 2));
 
@@ -1169,7 +1717,27 @@ void OnTick()
    FXAI_ProcessReliabilityBar(_Symbol);
    int precomputed_signal = SpecialDirectionAI(_Symbol);
 
-   if(FXAI_ManagedOrdersTotal(_Symbol) + FXAI_ManagedPositionsTotal(_Symbol) == 0)
+   int managed_total = FXAI_ManagedOrdersTotal(_Symbol) + FXAI_ManagedPositionsTotal(_Symbol);
+   if(managed_total > 0)
+   {
+      string kill_reason = "ok";
+      if(FXAI_RegimeKillSwitchTriggered(kill_reason))
+      {
+         if(AI_DebugFlow)
+            Print("FXAI debug: kill switch exit. reason=", kill_reason,
+                  " gate=", DoubleToString(g_ai_last_trade_gate, 3),
+                  " path=", DoubleToString(g_ai_last_path_risk, 3),
+                  " fill=", DoubleToString(g_ai_last_fill_risk, 3));
+         if(CloseAll())
+         {
+            ResetCycleState();
+            Calc_TP();
+         }
+         return;
+      }
+   }
+
+   if(managed_total == 0)
       SendTrade(precomputed_signal);
 }
 //+------------------------------------------------------------------+

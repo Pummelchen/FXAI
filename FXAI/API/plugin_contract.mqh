@@ -6,7 +6,7 @@
 #include "..\TensorCore\TensorCore.mqh"
 
 #define FXAI_PLUGIN_STATE_ARTIFACT_DIR "FXAI\\Runtime\\Plugins"
-#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 1
+#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 2
 
 class CFXAITernaryCalibrator
 {
@@ -488,7 +488,7 @@ public:
       ResetAuxState();
       m_native_quality_heads.Reset();
    }
-   virtual bool SupportsPersistentState(void) const { return false; }
+   virtual bool SupportsPersistentState(void) const { return true; }
    virtual int PersistentStateVersion(void) const { return 1; }
    virtual void Describe(FXAIAIManifestV4 &out) const = 0;
    virtual bool SupportsSyntheticSeries(void) const { return false; }
@@ -635,11 +635,28 @@ public:
       if(can_replay)
          StoreReplaySample(req, replay_pri);
 
+      UpdateCrossSymbolTransferBank(req.x, req.move_points, sample_w);
       TrainModelCore(req.label_class, req.x, hp, req.move_points);
       UpdateSharedContextAdapter(req.x, req.label_class, req.move_points, sample_w, hp.lr);
       UpdateQualityHeads(req, sample_w);
       if(can_replay)
          RunReplayRehearsal(hp, req.ctx.regime_id, req.ctx.horizon_minutes);
+      FXAI_MarkRuntimeArtifactsDirty();
+   }
+
+   void TrainSharedTransfer(const FXAIAIContextV4 &ctx,
+                            const double &x[],
+                            const double move_points,
+                            const double sample_w,
+                            const double lr)
+   {
+      SetContext(ctx);
+      UpdateCrossSymbolTransferBank(x, move_points, sample_w);
+      UpdateSharedContextAdapter(x,
+                                 NormalizeClassLabel(-1, x, move_points),
+                                 move_points,
+                                 sample_w,
+                                 FXAI_Clamp(0.50 * lr, 0.0001, 0.0500));
       FXAI_MarkRuntimeArtifactsDirty();
    }
 
@@ -727,10 +744,17 @@ protected:
       FileWriteInteger(handle, (m_shared_adapter_ready ? 1 : 0));
       FileWriteInteger(handle, m_shared_adapter_steps);
       for(int c=0; c<3; c++)
-         for(int i=0; i<5; i++)
+         for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
             FileWriteDouble(handle, m_shared_cls_w[c][i]);
-      for(int i=0; i<5; i++)
+      for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
          FileWriteDouble(handle, m_shared_move_w[i]);
+      for(int slot=0; slot<FXAI_CONTEXT_TOP_SYMBOLS; slot++)
+      {
+         FileWriteDouble(handle, m_transfer_slot_obs[slot]);
+         FileWriteDouble(handle, m_transfer_slot_align[slot]);
+         FileWriteDouble(handle, m_transfer_slot_lead[slot]);
+         FileWriteDouble(handle, m_transfer_slot_move[slot]);
+      }
 
       FileWriteInteger(handle, (m_quality_head_ready ? 1 : 0));
       FileWriteDouble(handle, m_quality_mfe_ema);
@@ -830,10 +854,17 @@ protected:
       m_shared_adapter_ready = (FileReadInteger(handle) != 0);
       m_shared_adapter_steps = FileReadInteger(handle);
       for(int c=0; c<3; c++)
-         for(int i=0; i<5; i++)
+         for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
             m_shared_cls_w[c][i] = FileReadDouble(handle);
-      for(int i=0; i<5; i++)
+      for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
          m_shared_move_w[i] = FileReadDouble(handle);
+      for(int slot=0; slot<FXAI_CONTEXT_TOP_SYMBOLS; slot++)
+      {
+         m_transfer_slot_obs[slot] = FileReadDouble(handle);
+         m_transfer_slot_align[slot] = FileReadDouble(handle);
+         m_transfer_slot_lead[slot] = FileReadDouble(handle);
+         m_transfer_slot_move[slot] = FileReadDouble(handle);
+      }
 
       m_quality_head_ready = (FileReadInteger(handle) != 0);
       m_quality_mfe_ema = FileReadDouble(handle);
