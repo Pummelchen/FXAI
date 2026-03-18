@@ -26,6 +26,7 @@ void FXAI_ResetNormalizationWindows(const int default_window = FXAI_NORM_ROLL_WI
       g_fxai_norm_feature_window[f] = g_fxai_norm_default_window;
    g_fxai_norm_window_inited = true;
    g_fxai_norm_window_cfg_version++;
+   FXAI_MarkRuntimeArtifactsDirty();
 }
 
 void FXAI_SetNormalizationWindows(const int &windows[], const int default_window = FXAI_NORM_ROLL_WINDOW_DEFAULT)
@@ -44,6 +45,7 @@ void FXAI_SetNormalizationWindows(const int &windows[], const int default_window
       g_fxai_norm_feature_window[f] = w;
    }
    g_fxai_norm_window_cfg_version++;
+   FXAI_MarkRuntimeArtifactsDirty();
 }
 
 void FXAI_GetNormalizationWindows(int &out_windows[], int &out_default_window)

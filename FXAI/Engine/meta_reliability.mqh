@@ -238,6 +238,8 @@ void FXAI_UpdateReliabilityFromPending(const int ai_idx,
                                            move_points,
                                            min_move_i,
                                            pending_h,
+                                           0.0,
+                                           0,
                                            pending_expected_move,
                                            probs_eval);
                FXAI_BoostReplayPriorityByOutcome(time_arr[idx_pred],
@@ -437,6 +439,17 @@ void FXAI_ProcessReliabilityBar(const string symbol)
                                        commission_points,
                                        cost_buffer_points,
                                        evThresholdPoints);
+      FXAI_UpdateConformalFromPending(ai_idx,
+                                      signal_seq,
+                                      snapshot,
+                                      rel_spread_arr,
+                                      rel_time_arr,
+                                      rel_high_arr,
+                                      rel_low_arr,
+                                      rel_close_arr,
+                                      commission_points,
+                                      cost_buffer_points,
+                                      evThresholdPoints);
    }
 
    FXAI_UpdateStackFromPending(signal_seq,
@@ -457,6 +470,7 @@ void FXAI_ProcessReliabilityBar(const string symbol)
                                        commission_points,
                                        cost_buffer_points,
                                        evThresholdPoints);
+   FXAI_MaybeSaveRuntimeArtifacts(symbol, signal_bar);
    FXAI_MaybeSaveMetaArtifacts(symbol, signal_bar);
 }
 

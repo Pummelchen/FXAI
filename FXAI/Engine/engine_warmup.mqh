@@ -812,7 +812,9 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
       double net_pts = FXAI_RealizedNetPointsForSignal(signal,
                                                        samples[i].move_points,
                                                        samples[i].min_move_points,
-                                                       score_h);
+                                                       score_h,
+                                                       samples[i].spread_stress,
+                                                       samples[i].path_flags);
       FXAI_UpdateWarmupBucketStats(total_stats, net_pts);
       int regime_id = samples[i].regime_id;
       if(regime_id < 0 || regime_id >= FXAI_REGIME_COUNT) regime_id = 0;
@@ -948,7 +950,9 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
       double net_pts = FXAI_RealizedNetPointsForSignal(signal,
                                                        eval_sample.move_points,
                                                        eval_sample.min_move_points,
-                                                       score_h);
+                                                       score_h,
+                                                       eval_sample.spread_stress,
+                                                       eval_sample.path_flags);
       FXAI_UpdateWarmupBucketStats(total_stats, net_pts);
       int regime_id = eval_sample.regime_id;
       if(regime_id < 0 || regime_id >= FXAI_REGIME_COUNT) regime_id = 0;
@@ -1464,6 +1468,8 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
                                         samples[i].move_points,
                                         samples[i].min_move_points,
                                         H,
+                                        samples[i].spread_stress,
+                                        samples[i].path_flags,
                                         expected_move,
                                         probs_eval);
 
@@ -2156,7 +2162,9 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
 
    g_ai_warmup_done = true;
    FXAI_MarkMetaArtifactsDirty();
+    FXAI_MarkRuntimeArtifactsDirty();
    FXAI_SaveMetaArtifacts(symbol);
+   FXAI_SaveRuntimeArtifacts(symbol);
    Print("FXAI warmup completed: symbol=", symbol,
          ", samples=", warmup_samples,
          ", loops=", warmup_loops,

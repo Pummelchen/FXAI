@@ -41,6 +41,9 @@ ISSUE = {
     32: "sequence contract weak",
     64: "dead move output",
     128: "side collapse",
+    256: "walkforward overfit",
+    512: "walkforward unstable",
+    1024: "walkforward weak edge",
 }
 
 EXECUTION_PROFILES = {
@@ -545,6 +548,12 @@ def build_suggestions(name, family, rows, oracle, findings):
         suggestions.append("The expected-move head is too flat. It needs stronger amplitude learning and clearer separation between edge and noise.")
     if "side collapse" in issue_names:
         suggestions.append("The plugin is collapsing to one side. Rebalance the class objective and strengthen skip when evidence is symmetric.")
+    if "walkforward overfit" in issue_names:
+        suggestions.append("The walk-forward gap is too wide. Tighten promotion gates, reduce model variance, and prefer configurations that hold up after purge and embargo.")
+    if "walkforward unstable" in issue_names:
+        suggestions.append("Walk-forward stability is weak. Improve fold consistency, reduce sensitivity to regime edges, and harden the model against execution and spread shifts.")
+    if "walkforward weak edge" in issue_names:
+        suggestions.append("Out-of-sample edge is not robust enough. The live candidate needs stronger post-cost edge or more aggressive rejection of marginal trades.")
 
     suggestions.extend(findings)
     suggestions.extend(oracle.get("recommendations", []))
@@ -578,6 +587,14 @@ def build_summary(rows, oracles: dict):
                 "path_quality_error": fnum(row, "path_quality_error"),
                 "reset_delta": fnum(row, "reset_delta"),
                 "sequence_delta": fnum(row, "sequence_delta"),
+                "wf_folds": inum(row, "wf_folds"),
+                "wf_train_score": fnum(row, "wf_train_score"),
+                "wf_test_score": fnum(row, "wf_test_score"),
+                "wf_test_score_std": fnum(row, "wf_test_score_std"),
+                "wf_gap": fnum(row, "wf_gap"),
+                "wf_pbo": fnum(row, "wf_pbo"),
+                "wf_dsr": fnum(row, "wf_dsr"),
+                "wf_pass_rate": fnum(row, "wf_pass_rate"),
                 "avg_move": fnum(row, "avg_move"),
                 "trend_align": fnum(row, "trend_align"),
                 "invalid_preds": inum(row, "invalid_preds"),
@@ -695,6 +712,15 @@ def render_multisymbol_report(summary: dict, execution_profile: str, manifest_pa
                 f"Brier {float(recent.get('brier_score', 0.0)):.3f} | "
                 f"CalErr {float(recent.get('calibration_error', 0.0)):.3f} | "
                 f"PathErr {float(recent.get('path_quality_error', 0.0)):.3f}"
+            )
+        wf = info.get("scenarios", {}).get("market_walkforward", {})
+        if wf:
+            out.append(
+                "Walkforward: "
+                f"Test {float(wf.get('wf_test_score', 0.0)):.1f} | "
+                f"PBO {float(wf.get('wf_pbo', 0.0)):.2f} | "
+                f"DSR(proxy) {float(wf.get('wf_dsr', 0.0)):.2f} | "
+                f"Pass {float(wf.get('wf_pass_rate', 0.0)):.2f}"
             )
         issues = list(info.get("issues", [])) + list(info.get("findings", []))
         if issues:
@@ -1159,8 +1185,17 @@ def compare_summary_data(current: dict, baseline: dict) -> dict:
                 plugin_notes.append(f"walkforward score down {wf_delta:.1f}")
             if float(cur_wf.get("score_ci95", 0.0)) >= float(base_wf.get("score_ci95", 0.0)) + 1.0:
                 plugin_notes.append("walkforward stability weaker")
+            pbo_delta = float(cur_wf.get("wf_pbo", 0.0)) - float(base_wf.get("wf_pbo", 0.0))
+            dsr_delta = float(cur_wf.get("wf_dsr", 0.0)) - float(base_wf.get("wf_dsr", 0.0))
+            pass_delta = float(cur_wf.get("wf_pass_rate", 0.0)) - float(base_wf.get("wf_pass_rate", 0.0))
+            if pbo_delta >= 0.08:
+                plugin_notes.append(f"walkforward PBO worse +{pbo_delta:.2f}")
+            if dsr_delta <= -0.08:
+                plugin_notes.append(f"walkforward DSR weaker {dsr_delta:.2f}")
+            if pass_delta <= -0.08:
+                plugin_notes.append(f"walkforward pass-rate down {pass_delta:.2f}")
 
-        if any(x.startswith(("score down", "statistically significant score down", "new issues", "random_walk skip down", "drift_up align down", "drift_down align down", "cross-symbol stability weak", "cross-symbol dispersion worse", "market_recent brier worse", "market_recent calibration worse", "market_recent path-quality worse", "market_recent brier stability weaker", "walkforward score down", "walkforward stability weaker")) for x in plugin_notes):
+        if any(x.startswith(("score down", "statistically significant score down", "new issues", "random_walk skip down", "drift_up align down", "drift_down align down", "cross-symbol stability weak", "cross-symbol dispersion worse", "market_recent brier worse", "market_recent calibration worse", "market_recent path-quality worse", "market_recent brier stability weaker", "walkforward score down", "walkforward stability weaker", "walkforward PBO worse", "walkforward DSR weaker", "walkforward pass-rate down")) for x in plugin_notes):
             regressions.append(f"{name}: " + ", ".join(plugin_notes))
         elif plugin_notes:
             improvements.append(f"{name}: " + ", ".join(plugin_notes))
@@ -1216,6 +1251,9 @@ def write_audit_set(path: Path, args) -> None:
         f"Audit_FillPenaltyPoints={args.fill_penalty_points}||0||0||100||N",
         f"Audit_WalkForwardTrainBars={args.wf_train_bars}||64||1||50000||N",
         f"Audit_WalkForwardTestBars={args.wf_test_bars}||16||1||50000||N",
+        f"Audit_WalkForwardPurgeBars={args.wf_purge_bars}||0||0||50000||N",
+        f"Audit_WalkForwardEmbargoBars={args.wf_embargo_bars}||0||0||50000||N",
+        f"Audit_WalkForwardFolds={args.wf_folds}||2||1||64||N",
         f"Audit_Seed={args.seed}||0||1||1000000||N",
         "Audit_ResetOutput=true||false||0||true||N",
         "Audit_StopOnFailure=false||false||0||true||N",
@@ -1603,6 +1641,14 @@ def cmd_release_gate(args):
             gate_failures.append(f"{name}: score {score:.1f} below minimum {args.min_score:.1f}")
         if "stability" in info and float(info.get("stability", 1.0)) < args.min_stability:
             gate_failures.append(f"{name}: cross-symbol stability {float(info.get('stability', 0.0)):.2f} below minimum {args.min_stability:.2f}")
+        wf = info.get("scenarios", {}).get("market_walkforward", {})
+        if wf:
+            if float(wf.get("wf_pbo", 0.0)) > 0.45:
+                gate_failures.append(f"{name}: walkforward PBO {float(wf.get('wf_pbo', 0.0)):.2f} above maximum 0.45")
+            if float(wf.get("wf_dsr", 1.0)) < 0.35:
+                gate_failures.append(f"{name}: walkforward DSR(proxy) {float(wf.get('wf_dsr', 0.0)):.2f} below minimum 0.35")
+            if float(wf.get("wf_pass_rate", 1.0)) < 0.55:
+                gate_failures.append(f"{name}: walkforward pass rate {float(wf.get('wf_pass_rate', 0.0)):.2f} below minimum 0.55")
         if args.fail_on_issues:
             issues = list(info.get("issues", []))
             findings = list(info.get("findings", []))
@@ -1670,6 +1716,9 @@ def main():
     ra.add_argument("--fill-penalty-points", type=float, default=None)
     ra.add_argument("--wf-train-bars", type=int, default=256)
     ra.add_argument("--wf-test-bars", type=int, default=64)
+    ra.add_argument("--wf-purge-bars", type=int, default=32)
+    ra.add_argument("--wf-embargo-bars", type=int, default=24)
+    ra.add_argument("--wf-folds", type=int, default=6)
     ra.add_argument("--seed", type=int, default=42)
     ra.add_argument("--symbol", default="EURUSD")
     ra.add_argument("--symbol-list", default="")

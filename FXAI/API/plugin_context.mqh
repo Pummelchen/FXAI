@@ -10,6 +10,10 @@
    double m_cal_b;
    double m_iso_pos[12];
    double m_iso_cnt[12];
+   bool   m_shared_adapter_ready;
+   int    m_shared_adapter_steps;
+   double m_shared_cls_w[3][5];
+   double m_shared_move_w[5];
 
    // V4 context payload (set by Train/Predict).
    bool     m_ctx_time_ready;
@@ -186,6 +190,137 @@
             m_ctx_window[b][k] = 0.0;
    }
 
+   void BuildSharedAdapterInput(const double &x[],
+                                double &out[]) const
+   {
+      ArrayResize(out, 5);
+      out[0] = 1.0;
+      out[1] = FXAI_GetInputFeature(x, 62);
+      out[2] = FXAI_GetInputFeature(x, 63);
+      out[3] = FXAI_GetInputFeature(x, 64);
+      out[4] = FXAI_Clamp(0.5 + 0.5 * FXAI_GetInputFeature(x, 65), 0.0, 1.0);
+   }
+
+   bool HasSharedAdapterSignal(const double &a[]) const
+   {
+      if(ArraySize(a) < 5) return false;
+      double mag = 0.0;
+      for(int i=1; i<5; i++)
+         mag += MathAbs(a[i]);
+      return (mag > 1e-6);
+   }
+
+   void ApplySharedContextAdapter(FXAIAIModelOutputV4 &out,
+                                  const double &x[]) const
+   {
+      double a[];
+      BuildSharedAdapterInput(x, a);
+      if(!HasSharedAdapterSignal(a))
+         return;
+
+      double trust = FXAI_Clamp((double)m_shared_adapter_steps / 96.0, 0.0, 1.0);
+      trust *= FXAI_Clamp(0.18 + 0.12 * a[4], 0.0, 0.30);
+      if(trust <= 1e-6)
+         return;
+
+      double logits[3];
+      double mx = -1e18;
+      for(int c=0; c<3; c++)
+      {
+         double z = 0.0;
+         for(int i=0; i<5; i++)
+            z += m_shared_cls_w[c][i] * a[i];
+         logits[c] = z;
+         if(z > mx) mx = z;
+      }
+
+      double probs[3];
+      double den = 0.0;
+      for(int c=0; c<3; c++)
+      {
+         probs[c] = MathExp(FXAI_ClipSym(logits[c] - mx, 10.0));
+         den += probs[c];
+      }
+      if(den <= 0.0) den = 1.0;
+      for(int c=0; c<3; c++)
+         probs[c] /= den;
+
+      for(int c=0; c<3; c++)
+         out.class_probs[c] = FXAI_Clamp((1.0 - trust) * out.class_probs[c] + trust * probs[c], 0.0005, 0.9990);
+      NormalizeClassDistribution(out.class_probs);
+
+      double move_adj = 0.0;
+      for(int i=0; i<5; i++)
+         move_adj += m_shared_move_w[i] * a[i];
+      double scale = FXAI_Clamp(1.0 + 0.16 * trust * FXAI_ClipSym(move_adj, 1.5), 0.75, 1.35);
+      out.move_mean_points = MathMax(0.0, out.move_mean_points * scale);
+      out.move_q25_points = MathMax(0.0, out.move_q25_points * scale);
+      out.move_q50_points = MathMax(out.move_q25_points, out.move_q50_points * scale);
+      out.move_q75_points = MathMax(out.move_q50_points, out.move_q75_points * scale);
+      out.confidence = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY],
+                                          out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+      out.reliability = FXAI_Clamp(out.reliability * (1.0 - 0.12 * trust) +
+                                   trust * FXAI_Clamp(0.50 + 0.20 * a[2] + 0.15 * a[4], 0.0, 1.0),
+                                   0.0,
+                                   1.0);
+   }
+
+   void UpdateSharedContextAdapter(const double &x[],
+                                   const int y,
+                                   const double move_points,
+                                   const double sample_w,
+                                   const double lr)
+   {
+      double a[];
+      BuildSharedAdapterInput(x, a);
+      if(!HasSharedAdapterSignal(a))
+         return;
+
+      int cls = NormalizeClassLabel(y, x, move_points);
+      double logits[3];
+      double mx = -1e18;
+      for(int c=0; c<3; c++)
+      {
+         double z = 0.0;
+         for(int i=0; i<5; i++)
+            z += m_shared_cls_w[c][i] * a[i];
+         logits[c] = z;
+         if(z > mx) mx = z;
+      }
+
+      double probs[3];
+      double den = 0.0;
+      for(int c=0; c<3; c++)
+      {
+         probs[c] = MathExp(FXAI_ClipSym(logits[c] - mx, 10.0));
+         den += probs[c];
+      }
+      if(den <= 0.0) den = 1.0;
+      for(int c=0; c<3; c++)
+         probs[c] /= den;
+
+      double step = FXAI_Clamp(0.18 * lr * FXAI_Clamp(sample_w, 0.25, 4.0), 0.0002, 0.0200);
+      for(int c=0; c<3; c++)
+      {
+         double target = (c == cls ? 1.0 : 0.0);
+         double err = target - probs[c];
+         for(int i=0; i<5; i++)
+            m_shared_cls_w[c][i] = FXAI_ClipSym(m_shared_cls_w[c][i] + step * err * a[i], 3.0);
+      }
+
+      double move_pred = 0.0;
+      for(int i=0; i<5; i++)
+         move_pred += m_shared_move_w[i] * a[i];
+      double move_target = FXAI_Clamp(MathLog(1.0 + MathAbs(move_points)), 0.0, 4.0);
+      double move_err = FXAI_ClipSym(move_target - move_pred, 3.0);
+      for(int i=0; i<5; i++)
+         m_shared_move_w[i] = FXAI_ClipSym(m_shared_move_w[i] + 0.80 * step * move_err * a[i], 3.0);
+
+      m_shared_adapter_steps++;
+      if(m_shared_adapter_steps >= 24)
+         m_shared_adapter_ready = true;
+   }
+
    void SetContext(const datetime sample_time,
                    const double cost_points,
                    const double min_move_points,
@@ -243,6 +378,13 @@
          m_iso_pos[i] = 0.0;
          m_iso_cnt[i] = 0.0;
       }
+      m_shared_adapter_ready = false;
+      m_shared_adapter_steps = 0;
+      for(int c=0; c<3; c++)
+         for(int i=0; i<5; i++)
+            m_shared_cls_w[c][i] = 0.0;
+      for(int i=0; i<5; i++)
+         m_shared_move_w[i] = 0.0;
 
       m_ctx_time_ready = false;
       m_ctx_time = 0;

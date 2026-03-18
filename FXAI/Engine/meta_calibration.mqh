@@ -186,6 +186,8 @@ void FXAI_UpdateModelPerformance(const int ai_idx,
                                  const double realized_move_points,
                                  const double min_move_points,
                                  const int horizon_minutes,
+                                 const double spread_stress,
+                                 const int path_flags,
                                  const double expected_move_points,
                                  const double &probs[])
 {
@@ -200,7 +202,9 @@ void FXAI_UpdateModelPerformance(const int ai_idx,
       realized_net = FXAI_RealizedNetPointsForSignal(signal,
                                                      realized_move_points,
                                                      min_mv,
-                                                     horizon_minutes);
+                                                     horizon_minutes,
+                                                     spread_stress,
+                                                     path_flags);
    }
    else
    {

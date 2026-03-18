@@ -785,6 +785,138 @@ public:
       }
    }
 
+   virtual bool SupportsPersistentState(void) const { return true; }
+
+   virtual bool SaveModelState(const int handle) const
+   {
+      FileWriteInteger(handle, m_step);
+      FileWriteInteger(handle, m_mv_steps);
+      FileWriteInteger(handle, (m_loss_ready ? 1 : 0));
+      FileWriteDouble(handle, m_loss_fast);
+      FileWriteDouble(handle, m_loss_slow);
+      FileWriteInteger(handle, m_drift_cooldown);
+      FileWriteDouble(handle, m_cal3_temp);
+      FileWriteInteger(handle, m_cal3_steps);
+      FileWriteInteger(handle, (m_use_hash ? 1 : 0));
+      FileWriteInteger(handle, (m_use_hash2 ? 1 : 0));
+      FileWriteDouble(handle, m_hmean1);
+      FileWriteDouble(handle, m_hmean2);
+      for(int c=0; c<FXAI_FTRL_CLASS_COUNT; c++)
+      {
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+         {
+            FileWriteDouble(handle, m_z[c][i]);
+            FileWriteDouble(handle, m_n[c][i]);
+            FileWriteDouble(handle, m_w[c][i]);
+         }
+         for(int i=0; i<FXAI_ENHASH_BUCKETS; i++)
+         {
+            FileWriteDouble(handle, m_hz1[c][i]);
+            FileWriteDouble(handle, m_hn1[c][i]);
+            FileWriteDouble(handle, m_hw1[c][i]);
+         }
+         for(int i=0; i<FXAI_FTRL_HASH2_BUCKETS; i++)
+         {
+            FileWriteDouble(handle, m_hz2[c][i]);
+            FileWriteDouble(handle, m_hn2[c][i]);
+            FileWriteDouble(handle, m_hw2[c][i]);
+         }
+         FileWriteDouble(handle, m_cal3_bias[c]);
+         FileWriteDouble(handle, m_cls_ema[c]);
+         for(int b=0; b<FXAI_FTRL_CAL_BINS; b++)
+         {
+            FileWriteDouble(handle, m_cal3_iso_pos[c][b]);
+            FileWriteDouble(handle, m_cal3_iso_cnt[c][b]);
+         }
+      }
+      for(int i=0; i<FXAI_ENHASH_BUCKETS; i++)
+      {
+         FileWriteDouble(handle, m_hload1[i]);
+         FileWriteDouble(handle, m_mv_hz1[i]);
+         FileWriteDouble(handle, m_mv_hn1[i]);
+         FileWriteDouble(handle, m_mv_hw1[i]);
+      }
+      for(int i=0; i<FXAI_FTRL_HASH2_BUCKETS; i++)
+      {
+         FileWriteDouble(handle, m_hload2[i]);
+         FileWriteDouble(handle, m_mv_hz2[i]);
+         FileWriteDouble(handle, m_mv_hn2[i]);
+         FileWriteDouble(handle, m_mv_hw2[i]);
+      }
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         FileWriteDouble(handle, m_mv_z[i]);
+         FileWriteDouble(handle, m_mv_n[i]);
+         FileWriteDouble(handle, m_mv_w[i]);
+      }
+      return true;
+   }
+
+   virtual bool LoadModelState(const int handle, const int version)
+   {
+      m_step = FileReadInteger(handle);
+      m_mv_steps = FileReadInteger(handle);
+      m_loss_ready = (FileReadInteger(handle) != 0);
+      m_loss_fast = FileReadDouble(handle);
+      m_loss_slow = FileReadDouble(handle);
+      m_drift_cooldown = FileReadInteger(handle);
+      m_cal3_temp = FileReadDouble(handle);
+      m_cal3_steps = FileReadInteger(handle);
+      m_use_hash = (FileReadInteger(handle) != 0);
+      m_use_hash2 = (FileReadInteger(handle) != 0);
+      m_hmean1 = FileReadDouble(handle);
+      m_hmean2 = FileReadDouble(handle);
+      for(int c=0; c<FXAI_FTRL_CLASS_COUNT; c++)
+      {
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+         {
+            m_z[c][i] = FileReadDouble(handle);
+            m_n[c][i] = FileReadDouble(handle);
+            m_w[c][i] = FileReadDouble(handle);
+         }
+         for(int i=0; i<FXAI_ENHASH_BUCKETS; i++)
+         {
+            m_hz1[c][i] = FileReadDouble(handle);
+            m_hn1[c][i] = FileReadDouble(handle);
+            m_hw1[c][i] = FileReadDouble(handle);
+         }
+         for(int i=0; i<FXAI_FTRL_HASH2_BUCKETS; i++)
+         {
+            m_hz2[c][i] = FileReadDouble(handle);
+            m_hn2[c][i] = FileReadDouble(handle);
+            m_hw2[c][i] = FileReadDouble(handle);
+         }
+         m_cal3_bias[c] = FileReadDouble(handle);
+         m_cls_ema[c] = FileReadDouble(handle);
+         for(int b=0; b<FXAI_FTRL_CAL_BINS; b++)
+         {
+            m_cal3_iso_pos[c][b] = FileReadDouble(handle);
+            m_cal3_iso_cnt[c][b] = FileReadDouble(handle);
+         }
+      }
+      for(int i=0; i<FXAI_ENHASH_BUCKETS; i++)
+      {
+         m_hload1[i] = FileReadDouble(handle);
+         m_mv_hz1[i] = FileReadDouble(handle);
+         m_mv_hn1[i] = FileReadDouble(handle);
+         m_mv_hw1[i] = FileReadDouble(handle);
+      }
+      for(int i=0; i<FXAI_FTRL_HASH2_BUCKETS; i++)
+      {
+         m_hload2[i] = FileReadDouble(handle);
+         m_mv_hz2[i] = FileReadDouble(handle);
+         m_mv_hn2[i] = FileReadDouble(handle);
+         m_mv_hw2[i] = FileReadDouble(handle);
+      }
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         m_mv_z[i] = FileReadDouble(handle);
+         m_mv_n[i] = FileReadDouble(handle);
+         m_mv_w[i] = FileReadDouble(handle);
+      }
+      return true;
+   }
+
 protected:
    virtual void TrainModelCore(const int y,
                                const double &x[],

@@ -28,6 +28,9 @@
 #define FXAI_AUDIT_ISSUE_SEQUENCE_WEAK    32
 #define FXAI_AUDIT_ISSUE_DEAD_OUTPUT      64
 #define FXAI_AUDIT_ISSUE_SIDE_COLLAPSE    128
+#define FXAI_AUDIT_ISSUE_WF_OVERFIT       256
+#define FXAI_AUDIT_ISSUE_WF_UNSTABLE      512
+#define FXAI_AUDIT_ISSUE_WF_WEAK_EDGE     1024
 
 int FXAI_AuditGetSequenceBarsOverride(void);
 int FXAI_AuditGetSchemaOverride(void);
@@ -37,6 +40,9 @@ double FXAI_AuditGetSlippagePoints(void);
 double FXAI_AuditGetFillPenaltyPoints(void);
 int FXAI_AuditGetWalkForwardTrainBars(void);
 int FXAI_AuditGetWalkForwardTestBars(void);
+int FXAI_AuditGetWalkForwardPurgeBars(void);
+int FXAI_AuditGetWalkForwardEmbargoBars(void);
+int FXAI_AuditGetWalkForwardFolds(void);
 ulong FXAI_AuditGetFeatureGroupsMaskOverride(void);
 
 void FXAI_AuditAssignExcursionsForRealizedMove(const double realized_move_points,
@@ -204,6 +210,25 @@ struct FXAIAuditScenarioSpec
    double spread_points;
 };
 
+struct FXAIAuditFoldMetrics
+{
+   int samples_total;
+   int valid_preds;
+   int invalid_preds;
+   int buy_count;
+   int sell_count;
+   int skip_count;
+   int directional_eval_count;
+   int directional_correct_count;
+   double conf_sum;
+   double rel_sum;
+   double move_sum;
+   double brier_sum;
+   double calibration_abs_sum;
+   double path_quality_abs_sum;
+   int path_quality_count;
+};
+
 struct FXAIAuditScenarioMetrics
 {
    int ai_id;
@@ -243,6 +268,16 @@ struct FXAIAuditScenarioMetrics
    double path_quality_error;
    double reset_delta;
    double sequence_delta;
+   int wf_folds;
+   int wf_train_samples;
+   int wf_test_samples;
+   double wf_train_score;
+   double wf_test_score;
+   double wf_test_score_std;
+   double wf_gap;
+   double wf_pbo;
+   double wf_dsr;
+   double wf_pass_rate;
    double score;
    int issue_flags;
 };

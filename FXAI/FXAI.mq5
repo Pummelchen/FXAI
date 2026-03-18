@@ -420,6 +420,21 @@ double   g_rel_pending_expected_move[FXAI_AI_COUNT][FXAI_REL_MAX_PENDING];
 int      g_rel_pending_horizon[FXAI_AI_COUNT][FXAI_REL_MAX_PENDING];
 int      g_rel_pending_head[FXAI_AI_COUNT];
 int      g_rel_pending_tail[FXAI_AI_COUNT];
+double   g_conf_class_score[FXAI_AI_COUNT][FXAI_REGIME_COUNT][FXAI_MAX_HORIZONS][FXAI_CONFORMAL_DEPTH];
+double   g_conf_move_score[FXAI_AI_COUNT][FXAI_REGIME_COUNT][FXAI_MAX_HORIZONS][FXAI_CONFORMAL_DEPTH];
+double   g_conf_path_score[FXAI_AI_COUNT][FXAI_REGIME_COUNT][FXAI_MAX_HORIZONS][FXAI_CONFORMAL_DEPTH];
+int      g_conf_count[FXAI_AI_COUNT][FXAI_REGIME_COUNT][FXAI_MAX_HORIZONS];
+int      g_conf_head[FXAI_AI_COUNT][FXAI_REGIME_COUNT][FXAI_MAX_HORIZONS];
+int      g_conf_pending_seq[FXAI_AI_COUNT][FXAI_REL_MAX_PENDING];
+int      g_conf_pending_regime[FXAI_AI_COUNT][FXAI_REL_MAX_PENDING];
+int      g_conf_pending_horizon[FXAI_AI_COUNT][FXAI_REL_MAX_PENDING];
+double   g_conf_pending_prob[FXAI_AI_COUNT][FXAI_REL_MAX_PENDING][3];
+double   g_conf_pending_move_q25[FXAI_AI_COUNT][FXAI_REL_MAX_PENDING];
+double   g_conf_pending_move_q50[FXAI_AI_COUNT][FXAI_REL_MAX_PENDING];
+double   g_conf_pending_move_q75[FXAI_AI_COUNT][FXAI_REL_MAX_PENDING];
+double   g_conf_pending_path_risk[FXAI_AI_COUNT][FXAI_REL_MAX_PENDING];
+int      g_conf_pending_head[FXAI_AI_COUNT];
+int      g_conf_pending_tail[FXAI_AI_COUNT];
 int      g_stack_pending_seq[FXAI_REL_MAX_PENDING];
 int      g_stack_pending_signal[FXAI_REL_MAX_PENDING];
 int      g_stack_pending_regime[FXAI_REL_MAX_PENDING];
@@ -472,6 +487,8 @@ int      g_norm_default_window = FXAI_NORM_ROLL_WINDOW_DEFAULT;
 bool     g_norm_windows_ready = false;
 bool     g_meta_artifacts_dirty = false;
 datetime g_meta_last_save_time = 0;
+bool     g_runtime_artifacts_dirty = false;
+datetime g_runtime_last_save_time = 0;
 
 struct FXAIContextSeries
 {
@@ -576,6 +593,8 @@ int OnInit()
 
 void OnDeinit(const int reason)
 {
+   FXAI_SaveRuntimeArtifacts(_Symbol);
+   FXAI_SaveMetaArtifacts(_Symbol);
    g_plugins.Release();
    g_plugins_ready = false;
 }

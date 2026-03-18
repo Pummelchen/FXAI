@@ -138,6 +138,16 @@ void FXAI_AuditResetMetrics(FXAIAuditScenarioMetrics &m,
    m.path_quality_error = 0.0;
    m.reset_delta = 0.0;
    m.sequence_delta = 0.0;
+   m.wf_folds = 0;
+   m.wf_train_samples = 0;
+   m.wf_test_samples = 0;
+   m.wf_train_score = 0.0;
+   m.wf_test_score = 0.0;
+   m.wf_test_score_std = 0.0;
+   m.wf_gap = 0.0;
+   m.wf_pbo = 0.0;
+   m.wf_dsr = 0.0;
+   m.wf_pass_rate = 0.0;
    m.score = 0.0;
    m.issue_flags = 0;
 }
@@ -345,6 +355,22 @@ void FXAI_AuditBuildContextFeatures(const double &main_close[],
       FXAI_SetContextExtraValue(ctx_extra_arr, i, 9, lag[2]);
       FXAI_SetContextExtraValue(ctx_extra_arr, i, 10, ret[2] - main_ret);
       FXAI_SetContextExtraValue(ctx_extra_arr, i, 11, corr3);
+
+      double main_vol = FXAI_RollingAbsReturn(main_close, i, 20);
+      if(main_vol < 1e-6) main_vol = MathAbs(main_ret);
+      if(main_vol < 1e-6) main_vol = 1e-4;
+      double stab = 1.0;
+      for(int s=0; s<3; s++)
+         stab -= 0.20 * FXAI_Clamp(MathAbs(ret[s] - lag[s]) / MathMax(main_vol, 1e-4), 0.0, 1.0);
+      double lead = 0.0;
+      for(int s=0; s<3; s++)
+         lead += FXAI_Clamp(MathAbs(lag[s]) / MathMax(main_vol, 1e-4), 0.0, 4.0) / 4.0;
+      lead /= 3.0;
+
+      FXAI_SetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 0, FXAI_Clamp(mean / MathMax(main_vol, 1e-4), -1.0, 1.0));
+      FXAI_SetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 1, FXAI_Clamp(stab, 0.0, 1.0));
+      FXAI_SetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 2, FXAI_Clamp(lead, 0.0, 1.0));
+      FXAI_SetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 3, 1.0);
    }
 }
 

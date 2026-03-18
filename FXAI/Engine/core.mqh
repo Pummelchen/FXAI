@@ -1,10 +1,11 @@
 #ifndef __FXAI_CORE_MQH__
 #define __FXAI_CORE_MQH__
 
-#define FXAI_AI_FEATURES 62
+#define FXAI_AI_FEATURES 72
 #define FXAI_AI_WEIGHTS (FXAI_AI_FEATURES + 1)
 #define FXAI_AI_MLP_HIDDEN 12
 #define FXAI_AI_COUNT 32
+#define FXAI_CONFORMAL_DEPTH 96
 #define FXAI_NORM_METHOD_COUNT 15
 #define FXAI_ENHASH_BUCKETS 128
 #define FXAI_PLUGIN_CLASS_FEATURES 5
@@ -14,7 +15,12 @@
 #define FXAI_PLUGIN_REPLAY_CAPACITY 96
 #define FXAI_PLUGIN_REPLAY_STEPS 2
 #define FXAI_CONTEXT_TOP_SYMBOLS 3
-#define FXAI_CONTEXT_EXTRA_FEATS (FXAI_CONTEXT_TOP_SYMBOLS * 4)
+#define FXAI_CONTEXT_BASE_SYMBOL_FEATS 4
+#define FXAI_CONTEXT_SHARED_ADAPTER_FEATS 4
+#define FXAI_CONTEXT_MICROSTRUCTURE_FEATS 6
+#define FXAI_CONTEXT_SHARED_OFFSET (FXAI_CONTEXT_TOP_SYMBOLS * FXAI_CONTEXT_BASE_SYMBOL_FEATS)
+#define FXAI_CONTEXT_MICRO_OFFSET (FXAI_CONTEXT_SHARED_OFFSET + FXAI_CONTEXT_SHARED_ADAPTER_FEATS)
+#define FXAI_CONTEXT_EXTRA_FEATS (FXAI_CONTEXT_SHARED_OFFSET + FXAI_CONTEXT_SHARED_ADAPTER_FEATS + FXAI_CONTEXT_MICROSTRUCTURE_FEATS)
 #define FXAI_CONTEXT_DYNAMIC_POOL 12
 #define FXAI_API_VERSION_V4 4
 #define FXAI_MAX_SEQUENCE_BARS 96
@@ -127,6 +133,7 @@ enum ENUM_FXAI_FEATURE_GROUP
    FXAI_FEAT_GROUP_TIME,
    FXAI_FEAT_GROUP_CONTEXT,
    FXAI_FEAT_GROUP_COST,
+   FXAI_FEAT_GROUP_MICROSTRUCTURE,
    FXAI_FEAT_GROUP_FILTERS
 };
 
@@ -300,6 +307,47 @@ struct FXAIAIModelOutputV4
    bool   has_confidence;
    bool   has_path_quality;
 };
+
+void FXAI_ApplyConformalPredictionAdjustment(const int ai_idx,
+                                             const int regime_id,
+                                             const int horizon_minutes,
+                                             const double min_move_points,
+                                             FXAIAIPredictionV4 &pred);
+void FXAI_ResetConformalState(void);
+void FXAI_EnqueueConformalPending(const int ai_idx,
+                                  const int signal_seq,
+                                  const int regime_id,
+                                  const int horizon_minutes,
+                                  const FXAIAIPredictionV4 &pred);
+void FXAI_UpdateConformalFromPending(const int ai_idx,
+                                     const int current_signal_seq,
+                                     const FXAIDataSnapshot &snapshot,
+                                     const int &spread_m1[],
+                                     const datetime &time_arr[],
+                                     const double &high_arr[],
+                                     const double &low_arr[],
+                                     const double &close_arr[],
+                                     const double commission_points,
+                                     const double cost_buffer_points,
+                                     const double ev_threshold_points);
+int FXAI_BuildTripleBarrierLabelEx(const int i,
+                                   const int H,
+                                   const double roundtrip_cost_points,
+                                   const double ev_threshold_points,
+                                   const FXAIDataSnapshot &snapshot,
+                                   const double &high_arr[],
+                                   const double &low_arr[],
+                                   const double &close_arr[],
+                                   double &realized_move_points,
+                                   double &mfe_points,
+                                   double &mae_points,
+                                   double &time_to_hit_frac,
+                                   int &path_flags);
+void FXAI_MarkRuntimeArtifactsDirty(void);
+bool FXAI_SaveRuntimeArtifacts(const string symbol);
+bool FXAI_LoadRuntimeArtifacts(const string symbol);
+void FXAI_MaybeSaveRuntimeArtifacts(const string symbol,
+                                    const datetime bar_time);
 
 string FXAI_ReferenceTierName(const int tier)
 {
@@ -654,6 +702,8 @@ int FXAI_GetFeatureGroupForIndex(const int feature_idx)
    if(feature_idx <= 37) return (int)FXAI_FEAT_GROUP_MULTI_TIMEFRAME;
    if(feature_idx <= 45) return (int)FXAI_FEAT_GROUP_VOLATILITY;
    if(feature_idx <= 49) return (int)FXAI_FEAT_GROUP_FILTERS;
+   if(feature_idx <= 65) return (int)FXAI_FEAT_GROUP_CONTEXT;
+   if(feature_idx <= 71) return (int)FXAI_FEAT_GROUP_MICROSTRUCTURE;
    return (int)FXAI_FEAT_GROUP_CONTEXT;
 }
 
@@ -669,6 +719,7 @@ ulong FXAI_DefaultFeatureGroupsForFamily(const int family)
          mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_TIME);
          mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_CONTEXT);
          mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_COST);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_MICROSTRUCTURE);
          break;
       case FXAI_FAMILY_TREE:
          mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_PRICE);
@@ -677,6 +728,7 @@ ulong FXAI_DefaultFeatureGroupsForFamily(const int family)
          mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_TIME);
          mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_CONTEXT);
          mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_COST);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_MICROSTRUCTURE);
          mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_FILTERS);
          break;
       case FXAI_FAMILY_RULE_BASED:
@@ -690,6 +742,7 @@ ulong FXAI_DefaultFeatureGroupsForFamily(const int family)
          mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_VOLATILITY);
          mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_CONTEXT);
          mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_COST);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_MICROSTRUCTURE);
          break;
       default:
          mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_PRICE);
@@ -698,6 +751,7 @@ ulong FXAI_DefaultFeatureGroupsForFamily(const int family)
          mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_TIME);
          mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_CONTEXT);
          mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_COST);
+         mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_MICROSTRUCTURE);
          mask |= FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_FILTERS);
          break;
    }
@@ -742,7 +796,7 @@ bool FXAI_IsFeatureEnabledForSchema(const int feature_idx,
    {
       case FXAI_SCHEMA_SPARSE_STAT:
          if(feature_idx >= 46 && feature_idx <= 49) return false;
-         if(feature_idx >= 50 && feature_idx <= 61) return false;
+         if(feature_idx >= 50 && feature_idx <= 71) return false;
          return true;
       case FXAI_SCHEMA_RULE:
          return (group_id == (int)FXAI_FEAT_GROUP_PRICE ||

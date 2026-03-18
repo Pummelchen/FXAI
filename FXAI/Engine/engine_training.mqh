@@ -502,6 +502,7 @@ int FXAI_EnsureNormInputCache(const int method_id,
                                  high_arr,
                                  low_arr,
                                  close_arr,
+                                 spread_m1,
                                  time_m5,
                                  close_m5,
                                  map_m5,
@@ -541,6 +542,7 @@ int FXAI_EnsureNormInputCache(const int method_id,
                                                high_arr,
                                                low_arr,
                                                close_arr,
+                                               spread_m1,
                                                time_m5,
                                                close_m5,
                                                map_m5,
@@ -965,6 +967,7 @@ void FXAI_AddReplaySample(const FXAIPreparedSample &sample)
    g_replay_used[slot] = true;
    g_replay_bucket_count[regime_id][hslot]++;
    if(sample.sample_time > 0) g_replay_last_sample_time[hslot] = sample.sample_time;
+   FXAI_MarkRuntimeArtifactsDirty();
 }
 
 void FXAI_BoostReplayPriorityByOutcome(const datetime sample_time,

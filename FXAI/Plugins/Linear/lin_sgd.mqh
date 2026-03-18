@@ -626,6 +626,104 @@ public:
       m_mv_ema_abs = 0.0;
    }
 
+   virtual bool SupportsPersistentState(void) const { return true; }
+
+   virtual bool SaveModelState(const int handle) const
+   {
+      FileWriteInteger(handle, m_step);
+      FileWriteInteger(handle, (m_loss_ready ? 1 : 0));
+      FileWriteDouble(handle, m_loss_fast);
+      FileWriteDouble(handle, m_loss_slow);
+      FileWriteInteger(handle, m_drift_cooldown);
+      for(int c=0; c<FXAI_SGD_CLASS_COUNT; c++)
+      {
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+         {
+            FileWriteDouble(handle, m_w[c][i]);
+            FileWriteDouble(handle, m_m[c][i]);
+            FileWriteDouble(handle, m_v[c][i]);
+         }
+         for(int b=0; b<FXAI_SGD_HASH_BUCKETS; b++)
+         {
+            FileWriteDouble(handle, m_hw[c][b]);
+            FileWriteDouble(handle, m_hm[c][b]);
+            FileWriteDouble(handle, m_hv[c][b]);
+         }
+         FileWriteDouble(handle, m_cal_bias[c]);
+         FileWriteDouble(handle, m_class_ema[c]);
+         for(int k=0; k<FXAI_SGD_ISO_BINS; k++)
+         {
+            FileWriteDouble(handle, m_cal3_iso_pos[c][k]);
+            FileWriteDouble(handle, m_cal3_iso_cnt[c][k]);
+         }
+      }
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         FileWriteDouble(handle, m_mv_w[i]);
+         FileWriteDouble(handle, m_mv_m[i]);
+         FileWriteDouble(handle, m_mv_v[i]);
+      }
+      for(int b=0; b<FXAI_SGD_HASH_BUCKETS; b++)
+      {
+         FileWriteDouble(handle, m_mv_hw[b]);
+         FileWriteDouble(handle, m_mv_hm[b]);
+         FileWriteDouble(handle, m_mv_hv[b]);
+      }
+      FileWriteInteger(handle, (m_mv_ready ? 1 : 0));
+      FileWriteDouble(handle, m_mv_ema_abs);
+      FileWriteDouble(handle, m_cal_temp);
+      FileWriteInteger(handle, m_cal3_steps);
+      return true;
+   }
+
+   virtual bool LoadModelState(const int handle, const int version)
+   {
+      m_step = FileReadInteger(handle);
+      m_loss_ready = (FileReadInteger(handle) != 0);
+      m_loss_fast = FileReadDouble(handle);
+      m_loss_slow = FileReadDouble(handle);
+      m_drift_cooldown = FileReadInteger(handle);
+      for(int c=0; c<FXAI_SGD_CLASS_COUNT; c++)
+      {
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+         {
+            m_w[c][i] = FileReadDouble(handle);
+            m_m[c][i] = FileReadDouble(handle);
+            m_v[c][i] = FileReadDouble(handle);
+         }
+         for(int b=0; b<FXAI_SGD_HASH_BUCKETS; b++)
+         {
+            m_hw[c][b] = FileReadDouble(handle);
+            m_hm[c][b] = FileReadDouble(handle);
+            m_hv[c][b] = FileReadDouble(handle);
+         }
+         m_cal_bias[c] = FileReadDouble(handle);
+         m_class_ema[c] = FileReadDouble(handle);
+         for(int k=0; k<FXAI_SGD_ISO_BINS; k++)
+         {
+            m_cal3_iso_pos[c][k] = FileReadDouble(handle);
+            m_cal3_iso_cnt[c][k] = FileReadDouble(handle);
+         }
+      }
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         m_mv_w[i] = FileReadDouble(handle);
+         m_mv_m[i] = FileReadDouble(handle);
+         m_mv_v[i] = FileReadDouble(handle);
+      }
+      for(int b=0; b<FXAI_SGD_HASH_BUCKETS; b++)
+      {
+         m_mv_hw[b] = FileReadDouble(handle);
+         m_mv_hm[b] = FileReadDouble(handle);
+         m_mv_hv[b] = FileReadDouble(handle);
+      }
+      m_mv_ready = (FileReadInteger(handle) != 0);
+      m_mv_ema_abs = FileReadDouble(handle);
+      m_cal_temp = FileReadDouble(handle);
+      m_cal3_steps = FileReadInteger(handle);
+      return true;
+   }
+
 protected:
    virtual void TrainModelCore(const int y,
                                const double &x[],

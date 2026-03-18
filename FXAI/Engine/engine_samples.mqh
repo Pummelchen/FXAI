@@ -207,12 +207,24 @@ int FXAI_BuildTripleBarrierLabel(const int i,
 double FXAI_RealizedNetPointsForSignal(const int signal,
                                        const double realized_move_points,
                                        const double roundtrip_cost_points,
-                                       const int horizon_minutes)
+                                       const int horizon_minutes,
+                                       const double spread_stress,
+                                       const int path_flags)
 {
    if(signal != 0 && signal != 1) return 0.0;
 
-   double slippage_points = 0.10 + (0.05 * MathMax(roundtrip_cost_points, 0.0));
-   if(slippage_points > 5.0) slippage_points = 5.0;
+   double stress = FXAI_Clamp(spread_stress, 0.0, 4.0);
+   double slippage_points = 0.08 +
+                            (0.04 * MathMax(roundtrip_cost_points, 0.0)) +
+                            (0.18 * stress) +
+                            (0.02 * MathSqrt((double)MathMax(horizon_minutes, 1)));
+   if((path_flags & FXAI_PATHFLAG_DUAL_HIT) != 0)
+      slippage_points += 0.12 * MathMax(roundtrip_cost_points, 0.0) + 0.18 * stress;
+   if((path_flags & FXAI_PATHFLAG_SLOW_HIT) != 0)
+      slippage_points += 0.10 * stress;
+   if((path_flags & FXAI_PATHFLAG_SPREAD_STRESS) != 0)
+      slippage_points += 0.25 + 0.12 * stress;
+   if(slippage_points > 8.0) slippage_points = 8.0;
 
    double kill_penalty = 0.0;
    if(TradeKiller > 0 && horizon_minutes > TradeKiller)
@@ -334,6 +346,7 @@ bool FXAI_PrepareTrainingSample(const int i,
                                 high_arr,
                                 low_arr,
                                 close_arr,
+                                spread_m1,
                                 time_m5,
                                 close_m5,
                                 map_m5,
@@ -374,6 +387,7 @@ bool FXAI_PrepareTrainingSample(const int i,
                                                high_arr,
                                                low_arr,
                                                close_arr,
+                                               spread_m1,
                                                time_m5,
                                                close_m5,
                                                map_m5,

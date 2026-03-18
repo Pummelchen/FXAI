@@ -346,6 +346,7 @@ int SpecialDirectionAI(const string symbol)
                                 high_arr,
                                 low_arr,
                                 close_arr,
+                                spread_m1,
                                 time_m5,
                                 close_m5,
                                 map_m5,
@@ -893,6 +894,11 @@ int SpecialDirectionAI(const string symbol)
                                      expected_move,
                                      H,
                                      class_probs_pred);
+      FXAI_EnqueueConformalPending(ai_idx,
+                                   signal_seq,
+                                   regime_id,
+                                   H,
+                                   pred);
 
       if(ensembleMode == 0)
       {

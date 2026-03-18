@@ -717,6 +717,29 @@ void FXAI_PrecomputeContextAggregates(const datetime &main_time[],
          FXAI_SetContextExtraValue(ctx_extra_arr, i, top_slot * 4 + 2, top_ctx_rel[top_slot]);
          FXAI_SetContextExtraValue(ctx_extra_arr, i, top_slot * 4 + 3, top_ctx_corr[top_slot]);
       }
+
+      double adapter_stability = 0.5;
+      double adapter_lead = 0.5;
+      int adapter_used = 0;
+      for(int top_slot=0; top_slot<FXAI_CONTEXT_TOP_SYMBOLS; top_slot++)
+      {
+         if(top_symbol_idx[top_slot] < 0) continue;
+         double stab = 1.0 - FXAI_Clamp(MathAbs(top_ctx_ret[top_slot] - top_ctx_lag[top_slot]) / MathMax(main_vol, 1e-4), 0.0, 1.0);
+         double lead = FXAI_Clamp(MathAbs(top_ctx_lag[top_slot]) / MathMax(main_vol, 1e-4), 0.0, 4.0) / 4.0;
+         adapter_stability += stab;
+         adapter_lead += lead;
+         adapter_used++;
+      }
+      if(adapter_used > 0)
+      {
+         adapter_stability /= (double)(adapter_used + 1);
+         adapter_lead /= (double)(adapter_used + 1);
+      }
+
+      FXAI_SetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 0, FXAI_Clamp(mean / MathMax(main_vol, 1e-4), -1.0, 1.0));
+      FXAI_SetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 1, FXAI_Clamp(adapter_stability, 0.0, 1.0));
+      FXAI_SetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 2, FXAI_Clamp(adapter_lead, 0.0, 1.0));
+      FXAI_SetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 3, coverage);
    }
 }
 
@@ -897,6 +920,8 @@ void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
       double weighted_sum2 = 0.0;
       double weight_total = 0.0;
       double up_weight = 0.0;
+      double stability_sum = 0.0;
+      double lead_sum = 0.0;
       int valid = 0;
       double top_score[FXAI_CONTEXT_TOP_SYMBOLS];
       int top_symbol_idx[FXAI_CONTEXT_TOP_SYMBOLS];
@@ -949,6 +974,8 @@ void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
          weighted_sum2 += w * ctx_ret_raw * ctx_ret_raw;
          weight_total += w;
          if(ctx_ret_raw > 0.0) up_weight += w;
+         stability_sum += w * stability_edge;
+         lead_sum += w * (lag_edge / 4.0);
          valid++;
 
          for(int top_slot=0; top_slot<FXAI_CONTEXT_TOP_SYMBOLS; top_slot++)
@@ -995,6 +1022,14 @@ void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
          FXAI_SetContextExtraValue(ctx_extra_arr, i, top_slot * 4 + 2, top_ctx_rel[top_slot]);
          FXAI_SetContextExtraValue(ctx_extra_arr, i, top_slot * 4 + 3, top_ctx_corr[top_slot]);
       }
+
+      double adapter_util = FXAI_Clamp(mean / MathMax(main_vol, 1e-4), -1.0, 1.0);
+      double adapter_stability = (weight_total > 0.0 ? stability_sum / weight_total : 0.5);
+      double adapter_lead = (weight_total > 0.0 ? lead_sum / weight_total : 0.5);
+      FXAI_SetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 0, adapter_util);
+      FXAI_SetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 1, FXAI_Clamp(adapter_stability, 0.0, 1.0));
+      FXAI_SetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 2, FXAI_Clamp(adapter_lead, 0.0, 1.0));
+      FXAI_SetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 3, coverage);
 
       for(int s=0; s<ctx_count && s<FXAI_MAX_CONTEXT_SYMBOLS; s++)
       {
@@ -1088,10 +1123,14 @@ void ResetAIState(const string symbol)
    FXAI_ResetReliabilityPending();
    FXAI_ResetHorizonPolicyPending();
    FXAI_ResetStackPending();
+   FXAI_ResetConformalState();
    FXAI_ResetAdaptiveRoutingState();
    FXAI_ResetRegimeCalibration();
    FXAI_ResetReplayReservoir();
+   if(g_plugins_ready)
+      g_plugins.ResetAll();
    FXAI_LoadMetaArtifacts(symbol);
+   FXAI_LoadRuntimeArtifacts(symbol);
    for(int s=0; s<FXAI_MAX_CONTEXT_SYMBOLS; s++)
    {
       g_context_symbol_utility[s] = 0.0;
@@ -1119,9 +1158,6 @@ void ResetAIState(const string symbol)
       g_ai_last_train_bar[i] = 0;
       FXAI_ResetModelAuxState(i);
    }
-
-   if(g_plugins_ready)
-      g_plugins.ResetAll();
 }
 
 bool FXAI_ValidateNativePluginAPI()
@@ -1589,6 +1625,163 @@ bool FXAI_RunCalibrationDriftCompliance(CFXAIAIPlugin &plugin,
    return true;
 }
 
+double FXAI_ComplianceRandSymmetric(ulong &state)
+{
+   state = state * (ulong)1664525 + (ulong)1013904223;
+   ulong bucket = state % (ulong)20001;
+   return ((double)bucket / 10000.0) - 1.0;
+}
+
+bool FXAI_RunDeterminismCompliance(CFXAIAIPlugin &plugin,
+                                   const FXAIAIManifestV4 &manifest,
+                                   const FXAIAIHyperParams &hp,
+                                   const datetime now_t)
+{
+   int horizon = FXAI_ComplianceHorizon(manifest, 13);
+   FXAIAIPredictRequestV4 req;
+   FXAI_FillCompliancePredictRequest(plugin, req, 0.8, 0.72, 0.38, 0.18, now_t, 2, horizon);
+
+   FXAIAIPredictionV4 pred_a, pred_b;
+   if(!FXAI_PredictViaV4(plugin, req, hp, pred_a) ||
+      !FXAI_ValidatePredictionOutput(plugin, pred_a, "determinism_a"))
+      return false;
+   if(!FXAI_PredictViaV4(plugin, req, hp, pred_b) ||
+      !FXAI_ValidatePredictionOutput(plugin, pred_b, "determinism_b"))
+      return false;
+
+   double drift = FXAI_PredictionDistance(pred_a, pred_b);
+   if(drift > 1e-8)
+   {
+      Print("FXAI compliance error: deterministic replay failed. model=", plugin.AIName(),
+            " drift=", DoubleToString(drift, 10));
+      return false;
+   }
+   return true;
+}
+
+bool FXAI_RunPersistenceRoundTripCompliance(CFXAIAIPlugin &plugin,
+                                            const FXAIAIManifestV4 &manifest,
+                                            const FXAIAIHyperParams &hp,
+                                            const datetime now_t)
+{
+   if(!plugin.SupportsPersistentState())
+      return true;
+
+   string file_name = plugin.PersistentStateFile("__compliance__");
+   FileDelete(file_name, FILE_COMMON);
+   if(!plugin.SaveStateFile(file_name))
+   {
+      Print("FXAI compliance error: failed to save persistent state. model=", plugin.AIName());
+      return false;
+   }
+
+   CFXAIAIPlugin *twin = g_plugins.CreateInstance(plugin.AIId());
+   if(twin == NULL)
+   {
+      FileDelete(file_name, FILE_COMMON);
+      Print("FXAI compliance error: failed to create persistence twin. model=", plugin.AIName());
+      return false;
+   }
+
+   twin.Reset();
+   twin.EnsureInitialized(hp);
+   if(!twin.LoadStateFile(file_name))
+   {
+      delete twin;
+      FileDelete(file_name, FILE_COMMON);
+      Print("FXAI compliance error: failed to reload persistent state. model=", plugin.AIName());
+      return false;
+   }
+
+   FXAIAIPredictRequestV4 req;
+   FXAI_FillCompliancePredictRequest(plugin, req, 0.9, 0.84, 0.44, 0.22, now_t, 1, FXAI_ComplianceHorizon(manifest, 21));
+
+   FXAIAIPredictionV4 pred_live, pred_restored;
+   bool live_ok = FXAI_PredictViaV4(plugin, req, hp, pred_live) &&
+                  FXAI_ValidatePredictionOutput(plugin, pred_live, "persist_live");
+   bool twin_ok = FXAI_PredictViaV4(*twin, req, hp, pred_restored) &&
+                  FXAI_ValidatePredictionOutput(*twin, pred_restored, "persist_twin");
+
+   delete twin;
+   FileDelete(file_name, FILE_COMMON);
+   if(!live_ok || !twin_ok)
+      return false;
+
+   double drift = FXAI_PredictionDistance(pred_live, pred_restored);
+   if(drift > 1e-6)
+   {
+      Print("FXAI compliance error: persistence round-trip drift too high. model=", plugin.AIName(),
+            " drift=", DoubleToString(drift, 8));
+      return false;
+   }
+   return true;
+}
+
+bool FXAI_RunFuzzStressCompliance(CFXAIAIPlugin &plugin,
+                                  const FXAIAIManifestV4 &manifest,
+                                  const FXAIAIHyperParams &hp,
+                                  const datetime now_t)
+{
+   ulong state = (ulong)(plugin.AIId() + 1) * (ulong)2654435761;
+   int seq = FXAI_ComplianceSequenceBars(manifest);
+   int h_min = FXAI_ComplianceHorizon(manifest, manifest.min_horizon_minutes);
+   int h_mid = FXAI_ComplianceHorizon(manifest, 13);
+   int h_max = FXAI_ComplianceHorizon(manifest, manifest.max_horizon_minutes);
+
+   for(int step=0; step<48; step++)
+   {
+      double v1 = FXAI_ComplianceRandSymmetric(state);
+      double v2 = 0.55 * FXAI_ComplianceRandSymmetric(state);
+      double v3 = 0.30 * FXAI_ComplianceRandSymmetric(state);
+      double cost = 0.4 + 3.4 * FXAI_Clamp(0.5 + 0.5 * FXAI_ComplianceRandSymmetric(state), 0.0, 1.0);
+      int regime = step % 4;
+      int horizon = (step % 3 == 0 ? h_min : (step % 3 == 1 ? h_mid : h_max));
+
+      if((step % 4) == 0)
+      {
+         int cls = (v1 > 0.12 ? (int)FXAI_LABEL_BUY :
+                   (v1 < -0.12 ? (int)FXAI_LABEL_SELL : (int)FXAI_LABEL_SKIP));
+         double move = (cls == (int)FXAI_LABEL_SKIP ? 0.15 + 0.20 * MathAbs(v1) :
+                       (cls == (int)FXAI_LABEL_BUY ? 4.0 + 4.0 * MathAbs(v1) : -(4.0 + 4.0 * MathAbs(v1))));
+         FXAIAITrainRequestV4 train_req;
+         FXAI_FillComplianceTrainRequest(plugin, train_req, cls, move, cost,
+                                         v1, v2, v3,
+                                         now_t - (step * 60), regime, horizon);
+         train_req.ctx.sequence_bars = seq;
+         FXAI_TrainViaV4(plugin, train_req, hp);
+      }
+
+      FXAIAIPredictRequestV4 req;
+      FXAI_FillCompliancePredictRequest(plugin, req, cost, v1, v2, v3,
+                                        now_t + (step * 60), regime, horizon);
+      req.ctx.sequence_bars = seq;
+      FXAIAIPredictionV4 pred;
+      if(!FXAI_PredictViaV4(plugin, req, hp, pred) ||
+         !FXAI_ValidatePredictionOutput(plugin, pred, "fuzz"))
+         return false;
+
+      if(pred.move_q25_points > pred.move_q50_points + 1e-6 ||
+         pred.move_q50_points > pred.move_q75_points + 1e-6)
+      {
+         Print("FXAI compliance error: move quantiles out of order. model=", plugin.AIName());
+         return false;
+      }
+      if(pred.path_risk < 0.0 || pred.path_risk > 1.0 ||
+         pred.fill_risk < 0.0 || pred.fill_risk > 1.0 ||
+         pred.confidence < 0.0 || pred.confidence > 1.0 ||
+         pred.reliability < 0.0 || pred.reliability > 1.0)
+      {
+         Print("FXAI compliance error: bounded risk/confidence outputs failed. model=", plugin.AIName());
+         return false;
+      }
+
+      if((step % 12) == 11)
+         plugin.ResetState((int)FXAI_RESET_SESSION_CHANGE, now_t + (step * 60));
+   }
+
+   return true;
+}
+
 bool FXAI_RunPluginComplianceHarness()
 {
    datetime now_t = TimeCurrent();
@@ -1700,6 +1893,14 @@ bool FXAI_RunPluginComplianceHarness()
       {
          Print("FXAI compliance error: core predict failures detected. model=", plugin.AIName(),
                " failures=", plugin.CorePredictFailures());
+         delete plugin;
+         return false;
+      }
+
+      if(!FXAI_RunDeterminismCompliance(*plugin, manifest, hp, now_t + 120) ||
+         !FXAI_RunPersistenceRoundTripCompliance(*plugin, manifest, hp, now_t + 150) ||
+         !FXAI_RunFuzzStressCompliance(*plugin, manifest, hp, now_t + 180))
+      {
          delete plugin;
          return false;
       }

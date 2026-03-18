@@ -8,6 +8,7 @@ bool FXAI_ComputeFeatureVector(const int i,
                               const double &main_h1_ohlc[],
                               const double &main_l1[],
                               const double &main_m1[],
+                              const int &main_spread_arr[],
                               const datetime &main_t5[],
                               const double &main_m5[],
                               const int &map_m5[],
@@ -35,6 +36,7 @@ bool FXAI_ComputeFeatureVector(const int i,
    if(ArraySize(main_o1) != n) return false;
    if(ArraySize(main_h1_ohlc) != n) return false;
    if(ArraySize(main_l1) != n) return false;
+   if(ArraySize(main_spread_arr) != n) return false;
    if(i >= ArraySize(main_t1)) return false;
 
    datetime t_ref = main_t1[i];
@@ -272,6 +274,61 @@ bool FXAI_ComputeFeatureVector(const int i,
       features[base_f + 2] = ctx_rel / vol_unit;
       features[base_f + 3] = ctx_corr;
    }
+
+   double shared_util = FXAI_GetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 0, 0.0);
+   double shared_stability = FXAI_GetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 1, 0.5);
+   double shared_lead = FXAI_GetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 2, 0.5);
+   double shared_coverage = FXAI_GetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 3, 0.0);
+   features[62] = FXAI_Clamp(shared_util, -1.0, 1.0);
+   features[63] = FXAI_Clamp(2.0 * shared_stability - 1.0, -1.0, 1.0);
+   features[64] = FXAI_Clamp(2.0 * shared_lead - 1.0, -1.0, 1.0);
+   features[65] = FXAI_Clamp(2.0 * shared_coverage - 1.0, -1.0, 1.0);
+
+   double point_value = (_Point > 0.0 ? _Point : 1.0);
+   double bar_range = MathMax(h - l, point_value);
+   double close_loc = ((c - l) - (h - c)) / bar_range;
+   double wick_up = MathMax(0.0, h - MathMax(c, o));
+   double wick_dn = MathMax(0.0, MathMin(c, o) - l);
+   double wick_imbalance = (wick_up - wick_dn) / bar_range;
+   double body_eff = MathAbs(c - o) / bar_range;
+
+   double avg_spread20 = MathMax(spread_points, 0.25);
+   double avg_range_points20 = MathMax(bar_range / point_value, 0.25);
+   double spread_prev = spread_points;
+   int spread_used = 0;
+   int range_used = 0;
+   for(int k=0; k<20; k++)
+   {
+      int ik = i + k;
+      if(ik >= 0 && ik < ArraySize(main_spread_arr))
+      {
+         avg_spread20 += MathMax((double)main_spread_arr[ik], 0.0);
+         spread_used++;
+         if(k == 1)
+            spread_prev = MathMax((double)main_spread_arr[ik], 0.0);
+      }
+      if(ik >= 0 && ik < ArraySize(main_h1_ohlc) && ik < ArraySize(main_l1))
+      {
+         avg_range_points20 += MathMax(0.0, (main_h1_ohlc[ik] - main_l1[ik]) / point_value);
+         range_used++;
+      }
+   }
+   avg_spread20 /= (double)MathMax(spread_used + 1, 1);
+   avg_range_points20 /= (double)MathMax(range_used + 1, 1);
+
+   double bar_range_points = MathMax(0.0, (h - l) / point_value);
+   double spread_shock = (spread_points / MathMax(avg_spread20, 0.25)) - 1.0;
+   double spread_accel = (spread_points - spread_prev) / MathMax(avg_spread20, 0.25);
+   double spread_to_range = spread_points / MathMax(bar_range_points + 0.25, 0.25);
+   double range_pressure = (bar_range_points / MathMax(avg_range_points20, 0.25)) - 1.0;
+   double micro_trend = close_loc * (0.60 + 0.40 * body_eff);
+
+   features[66] = FXAI_Clamp(close_loc, -1.2, 1.2);
+   features[67] = FXAI_Clamp(wick_imbalance, -1.2, 1.2);
+   features[68] = FXAI_Clamp(spread_shock, -4.0, 8.0);
+   features[69] = FXAI_Clamp(spread_accel, -4.0, 8.0);
+   features[70] = FXAI_Clamp(spread_to_range, 0.0, 8.0);
+   features[71] = FXAI_Clamp(micro_trend * (1.0 + 0.35 * range_pressure), -6.0, 6.0);
 
    for(int f=0; f<FXAI_AI_FEATURES; f++)
    {

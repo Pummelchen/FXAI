@@ -20,6 +20,9 @@ input double Audit_SlippagePoints = 0.0;
 input double Audit_FillPenaltyPoints = 0.0;
 input int    Audit_WalkForwardTrainBars = 256;
 input int    Audit_WalkForwardTestBars = 64;
+input int    Audit_WalkForwardPurgeBars = 32;
+input int    Audit_WalkForwardEmbargoBars = 24;
+input int    Audit_WalkForwardFolds = 6;
 input int    Audit_Seed = 42;
 input bool   Audit_RunTensorKernelSanity = true;
 input bool   Audit_ResetOutput = true;
@@ -77,6 +80,30 @@ int FXAI_AuditGetWalkForwardTrainBars(void)
 int FXAI_AuditGetWalkForwardTestBars(void)
 {
    return Audit_WalkForwardTestBars;
+}
+
+int FXAI_AuditGetWalkForwardPurgeBars(void)
+{
+   int v = Audit_WalkForwardPurgeBars;
+   if(v < 0) v = 0;
+   if(v > 512) v = 512;
+   return v;
+}
+
+int FXAI_AuditGetWalkForwardEmbargoBars(void)
+{
+   int v = Audit_WalkForwardEmbargoBars;
+   if(v < 0) v = 0;
+   if(v > 512) v = 512;
+   return v;
+}
+
+int FXAI_AuditGetWalkForwardFolds(void)
+{
+   int v = Audit_WalkForwardFolds;
+   if(v < 2) v = 2;
+   if(v > 16) v = 16;
+   return v;
 }
 
 ulong FXAI_AuditGetFeatureGroupsMaskOverride(void)
@@ -318,6 +345,9 @@ int OnInit()
                " drift=", DoubleToString(metrics.conf_drift, 3),
                " reset=", DoubleToString(metrics.reset_delta, 3),
                " seq=", DoubleToString(metrics.sequence_delta, 3),
+               " wf_pbo=", DoubleToString(metrics.wf_pbo, 3),
+               " wf_dsr=", DoubleToString(metrics.wf_dsr, 3),
+               " wf_pass=", DoubleToString(metrics.wf_pass_rate, 3),
                " flags=", metrics.issue_flags);
          if(metrics.issue_flags != 0) failures++;
       }
