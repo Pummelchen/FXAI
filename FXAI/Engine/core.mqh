@@ -1,7 +1,7 @@
 #ifndef __FXAI_CORE_MQH__
 #define __FXAI_CORE_MQH__
 
-#define FXAI_AI_FEATURES 72
+#define FXAI_AI_FEATURES 80
 #define FXAI_AI_WEIGHTS (FXAI_AI_FEATURES + 1)
 #define FXAI_AI_MLP_HIDDEN 12
 #define FXAI_AI_COUNT 32
@@ -22,9 +22,22 @@
 #define FXAI_CONTEXT_MICRO_OFFSET (FXAI_CONTEXT_SHARED_OFFSET + FXAI_CONTEXT_SHARED_ADAPTER_FEATS)
 #define FXAI_CONTEXT_EXTRA_FEATS (FXAI_CONTEXT_SHARED_OFFSET + FXAI_CONTEXT_SHARED_ADAPTER_FEATS + FXAI_CONTEXT_MICROSTRUCTURE_FEATS)
 #define FXAI_CONTEXT_DYNAMIC_POOL 12
-#define FXAI_SHARED_TRANSFER_FEATURES 9
+#define FXAI_SHARED_TRANSFER_FEATURES 14
 #define FXAI_API_VERSION_V4 4
 #define FXAI_MAX_SEQUENCE_BARS 96
+
+#ifndef FXAI_PATHFLAG_DUAL_HIT
+#define FXAI_PATHFLAG_DUAL_HIT 1
+#endif
+#ifndef FXAI_PATHFLAG_KILLED_EARLY
+#define FXAI_PATHFLAG_KILLED_EARLY 2
+#endif
+#ifndef FXAI_PATHFLAG_SPREAD_STRESS
+#define FXAI_PATHFLAG_SPREAD_STRESS 4
+#endif
+#ifndef FXAI_PATHFLAG_SLOW_HIT
+#define FXAI_PATHFLAG_SLOW_HIT 8
+#endif
 
 
 enum ENUM_AI_TYPE
@@ -249,6 +262,7 @@ struct FXAIAIContextV4
    double cost_points;
    double min_move_points;
    double point_value;
+   double domain_hash;
    datetime sample_time;
 };
 
@@ -315,6 +329,17 @@ struct FXAIExecutionProfile
    double partial_fill_penalty;
    double latency_penalty_points;
    double allowed_deviation_points;
+};
+
+struct FXAIExecutionReplayFrame
+{
+   double slippage_mult;
+   double fill_mult;
+   double latency_add_points;
+   double reject_prob;
+   double partial_fill_prob;
+   double drift_penalty_points;
+   int    event_flags;
 };
 
 struct FXAIAIModelOutputV4
@@ -467,6 +492,22 @@ double FXAI_Logit(const double p)
    return MathLog(x / (1.0 - x));
 }
 
+double FXAI_SymbolHash01(const string symbol)
+{
+   string s = symbol;
+   if(StringLen(s) <= 0)
+      s = _Symbol;
+   uint h = 2166136261U;
+   int n = StringLen(s);
+   for(int i=0; i<n; i++)
+   {
+      uint ch = (uint)StringGetCharacter(s, i);
+      h ^= ch;
+      h *= 16777619U;
+   }
+   return (double)(h % 100000U) / 100000.0;
+}
+
 double FXAI_Tanh(const double z)
 {
    if(z > 18.0) return 1.0;
@@ -561,6 +602,94 @@ void FXAI_ClearExecutionProfile(FXAIExecutionProfile &profile)
    profile.allowed_deviation_points = 2.0;
 }
 
+void FXAI_ClearExecutionReplayFrame(FXAIExecutionReplayFrame &frame)
+{
+   frame.slippage_mult = 1.0;
+   frame.fill_mult = 1.0;
+   frame.latency_add_points = 0.0;
+   frame.reject_prob = 0.0;
+   frame.partial_fill_prob = 0.0;
+   frame.drift_penalty_points = 0.0;
+   frame.event_flags = 0;
+}
+
+void FXAI_BuildExecutionReplayFrame(const FXAIExecutionProfile &profile,
+                                    const datetime sample_time,
+                                    const int horizon_minutes,
+                                    const double spread_stress,
+                                    const int path_flags,
+                                    const int scenario_id,
+                                    FXAIExecutionReplayFrame &frame)
+{
+   FXAI_ClearExecutionReplayFrame(frame);
+
+   MqlDateTime dt;
+   TimeToStruct((sample_time > 0 ? sample_time : TimeCurrent()), dt);
+   double stress = FXAI_Clamp(spread_stress, 0.0, 4.0);
+   double horizon_scale = MathSqrt((double)MathMax(horizon_minutes, 1));
+   double mm_norm = ((double)dt.min + (double)dt.sec / 60.0) / 60.0;
+   double session_edge = 1.0 - MathMin(MathAbs((double)dt.hour - 8.0), MathAbs((double)dt.hour - 16.0)) / 8.0;
+   session_edge = FXAI_Clamp(session_edge, 0.0, 1.0);
+   double rollover_edge = 1.0 - MathMin(MathAbs((double)dt.hour - 23.0), 6.0) / 6.0;
+   rollover_edge = FXAI_Clamp(rollover_edge, 0.0, 1.0);
+   double pulse = 0.5 + 0.5 * MathSin(6.283185307179586 * mm_norm);
+
+   frame.slippage_mult = 1.0 +
+                         0.05 * stress +
+                         0.04 * session_edge +
+                         0.03 * rollover_edge +
+                         0.015 * horizon_scale +
+                         0.02 * pulse;
+   frame.fill_mult = 1.0 +
+                     0.04 * stress +
+                     0.03 * session_edge +
+                     0.02 * rollover_edge;
+   frame.latency_add_points = MathMax(profile.latency_penalty_points, 0.0) *
+                              (0.40 + 0.35 * session_edge + 0.25 * rollover_edge + 0.10 * stress);
+   frame.reject_prob = FXAI_Clamp(0.002 +
+                                  0.010 * stress +
+                                  0.008 * session_edge +
+                                  0.008 * rollover_edge,
+                                  0.0,
+                                  0.35);
+   frame.partial_fill_prob = FXAI_Clamp(0.01 +
+                                        0.05 * stress +
+                                        0.04 * session_edge +
+                                        0.02 * rollover_edge,
+                                        0.0,
+                                        0.95);
+   frame.drift_penalty_points = 0.05 * MathMax(profile.cost_buffer_points, 0.0) * (session_edge + rollover_edge);
+
+   if((path_flags & FXAI_PATHFLAG_DUAL_HIT) != 0)
+      frame.event_flags |= FXAI_PATHFLAG_DUAL_HIT;
+   if((path_flags & FXAI_PATHFLAG_SPREAD_STRESS) != 0)
+      frame.event_flags |= FXAI_PATHFLAG_SPREAD_STRESS;
+
+   if(scenario_id == 11) // market_session_edges
+   {
+      frame.slippage_mult += 0.10;
+      frame.fill_mult += 0.08;
+      frame.reject_prob = FXAI_Clamp(frame.reject_prob + 0.05, 0.0, 0.45);
+      frame.partial_fill_prob = FXAI_Clamp(frame.partial_fill_prob + 0.10, 0.0, 0.98);
+      frame.event_flags |= FXAI_PATHFLAG_SLOW_HIT;
+   }
+   else if(scenario_id == 12) // market_spread_shock
+   {
+      frame.slippage_mult += 0.16;
+      frame.fill_mult += 0.12;
+      frame.latency_add_points += 0.20 + 0.10 * stress;
+      frame.reject_prob = FXAI_Clamp(frame.reject_prob + 0.08, 0.0, 0.50);
+      frame.partial_fill_prob = FXAI_Clamp(frame.partial_fill_prob + 0.14, 0.0, 0.99);
+      frame.event_flags |= FXAI_PATHFLAG_SPREAD_STRESS;
+   }
+   else if(scenario_id == 13) // market_walkforward
+   {
+      frame.slippage_mult += 0.05;
+      frame.fill_mult += 0.04;
+      frame.reject_prob = FXAI_Clamp(frame.reject_prob + 0.03, 0.0, 0.40);
+   }
+}
+
 void FXAI_SetExecutionProfilePreset(const int profile_id,
                                     FXAIExecutionProfile &profile)
 {
@@ -652,6 +781,25 @@ double FXAI_ExecutionSlippagePoints(const FXAIExecutionProfile &profile,
    return slippage_points;
 }
 
+double FXAI_ExecutionSlippagePointsReplay(const FXAIExecutionProfile &profile,
+                                          const FXAIExecutionReplayFrame &frame,
+                                          const double roundtrip_cost_points,
+                                          const int horizon_minutes,
+                                          const double spread_stress,
+                                          const int path_flags)
+{
+   double slippage_points = FXAI_ExecutionSlippagePoints(profile,
+                                                         roundtrip_cost_points,
+                                                         horizon_minutes,
+                                                         spread_stress,
+                                                         path_flags | frame.event_flags);
+   slippage_points = slippage_points * FXAI_Clamp(frame.slippage_mult, 0.50, 3.00) +
+                     MathMax(frame.latency_add_points, 0.0) +
+                     MathMax(frame.drift_penalty_points, 0.0);
+   if(slippage_points > 18.0) slippage_points = 18.0;
+   return slippage_points;
+}
+
 double FXAI_ExecutionFillPenaltyPoints(const FXAIExecutionProfile &profile,
                                        const double roundtrip_cost_points,
                                        const double spread_stress,
@@ -665,6 +813,23 @@ double FXAI_ExecutionFillPenaltyPoints(const FXAIExecutionProfile &profile,
    if((path_flags & 1) != 0)
       fill_penalty += 0.08 * MathMax(roundtrip_cost_points, 0.0);
    if(fill_penalty > 10.0) fill_penalty = 10.0;
+   return fill_penalty;
+}
+
+double FXAI_ExecutionFillPenaltyPointsReplay(const FXAIExecutionProfile &profile,
+                                             const FXAIExecutionReplayFrame &frame,
+                                             const double roundtrip_cost_points,
+                                             const double spread_stress,
+                                             const int path_flags)
+{
+   double fill_penalty = FXAI_ExecutionFillPenaltyPoints(profile,
+                                                         roundtrip_cost_points,
+                                                         spread_stress,
+                                                         path_flags | frame.event_flags);
+   fill_penalty *= FXAI_Clamp(frame.fill_mult, 0.50, 3.00);
+   fill_penalty += MathMax(profile.partial_fill_penalty, 0.0) * FXAI_Clamp(frame.partial_fill_prob, 0.0, 1.0);
+   fill_penalty += 0.50 * MathMax(frame.drift_penalty_points, 0.0);
+   if(fill_penalty > 15.0) fill_penalty = 15.0;
    return fill_penalty;
 }
 
@@ -869,6 +1034,9 @@ int FXAI_GetFeatureGroupForIndex(const int feature_idx)
    if(feature_idx <= 49) return (int)FXAI_FEAT_GROUP_FILTERS;
    if(feature_idx <= 65) return (int)FXAI_FEAT_GROUP_CONTEXT;
    if(feature_idx <= 71) return (int)FXAI_FEAT_GROUP_MICROSTRUCTURE;
+   if(feature_idx <= 73) return (int)FXAI_FEAT_GROUP_TIME;
+   if(feature_idx <= 78) return (int)FXAI_FEAT_GROUP_COST;
+   if(feature_idx == 79) return (int)FXAI_FEAT_GROUP_FILTERS;
    return (int)FXAI_FEAT_GROUP_CONTEXT;
 }
 
@@ -1402,6 +1570,7 @@ void FXAI_ClearContextV4(FXAIAIContextV4 &ctx)
    ctx.cost_points = 0.0;
    ctx.min_move_points = 0.0;
    ctx.point_value = 0.0;
+    ctx.domain_hash = FXAI_SymbolHash01(_Symbol);
    ctx.sample_time = 0;
 }
 
@@ -1451,6 +1620,11 @@ bool FXAI_ValidateContextV4(const FXAIAIContextV4 &ctx,
    if(!MathIsValidNumber(ctx.min_move_points) || ctx.min_move_points < 0.0)
    {
       reason = "ctx.min_move_points";
+      return false;
+   }
+   if(!MathIsValidNumber(ctx.domain_hash) || ctx.domain_hash < 0.0 || ctx.domain_hash > 1.0)
+   {
+      reason = "ctx.domain_hash";
       return false;
    }
    if(!MathIsValidNumber(ctx.point_value) || ctx.point_value <= 0.0)

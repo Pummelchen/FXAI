@@ -1,7 +1,112 @@
 #ifndef __FXAI_FEATURE_BUILD_MQH__
 #define __FXAI_FEATURE_BUILD_MQH__
 
+double FXAI_CyclicHourPulse(const double hour_value,
+                            const double center_hour,
+                            const double radius_hours)
+{
+   double radius = (radius_hours > 1e-6 ? radius_hours : 1.0);
+   double d = MathAbs(hour_value - center_hour);
+   if(d > 12.0)
+      d = 24.0 - d;
+   return FXAI_Clamp(1.0 - d / radius, 0.0, 1.0);
+}
+
+double FXAI_RolloverProximityFeature(const datetime sample_time)
+{
+   MqlDateTime dt;
+   TimeToStruct(sample_time, dt);
+   double hour_value = (double)dt.hour + (double)dt.min / 60.0;
+   return FXAI_CyclicHourPulse(hour_value, 23.0, 3.0);
+}
+
+double FXAI_SessionTransitionFeature(const datetime sample_time)
+{
+   MqlDateTime dt;
+   TimeToStruct(sample_time, dt);
+   double hour_value = (double)dt.hour + (double)dt.min / 60.0;
+   double asia_to_eu = FXAI_CyclicHourPulse(hour_value, 7.0, 2.5);
+   double eu_to_us = FXAI_CyclicHourPulse(hour_value, 13.0, 2.5);
+   double us_to_roll = FXAI_CyclicHourPulse(hour_value, 21.0, 2.5);
+   return FXAI_Clamp(0.60 * asia_to_eu + 0.80 * eu_to_us - 0.70 * us_to_roll, -1.0, 1.0);
+}
+
+double FXAI_SessionOverlapFeature(const datetime sample_time)
+{
+   MqlDateTime dt;
+   TimeToStruct(sample_time, dt);
+   double hour_value = (double)dt.hour + (double)dt.min / 60.0;
+   double london_open = FXAI_CyclicHourPulse(hour_value, 8.0, 3.0);
+   double ny_open = FXAI_CyclicHourPulse(hour_value, 13.5, 3.0);
+   double overlap = MathMin(london_open, ny_open);
+   return FXAI_Clamp(0.70 * overlap + 0.30 * FXAI_CyclicHourPulse(hour_value, 15.0, 2.0), 0.0, 1.0);
+}
+
+void FXAI_GetSwapCarryFeatures(const string symbol,
+                               const datetime sample_time,
+                               const double momentum_signal,
+                               const double ctx_signal,
+                               double &triple_swap_bias,
+                               double &swap_long_pressure,
+                               double &swap_short_pressure,
+                               double &carry_alignment)
+{
+   long triple_roll = 3;
+   if(!SymbolInfoInteger(symbol, SYMBOL_SWAP_ROLLOVER3DAYS, triple_roll))
+      triple_roll = 3;
+
+   MqlDateTime dt;
+   TimeToStruct(sample_time, dt);
+   int triple_dow = (int)triple_roll;
+   if(triple_dow < 0 || triple_dow > 6)
+      triple_dow = 3;
+   double day_bias = (dt.day_of_week == triple_dow ? 1.0 : -0.25);
+   double roll_bias = FXAI_RolloverProximityFeature(sample_time);
+   triple_swap_bias = FXAI_Clamp(day_bias * (0.35 + 0.65 * roll_bias), -1.0, 1.0);
+
+   double swap_long = SymbolInfoDouble(symbol, SYMBOL_SWAP_LONG);
+   double swap_short = SymbolInfoDouble(symbol, SYMBOL_SWAP_SHORT);
+   double scale = MathMax(MathMax(MathAbs(swap_long), MathAbs(swap_short)), 0.25);
+   swap_long_pressure = FXAI_Clamp(swap_long / scale, -4.0, 4.0);
+   swap_short_pressure = FXAI_Clamp(swap_short / scale, -4.0, 4.0);
+
+   double carry_skew = (swap_long - swap_short) / scale;
+   double directional = FXAI_Clamp(0.70 * momentum_signal + 0.30 * ctx_signal, -4.0, 4.0);
+   carry_alignment = FXAI_Clamp(carry_skew * directional, -6.0, 6.0);
+}
+
+double FXAI_LocalFeatureFamilyDrift(const double &features[])
+{
+   double family_sum[FXAI_FEATURE_GROUP_COUNT];
+   int family_cnt[FXAI_FEATURE_GROUP_COUNT];
+   for(int g=0; g<FXAI_FEATURE_GROUP_COUNT; g++)
+   {
+      family_sum[g] = 0.0;
+      family_cnt[g] = 0;
+   }
+
+   for(int f=0; f<79 && f < FXAI_AI_FEATURES; f++)
+   {
+      int g = FXAI_GetFeatureGroupForIndex(f);
+      if(g < 0 || g >= FXAI_FEATURE_GROUP_COUNT)
+         continue;
+      family_sum[g] += features[f];
+      family_cnt[g]++;
+   }
+
+   double family_mean[FXAI_FEATURE_GROUP_COUNT];
+   for(int g=0; g<FXAI_FEATURE_GROUP_COUNT; g++)
+      family_mean[g] = (family_cnt[g] > 0 ? family_sum[g] / (double)family_cnt[g] : 0.0);
+
+   double drift = 0.0;
+   drift += MathAbs(family_mean[(int)FXAI_FEAT_GROUP_PRICE] - family_mean[(int)FXAI_FEAT_GROUP_MULTI_TIMEFRAME]);
+   drift += MathAbs(family_mean[(int)FXAI_FEAT_GROUP_CONTEXT] - family_mean[(int)FXAI_FEAT_GROUP_COST]);
+   drift += 0.50 * MathAbs(family_mean[(int)FXAI_FEAT_GROUP_MICROSTRUCTURE] - family_mean[(int)FXAI_FEAT_GROUP_FILTERS]);
+   return FXAI_Clamp(drift / 3.0, 0.0, 6.0);
+}
+
 bool FXAI_ComputeFeatureVector(const int i,
+                              const string symbol,
                               const double spread_points,
                               const datetime &main_t1[],
                               const double &main_o1[],
@@ -284,7 +389,9 @@ bool FXAI_ComputeFeatureVector(const int i,
    features[64] = FXAI_Clamp(2.0 * shared_lead - 1.0, -1.0, 1.0);
    features[65] = FXAI_Clamp(2.0 * shared_coverage - 1.0, -1.0, 1.0);
 
-   double point_value = (_Point > 0.0 ? _Point : 1.0);
+   double point_value = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   if(point_value <= 0.0)
+      point_value = (_Point > 0.0 ? _Point : 1.0);
    double bar_range = MathMax(h - l, point_value);
    double close_loc = ((c - l) - (h - c)) / bar_range;
    double wick_up = MathMax(0.0, h - MathMax(c, o));
@@ -329,6 +436,19 @@ bool FXAI_ComputeFeatureVector(const int i,
    features[69] = FXAI_Clamp(spread_accel, -4.0, 8.0);
    features[70] = FXAI_Clamp(spread_to_range, 0.0, 8.0);
    features[71] = FXAI_Clamp(micro_trend * (1.0 + 0.35 * range_pressure), -6.0, 6.0);
+
+   features[72] = FXAI_SessionTransitionFeature(t_ref);
+   features[73] = FXAI_SessionOverlapFeature(t_ref);
+   features[74] = FXAI_RolloverProximityFeature(t_ref);
+   FXAI_GetSwapCarryFeatures(symbol,
+                             t_ref,
+                             features[0] + 0.50 * features[3],
+                             features[10] + 0.50 * features[12],
+                             features[75],
+                             features[76],
+                             features[77],
+                             features[78]);
+   features[79] = FXAI_LocalFeatureFamilyDrift(features);
 
    for(int f=0; f<FXAI_AI_FEATURES; f++)
    {

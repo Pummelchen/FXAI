@@ -35,6 +35,7 @@ void FXAI_AuditResetFoldMetrics(FXAIAuditFoldMetrics &m)
    m.calibration_abs_sum = 0.0;
    m.path_quality_abs_sum = 0.0;
    m.path_quality_count = 0;
+   m.net_sum = 0.0;
 }
 
 void FXAI_AuditFoldInvalid(FXAIAuditFoldMetrics &m)
@@ -47,6 +48,7 @@ void FXAI_AuditFoldValid(FXAIAuditFoldMetrics &m,
                          const int decision,
                          const FXAIAIPredictionV4 &pred,
                          const double brier,
+                         const double net_points,
                          const bool directional_eval,
                          const bool directional_ok,
                          const double calibration_abs,
@@ -62,6 +64,7 @@ void FXAI_AuditFoldValid(FXAIAuditFoldMetrics &m,
    m.rel_sum += pred.reliability;
    m.move_sum += pred.move_mean_points;
    m.brier_sum += brier;
+   m.net_sum += net_points;
    if(directional_eval)
    {
       m.directional_eval_count++;
@@ -127,6 +130,7 @@ double FXAI_AuditScoreFold(const FXAIAuditFoldMetrics &m)
    double avg_conf = m.conf_sum / (double)m.valid_preds;
    double avg_rel = m.rel_sum / (double)m.valid_preds;
    double avg_move = m.move_sum / (double)m.valid_preds;
+   double avg_net = m.net_sum / (double)m.valid_preds;
 
    double score = 100.0;
    score -= 42.0 * invalid_rate;
@@ -143,6 +147,7 @@ double FXAI_AuditScoreFold(const FXAIAuditFoldMetrics &m)
    score += 8.0 * FXAI_Clamp(avg_rel - 0.50, -0.50, 0.50);
    score += 4.0 * FXAI_Clamp(avg_conf - 0.50, -0.50, 0.50);
    score += 4.0 * FXAI_Clamp(avg_move / 8.0, 0.0, 1.0);
+   score += 6.0 * FXAI_Clamp(avg_net / 8.0, -1.0, 1.0);
    if(score < 0.0) score = 0.0;
    if(score > 100.0) score = 100.0;
    return score;
@@ -242,6 +247,7 @@ void FXAI_AuditFinalizeMetrics(FXAIAuditScenarioMetrics &m)
       m.brier_score = m.brier_sum / (double)m.valid_preds;
    if(m.path_quality_count > 0)
       m.path_quality_error = m.path_quality_abs_sum / (double)m.path_quality_count;
+   double avg_net = (m.valid_preds > 0 ? m.net_sum / (double)m.valid_preds : 0.0);
 
    double score = 100.0;
    if(m.invalid_preds > 0) score -= 35.0;
@@ -258,6 +264,8 @@ void FXAI_AuditFinalizeMetrics(FXAIAuditScenarioMetrics &m)
    if(m.brier_score > 0.52) score -= 8.0;
    if(m.calibration_error > 0.28) score -= 8.0;
    if(m.path_quality_error > 0.55) score -= 8.0;
+   if((m.scenario == "market_session_edges" || m.scenario == "market_spread_shock" || m.scenario == "market_walkforward") && avg_net < 0.0)
+      score -= 8.0 * FXAI_Clamp(-avg_net / 4.0, 0.0, 1.0);
    if(m.reset_delta > 0.30) score -= 12.0;
    if(m.sequence_delta < 0.005 && m.sequence_delta >= 0.0) score -= 6.0;
    if(m.move_sum <= 0.0) score -= 8.0;
@@ -638,6 +646,7 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
             bool dir_ok = false;
             double calibration_abs = 0.0;
             double path_quality = -1.0;
+            double net_points = 0.0;
             if(directional_eval)
             {
                dir_conf = MathMax(pred.class_probs[(int)FXAI_LABEL_BUY], pred.class_probs[(int)FXAI_LABEL_SELL]);
@@ -650,6 +659,14 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
                               0.20 * MathAbs(pred.hit_time_frac - time_to_hit_frac) +
                               0.20 * MathAbs(pred.path_risk - spread_stress) +
                               0.15 * MathAbs(pred.fill_risk - FXAI_Clamp(spread_stress + (((path_flags & FXAI_PATHFLAG_DUAL_HIT) != 0) ? 0.25 : 0.0), 0.0, 1.0));
+               net_points = FXAI_AuditRealizedNetPointsForSignalReplay(decision,
+                                                                       move_points,
+                                                                       ctx.min_move_points,
+                                                                       horizon_minutes,
+                                                                       spread_stress,
+                                                                       path_flags,
+                                                                       ctx.sample_time,
+                                                                       spec.id);
             }
 
             if(track_overall_eval)
@@ -693,6 +710,7 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
                out.rel_sum += pred.reliability;
                out.move_sum += pred.move_mean_points;
                out.brier_sum += brier;
+               out.net_sum += net_points;
 
                if(directional_eval)
                {
@@ -709,9 +727,9 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
             if(spec.name == "market_walkforward" && fold_idx >= 0)
             {
                if(eval_bucket == 1)
-                  FXAI_AuditFoldValid(wf_train_fold[fold_idx], decision, pred, brier, directional_eval, dir_ok, calibration_abs, path_quality);
+                  FXAI_AuditFoldValid(wf_train_fold[fold_idx], decision, pred, brier, net_points, directional_eval, dir_ok, calibration_abs, path_quality);
                else if(eval_bucket == 2)
-                  FXAI_AuditFoldValid(wf_test_fold[fold_idx], decision, pred, brier, directional_eval, dir_ok, calibration_abs, path_quality);
+                  FXAI_AuditFoldValid(wf_test_fold[fold_idx], decision, pred, brier, net_points, directional_eval, dir_ok, calibration_abs, path_quality);
             }
          }
       }

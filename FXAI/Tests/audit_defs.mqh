@@ -227,6 +227,7 @@ struct FXAIAuditFoldMetrics
    double calibration_abs_sum;
    double path_quality_abs_sum;
    int path_quality_count;
+   double net_sum;
 };
 
 struct FXAIAuditScenarioMetrics
@@ -259,6 +260,7 @@ struct FXAIAuditScenarioMetrics
    double calibration_abs_sum;
    double path_quality_abs_sum;
    int path_quality_count;
+   double net_sum;
    double skip_ratio;
    double active_ratio;
    double bias_abs;
@@ -281,6 +283,67 @@ struct FXAIAuditScenarioMetrics
    double score;
    int issue_flags;
 };
+
+double FXAI_AuditRealizedNetPointsForSignalReplay(const int signal,
+                                                  const double realized_move_points,
+                                                  const double roundtrip_cost_points,
+                                                  const int horizon_minutes,
+                                                  const double spread_stress,
+                                                  const int path_flags,
+                                                  const datetime sample_time,
+                                                  const int scenario_id)
+{
+   if(signal != 0 && signal != 1)
+      return 0.0;
+
+   FXAIExecutionProfile exec_profile;
+   FXAI_ResolveExecutionProfile(exec_profile);
+   FXAIExecutionReplayFrame replay_frame;
+   FXAI_BuildExecutionReplayFrame(exec_profile,
+                                  sample_time,
+                                  horizon_minutes,
+                                  spread_stress,
+                                  path_flags,
+                                  scenario_id,
+                                  replay_frame);
+
+   double slippage_points = FXAI_ExecutionSlippagePointsReplay(exec_profile,
+                                                               replay_frame,
+                                                               roundtrip_cost_points,
+                                                               horizon_minutes,
+                                                               spread_stress,
+                                                               path_flags);
+   double fill_penalty_points = FXAI_ExecutionFillPenaltyPointsReplay(exec_profile,
+                                                                      replay_frame,
+                                                                      roundtrip_cost_points,
+                                                                      spread_stress,
+                                                                      path_flags);
+   double gross = (signal == 1 ? realized_move_points : -realized_move_points);
+   double execution_capture = FXAI_Clamp(1.0 -
+                                         0.45 * replay_frame.reject_prob -
+                                         0.20 * replay_frame.partial_fill_prob,
+                                         0.35,
+                                         1.0);
+   gross *= execution_capture;
+   double reject_drag = replay_frame.reject_prob *
+                        (0.35 * MathMax(roundtrip_cost_points, 0.0) +
+                         0.15 * MathAbs(gross));
+   double partial_drag = replay_frame.partial_fill_prob * 0.10 * MathAbs(gross);
+   double kill_penalty = 0.0;
+   if(TradeKiller > 0 && horizon_minutes > TradeKiller)
+   {
+      double frac_cut = 1.0 - ((double)TradeKiller / (double)horizon_minutes);
+      kill_penalty = FXAI_Clamp(frac_cut * 0.10 * MathAbs(realized_move_points), 0.0, 10.0);
+   }
+
+   return gross -
+          MathMax(roundtrip_cost_points, 0.0) -
+          slippage_points -
+          fill_penalty_points -
+          reject_drag -
+          partial_drag -
+          kill_penalty;
+}
 
 class CFXAIAuditRng
 {

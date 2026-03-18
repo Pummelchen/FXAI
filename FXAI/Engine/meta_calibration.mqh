@@ -199,12 +199,14 @@ void FXAI_UpdateModelPerformance(const int ai_idx,
    double opportunity_penalty = 0.0;
    if(signal == 0 || signal == 1)
    {
-      realized_net = FXAI_RealizedNetPointsForSignal(signal,
-                                                     realized_move_points,
-                                                     min_mv,
-                                                     horizon_minutes,
-                                                     spread_stress,
-                                                     path_flags);
+      realized_net = FXAI_RealizedNetPointsForSignalReplay(signal,
+                                                           realized_move_points,
+                                                           min_mv,
+                                                           horizon_minutes,
+                                                           spread_stress,
+                                                           path_flags,
+                                                           TimeCurrent(),
+                                                           0);
    }
    else
    {

@@ -6,7 +6,7 @@
 #include "..\TensorCore\TensorCore.mqh"
 
 #define FXAI_PLUGIN_STATE_ARTIFACT_DIR "FXAI\\Runtime\\Plugins"
-#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 2
+#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 3
 
 class CFXAITernaryCalibrator
 {
@@ -490,6 +490,7 @@ public:
    }
    virtual bool SupportsPersistentState(void) const { return true; }
    virtual int PersistentStateVersion(void) const { return 1; }
+   virtual string PersistentStateCoverageTag(void) const { return "base_only"; }
    virtual void Describe(FXAIAIManifestV4 &out) const = 0;
    virtual bool SupportsSyntheticSeries(void) const { return false; }
    virtual bool SetSyntheticSeries(const datetime &time_arr[],
@@ -815,6 +816,7 @@ protected:
          FileWriteInteger(handle, m_replay_norm_method[i]);
          FileWriteInteger(handle, m_replay_sequence_bars[i]);
          FileWriteDouble(handle, m_replay_point_value[i]);
+         FileWriteDouble(handle, m_replay_domain_hash[i]);
          FileWriteInteger(handle, m_replay_window_size[i]);
          FileWriteDouble(handle, m_replay_priority[i]);
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
@@ -925,6 +927,7 @@ protected:
          m_replay_norm_method[i] = FileReadInteger(handle);
          m_replay_sequence_bars[i] = FileReadInteger(handle);
          m_replay_point_value[i] = FileReadDouble(handle);
+         m_replay_domain_hash[i] = FileReadDouble(handle);
          m_replay_window_size[i] = FileReadInteger(handle);
          m_replay_priority[i] = FileReadDouble(handle);
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)

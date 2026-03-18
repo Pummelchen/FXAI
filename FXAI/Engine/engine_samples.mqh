@@ -204,26 +204,38 @@ int FXAI_BuildTripleBarrierLabel(const int i,
                                          path_flags);
 }
 
-double FXAI_RealizedNetPointsForSignal(const int signal,
-                                       const double realized_move_points,
-                                       const double roundtrip_cost_points,
-                                       const int horizon_minutes,
-                                       const double spread_stress,
-                                       const int path_flags)
+double FXAI_RealizedNetPointsForSignalReplay(const int signal,
+                                             const double realized_move_points,
+                                             const double roundtrip_cost_points,
+                                             const int horizon_minutes,
+                                             const double spread_stress,
+                                             const int path_flags,
+                                             const datetime sample_time,
+                                             const int scenario_id)
 {
    if(signal != 0 && signal != 1) return 0.0;
 
    FXAIExecutionProfile exec_profile;
    FXAI_ResolveExecutionProfile(exec_profile);
-   double slippage_points = FXAI_ExecutionSlippagePoints(exec_profile,
-                                                         roundtrip_cost_points,
-                                                         horizon_minutes,
-                                                         spread_stress,
-                                                         path_flags);
-   double fill_penalty_points = FXAI_ExecutionFillPenaltyPoints(exec_profile,
-                                                                roundtrip_cost_points,
-                                                                spread_stress,
-                                                                path_flags);
+   FXAIExecutionReplayFrame replay_frame;
+   FXAI_BuildExecutionReplayFrame(exec_profile,
+                                  sample_time,
+                                  horizon_minutes,
+                                  spread_stress,
+                                  path_flags,
+                                  scenario_id,
+                                  replay_frame);
+   double slippage_points = FXAI_ExecutionSlippagePointsReplay(exec_profile,
+                                                               replay_frame,
+                                                               roundtrip_cost_points,
+                                                               horizon_minutes,
+                                                               spread_stress,
+                                                               path_flags);
+   double fill_penalty_points = FXAI_ExecutionFillPenaltyPointsReplay(exec_profile,
+                                                                      replay_frame,
+                                                                      roundtrip_cost_points,
+                                                                      spread_stress,
+                                                                      path_flags);
 
    double kill_penalty = 0.0;
    if(TradeKiller > 0 && horizon_minutes > TradeKiller)
@@ -233,7 +245,40 @@ double FXAI_RealizedNetPointsForSignal(const int signal,
    }
 
    double gross = (signal == 1 ? realized_move_points : -realized_move_points);
-   return gross - MathMax(roundtrip_cost_points, 0.0) - slippage_points - fill_penalty_points - kill_penalty;
+   double execution_capture = FXAI_Clamp(1.0 -
+                                         0.45 * replay_frame.reject_prob -
+                                         0.20 * replay_frame.partial_fill_prob,
+                                         0.35,
+                                         1.0);
+   gross *= execution_capture;
+   double reject_drag = replay_frame.reject_prob *
+                        (0.35 * MathMax(roundtrip_cost_points, 0.0) +
+                         0.15 * MathAbs(gross));
+   double partial_drag = replay_frame.partial_fill_prob * 0.10 * MathAbs(gross);
+   return gross -
+          MathMax(roundtrip_cost_points, 0.0) -
+          slippage_points -
+          fill_penalty_points -
+          reject_drag -
+          partial_drag -
+          kill_penalty;
+}
+
+double FXAI_RealizedNetPointsForSignal(const int signal,
+                                       const double realized_move_points,
+                                       const double roundtrip_cost_points,
+                                       const int horizon_minutes,
+                                       const double spread_stress,
+                                       const int path_flags)
+{
+   return FXAI_RealizedNetPointsForSignalReplay(signal,
+                                                realized_move_points,
+                                                roundtrip_cost_points,
+                                                horizon_minutes,
+                                                spread_stress,
+                                                path_flags,
+                                                0,
+                                                0);
 }
 
 void FXAI_ResetPreparedSample(FXAIPreparedSample &sample)
@@ -257,6 +302,7 @@ void FXAI_ResetPreparedSample(FXAIPreparedSample &sample)
    sample.next_vol_target = 0.0;
    sample.regime_shift_target = 0.0;
    sample.context_lead_target = 0.5;
+   sample.domain_hash = FXAI_SymbolHash01(_Symbol);
    sample.sample_time = 0;
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
       sample.x[k] = 0.0;
@@ -344,6 +390,7 @@ bool FXAI_PrepareTrainingSample(const int i,
                                  : FXAI_GetFeatureNormalizationMethod());
    double feat[FXAI_AI_FEATURES];
    if(!FXAI_ComputeFeatureVector(i,
+                                snapshot.symbol,
                                 spread_i,
                                 time_arr,
                                 open_arr,
@@ -385,6 +432,7 @@ bool FXAI_PrepareTrainingSample(const int i,
       double ctx_up_prev = FXAI_GetArrayValue(ctx_up_arr, i + 1, ctx_up_i);
 
       has_prev_feat = FXAI_ComputeFeatureVector(i + 1,
+                                               snapshot.symbol,
                                                spread_prev,
                                                time_arr,
                                                open_arr,
@@ -492,7 +540,8 @@ bool FXAI_PrepareTrainingSample(const int i,
       ctx_signal = ctx_mean_i / ctx_std_i;
    else
       ctx_signal = ctx_mean_i;
-   sample.context_lead_target = FXAI_Clamp(0.5 + 0.5 * FXAI_Sign(ctx_signal) * FXAI_Sign(move_points), 0.0, 1.0);
+  sample.context_lead_target = FXAI_Clamp(0.5 + 0.5 * FXAI_Sign(ctx_signal) * FXAI_Sign(move_points), 0.0, 1.0);
+   sample.domain_hash = FXAI_SymbolHash01(snapshot.symbol);
 
    double quality = 1.0;
    if(label_class == (int)FXAI_LABEL_SKIP)

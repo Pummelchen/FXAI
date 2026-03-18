@@ -1140,6 +1140,7 @@ void ResetAIState(const string symbol)
    FXAI_ResetAdaptiveRoutingState();
    FXAI_ResetRegimeCalibration();
    FXAI_ResetReplayReservoir();
+   FXAI_ResetFeatureDriftDiagnostics();
    if(g_plugins_ready)
       g_plugins.ResetAll();
    FXAI_LoadMetaArtifacts(symbol);
@@ -1175,6 +1176,12 @@ void ResetAIState(const string symbol)
 
 bool FXAI_ValidateNativePluginAPI()
 {
+   if(!FXAI_FeatureRegistrySelfTest())
+   {
+      Print("FXAI error: feature registry self-test failed.");
+      return false;
+   }
+
    double x_dummy[FXAI_AI_WEIGHTS];
    for(int k=0; k<FXAI_AI_WEIGHTS; k++) x_dummy[k] = 0.0;
    x_dummy[0] = 1.0;
@@ -1216,6 +1223,7 @@ bool FXAI_ValidateNativePluginAPI()
       req_v4.ctx.cost_points = 0.5;
       req_v4.ctx.min_move_points = 0.8;
       req_v4.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+      req_v4.ctx.domain_hash = FXAI_SymbolHash01(_Symbol);
       req_v4.ctx.sample_time = TimeCurrent();
       for(int kk=0; kk<FXAI_AI_WEIGHTS; kk++)
          req_v4.x[kk] = x_dummy[kk];
@@ -1273,6 +1281,7 @@ void FXAI_FillComplianceContext(CFXAIAIPlugin &plugin,
    ctx.min_move_points = MathMax(cost_points + 0.30, 0.50);
    ctx.cost_points = MathMax(cost_points, 0.0);
    ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+   ctx.domain_hash = FXAI_SymbolHash01(_Symbol);
    ctx.sample_time = sample_time;
 }
 
@@ -1730,6 +1739,50 @@ bool FXAI_RunPersistenceRoundTripCompliance(CFXAIAIPlugin &plugin,
    return true;
 }
 
+bool FXAI_RunPersistenceCoverageCompliance(CFXAIAIPlugin &plugin,
+                                           const FXAIAIManifestV4 &manifest)
+{
+   if(!plugin.SupportsPersistentState())
+      return true;
+
+   string file_name = plugin.PersistentStateFile("__coverage__");
+   FileDelete(file_name, FILE_COMMON);
+   if(!plugin.SaveStateFile(file_name))
+   {
+      Print("FXAI compliance error: failed to save persistence coverage artifact. model=", plugin.AIName());
+      return false;
+   }
+
+   int handle = FileOpen(file_name, FILE_READ | FILE_BIN | FILE_COMMON);
+   if(handle == INVALID_HANDLE)
+   {
+      FileDelete(file_name, FILE_COMMON);
+      Print("FXAI compliance error: failed to reopen persistence coverage artifact. model=", plugin.AIName());
+      return false;
+   }
+   long file_size = (long)FileSize(handle);
+   FileClose(handle);
+   FileDelete(file_name, FILE_COMMON);
+
+   string coverage_tag = plugin.PersistentStateCoverageTag();
+   if(coverage_tag == "native_model" && file_size < 1024)
+   {
+      Print("FXAI compliance error: native persistence artifact unexpectedly small. model=", plugin.AIName(),
+            " bytes=", (int)file_size);
+      return false;
+   }
+
+   if((FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_ONLINE_LEARNING) ||
+       FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY) ||
+       FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL)) &&
+      coverage_tag == "base_only")
+   {
+      Print("FXAI persistence note: plugin still uses base-only checkpoint coverage. model=", plugin.AIName());
+   }
+
+   return true;
+}
+
 bool FXAI_RunFuzzStressCompliance(CFXAIAIPlugin &plugin,
                                   const FXAIAIManifestV4 &manifest,
                                   const FXAIAIHyperParams &hp,
@@ -1912,6 +1965,7 @@ bool FXAI_RunPluginComplianceHarness()
 
       if(!FXAI_RunDeterminismCompliance(*plugin, manifest, hp, now_t + 120) ||
          !FXAI_RunPersistenceRoundTripCompliance(*plugin, manifest, hp, now_t + 150) ||
+         !FXAI_RunPersistenceCoverageCompliance(*plugin, manifest) ||
          !FXAI_RunFuzzStressCompliance(*plugin, manifest, hp, now_t + 180))
       {
          delete plugin;

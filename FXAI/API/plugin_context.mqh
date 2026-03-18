@@ -32,6 +32,7 @@
    int      m_ctx_normalization_method_id;
    int      m_ctx_sequence_bars;
    double   m_ctx_point_value;
+   double   m_ctx_domain_hash;
    int      m_ctx_window_size;
    double   m_ctx_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
    bool     m_target_quality_ready;
@@ -92,6 +93,7 @@
    int      m_replay_norm_method[FXAI_PLUGIN_REPLAY_CAPACITY];
    int      m_replay_sequence_bars[FXAI_PLUGIN_REPLAY_CAPACITY];
    double   m_replay_point_value[FXAI_PLUGIN_REPLAY_CAPACITY];
+   double   m_replay_domain_hash[FXAI_PLUGIN_REPLAY_CAPACITY];
    int      m_replay_window_size[FXAI_PLUGIN_REPLAY_CAPACITY];
    double   m_replay_window[FXAI_PLUGIN_REPLAY_CAPACITY][FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
    double   m_replay_priority[FXAI_PLUGIN_REPLAY_CAPACITY];
@@ -171,6 +173,8 @@
          m_ctx_sequence_bars = FXAI_MAX_SEQUENCE_BARS;
       m_ctx_point_value = (MathIsValidNumber(ctx.point_value) && ctx.point_value > 0.0
                            ? ctx.point_value : (_Point > 0.0 ? _Point : 1.0));
+      m_ctx_domain_hash = (MathIsValidNumber(ctx.domain_hash) && ctx.domain_hash >= 0.0 && ctx.domain_hash <= 1.0
+                           ? ctx.domain_hash : FXAI_SymbolHash01(_Symbol));
    }
 
    void SetWindowPayload(const int window_size,
@@ -242,6 +246,23 @@
          out[7] = 0.0;
          out[8] = 0.0;
       }
+      double domain = FXAI_Clamp(m_ctx_domain_hash, 0.0, 1.0);
+      double horizon_scale = FXAI_Clamp(MathLog(1.0 + (double)MathMax(m_ctx_horizon_minutes, 1)) / MathLog(1.0 + 1440.0), 0.0, 1.0);
+      out[9] = 2.0 * domain - 1.0;
+      out[10] = 2.0 * horizon_scale - 1.0;
+      out[11] = FXAI_GetInputFeature(x, 72);
+      out[12] = FXAI_Clamp(0.45 * FXAI_GetInputFeature(x, 74) +
+                           0.20 * FXAI_GetInputFeature(x, 75) +
+                           0.20 * FXAI_GetInputFeature(x, 78) +
+                           0.15 * FXAI_GetInputFeature(x, 73),
+                           -1.0,
+                           1.0);
+      out[13] = FXAI_Clamp(0.18 * FXAI_GetInputFeature(x, 76) -
+                           0.18 * FXAI_GetInputFeature(x, 77) -
+                           0.15 * FXAI_GetInputFeature(x, 79) +
+                           0.10 * FXAI_GetInputFeature(x, 6),
+                           -4.0,
+                           4.0);
    }
 
    bool HasSharedAdapterSignal(const double &a[]) const
@@ -350,7 +371,14 @@
          return;
 
       double trust = FXAI_Clamp((double)m_shared_adapter_steps / 96.0, 0.0, 1.0);
-      trust *= FXAI_Clamp(0.16 + 0.10 * a[4] + 0.04 * MathAbs(a[8]), 0.0, 0.34);
+      trust *= FXAI_Clamp(0.14 +
+                          0.08 * a[4] +
+                          0.03 * MathAbs(a[8]) +
+                          0.03 * MathAbs(a[10]) +
+                          0.04 * MathAbs(a[11]) +
+                          0.04 * MathAbs(a[12]),
+                          0.0,
+                          0.42);
       if(trust <= 1e-6)
          return;
 
@@ -408,7 +436,14 @@
       out.confidence = FXAI_Clamp(MathMax(out.class_probs[(int)FXAI_LABEL_BUY],
                                           out.class_probs[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
       out.reliability = FXAI_Clamp(out.reliability * (1.0 - 0.12 * trust) +
-                                   trust * FXAI_Clamp(0.50 + 0.18 * a[2] + 0.12 * a[4] + transfer_rel_boost, 0.0, 1.0),
+                                   trust * FXAI_Clamp(0.48 +
+                                                      0.16 * a[2] +
+                                                      0.10 * a[4] +
+                                                      0.06 * MathAbs(a[11]) +
+                                                      0.05 * (1.0 - MathAbs(a[13]) / 4.0) +
+                                                      transfer_rel_boost,
+                                                      0.0,
+                                                      1.0),
                                    0.0,
                                    1.0);
    }
@@ -520,6 +555,7 @@
                    const int horizon_minutes)
    {
       FXAIAIContextV4 ctx;
+      FXAI_ClearContextV4(ctx);
       ctx.api_version = FXAI_API_VERSION_V4;
       ctx.regime_id = regime_id;
       ctx.session_bucket = FXAI_DeriveSessionBucket(sample_time);
@@ -530,6 +566,7 @@
       ctx.cost_points = cost_points;
       ctx.min_move_points = min_move_points;
       ctx.point_value = m_ctx_point_value;
+      ctx.domain_hash = m_ctx_domain_hash;
       ctx.sample_time = sample_time;
       SetContext(ctx);
    }
@@ -597,6 +634,7 @@
       m_ctx_normalization_method_id = 0;
       m_ctx_sequence_bars = 1;
       m_ctx_point_value = (_Point > 0.0 ? _Point : 1.0);
+      m_ctx_domain_hash = FXAI_SymbolHash01(_Symbol);
       m_ctx_window_size = 0;
       m_target_quality_ready = false;
       m_target_mfe_points = 0.0;
@@ -669,6 +707,7 @@
          m_replay_norm_method[i] = 0;
          m_replay_sequence_bars[i] = 1;
          m_replay_point_value[i] = (_Point > 0.0 ? _Point : 1.0);
+         m_replay_domain_hash[i] = FXAI_SymbolHash01(_Symbol);
          m_replay_window_size[i] = 0;
          m_replay_priority[i] = 0.0;
          for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
@@ -991,6 +1030,7 @@
       ctx.cost_points = m_ctx_cost_points;
       ctx.min_move_points = m_ctx_min_move_points;
       ctx.point_value = ResolvePointValue();
+      ctx.domain_hash = FXAI_Clamp(m_ctx_domain_hash, 0.0, 1.0);
       ctx.sample_time = ResolveContextTime();
    }
 
@@ -1160,6 +1200,7 @@
       m_replay_norm_method[slot] = sample.ctx.normalization_method_id;
       m_replay_sequence_bars[slot] = sample.ctx.sequence_bars;
       m_replay_point_value[slot] = sample.ctx.point_value;
+      m_replay_domain_hash[slot] = sample.ctx.domain_hash;
       m_replay_window_size[slot] = sample.window_size;
       if(m_replay_window_size[slot] < 0) m_replay_window_size[slot] = 0;
       if(m_replay_window_size[slot] > FXAI_MAX_SEQUENCE_BARS) m_replay_window_size[slot] = FXAI_MAX_SEQUENCE_BARS;
@@ -1223,6 +1264,7 @@
       int keep_norm_method = m_ctx_normalization_method_id;
       int keep_sequence_bars = m_ctx_sequence_bars;
       double keep_point_value = m_ctx_point_value;
+      double keep_domain_hash = m_ctx_domain_hash;
       int keep_window_size = m_ctx_window_size;
       double keep_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
       for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
@@ -1244,6 +1286,7 @@
          replay_ctx.cost_points = m_replay_cost[idx];
          replay_ctx.min_move_points = m_replay_min_move[idx];
          replay_ctx.point_value = m_replay_point_value[idx];
+         replay_ctx.domain_hash = m_replay_domain_hash[idx];
          replay_ctx.sample_time = m_replay_time[idx];
          SetContext(replay_ctx);
          m_target_quality_ready = true;
@@ -1284,6 +1327,7 @@
       m_ctx_normalization_method_id = keep_norm_method;
       m_ctx_sequence_bars = keep_sequence_bars;
       m_ctx_point_value = keep_point_value;
+      m_ctx_domain_hash = keep_domain_hash;
       m_target_quality_ready = false;
       m_target_mfe_points = 0.0;
       m_target_mae_points = 0.0;

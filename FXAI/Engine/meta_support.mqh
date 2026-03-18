@@ -159,7 +159,11 @@ void FXAI_BuildNormWindowsFromGroups(const int w_fast,
       else if(f <= 21) w = wr;      // time/candle geometry
       else if(f <= 33) w = ws;      // MA/EMA trend structure
       else if(f <= 49) w = wm;      // volatility/statistical filters
-      else w = wm;                  // detailed cross-symbol context
+      else if(f <= 65) w = wm;      // detailed cross-symbol context
+      else if(f <= 71) w = wf;      // microstructure and spread shocks
+      else if(f <= 75) w = wr;      // session and rollover state
+      else if(f <= 78) w = ws;      // carry and swap pressures
+      else w = wm;                  // feature-family drift composite
       windows_out[f] = w;
    }
 }

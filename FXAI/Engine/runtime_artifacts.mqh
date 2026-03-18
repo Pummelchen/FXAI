@@ -2,9 +2,9 @@
 #define __FXAI_RUNTIME_ARTIFACTS_MQH__
 
 #define FXAI_RUNTIME_ARTIFACT_DIR "FXAI\\Runtime"
-#define FXAI_RUNTIME_ARTIFACT_VERSION 1
+#define FXAI_RUNTIME_ARTIFACT_VERSION 2
 
-string FXAI_RuntimeArtifactFile(const string symbol)
+string FXAI_RuntimeArtifactSafeSymbol(const string symbol)
 {
    string clean = symbol;
    if(StringLen(clean) <= 0)
@@ -18,12 +18,32 @@ string FXAI_RuntimeArtifactFile(const string symbol)
    StringReplace(clean, "<", "_");
    StringReplace(clean, ">", "_");
    StringReplace(clean, "|", "_");
-   return FXAI_RUNTIME_ARTIFACT_DIR + "\\fxai_runtime_" + clean + ".bin";
+   return clean;
+}
+
+string FXAI_RuntimeArtifactFile(const string symbol)
+{
+   return FXAI_RUNTIME_ARTIFACT_DIR + "\\fxai_runtime_" + FXAI_RuntimeArtifactSafeSymbol(symbol) + ".bin";
+}
+
+string FXAI_RuntimePersistenceManifestFile(const string symbol)
+{
+   return FXAI_RUNTIME_ARTIFACT_DIR + "\\fxai_persistence_" + FXAI_RuntimeArtifactSafeSymbol(symbol) + ".tsv";
 }
 
 void FXAI_MarkRuntimeArtifactsDirty(void)
 {
    g_runtime_artifacts_dirty = true;
+}
+
+long FXAI_CommonFileSize(const string file_name)
+{
+   int handle = FileOpen(file_name, FILE_READ | FILE_BIN | FILE_COMMON);
+   if(handle == INVALID_HANDLE)
+      return -1;
+   long sz = (long)FileSize(handle);
+   FileClose(handle);
+   return sz;
 }
 
 void FXAI_WritePreparedSample(const int handle,
@@ -48,6 +68,7 @@ void FXAI_WritePreparedSample(const int handle,
    FileWriteDouble(handle, sample.next_vol_target);
    FileWriteDouble(handle, sample.regime_shift_target);
    FileWriteDouble(handle, sample.context_lead_target);
+   FileWriteDouble(handle, sample.domain_hash);
    FileWriteLong(handle, (long)sample.sample_time);
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
       FileWriteDouble(handle, sample.x[k]);
@@ -75,9 +96,47 @@ void FXAI_ReadPreparedSample(const int handle,
    sample.next_vol_target = FileReadDouble(handle);
    sample.regime_shift_target = FileReadDouble(handle);
    sample.context_lead_target = FileReadDouble(handle);
+   sample.domain_hash = FileReadDouble(handle);
    sample.sample_time = (datetime)FileReadLong(handle);
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
       sample.x[k] = FileReadDouble(handle);
+}
+
+void FXAI_WritePersistenceCoverageManifest(const string symbol)
+{
+   FolderCreate("FXAI", FILE_COMMON);
+   FolderCreate(FXAI_RUNTIME_ARTIFACT_DIR, FILE_COMMON);
+
+   int handle = FileOpen(FXAI_RuntimePersistenceManifestFile(symbol), FILE_WRITE | FILE_TXT | FILE_COMMON);
+   if(handle == INVALID_HANDLE)
+      return;
+
+   FileWriteString(handle, "ai_id\tai_name\tcoverage_tag\tpersistent\tstate_version\tcapability_mask\tstate_file_size\tstate_file\r\n");
+   if(g_plugins_ready)
+   {
+      for(int ai=0; ai<FXAI_AI_COUNT; ai++)
+      {
+         CFXAIAIPlugin *plugin = g_plugins.Get(ai);
+         if(plugin == NULL)
+            continue;
+
+         FXAIAIManifestV4 manifest;
+         FXAI_GetPluginManifest(*plugin, manifest);
+         string state_file = plugin.PersistentStateFile(symbol);
+         long file_size = FXAI_CommonFileSize(state_file);
+         string line = IntegerToString(plugin.AIId()) + "\t" +
+                       plugin.AIName() + "\t" +
+                       plugin.PersistentStateCoverageTag() + "\t" +
+                       IntegerToString(plugin.SupportsPersistentState() ? 1 : 0) + "\t" +
+                       IntegerToString(plugin.PersistentStateVersion()) + "\t" +
+                       IntegerToString((int)manifest.capability_mask) + "\t" +
+                       IntegerToString((int)file_size) + "\t" +
+                       state_file + "\r\n";
+         FileWriteString(handle, line);
+      }
+   }
+
+   FileClose(handle);
 }
 
 bool FXAI_SaveRuntimeArtifacts(const string symbol)
@@ -174,6 +233,19 @@ bool FXAI_SaveRuntimeArtifacts(const string symbol)
       }
    }
 
+   FileWriteInteger(handle, (g_feature_drift_ready ? 1 : 0));
+   FileWriteLong(handle, (long)g_feature_drift_last_time);
+   for(int g=0; g<FXAI_FEATURE_GROUP_COUNT; g++)
+   {
+      FileWriteInteger(handle, g_feature_drift_baseline_obs[g]);
+      FileWriteInteger(handle, g_feature_drift_live_obs[g]);
+      FileWriteDouble(handle, g_feature_drift_baseline_mean[g]);
+      FileWriteDouble(handle, g_feature_drift_baseline_abs[g]);
+      FileWriteDouble(handle, g_feature_drift_live_mean[g]);
+      FileWriteDouble(handle, g_feature_drift_live_abs[g]);
+      FileWriteDouble(handle, g_feature_drift_ema[g]);
+   }
+
    FileClose(handle);
 
    bool ok = true;
@@ -191,6 +263,7 @@ bool FXAI_SaveRuntimeArtifacts(const string symbol)
 
    if(ok)
    {
+      FXAI_WritePersistenceCoverageManifest(symbol);
       g_runtime_artifacts_dirty = false;
       g_runtime_last_save_time = TimeCurrent();
    }
@@ -299,6 +372,20 @@ bool FXAI_LoadRuntimeArtifacts(const string symbol)
                g_conf_pending_path_risk[ai][k] = FileReadDouble(handle);
             }
          }
+
+         g_feature_drift_ready = (FileReadInteger(handle) != 0);
+         g_feature_drift_last_time = (datetime)FileReadLong(handle);
+         for(int g=0; g<FXAI_FEATURE_GROUP_COUNT; g++)
+         {
+            g_feature_drift_baseline_obs[g] = FileReadInteger(handle);
+            g_feature_drift_live_obs[g] = FileReadInteger(handle);
+            g_feature_drift_baseline_mean[g] = FileReadDouble(handle);
+            g_feature_drift_baseline_abs[g] = FileReadDouble(handle);
+            g_feature_drift_live_mean[g] = FileReadDouble(handle);
+            g_feature_drift_live_abs[g] = FileReadDouble(handle);
+            g_feature_drift_ema[g] = FileReadDouble(handle);
+         }
+
          loaded_global = true;
       }
       FileClose(handle);

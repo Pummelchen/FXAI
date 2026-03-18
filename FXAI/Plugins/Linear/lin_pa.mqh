@@ -1130,6 +1130,7 @@ public:
    }
 
    virtual bool SupportsPersistentState(void) const { return true; }
+   virtual string PersistentStateCoverageTag(void) const { return "native_model"; }
 
    virtual bool SaveModelState(const int handle) const
    {

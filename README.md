@@ -57,12 +57,18 @@ You do not need to be an MQL5 programmer to use FXAI as an operator. For normal 
   - Swap or benchmark AI plugins without rewriting EA logic.
 - **Internal neural runtime**
   - Serious neural plugins share one native `TensorCore` layer for tensor math, sequence handling, sequence blocks, optimizers, and numeric verification.
+- **Cross-symbol transfer warmup**
+  - Shared transfer adapters now pretrain across configured horizons and capped context-symbol sample packs before live trading begins.
 - **Cost-aware signals**
   - Labels and thresholds account for trading friction, improving realistic expectancy.
+- **Feature governance**
+  - A feature registry now tracks provenance, leakage guards, session-transition and rollover states, swap/carry factors, and live feature-family drift diagnostics.
 - **Safer execution**
   - Built-in equity controls, skip class, and conservative calibration reduce overtrading.
 - **Execution parity controls**
-  - Shared execution profiles, risk-aware sizing, correlated exposure caps, and `OrderCheck` preflight keep live trading closer to Audit Lab and tester assumptions.
+  - Shared execution profiles, replay-aware broker-event penalties, risk-aware sizing, correlated exposure caps, and `OrderCheck` preflight keep live trading closer to Audit Lab and tester assumptions.
+- **Persistent research state**
+  - Runtime artifacts now persist feature-drift diagnostics and emit a per-plugin checkpoint coverage manifest so restart behavior and checkpoint depth are auditable.
 - **Backtest efficiency**
   - Lightweight online updates and shared data pipeline support large optimization runs.
 - **Audit discipline**
@@ -158,7 +164,7 @@ Typical operator use cases:
 - **Check whether a model is still trustworthy**
   - Use the Audit Lab before a long optimization or before promoting a configuration
 - **Validate execution realism**
-  - Re-run audits with spread, slippage, and fill penalties that match your broker conditions
+  - Re-run audits with spread, slippage, partial-fill, reject, and session-edge penalties that match your broker conditions
 - **Deploy with stricter live controls**
   - Configure execution profile, position sizing mode, and portfolio exposure caps before moving from audit into live evaluation
 - **Create a baseline**
@@ -192,7 +198,7 @@ What FXAI is not:
 - `FXAI/Engine/*.mqh`  
   Runtime, training, warmup, lifecycle, sample, and meta orchestration layers
 - `FXAI/Engine/data_*.mqh`, `FXAI/Engine/feature_*.mqh`  
-  Split market-data, alignment, normalization-window, feature-math, normalization, and feature-build modules
+  Split market-data, alignment, normalization-window, feature-math, normalization, feature-build, and feature-registry modules
 - `FXAI/Engine/meta_*.mqh`  
   Split horizon, stacker, calibration, reliability, threshold, and support subsystems
 - `FXAI/Plugins/Sequence/*.mqh`

@@ -111,6 +111,7 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
          s3.ctx.cost_points = samples[i].cost_points;
          s3.ctx.min_move_points = samples[i].min_move_points;
          s3.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+         s3.ctx.domain_hash = samples[i].domain_hash;
          s3.ctx.sample_time = samples[i].sample_time;
          s3.label_class = samples[i].label_class;
          s3.move_points = samples[i].move_points;
@@ -761,6 +762,7 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
       req.ctx.cost_points = samples[i].cost_points;
       req.ctx.min_move_points = samples[i].min_move_points;
       req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+      req.ctx.domain_hash = samples[i].domain_hash;
       req.ctx.sample_time = samples[i].sample_time;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = samples[i].x[k];
@@ -809,12 +811,14 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
                                          FXAI_Clamp(AI_EVThresholdPoints, 0.0, 100.0));
       if(signal == -1) continue;
 
-      double net_pts = FXAI_RealizedNetPointsForSignal(signal,
-                                                       samples[i].move_points,
-                                                       samples[i].min_move_points,
-                                                       score_h,
-                                                       samples[i].spread_stress,
-                                                       samples[i].path_flags);
+      double net_pts = FXAI_RealizedNetPointsForSignalReplay(signal,
+                                                             samples[i].move_points,
+                                                             samples[i].min_move_points,
+                                                             score_h,
+                                                             samples[i].spread_stress,
+                                                             samples[i].path_flags,
+                                                             samples[i].sample_time,
+                                                             0);
       FXAI_UpdateWarmupBucketStats(total_stats, net_pts);
       int regime_id = samples[i].regime_id;
       if(regime_id < 0 || regime_id >= FXAI_REGIME_COUNT) regime_id = 0;
@@ -899,6 +903,7 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
       req.ctx.cost_points = eval_sample.cost_points;
       req.ctx.min_move_points = eval_sample.min_move_points;
       req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+      req.ctx.domain_hash = eval_sample.domain_hash;
       req.ctx.sample_time = eval_sample.sample_time;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = eval_sample.x[k];
@@ -947,12 +952,14 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
                                           FXAI_Clamp(AI_EVThresholdPoints, 0.0, 100.0));
       if(signal == -1) continue;
 
-      double net_pts = FXAI_RealizedNetPointsForSignal(signal,
-                                                       eval_sample.move_points,
-                                                       eval_sample.min_move_points,
-                                                       score_h,
-                                                       eval_sample.spread_stress,
-                                                       eval_sample.path_flags);
+      double net_pts = FXAI_RealizedNetPointsForSignalReplay(signal,
+                                                             eval_sample.move_points,
+                                                             eval_sample.min_move_points,
+                                                             score_h,
+                                                             eval_sample.spread_stress,
+                                                             eval_sample.path_flags,
+                                                             eval_sample.sample_time,
+                                                             0);
       FXAI_UpdateWarmupBucketStats(total_stats, net_pts);
       int regime_id = eval_sample.regime_id;
       if(regime_id < 0 || regime_id >= FXAI_REGIME_COUNT) regime_id = 0;
@@ -1401,6 +1408,7 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             req.ctx.cost_points = pred_sample.cost_points;
             req.ctx.min_move_points = pred_sample.min_move_points;
             req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+            req.ctx.domain_hash = pred_sample.domain_hash;
             req.ctx.sample_time = pred_sample.sample_time;
             for(int k=0; k<FXAI_AI_WEIGHTS; k++)
                req.x[k] = pred_sample.x[k];
@@ -1602,6 +1610,256 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
          }
       }
    }
+}
+
+void FXAI_WarmupPrimeFeatureDriftBaseline(const FXAIPreparedSample &samples[])
+{
+   int n = ArraySize(samples);
+   for(int i=0; i<n; i++)
+   {
+      if(!samples[i].valid)
+         continue;
+      FXAI_UpdateFeatureDriftBaselineFromInput(samples[i].x);
+   }
+}
+
+void FXAI_WarmupPretrainSharedTransferSamples(const FXAIPreparedSample &samples[],
+                                              const int sample_cap,
+                                              const double sample_scale,
+                                              CFXAIAIPlugin &plugin,
+                                              const FXAIAIHyperParams &hp)
+{
+   int n = ArraySize(samples);
+   if(n <= 0 || sample_cap <= 0)
+      return;
+
+   int valid_total = 0;
+   for(int i=0; i<n; i++)
+      if(samples[i].valid)
+         valid_total++;
+   if(valid_total <= 0)
+      return;
+
+   int stride = 1;
+   if(valid_total > sample_cap)
+      stride = MathMax(1, valid_total / sample_cap);
+
+   int emitted = 0;
+   int seen = 0;
+   for(int i=n - 1; i>=0; i--)
+   {
+      if(!samples[i].valid)
+         continue;
+      if((seen % stride) != 0)
+      {
+         seen++;
+         continue;
+      }
+      seen++;
+
+      FXAIAIContextV4 ctx;
+      FXAI_ClearContextV4(ctx);
+      ctx.api_version = FXAI_API_VERSION_V4;
+      ctx.regime_id = samples[i].regime_id;
+      ctx.session_bucket = FXAI_DeriveSessionBucket(samples[i].sample_time);
+      ctx.horizon_minutes = samples[i].horizon_minutes;
+      ctx.feature_schema_id = (int)FXAI_SCHEMA_FULL;
+      ctx.normalization_method_id = (int)FXAI_NORM_EXISTING;
+      ctx.sequence_bars = 1;
+      ctx.cost_points = samples[i].cost_points;
+      ctx.min_move_points = samples[i].min_move_points;
+      ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+      ctx.domain_hash = samples[i].domain_hash;
+      ctx.sample_time = samples[i].sample_time;
+
+      double sample_w = FXAI_Clamp(samples[i].sample_weight * sample_scale, 0.20, 4.00);
+      plugin.TrainSharedTransfer(ctx,
+                                 samples[i].x,
+                                 samples[i].move_points,
+                                 sample_w,
+                                 hp.lr);
+      emitted++;
+      if(emitted >= sample_cap)
+         break;
+   }
+}
+
+bool FXAI_WarmupBuildTransferSymbolSamplesForHorizon(const string target_symbol,
+                                                     const string main_symbol,
+                                                     const int needed,
+                                                     const int max_h,
+                                                     const int sample_cap,
+                                                     const int horizon_minutes,
+                                                     const double commission_per_lot_side,
+                                                     const double cost_buffer_points,
+                                                     const double ev_threshold_points,
+                                                     FXAIPreparedSample &out[])
+{
+   ArrayResize(out, 0);
+   if(StringLen(target_symbol) <= 0 || sample_cap <= 0)
+      return false;
+
+   const int FEATURE_LB = 10;
+
+   FXAIDataSnapshot snapshot;
+   if(!FXAI_ExportDataSnapshot(target_symbol, commission_per_lot_side, cost_buffer_points, snapshot))
+      return false;
+
+   MqlRates rates_m1[];
+   MqlRates rates_m5[];
+   MqlRates rates_m15[];
+   MqlRates rates_m30[];
+   MqlRates rates_h1[];
+   MqlRates rates_ctx_tmp[];
+
+   double open_arr[];
+   double high_arr[];
+   double low_arr[];
+   double close_arr[];
+   datetime time_arr[];
+   int spread_m1[];
+   if(!FXAI_LoadSeriesWithSpread(target_symbol, needed, rates_m1, close_arr, time_arr, spread_m1))
+      return false;
+   FXAI_ExtractRatesOHLC(rates_m1, open_arr, high_arr, low_arr, close_arr);
+   if(ArraySize(close_arr) < needed || ArraySize(time_arr) < needed)
+      return false;
+
+   int needed_m5 = MathMax((needed / 5) + 80, 220);
+   int needed_m15 = MathMax((needed / 15) + 80, 220);
+   int needed_m30 = MathMax((needed / 30) + 80, 220);
+   int needed_h1 = MathMax((needed / 60) + 80, 220);
+
+   double close_m5[];
+   datetime time_m5[];
+   double close_m15[];
+   datetime time_m15[];
+   double close_m30[];
+   datetime time_m30[];
+   double close_h1[];
+   datetime time_h1[];
+   int map_m5[];
+   int map_m15[];
+   int map_m30[];
+   int map_h1[];
+
+   FXAI_LoadSeriesOptionalCached(target_symbol, PERIOD_M5, needed_m5, rates_m5, close_m5, time_m5);
+   FXAI_LoadSeriesOptionalCached(target_symbol, PERIOD_M15, needed_m15, rates_m15, close_m15, time_m15);
+   FXAI_LoadSeriesOptionalCached(target_symbol, PERIOD_M30, needed_m30, rates_m30, close_m30, time_m30);
+   FXAI_LoadSeriesOptionalCached(target_symbol, PERIOD_H1, needed_h1, rates_h1, close_h1, time_h1);
+
+   int lag_m5 = 2 * PeriodSeconds(PERIOD_M5);
+   int lag_m15 = 2 * PeriodSeconds(PERIOD_M15);
+   int lag_m30 = 2 * PeriodSeconds(PERIOD_M30);
+   int lag_h1 = 2 * PeriodSeconds(PERIOD_H1);
+   if(lag_m5 <= 0) lag_m5 = 600;
+   if(lag_m15 <= 0) lag_m15 = 1800;
+   if(lag_m30 <= 0) lag_m30 = 3600;
+   if(lag_h1 <= 0) lag_h1 = 7200;
+   FXAI_BuildAlignedIndexMap(time_arr, time_m5, lag_m5, map_m5);
+   FXAI_BuildAlignedIndexMap(time_arr, time_m15, lag_m15, map_m15);
+   FXAI_BuildAlignedIndexMap(time_arr, time_m30, lag_m30, map_m30);
+   FXAI_BuildAlignedIndexMap(time_arr, time_h1, lag_h1, map_h1);
+
+   FXAIContextSeries ctx_series[];
+   ArrayResize(ctx_series, FXAI_MAX_CONTEXT_SYMBOLS);
+   int ctx_loaded = 0;
+
+   if(StringLen(main_symbol) > 0 && main_symbol != target_symbol && ctx_loaded < FXAI_MAX_CONTEXT_SYMBOLS)
+   {
+      ctx_series[ctx_loaded].symbol = main_symbol;
+      ctx_series[ctx_loaded].loaded = FXAI_LoadSeriesOptionalCached(main_symbol,
+                                                                    PERIOD_M1,
+                                                                    needed,
+                                                                    rates_ctx_tmp,
+                                                                    ctx_series[ctx_loaded].close,
+                                                                    ctx_series[ctx_loaded].time);
+      if(ctx_series[ctx_loaded].loaded)
+         ctx_loaded++;
+   }
+
+   for(int s=0; s<ArraySize(g_context_symbols) && ctx_loaded < FXAI_MAX_CONTEXT_SYMBOLS; s++)
+   {
+      string ctx_symbol = g_context_symbols[s];
+      if(StringLen(ctx_symbol) <= 0 || ctx_symbol == target_symbol || ctx_symbol == main_symbol)
+         continue;
+      bool dup = false;
+      for(int j=0; j<ctx_loaded; j++)
+      {
+         if(ctx_series[j].symbol == ctx_symbol)
+         {
+            dup = true;
+            break;
+         }
+      }
+      if(dup)
+         continue;
+      ctx_series[ctx_loaded].symbol = ctx_symbol;
+      ctx_series[ctx_loaded].loaded = FXAI_LoadSeriesOptionalCached(ctx_symbol,
+                                                                    PERIOD_M1,
+                                                                    needed,
+                                                                    rates_ctx_tmp,
+                                                                    ctx_series[ctx_loaded].close,
+                                                                    ctx_series[ctx_loaded].time);
+      if(ctx_series[ctx_loaded].loaded)
+         ctx_loaded++;
+   }
+   ArrayResize(ctx_series, ctx_loaded);
+
+   int i_start = max_h;
+   int i_end = i_start + sample_cap - 1;
+   int max_valid = needed - FEATURE_LB - 1;
+   if(i_end > max_valid)
+      i_end = max_valid;
+   if(i_end <= i_start)
+      return false;
+
+   double ctx_mean_arr[];
+   double ctx_std_arr[];
+   double ctx_up_arr[];
+   double ctx_extra_arr[];
+   FXAI_PrecomputeDynamicContextAggregates(time_arr,
+                                           close_arr,
+                                           ctx_series,
+                                           ctx_loaded,
+                                           i_end,
+                                           ctx_mean_arr,
+                                           ctx_std_arr,
+                                           ctx_up_arr,
+                                           ctx_extra_arr);
+
+   FXAI_PrecomputeTrainingSamples(i_start,
+                                  i_end,
+                                  horizon_minutes,
+                                  snapshot.commission_points,
+                                  cost_buffer_points,
+                                  ev_threshold_points,
+                                  snapshot,
+                                  spread_m1,
+                                  time_arr,
+                                  open_arr,
+                                  high_arr,
+                                  low_arr,
+                                  close_arr,
+                                  time_m5,
+                                  close_m5,
+                                  map_m5,
+                                  time_m15,
+                                  close_m15,
+                                  map_m15,
+                                  time_m30,
+                                  close_m30,
+                                  map_m30,
+                                  time_h1,
+                                  close_h1,
+                                  map_h1,
+                                  ctx_mean_arr,
+                                  ctx_std_arr,
+                                  ctx_up_arr,
+                                  ctx_extra_arr,
+                                  -1,
+                                  out);
+
+   return (ArraySize(out) > 0);
 }
 
 bool FXAI_WarmupTrainAndTune(const string symbol)
@@ -2100,6 +2358,56 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
                                        ctx_extra_arr,
                                        -1,
                                        runtime_samples);
+      }
+
+      FXAI_WarmupPrimeFeatureDriftBaseline(runtime_samples);
+      int transfer_cap = MathMin(640, MathMax(128, warmup_samples / 6));
+      for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
+      {
+         CFXAIAIPlugin *runtime = g_plugins.Get(ai_idx);
+         if(runtime == NULL) continue;
+
+         FXAIAIHyperParams hp_transfer;
+         FXAI_GetModelHyperParamsRouted(ai_idx, 0, H, hp_transfer);
+         FXAI_WarmupPretrainSharedTransferSamples(runtime_samples,
+                                                  transfer_cap,
+                                                  0.60,
+                                                  *runtime,
+                                                  hp_transfer);
+      }
+
+      int transfer_symbols = ArraySize(g_context_symbols);
+      if(transfer_symbols > FXAI_CONTEXT_TOP_SYMBOLS)
+         transfer_symbols = FXAI_CONTEXT_TOP_SYMBOLS;
+      for(int s=0; s<transfer_symbols; s++)
+      {
+         FXAIPreparedSample transfer_samples[];
+         if(!FXAI_WarmupBuildTransferSymbolSamplesForHorizon(g_context_symbols[s],
+                                                             symbol,
+                                                             needed,
+                                                             max_h,
+                                                             transfer_cap,
+                                                             H,
+                                                             AI_CommissionPerLotSide,
+                                                             cost_buffer_points,
+                                                             evThresholdPoints,
+                                                             transfer_samples))
+            continue;
+
+         FXAI_WarmupPrimeFeatureDriftBaseline(transfer_samples);
+         for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
+         {
+            CFXAIAIPlugin *runtime = g_plugins.Get(ai_idx);
+            if(runtime == NULL) continue;
+
+            FXAIAIHyperParams hp_transfer;
+            FXAI_GetModelHyperParamsRouted(ai_idx, 0, H, hp_transfer);
+            FXAI_WarmupPretrainSharedTransferSamples(transfer_samples,
+                                                     MathMax(64, transfer_cap / 2),
+                                                     0.45,
+                                                     *runtime,
+                                                     hp_transfer);
+         }
       }
 
       for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)

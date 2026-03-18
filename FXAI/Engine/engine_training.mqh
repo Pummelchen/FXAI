@@ -496,6 +496,7 @@ int FXAI_EnsureNormInputCache(const int method_id,
    double ctx_up_pred = FXAI_GetArrayValue(ctx_up_arr, 0, 0.5);
    double feat_pred[FXAI_AI_FEATURES];
    if(!FXAI_ComputeFeatureVector(0,
+                                 snapshot.symbol,
                                  spread_pred,
                                  time_arr,
                                  open_arr,
@@ -536,6 +537,7 @@ int FXAI_EnsureNormInputCache(const int method_id,
       double ctx_std_prev = FXAI_GetArrayValue(ctx_std_arr, 1, ctx_std_pred);
       double ctx_up_prev = FXAI_GetArrayValue(ctx_up_arr, 1, ctx_up_pred);
       has_prev_feat = FXAI_ComputeFeatureVector(1,
+                                               snapshot.symbol,
                                                spread_prev,
                                                time_arr,
                                                open_arr,
@@ -606,6 +608,7 @@ void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
    s3.ctx.cost_points = sample.cost_points;
    s3.ctx.min_move_points = sample.min_move_points;
    s3.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+   s3.ctx.domain_hash = sample.domain_hash;
    s3.ctx.sample_time = sample.sample_time;
    s3.label_class = sample.label_class;
    s3.move_points = sample.move_points;

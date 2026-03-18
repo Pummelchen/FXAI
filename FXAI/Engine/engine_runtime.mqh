@@ -390,6 +390,7 @@ int SpecialDirectionAI(const string symbol)
    ENUM_FXAI_FEATURE_NORMALIZATION norm_method = FXAI_GetFeatureNormalizationMethod();
    double feat_pred[FXAI_AI_FEATURES];
    if(!FXAI_ComputeFeatureVector(0,
+                                _Symbol,
                                 spread_pred,
                                 time_arr,
                                 open_arr,
@@ -773,6 +774,9 @@ int SpecialDirectionAI(const string symbol)
    ensemble_probs[2] = 0.3334;
    double stack_feat[FXAI_STACK_FEATS];
    for(int sf=0; sf<FXAI_STACK_FEATS; sf++) stack_feat[sf] = 0.0;
+   bool feature_drift_updated = false;
+   double live_feature_drift = FXAI_GetFeatureDriftPenalty();
+   double drift_norm = FXAI_Clamp(live_feature_drift / 4.0, 0.0, 1.0);
 
    for(int m=0; m<ArraySize(active_ai_ids); m++)
    {
@@ -837,6 +841,7 @@ int SpecialDirectionAI(const string symbol)
       req.ctx.min_move_points = min_move_pred;
       req.ctx.cost_points = min_move_pred;
       req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+      req.ctx.domain_hash = FXAI_SymbolHash01(snapshot.symbol);
       req.ctx.sample_time = snapshot.bar_time;
       int input_idx = FXAI_FindNormInputCache(method_id, input_caches);
       if(input_idx < 0)
@@ -870,6 +875,14 @@ int SpecialDirectionAI(const string symbol)
       }
       if(input_idx < 0)
          continue;
+      if(!feature_drift_updated)
+      {
+         FXAI_UpdateFeatureDriftLiveFromInput(input_caches[input_idx].x, snapshot.bar_time);
+         FXAI_MarkRuntimeArtifactsDirty();
+         live_feature_drift = FXAI_GetFeatureDriftPenalty();
+         drift_norm = FXAI_Clamp(live_feature_drift / 4.0, 0.0, 1.0);
+         feature_drift_updated = true;
+      }
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = input_caches[input_idx].x[k];
       FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, 0, runtime_norm_caches, req.ctx.sequence_bars, req.x_window, req.window_size);
@@ -963,6 +976,7 @@ int SpecialDirectionAI(const string symbol)
                                                0.10 * (1.0 - FXAI_Clamp(pred.fill_risk, 0.0, 1.0)) +
                                                0.08 * FXAI_Clamp(context_quality, 0.0, 1.5) +
                                                0.07 * FXAI_Clamp(context_strength / 2.0, 0.0, 1.0) -
+                                               0.08 * drift_norm -
                                                0.10 * class_probs_pred[(int)FXAI_LABEL_SKIP],
                                                0.0,
                                                1.0);
@@ -972,7 +986,7 @@ int SpecialDirectionAI(const string symbol)
          g_ai_last_expected_move_points = MathMax(expected_move, 0.0);
          g_ai_last_trade_edge_points = chosen_edge;
          g_ai_last_confidence = FXAI_Clamp(pred.confidence, 0.0, 1.0);
-         g_ai_last_reliability = FXAI_Clamp(pred.reliability, 0.0, 1.0);
+         g_ai_last_reliability = FXAI_Clamp(pred.reliability * (1.0 - 0.15 * drift_norm), 0.0, 1.0);
          g_ai_last_path_risk = FXAI_Clamp(pred.path_risk, 0.0, 1.0);
          g_ai_last_fill_risk = FXAI_Clamp(pred.fill_risk, 0.0, 1.0);
          g_ai_last_trade_gate = single_trade_gate;
@@ -1090,6 +1104,7 @@ int SpecialDirectionAI(const string symbol)
                                               0.08 * FXAI_Clamp(context_quality, 0.0, 1.5) +
                                               0.10 * (1.0 - avg_path_risk) +
                                               0.08 * (1.0 - avg_fill_risk) -
+                                              0.08 * drift_norm -
                                               0.10 * vote_probs[(int)FXAI_LABEL_SKIP],
                                               0.05,
                                               0.95);
@@ -1098,7 +1113,8 @@ int SpecialDirectionAI(const string symbol)
                                             0.06 * vote_probs[(int)FXAI_LABEL_SKIP] +
                                             0.05 * FXAI_Clamp(move_dispersion / MathMax(min_move_pred, 0.10), 0.0, 1.0) -
                                             0.05 * avg_conf -
-                                            0.04 * avg_rel,
+                                            0.04 * avg_rel +
+                                            0.03 * drift_norm,
                                             0.42,
                                             0.68);
          double stack_blend = FXAI_Clamp(0.40 + 0.20 * avg_conf + 0.18 * avg_rel + 0.12 * dominant_family_ratio + 0.08 * FXAI_Clamp(context_quality, 0.0, 1.5) - 0.06 * FXAI_Clamp(move_dispersion / MathMax(min_move_pred, 0.10), 0.0, 1.0),
@@ -1117,7 +1133,7 @@ int SpecialDirectionAI(const string symbol)
          double chosen_edge = MathMax(stack_buy_ev, stack_sell_ev);
          g_ai_last_expected_move_points = stack_move;
          g_ai_last_confidence = FXAI_Clamp(avg_conf, 0.0, 1.0);
-         g_ai_last_reliability = FXAI_Clamp(avg_rel, 0.0, 1.0);
+         g_ai_last_reliability = FXAI_Clamp(avg_rel * (1.0 - 0.15 * drift_norm), 0.0, 1.0);
          g_ai_last_path_risk = FXAI_Clamp(avg_path_risk, 0.0, 1.0);
          g_ai_last_fill_risk = FXAI_Clamp(avg_fill_risk, 0.0, 1.0);
          g_ai_last_trade_gate = trade_gate;

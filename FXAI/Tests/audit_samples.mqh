@@ -59,6 +59,7 @@ bool FXAI_AuditBuildSample(const int i,
 
    double feat[FXAI_AI_FEATURES];
    if(!FXAI_ComputeFeatureVector(i,
+                                 snapshot.symbol,
                                  snapshot.spread_points,
                                  time_arr,
                                  open_arr,
@@ -93,6 +94,7 @@ bool FXAI_AuditBuildSample(const int i,
    if(need_prev && (i + 1) < n)
    {
       has_prev = FXAI_ComputeFeatureVector(i + 1,
+                                           snapshot.symbol,
                                            FXAI_GetSpreadAtIndex(i + 1, spread_arr, snapshot.spread_points),
                                            time_arr,
                                            open_arr,
@@ -164,6 +166,7 @@ bool FXAI_AuditBuildSample(const int i,
    ctx.cost_points = cost_points;
    ctx.min_move_points = cost_points;
    ctx.point_value = point;
+   ctx.domain_hash = FXAI_SymbolHash01(snapshot.symbol);
    ctx.sample_time = snapshot.bar_time;
    return true;
 }
