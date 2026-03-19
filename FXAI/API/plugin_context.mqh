@@ -17,6 +17,7 @@
    double m_shared_cls_w[3][FXAI_SHARED_TRANSFER_FEATURES];
    double m_shared_move_w[FXAI_SHARED_TRANSFER_FEATURES];
    double m_shared_backbone_w[FXAI_SHARED_TRANSFER_LATENT][FXAI_SHARED_TRANSFER_FEATURES];
+   double m_shared_backbone_seq_w[FXAI_SHARED_TRANSFER_LATENT][FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS];
    double m_shared_backbone_b[FXAI_SHARED_TRANSFER_LATENT];
    double m_shared_backbone_cls[3][FXAI_SHARED_TRANSFER_LATENT];
    double m_shared_backbone_move[FXAI_SHARED_TRANSFER_LATENT];
@@ -257,16 +258,20 @@
    void EncodeSharedTransferBackbone(const double &a[],
                                      double &latent[]) const
    {
-      FXAI_SharedTransferEncode(a,
-                                FXAI_SharedTransferDomainBucket(m_ctx_domain_hash),
-                                FXAI_SharedTransferHorizonBucket(m_ctx_horizon_minutes),
-                                m_ctx_session_bucket,
-                                m_shared_backbone_w,
-                                m_shared_backbone_b,
-                                m_shared_domain_emb,
-                                m_shared_horizon_emb,
-                                m_shared_session_emb,
-                                latent);
+      double seq_tokens[];
+      FXAI_SharedTransferBuildSequenceTokens(a, m_ctx_window, m_ctx_window_size, seq_tokens);
+      FXAI_SharedTransferEncodeTemporal(a,
+                                        seq_tokens,
+                                        FXAI_SharedTransferDomainBucket(m_ctx_domain_hash),
+                                        FXAI_SharedTransferHorizonBucket(m_ctx_horizon_minutes),
+                                        m_ctx_session_bucket,
+                                        m_shared_backbone_w,
+                                        m_shared_backbone_seq_w,
+                                        m_shared_backbone_b,
+                                        m_shared_domain_emb,
+                                        m_shared_horizon_emb,
+                                        m_shared_session_emb,
+                                        latent);
    }
 
    void PredictSharedTransferBackbone(const double &a[],
@@ -418,6 +423,8 @@
       double global_probs[];
       double global_move_adj = 0.0;
       FXAI_GlobalSharedTransferPredict(a,
+                                       m_ctx_window,
+                                       m_ctx_window_size,
                                        m_ctx_domain_hash,
                                        m_ctx_horizon_minutes,
                                        m_ctx_session_bucket,
@@ -567,6 +574,8 @@
          m_shared_move_w[i] = FXAI_ClipSym(m_shared_move_w[i] + 0.80 * step * move_err * a[i], 3.0);
 
       double latent[];
+      double seq_tokens[];
+      FXAI_SharedTransferBuildSequenceTokens(a, m_ctx_window, m_ctx_window_size, seq_tokens);
       EncodeSharedTransferBackbone(a, latent);
       double bb_logits[3];
       for(int c=0; c<3; c++)
@@ -615,6 +624,8 @@
          m_shared_backbone_b[j] = FXAI_ClipSym(m_shared_backbone_b[j] + bb_step * g, 3.0);
          for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
             m_shared_backbone_w[j][i] = FXAI_ClipSym(m_shared_backbone_w[j][i] + bb_step * g * a[i], 3.0);
+         for(int t=0; t<FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS; t++)
+            m_shared_backbone_seq_w[j][t] = FXAI_ClipSym(m_shared_backbone_seq_w[j][t] + 0.80 * bb_step * g * FXAI_SharedTransferArrayValue(seq_tokens, t, 0.0), 3.0);
          m_shared_domain_emb[domain_bucket][j] = FXAI_ClipSym(m_shared_domain_emb[domain_bucket][j] + 0.40 * bb_step * g, 3.0);
          m_shared_horizon_emb[horizon_bucket][j] = FXAI_ClipSym(m_shared_horizon_emb[horizon_bucket][j] + 0.40 * bb_step * g, 3.0);
          m_shared_session_emb[session_bucket][j] = FXAI_ClipSym(m_shared_session_emb[session_bucket][j] + 0.30 * bb_step * g, 3.0);
@@ -628,6 +639,8 @@
          m_shared_backbone_ready = true;
 
       FXAI_GlobalSharedTransferUpdate(a,
+                                      m_ctx_window,
+                                      m_ctx_window_size,
                                       m_ctx_domain_hash,
                                       m_ctx_horizon_minutes,
                                       m_ctx_session_bucket,
@@ -714,6 +727,8 @@
             m_shared_backbone_cls[c][j] = 0.01 * (double)((((c + 1) * (j + 3)) % 7) - 3);
          for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
             m_shared_backbone_w[j][i] = 0.004 * (double)((((j + 1) * (i + 5)) % 11) - 5);
+         for(int t=0; t<FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS; t++)
+            m_shared_backbone_seq_w[j][t] = 0.003 * (double)((((j + 3) * (t + 7)) % 13) - 6);
       }
       for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
          for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)

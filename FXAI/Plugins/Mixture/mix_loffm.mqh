@@ -414,6 +414,8 @@ public:
 
    virtual int AIId(void) const { return AI_LOFFM; }
    virtual string AIName(void) const { return "mix_loffm"; }
+   virtual int PersistentStateVersion(void) const { return 9; }
+   virtual string PersistentStateCoverageTag(void) const { return "native_model"; }
 
 
    virtual void Describe(FXAIAIManifestV4 &out) const
@@ -661,6 +663,104 @@ protected:
       if(exp_move > 0.0) return exp_move;
       if(m_move_ready && m_move_ema_abs > 0.0) return m_move_ema_abs;
       return 0.0;
+   }
+
+   virtual bool SaveModelState(const int handle) const
+   {
+      if(handle == INVALID_HANDLE)
+         return false;
+
+      FileWriteInteger(handle, (m_initialized ? 1 : 0));
+      FileWriteInteger(handle, m_steps);
+      for(int e=0; e<FXAI_LOFFM_EXPERTS; e++)
+      {
+         for(int k=0; k<FXAI_LOFFM_DERIVED; k++)
+         {
+            FileWriteDouble(handle, m_gate_w[e][k]);
+            FileWriteDouble(handle, m_skip_w[e][k]);
+            FileWriteDouble(handle, m_skip_g2[e][k]);
+         }
+         for(int k=0; k<FXAI_LOFFM_LATENT; k++)
+         {
+            FileWriteDouble(handle, m_dir_w[e][k]);
+            FileWriteDouble(handle, m_dir_g2[e][k]);
+         }
+         for(int k=0; k<FXAI_LOFFM_MOVE_FEATS; k++)
+         {
+            FileWriteDouble(handle, m_move_head_w[e][k]);
+            FileWriteDouble(handle, m_move_g2[e][k]);
+         }
+         for(int k=0; k<FXAI_LOFFM_STATE; k++)
+            FileWriteDouble(handle, m_latent[e][k]);
+         FileWriteDouble(handle, m_conf_ema[e]);
+         FileWriteDouble(handle, m_edge_ema[e]);
+         FileWriteDouble(handle, m_hit_ema[e]);
+         FileWriteDouble(handle, m_expert_mass[e]);
+         FileWriteDouble(handle, m_usage_ema[e]);
+         FileWriteInteger(handle, m_loffm_replay_head[e]);
+         FileWriteInteger(handle, m_replay_count[e]);
+         for(int r=0; r<FXAI_LOFFM_REPLAY; r++)
+         {
+            for(int k=0; k<FXAI_LOFFM_DERIVED; k++)
+               FileWriteDouble(handle, m_replay_d[e][r][k]);
+            FileWriteDouble(handle, m_loffm_replay_move[e][r]);
+            FileWriteInteger(handle, m_loffm_replay_label[e][r]);
+         }
+      }
+      for(int k=0; k<FXAI_LOFFM_STATE; k++)
+         FileWriteDouble(handle, m_global_state[k]);
+      FileWriteDouble(handle, m_global_edge_ema);
+      FileWriteDouble(handle, m_global_hit_ema);
+      return m_cal3.Save(handle);
+   }
+
+   virtual bool LoadModelState(const int handle, const int version)
+   {
+      if(handle == INVALID_HANDLE || version < 8)
+         return false;
+
+      m_initialized = (FileReadInteger(handle) != 0);
+      m_steps = FileReadInteger(handle);
+      for(int e=0; e<FXAI_LOFFM_EXPERTS; e++)
+      {
+         for(int k=0; k<FXAI_LOFFM_DERIVED; k++)
+         {
+            m_gate_w[e][k] = FileReadDouble(handle);
+            m_skip_w[e][k] = FileReadDouble(handle);
+            m_skip_g2[e][k] = FileReadDouble(handle);
+         }
+         for(int k=0; k<FXAI_LOFFM_LATENT; k++)
+         {
+            m_dir_w[e][k] = FileReadDouble(handle);
+            m_dir_g2[e][k] = FileReadDouble(handle);
+         }
+         for(int k=0; k<FXAI_LOFFM_MOVE_FEATS; k++)
+         {
+            m_move_head_w[e][k] = FileReadDouble(handle);
+            m_move_g2[e][k] = FileReadDouble(handle);
+         }
+         for(int k=0; k<FXAI_LOFFM_STATE; k++)
+            m_latent[e][k] = FileReadDouble(handle);
+         m_conf_ema[e] = FileReadDouble(handle);
+         m_edge_ema[e] = FileReadDouble(handle);
+         m_hit_ema[e] = FileReadDouble(handle);
+         m_expert_mass[e] = FileReadDouble(handle);
+         m_usage_ema[e] = FileReadDouble(handle);
+         m_loffm_replay_head[e] = FileReadInteger(handle);
+         m_replay_count[e] = FileReadInteger(handle);
+         for(int r=0; r<FXAI_LOFFM_REPLAY; r++)
+         {
+            for(int k=0; k<FXAI_LOFFM_DERIVED; k++)
+               m_replay_d[e][r][k] = FileReadDouble(handle);
+            m_loffm_replay_move[e][r] = FileReadDouble(handle);
+            m_loffm_replay_label[e][r] = FileReadInteger(handle);
+         }
+      }
+      for(int k=0; k<FXAI_LOFFM_STATE; k++)
+         m_global_state[k] = FileReadDouble(handle);
+      m_global_edge_ema = FileReadDouble(handle);
+      m_global_hit_ema = FileReadDouble(handle);
+      return m_cal3.Load(handle);
    }
 };
 

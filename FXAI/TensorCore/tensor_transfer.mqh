@@ -4,6 +4,7 @@
 bool   g_shared_transfer_global_ready = false;
 int    g_shared_transfer_global_steps = 0;
 double g_shared_transfer_global_w[FXAI_SHARED_TRANSFER_LATENT][FXAI_SHARED_TRANSFER_FEATURES];
+double g_shared_transfer_global_seq_w[FXAI_SHARED_TRANSFER_LATENT][FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS];
 double g_shared_transfer_global_b[FXAI_SHARED_TRANSFER_LATENT];
 double g_shared_transfer_global_cls[3][FXAI_SHARED_TRANSFER_LATENT];
 double g_shared_transfer_global_move[FXAI_SHARED_TRANSFER_LATENT];
@@ -40,16 +41,191 @@ int FXAI_SharedTransferHorizonBucket(const int horizon_minutes)
    return slot;
 }
 
-void FXAI_SharedTransferEncode(const double &a[],
-                               const int domain_bucket,
-                               const int horizon_bucket,
-                               const int session_bucket,
-                               const double &w[][FXAI_SHARED_TRANSFER_FEATURES],
-                               const double &b[],
-                               const double &domain_emb[][FXAI_SHARED_TRANSFER_LATENT],
-                               const double &horizon_emb[][FXAI_SHARED_TRANSFER_LATENT],
-                               const double &session_emb[][FXAI_SHARED_TRANSFER_LATENT],
-                               double &latent[])
+double FXAI_SharedTransferWindowFeatureSegmentMean(const double &x_window[][FXAI_AI_WEIGHTS],
+                                                   const int window_size,
+                                                   const int feature_idx,
+                                                   const int seg_start,
+                                                   const int seg_len)
+{
+   if(window_size <= 0 || seg_len <= 0)
+      return 0.0;
+   int input_idx = feature_idx + 1;
+   if(input_idx < 1 || input_idx >= FXAI_AI_WEIGHTS)
+      return 0.0;
+
+   int start = seg_start;
+   if(start < 0) start = 0;
+   if(start >= window_size) start = window_size - 1;
+   int stop = start + seg_len;
+   if(stop > window_size) stop = window_size;
+   if(stop <= start)
+      return 0.0;
+
+   double sum = 0.0;
+   int used = 0;
+   for(int b=start; b<stop; b++)
+   {
+      sum += x_window[b][input_idx];
+      used++;
+   }
+   if(used <= 0)
+      return 0.0;
+   return sum / (double)used;
+}
+
+double FXAI_SharedTransferArrayValue(const double &values[],
+                                     const int index,
+                                     const double fallback)
+{
+   int n = ArraySize(values);
+   if(index < 0 || index >= n)
+      return fallback;
+   return values[index];
+}
+
+void FXAI_SharedTransferBuildSequenceTokens(const double &a[],
+                                           const double &x_window[][FXAI_AI_WEIGHTS],
+                                           const int window_size,
+                                           double &tokens[])
+{
+   ArrayResize(tokens, FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS);
+   for(int i=0; i<FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS; i++)
+      tokens[i] = 0.0;
+
+   if(window_size <= 0)
+   {
+      tokens[0] = FXAI_SharedTransferArrayValue(a, 20, 0.0);
+      tokens[1] = FXAI_SharedTransferArrayValue(a, 21, 0.0);
+      tokens[2] = FXAI_SharedTransferArrayValue(a, 22, 0.0);
+      tokens[3] = FXAI_SharedTransferArrayValue(a, 23, 0.0);
+      tokens[4] = FXAI_SharedTransferArrayValue(a, 24, 0.0);
+      tokens[5] = FXAI_SharedTransferArrayValue(a, 25, 0.0);
+      tokens[6] = FXAI_SharedTransferArrayValue(a, 26, 0.0);
+      tokens[7] = FXAI_SharedTransferArrayValue(a, 27, 0.0);
+      tokens[8] = FXAI_Clamp(0.50 * FXAI_SharedTransferArrayValue(a, 11, 0.0) + 0.50 * FXAI_SharedTransferArrayValue(a, 12, 0.0), -4.0, 4.0);
+      tokens[9] = FXAI_Clamp(0.55 * FXAI_SharedTransferArrayValue(a, 13, 0.0) + 0.45 * FXAI_SharedTransferArrayValue(a, 14, 0.0), -4.0, 4.0);
+      tokens[10] = FXAI_Clamp(0.50 * FXAI_SharedTransferArrayValue(a, 15, 0.0) + 0.50 * FXAI_SharedTransferArrayValue(a, 16, 0.0), -4.0, 4.0);
+      tokens[11] = FXAI_Clamp(0.50 * FXAI_SharedTransferArrayValue(a, 17, 0.0) + 0.50 * FXAI_SharedTransferArrayValue(a, 18, 0.0), -4.0, 4.0);
+      tokens[12] = FXAI_Clamp(0.60 * FXAI_SharedTransferArrayValue(a, 6, 0.0) + 0.40 * FXAI_SharedTransferArrayValue(a, 7, 0.0), -4.0, 4.0);
+      tokens[13] = FXAI_Clamp(0.50 * FXAI_SharedTransferArrayValue(a, 4, 0.0) + 0.50 * FXAI_SharedTransferArrayValue(a, 8, 0.0), -4.0, 4.0);
+      tokens[14] = FXAI_Clamp(FXAI_SharedTransferArrayValue(a, 19, 0.0), -4.0, 4.0);
+      tokens[15] = FXAI_Clamp((MathAbs(tokens[0]) + MathAbs(tokens[3]) + MathAbs(tokens[7])) / 3.0, 0.0, 6.0);
+      return;
+   }
+
+   int seg = MathMax(window_size / 4, 2);
+   if(seg > window_size) seg = window_size;
+   int tail_start = MathMax(window_size - seg, 0);
+   double ret_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 0, 0, seg);
+   double ret_mid = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 1, seg, seg);
+   double ret_tail = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 2, tail_start, seg);
+   double trend_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 3, 0, seg);
+   double vol_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 5, 0, seg);
+   double vol_tail = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 5, tail_start, seg);
+   double spread_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 80, 0, seg);
+   double spread_tail = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 80, tail_start, seg);
+   double spread_z_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 81, 0, seg);
+   double ctx_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 10, 0, seg);
+   double ctx_tail = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 10, tail_start, seg);
+   double shared_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 62, 0, seg);
+   double shared_lead_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 64, 0, seg);
+   double shared_cover_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 65, 0, seg);
+   double session_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 72, 0, seg);
+   double overlap_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 73, 0, seg);
+   double rollover_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 74, 0, seg);
+   double carry_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 78, 0, seg);
+   double drift_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 79, 0, seg);
+   double drift_tail = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, 79, tail_start, seg);
+   double macro_pre_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 0, 0, seg);
+   double macro_post_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 1, 0, seg);
+   double macro_imp_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 2, 0, seg);
+   double macro_surprise_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 3, 0, seg);
+   double macro_abs_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 4, 0, seg);
+   double macro_z_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 6, 0, seg);
+   double macro_revision_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 7, 0, seg);
+   double macro_currency_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 8, 0, seg);
+   double macro_provenance_recent = FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 9, 0, seg);
+
+   double main_mtf_body_recent = 0.0;
+   double main_mtf_spread_recent = 0.0;
+   double ctx_mtf_body_recent = 0.0;
+   double ctx_mtf_spread_recent = 0.0;
+   for(int tf_slot=0; tf_slot<FXAI_MAIN_MTF_TF_COUNT; tf_slot++)
+   {
+      int base = FXAI_MainMTFFeatureIndex(tf_slot, 0);
+      if(base < 0)
+         continue;
+      main_mtf_body_recent += FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, base + 0, 0, seg);
+      main_mtf_spread_recent += FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, base + 3, 0, seg);
+   }
+   main_mtf_body_recent /= (double)MathMax(FXAI_MAIN_MTF_TF_COUNT, 1);
+   main_mtf_spread_recent /= (double)MathMax(FXAI_MAIN_MTF_TF_COUNT, 1);
+   int ctx_used = 0;
+   for(int slot=0; slot<FXAI_CONTEXT_TOP_SYMBOLS; slot++)
+   {
+      for(int tf_slot=0; tf_slot<FXAI_CONTEXT_MTF_TF_COUNT; tf_slot++)
+      {
+         int base = FXAI_ContextMTFFeatureIndex(slot, tf_slot, 0);
+         if(base < 0)
+            continue;
+         ctx_mtf_body_recent += FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, base + 0, 0, seg);
+         ctx_mtf_spread_recent += FXAI_SharedTransferWindowFeatureSegmentMean(x_window, window_size, base + 3, 0, seg);
+         ctx_used++;
+      }
+   }
+   if(ctx_used > 0)
+   {
+      ctx_mtf_body_recent /= (double)ctx_used;
+      ctx_mtf_spread_recent /= (double)ctx_used;
+   }
+
+   tokens[0] = FXAI_Clamp(ret_recent, -4.0, 4.0);
+   tokens[1] = FXAI_Clamp(ret_mid, -4.0, 4.0);
+   tokens[2] = FXAI_Clamp(ret_tail, -4.0, 4.0);
+   tokens[3] = FXAI_Clamp(trend_recent + 0.35 * (ret_recent - ret_tail), -4.0, 4.0);
+   tokens[4] = FXAI_Clamp(0.65 * vol_recent + 0.35 * (vol_recent - vol_tail), 0.0, 6.0);
+   tokens[5] = FXAI_Clamp(0.60 * spread_recent + 0.25 * spread_z_recent + 0.15 * (spread_recent - spread_tail), -6.0, 8.0);
+   tokens[6] = FXAI_Clamp(0.60 * ctx_recent + 0.20 * (ctx_recent - ctx_tail) + 0.20 * shared_recent, -4.0, 4.0);
+   tokens[7] = FXAI_Clamp(0.45 * shared_recent + 0.30 * shared_lead_recent + 0.25 * shared_cover_recent, -4.0, 4.0);
+   tokens[8] = FXAI_Clamp(0.45 * session_recent + 0.30 * overlap_recent + 0.25 * rollover_recent, -4.0, 4.0);
+   tokens[9] = FXAI_Clamp(0.45 * carry_recent + 0.35 * drift_recent + 0.20 * (drift_recent - drift_tail), -4.0, 4.0);
+   tokens[10] = FXAI_Clamp(0.25 * macro_pre_recent +
+                           0.12 * macro_post_recent +
+                           0.22 * macro_imp_recent +
+                           0.18 * macro_surprise_recent +
+                           0.13 * macro_z_recent +
+                           0.10 * macro_currency_recent,
+                           -6.0,
+                           6.0);
+   tokens[11] = FXAI_Clamp(0.28 * macro_abs_recent +
+                           0.15 * macro_revision_recent +
+                           0.10 * macro_provenance_recent +
+                           0.27 * main_mtf_body_recent +
+                           0.20 * ctx_mtf_body_recent,
+                           -4.0,
+                           6.0);
+   tokens[12] = FXAI_Clamp(main_mtf_spread_recent - ctx_mtf_spread_recent, -4.0, 4.0);
+   tokens[13] = FXAI_Clamp(ret_recent - ret_tail, -4.0, 4.0);
+   tokens[14] = FXAI_Clamp(spread_recent - spread_tail, -6.0, 6.0);
+   tokens[15] = FXAI_Clamp(0.40 * FXAI_SharedTransferWindowFeatureStd(x_window, window_size, 5) +
+                           0.35 * FXAI_SharedTransferWindowFeatureStd(x_window, window_size, 80) +
+                           0.25 * FXAI_SharedTransferWindowFeatureStd(x_window, window_size, 79),
+                           0.0,
+                           6.0);
+}
+
+void FXAI_SharedTransferEncodeTemporal(const double &a[],
+                                       const double &seq_tokens[],
+                                       const int domain_bucket,
+                                       const int horizon_bucket,
+                                       const int session_bucket,
+                                       const double &w[][FXAI_SHARED_TRANSFER_FEATURES],
+                                       const double &seq_w[][FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS],
+                                       const double &b[],
+                                       const double &domain_emb[][FXAI_SHARED_TRANSFER_LATENT],
+                                       const double &horizon_emb[][FXAI_SHARED_TRANSFER_LATENT],
+                                       const double &session_emb[][FXAI_SHARED_TRANSFER_LATENT],
+                                       double &latent[])
 {
    ArrayResize(latent, FXAI_SHARED_TRANSFER_LATENT);
    int db = domain_bucket;
@@ -70,8 +246,43 @@ void FXAI_SharedTransferEncode(const double &a[],
                  session_emb[sb][j];
       for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
          z += w[j][i] * a[i];
+      for(int t=0; t<FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS; t++)
+         z += seq_w[j][t] * FXAI_SharedTransferArrayValue(seq_tokens, t, 0.0);
       latent[j] = FXAI_Tanh(FXAI_ClipSym(z, 6.0));
    }
+}
+
+void FXAI_SharedTransferEncode(const double &a[],
+                               const int domain_bucket,
+                               const int horizon_bucket,
+                               const int session_bucket,
+                               const double &w[][FXAI_SHARED_TRANSFER_FEATURES],
+                               const double &b[],
+                               const double &domain_emb[][FXAI_SHARED_TRANSFER_LATENT],
+                               const double &horizon_emb[][FXAI_SHARED_TRANSFER_LATENT],
+                               const double &session_emb[][FXAI_SHARED_TRANSFER_LATENT],
+                               double &latent[])
+{
+   double seq_tokens[];
+   ArrayResize(seq_tokens, FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS);
+   for(int i=0; i<FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS; i++)
+      seq_tokens[i] = 0.0;
+   double seq_w_zero[FXAI_SHARED_TRANSFER_LATENT][FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS];
+   for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+      for(int t=0; t<FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS; t++)
+         seq_w_zero[j][t] = 0.0;
+   FXAI_SharedTransferEncodeTemporal(a,
+                                     seq_tokens,
+                                     domain_bucket,
+                                     horizon_bucket,
+                                     session_bucket,
+                                     w,
+                                     seq_w_zero,
+                                     b,
+                                     domain_emb,
+                                     horizon_emb,
+                                     session_emb,
+                                     latent);
 }
 
 void FXAI_SharedTransferSoftmax(const double &logits[],
@@ -350,6 +561,10 @@ void FXAI_BuildSharedTransferInputGlobalBase(const double &x[],
    double macro_surprise = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 3);
    double macro_surprise_abs = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 4);
    double macro_class = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 5);
+   double macro_surprise_z = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 6);
+   double macro_revision_abs = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 7);
+   double macro_currency_rel = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 8);
+   double macro_provenance = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 9);
 
    out[9] = 2.0 * domain - 1.0;
    out[10] = 2.0 * horizon_scale - 1.0;
@@ -423,14 +638,18 @@ void FXAI_BuildSharedTransferInputGlobalBase(const double &x[],
                         0.20 * macro_class +
                         0.15 * FXAI_GetInputFeature(x, 78) +
                         0.10 * FXAI_GetInputFeature(x, 72) +
-                        0.10 * FXAI_GetInputFeature(x, 73),
+                        0.10 * FXAI_GetInputFeature(x, 73) +
+                        0.12 * macro_surprise_z +
+                        0.08 * macro_currency_rel,
                         -6.0,
                         6.0);
    out[19] = FXAI_Clamp(0.40 * macro_surprise_abs +
                         0.22 * macro_imp +
                         0.18 * macro_pre +
                         0.10 * macro_post +
-                        0.10 * FXAI_GetInputFeature(x, 79),
+                        0.10 * FXAI_GetInputFeature(x, 79) +
+                        0.10 * macro_revision_abs +
+                        0.08 * macro_provenance,
                         0.0,
                         6.0);
 }
@@ -595,6 +814,8 @@ void FXAI_ResetGlobalSharedTransferBackbone(void)
          g_shared_transfer_global_cls[c][j] = 0.01 * (double)((((c + 1) * (j + 5)) % 9) - 4);
       for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
          g_shared_transfer_global_w[j][i] = 0.0035 * (double)((((j + 2) * (i + 3)) % 13) - 6);
+      for(int t=0; t<FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS; t++)
+         g_shared_transfer_global_seq_w[j][t] = 0.0030 * (double)((((j + 5) * (t + 7)) % 17) - 8);
    }
    for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
       for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
@@ -613,24 +834,32 @@ double FXAI_GlobalSharedTransferTrust(void)
 }
 
 void FXAI_GlobalSharedTransferEncode(const double &a[],
+                                     const double &x_window[][FXAI_AI_WEIGHTS],
+                                     const int window_size,
                                      const double domain_hash,
                                      const int horizon_minutes,
                                      const int session_bucket,
                                      double &latent[])
 {
-   FXAI_SharedTransferEncode(a,
-                             FXAI_SharedTransferDomainBucket(domain_hash),
-                             FXAI_SharedTransferHorizonBucket(horizon_minutes),
-                             session_bucket,
-                             g_shared_transfer_global_w,
-                             g_shared_transfer_global_b,
-                             g_shared_transfer_global_domain_emb,
-                             g_shared_transfer_global_horizon_emb,
-                             g_shared_transfer_global_session_emb,
-                             latent);
+   double seq_tokens[];
+   FXAI_SharedTransferBuildSequenceTokens(a, x_window, window_size, seq_tokens);
+   FXAI_SharedTransferEncodeTemporal(a,
+                                     seq_tokens,
+                                     FXAI_SharedTransferDomainBucket(domain_hash),
+                                     FXAI_SharedTransferHorizonBucket(horizon_minutes),
+                                     session_bucket,
+                                     g_shared_transfer_global_w,
+                                     g_shared_transfer_global_seq_w,
+                                     g_shared_transfer_global_b,
+                                     g_shared_transfer_global_domain_emb,
+                                     g_shared_transfer_global_horizon_emb,
+                                     g_shared_transfer_global_session_emb,
+                                     latent);
 }
 
 void FXAI_GlobalSharedTransferPredict(const double &a[],
+                                      const double &x_window[][FXAI_AI_WEIGHTS],
+                                      const int window_size,
                                       const double domain_hash,
                                       const int horizon_minutes,
                                       const int session_bucket,
@@ -638,7 +867,7 @@ void FXAI_GlobalSharedTransferPredict(const double &a[],
                                       double &move_adj)
 {
    double latent[];
-   FXAI_GlobalSharedTransferEncode(a, domain_hash, horizon_minutes, session_bucket, latent);
+   FXAI_GlobalSharedTransferEncode(a, x_window, window_size, domain_hash, horizon_minutes, session_bucket, latent);
 
    double logits[3];
    for(int c=0; c<3; c++)
@@ -655,6 +884,8 @@ void FXAI_GlobalSharedTransferPredict(const double &a[],
 }
 
 void FXAI_GlobalSharedTransferUpdate(const double &a[],
+                                     const double &x_window[][FXAI_AI_WEIGHTS],
+                                     const int window_size,
                                      const double domain_hash,
                                      const int horizon_minutes,
                                      const int session_bucket,
@@ -665,8 +896,10 @@ void FXAI_GlobalSharedTransferUpdate(const double &a[],
                                      const double lr)
 {
    int cls = FXAI_SharedTransferResolveClassLabel(y, cost_points, move_points);
+   double seq_tokens[];
+   FXAI_SharedTransferBuildSequenceTokens(a, x_window, window_size, seq_tokens);
    double latent[];
-   FXAI_GlobalSharedTransferEncode(a, domain_hash, horizon_minutes, session_bucket, latent);
+   FXAI_GlobalSharedTransferEncode(a, x_window, window_size, domain_hash, horizon_minutes, session_bucket, latent);
 
    double logits[3];
    for(int c=0; c<3; c++)
@@ -717,6 +950,8 @@ void FXAI_GlobalSharedTransferUpdate(const double &a[],
       g_shared_transfer_global_b[j] = FXAI_ClipSym(g_shared_transfer_global_b[j] + step * g, 3.0);
       for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
          g_shared_transfer_global_w[j][i] = FXAI_ClipSym(g_shared_transfer_global_w[j][i] + step * g * a[i], 3.0);
+      for(int t=0; t<FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS; t++)
+         g_shared_transfer_global_seq_w[j][t] = FXAI_ClipSym(g_shared_transfer_global_seq_w[j][t] + 0.80 * step * g * FXAI_SharedTransferArrayValue(seq_tokens, t, 0.0), 3.0);
       g_shared_transfer_global_domain_emb[domain_bucket][j] = FXAI_ClipSym(g_shared_transfer_global_domain_emb[domain_bucket][j] + 0.45 * step * g, 3.0);
       g_shared_transfer_global_horizon_emb[horizon_bucket][j] = FXAI_ClipSym(g_shared_transfer_global_horizon_emb[horizon_bucket][j] + 0.45 * step * g, 3.0);
       g_shared_transfer_global_session_emb[session_idx][j] = FXAI_ClipSym(g_shared_transfer_global_session_emb[session_idx][j] + 0.35 * step * g, 3.0);

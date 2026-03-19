@@ -1080,6 +1080,8 @@ public:
 
    virtual int AIId(void) const { return (int)AI_LIGHTGBM; }
    virtual string AIName(void) const { return "tree_lgbm"; }
+   virtual int PersistentStateVersion(void) const { return 9; }
+   virtual string PersistentStateCoverageTag(void) const { return "native_model"; }
 
 
    virtual void Describe(FXAIAIManifestV4 &out) const
@@ -1314,6 +1316,159 @@ public:
       double ev = -1.0;
       if(PredictModelCore(x, hp, probs, ev) && ev > 0.0) return ev;
       return (m_move_ready ? m_move_ema_abs : 0.0);
+   }
+
+   virtual bool SaveModelState(const int handle) const
+   {
+      if(handle == INVALID_HANDLE)
+         return false;
+
+      FileWriteInteger(handle, (m_initialized ? 1 : 0));
+      FileWriteInteger(handle, m_step);
+      for(int c=0; c<FXAI_LGB_CLASS_COUNT; c++)
+      {
+         FileWriteDouble(handle, m_bias[c]);
+         FileWriteInteger(handle, m_tree_count[c]);
+         for(int t=0; t<FXAI_LGB_MAX_TREES; t++)
+         {
+            FileWriteInteger(handle, m_trees[c][t].node_count);
+            for(int n=0; n<FXAI_LGB_MAX_NODES; n++)
+            {
+               FXAILGBNode node = m_trees[c][t].nodes[n];
+               FileWriteInteger(handle, (node.is_leaf ? 1 : 0));
+               FileWriteInteger(handle, node.feature);
+               FileWriteDouble(handle, node.threshold);
+               FileWriteInteger(handle, (node.default_left ? 1 : 0));
+               FileWriteInteger(handle, node.left);
+               FileWriteInteger(handle, node.right);
+               FileWriteInteger(handle, node.depth);
+               FileWriteDouble(handle, node.leaf_value);
+               FileWriteDouble(handle, node.move_mean);
+               FileWriteDouble(handle, node.move_var);
+               FileWriteDouble(handle, node.move_q10);
+               FileWriteDouble(handle, node.move_q50);
+               FileWriteDouble(handle, node.move_q90);
+               FileWriteInteger(handle, node.sample_count);
+            }
+         }
+      }
+      FileWriteInteger(handle, m_buf_head);
+      FileWriteInteger(handle, m_buf_size);
+      for(int i=0; i<FXAI_LGB_BUFFER; i++)
+      {
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            FileWriteDouble(handle, m_buf_x[i][k]);
+         FileWriteInteger(handle, m_buf_cls[i]);
+         FileWriteDouble(handle, m_buf_move[i]);
+         FileWriteDouble(handle, m_buf_cost[i]);
+         FileWriteDouble(handle, m_buf_w[i]);
+      }
+      for(int c=0; c<FXAI_LGB_CLASS_COUNT; c++)
+      {
+         for(int j=0; j<FXAI_LGB_CLASS_COUNT; j++)
+            FileWriteDouble(handle, m_cal_vs_w[c][j]);
+         FileWriteDouble(handle, m_cal_vs_b[c]);
+         for(int b=0; b<FXAI_LGB_CAL_BINS; b++)
+         {
+            FileWriteDouble(handle, m_cal_iso_pos[c][b]);
+            FileWriteDouble(handle, m_cal_iso_cnt[c][b]);
+         }
+      }
+      FileWriteInteger(handle, m_cal3_steps);
+      FileWriteInteger(handle, (m_val_ready ? 1 : 0));
+      FileWriteInteger(handle, m_val_steps);
+      FileWriteDouble(handle, m_val_nll_fast);
+      FileWriteDouble(handle, m_val_nll_slow);
+      FileWriteDouble(handle, m_val_brier_fast);
+      FileWriteDouble(handle, m_val_brier_slow);
+      FileWriteDouble(handle, m_val_ece_fast);
+      FileWriteDouble(handle, m_val_ece_slow);
+      FileWriteDouble(handle, m_val_ev_fast);
+      FileWriteDouble(handle, m_val_ev_slow);
+      for(int b=0; b<FXAI_LGB_ECE_BINS; b++)
+      {
+         FileWriteDouble(handle, m_ece_mass[b]);
+         FileWriteDouble(handle, m_ece_acc[b]);
+         FileWriteDouble(handle, m_ece_conf[b]);
+      }
+      FileWriteInteger(handle, (m_quality_degraded ? 1 : 0));
+      return m_quality_heads.Save(handle);
+   }
+
+   virtual bool LoadModelState(const int handle, const int version)
+   {
+      if(handle == INVALID_HANDLE || version < 8)
+         return false;
+
+      m_initialized = (FileReadInteger(handle) != 0);
+      m_step = FileReadInteger(handle);
+      for(int c=0; c<FXAI_LGB_CLASS_COUNT; c++)
+      {
+         m_bias[c] = FileReadDouble(handle);
+         m_tree_count[c] = FileReadInteger(handle);
+         for(int t=0; t<FXAI_LGB_MAX_TREES; t++)
+         {
+            m_trees[c][t].node_count = FileReadInteger(handle);
+            for(int n=0; n<FXAI_LGB_MAX_NODES; n++)
+            {
+               m_trees[c][t].nodes[n].is_leaf = (FileReadInteger(handle) != 0);
+               m_trees[c][t].nodes[n].feature = FileReadInteger(handle);
+               m_trees[c][t].nodes[n].threshold = FileReadDouble(handle);
+               m_trees[c][t].nodes[n].default_left = (FileReadInteger(handle) != 0);
+               m_trees[c][t].nodes[n].left = FileReadInteger(handle);
+               m_trees[c][t].nodes[n].right = FileReadInteger(handle);
+               m_trees[c][t].nodes[n].depth = FileReadInteger(handle);
+               m_trees[c][t].nodes[n].leaf_value = FileReadDouble(handle);
+               m_trees[c][t].nodes[n].move_mean = FileReadDouble(handle);
+               m_trees[c][t].nodes[n].move_var = FileReadDouble(handle);
+               m_trees[c][t].nodes[n].move_q10 = FileReadDouble(handle);
+               m_trees[c][t].nodes[n].move_q50 = FileReadDouble(handle);
+               m_trees[c][t].nodes[n].move_q90 = FileReadDouble(handle);
+               m_trees[c][t].nodes[n].sample_count = FileReadInteger(handle);
+            }
+         }
+      }
+      m_buf_head = FileReadInteger(handle);
+      m_buf_size = FileReadInteger(handle);
+      for(int i=0; i<FXAI_LGB_BUFFER; i++)
+      {
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            m_buf_x[i][k] = FileReadDouble(handle);
+         m_buf_cls[i] = FileReadInteger(handle);
+         m_buf_move[i] = FileReadDouble(handle);
+         m_buf_cost[i] = FileReadDouble(handle);
+         m_buf_w[i] = FileReadDouble(handle);
+      }
+      for(int c=0; c<FXAI_LGB_CLASS_COUNT; c++)
+      {
+         for(int j=0; j<FXAI_LGB_CLASS_COUNT; j++)
+            m_cal_vs_w[c][j] = FileReadDouble(handle);
+         m_cal_vs_b[c] = FileReadDouble(handle);
+         for(int b=0; b<FXAI_LGB_CAL_BINS; b++)
+         {
+            m_cal_iso_pos[c][b] = FileReadDouble(handle);
+            m_cal_iso_cnt[c][b] = FileReadDouble(handle);
+         }
+      }
+      m_cal3_steps = FileReadInteger(handle);
+      m_val_ready = (FileReadInteger(handle) != 0);
+      m_val_steps = FileReadInteger(handle);
+      m_val_nll_fast = FileReadDouble(handle);
+      m_val_nll_slow = FileReadDouble(handle);
+      m_val_brier_fast = FileReadDouble(handle);
+      m_val_brier_slow = FileReadDouble(handle);
+      m_val_ece_fast = FileReadDouble(handle);
+      m_val_ece_slow = FileReadDouble(handle);
+      m_val_ev_fast = FileReadDouble(handle);
+      m_val_ev_slow = FileReadDouble(handle);
+      for(int b=0; b<FXAI_LGB_ECE_BINS; b++)
+      {
+         m_ece_mass[b] = FileReadDouble(handle);
+         m_ece_acc[b] = FileReadDouble(handle);
+         m_ece_conf[b] = FileReadDouble(handle);
+      }
+      m_quality_degraded = (FileReadInteger(handle) != 0);
+      return m_quality_heads.Load(handle);
    }
 };
 

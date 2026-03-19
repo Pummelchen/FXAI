@@ -490,6 +490,8 @@ public:
 
    virtual int AIId(void) const { return (int)AI_XGBOOST; }
    virtual string AIName(void) const { return "tree_xgb"; }
+   virtual int PersistentStateVersion(void) const { return 9; }
+   virtual string PersistentStateCoverageTag(void) const { return "native_model"; }
 
 
    virtual void Describe(FXAIAIManifestV4 &out) const
@@ -690,6 +692,91 @@ public:
          return MathMax(0.0, mean_mv + 0.10 * MathSqrt(var_mv + 1e-6));
       }
       return MathMax(PredictMoveHeadRaw(x), m_move_ema_abs);
+   }
+
+   virtual bool SaveModelState(const int handle) const
+   {
+      if(handle == INVALID_HANDLE)
+         return false;
+
+      FileWriteInteger(handle, (m_initialized ? 1 : 0));
+      FileWriteInteger(handle, m_step);
+      FileWriteDouble(handle, m_bias);
+      FileWriteInteger(handle, m_tree_count);
+      for(int t=0; t<FXAI_XGB_MAX_TREES; t++)
+      {
+         FileWriteInteger(handle, m_trees[t].node_count);
+         for(int n=0; n<FXAI_XGB_MAX_NODES; n++)
+         {
+            FXAIXGBNode node = m_trees[t].nodes[n];
+            FileWriteInteger(handle, (node.is_leaf ? 1 : 0));
+            FileWriteInteger(handle, node.feature);
+            FileWriteDouble(handle, node.threshold);
+            FileWriteInteger(handle, (node.default_left ? 1 : 0));
+            FileWriteInteger(handle, node.left);
+            FileWriteInteger(handle, node.right);
+            FileWriteDouble(handle, node.leaf_value);
+            FileWriteDouble(handle, node.move_mean);
+            FileWriteDouble(handle, node.move_var);
+            for(int c=0; c<3; c++)
+               FileWriteDouble(handle, node.class_mass[c]);
+            FileWriteInteger(handle, node.sample_count);
+         }
+      }
+      FileWriteInteger(handle, m_buf_head);
+      FileWriteInteger(handle, m_buf_size);
+      for(int i=0; i<FXAI_XGB_BUFFER; i++)
+      {
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            FileWriteDouble(handle, m_buf_x[i][k]);
+         FileWriteInteger(handle, m_buf_y[i]);
+         FileWriteInteger(handle, m_buf_cls[i]);
+         FileWriteDouble(handle, m_buf_move[i]);
+         FileWriteDouble(handle, m_buf_w[i]);
+      }
+      return m_quality_heads.Save(handle);
+   }
+
+   virtual bool LoadModelState(const int handle, const int version)
+   {
+      if(handle == INVALID_HANDLE || version < 8)
+         return false;
+
+      m_initialized = (FileReadInteger(handle) != 0);
+      m_step = FileReadInteger(handle);
+      m_bias = FileReadDouble(handle);
+      m_tree_count = FileReadInteger(handle);
+      for(int t=0; t<FXAI_XGB_MAX_TREES; t++)
+      {
+         m_trees[t].node_count = FileReadInteger(handle);
+         for(int n=0; n<FXAI_XGB_MAX_NODES; n++)
+         {
+            m_trees[t].nodes[n].is_leaf = (FileReadInteger(handle) != 0);
+            m_trees[t].nodes[n].feature = FileReadInteger(handle);
+            m_trees[t].nodes[n].threshold = FileReadDouble(handle);
+            m_trees[t].nodes[n].default_left = (FileReadInteger(handle) != 0);
+            m_trees[t].nodes[n].left = FileReadInteger(handle);
+            m_trees[t].nodes[n].right = FileReadInteger(handle);
+            m_trees[t].nodes[n].leaf_value = FileReadDouble(handle);
+            m_trees[t].nodes[n].move_mean = FileReadDouble(handle);
+            m_trees[t].nodes[n].move_var = FileReadDouble(handle);
+            for(int c=0; c<3; c++)
+               m_trees[t].nodes[n].class_mass[c] = FileReadDouble(handle);
+            m_trees[t].nodes[n].sample_count = FileReadInteger(handle);
+         }
+      }
+      m_buf_head = FileReadInteger(handle);
+      m_buf_size = FileReadInteger(handle);
+      for(int i=0; i<FXAI_XGB_BUFFER; i++)
+      {
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            m_buf_x[i][k] = FileReadDouble(handle);
+         m_buf_y[i] = FileReadInteger(handle);
+         m_buf_cls[i] = FileReadInteger(handle);
+         m_buf_move[i] = FileReadDouble(handle);
+         m_buf_w[i] = FileReadDouble(handle);
+      }
+      return m_quality_heads.Load(handle);
    }
 };
 

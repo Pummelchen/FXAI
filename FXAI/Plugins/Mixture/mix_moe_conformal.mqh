@@ -280,6 +280,8 @@ public:
 
    virtual int AIId(void) const { return (int)AI_MOE_CONFORMAL; }
    virtual string AIName(void) const { return "mix_moe_conformal"; }
+   virtual int PersistentStateVersion(void) const { return 9; }
+   virtual string PersistentStateCoverageTag(void) const { return "native_model"; }
 
 
    virtual void Describe(FXAIAIManifestV4 &out) const
@@ -384,6 +386,76 @@ public:
                                 out.reliability,
                                 out.confidence,
                                 out);
+      return true;
+   }
+
+   virtual bool SaveModelState(const int handle) const
+   {
+      if(handle == INVALID_HANDLE)
+         return false;
+
+      FileWriteInteger(handle, (m_init ? 1 : 0));
+      FileWriteInteger(handle, m_feat_n);
+      FileWriteInteger(handle, m_steps);
+      FileWriteInteger(handle, m_cal_n);
+      for(int e=0; e<FXAI_MOE_E; e++)
+      {
+         for(int k=0; k<12; k++)
+            FileWriteDouble(handle, m_router[e][k]);
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         {
+            FileWriteDouble(handle, m_gate[e][k]);
+            FileWriteDouble(handle, m_dir[e][k]);
+            FileWriteDouble(handle, m_move[e][k]);
+         }
+         FileWriteDouble(handle, m_usage_ema[e]);
+      }
+      for(int i=0; i<128; i++)
+         FileWriteDouble(handle, m_scores[i]);
+      for(int b=0; b<FXAI_MOE_BUCKETS; b++)
+      {
+         FileWriteInteger(handle, m_bucket_counts[b]);
+         for(int d=0; d<FXAI_MOE_BUCKET_DEPTH; d++)
+            FileWriteDouble(handle, m_bucket_scores[b][d]);
+      }
+      for(int c=0; c<3; c++)
+         for(int k=0; k<5; k++)
+            FileWriteDouble(handle, m_cal_w[c][k]);
+      return true;
+   }
+
+   virtual bool LoadModelState(const int handle, const int version)
+   {
+      if(handle == INVALID_HANDLE || version < 8)
+         return false;
+
+      m_init = (FileReadInteger(handle) != 0);
+      m_feat_n = FileReadInteger(handle);
+      m_steps = FileReadInteger(handle);
+      m_cal_n = FileReadInteger(handle);
+      for(int e=0; e<FXAI_MOE_E; e++)
+      {
+         for(int k=0; k<12; k++)
+            m_router[e][k] = FileReadDouble(handle);
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         {
+            m_gate[e][k] = FileReadDouble(handle);
+            m_dir[e][k] = FileReadDouble(handle);
+            m_move[e][k] = FileReadDouble(handle);
+         }
+         m_usage_ema[e] = FileReadDouble(handle);
+      }
+      for(int i=0; i<128; i++)
+         m_scores[i] = FileReadDouble(handle);
+      for(int b=0; b<FXAI_MOE_BUCKETS; b++)
+      {
+         m_bucket_counts[b] = FileReadInteger(handle);
+         for(int d=0; d<FXAI_MOE_BUCKET_DEPTH; d++)
+            m_bucket_scores[b][d] = FileReadDouble(handle);
+      }
+      for(int c=0; c<3; c++)
+         for(int k=0; k<5; k++)
+            m_cal_w[c][k] = FileReadDouble(handle);
       return true;
    }
 };

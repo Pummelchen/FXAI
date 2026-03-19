@@ -186,6 +186,14 @@ string FXAI_FeatureName(const int feature_idx)
       case FXAI_MACRO_EVENT_FEATURE_OFFSET + 3: return "macro_surprise_signed";
       case FXAI_MACRO_EVENT_FEATURE_OFFSET + 4: return "macro_surprise_abs";
       case FXAI_MACRO_EVENT_FEATURE_OFFSET + 5: return "macro_event_class_bias";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 6: return "macro_surprise_zscore";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 7: return "macro_revision_abs";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 8: return "macro_currency_relevance";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 9: return "macro_provenance_trust";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 10: return "macro_rates_activity";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 11: return "macro_inflation_activity";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 12: return "macro_labor_activity";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 13: return "macro_growth_activity";
       default:
       {
          if(feature_idx >= FXAI_MAIN_MTF_FEATURE_OFFSET && feature_idx < FXAI_CONTEXT_MTF_FEATURE_OFFSET)

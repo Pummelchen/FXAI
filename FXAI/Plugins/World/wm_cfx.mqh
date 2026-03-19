@@ -357,6 +357,8 @@ public:
 
    virtual int AIId(void) const { return AI_CFX_WORLD; }
    virtual string AIName(void) const { return "wm_cfx"; }
+   virtual int PersistentStateVersion(void) const { return 9; }
+   virtual string PersistentStateCoverageTag(void) const { return "native_model"; }
 
 
    virtual void Describe(FXAIAIManifestV4 &out) const
@@ -582,6 +584,60 @@ protected:
          return out.move_mean_points;
       if(m_move_ready && m_move_ema_abs > 0.0) return m_move_ema_abs;
       return 0.0;
+   }
+
+   virtual bool SaveModelState(const int handle) const
+   {
+      if(handle == INVALID_HANDLE)
+         return false;
+
+      FileWriteInteger(handle, (m_initialized ? 1 : 0));
+      FileWriteInteger(handle, m_steps);
+      FileWriteInteger(handle, (int)m_seed);
+      for(int s=0; s<FXAI_CFXW_STATE; s++)
+      {
+         FileWriteDouble(handle, m_state[s]);
+         FileWriteDouble(handle, m_trans[s]);
+         for(int k=0; k<FXAI_CFXW_FEATS; k++)
+         {
+            FileWriteDouble(handle, m_state_w[s][k]);
+            FileWriteDouble(handle, m_state_g2[s][k]);
+         }
+      }
+      FileWriteDouble(handle, m_confidence_ema);
+      FileWriteDouble(handle, m_consensus_ema);
+      FileWriteDouble(handle, m_edge_ema);
+      FileWriteDouble(handle, m_downside_ema);
+      for(int b=0; b<4; b++)
+         FileWriteDouble(handle, m_session_edge[b]);
+      return m_cal3.Save(handle);
+   }
+
+   virtual bool LoadModelState(const int handle, const int version)
+   {
+      if(handle == INVALID_HANDLE || version < 8)
+         return false;
+
+      m_initialized = (FileReadInteger(handle) != 0);
+      m_steps = FileReadInteger(handle);
+      m_seed = (uint)FileReadInteger(handle);
+      for(int s=0; s<FXAI_CFXW_STATE; s++)
+      {
+         m_state[s] = FileReadDouble(handle);
+         m_trans[s] = FileReadDouble(handle);
+         for(int k=0; k<FXAI_CFXW_FEATS; k++)
+         {
+            m_state_w[s][k] = FileReadDouble(handle);
+            m_state_g2[s][k] = FileReadDouble(handle);
+         }
+      }
+      m_confidence_ema = FileReadDouble(handle);
+      m_consensus_ema = FileReadDouble(handle);
+      m_edge_ema = FileReadDouble(handle);
+      m_downside_ema = FileReadDouble(handle);
+      for(int b=0; b<4; b++)
+         m_session_edge[b] = FileReadDouble(handle);
+      return m_cal3.Load(handle);
    }
 };
 

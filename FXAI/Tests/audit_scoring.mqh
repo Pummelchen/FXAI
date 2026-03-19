@@ -256,6 +256,14 @@ void FXAI_AuditFinalizeMetrics(FXAIAuditScenarioMetrics &m)
       m.macro_importance_mean /= denom;
       m.macro_surprise_abs_mean /= denom;
       m.macro_data_coverage /= denom;
+      m.macro_surprise_z_abs_mean /= denom;
+      m.macro_revision_abs_mean /= denom;
+      m.macro_currency_relevance_mean /= denom;
+      m.macro_provenance_trust_mean /= denom;
+      m.macro_rates_rate /= denom;
+      m.macro_inflation_rate /= denom;
+      m.macro_labor_rate /= denom;
+      m.macro_growth_rate /= denom;
    }
    double avg_net = (m.valid_preds > 0 ? m.net_sum / (double)m.valid_preds : 0.0);
    bool macro_dataset_active = FXAI_HasMacroEventDataset();
@@ -291,6 +299,8 @@ void FXAI_AuditFinalizeMetrics(FXAIAuditScenarioMetrics &m)
          if(m.macro_data_coverage < 0.08) score -= 20.0;
          if(m.macro_event_rate < 0.06) score -= 16.0;
          if(m.macro_importance_mean < 0.08) score -= 10.0;
+         if(m.macro_currency_relevance_mean < 0.40) score -= 8.0;
+         if(m.macro_provenance_trust_mean < 0.45) score -= 8.0;
          if(m.active_ratio < 0.05 && m.macro_event_rate > 0.10) score -= 8.0;
          if(m.active_ratio > 0.88 && m.macro_surprise_abs_mean < 0.20) score -= 8.0;
          if(avg_net < 0.0) score -= 10.0 * FXAI_Clamp(-avg_net / 4.0, 0.0, 1.0);
@@ -658,6 +668,10 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
          double macro_post = FXAI_GetInputFeature(req.x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 1);
          double macro_importance = FXAI_GetInputFeature(req.x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 2);
          double macro_surprise_abs = FXAI_GetInputFeature(req.x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 4);
+         double macro_surprise_z_abs = MathAbs(FXAI_GetInputFeature(req.x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 6));
+         double macro_revision_abs = FXAI_GetInputFeature(req.x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 7);
+         double macro_currency_relevance = FXAI_GetInputFeature(req.x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 8);
+         double macro_provenance_trust = FXAI_GetInputFeature(req.x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 9);
          double macro_activity = MathMax(macro_importance, MathMax(macro_pre, macro_post));
          out.macro_event_rate += (macro_activity > 0.05 ? 1.0 : 0.0);
          out.macro_pre_rate += (macro_pre > 0.05 ? 1.0 : 0.0);
@@ -665,6 +679,14 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
          out.macro_importance_mean += macro_importance;
          out.macro_surprise_abs_mean += macro_surprise_abs;
          out.macro_data_coverage += FXAI_Clamp(macro_activity, 0.0, 1.0);
+         out.macro_surprise_z_abs_mean += macro_surprise_z_abs;
+         out.macro_revision_abs_mean += macro_revision_abs;
+         out.macro_currency_relevance_mean += macro_currency_relevance;
+         out.macro_provenance_trust_mean += macro_provenance_trust;
+         out.macro_rates_rate += (FXAI_GetInputFeature(req.x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 10) > 0.05 ? 1.0 : 0.0);
+         out.macro_inflation_rate += (FXAI_GetInputFeature(req.x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 11) > 0.05 ? 1.0 : 0.0);
+         out.macro_labor_rate += (FXAI_GetInputFeature(req.x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 12) > 0.05 ? 1.0 : 0.0);
+         out.macro_growth_rate += (FXAI_GetInputFeature(req.x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 13) > 0.05 ? 1.0 : 0.0);
       }
 
       if(eval_enabled)

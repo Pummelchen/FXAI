@@ -314,6 +314,8 @@ public:
 
    virtual int AIId(void) const { return (int)AI_RETRDIFF; }
    virtual string AIName(void) const { return "mem_retrdiff"; }
+   virtual int PersistentStateVersion(void) const { return 9; }
+   virtual string PersistentStateCoverageTag(void) const { return "native_model"; }
 
 
    virtual void Describe(FXAIAIManifestV4 &out) const
@@ -463,6 +465,66 @@ public:
       for(int i=0; i<3; i++)
          class_probs[i] = out.class_probs[i];
       expected_move_points = out.move_mean_points;
+      return true;
+   }
+
+   virtual bool SaveModelState(const int handle) const
+   {
+      if(handle == INVALID_HANDLE)
+         return false;
+
+      FileWriteInteger(handle, (m_init ? 1 : 0));
+      FileWriteInteger(handle, m_steps);
+      FileWriteInteger(handle, m_head);
+      FileWriteInteger(handle, m_count);
+      for(int i=0; i<FXAI_RETRDIFF_EMB; i++)
+         for(int j=0; j<FXAI_RETRDIFF_BASE; j++)
+            FileWriteDouble(handle, m_R[i][j]);
+      for(int p=0; p<FXAI_RETRDIFF_MEM; p++)
+      {
+         for(int i=0; i<FXAI_RETRDIFF_EMB; i++)
+            FileWriteDouble(handle, m_emb[p][i]);
+         FileWriteDouble(handle, m_future_move[p]);
+         FileWriteDouble(handle, m_move_var[p]);
+         FileWriteDouble(handle, m_future_up[p]);
+         FileWriteDouble(handle, m_future_event[p]);
+         for(int c=0; c<3; c++)
+            FileWriteDouble(handle, m_label_mass[p][c]);
+         FileWriteLong(handle, (long)m_sample_time[p]);
+         FileWriteDouble(handle, m_regime_vol[p]);
+         FileWriteDouble(handle, m_regime_dir[p]);
+         FileWriteDouble(handle, m_proto_weight[p]);
+      }
+      return true;
+   }
+
+   virtual bool LoadModelState(const int handle, const int version)
+   {
+      if(handle == INVALID_HANDLE || version < 8)
+         return false;
+
+      m_init = (FileReadInteger(handle) != 0);
+      m_steps = FileReadInteger(handle);
+      m_head = FileReadInteger(handle);
+      m_count = FileReadInteger(handle);
+      for(int i=0; i<FXAI_RETRDIFF_EMB; i++)
+         for(int j=0; j<FXAI_RETRDIFF_BASE; j++)
+            m_R[i][j] = FileReadDouble(handle);
+      for(int p=0; p<FXAI_RETRDIFF_MEM; p++)
+      {
+         for(int i=0; i<FXAI_RETRDIFF_EMB; i++)
+            m_emb[p][i] = FileReadDouble(handle);
+         m_future_move[p] = FileReadDouble(handle);
+         m_move_var[p] = FileReadDouble(handle);
+         m_future_up[p] = FileReadDouble(handle);
+         m_future_event[p] = FileReadDouble(handle);
+         for(int c=0; c<3; c++)
+            m_label_mass[p][c] = FileReadDouble(handle);
+         m_sample_time[p] = (datetime)FileReadLong(handle);
+         m_regime_vol[p] = FileReadDouble(handle);
+         m_regime_dir[p] = FileReadDouble(handle);
+         m_proto_weight[p] = FileReadDouble(handle);
+      }
       return true;
    }
 };

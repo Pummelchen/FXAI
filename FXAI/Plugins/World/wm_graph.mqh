@@ -238,6 +238,8 @@ public:
 
    virtual int AIId(void) const { return (int)AI_GRAPHWM; }
    virtual string AIName(void) const { return "wm_graph"; }
+   virtual int PersistentStateVersion(void) const { return 9; }
+   virtual string PersistentStateCoverageTag(void) const { return "native_model"; }
 
 
    virtual void Describe(FXAIAIManifestV4 &out) const
@@ -352,6 +354,56 @@ public:
                               bank_mfe, bank_mae, bank_hit, bank_path, bank_fill, bank_trust,
                               out);
       return true;
+   }
+
+   virtual bool SaveModelState(const int handle) const
+   {
+      if(handle == INVALID_HANDLE)
+         return false;
+
+      FileWriteInteger(handle, (m_init ? 1 : 0));
+      FileWriteInteger(handle, m_feat_n);
+      FileWriteInteger(handle, m_steps);
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      {
+         FileWriteDouble(handle, m_gate_w[k]);
+         FileWriteDouble(handle, m_dir_w[k]);
+         FileWriteDouble(handle, m_move_mu_w[k]);
+         FileWriteDouble(handle, m_move_logv_w[k]);
+      }
+      FileWriteDouble(handle, m_graph_bias);
+      for(int c=0; c<3; c++)
+         FileWriteDouble(handle, m_last_probs[c]);
+      FileWriteDouble(handle, m_reliability_ema);
+      FileWriteDouble(handle, m_err_ema);
+      if(!m_cal3.Save(handle))
+         return false;
+      return m_quality_heads.Save(handle);
+   }
+
+   virtual bool LoadModelState(const int handle, const int version)
+   {
+      if(handle == INVALID_HANDLE || version < 8)
+         return false;
+
+      m_init = (FileReadInteger(handle) != 0);
+      m_feat_n = FileReadInteger(handle);
+      m_steps = FileReadInteger(handle);
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      {
+         m_gate_w[k] = FileReadDouble(handle);
+         m_dir_w[k] = FileReadDouble(handle);
+         m_move_mu_w[k] = FileReadDouble(handle);
+         m_move_logv_w[k] = FileReadDouble(handle);
+      }
+      m_graph_bias = FileReadDouble(handle);
+      for(int c=0; c<3; c++)
+         m_last_probs[c] = FileReadDouble(handle);
+      m_reliability_ema = FileReadDouble(handle);
+      m_err_ema = FileReadDouble(handle);
+      if(!m_cal3.Load(handle))
+         return false;
+      return m_quality_heads.Load(handle);
    }
 };
 

@@ -2,7 +2,7 @@
 #define __FXAI_RUNTIME_ARTIFACTS_MQH__
 
 #define FXAI_RUNTIME_ARTIFACT_DIR "FXAI\\Runtime"
-#define FXAI_RUNTIME_ARTIFACT_VERSION 8
+#define FXAI_RUNTIME_ARTIFACT_VERSION 10
 
 string FXAI_RuntimeArtifactSafeSymbol(const string symbol)
 {
@@ -229,17 +229,27 @@ void FXAI_WriteMacroDatasetManifest(const string symbol)
 
    FXAIMacroEventDatasetStats stats;
    FXAI_GetMacroEventDatasetStats(stats);
-   FileWriteString(handle, "symbol\trecord_count\tparse_errors\tdistinct_symbols\tfirst_event_time\tlast_event_time\tavg_importance\tavg_pre_window_min\tavg_post_window_min\tchecksum01\tleakage_guard_score\tleakage_safe\r\n");
+   FileWriteString(handle, "symbol\trecord_count\tparse_errors\tdistinct_symbols\tdistinct_sources\tdistinct_event_ids\tfamily_rates_count\tfamily_inflation_count\tfamily_labor_count\tfamily_growth_count\tfamily_trade_count\tfirst_event_time\tlast_event_time\tavg_importance\tavg_pre_window_min\tavg_post_window_min\tavg_surprise_z_abs\tavg_revision_abs\tchecksum01\tprovenance_hash01\tleakage_guard_score\tleakage_safe\r\n");
    string line = FXAI_RuntimeArtifactSafeSymbol(symbol) + "\t" +
                  IntegerToString(stats.record_count) + "\t" +
                  IntegerToString(stats.parse_errors) + "\t" +
                  IntegerToString(stats.distinct_symbols) + "\t" +
+                 IntegerToString(stats.distinct_sources) + "\t" +
+                 IntegerToString(stats.distinct_event_ids) + "\t" +
+                 IntegerToString(stats.family_rates_count) + "\t" +
+                 IntegerToString(stats.family_inflation_count) + "\t" +
+                 IntegerToString(stats.family_labor_count) + "\t" +
+                 IntegerToString(stats.family_growth_count) + "\t" +
+                 IntegerToString(stats.family_trade_count) + "\t" +
                  IntegerToString((int)stats.first_event_time) + "\t" +
                  IntegerToString((int)stats.last_event_time) + "\t" +
                  DoubleToString(stats.avg_importance, 6) + "\t" +
                  DoubleToString(stats.avg_pre_window_min, 6) + "\t" +
                  DoubleToString(stats.avg_post_window_min, 6) + "\t" +
+                 DoubleToString(stats.avg_surprise_z_abs, 6) + "\t" +
+                 DoubleToString(stats.avg_revision_abs, 6) + "\t" +
                  DoubleToString(stats.checksum01, 6) + "\t" +
+                 DoubleToString(stats.provenance_hash01, 6) + "\t" +
                  DoubleToString(stats.leakage_guard_score, 6) + "\t" +
                  IntegerToString(FXAI_MacroEventLeakageSafe() ? 1 : 0) + "\r\n";
    FileWriteString(handle, line);
@@ -363,6 +373,8 @@ bool FXAI_SaveRuntimeArtifacts(const string symbol)
          FileWriteDouble(handle, g_shared_transfer_global_cls[c][j]);
       for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
          FileWriteDouble(handle, g_shared_transfer_global_w[j][i]);
+      for(int t=0; t<FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS; t++)
+         FileWriteDouble(handle, g_shared_transfer_global_seq_w[j][t]);
    }
    for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
       for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
@@ -385,6 +397,18 @@ bool FXAI_SaveRuntimeArtifacts(const string symbol)
          FileWriteDouble(handle, g_broker_execution_reject_ema[s][h]);
          FileWriteDouble(handle, g_broker_execution_partial_ema[s][h]);
       }
+   }
+   FileWriteInteger(handle, g_broker_execution_trace_head);
+   FileWriteInteger(handle, g_broker_execution_trace_size);
+   for(int i=0; i<FXAI_BROKER_EXEC_TRACE_CAP; i++)
+   {
+      FileWriteLong(handle, (long)g_broker_execution_trace_time[i]);
+      FileWriteInteger(handle, g_broker_execution_trace_session[i]);
+      FileWriteInteger(handle, g_broker_execution_trace_horizon[i]);
+      FileWriteDouble(handle, g_broker_execution_trace_slippage[i]);
+      FileWriteDouble(handle, g_broker_execution_trace_latency[i]);
+      FileWriteDouble(handle, g_broker_execution_trace_reject[i]);
+      FileWriteDouble(handle, g_broker_execution_trace_partial[i]);
    }
 
    FileClose(handle);
@@ -541,6 +565,11 @@ bool FXAI_LoadRuntimeArtifacts(const string symbol)
                   g_shared_transfer_global_cls[c][j] = FileReadDouble(handle);
                for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
                   g_shared_transfer_global_w[j][i] = FileReadDouble(handle);
+               if(version >= 9)
+               {
+                  for(int t=0; t<FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS; t++)
+                     g_shared_transfer_global_seq_w[j][t] = FileReadDouble(handle);
+               }
             }
             for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
                for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
@@ -562,6 +591,21 @@ bool FXAI_LoadRuntimeArtifacts(const string symbol)
                   g_broker_execution_latency_ema[s][h] = FileReadDouble(handle);
                   g_broker_execution_reject_ema[s][h] = FileReadDouble(handle);
                   g_broker_execution_partial_ema[s][h] = FileReadDouble(handle);
+               }
+            }
+            if(version >= 10)
+            {
+               g_broker_execution_trace_head = FileReadInteger(handle);
+               g_broker_execution_trace_size = FileReadInteger(handle);
+               for(int i=0; i<FXAI_BROKER_EXEC_TRACE_CAP; i++)
+               {
+                  g_broker_execution_trace_time[i] = (datetime)FileReadLong(handle);
+                  g_broker_execution_trace_session[i] = FileReadInteger(handle);
+                  g_broker_execution_trace_horizon[i] = FileReadInteger(handle);
+                  g_broker_execution_trace_slippage[i] = FileReadDouble(handle);
+                  g_broker_execution_trace_latency[i] = FileReadDouble(handle);
+                  g_broker_execution_trace_reject[i] = FileReadDouble(handle);
+                  g_broker_execution_trace_partial[i] = FileReadDouble(handle);
                }
             }
          }

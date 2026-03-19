@@ -58,7 +58,7 @@ You do not need to be an MQL5 programmer to use FXAI as an operator. For normal 
 - **Internal neural runtime**
   - Serious neural plugins share one native `TensorCore` layer for tensor math, sequence handling, sequence blocks, optimizers, and numeric verification.
 - **Cross-symbol transfer warmup**
-  - Shared transfer adapters now pretrain across configured horizons and capped context-symbol sample packs before live trading begins, with a deeper shared latent backbone that is conditioned by symbol-domain, horizon, and session context.
+  - Shared transfer adapters now pretrain across configured horizons and capped context-symbol sample packs before live trading begins, with a deeper shared latent backbone that is conditioned by symbol-domain, horizon, session context, and explicit sequence-window tokens.
 - **Checkpoint recovery for stateful plugins**
   - Persistent plugins now carry replay-backed checkpoint reconstruction metadata, and runtime manifests plus release gating now block live promotion of stateful plugins until they provide full native checkpoint coverage.
 - **Cost-aware signals**
@@ -70,7 +70,7 @@ You do not need to be an MQL5 programmer to use FXAI as an operator. For normal 
 - **Safer execution**
   - Built-in equity controls, skip class, and conservative calibration reduce overtrading.
 - **Execution parity controls**
-  - Shared execution profiles, M1 replay-trace penalties, broker-event replay capture, risk-aware sizing, correlated exposure caps, and `OrderCheck` preflight keep live trading closer to Audit Lab and tester assumptions.
+  - Shared execution profiles, M1 replay-trace penalties, persistent broker-event trace replay, risk-aware sizing, correlated exposure caps, and `OrderCheck` preflight keep live trading closer to Audit Lab and tester assumptions.
 - **Contextual model routing**
   - The meta layer now persists regime and horizon-specific contextual edge and regret state so ensemble routing can adapt to where each plugin is actually earning or losing edge.
 - **Persistent research state**
@@ -155,7 +155,8 @@ python3 FXAI/Tools/fxai_testlab.py release-gate --baseline eurusd_smoke --requir
 Optional macro-event input file:
 
 - `FXAI\\Runtime\\macro_events.tsv` in the MT5 common-files area
-- tab-separated columns: `symbol`, `event_time`, `pre_window_min`, `post_window_min`, `importance`, `surprise`, `actual_delta`, `forecast_delta`, `class`
+- required tab-separated columns: `symbol`, `event_time`, `pre_window_min`, `post_window_min`, `importance`, `surprise`, `actual_delta`, `forecast_delta`, `class`
+- optional appended columns supported by the current contract: `event_id`, `country`, `currency`, `source`, `revision_delta`, `prior_delta`, `surprise_z`
 - if the file is absent, FXAI falls back to zeroed macro-event features and keeps the macro-event audit scenario neutral instead of penalizing plugins for missing optional data
 - if the file is present but fails the leakage guard, release-gate checks fail until the dataset is fixed
 

@@ -693,6 +693,8 @@ public:
 
    virtual int AIId(void) const { return (int)AI_QUANTILE; }
    virtual string AIName(void) const { return "dist_quantile"; }
+   virtual int PersistentStateVersion(void) const { return 9; }
+   virtual string PersistentStateCoverageTag(void) const { return "native_model"; }
 
 
    virtual void Describe(FXAIAIManifestV4 &out) const
@@ -1041,6 +1043,138 @@ public:
       if(pred > 0.0)
          return pred;
       return (m_move_ready ? m_move_ema_abs : 0.0);
+   }
+
+   virtual bool SaveModelState(const int handle) const
+   {
+      if(handle == INVALID_HANDLE)
+         return false;
+
+      FileWriteInteger(handle, (m_initialized ? 1 : 0));
+      for(int i=0; i<FXAI_QT_Q; i++)
+         FileWriteDouble(handle, m_tau[i]);
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         FileWriteDouble(handle, m_w_med_s[i]);
+         FileWriteDouble(handle, m_w_med_m[i]);
+         FileWriteDouble(handle, m_g2_med_s[i]);
+         FileWriteDouble(handle, m_g2_med_m[i]);
+      }
+      for(int j=0; j<FXAI_QT_SIDE; j++)
+      {
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+         {
+            FileWriteDouble(handle, m_w_up_s[j][i]);
+            FileWriteDouble(handle, m_w_dn_s[j][i]);
+            FileWriteDouble(handle, m_w_up_m[j][i]);
+            FileWriteDouble(handle, m_w_dn_m[j][i]);
+            FileWriteDouble(handle, m_g2_up_s[j][i]);
+            FileWriteDouble(handle, m_g2_dn_s[j][i]);
+            FileWriteDouble(handle, m_g2_up_m[j][i]);
+            FileWriteDouble(handle, m_g2_dn_m[j][i]);
+         }
+      }
+      for(int h=0; h<2; h++)
+      {
+         for(int s=0; s<FXAI_QT_SESS; s++)
+         {
+            FileWriteDouble(handle, m_sess_bias[h][s]);
+            FileWriteDouble(handle, m_g2_sess_bias[h][s]);
+         }
+         for(int r=0; r<FXAI_QT_REG; r++)
+         {
+            FileWriteDouble(handle, m_reg_scale[h][r]);
+            FileWriteDouble(handle, m_g2_reg_scale[h][r]);
+         }
+      }
+      for(int c=0; c<3; c++)
+      {
+         for(int i=0; i<FXAI_QT_ZF; i++)
+         {
+            FileWriteDouble(handle, m_cls_w[c][i]);
+            FileWriteDouble(handle, m_cls_g2[c][i]);
+         }
+      }
+      for(int i=0; i<FXAI_QT_CALF; i++)
+      {
+         FileWriteDouble(handle, m_cal_w_q[i]);
+         FileWriteDouble(handle, m_cal_g2_q[i]);
+      }
+      FileWriteInteger(handle, m_diag_n);
+      FileWriteDouble(handle, m_pit_mean);
+      FileWriteDouble(handle, m_pit_m2);
+      FileWriteDouble(handle, m_cross_ema);
+      FileWriteDouble(handle, m_cal_err_ema);
+      FileWriteDouble(handle, m_rel_weight);
+      FileWriteInteger(handle, (m_medium_ready ? 1 : 0));
+      FileWriteDouble(handle, m_medium_target_ema);
+      return m_quality_heads.Save(handle);
+   }
+
+   virtual bool LoadModelState(const int handle, const int version)
+   {
+      if(handle == INVALID_HANDLE || version < 8)
+         return false;
+
+      m_initialized = (FileReadInteger(handle) != 0);
+      for(int i=0; i<FXAI_QT_Q; i++)
+         m_tau[i] = FileReadDouble(handle);
+      for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+      {
+         m_w_med_s[i] = FileReadDouble(handle);
+         m_w_med_m[i] = FileReadDouble(handle);
+         m_g2_med_s[i] = FileReadDouble(handle);
+         m_g2_med_m[i] = FileReadDouble(handle);
+      }
+      for(int j=0; j<FXAI_QT_SIDE; j++)
+      {
+         for(int i=0; i<FXAI_AI_WEIGHTS; i++)
+         {
+            m_w_up_s[j][i] = FileReadDouble(handle);
+            m_w_dn_s[j][i] = FileReadDouble(handle);
+            m_w_up_m[j][i] = FileReadDouble(handle);
+            m_w_dn_m[j][i] = FileReadDouble(handle);
+            m_g2_up_s[j][i] = FileReadDouble(handle);
+            m_g2_dn_s[j][i] = FileReadDouble(handle);
+            m_g2_up_m[j][i] = FileReadDouble(handle);
+            m_g2_dn_m[j][i] = FileReadDouble(handle);
+         }
+      }
+      for(int h=0; h<2; h++)
+      {
+         for(int s=0; s<FXAI_QT_SESS; s++)
+         {
+            m_sess_bias[h][s] = FileReadDouble(handle);
+            m_g2_sess_bias[h][s] = FileReadDouble(handle);
+         }
+         for(int r=0; r<FXAI_QT_REG; r++)
+         {
+            m_reg_scale[h][r] = FileReadDouble(handle);
+            m_g2_reg_scale[h][r] = FileReadDouble(handle);
+         }
+      }
+      for(int c=0; c<3; c++)
+      {
+         for(int i=0; i<FXAI_QT_ZF; i++)
+         {
+            m_cls_w[c][i] = FileReadDouble(handle);
+            m_cls_g2[c][i] = FileReadDouble(handle);
+         }
+      }
+      for(int i=0; i<FXAI_QT_CALF; i++)
+      {
+         m_cal_w_q[i] = FileReadDouble(handle);
+         m_cal_g2_q[i] = FileReadDouble(handle);
+      }
+      m_diag_n = FileReadInteger(handle);
+      m_pit_mean = FileReadDouble(handle);
+      m_pit_m2 = FileReadDouble(handle);
+      m_cross_ema = FileReadDouble(handle);
+      m_cal_err_ema = FileReadDouble(handle);
+      m_rel_weight = FileReadDouble(handle);
+      m_medium_ready = (FileReadInteger(handle) != 0);
+      m_medium_target_ema = FileReadDouble(handle);
+      return m_quality_heads.Load(handle);
    }
 };
 

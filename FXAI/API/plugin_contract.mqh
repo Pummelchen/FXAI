@@ -5,7 +5,7 @@
 #include "..\TensorCore\TensorCore.mqh"
 
 #define FXAI_PLUGIN_STATE_ARTIFACT_DIR "FXAI\\Runtime\\Plugins"
-#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 7
+#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 9
 
 class CFXAITernaryCalibrator
 {
@@ -160,6 +160,47 @@ public:
    }
 
    int Steps(void) const { return m_steps; }
+
+   bool Save(const int handle) const
+   {
+      if(handle == INVALID_HANDLE)
+         return false;
+
+      FileWriteInteger(handle, m_steps);
+      for(int c=0; c<3; c++)
+      {
+         FileWriteDouble(handle, m_b[c]);
+         for(int j=0; j<3; j++)
+            FileWriteDouble(handle, m_w[c][j]);
+         for(int b=0; b<CAL_BINS; b++)
+         {
+            FileWriteDouble(handle, m_iso_pos[c][b]);
+            FileWriteDouble(handle, m_iso_cnt[c][b]);
+         }
+      }
+      return true;
+   }
+
+   bool Load(const int handle)
+   {
+      if(handle == INVALID_HANDLE)
+         return false;
+
+      Reset();
+      m_steps = FileReadInteger(handle);
+      for(int c=0; c<3; c++)
+      {
+         m_b[c] = FileReadDouble(handle);
+         for(int j=0; j<3; j++)
+            m_w[c][j] = FileReadDouble(handle);
+         for(int b=0; b<CAL_BINS; b++)
+         {
+            m_iso_pos[c][b] = FileReadDouble(handle);
+            m_iso_cnt[c][b] = FileReadDouble(handle);
+         }
+      }
+      return true;
+   }
 };
 
 class CFXAINativeQualityHeads
@@ -488,7 +529,7 @@ public:
       m_native_quality_heads.Reset();
    }
    virtual bool SupportsPersistentState(void) const { return true; }
-   virtual int PersistentStateVersion(void) const { return 7; }
+   virtual int PersistentStateVersion(void) const { return 9; }
    virtual string PersistentStateCoverageTag(void) const
    {
       FXAIAIManifestV4 manifest;
@@ -777,6 +818,8 @@ protected:
             FileWriteDouble(handle, m_shared_backbone_cls[c][j]);
          for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
             FileWriteDouble(handle, m_shared_backbone_w[j][i]);
+         for(int t=0; t<FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS; t++)
+            FileWriteDouble(handle, m_shared_backbone_seq_w[j][t]);
       }
       for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
          for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
@@ -943,6 +986,11 @@ protected:
                m_shared_backbone_cls[c][j] = FileReadDouble(handle);
             for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
                m_shared_backbone_w[j][i] = FileReadDouble(handle);
+            if(version >= 9)
+            {
+               for(int t=0; t<FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS; t++)
+                  m_shared_backbone_seq_w[j][t] = FileReadDouble(handle);
+            }
          }
          for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
             for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)

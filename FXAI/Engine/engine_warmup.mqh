@@ -1,6 +1,43 @@
 #ifndef __FXAI_ENGINE_WARMUP_MQH__
 #define __FXAI_ENGINE_WARMUP_MQH__
 
+double FXAI_WarmupPortfolioObjectiveProxy(const double total_score,
+                                          const int total_trades,
+                                          const double &regime_scores[],
+                                          const int &regime_trades[])
+{
+   double mean = 0.0;
+   double sq = 0.0;
+   int used = 0;
+   int covered = 0;
+   for(int r=0; r<ArraySize(regime_scores) && r<ArraySize(regime_trades); r++)
+   {
+      if(regime_trades[r] <= 0)
+         continue;
+      double s = regime_scores[r];
+      mean += s;
+      sq += s * s;
+      used++;
+      if(regime_trades[r] >= 12)
+         covered++;
+   }
+   if(used <= 0)
+      return 0.0;
+
+   mean /= (double)used;
+   double var = MathMax(sq / (double)used - mean * mean, 0.0);
+   double stdv = MathSqrt(var);
+   double stability = 1.0 - FXAI_Clamp(stdv / MathMax(MathAbs(mean), 0.50), 0.0, 1.0);
+   double diversification = FXAI_Clamp((double)covered / 4.0, 0.0, 1.0);
+   double trade_cov = FXAI_Clamp((double)MathMax(total_trades, 0) / 64.0, 0.0, 1.0);
+   double edge_norm = FXAI_Clamp(total_score / 100.0, -1.0, 1.0);
+   double objective = 0.35 * stability +
+                      0.25 * diversification +
+                      0.20 * trade_cov +
+                      0.20 * (0.5 + 0.5 * edge_norm);
+   return FXAI_Clamp(1.20 * (objective - 0.50), -0.60, 0.60);
+}
+
 double FXAI_ScoreNormalizationSetup(const int i_start,
                                     const int i_end,
                                     const int H,
@@ -156,6 +193,7 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
                                         regime_trades);
    delete trial;
    if(trades < 20) score -= 1.5;
+   score += FXAI_WarmupPortfolioObjectiveProxy(score, trades, regime_scores, regime_trades);
    return score;
 }
 
@@ -481,6 +519,7 @@ double FXAI_ScoreNormMethodCandidate(const int ai_idx,
                                         regime_scores,
                                         regime_trades);
    delete trial;
+   score += FXAI_WarmupPortfolioObjectiveProxy(score, trades, regime_scores, regime_trades);
    return score;
 }
 
@@ -1239,6 +1278,14 @@ void FXAI_WarmupSelectBanksForHorizon(const int H,
             double miss = (double)(warmup_min_trades - trades_total) / (double)warmup_min_trades;
             score -= 1.5 * miss;
          }
+         double regime_scores_avg[FXAI_REGIME_COUNT];
+         int regime_trades_agg[FXAI_REGIME_COUNT];
+         for(int r=0; r<FXAI_REGIME_COUNT; r++)
+         {
+            regime_scores_avg[r] = (regime_score_used[r] > 0 ? regime_score_sum[r] / (double)regime_score_used[r] : 0.0);
+            regime_trades_agg[r] = regime_trade_total[r];
+         }
+         score += FXAI_WarmupPortfolioObjectiveProxy(score, trades_total, regime_scores_avg, regime_trades_agg);
 
          if(score > best_score)
          {
@@ -1819,6 +1866,8 @@ void FXAI_WarmupPretrainGlobalTransferSamples(const FXAIPreparedSample &samples[
                                           a);
       double sample_w = FXAI_Clamp(samples[i].sample_weight * sample_scale, 0.20, 4.00);
       FXAI_GlobalSharedTransferUpdate(a,
+                                      x_window,
+                                      window_size,
                                       samples[i].domain_hash,
                                       samples[i].horizon_minutes,
                                       FXAI_DeriveSessionBucket(samples[i].sample_time),

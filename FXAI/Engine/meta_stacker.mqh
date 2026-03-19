@@ -8,6 +8,31 @@ bool FXAI_IsModelInList(const int ai_idx, const int &ai_list[])
    return false;
 }
 
+double FXAI_StackPortfolioObjective(const double &feat[])
+{
+   return FXAI_Clamp(0.30 * FXAI_GetArrayValue(feat, 61, 0.0) +
+                     0.28 * FXAI_GetArrayValue(feat, 62, 0.0) -
+                     0.22 * FXAI_GetArrayValue(feat, 63, 0.0) +
+                     0.24 * FXAI_GetArrayValue(feat, 64, 0.0) +
+                     0.10 * FXAI_GetArrayValue(feat, 70, 0.0) +
+                     0.10 * FXAI_GetArrayValue(feat, 71, 0.0),
+                     -1.0,
+                     1.0);
+}
+
+double FXAI_StackRoutingObjective(const double &feat[])
+{
+   return FXAI_Clamp(0.22 * FXAI_GetArrayValue(feat, 56, 0.0) -
+                     0.30 * FXAI_GetArrayValue(feat, 57, 0.0) +
+                     0.18 * FXAI_GetArrayValue(feat, 58, 0.0) +
+                     0.20 * FXAI_GetArrayValue(feat, 59, 0.0) -
+                     0.18 * FXAI_GetArrayValue(feat, 60, 0.0) +
+                     0.10 * FXAI_GetArrayValue(feat, 68, 0.0) +
+                     0.16 * FXAI_GetArrayValue(feat, 69, 0.0),
+                     -1.0,
+                     1.0);
+}
+
 void FXAI_StackBuildFeatures(const double buy_pct,
                              const double sell_pct,
                              const double skip_pct,
@@ -173,6 +198,11 @@ void FXAI_StackPredict(const int regime_id, const double &feat[], double &probs[
                                  (0.07 * feat[20]) - (0.07 * feat[21]) + (0.08 * feat[31]) -
                                  (0.04 * feat[28]) - (0.03 * feat[32]) + (0.08 * feat[57]) +
                                  (0.07 * feat[60]) + (0.05 * feat[63]) - (0.05 * feat[62]), 0.01, 0.98);
+      double portfolio_obj = FXAI_StackPortfolioObjective(feat);
+      double routing_obj = FXAI_StackRoutingObjective(feat);
+      p_buy = FXAI_Clamp(p_buy + 0.05 * portfolio_obj + 0.06 * routing_obj * FXAI_Clamp(feat[6], -1.0, 1.0), 0.01, 0.98);
+      p_sell = FXAI_Clamp(p_sell + 0.05 * portfolio_obj - 0.06 * routing_obj * FXAI_Clamp(feat[6], -1.0, 1.0), 0.01, 0.98);
+      p_skip = FXAI_Clamp(p_skip - 0.05 * portfolio_obj - 0.04 * routing_obj * FXAI_Clamp(feat[19], -1.0, 1.0), 0.01, 0.98);
       double s0 = p_sell + p_buy + p_skip;
       if(s0 <= 0.0) s0 = 1.0;
       probs[0] = p_sell / s0;
@@ -209,6 +239,20 @@ void FXAI_StackPredict(const int regime_id, const double &feat[], double &probs[
    probs[0] = e0 / s;
    probs[1] = e1 / s;
    probs[2] = e2 / s;
+   double portfolio_obj = FXAI_StackPortfolioObjective(feat);
+   double routing_obj = FXAI_StackRoutingObjective(feat);
+   double dir_bias = FXAI_Clamp(0.08 * routing_obj * FXAI_Clamp(feat[6], -1.0, 1.0) +
+                                0.05 * portfolio_obj * FXAI_Clamp(feat[71], -1.0, 1.0),
+                                -0.12,
+                                0.12);
+   probs[0] = FXAI_Clamp(probs[0] + MathMax(-dir_bias, 0.0), 0.0005, 0.9990);
+   probs[1] = FXAI_Clamp(probs[1] + MathMax(dir_bias, 0.0), 0.0005, 0.9990);
+   probs[2] = FXAI_Clamp(probs[2] - 0.04 * portfolio_obj, 0.0005, 0.9990);
+   double sn = probs[0] + probs[1] + probs[2];
+   if(sn <= 0.0) sn = 1.0;
+   probs[0] /= sn;
+   probs[1] /= sn;
+   probs[2] /= sn;
 }
 
 void FXAI_StackUpdate(const int regime_id,
@@ -252,7 +296,12 @@ void FXAI_StackUpdate(const int regime_id,
 
    double lr = 0.025 / MathSqrt(1.0 + 0.02 * (double)g_stack_obs[r]);
    lr = FXAI_Clamp(lr, 0.002, 0.025);
-   double sw = FXAI_Clamp(sample_weight, 0.20, 7.50);
+   double portfolio_obj = FXAI_StackPortfolioObjective(feat);
+   double routing_obj = FXAI_StackRoutingObjective(feat);
+   double sw = FXAI_Clamp(sample_weight *
+                          FXAI_Clamp(0.90 + 0.30 * portfolio_obj + 0.20 * routing_obj, 0.45, 1.60),
+                          0.20,
+                          7.50);
 
    double delta_out[3];
    for(int c=0; c<3; c++)

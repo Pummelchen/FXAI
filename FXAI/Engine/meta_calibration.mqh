@@ -261,12 +261,12 @@ double FXAI_GetModelPortfolioFactor(const int ai_idx,
    double corr_penalty = g_model_portfolio_corr_penalty[ai_idx];
    double diversification = g_model_portfolio_diversification[ai_idx];
    double symbol_cov = FXAI_Clamp((double)g_model_portfolio_symbol_count[ai_idx] / 6.0, 0.0, 1.0);
-   double factor = 1.0 +
-                   0.28 * edge_norm +
-                   0.24 * (stability - 0.50) -
-                   0.22 * corr_penalty +
-                   0.18 * (diversification - 0.50) +
-                   0.12 * symbol_cov;
+   double objective = 0.34 * edge_norm +
+                      0.26 * (stability - 0.50) -
+                      0.24 * corr_penalty +
+                      0.24 * (diversification - 0.50) +
+                      0.16 * (symbol_cov - 0.50);
+   double factor = 1.0 + 0.70 * objective;
    return FXAI_Clamp(factor, 0.45, 1.85);
 }
 

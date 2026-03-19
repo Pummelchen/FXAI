@@ -278,6 +278,14 @@ struct FXAIAuditScenarioMetrics
    double macro_importance_mean;
    double macro_surprise_abs_mean;
    double macro_data_coverage;
+   double macro_surprise_z_abs_mean;
+   double macro_revision_abs_mean;
+   double macro_currency_relevance_mean;
+   double macro_provenance_trust_mean;
+   double macro_rates_rate;
+   double macro_inflation_rate;
+   double macro_labor_rate;
+   double macro_growth_rate;
    double reset_delta;
    double sequence_delta;
    int wf_folds;

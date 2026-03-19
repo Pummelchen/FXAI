@@ -554,6 +554,14 @@ bool FXAI_ComputeFeatureVector(const int i,
    double macro_surprise_signed = 0.0;
    double macro_surprise_abs = 0.0;
    double macro_event_class_bias = 0.0;
+   double macro_surprise_z = 0.0;
+   double macro_revision_abs = 0.0;
+   double macro_currency_relevance = 0.0;
+   double macro_provenance_trust = 0.0;
+   double macro_rates_activity = 0.0;
+   double macro_inflation_activity = 0.0;
+   double macro_labor_activity = 0.0;
+   double macro_growth_activity = 0.0;
    if(FXAI_MacroEventLeakageSafe())
    {
       FXAI_GetMacroEventFeatures(symbol,
@@ -563,7 +571,15 @@ bool FXAI_ComputeFeatureVector(const int i,
                                  macro_event_importance,
                                  macro_surprise_signed,
                                  macro_surprise_abs,
-                                 macro_event_class_bias);
+                                 macro_event_class_bias,
+                                 macro_surprise_z,
+                                 macro_revision_abs,
+                                 macro_currency_relevance,
+                                 macro_provenance_trust,
+                                 macro_rates_activity,
+                                 macro_inflation_activity,
+                                 macro_labor_activity,
+                                 macro_growth_activity);
    }
    features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 0] = macro_pre_embargo;
    features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 1] = macro_post_embargo;
@@ -571,6 +587,14 @@ bool FXAI_ComputeFeatureVector(const int i,
    features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 3] = macro_surprise_signed;
    features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 4] = macro_surprise_abs;
    features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 5] = macro_event_class_bias;
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 6] = macro_surprise_z;
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 7] = macro_revision_abs;
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 8] = macro_currency_relevance;
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 9] = macro_provenance_trust;
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 10] = macro_rates_activity;
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 11] = macro_inflation_activity;
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 12] = macro_labor_activity;
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 13] = macro_growth_activity;
 
    features[80] = FXAI_Clamp(MathLog(1.0 + MathMax(spread_points, 0.0)), 0.0, 6.0);
    features[81] = FXAI_Clamp(spread_z20, -8.0, 8.0);
