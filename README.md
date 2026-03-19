@@ -59,16 +59,20 @@ You do not need to be an MQL5 programmer to use FXAI as an operator. For normal 
   - Serious neural plugins share one native `TensorCore` layer for tensor math, sequence handling, sequence blocks, optimizers, and numeric verification.
 - **Cross-symbol transfer warmup**
   - Shared transfer adapters now pretrain across configured horizons and capped context-symbol sample packs before live trading begins, with a deeper shared latent backbone that is conditioned by symbol-domain, horizon, and session context.
+- **Checkpoint recovery for stateful plugins**
+  - Persistent plugins now carry replay-backed checkpoint reconstruction metadata, so online or stateful models can recover a verified learned state even when they do not yet ship a full native weight serializer.
 - **Cost-aware signals**
   - Labels and thresholds account for trading friction, improving realistic expectancy.
 - **Feature governance**
-  - A feature registry now tracks provenance, leakage guards, session-transition and rollover states, swap/carry factors, live feature-family drift diagnostics, and emits a runtime feature manifest for auditability.
+  - A feature registry now tracks provenance, leakage guards, session-transition and rollover states, swap/carry factors, macro-event features, live feature-family drift diagnostics, and emits a runtime feature manifest for auditability.
 - **M1-first research data**
   - FXAI now explicitly treats M1 OHLC plus spread as the canonical execution and feature source, with integrity checks shared by warmup, runtime, and Audit Lab. Higher-timeframe candle and spread states for the traded symbol and the top context FX pairs are derived from that same M1 source, so every plugin sees one consistent `OHLC + spread` contract instead of mixed shortcuts.
 - **Safer execution**
   - Built-in equity controls, skip class, and conservative calibration reduce overtrading.
 - **Execution parity controls**
-  - Shared execution profiles, M1 replay-trace penalties, risk-aware sizing, correlated exposure caps, and `OrderCheck` preflight keep live trading closer to Audit Lab and tester assumptions.
+  - Shared execution profiles, M1 replay-trace penalties, broker-event replay capture, risk-aware sizing, correlated exposure caps, and `OrderCheck` preflight keep live trading closer to Audit Lab and tester assumptions.
+- **Contextual model routing**
+  - The meta layer now persists regime and horizon-specific contextual edge and regret state so ensemble routing can adapt to where each plugin is actually earning or losing edge.
 - **Persistent research state**
   - Runtime artifacts now persist feature-drift diagnostics and emit per-plugin checkpoint coverage plus feature-registry manifests so restart behavior and checkpoint depth are auditable.
 - **Backtest efficiency**
@@ -147,6 +151,12 @@ Typical baseline workflow:
 python3 FXAI/Tools/fxai_testlab.py baseline-save --name eurusd_smoke
 python3 FXAI/Tools/fxai_testlab.py release-gate --baseline eurusd_smoke --require-market-replay
 ```
+
+Optional macro-event input file:
+
+- `FXAI\\Runtime\\macro_events.tsv` in the MT5 common-files area
+- tab-separated columns: `symbol`, `event_time`, `pre_window_min`, `post_window_min`, `importance`, `surprise`, `actual_delta`, `forecast_delta`, `class`
+- if the file is absent, FXAI falls back to zeroed macro-event features
 
 Portfolio-style audit pack example:
 

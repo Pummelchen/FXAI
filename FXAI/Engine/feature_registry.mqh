@@ -10,6 +10,7 @@ enum ENUM_FXAI_FEATURE_PROVENANCE
    FXAI_PROV_CONTEXT_SYMBOL,
    FXAI_PROV_TIME_CALENDAR,
    FXAI_PROV_SYMBOL_CONTRACT,
+   FXAI_PROV_EVENT_MACRO,
    FXAI_PROV_DERIVED_FILTER
 };
 
@@ -48,6 +49,7 @@ string FXAI_FeatureProvenanceName(const int provenance_id)
       case FXAI_PROV_CONTEXT_SYMBOL: return "context_symbol";
       case FXAI_PROV_TIME_CALENDAR: return "time_calendar";
       case FXAI_PROV_SYMBOL_CONTRACT: return "symbol_contract";
+      case FXAI_PROV_EVENT_MACRO: return "event_macro";
       case FXAI_PROV_DERIVED_FILTER: return "derived_filter";
       default: return "unknown";
    }
@@ -178,6 +180,12 @@ string FXAI_FeatureName(const int feature_idx)
       case 81: return "spread_zscore_20";
       case 82: return "spread_vol_ratio_20";
       case 83: return "spread_rank_20";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 0: return "macro_pre_event_embargo";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 1: return "macro_post_event_embargo";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 2: return "macro_event_importance";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 3: return "macro_surprise_signed";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 4: return "macro_surprise_abs";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 5: return "macro_event_class_bias";
       default:
       {
          if(feature_idx >= FXAI_MAIN_MTF_FEATURE_OFFSET && feature_idx < FXAI_CONTEXT_MTF_FEATURE_OFFSET)
@@ -187,7 +195,7 @@ string FXAI_FeatureName(const int feature_idx)
             int metric = rel % FXAI_MTF_STATE_FEATURES_PER_TF;
             return FXAI_MainMTFSlotName(tf_slot) + "_" + FXAI_MTFMetricName(metric);
          }
-         if(feature_idx >= FXAI_CONTEXT_MTF_FEATURE_OFFSET && feature_idx < FXAI_AI_FEATURES)
+         if(feature_idx >= FXAI_CONTEXT_MTF_FEATURE_OFFSET && feature_idx < FXAI_MACRO_EVENT_FEATURE_OFFSET)
          {
             int rel = feature_idx - FXAI_CONTEXT_MTF_FEATURE_OFFSET;
             int slot = rel / FXAI_CONTEXT_SLOT_MTF_FEATS;
@@ -209,8 +217,10 @@ int FXAI_FeatureProvenance(const int feature_idx)
       return (int)FXAI_PROV_DERIVED_FILTER;
    if(feature_idx >= FXAI_MAIN_MTF_FEATURE_OFFSET && feature_idx < FXAI_CONTEXT_MTF_FEATURE_OFFSET)
       return (int)FXAI_PROV_MULTI_TIMEFRAME;
-   if(feature_idx >= FXAI_CONTEXT_MTF_FEATURE_OFFSET)
+    if(feature_idx >= FXAI_CONTEXT_MTF_FEATURE_OFFSET && feature_idx < FXAI_MACRO_EVENT_FEATURE_OFFSET)
       return (int)FXAI_PROV_CONTEXT_SYMBOL;
+   if(feature_idx >= FXAI_MACRO_EVENT_FEATURE_OFFSET)
+      return (int)FXAI_PROV_EVENT_MACRO;
    if(feature_idx <= 6 || (feature_idx >= 18 && feature_idx <= 21) || (feature_idx >= 66 && feature_idx <= 71) || (feature_idx >= 80 && feature_idx <= 83))
       return (int)FXAI_PROV_PRICE_BAR;
    if((feature_idx >= 7 && feature_idx <= 9) || (feature_idx >= 13 && feature_idx <= 37))

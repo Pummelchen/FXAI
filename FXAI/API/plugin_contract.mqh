@@ -5,7 +5,7 @@
 #include "..\TensorCore\TensorCore.mqh"
 
 #define FXAI_PLUGIN_STATE_ARTIFACT_DIR "FXAI\\Runtime\\Plugins"
-#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 5
+#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 6
 
 class CFXAITernaryCalibrator
 {
@@ -488,8 +488,19 @@ public:
       m_native_quality_heads.Reset();
    }
    virtual bool SupportsPersistentState(void) const { return true; }
-   virtual int PersistentStateVersion(void) const { return 5; }
-   virtual string PersistentStateCoverageTag(void) const { return FXAI_ReferenceTierName(FXAI_DefaultReferenceTierForAI(AIId())); }
+   virtual int PersistentStateVersion(void) const { return 6; }
+   virtual string PersistentStateCoverageTag(void) const
+   {
+      FXAIAIManifestV4 manifest;
+      Describe(manifest);
+      if(FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_ONLINE_LEARNING) ||
+         FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY) ||
+         FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL))
+      {
+         return "native_replay";
+      }
+      return FXAI_ReferenceTierName(FXAI_DefaultReferenceTierForAI(AIId()));
+   }
    virtual void Describe(FXAIAIManifestV4 &out) const = 0;
    virtual bool SupportsSyntheticSeries(void) const { return false; }
    virtual bool SetSyntheticSeries(const datetime &time_arr[],
@@ -611,6 +622,11 @@ public:
       bool can_replay = can_learn && FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY);
       if(!can_learn)
          return;
+
+      m_persist_hp = hp;
+      m_persist_hp_ready = true;
+      if(m_persist_train_events < 1000000)
+         m_persist_train_events++;
 
       double pre_probs[3];
       pre_probs[0] = 0.10;
@@ -850,6 +866,30 @@ protected:
       FileWriteInteger(handle, m_replay_rehearsals);
       FileWriteInteger(handle, (m_rng_seeded ? 1 : 0));
       FileWriteInteger(handle, (int)m_rng_state);
+      FileWriteInteger(handle, (m_persist_hp_ready ? 1 : 0));
+      FileWriteInteger(handle, m_persist_train_events);
+      FileWriteDouble(handle, m_persist_hp.lr);
+      FileWriteDouble(handle, m_persist_hp.l2);
+      FileWriteDouble(handle, m_persist_hp.ftrl_alpha);
+      FileWriteDouble(handle, m_persist_hp.ftrl_beta);
+      FileWriteDouble(handle, m_persist_hp.ftrl_l1);
+      FileWriteDouble(handle, m_persist_hp.ftrl_l2);
+      FileWriteDouble(handle, m_persist_hp.pa_c);
+      FileWriteDouble(handle, m_persist_hp.pa_margin);
+      FileWriteDouble(handle, m_persist_hp.xgb_lr);
+      FileWriteDouble(handle, m_persist_hp.xgb_l2);
+      FileWriteDouble(handle, m_persist_hp.xgb_split);
+      FileWriteDouble(handle, m_persist_hp.mlp_lr);
+      FileWriteDouble(handle, m_persist_hp.mlp_l2);
+      FileWriteDouble(handle, m_persist_hp.mlp_init);
+      FileWriteDouble(handle, m_persist_hp.quantile_lr);
+      FileWriteDouble(handle, m_persist_hp.quantile_l2);
+      FileWriteDouble(handle, m_persist_hp.enhash_lr);
+      FileWriteDouble(handle, m_persist_hp.enhash_l1);
+      FileWriteDouble(handle, m_persist_hp.enhash_l2);
+      FileWriteDouble(handle, m_persist_hp.tcn_layers);
+      FileWriteDouble(handle, m_persist_hp.tcn_kernel);
+      FileWriteDouble(handle, m_persist_hp.tcn_dilation_base);
       return true;
    }
 
@@ -993,11 +1033,109 @@ protected:
       m_replay_rehearsals = FileReadInteger(handle);
       m_rng_seeded = (FileReadInteger(handle) != 0);
       m_rng_state = (uint)FileReadInteger(handle);
+      if(version >= 6)
+      {
+         m_persist_hp_ready = (FileReadInteger(handle) != 0);
+         m_persist_train_events = FileReadInteger(handle);
+         m_persist_hp.lr = FileReadDouble(handle);
+         m_persist_hp.l2 = FileReadDouble(handle);
+         m_persist_hp.ftrl_alpha = FileReadDouble(handle);
+         m_persist_hp.ftrl_beta = FileReadDouble(handle);
+         m_persist_hp.ftrl_l1 = FileReadDouble(handle);
+         m_persist_hp.ftrl_l2 = FileReadDouble(handle);
+         m_persist_hp.pa_c = FileReadDouble(handle);
+         m_persist_hp.pa_margin = FileReadDouble(handle);
+         m_persist_hp.xgb_lr = FileReadDouble(handle);
+         m_persist_hp.xgb_l2 = FileReadDouble(handle);
+         m_persist_hp.xgb_split = FileReadDouble(handle);
+         m_persist_hp.mlp_lr = FileReadDouble(handle);
+         m_persist_hp.mlp_l2 = FileReadDouble(handle);
+         m_persist_hp.mlp_init = FileReadDouble(handle);
+         m_persist_hp.quantile_lr = FileReadDouble(handle);
+         m_persist_hp.quantile_l2 = FileReadDouble(handle);
+         m_persist_hp.enhash_lr = FileReadDouble(handle);
+         m_persist_hp.enhash_l1 = FileReadDouble(handle);
+         m_persist_hp.enhash_l2 = FileReadDouble(handle);
+         m_persist_hp.tcn_layers = FileReadDouble(handle);
+         m_persist_hp.tcn_kernel = FileReadDouble(handle);
+         m_persist_hp.tcn_dilation_base = FileReadDouble(handle);
+      }
+      else
+      {
+         m_persist_hp_ready = false;
+         m_persist_train_events = 0;
+      }
       return true;
    }
 
-   virtual bool SaveModelState(const int handle) const { return true; }
-   virtual bool LoadModelState(const int handle, const int version) { return true; }
+   bool RebuildModelStateFromReplay(const FXAIAIHyperParams &hp)
+   {
+      if(m_replay_size <= 0)
+         return true;
+
+      EnsureInitialized(hp);
+
+      int start = (m_replay_size < FXAI_PLUGIN_REPLAY_CAPACITY ? 0 : m_replay_head);
+      for(int n=0; n<m_replay_size; n++)
+      {
+         int idx = (start + n) % FXAI_PLUGIN_REPLAY_CAPACITY;
+         FXAIAIContextV4 replay_ctx;
+         FXAI_ClearContextV4(replay_ctx);
+         replay_ctx.api_version = FXAI_API_VERSION_V4;
+         replay_ctx.regime_id = m_replay_regime[idx];
+         replay_ctx.session_bucket = m_replay_session_bucket[idx];
+         replay_ctx.horizon_minutes = m_replay_horizon[idx];
+         replay_ctx.feature_schema_id = m_replay_feature_schema[idx];
+         replay_ctx.normalization_method_id = m_replay_norm_method[idx];
+         replay_ctx.sequence_bars = m_replay_sequence_bars[idx];
+         replay_ctx.cost_points = m_replay_cost[idx];
+         replay_ctx.min_move_points = m_replay_min_move[idx];
+         replay_ctx.point_value = m_replay_point_value[idx];
+         replay_ctx.domain_hash = m_replay_domain_hash[idx];
+         replay_ctx.sample_time = m_replay_time[idx];
+         SetContext(replay_ctx);
+         SetTrainingTargetsRaw(m_replay_mfe[idx],
+                               m_replay_mae[idx],
+                               m_replay_hit_time[idx],
+                               m_replay_path_flags[idx],
+                               m_replay_path_risk[idx],
+                               m_replay_fill_risk[idx],
+                               m_replay_masked_step[idx],
+                               m_replay_next_vol[idx],
+                               m_replay_regime_shift[idx],
+                               m_replay_context_lead[idx]);
+         m_ctx_window_size = m_replay_window_size[idx];
+         if(m_ctx_window_size < 0) m_ctx_window_size = 0;
+         if(m_ctx_window_size > FXAI_MAX_SEQUENCE_BARS) m_ctx_window_size = FXAI_MAX_SEQUENCE_BARS;
+         for(int b=0; b<FXAI_MAX_SEQUENCE_BARS; b++)
+         {
+            for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+               m_ctx_window[b][k] = (b < m_ctx_window_size ? m_replay_window[idx][b][k] : 0.0);
+         }
+
+         double replay_x[FXAI_AI_WEIGHTS];
+         for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+            replay_x[k] = m_replay_x[idx][k];
+         TrainModelCore(m_replay_label[idx], replay_x, hp, m_replay_move[idx]);
+      }
+      return true;
+   }
+
+   virtual bool SaveModelState(const int handle) const
+   {
+      FileWriteInteger(handle, 0x46585250);
+      return true;
+   }
+
+   virtual bool LoadModelState(const int handle, const int version)
+   {
+      int marker = FileReadInteger(handle);
+      if(marker != 0x46585250)
+         return false;
+      if(!m_persist_hp_ready || m_replay_size <= 0)
+         return true;
+      return RebuildModelStateFromReplay(m_persist_hp);
+   }
 
    virtual bool PredictModelCore(const double &x[],
                                  const FXAIAIHyperParams &hp,

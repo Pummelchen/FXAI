@@ -2,7 +2,7 @@
 #define __FXAI_RUNTIME_ARTIFACTS_MQH__
 
 #define FXAI_RUNTIME_ARTIFACT_DIR "FXAI\\Runtime"
-#define FXAI_RUNTIME_ARTIFACT_VERSION 6
+#define FXAI_RUNTIME_ARTIFACT_VERSION 7
 
 string FXAI_RuntimeArtifactSafeSymbol(const string symbol)
 {
@@ -298,6 +298,40 @@ bool FXAI_SaveRuntimeArtifacts(const string symbol)
       FileWriteDouble(handle, g_feature_drift_ema[g]);
    }
 
+   FileWriteInteger(handle, (g_shared_transfer_global_ready ? 1 : 0));
+   FileWriteInteger(handle, g_shared_transfer_global_steps);
+   for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+   {
+      FileWriteDouble(handle, g_shared_transfer_global_b[j]);
+      FileWriteDouble(handle, g_shared_transfer_global_move[j]);
+      for(int c=0; c<3; c++)
+         FileWriteDouble(handle, g_shared_transfer_global_cls[c][j]);
+      for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
+         FileWriteDouble(handle, g_shared_transfer_global_w[j][i]);
+   }
+   for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
+      for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+         FileWriteDouble(handle, g_shared_transfer_global_domain_emb[d][j]);
+   for(int h=0; h<FXAI_SHARED_TRANSFER_HORIZON_BUCKETS; h++)
+      for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+         FileWriteDouble(handle, g_shared_transfer_global_horizon_emb[h][j]);
+   for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
+      for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+         FileWriteDouble(handle, g_shared_transfer_global_session_emb[s][j]);
+
+   FileWriteInteger(handle, (g_broker_execution_ready ? 1 : 0));
+   for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
+   {
+      for(int h=0; h<FXAI_SHARED_TRANSFER_HORIZON_BUCKETS; h++)
+      {
+         FileWriteDouble(handle, g_broker_execution_obs[s][h]);
+         FileWriteDouble(handle, g_broker_execution_slippage_ema[s][h]);
+         FileWriteDouble(handle, g_broker_execution_latency_ema[s][h]);
+         FileWriteDouble(handle, g_broker_execution_reject_ema[s][h]);
+         FileWriteDouble(handle, g_broker_execution_partial_ema[s][h]);
+      }
+   }
+
    FileClose(handle);
 
    bool ok = true;
@@ -437,6 +471,43 @@ bool FXAI_LoadRuntimeArtifacts(const string symbol)
             g_feature_drift_live_mean[g] = FileReadDouble(handle);
             g_feature_drift_live_abs[g] = FileReadDouble(handle);
             g_feature_drift_ema[g] = FileReadDouble(handle);
+         }
+
+         if(version >= 7)
+         {
+            g_shared_transfer_global_ready = (FileReadInteger(handle) != 0);
+            g_shared_transfer_global_steps = FileReadInteger(handle);
+            for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+            {
+               g_shared_transfer_global_b[j] = FileReadDouble(handle);
+               g_shared_transfer_global_move[j] = FileReadDouble(handle);
+               for(int c=0; c<3; c++)
+                  g_shared_transfer_global_cls[c][j] = FileReadDouble(handle);
+               for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
+                  g_shared_transfer_global_w[j][i] = FileReadDouble(handle);
+            }
+            for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
+               for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+                  g_shared_transfer_global_domain_emb[d][j] = FileReadDouble(handle);
+            for(int h=0; h<FXAI_SHARED_TRANSFER_HORIZON_BUCKETS; h++)
+               for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+                  g_shared_transfer_global_horizon_emb[h][j] = FileReadDouble(handle);
+            for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
+               for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+                  g_shared_transfer_global_session_emb[s][j] = FileReadDouble(handle);
+
+            g_broker_execution_ready = (FileReadInteger(handle) != 0);
+            for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
+            {
+               for(int h=0; h<FXAI_SHARED_TRANSFER_HORIZON_BUCKETS; h++)
+               {
+                  g_broker_execution_obs[s][h] = FileReadDouble(handle);
+                  g_broker_execution_slippage_ema[s][h] = FileReadDouble(handle);
+                  g_broker_execution_latency_ema[s][h] = FileReadDouble(handle);
+                  g_broker_execution_reject_ema[s][h] = FileReadDouble(handle);
+                  g_broker_execution_partial_ema[s][h] = FileReadDouble(handle);
+               }
+            }
          }
 
          loaded_global = true;

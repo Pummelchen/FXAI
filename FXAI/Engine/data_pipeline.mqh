@@ -6,6 +6,7 @@
 #include "data_io.mqh"
 #include "data_align.mqh"
 #include "feature_math.mqh"
+#include "event_macro.mqh"
 #include "feature_norm.mqh"
 #include "feature_registry.mqh"
 #include "feature_build.mqh"

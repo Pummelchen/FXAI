@@ -112,6 +112,9 @@
    int      m_replay_rehearsals;
    bool m_rng_seeded;
    uint m_rng_state;
+   FXAIAIHyperParams m_persist_hp;
+   bool m_persist_hp_ready;
+   int  m_persist_train_events;
 
    double InputCostProxyPoints(const double &x[]) const
    {
@@ -210,176 +213,7 @@
    void BuildSharedAdapterInput(const double &x[],
                                 double &out[]) const
    {
-      ArrayResize(out, FXAI_SHARED_TRANSFER_FEATURES);
-      out[0] = 1.0;
-      out[1] = FXAI_GetInputFeature(x, 62);
-      out[2] = FXAI_GetInputFeature(x, 63);
-      out[3] = FXAI_GetInputFeature(x, 64);
-      out[4] = FXAI_Clamp(0.5 + 0.5 * FXAI_GetInputFeature(x, 65), 0.0, 1.0);
-      double ret_mix = 0.0;
-      double lag_mix = 0.0;
-      double rel_mix = 0.0;
-      double corr_mix = 0.0;
-      double weight_total = 0.0;
-      for(int slot=0; slot<FXAI_CONTEXT_TOP_SYMBOLS; slot++)
-      {
-         int base = 50 + slot * 4;
-         double ctx_ret = FXAI_GetInputFeature(x, base + 0);
-         double ctx_lag = FXAI_GetInputFeature(x, base + 1);
-         double ctx_rel = FXAI_GetInputFeature(x, base + 2);
-         double ctx_corr = FXAI_GetInputFeature(x, base + 3);
-         double w = FXAI_Clamp((0.30 + 0.70 * MathAbs(ctx_corr)) *
-                               (0.35 + 0.65 * out[4]) *
-                               (0.35 + 0.25 * MathAbs(ctx_ret) + 0.25 * MathAbs(ctx_lag) + 0.15 * MathAbs(ctx_rel)),
-                               0.0,
-                               3.0);
-         if(w <= 1e-6)
-            continue;
-         ret_mix += w * ctx_ret;
-         lag_mix += w * ctx_lag;
-         rel_mix += w * ctx_rel;
-         corr_mix += w * ctx_corr;
-         weight_total += w;
-      }
-      if(weight_total > 1e-6)
-      {
-         out[5] = ret_mix / weight_total;
-         out[6] = lag_mix / weight_total;
-         out[7] = rel_mix / weight_total;
-         out[8] = corr_mix / weight_total;
-      }
-      else
-      {
-         out[5] = 0.0;
-         out[6] = 0.0;
-         out[7] = 0.0;
-         out[8] = 0.0;
-      }
-      double domain = FXAI_Clamp(m_ctx_domain_hash, 0.0, 1.0);
-      double horizon_scale = FXAI_Clamp(MathLog(1.0 + (double)MathMax(m_ctx_horizon_minutes, 1)) / MathLog(1.0 + 1440.0), 0.0, 1.0);
-      double main_mtf_body = 0.0;
-      double main_mtf_loc = 0.0;
-      double main_mtf_range = 0.0;
-      double main_mtf_spread = 0.0;
-      for(int tf_slot=0; tf_slot<FXAI_MAIN_MTF_TF_COUNT; tf_slot++)
-      {
-         int base = FXAI_MainMTFFeatureIndex(tf_slot, 0);
-         if(base < 0)
-            continue;
-         main_mtf_body += FXAI_GetInputFeature(x, base + 0);
-         main_mtf_loc += FXAI_GetInputFeature(x, base + 1);
-         main_mtf_range += FXAI_GetInputFeature(x, base + 2);
-         main_mtf_spread += FXAI_GetInputFeature(x, base + 3);
-      }
-      main_mtf_body /= (double)MathMax(FXAI_MAIN_MTF_TF_COUNT, 1);
-      main_mtf_loc /= (double)MathMax(FXAI_MAIN_MTF_TF_COUNT, 1);
-      main_mtf_range /= (double)MathMax(FXAI_MAIN_MTF_TF_COUNT, 1);
-      main_mtf_spread /= (double)MathMax(FXAI_MAIN_MTF_TF_COUNT, 1);
-
-      double ctx_mtf_body = 0.0;
-      double ctx_mtf_loc = 0.0;
-      double ctx_mtf_range = 0.0;
-      double ctx_mtf_spread = 0.0;
-      double ctx_mtf_weight = 0.0;
-      for(int slot=0; slot<FXAI_CONTEXT_TOP_SYMBOLS; slot++)
-      {
-         double slot_corr = MathAbs(FXAI_GetInputFeature(x, 50 + slot * 4 + 3));
-         double slot_weight = 0.35 + 0.65 * slot_corr;
-         double slot_body = 0.0;
-         double slot_loc = 0.0;
-         double slot_range = 0.0;
-         double slot_spread = 0.0;
-         int slot_used = 0;
-         for(int tf_slot=0; tf_slot<FXAI_CONTEXT_MTF_TF_COUNT; tf_slot++)
-         {
-            int base = FXAI_ContextMTFFeatureIndex(slot, tf_slot, 0);
-            if(base < 0)
-               continue;
-            slot_body += FXAI_GetInputFeature(x, base + 0);
-            slot_loc += FXAI_GetInputFeature(x, base + 1);
-            slot_range += FXAI_GetInputFeature(x, base + 2);
-            slot_spread += FXAI_GetInputFeature(x, base + 3);
-            slot_used++;
-         }
-         if(slot_used <= 0)
-            continue;
-         slot_body /= (double)slot_used;
-         slot_loc /= (double)slot_used;
-         slot_range /= (double)slot_used;
-         slot_spread /= (double)slot_used;
-         ctx_mtf_body += slot_weight * slot_body;
-         ctx_mtf_loc += slot_weight * slot_loc;
-         ctx_mtf_range += slot_weight * slot_range;
-         ctx_mtf_spread += slot_weight * slot_spread;
-         ctx_mtf_weight += slot_weight;
-      }
-      if(ctx_mtf_weight > 1e-6)
-      {
-         ctx_mtf_body /= ctx_mtf_weight;
-         ctx_mtf_loc /= ctx_mtf_weight;
-         ctx_mtf_range /= ctx_mtf_weight;
-         ctx_mtf_spread /= ctx_mtf_weight;
-      }
-      out[9] = 2.0 * domain - 1.0;
-      out[10] = 2.0 * horizon_scale - 1.0;
-      out[11] = FXAI_Clamp(0.70 * FXAI_GetInputFeature(x, 72) +
-                           0.15 * main_mtf_loc +
-                           0.15 * ctx_mtf_loc,
-                           -1.0,
-                           1.0);
-      out[12] = FXAI_Clamp(0.35 * FXAI_GetInputFeature(x, 74) +
-                           0.20 * FXAI_GetInputFeature(x, 75) +
-                           0.20 * FXAI_GetInputFeature(x, 78) +
-                           0.10 * FXAI_GetInputFeature(x, 73) +
-                           0.08 * main_mtf_body +
-                           0.07 * ctx_mtf_body,
-                           -1.0,
-                           1.0);
-      out[13] = FXAI_Clamp(0.18 * FXAI_GetInputFeature(x, 76) -
-                           0.18 * FXAI_GetInputFeature(x, 77) -
-                           0.12 * FXAI_GetInputFeature(x, 79) +
-                           0.08 * FXAI_GetInputFeature(x, 6) +
-                           0.08 * FXAI_GetInputFeature(x, 81) -
-                           0.06 * main_mtf_spread -
-                           0.06 * FXAI_GetInputFeature(x, 82) +
-                           0.04 * ctx_mtf_spread,
-                           -4.0,
-                           4.0);
-      out[14] = FXAI_Clamp(0.45 * FXAI_GetInputFeature(x, 18) +
-                           0.20 * FXAI_GetInputFeature(x, 19) -
-                           0.20 * FXAI_GetInputFeature(x, 20) +
-                           0.15 * FXAI_GetInputFeature(x, 21) +
-                           0.10 * main_mtf_body +
-                           0.10 * main_mtf_loc,
-                           -4.0,
-                           4.0);
-      out[15] = FXAI_Clamp(0.18 * FXAI_GetInputFeature(x, 66) +
-                           0.14 * FXAI_GetInputFeature(x, 67) +
-                           0.14 * FXAI_GetInputFeature(x, 68) +
-                           0.12 * FXAI_GetInputFeature(x, 69) +
-                           0.20 * FXAI_GetInputFeature(x, 71) +
-                           0.10 * FXAI_GetInputFeature(x, 81) +
-                           0.08 * FXAI_GetInputFeature(x, 82) +
-                           0.04 * FXAI_GetInputFeature(x, 83) +
-                           0.08 * main_mtf_range +
-                           0.06 * ctx_mtf_range,
-                           -6.0,
-                           6.0);
-      out[16] = FXAI_Clamp(0.60 * FXAI_GetInputFeature(x, 68) +
-                           0.20 * FXAI_GetInputFeature(x, 81) +
-                           0.10 * FXAI_GetInputFeature(x, 80) +
-                           0.10 * FXAI_GetInputFeature(x, 82) +
-                           0.10 * main_mtf_spread,
-                           -4.0,
-                           8.0);
-      out[17] = FXAI_Clamp(0.65 * FXAI_GetInputFeature(x, 70) +
-                           0.20 * FXAI_GetInputFeature(x, 82) +
-                           0.10 * main_mtf_range +
-                           0.05 * MathAbs(FXAI_GetInputFeature(x, 83)),
-                           0.0,
-                           8.0);
-      out[18] = FXAI_Clamp(FXAI_GetInputFeature(x, 78), -6.0, 6.0);
-      out[19] = FXAI_Clamp(FXAI_GetInputFeature(x, 79), 0.0, 6.0);
+      FXAI_BuildSharedTransferInputGlobal(x, m_ctx_domain_hash, m_ctx_horizon_minutes, out);
    }
 
    bool HasSharedAdapterSignal(const double &a[]) const
@@ -568,6 +402,23 @@
             probs[c] = FXAI_Clamp((1.0 - blend) * probs[c] + blend * bb_probs[c], 0.0005, 0.9990);
       }
 
+      double global_probs[];
+      double global_move_adj = 0.0;
+      FXAI_GlobalSharedTransferPredict(a,
+                                       m_ctx_domain_hash,
+                                       m_ctx_horizon_minutes,
+                                       m_ctx_session_bucket,
+                                       global_probs,
+                                       global_move_adj);
+      double global_trust = FXAI_GlobalSharedTransferTrust();
+      global_trust *= FXAI_Clamp(0.12 + 1.10 * SharedAdapterSignalStrength(a), 0.0, 0.65);
+      if(ArraySize(global_probs) == 3 && global_trust > 1e-6)
+      {
+         double blend = FXAI_Clamp(0.30 + 0.60 * global_trust, 0.0, 0.78);
+         for(int c=0; c<3; c++)
+            probs[c] = FXAI_Clamp((1.0 - blend) * probs[c] + blend * global_probs[c], 0.0005, 0.9990);
+      }
+
       double transfer_probs[3];
       transfer_probs[0] = 0.0;
       transfer_probs[1] = 0.0;
@@ -592,7 +443,7 @@
       double move_adj = 0.0;
       for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
          move_adj += m_shared_move_w[i] * a[i];
-      move_adj = 0.70 * move_adj + 0.30 * bb_move_adj;
+      move_adj = 0.55 * move_adj + 0.20 * bb_move_adj + 0.25 * global_move_adj;
       double scale = FXAI_Clamp((1.0 + 0.16 * trust * FXAI_ClipSym(move_adj, 1.5)) * transfer_move_mult, 0.75, 1.45);
       out.move_mean_points = MathMax(0.0, out.move_mean_points * scale);
       out.move_q25_points = MathMax(0.0, out.move_q25_points * scale);
@@ -759,6 +610,16 @@
       m_shared_backbone_steps++;
       if(m_shared_backbone_steps >= 36)
          m_shared_backbone_ready = true;
+
+      FXAI_GlobalSharedTransferUpdate(a,
+                                      m_ctx_domain_hash,
+                                      m_ctx_horizon_minutes,
+                                      m_ctx_session_bucket,
+                                      cls,
+                                      m_ctx_cost_points,
+                                      move_points,
+                                      sample_w,
+                                      lr);
    }
 
    void SetContext(const datetime sample_time,
@@ -955,6 +816,30 @@
       m_replay_rehearsals = 0;
       m_rng_seeded = false;
       m_rng_state = 0u;
+      m_persist_hp_ready = false;
+      m_persist_train_events = 0;
+      m_persist_hp.lr = 0.0;
+      m_persist_hp.l2 = 0.0;
+      m_persist_hp.ftrl_alpha = 0.0;
+      m_persist_hp.ftrl_beta = 0.0;
+      m_persist_hp.ftrl_l1 = 0.0;
+      m_persist_hp.ftrl_l2 = 0.0;
+      m_persist_hp.pa_c = 0.0;
+      m_persist_hp.pa_margin = 0.0;
+      m_persist_hp.xgb_lr = 0.0;
+      m_persist_hp.xgb_l2 = 0.0;
+      m_persist_hp.xgb_split = 0.0;
+      m_persist_hp.mlp_lr = 0.0;
+      m_persist_hp.mlp_l2 = 0.0;
+      m_persist_hp.mlp_init = 0.0;
+      m_persist_hp.quantile_lr = 0.0;
+      m_persist_hp.quantile_l2 = 0.0;
+      m_persist_hp.enhash_lr = 0.0;
+      m_persist_hp.enhash_l1 = 0.0;
+      m_persist_hp.enhash_l2 = 0.0;
+      m_persist_hp.tcn_layers = 0.0;
+      m_persist_hp.tcn_kernel = 0.0;
+      m_persist_hp.tcn_dilation_base = 0.0;
    }
 
    void EnsurePluginRNG(void)
@@ -1012,19 +897,42 @@
       if(m_move_head_steps >= 16) m_move_head_ready = true;
    }
 
-   void SetTrainingTargets(const FXAIAITrainRequestV4 &req)
+   void SetTrainingTargetsRaw(const double mfe_points,
+                              const double mae_points,
+                              const double hit_time_frac,
+                              const int path_flags,
+                              const double path_risk,
+                              const double fill_risk,
+                              const double masked_step,
+                              const double next_vol,
+                              const double regime_shift,
+                              const double context_lead)
    {
       m_target_quality_ready = true;
-      m_target_mfe_points = MathMax(req.mfe_points, 0.0);
-      m_target_mae_points = MathMax(req.mae_points, 0.0);
-      m_target_hit_time_frac = FXAI_Clamp(req.time_to_hit_frac, 0.0, 1.0);
-      m_target_path_flags = req.path_flags;
-      m_target_path_risk = FXAI_Clamp(req.path_risk, 0.0, 1.0);
-      m_target_fill_risk = FXAI_Clamp(req.fill_risk, 0.0, 1.0);
-      m_target_masked_step = req.masked_step_target;
-      m_target_next_vol = MathMax(req.next_vol_target, 0.0);
-      m_target_regime_shift = FXAI_Clamp(req.regime_shift_target, 0.0, 1.0);
-      m_target_context_lead = FXAI_Clamp(req.context_lead_target, 0.0, 1.0);
+      m_target_mfe_points = MathMax(mfe_points, 0.0);
+      m_target_mae_points = MathMax(mae_points, 0.0);
+      m_target_hit_time_frac = FXAI_Clamp(hit_time_frac, 0.0, 1.0);
+      m_target_path_flags = path_flags;
+      m_target_path_risk = FXAI_Clamp(path_risk, 0.0, 1.0);
+      m_target_fill_risk = FXAI_Clamp(fill_risk, 0.0, 1.0);
+      m_target_masked_step = masked_step;
+      m_target_next_vol = MathMax(next_vol, 0.0);
+      m_target_regime_shift = FXAI_Clamp(regime_shift, 0.0, 1.0);
+      m_target_context_lead = FXAI_Clamp(context_lead, 0.0, 1.0);
+   }
+
+   void SetTrainingTargets(const FXAIAITrainRequestV4 &req)
+   {
+      SetTrainingTargetsRaw(req.mfe_points,
+                            req.mae_points,
+                            req.time_to_hit_frac,
+                            req.path_flags,
+                            req.path_risk,
+                            req.fill_risk,
+                            req.masked_step_target,
+                            req.next_vol_target,
+                            req.regime_shift_target,
+                            req.context_lead_target);
    }
 
    void UpdateQualityHeads(const FXAIAITrainRequestV4 &req,

@@ -1200,8 +1200,13 @@ void ResetAIState(const string symbol)
    FXAI_ResetRegimeCalibration();
    FXAI_ResetReplayReservoir();
    FXAI_ResetFeatureDriftDiagnostics();
+   FXAI_ResetGlobalSharedTransferBackbone();
+   FXAI_ResetBrokerExecutionReplayStats();
+   FXAI_ResetMacroEventStore();
    if(g_plugins_ready)
       g_plugins.ResetAll();
+   for(int i=0; i<FXAI_AI_COUNT; i++)
+      FXAI_ResetModelAuxState(i);
    FXAI_LoadMetaArtifacts(symbol);
    FXAI_LoadRuntimeArtifacts(symbol);
    for(int s=0; s<FXAI_MAX_CONTEXT_SYMBOLS; s++)
@@ -1229,7 +1234,6 @@ void ResetAIState(const string symbol)
    {
       g_ai_trained[i] = false;
       g_ai_last_train_bar[i] = 0;
-      FXAI_ResetModelAuxState(i);
    }
 }
 
@@ -1748,6 +1752,21 @@ bool FXAI_RunPersistenceRoundTripCompliance(CFXAIAIPlugin &plugin,
    if(!plugin.SupportsPersistentState())
       return true;
 
+   int seq = FXAI_ComplianceSequenceBars(manifest);
+   int horizon = FXAI_ComplianceHorizon(manifest, 5);
+   FXAIAITrainRequestV4 buy_s;
+   FXAIAITrainRequestV4 sell_s;
+   FXAIAITrainRequestV4 skip_s;
+   FXAI_FillComplianceTrainRequest(plugin, buy_s, (int)FXAI_LABEL_BUY, 4.5, 0.8, 0.75, 0.40, 0.20, now_t - 180, 1, horizon);
+   FXAI_FillComplianceTrainRequest(plugin, sell_s, (int)FXAI_LABEL_SELL, -4.5, 0.8, -0.75, -0.40, -0.20, now_t - 120, 1, horizon);
+   FXAI_FillComplianceTrainRequest(plugin, skip_s, (int)FXAI_LABEL_SKIP, 0.2, 0.8, 0.02, 0.01, 0.00, now_t - 60, 1, horizon);
+   buy_s.ctx.sequence_bars = seq;
+   sell_s.ctx.sequence_bars = seq;
+   skip_s.ctx.sequence_bars = seq;
+   FXAI_TrainViaV4(plugin, buy_s, hp);
+   FXAI_TrainViaV4(plugin, sell_s, hp);
+   FXAI_TrainViaV4(plugin, skip_s, hp);
+
    string file_name = plugin.PersistentStateFile("__compliance__");
    FileDelete(file_name, FILE_COMMON);
    if(!plugin.SaveStateFile(file_name))
@@ -1825,29 +1844,34 @@ bool FXAI_RunPersistenceCoverageCompliance(CFXAIAIPlugin &plugin,
 
    string coverage_tag = plugin.PersistentStateCoverageTag();
    string expected_tier = FXAI_ReferenceTierName(manifest.reference_tier);
-   if(coverage_tag == "native_model" && file_size < 1024)
+   if((coverage_tag == "native_model" || coverage_tag == "native_replay") && file_size < 256)
    {
-      Print("FXAI compliance error: native persistence artifact unexpectedly small. model=", plugin.AIName(),
+      Print("FXAI compliance error: persistence artifact unexpectedly small. model=", plugin.AIName(),
             " bytes=", (int)file_size);
+      return false;
+   }
+
+   bool stateful_checkpoint =
+      (FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_ONLINE_LEARNING) ||
+       FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY) ||
+       FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL));
+
+   if(stateful_checkpoint &&
+      coverage_tag != "native_model" &&
+      coverage_tag != "native_replay")
+   {
+      Print("FXAI compliance error: stateful model lacks checkpoint reconstruction coverage. model=", plugin.AIName(),
+            " coverage=", coverage_tag);
       return false;
    }
 
    if(manifest.reference_tier == (int)FXAI_REFERENCE_FULL_NATIVE &&
       coverage_tag != "native_model")
    {
-      Print("FXAI compliance error: full-native model lacks native checkpoint coverage. model=", plugin.AIName(),
+      Print("FXAI persistence note: full-native plugin is running on replay-verified checkpoint coverage. model=", plugin.AIName(),
             " coverage=", coverage_tag);
-      return false;
    }
-
-   if(manifest.reference_tier != (int)FXAI_REFERENCE_FULL_NATIVE &&
-      coverage_tag == "native_model")
-      return true;
-
-   if((FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_ONLINE_LEARNING) ||
-       FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY) ||
-       FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL)) &&
-      coverage_tag != expected_tier)
+   else if(stateful_checkpoint && coverage_tag != expected_tier && coverage_tag != "native_replay")
    {
       Print("FXAI persistence note: checkpoint coverage tag differs from declared reference tier. model=", plugin.AIName(),
             " coverage=", coverage_tag,

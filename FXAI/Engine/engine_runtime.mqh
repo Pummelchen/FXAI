@@ -552,7 +552,7 @@ int SpecialDirectionAI(const string symbol)
       {
          if(g_plugins.Get(ai_idx) == NULL) continue;
          if(FXAI_IsModelPruned(ai_idx, regime_id)) continue;
-         double score = FXAI_GetModelMetaScore(ai_idx, regime_id, min_move_pred);
+         double score = FXAI_GetModelMetaScore(ai_idx, regime_id, H, min_move_pred);
          if(score <= 0.0) continue;
          int sz = ArraySize(cand_ai_ids);
          ArrayResize(cand_ai_ids, sz + 1);
@@ -1034,7 +1034,7 @@ int SpecialDirectionAI(const string symbol)
       }
       else
       {
-         double meta_w = FXAI_GetModelMetaScore(ai_idx, regime_id, min_move_pred);
+         double meta_w = FXAI_GetModelMetaScore(ai_idx, regime_id, H, min_move_pred);
          if(meta_w <= 0.0) continue;
 
          double model_buy_ev = ((2.0 * class_probs_pred[(int)FXAI_LABEL_BUY]) - 1.0) * expected_move - min_move_pred;

@@ -125,7 +125,7 @@ void FXAI_GetFeatureClipBounds(const int f, double &lo, double &hi)
       lo = -1.1;
       hi = 1.1;
    }
-   else if(f >= FXAI_MAIN_MTF_FEATURE_OFFSET && f < FXAI_AI_FEATURES)
+   else if(f >= FXAI_MAIN_MTF_FEATURE_OFFSET && f < FXAI_MACRO_EVENT_FEATURE_OFFSET)
    {
       int rel = 0;
       if(f >= FXAI_CONTEXT_MTF_FEATURE_OFFSET)
@@ -147,6 +147,30 @@ void FXAI_GetFeatureClipBounds(const int f, double &lo, double &hi)
       {
          lo = -6.0;
          hi = 8.0;
+      }
+   }
+   else if(f >= FXAI_MACRO_EVENT_FEATURE_OFFSET && f < FXAI_AI_FEATURES)
+   {
+      int rel = f - FXAI_MACRO_EVENT_FEATURE_OFFSET;
+      if(rel <= 2)
+      {
+         lo = 0.0;
+         hi = 1.2;
+      }
+      else if(rel == 3)
+      {
+         lo = -6.0;
+         hi = 6.0;
+      }
+      else if(rel == 4)
+      {
+         lo = 0.0;
+         hi = 6.0;
+      }
+      else
+      {
+         lo = -1.2;
+         hi = 1.2;
       }
    }
    else if(f >= 50 && f < FXAI_AI_FEATURES)

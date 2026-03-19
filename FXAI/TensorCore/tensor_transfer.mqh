@@ -1,6 +1,16 @@
 #ifndef __FXAI_TENSOR_TRANSFER_MQH__
 #define __FXAI_TENSOR_TRANSFER_MQH__
 
+bool   g_shared_transfer_global_ready = false;
+int    g_shared_transfer_global_steps = 0;
+double g_shared_transfer_global_w[FXAI_SHARED_TRANSFER_LATENT][FXAI_SHARED_TRANSFER_FEATURES];
+double g_shared_transfer_global_b[FXAI_SHARED_TRANSFER_LATENT];
+double g_shared_transfer_global_cls[3][FXAI_SHARED_TRANSFER_LATENT];
+double g_shared_transfer_global_move[FXAI_SHARED_TRANSFER_LATENT];
+double g_shared_transfer_global_domain_emb[FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS][FXAI_SHARED_TRANSFER_LATENT];
+double g_shared_transfer_global_horizon_emb[FXAI_SHARED_TRANSFER_HORIZON_BUCKETS][FXAI_SHARED_TRANSFER_LATENT];
+double g_shared_transfer_global_session_emb[FXAI_PLUGIN_SESSION_BUCKETS][FXAI_SHARED_TRANSFER_LATENT];
+
 int FXAI_SharedTransferDomainBucket(const double domain_hash)
 {
    double v = FXAI_Clamp(domain_hash, 0.0, 1.0 - 1e-9);
@@ -81,6 +91,378 @@ void FXAI_SharedTransferSoftmax(const double &logits[],
    if(den <= 0.0) den = 1.0;
    for(int c=0; c<3; c++)
       probs[c] /= den;
+}
+
+void FXAI_BuildSharedTransferInputGlobal(const double &x[],
+                                         const double domain_hash,
+                                         const int horizon_minutes,
+                                         double &out[])
+{
+   ArrayResize(out, FXAI_SHARED_TRANSFER_FEATURES);
+   out[0] = 1.0;
+   out[1] = FXAI_GetInputFeature(x, 62);
+   out[2] = FXAI_GetInputFeature(x, 63);
+   out[3] = FXAI_GetInputFeature(x, 64);
+   out[4] = FXAI_Clamp(0.5 + 0.5 * FXAI_GetInputFeature(x, 65), 0.0, 1.0);
+
+   double ret_mix = 0.0;
+   double lag_mix = 0.0;
+   double rel_mix = 0.0;
+   double corr_mix = 0.0;
+   double weight_total = 0.0;
+   for(int slot=0; slot<FXAI_CONTEXT_TOP_SYMBOLS; slot++)
+   {
+      int base = 50 + slot * 4;
+      double ctx_ret = FXAI_GetInputFeature(x, base + 0);
+      double ctx_lag = FXAI_GetInputFeature(x, base + 1);
+      double ctx_rel = FXAI_GetInputFeature(x, base + 2);
+      double ctx_corr = FXAI_GetInputFeature(x, base + 3);
+      double w = FXAI_Clamp((0.30 + 0.70 * MathAbs(ctx_corr)) *
+                            (0.35 + 0.65 * out[4]) *
+                            (0.35 + 0.25 * MathAbs(ctx_ret) + 0.25 * MathAbs(ctx_lag) + 0.15 * MathAbs(ctx_rel)),
+                            0.0,
+                            3.0);
+      if(w <= 1e-6)
+         continue;
+      ret_mix += w * ctx_ret;
+      lag_mix += w * ctx_lag;
+      rel_mix += w * ctx_rel;
+      corr_mix += w * ctx_corr;
+      weight_total += w;
+   }
+   if(weight_total > 1e-6)
+   {
+      out[5] = ret_mix / weight_total;
+      out[6] = lag_mix / weight_total;
+      out[7] = rel_mix / weight_total;
+      out[8] = corr_mix / weight_total;
+   }
+   else
+   {
+      out[5] = 0.0;
+      out[6] = 0.0;
+      out[7] = 0.0;
+      out[8] = 0.0;
+   }
+
+   double domain = FXAI_Clamp(domain_hash, 0.0, 1.0);
+   double horizon_scale = FXAI_Clamp(MathLog(1.0 + (double)MathMax(horizon_minutes, 1)) / MathLog(1.0 + 1440.0), 0.0, 1.0);
+   double main_mtf_body = 0.0;
+   double main_mtf_loc = 0.0;
+   double main_mtf_range = 0.0;
+   double main_mtf_spread = 0.0;
+   for(int tf_slot=0; tf_slot<FXAI_MAIN_MTF_TF_COUNT; tf_slot++)
+   {
+      int base = FXAI_MainMTFFeatureIndex(tf_slot, 0);
+      if(base < 0)
+         continue;
+      main_mtf_body += FXAI_GetInputFeature(x, base + 0);
+      main_mtf_loc += FXAI_GetInputFeature(x, base + 1);
+      main_mtf_range += FXAI_GetInputFeature(x, base + 2);
+      main_mtf_spread += FXAI_GetInputFeature(x, base + 3);
+   }
+   main_mtf_body /= (double)MathMax(FXAI_MAIN_MTF_TF_COUNT, 1);
+   main_mtf_loc /= (double)MathMax(FXAI_MAIN_MTF_TF_COUNT, 1);
+   main_mtf_range /= (double)MathMax(FXAI_MAIN_MTF_TF_COUNT, 1);
+   main_mtf_spread /= (double)MathMax(FXAI_MAIN_MTF_TF_COUNT, 1);
+
+   double ctx_mtf_body = 0.0;
+   double ctx_mtf_loc = 0.0;
+   double ctx_mtf_range = 0.0;
+   double ctx_mtf_spread = 0.0;
+   double ctx_mtf_weight = 0.0;
+   for(int slot=0; slot<FXAI_CONTEXT_TOP_SYMBOLS; slot++)
+   {
+      double slot_corr = MathAbs(FXAI_GetInputFeature(x, 50 + slot * 4 + 3));
+      double slot_weight = 0.35 + 0.65 * slot_corr;
+      double slot_body = 0.0;
+      double slot_loc = 0.0;
+      double slot_range = 0.0;
+      double slot_spread = 0.0;
+      int slot_used = 0;
+      for(int tf_slot=0; tf_slot<FXAI_CONTEXT_MTF_TF_COUNT; tf_slot++)
+      {
+         int base = FXAI_ContextMTFFeatureIndex(slot, tf_slot, 0);
+         if(base < 0)
+            continue;
+         slot_body += FXAI_GetInputFeature(x, base + 0);
+         slot_loc += FXAI_GetInputFeature(x, base + 1);
+         slot_range += FXAI_GetInputFeature(x, base + 2);
+         slot_spread += FXAI_GetInputFeature(x, base + 3);
+         slot_used++;
+      }
+      if(slot_used <= 0)
+         continue;
+      slot_body /= (double)slot_used;
+      slot_loc /= (double)slot_used;
+      slot_range /= (double)slot_used;
+      slot_spread /= (double)slot_used;
+      ctx_mtf_body += slot_weight * slot_body;
+      ctx_mtf_loc += slot_weight * slot_loc;
+      ctx_mtf_range += slot_weight * slot_range;
+      ctx_mtf_spread += slot_weight * slot_spread;
+      ctx_mtf_weight += slot_weight;
+   }
+   if(ctx_mtf_weight > 1e-6)
+   {
+      ctx_mtf_body /= ctx_mtf_weight;
+      ctx_mtf_loc /= ctx_mtf_weight;
+      ctx_mtf_range /= ctx_mtf_weight;
+      ctx_mtf_spread /= ctx_mtf_weight;
+   }
+
+   double macro_pre = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 0);
+   double macro_post = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 1);
+   double macro_imp = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 2);
+   double macro_surprise = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 3);
+   double macro_surprise_abs = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 4);
+   double macro_class = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 5);
+
+   out[9] = 2.0 * domain - 1.0;
+   out[10] = 2.0 * horizon_scale - 1.0;
+   out[11] = FXAI_Clamp(0.60 * FXAI_GetInputFeature(x, 72) +
+                        0.15 * FXAI_GetInputFeature(x, 73) +
+                        0.10 * macro_pre -
+                        0.08 * macro_post +
+                        0.07 * main_mtf_loc +
+                        0.06 * ctx_mtf_loc,
+                        -1.0,
+                        1.0);
+   out[12] = FXAI_Clamp(0.28 * FXAI_GetInputFeature(x, 74) +
+                        0.16 * FXAI_GetInputFeature(x, 75) +
+                        0.14 * FXAI_GetInputFeature(x, 78) +
+                        0.10 * macro_imp +
+                        0.08 * macro_class +
+                        0.08 * main_mtf_body +
+                        0.06 * ctx_mtf_body,
+                        -1.0,
+                        1.0);
+   out[13] = FXAI_Clamp(0.16 * FXAI_GetInputFeature(x, 76) -
+                        0.16 * FXAI_GetInputFeature(x, 77) -
+                        0.10 * FXAI_GetInputFeature(x, 79) +
+                        0.08 * FXAI_GetInputFeature(x, 6) +
+                        0.08 * FXAI_GetInputFeature(x, 81) +
+                        0.06 * macro_surprise_abs -
+                        0.05 * main_mtf_spread -
+                        0.05 * FXAI_GetInputFeature(x, 82) +
+                        0.04 * ctx_mtf_spread,
+                        -4.0,
+                        4.0);
+   out[14] = FXAI_Clamp(0.42 * FXAI_GetInputFeature(x, 18) +
+                        0.18 * FXAI_GetInputFeature(x, 19) -
+                        0.18 * FXAI_GetInputFeature(x, 20) +
+                        0.12 * FXAI_GetInputFeature(x, 21) +
+                        0.06 * macro_imp +
+                        0.08 * main_mtf_body +
+                        0.08 * main_mtf_loc,
+                        -4.0,
+                        4.0);
+   out[15] = FXAI_Clamp(0.16 * FXAI_GetInputFeature(x, 66) +
+                        0.12 * FXAI_GetInputFeature(x, 67) +
+                        0.12 * FXAI_GetInputFeature(x, 68) +
+                        0.10 * FXAI_GetInputFeature(x, 69) +
+                        0.14 * FXAI_GetInputFeature(x, 71) +
+                        0.10 * macro_surprise +
+                        0.08 * macro_surprise_abs +
+                        0.06 * FXAI_GetInputFeature(x, 81) +
+                        0.04 * FXAI_GetInputFeature(x, 83) +
+                        0.05 * main_mtf_range +
+                        0.05 * ctx_mtf_range,
+                        -6.0,
+                        6.0);
+   out[16] = FXAI_Clamp(0.48 * FXAI_GetInputFeature(x, 68) +
+                        0.18 * FXAI_GetInputFeature(x, 81) +
+                        0.12 * FXAI_GetInputFeature(x, 80) +
+                        0.10 * macro_imp +
+                        0.08 * macro_surprise_abs +
+                        0.08 * main_mtf_spread,
+                        -4.0,
+                        8.0);
+   out[17] = FXAI_Clamp(0.55 * FXAI_GetInputFeature(x, 70) +
+                        0.18 * FXAI_GetInputFeature(x, 82) +
+                        0.10 * macro_post +
+                        0.08 * macro_surprise_abs +
+                        0.05 * main_mtf_range +
+                        0.04 * MathAbs(FXAI_GetInputFeature(x, 83)),
+                        0.0,
+                        8.0);
+   out[18] = FXAI_Clamp(0.45 * macro_surprise +
+                        0.20 * macro_class +
+                        0.15 * FXAI_GetInputFeature(x, 78) +
+                        0.10 * FXAI_GetInputFeature(x, 72) +
+                        0.10 * FXAI_GetInputFeature(x, 73),
+                        -6.0,
+                        6.0);
+   out[19] = FXAI_Clamp(0.40 * macro_surprise_abs +
+                        0.22 * macro_imp +
+                        0.18 * macro_pre +
+                        0.10 * macro_post +
+                        0.10 * FXAI_GetInputFeature(x, 79),
+                        0.0,
+                        6.0);
+}
+
+int FXAI_SharedTransferResolveClassLabel(const int y,
+                                         const double cost_points,
+                                         const double move_points)
+{
+   if(y >= (int)FXAI_LABEL_SELL && y <= (int)FXAI_LABEL_SKIP)
+      return y;
+
+   double cost = MathMax(cost_points, 0.0);
+   double edge = MathAbs(move_points) - cost;
+   double skip_band = 0.10 + 0.25 * MathMax(cost, 0.0);
+   if(edge <= skip_band)
+      return (int)FXAI_LABEL_SKIP;
+   if(y > 0)
+      return (int)FXAI_LABEL_BUY;
+   if(y == 0)
+      return (int)FXAI_LABEL_SELL;
+   return (move_points >= 0.0 ? (int)FXAI_LABEL_BUY : (int)FXAI_LABEL_SELL);
+}
+
+void FXAI_ResetGlobalSharedTransferBackbone(void)
+{
+   g_shared_transfer_global_ready = false;
+   g_shared_transfer_global_steps = 0;
+   for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+   {
+      g_shared_transfer_global_b[j] = 0.0;
+      g_shared_transfer_global_move[j] = 0.01 * (double)(((j * 7) % 11) - 5);
+      for(int c=0; c<3; c++)
+         g_shared_transfer_global_cls[c][j] = 0.01 * (double)((((c + 1) * (j + 5)) % 9) - 4);
+      for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
+         g_shared_transfer_global_w[j][i] = 0.0035 * (double)((((j + 2) * (i + 3)) % 13) - 6);
+   }
+   for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
+      for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+         g_shared_transfer_global_domain_emb[d][j] = 0.004 * (double)(((d + 3) * (j + 1)) % 7 - 3);
+   for(int h=0; h<FXAI_SHARED_TRANSFER_HORIZON_BUCKETS; h++)
+      for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+         g_shared_transfer_global_horizon_emb[h][j] = 0.003 * (double)(((h + 5) * (j + 2)) % 9 - 4);
+   for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
+      for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+         g_shared_transfer_global_session_emb[s][j] = 0.002 * (double)(((s + 7) * (j + 4)) % 11 - 5);
+}
+
+double FXAI_GlobalSharedTransferTrust(void)
+{
+   return FXAI_Clamp((double)g_shared_transfer_global_steps / 192.0, 0.0, 1.0);
+}
+
+void FXAI_GlobalSharedTransferEncode(const double &a[],
+                                     const double domain_hash,
+                                     const int horizon_minutes,
+                                     const int session_bucket,
+                                     double &latent[])
+{
+   FXAI_SharedTransferEncode(a,
+                             FXAI_SharedTransferDomainBucket(domain_hash),
+                             FXAI_SharedTransferHorizonBucket(horizon_minutes),
+                             session_bucket,
+                             g_shared_transfer_global_w,
+                             g_shared_transfer_global_b,
+                             g_shared_transfer_global_domain_emb,
+                             g_shared_transfer_global_horizon_emb,
+                             g_shared_transfer_global_session_emb,
+                             latent);
+}
+
+void FXAI_GlobalSharedTransferPredict(const double &a[],
+                                      const double domain_hash,
+                                      const int horizon_minutes,
+                                      const int session_bucket,
+                                      double &probs[],
+                                      double &move_adj)
+{
+   double latent[];
+   FXAI_GlobalSharedTransferEncode(a, domain_hash, horizon_minutes, session_bucket, latent);
+
+   double logits[3];
+   for(int c=0; c<3; c++)
+   {
+      logits[c] = 0.0;
+      for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+         logits[c] += g_shared_transfer_global_cls[c][j] * latent[j];
+   }
+   FXAI_SharedTransferSoftmax(logits, probs);
+
+   move_adj = 0.0;
+   for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+      move_adj += g_shared_transfer_global_move[j] * latent[j];
+}
+
+void FXAI_GlobalSharedTransferUpdate(const double &a[],
+                                     const double domain_hash,
+                                     const int horizon_minutes,
+                                     const int session_bucket,
+                                     const int y,
+                                     const double cost_points,
+                                     const double move_points,
+                                     const double sample_w,
+                                     const double lr)
+{
+   int cls = FXAI_SharedTransferResolveClassLabel(y, cost_points, move_points);
+   double latent[];
+   FXAI_GlobalSharedTransferEncode(a, domain_hash, horizon_minutes, session_bucket, latent);
+
+   double logits[3];
+   for(int c=0; c<3; c++)
+   {
+      logits[c] = 0.0;
+      for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+         logits[c] += g_shared_transfer_global_cls[c][j] * latent[j];
+   }
+   double probs[];
+   FXAI_SharedTransferSoftmax(logits, probs);
+
+   double latent_grad[FXAI_SHARED_TRANSFER_LATENT];
+   for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+      latent_grad[j] = 0.0;
+
+   double step = FXAI_Clamp(0.10 * lr * FXAI_Clamp(sample_w, 0.25, 4.0), 0.0001, 0.0100);
+   for(int c=0; c<3; c++)
+   {
+      double target = (c == cls ? 1.0 : 0.0);
+      double err = target - (ArraySize(probs) == 3 ? probs[c] : 0.3333333);
+      for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+      {
+         latent_grad[j] += err * g_shared_transfer_global_cls[c][j];
+         g_shared_transfer_global_cls[c][j] = FXAI_ClipSym(g_shared_transfer_global_cls[c][j] + step * err * latent[j], 3.0);
+      }
+   }
+
+   double move_pred = 0.0;
+   for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+      move_pred += g_shared_transfer_global_move[j] * latent[j];
+   double move_target = FXAI_Clamp(MathLog(1.0 + MathAbs(move_points)), 0.0, 4.0);
+   double move_err = FXAI_ClipSym(move_target - move_pred, 3.0);
+   for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+   {
+      latent_grad[j] += 0.30 * move_err * g_shared_transfer_global_move[j];
+      g_shared_transfer_global_move[j] = FXAI_ClipSym(g_shared_transfer_global_move[j] + 0.60 * step * move_err * latent[j], 3.0);
+   }
+
+   int domain_bucket = FXAI_SharedTransferDomainBucket(domain_hash);
+   int horizon_bucket = FXAI_SharedTransferHorizonBucket(horizon_minutes);
+   int session_idx = session_bucket;
+   if(session_idx < 0) session_idx = 0;
+   if(session_idx >= FXAI_PLUGIN_SESSION_BUCKETS) session_idx = FXAI_PLUGIN_SESSION_BUCKETS - 1;
+
+   for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+   {
+      double g = FXAI_ClipSym(latent_grad[j] * (1.0 - latent[j] * latent[j]), 2.5);
+      g_shared_transfer_global_b[j] = FXAI_ClipSym(g_shared_transfer_global_b[j] + step * g, 3.0);
+      for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
+         g_shared_transfer_global_w[j][i] = FXAI_ClipSym(g_shared_transfer_global_w[j][i] + step * g * a[i], 3.0);
+      g_shared_transfer_global_domain_emb[domain_bucket][j] = FXAI_ClipSym(g_shared_transfer_global_domain_emb[domain_bucket][j] + 0.45 * step * g, 3.0);
+      g_shared_transfer_global_horizon_emb[horizon_bucket][j] = FXAI_ClipSym(g_shared_transfer_global_horizon_emb[horizon_bucket][j] + 0.45 * step * g, 3.0);
+      g_shared_transfer_global_session_emb[session_idx][j] = FXAI_ClipSym(g_shared_transfer_global_session_emb[session_idx][j] + 0.35 * step * g, 3.0);
+   }
+
+   g_shared_transfer_global_steps++;
+   if(g_shared_transfer_global_steps >= 48)
+      g_shared_transfer_global_ready = true;
 }
 
 #endif // __FXAI_TENSOR_TRANSFER_MQH__

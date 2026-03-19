@@ -7,7 +7,9 @@
 #define FXAI_CONTEXT_MTF_TF_COUNT 5
 #define FXAI_MAIN_MTF_FEATURE_OFFSET 84
 #define FXAI_CONTEXT_MTF_FEATURE_OFFSET (FXAI_MAIN_MTF_FEATURE_OFFSET + FXAI_MAIN_MTF_TF_COUNT * FXAI_MTF_STATE_FEATURES_PER_TF)
-#define FXAI_AI_FEATURES (FXAI_CONTEXT_MTF_FEATURE_OFFSET + FXAI_CONTEXT_TOP_SYMBOLS * FXAI_CONTEXT_MTF_TF_COUNT * FXAI_MTF_STATE_FEATURES_PER_TF)
+#define FXAI_MACRO_EVENT_FEATURE_OFFSET (FXAI_CONTEXT_MTF_FEATURE_OFFSET + FXAI_CONTEXT_TOP_SYMBOLS * FXAI_CONTEXT_MTF_TF_COUNT * FXAI_MTF_STATE_FEATURES_PER_TF)
+#define FXAI_MACRO_EVENT_FEATURES 6
+#define FXAI_AI_FEATURES (FXAI_MACRO_EVENT_FEATURE_OFFSET + FXAI_MACRO_EVENT_FEATURES)
 #define FXAI_AI_WEIGHTS (FXAI_AI_FEATURES + 1)
 #define FXAI_AI_MLP_HIDDEN 12
 #define FXAI_AI_COUNT 32
@@ -371,6 +373,22 @@ struct FXAIExecutionTraceStats
    double rollover_exposure;
 };
 
+struct FXAIBrokerExecutionStats
+{
+   double coverage;
+   double slippage_points;
+   double latency_points;
+   double reject_prob;
+   double partial_fill_prob;
+};
+
+bool   g_broker_execution_ready = false;
+double g_broker_execution_obs[FXAI_PLUGIN_SESSION_BUCKETS][FXAI_SHARED_TRANSFER_HORIZON_BUCKETS];
+double g_broker_execution_slippage_ema[FXAI_PLUGIN_SESSION_BUCKETS][FXAI_SHARED_TRANSFER_HORIZON_BUCKETS];
+double g_broker_execution_latency_ema[FXAI_PLUGIN_SESSION_BUCKETS][FXAI_SHARED_TRANSFER_HORIZON_BUCKETS];
+double g_broker_execution_reject_ema[FXAI_PLUGIN_SESSION_BUCKETS][FXAI_SHARED_TRANSFER_HORIZON_BUCKETS];
+double g_broker_execution_partial_ema[FXAI_PLUGIN_SESSION_BUCKETS][FXAI_SHARED_TRANSFER_HORIZON_BUCKETS];
+
 struct FXAIAIModelOutputV4
 {
    double class_probs[3];
@@ -562,6 +580,111 @@ double FXAI_SymbolHash01(const string symbol)
       h *= 16777619U;
    }
    return (double)(h % 100000U) / 100000.0;
+}
+
+int FXAI_BrokerExecutionHorizonBucket(const int horizon_minutes)
+{
+   int h = horizon_minutes;
+   if(h < 1) h = 1;
+   if(h <= 2) return 0;
+   if(h <= 5) return 1;
+   if(h <= 15) return 2;
+   if(h <= 30) return 3;
+   if(h <= 60) return 4;
+   if(h <= 240) return 5;
+   if(h <= 720) return 6;
+   return FXAI_SHARED_TRANSFER_HORIZON_BUCKETS - 1;
+}
+
+void FXAI_ResetBrokerExecutionReplayStats(void)
+{
+   g_broker_execution_ready = false;
+   for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
+   {
+      for(int h=0; h<FXAI_SHARED_TRANSFER_HORIZON_BUCKETS; h++)
+      {
+         g_broker_execution_obs[s][h] = 0.0;
+         g_broker_execution_slippage_ema[s][h] = 0.0;
+         g_broker_execution_latency_ema[s][h] = 0.0;
+         g_broker_execution_reject_ema[s][h] = 0.0;
+         g_broker_execution_partial_ema[s][h] = 0.0;
+      }
+   }
+}
+
+void FXAI_RecordBrokerExecutionEvent(const datetime sample_time,
+                                     const int horizon_minutes,
+                                     const double slippage_points,
+                                     const double latency_points,
+                                     const bool rejected,
+                                     const bool partial_fill)
+{
+   int s = FXAI_DeriveSessionBucket(sample_time);
+   int h = FXAI_BrokerExecutionHorizonBucket(horizon_minutes);
+   if(s < 0) s = 0;
+   if(s >= FXAI_PLUGIN_SESSION_BUCKETS) s = FXAI_PLUGIN_SESSION_BUCKETS - 1;
+   if(h < 0) h = 0;
+   if(h >= FXAI_SHARED_TRANSFER_HORIZON_BUCKETS) h = FXAI_SHARED_TRANSFER_HORIZON_BUCKETS - 1;
+
+   double obs = g_broker_execution_obs[s][h];
+   double alpha = FXAI_Clamp(0.18 / MathSqrt(1.0 + 0.05 * obs), 0.02, 0.18);
+   double slip = MathMax(slippage_points, 0.0);
+   double lat = MathMax(latency_points, 0.0);
+   double rej = (rejected ? 1.0 : 0.0);
+   double part = (partial_fill ? 1.0 : 0.0);
+
+   if(obs <= 0.0)
+   {
+      g_broker_execution_slippage_ema[s][h] = slip;
+      g_broker_execution_latency_ema[s][h] = lat;
+      g_broker_execution_reject_ema[s][h] = rej;
+      g_broker_execution_partial_ema[s][h] = part;
+   }
+   else
+   {
+      g_broker_execution_slippage_ema[s][h] =
+         (1.0 - alpha) * g_broker_execution_slippage_ema[s][h] + alpha * slip;
+      g_broker_execution_latency_ema[s][h] =
+         (1.0 - alpha) * g_broker_execution_latency_ema[s][h] + alpha * lat;
+      g_broker_execution_reject_ema[s][h] =
+         (1.0 - alpha) * g_broker_execution_reject_ema[s][h] + alpha * rej;
+      g_broker_execution_partial_ema[s][h] =
+         (1.0 - alpha) * g_broker_execution_partial_ema[s][h] + alpha * part;
+   }
+
+   g_broker_execution_obs[s][h] = MathMin(obs + 1.0, 50000.0);
+   g_broker_execution_ready = true;
+}
+
+void FXAI_GetBrokerExecutionStress(const datetime sample_time,
+                                   const int horizon_minutes,
+                                   FXAIBrokerExecutionStats &stats)
+{
+   stats.coverage = 0.0;
+   stats.slippage_points = 0.0;
+   stats.latency_points = 0.0;
+   stats.reject_prob = 0.0;
+   stats.partial_fill_prob = 0.0;
+
+   if(!g_broker_execution_ready)
+      return;
+
+   int s = FXAI_DeriveSessionBucket(sample_time);
+   int h = FXAI_BrokerExecutionHorizonBucket(horizon_minutes);
+   if(s < 0) s = 0;
+   if(s >= FXAI_PLUGIN_SESSION_BUCKETS) s = FXAI_PLUGIN_SESSION_BUCKETS - 1;
+   if(h < 0) h = 0;
+   if(h >= FXAI_SHARED_TRANSFER_HORIZON_BUCKETS) h = FXAI_SHARED_TRANSFER_HORIZON_BUCKETS - 1;
+
+   double obs = g_broker_execution_obs[s][h];
+   if(obs <= 0.0)
+      return;
+
+   stats.coverage = FXAI_Clamp(obs / 64.0, 0.0, 1.0);
+   stats.slippage_points = MathMax(g_broker_execution_slippage_ema[s][h], 0.0);
+   stats.latency_points = MathMax(g_broker_execution_latency_ema[s][h], 0.0);
+   stats.reject_prob = FXAI_Clamp(g_broker_execution_reject_ema[s][h], 0.0, 1.0);
+   stats.partial_fill_prob = FXAI_Clamp(g_broker_execution_partial_ema[s][h], 0.0, 1.0);
 }
 
 double FXAI_Tanh(const double z)
@@ -841,6 +964,27 @@ void FXAI_BuildExecutionReplayFrame(const FXAIExecutionProfile &profile,
                                         0.95);
    frame.drift_penalty_points = 0.05 * MathMax(profile.cost_buffer_points, 0.0) *
                                 (trace_session + trace_roll + 0.35 * trace_spread);
+
+   FXAIBrokerExecutionStats broker_stats;
+   FXAI_GetBrokerExecutionStress(sample_time, horizon_minutes, broker_stats);
+   if(broker_stats.coverage > 1e-6)
+   {
+      double slip_ref = MathMax(profile.slippage_points + 0.25, 0.25);
+      double broker_slip_mult = 1.0 + 0.35 * broker_stats.coverage *
+                                FXAI_Clamp(broker_stats.slippage_points / slip_ref, 0.0, 3.0);
+      frame.slippage_mult *= broker_slip_mult;
+      frame.fill_mult *= 1.0 + 0.20 * broker_stats.coverage * broker_stats.partial_fill_prob;
+      frame.latency_add_points += broker_stats.coverage * broker_stats.latency_points;
+      frame.reject_prob = FXAI_Clamp((1.0 - 0.55 * broker_stats.coverage) * frame.reject_prob +
+                                     0.55 * broker_stats.coverage * MathMax(frame.reject_prob, broker_stats.reject_prob),
+                                     0.0,
+                                     0.75);
+      frame.partial_fill_prob = FXAI_Clamp((1.0 - 0.55 * broker_stats.coverage) * frame.partial_fill_prob +
+                                           0.55 * broker_stats.coverage * MathMax(frame.partial_fill_prob, broker_stats.partial_fill_prob),
+                                           0.0,
+                                           0.99);
+      frame.drift_penalty_points += 0.20 * broker_stats.coverage * broker_stats.slippage_points;
+   }
 
    if((path_flags & FXAI_PATHFLAG_DUAL_HIT) != 0)
       frame.event_flags |= FXAI_PATHFLAG_DUAL_HIT;
@@ -1241,7 +1385,11 @@ int FXAI_GetFeatureGroupForIndex(const int feature_idx)
    if(feature_idx == 79) return (int)FXAI_FEAT_GROUP_FILTERS;
    if(feature_idx <= 83) return (int)FXAI_FEAT_GROUP_COST;
    if(feature_idx < FXAI_CONTEXT_MTF_FEATURE_OFFSET) return (int)FXAI_FEAT_GROUP_MULTI_TIMEFRAME;
-   return (int)FXAI_FEAT_GROUP_CONTEXT;
+   if(feature_idx < FXAI_MACRO_EVENT_FEATURE_OFFSET) return (int)FXAI_FEAT_GROUP_CONTEXT;
+
+   int macro_rel = feature_idx - FXAI_MACRO_EVENT_FEATURE_OFFSET;
+   if(macro_rel <= 2) return (int)FXAI_FEAT_GROUP_TIME;
+   return (int)FXAI_FEAT_GROUP_FILTERS;
 }
 
 ulong FXAI_DefaultFeatureGroupsForFamily(const int family)
@@ -1324,7 +1472,7 @@ bool FXAI_IsFeatureEnabledForSchema(const int feature_idx,
                                     const int schema_id,
                                     const ulong groups_mask)
 {
-   if(feature_idx >= FXAI_MAIN_MTF_FEATURE_OFFSET && feature_idx < FXAI_AI_FEATURES)
+   if(feature_idx >= FXAI_MAIN_MTF_FEATURE_OFFSET && feature_idx < FXAI_MACRO_EVENT_FEATURE_OFFSET)
       return true;
 
    int group_id = FXAI_GetFeatureGroupForIndex(feature_idx);

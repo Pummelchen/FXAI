@@ -1487,7 +1487,7 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
                                         expected_move,
                                         probs_eval);
 
-            double meta_w = FXAI_GetModelMetaScore(ai_idx, regime_id, samples[i].min_move_points);
+            double meta_w = FXAI_GetModelMetaScore(ai_idx, regime_id, H, samples[i].min_move_points);
             if(meta_w <= 0.0) meta_w = 1.0;
             double model_buy_ev = ((2.0 * probs_eval[(int)FXAI_LABEL_BUY]) - 1.0) * expected_move - samples[i].min_move_points;
             double model_sell_ev = ((2.0 * probs_eval[(int)FXAI_LABEL_SELL]) - 1.0) * expected_move - samples[i].min_move_points;
@@ -1687,6 +1687,120 @@ void FXAI_WarmupPretrainSharedTransferSamples(const FXAIPreparedSample &samples[
       emitted++;
       if(emitted >= sample_cap)
          break;
+   }
+}
+
+void FXAI_WarmupPretrainGlobalTransferSamples(const FXAIPreparedSample &samples[],
+                                              const int sample_cap,
+                                              const double sample_scale,
+                                              const double lr)
+{
+   int n = ArraySize(samples);
+   if(n <= 0 || sample_cap <= 0)
+      return;
+
+   int valid_total = 0;
+   for(int i=0; i<n; i++)
+      if(samples[i].valid)
+         valid_total++;
+   if(valid_total <= 0)
+      return;
+
+   int stride = 1;
+   if(valid_total > sample_cap)
+      stride = MathMax(1, valid_total / sample_cap);
+
+   int emitted = 0;
+   int seen = 0;
+   for(int i=n - 1; i>=0; i--)
+   {
+      if(!samples[i].valid)
+         continue;
+      if((seen % stride) != 0)
+      {
+         seen++;
+         continue;
+      }
+      seen++;
+
+      double a[];
+      FXAI_BuildSharedTransferInputGlobal(samples[i].x,
+                                          samples[i].domain_hash,
+                                          samples[i].horizon_minutes,
+                                          a);
+      double sample_w = FXAI_Clamp(samples[i].sample_weight * sample_scale, 0.20, 4.00);
+      FXAI_GlobalSharedTransferUpdate(a,
+                                      samples[i].domain_hash,
+                                      samples[i].horizon_minutes,
+                                      FXAI_DeriveSessionBucket(samples[i].sample_time),
+                                      samples[i].label_class,
+                                      samples[i].cost_points,
+                                      samples[i].move_points,
+                                      sample_w,
+                                      lr);
+      emitted++;
+      if(emitted >= sample_cap)
+         break;
+   }
+
+   if(emitted > 0)
+      FXAI_MarkRuntimeArtifactsDirty();
+}
+
+void FXAI_WarmupBuildTransferUniverse(const string main_symbol,
+                                      string &symbols[])
+{
+   ArrayResize(symbols, 0);
+
+   string seed_symbols[] = {"EURUSD", "USDJPY", "GBPUSD", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD", "EURJPY", "EURGBP", "EURAUD"};
+   int total = 0;
+   if(StringLen(main_symbol) > 0)
+   {
+      ArrayResize(symbols, 1);
+      symbols[0] = main_symbol;
+      total = 1;
+   }
+
+   for(int i=0; i<ArraySize(g_context_symbols); i++)
+   {
+      string candidate = g_context_symbols[i];
+      if(StringLen(candidate) <= 0)
+         continue;
+      bool exists = false;
+      for(int j=0; j<total; j++)
+      {
+         if(symbols[j] == candidate)
+         {
+            exists = true;
+            break;
+         }
+      }
+      if(exists)
+         continue;
+      ArrayResize(symbols, total + 1);
+      symbols[total] = candidate;
+      total++;
+   }
+
+   for(int i=0; i<ArraySize(seed_symbols); i++)
+   {
+      string candidate = seed_symbols[i];
+      if(StringLen(candidate) <= 0)
+         continue;
+      bool exists = false;
+      for(int j=0; j<total; j++)
+      {
+         if(symbols[j] == candidate)
+         {
+            exists = true;
+            break;
+         }
+      }
+      if(exists)
+         continue;
+      ArrayResize(symbols, total + 1);
+      symbols[total] = candidate;
+      total++;
    }
 }
 
@@ -2424,6 +2538,10 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
 
       FXAI_WarmupPrimeFeatureDriftBaseline(runtime_samples);
       int transfer_cap = MathMin(640, MathMax(128, warmup_samples / 6));
+      FXAI_WarmupPretrainGlobalTransferSamples(runtime_samples,
+                                               MathMin(transfer_cap * 2, 1536),
+                                               0.75,
+                                               base_hp.lr);
       for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
       {
          CFXAIAIPlugin *runtime = g_plugins.Get(ai_idx);
@@ -2438,13 +2556,14 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
                                                   hp_transfer);
       }
 
-      int transfer_symbols = ArraySize(g_context_symbols);
-      if(transfer_symbols > FXAI_CONTEXT_TOP_SYMBOLS)
-         transfer_symbols = FXAI_CONTEXT_TOP_SYMBOLS;
-      for(int s=0; s<transfer_symbols; s++)
+      string transfer_universe[];
+      FXAI_WarmupBuildTransferUniverse(symbol, transfer_universe);
+      for(int s=0; s<ArraySize(transfer_universe); s++)
       {
          FXAIPreparedSample transfer_samples[];
-         if(!FXAI_WarmupBuildTransferSymbolSamplesForHorizon(g_context_symbols[s],
+         if(transfer_universe[s] == symbol)
+            continue;
+         if(!FXAI_WarmupBuildTransferSymbolSamplesForHorizon(transfer_universe[s],
                                                              symbol,
                                                              needed,
                                                              max_h,
@@ -2456,7 +2575,10 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
                                                              transfer_samples))
             continue;
 
-         FXAI_WarmupPrimeFeatureDriftBaseline(transfer_samples);
+         FXAI_WarmupPretrainGlobalTransferSamples(transfer_samples,
+                                                  MathMax(96, transfer_cap),
+                                                  0.60,
+                                                  base_hp.lr);
          for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
          {
             CFXAIAIPlugin *runtime = g_plugins.Get(ai_idx);

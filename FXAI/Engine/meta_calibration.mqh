@@ -121,6 +121,13 @@ void FXAI_ResetModelPerformanceState(const int ai_idx)
       g_model_regime_edge_ema[ai_idx][r] = 0.0;
       g_model_regime_edge_ready[ai_idx][r] = false;
       g_model_regime_obs[ai_idx][r] = 0;
+      for(int h=0; h<FXAI_MAX_HORIZONS; h++)
+      {
+         g_model_context_edge_ema[ai_idx][r][h] = 0.0;
+         g_model_context_regret_ema[ai_idx][r][h] = 0.0;
+         g_model_context_ready[ai_idx][r][h] = false;
+         g_model_context_obs[ai_idx][r][h] = 0;
+      }
    }
 }
 
@@ -142,6 +149,36 @@ double FXAI_GetHorizonRegimeEdge(const int regime_id, const int horizon_minutes)
    {
       return g_horizon_regime_edge_ema[regime_id][hslot];
    }
+   return 0.0;
+}
+
+double FXAI_GetModelContextEdge(const int ai_idx,
+                                const int regime_id,
+                                const int horizon_minutes)
+{
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT) return 0.0;
+   int r = regime_id;
+   if(r < 0 || r >= FXAI_REGIME_COUNT) r = 0;
+   int hslot = FXAI_GetHorizonSlot(horizon_minutes);
+   if(hslot < 0 || hslot >= FXAI_MAX_HORIZONS)
+      return 0.0;
+   if(g_model_context_ready[ai_idx][r][hslot])
+      return g_model_context_edge_ema[ai_idx][r][hslot];
+   return FXAI_GetModelRegimeEdge(ai_idx, regime_id);
+}
+
+double FXAI_GetModelContextRegret(const int ai_idx,
+                                  const int regime_id,
+                                  const int horizon_minutes)
+{
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT) return 0.0;
+   int r = regime_id;
+   if(r < 0 || r >= FXAI_REGIME_COUNT) r = 0;
+   int hslot = FXAI_GetHorizonSlot(horizon_minutes);
+   if(hslot < 0 || hslot >= FXAI_MAX_HORIZONS)
+      return 0.0;
+   if(g_model_context_ready[ai_idx][r][hslot])
+      return g_model_context_regret_ema[ai_idx][r][hslot];
    return 0.0;
 }
 
@@ -168,6 +205,7 @@ bool FXAI_IsModelPruned(const int ai_idx, const int regime_id)
 
 double FXAI_GetModelMetaScore(const int ai_idx,
                               const int regime_id,
+                              const int horizon_minutes,
                               const double min_move_points)
 {
    if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT) return 0.0;
@@ -176,7 +214,20 @@ double FXAI_GetModelMetaScore(const int ai_idx,
    double edge = FXAI_GetModelRegimeEdge(ai_idx, regime_id);
    double edge_scale = 1.0 + FXAI_Clamp(edge / MathMax(min_move_points, 0.50), -0.70, 1.20);
    if(edge_scale < 0.15) edge_scale = 0.15;
-   return rel * meta * edge_scale;
+   double ctx_edge = FXAI_GetModelContextEdge(ai_idx, regime_id, horizon_minutes);
+   double ctx_regret = FXAI_GetModelContextRegret(ai_idx, regime_id, horizon_minutes);
+   int r = regime_id;
+   if(r < 0 || r >= FXAI_REGIME_COUNT) r = 0;
+   int hslot = FXAI_GetHorizonSlot(horizon_minutes);
+   int obs = (hslot >= 0 && hslot < FXAI_MAX_HORIZONS ? g_model_context_obs[ai_idx][r][hslot] : 0);
+   double ctx_trust = FXAI_Clamp((double)obs / 48.0, 0.0, 1.0);
+   double ctx_factor = 1.0 +
+                       ctx_trust * FXAI_Clamp(0.55 * (ctx_edge / MathMax(min_move_points, 0.50)) -
+                                              0.40 * ctx_regret,
+                                              -0.80,
+                                              1.20);
+   ctx_factor = FXAI_Clamp(ctx_factor, 0.25, 2.20);
+   return rel * meta * edge_scale * ctx_factor;
 }
 
 void FXAI_UpdateModelPerformance(const int ai_idx,
@@ -290,6 +341,28 @@ void FXAI_UpdateModelPerformance(const int ai_idx,
          if(g_horizon_regime_total_obs[regime_id] > 1e9)
             g_horizon_regime_total_obs[regime_id] = 1e9;
       }
+
+      int r_ctx = regime_id;
+      if(r_ctx < 0 || r_ctx >= FXAI_REGIME_COUNT) r_ctx = 0;
+      double realized_ratio = FXAI_Clamp(realized_net / min_mv, -6.0, 6.0);
+      double pred_ratio = FXAI_Clamp(pred_edge / min_mv, -6.0, 6.0);
+      double regret_ratio = FXAI_Clamp(MathMax(pred_ratio - realized_ratio, 0.0), 0.0, 6.0);
+      if(!g_model_context_ready[ai_idx][r_ctx][hslot])
+      {
+         g_model_context_edge_ema[ai_idx][r_ctx][hslot] = realized_net;
+         g_model_context_regret_ema[ai_idx][r_ctx][hslot] = regret_ratio;
+         g_model_context_ready[ai_idx][r_ctx][hslot] = true;
+      }
+      else
+      {
+         g_model_context_edge_ema[ai_idx][r_ctx][hslot] =
+            (1.0 - alpha) * g_model_context_edge_ema[ai_idx][r_ctx][hslot] + alpha * realized_net;
+         g_model_context_regret_ema[ai_idx][r_ctx][hslot] =
+            (1.0 - alpha) * g_model_context_regret_ema[ai_idx][r_ctx][hslot] + alpha * regret_ratio;
+      }
+      g_model_context_obs[ai_idx][r_ctx][hslot]++;
+      if(g_model_context_obs[ai_idx][r_ctx][hslot] > 200000)
+         g_model_context_obs[ai_idx][r_ctx][hslot] = 200000;
    }
 
    // Online utility-driven threshold adaptation (model + regime + horizon aware).

@@ -2,7 +2,7 @@
 #define __FXAI_META_PERSISTENCE_MQH__
 
 #define FXAI_META_ARTIFACT_DIR "FXAI\\Meta"
-#define FXAI_META_ARTIFACT_VERSION 2
+#define FXAI_META_ARTIFACT_VERSION 3
 
 string FXAI_MetaArtifactFile(const string symbol)
 {
@@ -42,6 +42,7 @@ bool FXAI_SaveMetaArtifacts(const string symbol)
    FileWriteInteger(handle, FXAI_TRADE_GATE_HIDDEN);
    FileWriteInteger(handle, FXAI_HPOL_FEATS);
    FileWriteInteger(handle, FXAI_HPOL_HIDDEN);
+   FileWriteInteger(handle, FXAI_AI_COUNT);
 
    for(int r=0; r<FXAI_REGIME_COUNT; r++)
    {
@@ -95,6 +96,32 @@ bool FXAI_SaveMetaArtifacts(const string symbol)
       }
    }
 
+   for(int ai=0; ai<FXAI_AI_COUNT; ai++)
+   {
+      FileWriteDouble(handle, g_model_meta_weight[ai]);
+      FileWriteDouble(handle, g_model_global_edge_ema[ai]);
+      FileWriteInteger(handle, (g_model_global_edge_ready[ai] ? 1 : 0));
+      for(int r=0; r<FXAI_REGIME_COUNT; r++)
+      {
+         FileWriteDouble(handle, g_model_regime_edge_ema[ai][r]);
+         FileWriteInteger(handle, (g_model_regime_edge_ready[ai][r] ? 1 : 0));
+         FileWriteInteger(handle, g_model_regime_obs[ai][r]);
+         for(int h=0; h<FXAI_MAX_HORIZONS; h++)
+         {
+            FileWriteDouble(handle, g_model_context_edge_ema[ai][r][h]);
+            FileWriteDouble(handle, g_model_context_regret_ema[ai][r][h]);
+            FileWriteInteger(handle, (g_model_context_ready[ai][r][h] ? 1 : 0));
+            FileWriteInteger(handle, g_model_context_obs[ai][r][h]);
+         }
+      }
+      for(int h=0; h<FXAI_MAX_HORIZONS; h++)
+      {
+         FileWriteDouble(handle, g_model_horizon_edge_ema[ai][h]);
+         FileWriteInteger(handle, (g_model_horizon_edge_ready[ai][h] ? 1 : 0));
+         FileWriteInteger(handle, g_model_horizon_obs[ai][h]);
+      }
+   }
+
    FileClose(handle);
    g_meta_artifacts_dirty = false;
    g_meta_last_save_time = TimeCurrent();
@@ -117,6 +144,7 @@ bool FXAI_LoadMetaArtifacts(const string symbol)
    int gate_hidden = FileReadInteger(handle);
    int hpol_feats = FileReadInteger(handle);
    int hpol_hidden = FileReadInteger(handle);
+   int ai_count = FileReadInteger(handle);
    if(version != FXAI_META_ARTIFACT_VERSION ||
       regimes != FXAI_REGIME_COUNT ||
       stack_feats != FXAI_STACK_FEATS ||
@@ -124,7 +152,8 @@ bool FXAI_LoadMetaArtifacts(const string symbol)
       gate_feats != FXAI_TRADE_GATE_FEATS ||
       gate_hidden != FXAI_TRADE_GATE_HIDDEN ||
       hpol_feats != FXAI_HPOL_FEATS ||
-      hpol_hidden != FXAI_HPOL_HIDDEN)
+      hpol_hidden != FXAI_HPOL_HIDDEN ||
+      ai_count != FXAI_AI_COUNT)
    {
       ok = false;
    }
@@ -180,6 +209,32 @@ bool FXAI_LoadMetaArtifacts(const string symbol)
             g_meta_oof_edge_ema[r][slot] = FileReadDouble(handle);
             g_meta_oof_quality_ema[r][slot] = FileReadDouble(handle);
             g_meta_oof_trade_rate_ema[r][slot] = FileReadDouble(handle);
+         }
+      }
+
+      for(int ai=0; ai<FXAI_AI_COUNT && ok; ai++)
+      {
+         g_model_meta_weight[ai] = FileReadDouble(handle);
+         g_model_global_edge_ema[ai] = FileReadDouble(handle);
+         g_model_global_edge_ready[ai] = (FileReadInteger(handle) != 0);
+         for(int r=0; r<FXAI_REGIME_COUNT; r++)
+         {
+            g_model_regime_edge_ema[ai][r] = FileReadDouble(handle);
+            g_model_regime_edge_ready[ai][r] = (FileReadInteger(handle) != 0);
+            g_model_regime_obs[ai][r] = FileReadInteger(handle);
+            for(int h=0; h<FXAI_MAX_HORIZONS; h++)
+            {
+               g_model_context_edge_ema[ai][r][h] = FileReadDouble(handle);
+               g_model_context_regret_ema[ai][r][h] = FileReadDouble(handle);
+               g_model_context_ready[ai][r][h] = (FileReadInteger(handle) != 0);
+               g_model_context_obs[ai][r][h] = FileReadInteger(handle);
+            }
+         }
+         for(int h=0; h<FXAI_MAX_HORIZONS; h++)
+         {
+            g_model_horizon_edge_ema[ai][h] = FileReadDouble(handle);
+            g_model_horizon_edge_ready[ai][h] = (FileReadInteger(handle) != 0);
+            g_model_horizon_obs[ai][h] = FileReadInteger(handle);
          }
       }
    }
