@@ -716,6 +716,14 @@ void FXAI_PrecomputeContextAggregates(const datetime &main_time[],
          FXAI_SetContextExtraValue(ctx_extra_arr, i, top_slot * 4 + 1, top_ctx_lag[top_slot]);
          FXAI_SetContextExtraValue(ctx_extra_arr, i, top_slot * 4 + 2, top_ctx_rel[top_slot]);
          FXAI_SetContextExtraValue(ctx_extra_arr, i, top_slot * 4 + 3, top_ctx_corr[top_slot]);
+         int top_idx = (i >= 0 && i < ArraySize(ctx_series[top_symbol_idx[top_slot]].aligned_idx)
+                        ? ctx_series[top_symbol_idx[top_slot]].aligned_idx[i]
+                        : -1);
+         FXAI_SetContextSlotMTFStateExtras(ctx_extra_arr,
+                                           i,
+                                           top_slot,
+                                           ctx_series[top_symbol_idx[top_slot]],
+                                           top_idx);
       }
 
       double adapter_stability = 0.5;
@@ -787,6 +795,49 @@ double FXAI_ContextSeriesUtilityAt(const datetime &main_time[],
 
    if(used <= 0) return -1e9;
    return sum_score / (double)used;
+}
+
+void FXAI_SetContextSlotMTFStateExtras(double &ctx_extra_arr[],
+                                       const int sample_idx,
+                                       const int top_slot,
+                                       FXAIContextSeries &series,
+                                       const int idx)
+{
+   if(top_slot < 0 || top_slot >= FXAI_CONTEXT_TOP_SYMBOLS)
+      return;
+   if(!series.loaded || idx < 0)
+      return;
+
+   double point_value = SymbolInfoDouble(series.symbol, SYMBOL_POINT);
+   if(point_value <= 0.0)
+      point_value = (_Point > 0.0 ? _Point : 1.0);
+
+   for(int tf_slot=0; tf_slot<FXAI_CONTEXT_MTF_TF_COUNT; tf_slot++)
+   {
+      double body_bias = 0.0;
+      double close_loc = 0.0;
+      double range_pressure = 0.0;
+      double spread_pressure = 0.0;
+      int bars = FXAI_ContextMTFBarsForSlot(tf_slot);
+      if(!FXAI_ComputeAggregatedCandleSpreadState(idx,
+                                                  bars,
+                                                  series.open,
+                                                  series.high,
+                                                  series.low,
+                                                  series.close,
+                                                  series.spread,
+                                                  point_value,
+                                                  body_bias,
+                                                  close_loc,
+                                                  range_pressure,
+                                                  spread_pressure))
+         continue;
+
+      FXAI_SetContextExtraValue(ctx_extra_arr, sample_idx, FXAI_ContextSlotMTFExtraIndex(top_slot, tf_slot, (int)FXAI_MTF_BODY_BIAS), body_bias);
+      FXAI_SetContextExtraValue(ctx_extra_arr, sample_idx, FXAI_ContextSlotMTFExtraIndex(top_slot, tf_slot, (int)FXAI_MTF_CLOSE_LOCATION), close_loc);
+      FXAI_SetContextExtraValue(ctx_extra_arr, sample_idx, FXAI_ContextSlotMTFExtraIndex(top_slot, tf_slot, (int)FXAI_MTF_RANGE_PRESSURE), range_pressure);
+      FXAI_SetContextExtraValue(ctx_extra_arr, sample_idx, FXAI_ContextSlotMTFExtraIndex(top_slot, tf_slot, (int)FXAI_MTF_SPREAD_PRESSURE), spread_pressure);
+   }
 }
 
 void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
@@ -1021,6 +1072,14 @@ void FXAI_PrecomputeDynamicContextAggregates(const datetime &main_time[],
          FXAI_SetContextExtraValue(ctx_extra_arr, i, top_slot * 4 + 1, top_ctx_lag[top_slot]);
          FXAI_SetContextExtraValue(ctx_extra_arr, i, top_slot * 4 + 2, top_ctx_rel[top_slot]);
          FXAI_SetContextExtraValue(ctx_extra_arr, i, top_slot * 4 + 3, top_ctx_corr[top_slot]);
+         int top_idx = (i >= 0 && i < ArraySize(ctx_series[top_symbol_idx[top_slot]].aligned_idx)
+                        ? ctx_series[top_symbol_idx[top_slot]].aligned_idx[i]
+                        : -1);
+         FXAI_SetContextSlotMTFStateExtras(ctx_extra_arr,
+                                           i,
+                                           top_slot,
+                                           ctx_series[top_symbol_idx[top_slot]],
+                                           top_idx);
       }
 
       double adapter_util = FXAI_Clamp(mean / MathMax(main_vol, 1e-4), -1.0, 1.0);

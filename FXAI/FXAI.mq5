@@ -579,8 +579,12 @@ struct FXAIContextSeries
    string symbol;
    datetime last_bar_time;
    MqlRates rates[];
+   double open[];
+   double high[];
+   double low[];
    double close[];
    datetime time[];
+   int spread[];
    int aligned_idx[];
 };
 

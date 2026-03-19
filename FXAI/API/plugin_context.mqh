@@ -257,13 +257,82 @@
       }
       double domain = FXAI_Clamp(m_ctx_domain_hash, 0.0, 1.0);
       double horizon_scale = FXAI_Clamp(MathLog(1.0 + (double)MathMax(m_ctx_horizon_minutes, 1)) / MathLog(1.0 + 1440.0), 0.0, 1.0);
+      double main_mtf_body = 0.0;
+      double main_mtf_loc = 0.0;
+      double main_mtf_range = 0.0;
+      double main_mtf_spread = 0.0;
+      for(int tf_slot=0; tf_slot<FXAI_MAIN_MTF_TF_COUNT; tf_slot++)
+      {
+         int base = FXAI_MainMTFFeatureIndex(tf_slot, 0);
+         if(base < 0)
+            continue;
+         main_mtf_body += FXAI_GetInputFeature(x, base + 0);
+         main_mtf_loc += FXAI_GetInputFeature(x, base + 1);
+         main_mtf_range += FXAI_GetInputFeature(x, base + 2);
+         main_mtf_spread += FXAI_GetInputFeature(x, base + 3);
+      }
+      main_mtf_body /= (double)MathMax(FXAI_MAIN_MTF_TF_COUNT, 1);
+      main_mtf_loc /= (double)MathMax(FXAI_MAIN_MTF_TF_COUNT, 1);
+      main_mtf_range /= (double)MathMax(FXAI_MAIN_MTF_TF_COUNT, 1);
+      main_mtf_spread /= (double)MathMax(FXAI_MAIN_MTF_TF_COUNT, 1);
+
+      double ctx_mtf_body = 0.0;
+      double ctx_mtf_loc = 0.0;
+      double ctx_mtf_range = 0.0;
+      double ctx_mtf_spread = 0.0;
+      double ctx_mtf_weight = 0.0;
+      for(int slot=0; slot<FXAI_CONTEXT_TOP_SYMBOLS; slot++)
+      {
+         double slot_corr = MathAbs(FXAI_GetInputFeature(x, 50 + slot * 4 + 3));
+         double slot_weight = 0.35 + 0.65 * slot_corr;
+         double slot_body = 0.0;
+         double slot_loc = 0.0;
+         double slot_range = 0.0;
+         double slot_spread = 0.0;
+         int slot_used = 0;
+         for(int tf_slot=0; tf_slot<FXAI_CONTEXT_MTF_TF_COUNT; tf_slot++)
+         {
+            int base = FXAI_ContextMTFFeatureIndex(slot, tf_slot, 0);
+            if(base < 0)
+               continue;
+            slot_body += FXAI_GetInputFeature(x, base + 0);
+            slot_loc += FXAI_GetInputFeature(x, base + 1);
+            slot_range += FXAI_GetInputFeature(x, base + 2);
+            slot_spread += FXAI_GetInputFeature(x, base + 3);
+            slot_used++;
+         }
+         if(slot_used <= 0)
+            continue;
+         slot_body /= (double)slot_used;
+         slot_loc /= (double)slot_used;
+         slot_range /= (double)slot_used;
+         slot_spread /= (double)slot_used;
+         ctx_mtf_body += slot_weight * slot_body;
+         ctx_mtf_loc += slot_weight * slot_loc;
+         ctx_mtf_range += slot_weight * slot_range;
+         ctx_mtf_spread += slot_weight * slot_spread;
+         ctx_mtf_weight += slot_weight;
+      }
+      if(ctx_mtf_weight > 1e-6)
+      {
+         ctx_mtf_body /= ctx_mtf_weight;
+         ctx_mtf_loc /= ctx_mtf_weight;
+         ctx_mtf_range /= ctx_mtf_weight;
+         ctx_mtf_spread /= ctx_mtf_weight;
+      }
       out[9] = 2.0 * domain - 1.0;
       out[10] = 2.0 * horizon_scale - 1.0;
-      out[11] = FXAI_GetInputFeature(x, 72);
-      out[12] = FXAI_Clamp(0.45 * FXAI_GetInputFeature(x, 74) +
+      out[11] = FXAI_Clamp(0.70 * FXAI_GetInputFeature(x, 72) +
+                           0.15 * main_mtf_loc +
+                           0.15 * ctx_mtf_loc,
+                           -1.0,
+                           1.0);
+      out[12] = FXAI_Clamp(0.35 * FXAI_GetInputFeature(x, 74) +
                            0.20 * FXAI_GetInputFeature(x, 75) +
                            0.20 * FXAI_GetInputFeature(x, 78) +
-                           0.15 * FXAI_GetInputFeature(x, 73),
+                           0.10 * FXAI_GetInputFeature(x, 73) +
+                           0.08 * main_mtf_body +
+                           0.07 * ctx_mtf_body,
                            -1.0,
                            1.0);
       out[13] = FXAI_Clamp(0.18 * FXAI_GetInputFeature(x, 76) -
@@ -271,13 +340,17 @@
                            0.12 * FXAI_GetInputFeature(x, 79) +
                            0.08 * FXAI_GetInputFeature(x, 6) +
                            0.08 * FXAI_GetInputFeature(x, 81) -
-                           0.06 * FXAI_GetInputFeature(x, 82),
+                           0.06 * main_mtf_spread -
+                           0.06 * FXAI_GetInputFeature(x, 82) +
+                           0.04 * ctx_mtf_spread,
                            -4.0,
                            4.0);
       out[14] = FXAI_Clamp(0.45 * FXAI_GetInputFeature(x, 18) +
                            0.20 * FXAI_GetInputFeature(x, 19) -
                            0.20 * FXAI_GetInputFeature(x, 20) +
-                           0.15 * FXAI_GetInputFeature(x, 21),
+                           0.15 * FXAI_GetInputFeature(x, 21) +
+                           0.10 * main_mtf_body +
+                           0.10 * main_mtf_loc,
                            -4.0,
                            4.0);
       out[15] = FXAI_Clamp(0.18 * FXAI_GetInputFeature(x, 66) +
@@ -287,18 +360,22 @@
                            0.20 * FXAI_GetInputFeature(x, 71) +
                            0.10 * FXAI_GetInputFeature(x, 81) +
                            0.08 * FXAI_GetInputFeature(x, 82) +
-                           0.04 * FXAI_GetInputFeature(x, 83),
+                           0.04 * FXAI_GetInputFeature(x, 83) +
+                           0.08 * main_mtf_range +
+                           0.06 * ctx_mtf_range,
                            -6.0,
                            6.0);
       out[16] = FXAI_Clamp(0.60 * FXAI_GetInputFeature(x, 68) +
                            0.20 * FXAI_GetInputFeature(x, 81) +
                            0.10 * FXAI_GetInputFeature(x, 80) +
-                           0.10 * FXAI_GetInputFeature(x, 82),
+                           0.10 * FXAI_GetInputFeature(x, 82) +
+                           0.10 * main_mtf_spread,
                            -4.0,
                            8.0);
       out[17] = FXAI_Clamp(0.65 * FXAI_GetInputFeature(x, 70) +
                            0.20 * FXAI_GetInputFeature(x, 82) +
-                           0.15 * MathAbs(FXAI_GetInputFeature(x, 83)),
+                           0.10 * main_mtf_range +
+                           0.05 * MathAbs(FXAI_GetInputFeature(x, 83)),
                            0.0,
                            8.0);
       out[18] = FXAI_Clamp(FXAI_GetInputFeature(x, 78), -6.0, 6.0);

@@ -53,6 +53,43 @@ string FXAI_FeatureProvenanceName(const int provenance_id)
    }
 }
 
+string FXAI_MTFMetricName(const int metric_id)
+{
+   switch(metric_id)
+   {
+      case FXAI_MTF_BODY_BIAS: return "body_bias";
+      case FXAI_MTF_CLOSE_LOCATION: return "close_location";
+      case FXAI_MTF_RANGE_PRESSURE: return "range_pressure";
+      case FXAI_MTF_SPREAD_PRESSURE: return "spread_pressure";
+      default: return "unknown";
+   }
+}
+
+string FXAI_MainMTFSlotName(const int tf_slot)
+{
+   switch(tf_slot)
+   {
+      case 0: return "m5";
+      case 1: return "m15";
+      case 2: return "m30";
+      case 3: return "h1";
+      default: return "m1";
+   }
+}
+
+string FXAI_ContextMTFSlotName(const int tf_slot)
+{
+   switch(tf_slot)
+   {
+      case 0: return "m1";
+      case 1: return "m5";
+      case 2: return "m15";
+      case 3: return "m30";
+      case 4: return "h1";
+      default: return "m1";
+   }
+}
+
 string FXAI_FeatureName(const int feature_idx)
 {
    switch(feature_idx)
@@ -141,7 +178,28 @@ string FXAI_FeatureName(const int feature_idx)
       case 81: return "spread_zscore_20";
       case 82: return "spread_vol_ratio_20";
       case 83: return "spread_rank_20";
-      default: return "";
+      default:
+      {
+         if(feature_idx >= FXAI_MAIN_MTF_FEATURE_OFFSET && feature_idx < FXAI_CONTEXT_MTF_FEATURE_OFFSET)
+         {
+            int rel = feature_idx - FXAI_MAIN_MTF_FEATURE_OFFSET;
+            int tf_slot = rel / FXAI_MTF_STATE_FEATURES_PER_TF;
+            int metric = rel % FXAI_MTF_STATE_FEATURES_PER_TF;
+            return FXAI_MainMTFSlotName(tf_slot) + "_" + FXAI_MTFMetricName(metric);
+         }
+         if(feature_idx >= FXAI_CONTEXT_MTF_FEATURE_OFFSET && feature_idx < FXAI_AI_FEATURES)
+         {
+            int rel = feature_idx - FXAI_CONTEXT_MTF_FEATURE_OFFSET;
+            int slot = rel / FXAI_CONTEXT_SLOT_MTF_FEATS;
+            int slot_rel = rel % FXAI_CONTEXT_SLOT_MTF_FEATS;
+            int tf_slot = slot_rel / FXAI_MTF_STATE_FEATURES_PER_TF;
+            int metric = slot_rel % FXAI_MTF_STATE_FEATURES_PER_TF;
+            return "ctx_top" + IntegerToString(slot + 1) + "_" +
+                   FXAI_ContextMTFSlotName(tf_slot) + "_" +
+                   FXAI_MTFMetricName(metric);
+         }
+         return "";
+      }
    }
 }
 
@@ -149,6 +207,10 @@ int FXAI_FeatureProvenance(const int feature_idx)
 {
    if(feature_idx < 0 || feature_idx >= FXAI_AI_FEATURES)
       return (int)FXAI_PROV_DERIVED_FILTER;
+   if(feature_idx >= FXAI_MAIN_MTF_FEATURE_OFFSET && feature_idx < FXAI_CONTEXT_MTF_FEATURE_OFFSET)
+      return (int)FXAI_PROV_MULTI_TIMEFRAME;
+   if(feature_idx >= FXAI_CONTEXT_MTF_FEATURE_OFFSET)
+      return (int)FXAI_PROV_CONTEXT_SYMBOL;
    if(feature_idx <= 6 || (feature_idx >= 18 && feature_idx <= 21) || (feature_idx >= 66 && feature_idx <= 71) || (feature_idx >= 80 && feature_idx <= 83))
       return (int)FXAI_PROV_PRICE_BAR;
    if((feature_idx >= 7 && feature_idx <= 9) || (feature_idx >= 13 && feature_idx <= 37))

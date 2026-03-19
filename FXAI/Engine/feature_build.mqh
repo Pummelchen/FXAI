@@ -495,6 +495,54 @@ bool FXAI_ComputeFeatureVector(const int i,
                              features[76],
                              features[77],
                              features[78]);
+   for(int tf_slot=0; tf_slot<FXAI_MAIN_MTF_TF_COUNT; tf_slot++)
+   {
+      int bars = FXAI_MainMTFBarsForSlot(tf_slot);
+      double body_bias = 0.0;
+      double tf_close_loc = 0.0;
+      double tf_range_pressure = 0.0;
+      double tf_spread_pressure = 0.0;
+      int base_f = FXAI_MainMTFFeatureIndex(tf_slot, 0);
+      if(base_f < 0)
+         continue;
+      if(FXAI_ComputeAggregatedCandleSpreadState(i,
+                                                 bars,
+                                                 main_o1,
+                                                 main_h1_ohlc,
+                                                 main_l1,
+                                                 main_m1,
+                                                 main_spread_arr,
+                                                 point_value,
+                                                 body_bias,
+                                                 tf_close_loc,
+                                                 tf_range_pressure,
+                                                 tf_spread_pressure))
+      {
+         features[base_f + 0] = FXAI_Clamp(body_bias, -1.2, 1.2);
+         features[base_f + 1] = FXAI_Clamp(tf_close_loc, -1.2, 1.2);
+         features[base_f + 2] = FXAI_Clamp(tf_range_pressure, -6.0, 6.0);
+         features[base_f + 3] = FXAI_Clamp(tf_spread_pressure, -6.0, 8.0);
+      }
+   }
+
+   for(int slot=0; slot<FXAI_CONTEXT_TOP_SYMBOLS; slot++)
+   {
+      for(int tf_slot=0; tf_slot<FXAI_CONTEXT_MTF_TF_COUNT; tf_slot++)
+      {
+         int base_f = FXAI_ContextMTFFeatureIndex(slot, tf_slot, 0);
+         int extra_body = FXAI_ContextSlotMTFExtraIndex(slot, tf_slot, (int)FXAI_MTF_BODY_BIAS);
+         int extra_loc = FXAI_ContextSlotMTFExtraIndex(slot, tf_slot, (int)FXAI_MTF_CLOSE_LOCATION);
+         int extra_range = FXAI_ContextSlotMTFExtraIndex(slot, tf_slot, (int)FXAI_MTF_RANGE_PRESSURE);
+         int extra_spread = FXAI_ContextSlotMTFExtraIndex(slot, tf_slot, (int)FXAI_MTF_SPREAD_PRESSURE);
+         if(base_f < 0 || extra_body < 0 || extra_loc < 0 || extra_range < 0 || extra_spread < 0)
+            continue;
+         features[base_f + 0] = FXAI_Clamp(FXAI_GetContextExtraValue(ctx_extra_arr, i, extra_body, 0.0), -1.2, 1.2);
+         features[base_f + 1] = FXAI_Clamp(FXAI_GetContextExtraValue(ctx_extra_arr, i, extra_loc, 0.0), -1.2, 1.2);
+         features[base_f + 2] = FXAI_Clamp(FXAI_GetContextExtraValue(ctx_extra_arr, i, extra_range, 0.0), -6.0, 6.0);
+         features[base_f + 3] = FXAI_Clamp(FXAI_GetContextExtraValue(ctx_extra_arr, i, extra_spread, 0.0), -6.0, 8.0);
+      }
+   }
+
    features[80] = FXAI_Clamp(MathLog(1.0 + MathMax(spread_points, 0.0)), 0.0, 6.0);
    features[81] = FXAI_Clamp(spread_z20, -8.0, 8.0);
    features[82] = FXAI_Clamp(spread_vol_ratio20, 0.0, 4.5);

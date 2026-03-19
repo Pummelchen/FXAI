@@ -266,8 +266,12 @@ int SpecialDirectionAI(const string symbol)
          ctx_series[s].symbol = "";
          ctx_series[s].last_bar_time = 0;
          ArrayResize(ctx_series[s].rates, 0);
+         ArrayResize(ctx_series[s].open, 0);
+         ArrayResize(ctx_series[s].high, 0);
+         ArrayResize(ctx_series[s].low, 0);
          ArrayResize(ctx_series[s].close, 0);
          ArrayResize(ctx_series[s].time, 0);
+         ArrayResize(ctx_series[s].spread, 0);
          ArrayResize(ctx_series[s].aligned_idx, 0);
       }
    }
@@ -279,6 +283,13 @@ int SpecialDirectionAI(const string symbol)
          ctx_series[s].symbol = ctx_symbol;
          ctx_series[s].last_bar_time = 0;
          ArrayResize(ctx_series[s].rates, 0);
+         ArrayResize(ctx_series[s].open, 0);
+         ArrayResize(ctx_series[s].high, 0);
+         ArrayResize(ctx_series[s].low, 0);
+         ArrayResize(ctx_series[s].close, 0);
+         ArrayResize(ctx_series[s].time, 0);
+         ArrayResize(ctx_series[s].spread, 0);
+         ArrayResize(ctx_series[s].aligned_idx, 0);
       }
 
       ctx_series[s].loaded = FXAI_UpdateRatesRolling(ctx_symbol,
@@ -288,14 +299,34 @@ int SpecialDirectionAI(const string symbol)
                                                     ctx_series[s].rates);
       if(ctx_series[s].loaded)
       {
-         FXAI_ExtractRatesCloseTime(ctx_series[s].rates,
-                                   ctx_series[s].close,
-                                   ctx_series[s].time);
+         FXAI_ExtractRatesCloseTimeSpread(ctx_series[s].rates,
+                                         ctx_series[s].close,
+                                         ctx_series[s].time,
+                                         ctx_series[s].spread);
+         FXAI_ExtractRatesOHLC(ctx_series[s].rates,
+                               ctx_series[s].open,
+                               ctx_series[s].high,
+                               ctx_series[s].low,
+                               ctx_series[s].close);
+         if(!FXAI_ValidateM1SeriesBundle(ctx_series[s].time,
+                                         ctx_series[s].open,
+                                         ctx_series[s].high,
+                                         ctx_series[s].low,
+                                         ctx_series[s].close,
+                                         ctx_series[s].spread,
+                                         needed))
+         {
+            ctx_series[s].loaded = false;
+         }
       }
-      else
+      if(!ctx_series[s].loaded)
       {
+         ArrayResize(ctx_series[s].open, 0);
+         ArrayResize(ctx_series[s].high, 0);
+         ArrayResize(ctx_series[s].low, 0);
          ArrayResize(ctx_series[s].close, 0);
          ArrayResize(ctx_series[s].time, 0);
+         ArrayResize(ctx_series[s].spread, 0);
          ArrayResize(ctx_series[s].aligned_idx, 0);
       }
    }

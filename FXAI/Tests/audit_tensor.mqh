@@ -3,45 +3,75 @@
 
 #include "..\TensorCore\TensorCore.mqh"
 
+FXAISequenceBuffer g_fxai_audit_tensor_buffer;
+FXAISequenceBuffer g_fxai_audit_tensor_buffer_copy;
+FXAISequenceRuntimeState g_fxai_audit_tensor_rt_state;
+FXAISequenceRuntimeState g_fxai_audit_tensor_rt_copy;
+FXAISequenceRuntimeState g_fxai_audit_tensor_push_state;
+double g_fxai_audit_tensor_current_x[FXAI_AI_WEIGHTS];
+double g_fxai_audit_tensor_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+double g_fxai_audit_tensor_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+double g_fxai_audit_tensor_w_in[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
+double g_fxai_audit_tensor_mm_out[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_MLP_HIDDEN];
+double g_fxai_audit_tensor_attn_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+double g_fxai_audit_tensor_conv_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+double g_fxai_audit_tensor_ffn_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+double g_fxai_audit_tensor_seq_future[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+double g_fxai_audit_tensor_conv_future[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+double g_fxai_audit_tensor_attn_future[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+double g_fxai_audit_tensor_mix[FXAI_AI_MLP_HIDDEN][FXAI_AI_WEIGHTS];
+double g_fxai_audit_tensor_mat_p[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
+double g_fxai_audit_tensor_mat_m[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
+double g_fxai_audit_tensor_mat_v[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
+double g_fxai_audit_tensor_mat_g[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
+double g_fxai_audit_tensor_w_plus[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
+double g_fxai_audit_tensor_w_minus[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
+double g_fxai_audit_tensor_mm_plus[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_MLP_HIDDEN];
+double g_fxai_audit_tensor_mm_minus[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_MLP_HIDDEN];
+
 bool FXAI_AuditTensorKernelSelfTest(string &reason)
 {
-   double current_x[FXAI_AI_WEIGHTS];
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-      current_x[k] = (k == 0 ? 1.0 : 0.02 * (double)(k + 1));
+      g_fxai_audit_tensor_current_x[k] = (k == 0 ? 1.0 : 0.02 * (double)(k + 1));
 
-   double window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
    for(int t=0; t<FXAI_MAX_SEQUENCE_BARS; t++)
    {
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-         window[t][k] = (k == 0 ? 1.0 : 0.01 * (double)(t + 1) * (double)(k + 1));
+         g_fxai_audit_tensor_window[t][k] = (k == 0 ? 1.0 : 0.01 * (double)(t + 1) * (double)(k + 1));
    }
 
-   FXAISequenceBuffer buffer;
-   FXAI_SequenceBufferLoadWindow(buffer, current_x, window, 5, 6, false);
-   if(buffer.len != 6 || buffer.mask[0] != 1 || buffer.mask[5] != 1)
+   FXAI_SequenceBufferLoadWindow(g_fxai_audit_tensor_buffer,
+                                 g_fxai_audit_tensor_current_x,
+                                 g_fxai_audit_tensor_window,
+                                 5,
+                                 6,
+                                 false);
+   if(g_fxai_audit_tensor_buffer.len != 6 ||
+      g_fxai_audit_tensor_buffer.mask[0] != 1 ||
+      g_fxai_audit_tensor_buffer.mask[5] != 1)
    {
       reason = "sequence_buffer_load";
       return false;
    }
-   if(!(buffer.pos_bias[0] < buffer.pos_bias[5] && MathAbs(buffer.pos_bias[5]) < 1e-9))
+   if(!(g_fxai_audit_tensor_buffer.pos_bias[0] < g_fxai_audit_tensor_buffer.pos_bias[5] &&
+        MathAbs(g_fxai_audit_tensor_buffer.pos_bias[5]) < 1e-9))
    {
       reason = "sequence_positional_bias";
       return false;
    }
 
-   FXAISequenceBuffer buffer_copy;
-   FXAI_SequenceBufferCopy(buffer, buffer_copy);
-   if(buffer_copy.len != buffer.len || MathAbs(buffer_copy.data[2][3] - buffer.data[2][3]) > 1e-12)
+   FXAI_SequenceBufferCopy(g_fxai_audit_tensor_buffer, g_fxai_audit_tensor_buffer_copy);
+   if(g_fxai_audit_tensor_buffer_copy.len != g_fxai_audit_tensor_buffer.len ||
+      MathAbs(g_fxai_audit_tensor_buffer_copy.data[2][3] - g_fxai_audit_tensor_buffer.data[2][3]) > 1e-12)
    {
       reason = "sequence_copy";
       return false;
    }
 
-   double seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
    int seq_len = 0;
    int seq_mask[];
    double seq_pos[];
-   FXAI_SequenceBufferPreparePacked(buffer, seq, seq_len, seq_mask, seq_pos);
+   FXAI_SequenceBufferPreparePacked(g_fxai_audit_tensor_buffer, g_fxai_audit_tensor_seq, seq_len, seq_mask, seq_pos);
    if(seq_len != 6 || ArraySize(seq_mask) != FXAI_MAX_SEQUENCE_BARS || ArraySize(seq_pos) != FXAI_MAX_SEQUENCE_BARS)
    {
       reason = "sequence_pack";
@@ -49,59 +79,71 @@ bool FXAI_AuditTensorKernelSelfTest(string &reason)
    }
 
    FXAISequenceRuntimeConfig rt_cfg = FXAI_SequenceRuntimeMakeConfig(4, 2, 2, true, true, 0.04);
-   FXAISequenceRuntimeState rt_state;
-   FXAI_SequenceRuntimeReset(rt_state, rt_cfg);
-   FXAI_SequenceRuntimeLoadWindow(rt_state, current_x, window, 5);
-   if(rt_state.buffer.len < 2 || rt_state.buffer.len > 4)
+   FXAI_SequenceRuntimeReset(g_fxai_audit_tensor_rt_state, rt_cfg);
+   FXAI_SequenceRuntimeLoadWindow(g_fxai_audit_tensor_rt_state,
+                                 g_fxai_audit_tensor_current_x,
+                                 g_fxai_audit_tensor_window,
+                                 5);
+   if(g_fxai_audit_tensor_rt_state.buffer.len < 2 || g_fxai_audit_tensor_rt_state.buffer.len > 4)
    {
       reason = "sequence_runtime_load";
       return false;
    }
-   FXAISequenceRuntimeState rt_copy;
-   FXAI_SequenceRuntimeCopy(rt_state, rt_copy);
-   if(rt_copy.steps_seen != rt_state.steps_seen || rt_copy.buffer.len != rt_state.buffer.len || rt_copy.raw_len != rt_state.raw_len)
+   FXAI_SequenceRuntimeCopy(g_fxai_audit_tensor_rt_state, g_fxai_audit_tensor_rt_copy);
+   if(g_fxai_audit_tensor_rt_copy.steps_seen != g_fxai_audit_tensor_rt_state.steps_seen ||
+      g_fxai_audit_tensor_rt_copy.buffer.len != g_fxai_audit_tensor_rt_state.buffer.len ||
+      g_fxai_audit_tensor_rt_copy.raw_len != g_fxai_audit_tensor_rt_state.raw_len)
    {
       reason = "sequence_runtime_copy";
       return false;
    }
 
    FXAISequenceRuntimeConfig push_cfg = FXAI_SequenceRuntimeMakeConfig(4, 2, 2, false, true, 0.04);
-   FXAISequenceRuntimeState push_state;
-   FXAI_SequenceRuntimeReset(push_state, push_cfg);
+   FXAI_SequenceRuntimeReset(g_fxai_audit_tensor_push_state, push_cfg);
    for(int step=0; step<5; step++)
    {
       double push_x[FXAI_AI_WEIGHTS];
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          push_x[k] = (k == 0 ? 1.0 : 0.05 * (double)(step + 1) * (double)(k + 1));
-      FXAI_SequenceRuntimePush(push_state, push_x);
+      FXAI_SequenceRuntimePush(g_fxai_audit_tensor_push_state, push_x);
    }
-   if(push_state.raw_len != 5 || push_state.buffer.len != 2 || push_state.buffer.mask[0] != 1 || push_state.buffer.mask[1] != 1)
+   if(g_fxai_audit_tensor_push_state.raw_len != 5 ||
+      g_fxai_audit_tensor_push_state.buffer.len != 2 ||
+      g_fxai_audit_tensor_push_state.buffer.mask[0] != 1 ||
+      g_fxai_audit_tensor_push_state.buffer.mask[1] != 1)
    {
       reason = "sequence_runtime_push";
       return false;
    }
 
-   double w_in[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
    double b_in[FXAI_AI_MLP_HIDDEN];
    for(int i=0; i<FXAI_AI_WEIGHTS; i++)
       for(int o=0; o<FXAI_AI_MLP_HIDDEN; o++)
-         w_in[i][o] = ((i < 6 && o < 4) ? 0.01 * (double)(i + 1) * (double)(o + 1) : 0.0);
+         g_fxai_audit_tensor_w_in[i][o] = ((i < 6 && o < 4) ? 0.01 * (double)(i + 1) * (double)(o + 1) : 0.0);
    for(int o=0; o<FXAI_AI_MLP_HIDDEN; o++)
       b_in[o] = (o < 4 ? 0.05 * (double)(o + 1) : 0.0);
 
-   double mm_out[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_MLP_HIDDEN];
-   FXAI_TensorBatchedMatMul(seq, seq_len, w_in, b_in, mm_out, 4);
+   FXAI_TensorBatchedMatMul(g_fxai_audit_tensor_seq,
+                            seq_len,
+                            g_fxai_audit_tensor_w_in,
+                            b_in,
+                            g_fxai_audit_tensor_mm_out,
+                            4);
    double expect0 = b_in[0];
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-      expect0 += seq[0][k] * w_in[k][0];
-   if(MathAbs(mm_out[0][0] - expect0) > 1e-8)
+      expect0 += g_fxai_audit_tensor_seq[0][k] * g_fxai_audit_tensor_w_in[k][0];
+   if(MathAbs(g_fxai_audit_tensor_mm_out[0][0] - expect0) > 1e-8)
    {
       reason = "batched_matmul_forward";
       return false;
    }
 
    double gemv_out[];
-   FXAI_ModuleLinearInputHidden(current_x, w_in, b_in, gemv_out, 4);
+   FXAI_ModuleLinearInputHidden(g_fxai_audit_tensor_current_x,
+                                g_fxai_audit_tensor_w_in,
+                                b_in,
+                                gemv_out,
+                                4);
    if(ArraySize(gemv_out) != 4 || MathAbs(gemv_out[0] - expect0) > 1e-8)
    {
       reason = "linear_module_forward";
@@ -128,7 +170,7 @@ bool FXAI_AuditTensorKernelSelfTest(string &reason)
 
    double kernel[3] = {0.25, 0.50, 0.25};
    double conv[];
-   FXAI_ModuleConv1DSummary(seq, seq_len, kernel, 3, conv);
+   FXAI_ModuleConv1DSummary(g_fxai_audit_tensor_seq, seq_len, kernel, 3, conv);
    double conv_ref = 0.0;
    double conv_den = 0.0;
    for(int t=0; t<seq_len; t++)
@@ -139,7 +181,7 @@ bool FXAI_AuditTensorKernelSelfTest(string &reason)
       {
          int idx = t - j;
          if(idx < 0) break;
-         y += kernel[j] * seq[idx][1];
+         y += kernel[j] * g_fxai_audit_tensor_seq[idx][1];
          kw += MathAbs(kernel[j]);
       }
       if(kw <= 0.0) kw = 1.0;
@@ -155,9 +197,9 @@ bool FXAI_AuditTensorKernelSelfTest(string &reason)
 
    double query[FXAI_AI_WEIGHTS];
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-      query[k] = seq[seq_len - 1][k];
+      query[k] = g_fxai_audit_tensor_seq[seq_len - 1][k];
    double attn[];
-   FXAI_ModuleMultiHeadAttentionSummary(seq, seq_len, query, seq_mask, seq_pos, 2, attn);
+   FXAI_ModuleMultiHeadAttentionSummary(g_fxai_audit_tensor_seq, seq_len, query, seq_mask, seq_pos, 2, attn);
    if(ArraySize(attn) != FXAI_AI_WEIGHTS || !MathIsValidNumber(attn[2]))
    {
       reason = "attention_module_forward";
@@ -165,35 +207,32 @@ bool FXAI_AuditTensorKernelSelfTest(string &reason)
    }
 
    FXAITensorDims dims = FXAI_TensorMakeDims(12, FXAI_AI_MLP_HIDDEN, 2, 6, 1, 1, 1, 0.05);
-   double attn_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
-   double conv_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
-   double ffn_seq[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
    double pooled[];
-   FXAI_ModuleSequenceAttentionBlock(seq, seq_len, seq_mask, seq_pos, dims, attn_seq);
-   FXAI_ModuleSequenceConvBlock(seq, seq_len, kernel, 3, dims, conv_seq);
-   FXAI_ModuleSequenceResidualNormFFN(attn_seq, seq_len, dims, ffn_seq);
-   FXAI_ModuleSequencePool(ffn_seq, seq_len, dims, pooled);
-   if(ArraySize(pooled) != FXAI_AI_WEIGHTS || !MathIsValidNumber(attn_seq[seq_len - 1][2]) || !MathIsValidNumber(conv_seq[seq_len - 1][2]) || !MathIsValidNumber(ffn_seq[seq_len - 1][2]))
+   FXAI_ModuleSequenceAttentionBlock(g_fxai_audit_tensor_seq, seq_len, seq_mask, seq_pos, dims, g_fxai_audit_tensor_attn_seq);
+   FXAI_ModuleSequenceConvBlock(g_fxai_audit_tensor_seq, seq_len, kernel, 3, dims, g_fxai_audit_tensor_conv_seq);
+   FXAI_ModuleSequenceResidualNormFFN(g_fxai_audit_tensor_attn_seq, seq_len, dims, g_fxai_audit_tensor_ffn_seq);
+   FXAI_ModuleSequencePool(g_fxai_audit_tensor_ffn_seq, seq_len, dims, pooled);
+   if(ArraySize(pooled) != FXAI_AI_WEIGHTS ||
+      !MathIsValidNumber(g_fxai_audit_tensor_attn_seq[seq_len - 1][2]) ||
+      !MathIsValidNumber(g_fxai_audit_tensor_conv_seq[seq_len - 1][2]) ||
+      !MathIsValidNumber(g_fxai_audit_tensor_ffn_seq[seq_len - 1][2]))
    {
       reason = "sequence_blocks_forward";
       return false;
    }
 
-   double seq_future[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
    for(int t=0; t<FXAI_MAX_SEQUENCE_BARS; t++)
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-         seq_future[t][k] = seq[t][k];
-   seq_future[seq_len - 1][1] += 10.0;
-   double conv_future[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
-   double attn_future[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
-   FXAI_ModuleSequenceConvBlock(seq_future, seq_len, kernel, 3, dims, conv_future);
-   FXAI_ModuleSequenceAttentionBlock(seq_future, seq_len, seq_mask, seq_pos, dims, attn_future);
-   if(MathAbs(conv_future[0][1] - conv_seq[0][1]) > 1e-9)
+         g_fxai_audit_tensor_seq_future[t][k] = g_fxai_audit_tensor_seq[t][k];
+   g_fxai_audit_tensor_seq_future[seq_len - 1][1] += 10.0;
+   FXAI_ModuleSequenceConvBlock(g_fxai_audit_tensor_seq_future, seq_len, kernel, 3, dims, g_fxai_audit_tensor_conv_future);
+   FXAI_ModuleSequenceAttentionBlock(g_fxai_audit_tensor_seq_future, seq_len, seq_mask, seq_pos, dims, g_fxai_audit_tensor_attn_future);
+   if(MathAbs(g_fxai_audit_tensor_conv_future[0][1] - g_fxai_audit_tensor_conv_seq[0][1]) > 1e-9)
    {
       reason = "sequence_conv_causality";
       return false;
    }
-   if(MathAbs(attn_future[0][1] - attn_seq[0][1]) > 1e-9)
+   if(MathAbs(g_fxai_audit_tensor_attn_future[0][1] - g_fxai_audit_tensor_attn_seq[0][1]) > 1e-9)
    {
       reason = "sequence_attention_causality";
       return false;
@@ -261,7 +300,6 @@ bool FXAI_AuditTensorKernelSelfTest(string &reason)
    }
 
    double decay[FXAI_AI_MLP_HIDDEN];
-   double mix[FXAI_AI_MLP_HIDDEN][FXAI_AI_WEIGHTS];
    double skip[FXAI_AI_MLP_HIDDEN];
    double state_prev[FXAI_AI_MLP_HIDDEN], state_next[FXAI_AI_MLP_HIDDEN], ss_out[];
    for(int h=0; h<FXAI_AI_MLP_HIDDEN; h++)
@@ -270,9 +308,16 @@ bool FXAI_AuditTensorKernelSelfTest(string &reason)
       skip[h] = 0.05;
       state_prev[h] = 0.1;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-         mix[h][k] = (h < 2 && k < 6 ? 0.02 * (double)(h + 1) * (double)(k + 1) : 0.0);
+         g_fxai_audit_tensor_mix[h][k] = (h < 2 && k < 6 ? 0.02 * (double)(h + 1) * (double)(k + 1) : 0.0);
    }
-   FXAI_ModuleStateSpaceBlockForward(current_x, state_prev, decay, mix, skip, state_next, ss_out, 3);
+   FXAI_ModuleStateSpaceBlockForward(g_fxai_audit_tensor_current_x,
+                                     state_prev,
+                                     decay,
+                                     g_fxai_audit_tensor_mix,
+                                     skip,
+                                     state_next,
+                                     ss_out,
+                                     3);
    if(ArraySize(ss_out) != 3 || !MathIsValidNumber(ss_out[1]))
    {
       reason = "state_space_forward";
@@ -352,22 +397,28 @@ bool FXAI_AuditTensorKernelSelfTest(string &reason)
       return false;
    }
 
-   double mat_p[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
-   double mat_m[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
-   double mat_v[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
-   double mat_g[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
    for(int r=0; r<FXAI_AI_WEIGHTS; r++)
    {
       for(int c=0; c<FXAI_AI_MLP_HIDDEN; c++)
       {
-         mat_p[r][c] = ((r < 3 && c < 3) ? 0.05 * (double)(r + c + 1) : 0.0);
-         mat_m[r][c] = 0.0;
-         mat_v[r][c] = 0.0;
-         mat_g[r][c] = ((r < 3 && c < 3) ? 0.01 * (double)(r + 1) * (double)(c + 1) : 0.0);
+         g_fxai_audit_tensor_mat_p[r][c] = ((r < 3 && c < 3) ? 0.05 * (double)(r + c + 1) : 0.0);
+         g_fxai_audit_tensor_mat_m[r][c] = 0.0;
+         g_fxai_audit_tensor_mat_v[r][c] = 0.0;
+         g_fxai_audit_tensor_mat_g[r][c] = ((r < 3 && c < 3) ? 0.01 * (double)(r + 1) * (double)(c + 1) : 0.0);
       }
    }
-   FXAI_OptAdamWMatrixInputHiddenStep(mat_p, mat_m, mat_v, mat_g, 3, 3, group_cfg, group_stats);
-   if(group_stats.count != 9 || !MathIsValidNumber(mat_p[2][2]) || !MathIsValidNumber(mat_m[2][2]) || !MathIsValidNumber(mat_v[2][2]))
+   FXAI_OptAdamWMatrixInputHiddenStep(g_fxai_audit_tensor_mat_p,
+                                      g_fxai_audit_tensor_mat_m,
+                                      g_fxai_audit_tensor_mat_v,
+                                      g_fxai_audit_tensor_mat_g,
+                                      3,
+                                      3,
+                                      group_cfg,
+                                      group_stats);
+   if(group_stats.count != 9 ||
+      !MathIsValidNumber(g_fxai_audit_tensor_mat_p[2][2]) ||
+      !MathIsValidNumber(g_fxai_audit_tensor_mat_m[2][2]) ||
+      !MathIsValidNumber(g_fxai_audit_tensor_mat_v[2][2]))
    {
       reason = "param_group_matrix";
       return false;
@@ -392,33 +443,39 @@ bool FXAI_AuditTensorKernelSelfTest(string &reason)
    }
 
    double eps = 1e-5;
-   double w_plus[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
-   double w_minus[FXAI_AI_WEIGHTS][FXAI_AI_MLP_HIDDEN];
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
    {
       for(int o=0; o<FXAI_AI_MLP_HIDDEN; o++)
       {
-         w_plus[k][o] = w_in[k][o];
-         w_minus[k][o] = w_in[k][o];
+         g_fxai_audit_tensor_w_plus[k][o] = g_fxai_audit_tensor_w_in[k][o];
+         g_fxai_audit_tensor_w_minus[k][o] = g_fxai_audit_tensor_w_in[k][o];
       }
    }
-   w_plus[1][0] += eps;
-   w_minus[1][0] -= eps;
-   double mm_plus[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_MLP_HIDDEN];
-   double mm_minus[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_MLP_HIDDEN];
-   FXAI_TensorBatchedMatMul(seq, seq_len, w_plus, b_in, mm_plus, 2);
-   FXAI_TensorBatchedMatMul(seq, seq_len, w_minus, b_in, mm_minus, 2);
+   g_fxai_audit_tensor_w_plus[1][0] += eps;
+   g_fxai_audit_tensor_w_minus[1][0] -= eps;
+   FXAI_TensorBatchedMatMul(g_fxai_audit_tensor_seq,
+                            seq_len,
+                            g_fxai_audit_tensor_w_plus,
+                            b_in,
+                            g_fxai_audit_tensor_mm_plus,
+                            2);
+   FXAI_TensorBatchedMatMul(g_fxai_audit_tensor_seq,
+                            seq_len,
+                            g_fxai_audit_tensor_w_minus,
+                            b_in,
+                            g_fxai_audit_tensor_mm_minus,
+                            2);
    double loss_plus = 0.0;
    double loss_minus = 0.0;
    for(int t=0; t<seq_len; t++)
    {
-      loss_plus += mm_plus[t][0];
-      loss_minus += mm_minus[t][0];
+      loss_plus += g_fxai_audit_tensor_mm_plus[t][0];
+      loss_minus += g_fxai_audit_tensor_mm_minus[t][0];
    }
    double grad_fd = (loss_plus - loss_minus) / (2.0 * eps);
    double grad_ref = 0.0;
    for(int t=0; t<seq_len; t++)
-      grad_ref += seq[t][1];
+      grad_ref += g_fxai_audit_tensor_seq[t][1];
    if(MathAbs(grad_fd - grad_ref) > 1e-4)
    {
       reason = "batched_matmul_gradient";

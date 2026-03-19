@@ -1775,12 +1775,29 @@ bool FXAI_WarmupBuildTransferSymbolSamplesForHorizon(const string target_symbol,
    if(StringLen(main_symbol) > 0 && main_symbol != target_symbol && ctx_loaded < FXAI_MAX_CONTEXT_SYMBOLS)
    {
       ctx_series[ctx_loaded].symbol = main_symbol;
-      ctx_series[ctx_loaded].loaded = FXAI_LoadSeriesOptionalCached(main_symbol,
-                                                                    PERIOD_M1,
-                                                                    needed,
-                                                                    rates_ctx_tmp,
-                                                                    ctx_series[ctx_loaded].close,
-                                                                    ctx_series[ctx_loaded].time);
+      ctx_series[ctx_loaded].loaded = FXAI_LoadRatesOptional(main_symbol,
+                                                             PERIOD_M1,
+                                                             needed,
+                                                             rates_ctx_tmp);
+      if(ctx_series[ctx_loaded].loaded)
+      {
+         FXAI_ExtractRatesCloseTimeSpread(rates_ctx_tmp,
+                                          ctx_series[ctx_loaded].close,
+                                          ctx_series[ctx_loaded].time,
+                                          ctx_series[ctx_loaded].spread);
+         FXAI_ExtractRatesOHLC(rates_ctx_tmp,
+                               ctx_series[ctx_loaded].open,
+                               ctx_series[ctx_loaded].high,
+                               ctx_series[ctx_loaded].low,
+                               ctx_series[ctx_loaded].close);
+         ctx_series[ctx_loaded].loaded = FXAI_ValidateM1SeriesBundle(ctx_series[ctx_loaded].time,
+                                                                     ctx_series[ctx_loaded].open,
+                                                                     ctx_series[ctx_loaded].high,
+                                                                     ctx_series[ctx_loaded].low,
+                                                                     ctx_series[ctx_loaded].close,
+                                                                     ctx_series[ctx_loaded].spread,
+                                                                     needed);
+      }
       if(ctx_series[ctx_loaded].loaded)
          ctx_loaded++;
    }
@@ -1802,12 +1819,29 @@ bool FXAI_WarmupBuildTransferSymbolSamplesForHorizon(const string target_symbol,
       if(dup)
          continue;
       ctx_series[ctx_loaded].symbol = ctx_symbol;
-      ctx_series[ctx_loaded].loaded = FXAI_LoadSeriesOptionalCached(ctx_symbol,
-                                                                    PERIOD_M1,
-                                                                    needed,
-                                                                    rates_ctx_tmp,
-                                                                    ctx_series[ctx_loaded].close,
-                                                                    ctx_series[ctx_loaded].time);
+      ctx_series[ctx_loaded].loaded = FXAI_LoadRatesOptional(ctx_symbol,
+                                                             PERIOD_M1,
+                                                             needed,
+                                                             rates_ctx_tmp);
+      if(ctx_series[ctx_loaded].loaded)
+      {
+         FXAI_ExtractRatesCloseTimeSpread(rates_ctx_tmp,
+                                          ctx_series[ctx_loaded].close,
+                                          ctx_series[ctx_loaded].time,
+                                          ctx_series[ctx_loaded].spread);
+         FXAI_ExtractRatesOHLC(rates_ctx_tmp,
+                               ctx_series[ctx_loaded].open,
+                               ctx_series[ctx_loaded].high,
+                               ctx_series[ctx_loaded].low,
+                               ctx_series[ctx_loaded].close);
+         ctx_series[ctx_loaded].loaded = FXAI_ValidateM1SeriesBundle(ctx_series[ctx_loaded].time,
+                                                                     ctx_series[ctx_loaded].open,
+                                                                     ctx_series[ctx_loaded].high,
+                                                                     ctx_series[ctx_loaded].low,
+                                                                     ctx_series[ctx_loaded].close,
+                                                                     ctx_series[ctx_loaded].spread,
+                                                                     needed);
+      }
       if(ctx_series[ctx_loaded].loaded)
          ctx_loaded++;
    }
@@ -2007,12 +2041,30 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
    ArrayResize(ctx_series, ctx_count);
    for(int s=0; s<ctx_count; s++)
    {
-      ctx_series[s].loaded = FXAI_LoadSeriesOptionalCached(g_context_symbols[s],
-                                                          PERIOD_M1,
-                                                          needed,
-                                                          rates_ctx_tmp,
-                                                          ctx_series[s].close,
-                                                          ctx_series[s].time);
+      ctx_series[s].symbol = g_context_symbols[s];
+      ctx_series[s].loaded = FXAI_LoadRatesOptional(g_context_symbols[s],
+                                                    PERIOD_M1,
+                                                    needed,
+                                                    rates_ctx_tmp);
+      if(ctx_series[s].loaded)
+      {
+         FXAI_ExtractRatesCloseTimeSpread(rates_ctx_tmp,
+                                          ctx_series[s].close,
+                                          ctx_series[s].time,
+                                          ctx_series[s].spread);
+         FXAI_ExtractRatesOHLC(rates_ctx_tmp,
+                               ctx_series[s].open,
+                               ctx_series[s].high,
+                               ctx_series[s].low,
+                               ctx_series[s].close);
+         ctx_series[s].loaded = FXAI_ValidateM1SeriesBundle(ctx_series[s].time,
+                                                            ctx_series[s].open,
+                                                            ctx_series[s].high,
+                                                            ctx_series[s].low,
+                                                            ctx_series[s].close,
+                                                            ctx_series[s].spread,
+                                                            needed);
+      }
    }
 
    int i_start = max_h;
