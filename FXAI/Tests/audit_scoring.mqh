@@ -511,6 +511,7 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
       double time_to_hit_frac = 1.0;
       int path_flags = 0;
       double spread_stress = 0.0;
+      FXAIExecutionTraceStats trace_stats;
       double sample_weight = 1.0;
       double x[];
       if(!FXAI_AuditBuildSample(i,
@@ -548,6 +549,7 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
                                 time_to_hit_frac,
                                 path_flags,
                                 spread_stress,
+                                trace_stats,
                                 sample_weight,
                                 x))
          continue;
@@ -659,14 +661,15 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
                               0.20 * MathAbs(pred.hit_time_frac - time_to_hit_frac) +
                               0.20 * MathAbs(pred.path_risk - spread_stress) +
                               0.15 * MathAbs(pred.fill_risk - FXAI_Clamp(spread_stress + (((path_flags & FXAI_PATHFLAG_DUAL_HIT) != 0) ? 0.25 : 0.0), 0.0, 1.0));
-               net_points = FXAI_AuditRealizedNetPointsForSignalReplay(decision,
-                                                                       move_points,
-                                                                       ctx.min_move_points,
-                                                                       horizon_minutes,
-                                                                       spread_stress,
-                                                                       path_flags,
-                                                                       ctx.sample_time,
-                                                                       spec.id);
+               net_points = FXAI_AuditRealizedNetPointsForSignalReplayTrace(decision,
+                                                                            move_points,
+                                                                            ctx.min_move_points,
+                                                                            horizon_minutes,
+                                                                            spread_stress,
+                                                                            path_flags,
+                                                                            trace_stats,
+                                                                            ctx.sample_time,
+                                                                            spec.id);
             }
 
             if(track_overall_eval)

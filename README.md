@@ -58,17 +58,19 @@ You do not need to be an MQL5 programmer to use FXAI as an operator. For normal 
 - **Internal neural runtime**
   - Serious neural plugins share one native `TensorCore` layer for tensor math, sequence handling, sequence blocks, optimizers, and numeric verification.
 - **Cross-symbol transfer warmup**
-  - Shared transfer adapters now pretrain across configured horizons and capped context-symbol sample packs before live trading begins.
+  - Shared transfer adapters now pretrain across configured horizons and capped context-symbol sample packs before live trading begins, with a deeper shared latent backbone that is conditioned by symbol-domain, horizon, and session context.
 - **Cost-aware signals**
   - Labels and thresholds account for trading friction, improving realistic expectancy.
 - **Feature governance**
-  - A feature registry now tracks provenance, leakage guards, session-transition and rollover states, swap/carry factors, and live feature-family drift diagnostics.
+  - A feature registry now tracks provenance, leakage guards, session-transition and rollover states, swap/carry factors, live feature-family drift diagnostics, and emits a runtime feature manifest for auditability.
+- **M1-first research data**
+  - FXAI now explicitly treats M1 OHLC plus spread as the canonical execution and feature source, with integrity checks shared by warmup, runtime, and Audit Lab.
 - **Safer execution**
   - Built-in equity controls, skip class, and conservative calibration reduce overtrading.
 - **Execution parity controls**
-  - Shared execution profiles, replay-aware broker-event penalties, risk-aware sizing, correlated exposure caps, and `OrderCheck` preflight keep live trading closer to Audit Lab and tester assumptions.
+  - Shared execution profiles, M1 replay-trace penalties, risk-aware sizing, correlated exposure caps, and `OrderCheck` preflight keep live trading closer to Audit Lab and tester assumptions.
 - **Persistent research state**
-  - Runtime artifacts now persist feature-drift diagnostics and emit a per-plugin checkpoint coverage manifest so restart behavior and checkpoint depth are auditable.
+  - Runtime artifacts now persist feature-drift diagnostics and emit per-plugin checkpoint coverage plus feature-registry manifests so restart behavior and checkpoint depth are auditable.
 - **Backtest efficiency**
   - Lightweight online updates and shared data pipeline support large optimization runs.
 - **Audit discipline**
@@ -124,7 +126,7 @@ Important clarification:
 Compile from the repo root:
 
 ```bash
-cd /Users/andreborchert/Documents/New\ project/FXAI
+cd /Users/andreborchert/FXAI-main2
 python3 FXAI/Tools/fxai_testlab.py compile-main
 python3 FXAI/Tools/fxai_testlab.py compile-audit
 ```
@@ -132,7 +134,7 @@ python3 FXAI/Tools/fxai_testlab.py compile-audit
 Focused Audit Lab example:
 
 ```bash
-cd /Users/andreborchert/Documents/New\ project/FXAI
+cd /Users/andreborchert/FXAI-main2
 python3 FXAI/Tools/fxai_testlab.py run-audit \
   --plugin-list "{ai_mlp}" \
   --scenario-list "{market_recent, market_walkforward}" \
@@ -164,7 +166,7 @@ Typical operator use cases:
 - **Check whether a model is still trustworthy**
   - Use the Audit Lab before a long optimization or before promoting a configuration
 - **Validate execution realism**
-  - Re-run audits with spread, slippage, partial-fill, reject, and session-edge penalties that match your broker conditions
+  - Re-run audits with M1 spread and bar-trace-aware slippage, partial-fill, reject, and session-edge penalties that match your broker conditions
 - **Deploy with stricter live controls**
   - Configure execution profile, position sizing mode, and portfolio exposure caps before moving from audit into live evaluation
 - **Create a baseline**

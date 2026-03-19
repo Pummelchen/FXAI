@@ -22,7 +22,11 @@
 #define FXAI_CONTEXT_MICRO_OFFSET (FXAI_CONTEXT_SHARED_OFFSET + FXAI_CONTEXT_SHARED_ADAPTER_FEATS)
 #define FXAI_CONTEXT_EXTRA_FEATS (FXAI_CONTEXT_SHARED_OFFSET + FXAI_CONTEXT_SHARED_ADAPTER_FEATS + FXAI_CONTEXT_MICROSTRUCTURE_FEATS)
 #define FXAI_CONTEXT_DYNAMIC_POOL 12
-#define FXAI_SHARED_TRANSFER_FEATURES 14
+#define FXAI_SHARED_TRANSFER_FEATURES 20
+#define FXAI_SHARED_TRANSFER_LATENT 12
+#define FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS 8
+#define FXAI_SHARED_TRANSFER_HORIZON_BUCKETS 8
+#define FXAI_EXEC_TRACE_BARS 12
 #define FXAI_API_VERSION_V4 4
 #define FXAI_MAX_SEQUENCE_BARS 96
 
@@ -342,6 +346,18 @@ struct FXAIExecutionReplayFrame
    int    event_flags;
 };
 
+struct FXAIExecutionTraceStats
+{
+   double spread_mean_ratio;
+   double spread_peak_ratio;
+   double range_mean_ratio;
+   double body_efficiency;
+   double gap_ratio;
+   double reversal_ratio;
+   double session_transition_exposure;
+   double rollover_exposure;
+};
+
 struct FXAIAIModelOutputV4
 {
    double class_probs[3];
@@ -402,6 +418,17 @@ bool FXAI_SaveRuntimeArtifacts(const string symbol);
 bool FXAI_LoadRuntimeArtifacts(const string symbol);
 void FXAI_MaybeSaveRuntimeArtifacts(const string symbol,
                                     const datetime bar_time);
+void FXAI_ClearExecutionTraceStats(FXAIExecutionTraceStats &trace);
+void FXAI_BuildExecutionTraceStats(const int i,
+                                   const int horizon_minutes,
+                                   const double point_value,
+                                   const datetime &time_arr[],
+                                   const double &open_arr[],
+                                   const double &high_arr[],
+                                   const double &low_arr[],
+                                   const double &close_arr[],
+                                   const int &spread_arr[],
+                                   FXAIExecutionTraceStats &trace);
 
 string FXAI_ReferenceTierName(const int tier)
 {
@@ -422,12 +449,12 @@ int FXAI_DefaultReferenceTierForAI(const int ai_id)
       case AI_CHRONOS:
       case AI_TIMESFM:
       case AI_CFX_WORLD:
+      case AI_GRAPHWM:
          return (int)FXAI_REFERENCE_SURROGATE;
 
       case AI_S4:
       case AI_STMN:
       case AI_TRR:
-      case AI_GRAPHWM:
       case AI_RETRDIFF:
       case AI_LOFFM:
       case AI_MOE_CONFORMAL:
@@ -435,7 +462,23 @@ int FXAI_DefaultReferenceTierForAI(const int ai_id)
       case AI_AUTOFORMER:
       case AI_PATCHTST:
       case AI_GEODESICATTENTION:
+      case AI_CATBOOST:
+      case AI_LIGHTGBM:
+      case AI_XGB_FAST:
+      case AI_XGBOOST:
+      case AI_QUANTILE:
+      case AI_ENHASH:
+      case AI_MLP_TINY:
+      case AI_LSTM:
+      case AI_LSTMG:
+      case AI_TCN:
+      case AI_TFT:
          return (int)FXAI_REFERENCE_COMPRESSED_NATIVE;
+
+      case AI_FTRL_LOGIT:
+      case AI_PA_LINEAR:
+      case AI_SGD_LOGIT:
+         return (int)FXAI_REFERENCE_FULL_NATIVE;
 
       case AI_M1SYNC:
       case AI_BUY_ONLY:
@@ -613,12 +656,118 @@ void FXAI_ClearExecutionReplayFrame(FXAIExecutionReplayFrame &frame)
    frame.event_flags = 0;
 }
 
+void FXAI_ClearExecutionTraceStats(FXAIExecutionTraceStats &trace)
+{
+   trace.spread_mean_ratio = 1.0;
+   trace.spread_peak_ratio = 1.0;
+   trace.range_mean_ratio = 1.0;
+   trace.body_efficiency = 0.5;
+   trace.gap_ratio = 0.0;
+   trace.reversal_ratio = 0.0;
+   trace.session_transition_exposure = 0.0;
+   trace.rollover_exposure = 0.0;
+}
+
+void FXAI_BuildExecutionTraceStats(const int i,
+                                   const int horizon_minutes,
+                                   const double point_value,
+                                   const datetime &time_arr[],
+                                   const double &open_arr[],
+                                   const double &high_arr[],
+                                   const double &low_arr[],
+                                   const double &close_arr[],
+                                   const int &spread_arr[],
+                                   FXAIExecutionTraceStats &trace)
+{
+   FXAI_ClearExecutionTraceStats(trace);
+   int n = ArraySize(close_arr);
+   if(i < 0 || i >= n || point_value <= 0.0)
+      return;
+
+   int steps = horizon_minutes;
+   if(steps < 1)
+      steps = 1;
+   if(steps > 1440)
+      steps = 1440;
+   if(steps > FXAI_EXEC_TRACE_BARS)
+      steps = FXAI_EXEC_TRACE_BARS;
+   if(i < steps)
+      steps = i;
+   if(steps < 1)
+      steps = 1;
+
+   double entry_spread = MathMax(FXAI_GetSpreadAtIndex(i, spread_arr, 1.0), 0.25);
+   double entry_range = MathMax((high_arr[i] - low_arr[i]) / point_value, 0.25);
+   double spread_sum = 0.0;
+   double spread_peak = entry_spread;
+   double range_sum = 0.0;
+   double body_sum = 0.0;
+   double gap_sum = 0.0;
+   int reversal_count = 0;
+   double prev_dir = 0.0;
+   double session_sum = 0.0;
+   double rollover_sum = 0.0;
+
+   for(int step=0; step<=steps; step++)
+   {
+      int idx = i - step;
+      if(idx < 0 || idx >= n)
+         break;
+
+      double spread = MathMax(FXAI_GetSpreadAtIndex(idx, spread_arr, entry_spread), 0.0);
+      if(spread > spread_peak)
+         spread_peak = spread;
+      spread_sum += spread;
+
+      double range_points = MathMax((high_arr[idx] - low_arr[idx]) / point_value, 0.0);
+      range_sum += range_points;
+      double body_eff = MathAbs(close_arr[idx] - open_arr[idx]) / MathMax(high_arr[idx] - low_arr[idx], point_value);
+      body_sum += FXAI_Clamp(body_eff, 0.0, 1.0);
+
+      if(idx + 1 < n)
+      {
+         double gap_points = MathAbs(open_arr[idx] - close_arr[idx + 1]) / point_value;
+         gap_sum += gap_points;
+      }
+
+      double bar_dir = FXAI_Sign(close_arr[idx] - open_arr[idx]);
+      if(step > 0 && MathAbs(bar_dir) > 1e-9 && MathAbs(prev_dir) > 1e-9 && bar_dir != prev_dir)
+         reversal_count++;
+      if(MathAbs(bar_dir) > 1e-9)
+         prev_dir = bar_dir;
+
+      datetime t = (idx < ArraySize(time_arr) ? time_arr[idx] : 0);
+      MqlDateTime dt;
+      TimeToStruct(t, dt);
+      double hour_value = (double)dt.hour + (double)dt.min / 60.0;
+      double asia_to_eu = FXAI_Clamp(1.0 - MathAbs(hour_value - 7.0) / 2.5, 0.0, 1.0);
+      double eu_to_us = FXAI_Clamp(1.0 - MathAbs(hour_value - 13.0) / 2.5, 0.0, 1.0);
+      double us_to_roll = FXAI_Clamp(1.0 - MathAbs(hour_value - 21.0) / 2.5, 0.0, 1.0);
+      session_sum += FXAI_Clamp(0.60 * asia_to_eu + 0.80 * eu_to_us - 0.70 * us_to_roll, -1.0, 1.0);
+      double roll_d = MathAbs(hour_value - 23.0);
+      if(roll_d > 12.0)
+         roll_d = 24.0 - roll_d;
+      rollover_sum += FXAI_Clamp(1.0 - roll_d / 3.0, 0.0, 1.0);
+   }
+
+   double used = (double)(steps + 1);
+   trace.spread_mean_ratio = FXAI_Clamp((spread_sum / used) / entry_spread, 0.5, 6.0);
+   trace.spread_peak_ratio = FXAI_Clamp(spread_peak / entry_spread, 1.0, 10.0);
+   trace.range_mean_ratio = FXAI_Clamp((range_sum / used) / entry_range, 0.25, 8.0);
+   trace.body_efficiency = FXAI_Clamp(body_sum / used, 0.0, 1.0);
+   trace.gap_ratio = FXAI_Clamp((gap_sum / used) / entry_spread, 0.0, 8.0);
+   trace.reversal_ratio = FXAI_Clamp((double)reversal_count / MathMax((double)steps, 1.0), 0.0, 1.0);
+   trace.session_transition_exposure = FXAI_Clamp(0.5 + 0.5 * (session_sum / used), 0.0, 1.0);
+   trace.rollover_exposure = FXAI_Clamp(rollover_sum / used, 0.0, 1.0);
+}
+
 void FXAI_BuildExecutionReplayFrame(const FXAIExecutionProfile &profile,
                                     const datetime sample_time,
                                     const int horizon_minutes,
                                     const double spread_stress,
                                     const int path_flags,
                                     const int scenario_id,
+                                    const FXAIExecutionTraceStats &trace,
                                     FXAIExecutionReplayFrame &frame)
 {
    FXAI_ClearExecutionReplayFrame(frame);
@@ -633,36 +782,56 @@ void FXAI_BuildExecutionReplayFrame(const FXAIExecutionProfile &profile,
    double rollover_edge = 1.0 - MathMin(MathAbs((double)dt.hour - 23.0), 6.0) / 6.0;
    rollover_edge = FXAI_Clamp(rollover_edge, 0.0, 1.0);
    double pulse = 0.5 + 0.5 * MathSin(6.283185307179586 * mm_norm);
+   double trace_spread = FXAI_Clamp(0.55 * (trace.spread_mean_ratio - 1.0) +
+                                    0.45 * (trace.spread_peak_ratio - 1.0),
+                                    0.0,
+                                    6.0);
+   double trace_range = FXAI_Clamp(trace.range_mean_ratio - 1.0, -0.5, 4.0);
+   double trace_gap = FXAI_Clamp(trace.gap_ratio, 0.0, 6.0);
+   double trace_reversal = FXAI_Clamp(trace.reversal_ratio, 0.0, 1.0);
+   double trace_session = FXAI_Clamp(0.55 * session_edge + 0.45 * trace.session_transition_exposure, 0.0, 1.0);
+   double trace_roll = FXAI_Clamp(0.55 * rollover_edge + 0.45 * trace.rollover_exposure, 0.0, 1.0);
+   double body_penalty = FXAI_Clamp(1.0 - trace.body_efficiency, 0.0, 1.0);
 
    frame.slippage_mult = 1.0 +
-                         0.05 * stress +
-                         0.04 * session_edge +
-                         0.03 * rollover_edge +
+                         0.04 * stress +
+                         0.05 * trace_spread +
+                         0.03 * MathMax(trace_range, 0.0) +
+                         0.04 * trace_gap +
+                         0.04 * trace_session +
+                         0.03 * trace_roll +
                          0.015 * horizon_scale +
                          0.02 * pulse;
    frame.fill_mult = 1.0 +
-                     0.04 * stress +
-                     0.03 * session_edge +
-                     0.02 * rollover_edge;
+                     0.03 * stress +
+                     0.05 * trace_reversal +
+                     0.03 * body_penalty +
+                     0.03 * trace_session +
+                     0.02 * trace_roll;
    frame.latency_add_points = MathMax(profile.latency_penalty_points, 0.0) *
-                              (0.40 + 0.35 * session_edge + 0.25 * rollover_edge + 0.10 * stress);
+                              (0.32 + 0.22 * trace_spread + 0.18 * trace_gap + 0.16 * trace_session + 0.12 * trace_roll + 0.08 * stress);
    frame.reject_prob = FXAI_Clamp(0.002 +
-                                  0.010 * stress +
-                                  0.008 * session_edge +
-                                  0.008 * rollover_edge,
+                                  0.008 * stress +
+                                  0.012 * trace_spread +
+                                  0.010 * trace_gap +
+                                  0.009 * trace_session +
+                                  0.006 * trace_roll,
                                   0.0,
                                   0.35);
    frame.partial_fill_prob = FXAI_Clamp(0.01 +
-                                        0.05 * stress +
-                                        0.04 * session_edge +
-                                        0.02 * rollover_edge,
+                                        0.030 * stress +
+                                        0.040 * trace_spread +
+                                        0.030 * trace_reversal +
+                                        0.020 * body_penalty +
+                                        0.020 * trace_session,
                                         0.0,
                                         0.95);
-   frame.drift_penalty_points = 0.05 * MathMax(profile.cost_buffer_points, 0.0) * (session_edge + rollover_edge);
+   frame.drift_penalty_points = 0.05 * MathMax(profile.cost_buffer_points, 0.0) *
+                                (trace_session + trace_roll + 0.35 * trace_spread);
 
    if((path_flags & FXAI_PATHFLAG_DUAL_HIT) != 0)
       frame.event_flags |= FXAI_PATHFLAG_DUAL_HIT;
-   if((path_flags & FXAI_PATHFLAG_SPREAD_STRESS) != 0)
+   if((path_flags & FXAI_PATHFLAG_SPREAD_STRESS) != 0 || trace.spread_peak_ratio > 1.35)
       frame.event_flags |= FXAI_PATHFLAG_SPREAD_STRESS;
 
    if(scenario_id == 11) // market_session_edges
@@ -675,19 +844,39 @@ void FXAI_BuildExecutionReplayFrame(const FXAIExecutionProfile &profile,
    }
    else if(scenario_id == 12) // market_spread_shock
    {
-      frame.slippage_mult += 0.16;
-      frame.fill_mult += 0.12;
-      frame.latency_add_points += 0.20 + 0.10 * stress;
+      frame.slippage_mult += 0.12 + 0.03 * trace_spread;
+      frame.fill_mult += 0.10 + 0.02 * trace_spread;
+      frame.latency_add_points += 0.20 + 0.10 * stress + 0.06 * trace_gap;
       frame.reject_prob = FXAI_Clamp(frame.reject_prob + 0.08, 0.0, 0.50);
       frame.partial_fill_prob = FXAI_Clamp(frame.partial_fill_prob + 0.14, 0.0, 0.99);
       frame.event_flags |= FXAI_PATHFLAG_SPREAD_STRESS;
    }
    else if(scenario_id == 13) // market_walkforward
    {
-      frame.slippage_mult += 0.05;
-      frame.fill_mult += 0.04;
+      frame.slippage_mult += 0.04 + 0.02 * trace_reversal;
+      frame.fill_mult += 0.03 + 0.02 * body_penalty;
       frame.reject_prob = FXAI_Clamp(frame.reject_prob + 0.03, 0.0, 0.40);
    }
+}
+
+void FXAI_BuildExecutionReplayFrame(const FXAIExecutionProfile &profile,
+                                    const datetime sample_time,
+                                    const int horizon_minutes,
+                                    const double spread_stress,
+                                    const int path_flags,
+                                    const int scenario_id,
+                                    FXAIExecutionReplayFrame &frame)
+{
+   FXAIExecutionTraceStats trace;
+   FXAI_ClearExecutionTraceStats(trace);
+   FXAI_BuildExecutionReplayFrame(profile,
+                                  sample_time,
+                                  horizon_minutes,
+                                  spread_stress,
+                                  path_flags,
+                                  scenario_id,
+                                  trace,
+                                  frame);
 }
 
 void FXAI_SetExecutionProfilePreset(const int profile_id,

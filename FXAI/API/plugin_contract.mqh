@@ -489,8 +489,8 @@ public:
       m_native_quality_heads.Reset();
    }
    virtual bool SupportsPersistentState(void) const { return true; }
-   virtual int PersistentStateVersion(void) const { return 1; }
-   virtual string PersistentStateCoverageTag(void) const { return "base_only"; }
+   virtual int PersistentStateVersion(void) const { return 3; }
+   virtual string PersistentStateCoverageTag(void) const { return FXAI_ReferenceTierName(FXAI_DefaultReferenceTierForAI(AIId())); }
    virtual void Describe(FXAIAIManifestV4 &out) const = 0;
    virtual bool SupportsSyntheticSeries(void) const { return false; }
    virtual bool SetSyntheticSeries(const datetime &time_arr[],
@@ -588,7 +588,7 @@ public:
       if(ok)
       {
          Reset();
-         ok = LoadBasePersistentState(handle);
+         ok = LoadBasePersistentState(handle, model_version);
          if(ok)
             ok = LoadModelState(handle, model_version);
       }
@@ -744,11 +744,31 @@ protected:
 
       FileWriteInteger(handle, (m_shared_adapter_ready ? 1 : 0));
       FileWriteInteger(handle, m_shared_adapter_steps);
+      FileWriteInteger(handle, (m_shared_backbone_ready ? 1 : 0));
+      FileWriteInteger(handle, m_shared_backbone_steps);
       for(int c=0; c<3; c++)
          for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
             FileWriteDouble(handle, m_shared_cls_w[c][i]);
       for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
          FileWriteDouble(handle, m_shared_move_w[i]);
+      for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+      {
+         FileWriteDouble(handle, m_shared_backbone_b[j]);
+         FileWriteDouble(handle, m_shared_backbone_move[j]);
+         for(int c=0; c<3; c++)
+            FileWriteDouble(handle, m_shared_backbone_cls[c][j]);
+         for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
+            FileWriteDouble(handle, m_shared_backbone_w[j][i]);
+      }
+      for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
+         for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+            FileWriteDouble(handle, m_shared_domain_emb[d][j]);
+      for(int h=0; h<FXAI_SHARED_TRANSFER_HORIZON_BUCKETS; h++)
+         for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+            FileWriteDouble(handle, m_shared_horizon_emb[h][j]);
+      for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
+         for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+            FileWriteDouble(handle, m_shared_session_emb[s][j]);
       for(int slot=0; slot<FXAI_CONTEXT_TOP_SYMBOLS; slot++)
       {
          FileWriteDouble(handle, m_transfer_slot_obs[slot]);
@@ -834,7 +854,8 @@ protected:
       return true;
    }
 
-   bool LoadBasePersistentState(const int handle)
+   bool LoadBasePersistentState(const int handle,
+                                const int version)
    {
       m_move_ready = (FileReadInteger(handle) != 0);
       m_move_ema_abs = FileReadDouble(handle);
@@ -855,11 +876,42 @@ protected:
 
       m_shared_adapter_ready = (FileReadInteger(handle) != 0);
       m_shared_adapter_steps = FileReadInteger(handle);
+      if(version >= 3)
+      {
+         m_shared_backbone_ready = (FileReadInteger(handle) != 0);
+         m_shared_backbone_steps = FileReadInteger(handle);
+      }
+      else
+      {
+         m_shared_backbone_ready = false;
+         m_shared_backbone_steps = 0;
+      }
       for(int c=0; c<3; c++)
          for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
             m_shared_cls_w[c][i] = FileReadDouble(handle);
       for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
          m_shared_move_w[i] = FileReadDouble(handle);
+      if(version >= 3)
+      {
+         for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+         {
+            m_shared_backbone_b[j] = FileReadDouble(handle);
+            m_shared_backbone_move[j] = FileReadDouble(handle);
+            for(int c=0; c<3; c++)
+               m_shared_backbone_cls[c][j] = FileReadDouble(handle);
+            for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
+               m_shared_backbone_w[j][i] = FileReadDouble(handle);
+         }
+         for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
+            for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+               m_shared_domain_emb[d][j] = FileReadDouble(handle);
+         for(int h=0; h<FXAI_SHARED_TRANSFER_HORIZON_BUCKETS; h++)
+            for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+               m_shared_horizon_emb[h][j] = FileReadDouble(handle);
+         for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
+            for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+               m_shared_session_emb[s][j] = FileReadDouble(handle);
+      }
       for(int slot=0; slot<FXAI_CONTEXT_TOP_SYMBOLS; slot++)
       {
          m_transfer_slot_obs[slot] = FileReadDouble(handle);

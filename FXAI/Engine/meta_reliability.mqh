@@ -421,6 +421,8 @@ void FXAI_ProcessReliabilityBar(const string symbol)
    FXAI_ExtractRatesOHLC(rel_rates_m1, rel_open_arr, rel_high_arr, rel_low_arr, rel_close_arr);
    if(ArraySize(rel_close_arr) <= H || ArraySize(rel_spread_arr) <= H)
       return;
+   if(!FXAI_ValidateM1SeriesBundle(rel_time_arr, rel_open_arr, rel_high_arr, rel_low_arr, rel_close_arr, rel_spread_arr, H + 1))
+      return;
 
    FXAIDataSnapshot snapshot;
    if(!FXAI_ExportDataSnapshot(symbol, AI_CommissionPerLotSide, AI_CostBufferPoints, snapshot))

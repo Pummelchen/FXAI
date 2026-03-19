@@ -178,6 +178,11 @@ int SpecialDirectionAI(const string symbol)
       g_ai_last_reason = "m1_series_size_failed";
       return -1;
    }
+   if(!FXAI_ValidateM1SeriesBundle(time_arr, open_arr, high_arr, low_arr, close_arr, spread_m1, needed))
+   {
+      g_ai_last_reason = "m1_series_integrity_failed";
+      return -1;
+   }
 
    int needed_m5 = (needed / 5) + 80;
    int needed_m15 = (needed / 15) + 80;

@@ -36,6 +36,7 @@ bool FXAI_AuditBuildSample(const int i,
                            double &time_to_hit_frac,
                            int &path_flags,
                            double &spread_stress,
+                           FXAIExecutionTraceStats &trace_stats,
                            double &sample_weight,
                            double &x[])
 {
@@ -147,6 +148,16 @@ bool FXAI_AuditBuildSample(const int i,
                                                      time_to_hit_frac,
                                                      path_flags);
    spread_stress = FXAI_Clamp(snapshot.spread_points / MathMax(snapshot.min_move_points, 0.10), 0.0, 4.0);
+   FXAI_BuildExecutionTraceStats(i,
+                                 horizon_minutes,
+                                 point,
+                                 time_arr,
+                                 open_arr,
+                                 high_arr,
+                                 low_arr,
+                                 close_arr,
+                                 spread_arr,
+                                 trace_stats);
    sample_weight = FXAI_Clamp(FXAI_MoveEdgeWeight(move_points, cost_points), 0.25, 4.0);
 
    double spread_ref = FXAI_AuditGetIntArrayMean(spread_arr, i, 64, snapshot.spread_points);
@@ -217,6 +228,7 @@ void FXAI_AuditBuildWindow(const int i,
       double whit = 1.0;
       int wflags = 0;
       double wspread_stress = 0.0;
+      FXAIExecutionTraceStats wtrace;
       double wweight = 1.0;
       double wx[];
       if(!FXAI_AuditBuildSample(wi,
@@ -254,6 +266,7 @@ void FXAI_AuditBuildWindow(const int i,
                                 whit,
                                 wflags,
                                 wspread_stress,
+                                wtrace,
                                 wweight,
                                 wx))
          break;

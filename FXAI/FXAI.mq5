@@ -599,6 +599,14 @@ struct FXAIPreparedSample
    double mfe_points;
    double mae_points;
    double spread_stress;
+   double trace_spread_mean_ratio;
+   double trace_spread_peak_ratio;
+   double trace_range_mean_ratio;
+   double trace_body_efficiency;
+   double trace_gap_ratio;
+   double trace_reversal_ratio;
+   double trace_session_transition;
+   double trace_rollover;
    double time_to_hit_frac;
    int path_flags;
    double masked_step_target;

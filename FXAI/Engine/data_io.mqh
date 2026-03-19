@@ -339,6 +339,43 @@ void FXAI_ExtractRatesOHLC(const MqlRates &rates_arr[],
    }
 }
 
+bool FXAI_ValidateM1SeriesBundle(const datetime &time_arr[],
+                                 const double &open_arr[],
+                                 const double &high_arr[],
+                                 const double &low_arr[],
+                                 const double &close_arr[],
+                                 const int &spread_arr[],
+                                 const int required_bars)
+{
+   int n = ArraySize(close_arr);
+   if(required_bars > 0 && n < required_bars)
+      return false;
+   if(ArraySize(time_arr) != n || ArraySize(open_arr) != n || ArraySize(high_arr) != n ||
+      ArraySize(low_arr) != n || ArraySize(spread_arr) != n)
+      return false;
+
+   int check_n = n;
+   if(required_bars > 0 && check_n > required_bars)
+      check_n = required_bars;
+   for(int i=0; i<check_n; i++)
+   {
+      if(time_arr[i] <= 0)
+         return false;
+      if(!MathIsValidNumber(open_arr[i]) || !MathIsValidNumber(high_arr[i]) ||
+         !MathIsValidNumber(low_arr[i]) || !MathIsValidNumber(close_arr[i]))
+         return false;
+      double hi = high_arr[i];
+      double lo = low_arr[i];
+      double mx = MathMax(open_arr[i], close_arr[i]);
+      double mn = MathMin(open_arr[i], close_arr[i]);
+      if(hi + 1e-10 < mx || lo - 1e-10 > mn || hi < lo)
+         return false;
+      if(spread_arr[i] < 0)
+         return false;
+   }
+   return true;
+}
+
 bool FXAI_LoadSeriesOptionalCached(const string symbol,
                                   const ENUM_TIMEFRAMES tf,
                                   const int needed,

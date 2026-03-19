@@ -811,14 +811,17 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
                                          FXAI_Clamp(AI_EVThresholdPoints, 0.0, 100.0));
       if(signal == -1) continue;
 
-      double net_pts = FXAI_RealizedNetPointsForSignalReplay(signal,
-                                                             samples[i].move_points,
-                                                             samples[i].min_move_points,
-                                                             score_h,
-                                                             samples[i].spread_stress,
-                                                             samples[i].path_flags,
-                                                             samples[i].sample_time,
-                                                             0);
+      FXAIExecutionTraceStats trace;
+      FXAI_LoadExecutionTraceFromSample(samples[i], trace);
+      double net_pts = FXAI_RealizedNetPointsForSignalReplayTrace(signal,
+                                                                  samples[i].move_points,
+                                                                  samples[i].min_move_points,
+                                                                  score_h,
+                                                                  samples[i].spread_stress,
+                                                                  samples[i].path_flags,
+                                                                  trace,
+                                                                  samples[i].sample_time,
+                                                                  0);
       FXAI_UpdateWarmupBucketStats(total_stats, net_pts);
       int regime_id = samples[i].regime_id;
       if(regime_id < 0 || regime_id >= FXAI_REGIME_COUNT) regime_id = 0;
@@ -952,14 +955,17 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
                                           FXAI_Clamp(AI_EVThresholdPoints, 0.0, 100.0));
       if(signal == -1) continue;
 
-      double net_pts = FXAI_RealizedNetPointsForSignalReplay(signal,
-                                                             eval_sample.move_points,
-                                                             eval_sample.min_move_points,
-                                                             score_h,
-                                                             eval_sample.spread_stress,
-                                                             eval_sample.path_flags,
-                                                             eval_sample.sample_time,
-                                                             0);
+      FXAIExecutionTraceStats trace;
+      FXAI_LoadExecutionTraceFromSample(eval_sample, trace);
+      double net_pts = FXAI_RealizedNetPointsForSignalReplayTrace(signal,
+                                                                  eval_sample.move_points,
+                                                                  eval_sample.min_move_points,
+                                                                  score_h,
+                                                                  eval_sample.spread_stress,
+                                                                  eval_sample.path_flags,
+                                                                  trace,
+                                                                  eval_sample.sample_time,
+                                                                  0);
       FXAI_UpdateWarmupBucketStats(total_stats, net_pts);
       int regime_id = eval_sample.regime_id;
       if(regime_id < 0 || regime_id >= FXAI_REGIME_COUNT) regime_id = 0;
@@ -1723,6 +1729,8 @@ bool FXAI_WarmupBuildTransferSymbolSamplesForHorizon(const string target_symbol,
    FXAI_ExtractRatesOHLC(rates_m1, open_arr, high_arr, low_arr, close_arr);
    if(ArraySize(close_arr) < needed || ArraySize(time_arr) < needed)
       return false;
+   if(!FXAI_ValidateM1SeriesBundle(time_arr, open_arr, high_arr, low_arr, close_arr, spread_m1, needed))
+      return false;
 
    int needed_m5 = MathMax((needed / 5) + 80, 220);
    int needed_m15 = MathMax((needed / 15) + 80, 220);
@@ -1948,6 +1956,8 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
    FXAI_ExtractRatesOHLC(rates_m1, open_arr, high_arr, low_arr, close_arr);
 
    if(ArraySize(close_arr) < needed || ArraySize(time_arr) < needed)
+      return false;
+   if(!FXAI_ValidateM1SeriesBundle(time_arr, open_arr, high_arr, low_arr, close_arr, spread_m1, needed))
       return false;
 
    int needed_m5 = (needed / 5) + 80;

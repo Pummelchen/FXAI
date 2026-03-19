@@ -2,7 +2,7 @@
 #define __FXAI_RUNTIME_ARTIFACTS_MQH__
 
 #define FXAI_RUNTIME_ARTIFACT_DIR "FXAI\\Runtime"
-#define FXAI_RUNTIME_ARTIFACT_VERSION 2
+#define FXAI_RUNTIME_ARTIFACT_VERSION 3
 
 string FXAI_RuntimeArtifactSafeSymbol(const string symbol)
 {
@@ -29,6 +29,11 @@ string FXAI_RuntimeArtifactFile(const string symbol)
 string FXAI_RuntimePersistenceManifestFile(const string symbol)
 {
    return FXAI_RUNTIME_ARTIFACT_DIR + "\\fxai_persistence_" + FXAI_RuntimeArtifactSafeSymbol(symbol) + ".tsv";
+}
+
+string FXAI_RuntimeFeatureManifestFile(const string symbol)
+{
+   return FXAI_RUNTIME_ARTIFACT_DIR + "\\fxai_features_" + FXAI_RuntimeArtifactSafeSymbol(symbol) + ".tsv";
 }
 
 void FXAI_MarkRuntimeArtifactsDirty(void)
@@ -62,6 +67,14 @@ void FXAI_WritePreparedSample(const int handle,
    FileWriteDouble(handle, sample.mfe_points);
    FileWriteDouble(handle, sample.mae_points);
    FileWriteDouble(handle, sample.spread_stress);
+   FileWriteDouble(handle, sample.trace_spread_mean_ratio);
+   FileWriteDouble(handle, sample.trace_spread_peak_ratio);
+   FileWriteDouble(handle, sample.trace_range_mean_ratio);
+   FileWriteDouble(handle, sample.trace_body_efficiency);
+   FileWriteDouble(handle, sample.trace_gap_ratio);
+   FileWriteDouble(handle, sample.trace_reversal_ratio);
+   FileWriteDouble(handle, sample.trace_session_transition);
+   FileWriteDouble(handle, sample.trace_rollover);
    FileWriteDouble(handle, sample.time_to_hit_frac);
    FileWriteInteger(handle, sample.path_flags);
    FileWriteDouble(handle, sample.masked_step_target);
@@ -90,6 +103,14 @@ void FXAI_ReadPreparedSample(const int handle,
    sample.mfe_points = FileReadDouble(handle);
    sample.mae_points = FileReadDouble(handle);
    sample.spread_stress = FileReadDouble(handle);
+   sample.trace_spread_mean_ratio = FileReadDouble(handle);
+   sample.trace_spread_peak_ratio = FileReadDouble(handle);
+   sample.trace_range_mean_ratio = FileReadDouble(handle);
+   sample.trace_body_efficiency = FileReadDouble(handle);
+   sample.trace_gap_ratio = FileReadDouble(handle);
+   sample.trace_reversal_ratio = FileReadDouble(handle);
+   sample.trace_session_transition = FileReadDouble(handle);
+   sample.trace_rollover = FileReadDouble(handle);
    sample.time_to_hit_frac = FileReadDouble(handle);
    sample.path_flags = FileReadInteger(handle);
    sample.masked_step_target = FileReadDouble(handle);
@@ -111,7 +132,7 @@ void FXAI_WritePersistenceCoverageManifest(const string symbol)
    if(handle == INVALID_HANDLE)
       return;
 
-   FileWriteString(handle, "ai_id\tai_name\tcoverage_tag\tpersistent\tstate_version\tcapability_mask\tstate_file_size\tstate_file\r\n");
+   FileWriteString(handle, "ai_id\tai_name\treference_tier\tcoverage_tag\tpersistent\tstate_version\tcapability_mask\tstate_file_size\tstate_file\r\n");
    if(g_plugins_ready)
    {
       for(int ai=0; ai<FXAI_AI_COUNT; ai++)
@@ -126,6 +147,7 @@ void FXAI_WritePersistenceCoverageManifest(const string symbol)
          long file_size = FXAI_CommonFileSize(state_file);
          string line = IntegerToString(plugin.AIId()) + "\t" +
                        plugin.AIName() + "\t" +
+                       FXAI_ReferenceTierName(manifest.reference_tier) + "\t" +
                        plugin.PersistentStateCoverageTag() + "\t" +
                        IntegerToString(plugin.SupportsPersistentState() ? 1 : 0) + "\t" +
                        IntegerToString(plugin.PersistentStateVersion()) + "\t" +
@@ -134,6 +156,34 @@ void FXAI_WritePersistenceCoverageManifest(const string symbol)
                        state_file + "\r\n";
          FileWriteString(handle, line);
       }
+   }
+
+   FileClose(handle);
+}
+
+void FXAI_WriteFeatureRegistryManifest(const string symbol)
+{
+   FolderCreate("FXAI", FILE_COMMON);
+   FolderCreate(FXAI_RUNTIME_ARTIFACT_DIR, FILE_COMMON);
+
+   int handle = FileOpen(FXAI_RuntimeFeatureManifestFile(symbol), FILE_WRITE | FILE_TXT | FILE_COMMON);
+   if(handle == INVALID_HANDLE)
+      return;
+
+   FileWriteString(handle, "feature_idx\tfeature_name\tfeature_group\tprovenance\tleakage_guarded\tclip_lo\tclip_hi\r\n");
+   for(int f=0; f<FXAI_AI_FEATURES; f++)
+   {
+      double lo = -8.0;
+      double hi = 8.0;
+      FXAI_GetFeatureClipBounds(f, lo, hi);
+      string line = IntegerToString(f) + "\t" +
+                    FXAI_FeatureName(f) + "\t" +
+                    FXAI_FeatureGroupName(FXAI_GetFeatureGroupForIndex(f)) + "\t" +
+                    FXAI_FeatureProvenanceName(FXAI_FeatureProvenance(f)) + "\t" +
+                    IntegerToString(FXAI_FeatureLeakageGuarded(f) ? 1 : 0) + "\t" +
+                    DoubleToString(lo, 6) + "\t" +
+                    DoubleToString(hi, 6) + "\r\n";
+      FileWriteString(handle, line);
    }
 
    FileClose(handle);
@@ -264,6 +314,7 @@ bool FXAI_SaveRuntimeArtifacts(const string symbol)
    if(ok)
    {
       FXAI_WritePersistenceCoverageManifest(symbol);
+      FXAI_WriteFeatureRegistryManifest(symbol);
       g_runtime_artifacts_dirty = false;
       g_runtime_last_save_time = TimeCurrent();
    }

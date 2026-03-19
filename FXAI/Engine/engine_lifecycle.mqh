@@ -1765,6 +1765,7 @@ bool FXAI_RunPersistenceCoverageCompliance(CFXAIAIPlugin &plugin,
    FileDelete(file_name, FILE_COMMON);
 
    string coverage_tag = plugin.PersistentStateCoverageTag();
+   string expected_tier = FXAI_ReferenceTierName(manifest.reference_tier);
    if(coverage_tag == "native_model" && file_size < 1024)
    {
       Print("FXAI compliance error: native persistence artifact unexpectedly small. model=", plugin.AIName(),
@@ -1772,12 +1773,26 @@ bool FXAI_RunPersistenceCoverageCompliance(CFXAIAIPlugin &plugin,
       return false;
    }
 
+   if(manifest.reference_tier == (int)FXAI_REFERENCE_FULL_NATIVE &&
+      coverage_tag != "native_model")
+   {
+      Print("FXAI compliance error: full-native model lacks native checkpoint coverage. model=", plugin.AIName(),
+            " coverage=", coverage_tag);
+      return false;
+   }
+
+   if(manifest.reference_tier != (int)FXAI_REFERENCE_FULL_NATIVE &&
+      coverage_tag == "native_model")
+      return true;
+
    if((FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_ONLINE_LEARNING) ||
        FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY) ||
        FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL)) &&
-      coverage_tag == "base_only")
+      coverage_tag != expected_tier)
    {
-      Print("FXAI persistence note: plugin still uses base-only checkpoint coverage. model=", plugin.AIName());
+      Print("FXAI persistence note: checkpoint coverage tag differs from declared reference tier. model=", plugin.AIName(),
+            " coverage=", coverage_tag,
+            " tier=", expected_tier);
    }
 
    return true;

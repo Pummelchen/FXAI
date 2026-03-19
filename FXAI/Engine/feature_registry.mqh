@@ -20,8 +20,38 @@ int g_feature_drift_live_obs[FXAI_FEATURE_GROUP_COUNT];
 double g_feature_drift_baseline_mean[FXAI_FEATURE_GROUP_COUNT];
 double g_feature_drift_baseline_abs[FXAI_FEATURE_GROUP_COUNT];
 double g_feature_drift_live_mean[FXAI_FEATURE_GROUP_COUNT];
-double g_feature_drift_live_abs[FXAI_FEATURE_GROUP_COUNT];
+   double g_feature_drift_live_abs[FXAI_FEATURE_GROUP_COUNT];
 double g_feature_drift_ema[FXAI_FEATURE_GROUP_COUNT];
+
+string FXAI_FeatureGroupName(const int group_id)
+{
+   switch(group_id)
+   {
+      case FXAI_FEAT_GROUP_PRICE: return "price";
+      case FXAI_FEAT_GROUP_MULTI_TIMEFRAME: return "multi_timeframe";
+      case FXAI_FEAT_GROUP_VOLATILITY: return "volatility";
+      case FXAI_FEAT_GROUP_TIME: return "time_calendar";
+      case FXAI_FEAT_GROUP_CONTEXT: return "context";
+      case FXAI_FEAT_GROUP_COST: return "cost";
+      case FXAI_FEAT_GROUP_MICROSTRUCTURE: return "microstructure";
+      case FXAI_FEAT_GROUP_FILTERS: return "filters";
+      default: return "unknown";
+   }
+}
+
+string FXAI_FeatureProvenanceName(const int provenance_id)
+{
+   switch(provenance_id)
+   {
+      case FXAI_PROV_PRICE_BAR: return "price_bar";
+      case FXAI_PROV_MULTI_TIMEFRAME: return "multi_timeframe";
+      case FXAI_PROV_CONTEXT_SYMBOL: return "context_symbol";
+      case FXAI_PROV_TIME_CALENDAR: return "time_calendar";
+      case FXAI_PROV_SYMBOL_CONTRACT: return "symbol_contract";
+      case FXAI_PROV_DERIVED_FILTER: return "derived_filter";
+      default: return "unknown";
+   }
+}
 
 string FXAI_FeatureName(const int feature_idx)
 {

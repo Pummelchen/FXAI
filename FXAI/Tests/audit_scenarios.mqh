@@ -484,6 +484,8 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
 
       FXAI_ExtractRatesCloseTimeSpread(sel_m1, close_series, time_series, spread_series);
       FXAI_ExtractRatesOHLC(sel_m1, open_series, high_series, low_series, close_series);
+      if(!FXAI_ValidateM1SeriesBundle(time_series, open_series, high_series, low_series, close_series, spread_series, bars))
+         return false;
 
       int need_m5 = (search_bars / 5) + 220;
       int need_m15 = (search_bars / 15) + 220;

@@ -284,14 +284,15 @@ struct FXAIAuditScenarioMetrics
    int issue_flags;
 };
 
-double FXAI_AuditRealizedNetPointsForSignalReplay(const int signal,
-                                                  const double realized_move_points,
-                                                  const double roundtrip_cost_points,
-                                                  const int horizon_minutes,
-                                                  const double spread_stress,
-                                                  const int path_flags,
-                                                  const datetime sample_time,
-                                                  const int scenario_id)
+double FXAI_AuditRealizedNetPointsForSignalReplayTrace(const int signal,
+                                                       const double realized_move_points,
+                                                       const double roundtrip_cost_points,
+                                                       const int horizon_minutes,
+                                                       const double spread_stress,
+                                                       const int path_flags,
+                                                       const FXAIExecutionTraceStats &trace,
+                                                       const datetime sample_time,
+                                                       const int scenario_id)
 {
    if(signal != 0 && signal != 1)
       return 0.0;
@@ -305,8 +306,8 @@ double FXAI_AuditRealizedNetPointsForSignalReplay(const int signal,
                                   spread_stress,
                                   path_flags,
                                   scenario_id,
+                                  trace,
                                   replay_frame);
-
    double slippage_points = FXAI_ExecutionSlippagePointsReplay(exec_profile,
                                                                replay_frame,
                                                                roundtrip_cost_points,
@@ -343,6 +344,28 @@ double FXAI_AuditRealizedNetPointsForSignalReplay(const int signal,
           reject_drag -
           partial_drag -
           kill_penalty;
+}
+
+double FXAI_AuditRealizedNetPointsForSignalReplay(const int signal,
+                                                  const double realized_move_points,
+                                                  const double roundtrip_cost_points,
+                                                  const int horizon_minutes,
+                                                  const double spread_stress,
+                                                  const int path_flags,
+                                                  const datetime sample_time,
+                                                  const int scenario_id)
+{
+   FXAIExecutionTraceStats trace;
+   FXAI_ClearExecutionTraceStats(trace);
+   return FXAI_AuditRealizedNetPointsForSignalReplayTrace(signal,
+                                                          realized_move_points,
+                                                          roundtrip_cost_points,
+                                                          horizon_minutes,
+                                                          spread_stress,
+                                                          path_flags,
+                                                          trace,
+                                                          sample_time,
+                                                          scenario_id);
 }
 
 class CFXAIAuditRng

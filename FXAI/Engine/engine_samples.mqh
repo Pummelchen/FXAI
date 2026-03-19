@@ -41,6 +41,20 @@ void FXAI_AssignExcursionsForRealizedMove(const double realized_move_points,
    mae_points = MathMax(best_up_points, best_dn_points);
 }
 
+void FXAI_LoadExecutionTraceFromSample(const FXAIPreparedSample &sample,
+                                       FXAIExecutionTraceStats &trace)
+{
+   FXAI_ClearExecutionTraceStats(trace);
+   trace.spread_mean_ratio = sample.trace_spread_mean_ratio;
+   trace.spread_peak_ratio = sample.trace_spread_peak_ratio;
+   trace.range_mean_ratio = sample.trace_range_mean_ratio;
+   trace.body_efficiency = sample.trace_body_efficiency;
+   trace.gap_ratio = sample.trace_gap_ratio;
+   trace.reversal_ratio = sample.trace_reversal_ratio;
+   trace.session_transition_exposure = sample.trace_session_transition;
+   trace.rollover_exposure = sample.trace_rollover;
+}
+
 int FXAI_BuildTripleBarrierLabelEx(const int i,
                                    const int H,
                                    const double roundtrip_cost_points,
@@ -204,14 +218,15 @@ int FXAI_BuildTripleBarrierLabel(const int i,
                                          path_flags);
 }
 
-double FXAI_RealizedNetPointsForSignalReplay(const int signal,
-                                             const double realized_move_points,
-                                             const double roundtrip_cost_points,
-                                             const int horizon_minutes,
-                                             const double spread_stress,
-                                             const int path_flags,
-                                             const datetime sample_time,
-                                             const int scenario_id)
+double FXAI_RealizedNetPointsForSignalReplayTrace(const int signal,
+                                                  const double realized_move_points,
+                                                  const double roundtrip_cost_points,
+                                                  const int horizon_minutes,
+                                                  const double spread_stress,
+                                                  const int path_flags,
+                                                  const FXAIExecutionTraceStats &trace,
+                                                  const datetime sample_time,
+                                                  const int scenario_id)
 {
    if(signal != 0 && signal != 1) return 0.0;
 
@@ -224,6 +239,7 @@ double FXAI_RealizedNetPointsForSignalReplay(const int signal,
                                   spread_stress,
                                   path_flags,
                                   scenario_id,
+                                  trace,
                                   replay_frame);
    double slippage_points = FXAI_ExecutionSlippagePointsReplay(exec_profile,
                                                                replay_frame,
@@ -264,6 +280,28 @@ double FXAI_RealizedNetPointsForSignalReplay(const int signal,
           kill_penalty;
 }
 
+double FXAI_RealizedNetPointsForSignalReplay(const int signal,
+                                             const double realized_move_points,
+                                             const double roundtrip_cost_points,
+                                             const int horizon_minutes,
+                                             const double spread_stress,
+                                             const int path_flags,
+                                             const datetime sample_time,
+                                             const int scenario_id)
+{
+   FXAIExecutionTraceStats trace;
+   FXAI_ClearExecutionTraceStats(trace);
+   return FXAI_RealizedNetPointsForSignalReplayTrace(signal,
+                                                     realized_move_points,
+                                                     roundtrip_cost_points,
+                                                     horizon_minutes,
+                                                     spread_stress,
+                                                     path_flags,
+                                                     trace,
+                                                     sample_time,
+                                                     scenario_id);
+}
+
 double FXAI_RealizedNetPointsForSignal(const int signal,
                                        const double realized_move_points,
                                        const double roundtrip_cost_points,
@@ -296,6 +334,14 @@ void FXAI_ResetPreparedSample(FXAIPreparedSample &sample)
    sample.mfe_points = 0.0;
    sample.mae_points = 0.0;
    sample.spread_stress = 0.0;
+   sample.trace_spread_mean_ratio = 1.0;
+   sample.trace_spread_peak_ratio = 1.0;
+   sample.trace_range_mean_ratio = 1.0;
+   sample.trace_body_efficiency = 0.5;
+   sample.trace_gap_ratio = 0.0;
+   sample.trace_reversal_ratio = 0.0;
+   sample.trace_session_transition = 0.0;
+   sample.trace_rollover = 0.0;
    sample.time_to_hit_frac = 1.0;
    sample.path_flags = 0;
    sample.masked_step_target = 0.0;
@@ -500,6 +546,26 @@ bool FXAI_PrepareTrainingSample(const int i,
    double spread_stress = FXAI_Clamp((spread_peak - spread_avg) / MathMax(min_move_i, 0.50), 0.0, 3.0);
    if(spread_stress > 0.35) sample.path_flags |= FXAI_PATHFLAG_SPREAD_STRESS;
    sample.spread_stress = spread_stress;
+
+   FXAIExecutionTraceStats trace;
+   FXAI_BuildExecutionTraceStats(i,
+                                 H,
+                                 snapshot.point,
+                                 time_arr,
+                                 open_arr,
+                                 high_arr,
+                                 low_arr,
+                                 close_arr,
+                                 spread_m1,
+                                 trace);
+   sample.trace_spread_mean_ratio = trace.spread_mean_ratio;
+   sample.trace_spread_peak_ratio = trace.spread_peak_ratio;
+   sample.trace_range_mean_ratio = trace.range_mean_ratio;
+   sample.trace_body_efficiency = trace.body_efficiency;
+   sample.trace_gap_ratio = trace.gap_ratio;
+   sample.trace_reversal_ratio = trace.reversal_ratio;
+   sample.trace_session_transition = trace.session_transition_exposure;
+   sample.trace_rollover = trace.rollover_exposure;
 
    double masked_step_target = 0.0;
    if(i - 1 >= 0 && i - 1 < ArraySize(close_arr))

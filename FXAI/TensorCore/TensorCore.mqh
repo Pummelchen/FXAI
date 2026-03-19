@@ -6,5 +6,6 @@
 #include "tensor_optim.mqh"
 #include "tensor_sequence.mqh"
 #include "tensor_modules.mqh"
+#include "tensor_transfer.mqh"
 
 #endif // __FXAI_TENSORCORE_MQH__
