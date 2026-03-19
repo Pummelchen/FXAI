@@ -93,12 +93,145 @@ void FXAI_SharedTransferSoftmax(const double &logits[],
       probs[c] /= den;
 }
 
-void FXAI_BuildSharedTransferInputGlobal(const double &x[],
-                                         const double domain_hash,
-                                         const int horizon_minutes,
-                                         double &out[])
+double FXAI_SharedTransferWindowFeatureMean(const double &x_window[][FXAI_AI_WEIGHTS],
+                                            const int window_size,
+                                            const int feature_idx)
+{
+   if(window_size <= 0)
+      return 0.0;
+   int input_idx = feature_idx + 1;
+   if(input_idx < 1 || input_idx >= FXAI_AI_WEIGHTS)
+      return 0.0;
+
+   double sum = 0.0;
+   int used = 0;
+   for(int b=0; b<window_size; b++)
+   {
+      sum += x_window[b][input_idx];
+      used++;
+   }
+   if(used <= 0)
+      return 0.0;
+   return sum / (double)used;
+}
+
+double FXAI_SharedTransferWindowFeatureEMAMean(const double &x_window[][FXAI_AI_WEIGHTS],
+                                               const int window_size,
+                                               const int feature_idx,
+                                               const double decay = 0.72)
+{
+   if(window_size <= 0)
+      return 0.0;
+   int input_idx = feature_idx + 1;
+   if(input_idx < 1 || input_idx >= FXAI_AI_WEIGHTS)
+      return 0.0;
+
+   double a = FXAI_Clamp(decay, 0.05, 0.98);
+   double w = 1.0;
+   double sw = 0.0;
+   double sum = 0.0;
+   for(int b=0; b<window_size; b++)
+   {
+      sum += w * x_window[b][input_idx];
+      sw += w;
+      w *= a;
+   }
+   if(sw <= 0.0)
+      return 0.0;
+   return sum / sw;
+}
+
+double FXAI_SharedTransferWindowFeatureStd(const double &x_window[][FXAI_AI_WEIGHTS],
+                                           const int window_size,
+                                           const int feature_idx)
+{
+   if(window_size <= 1)
+      return 0.0;
+   int input_idx = feature_idx + 1;
+   if(input_idx < 1 || input_idx >= FXAI_AI_WEIGHTS)
+      return 0.0;
+
+   double mean = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, feature_idx);
+   double acc = 0.0;
+   for(int b=0; b<window_size; b++)
+   {
+      double d = x_window[b][input_idx] - mean;
+      acc += d * d;
+   }
+   return MathSqrt(acc / (double)MathMax(window_size, 1));
+}
+
+double FXAI_SharedTransferWindowFeatureRange(const double &x_window[][FXAI_AI_WEIGHTS],
+                                             const int window_size,
+                                             const int feature_idx,
+                                             const int recent_bars = 0)
+{
+   if(window_size <= 0)
+      return 0.0;
+   int input_idx = feature_idx + 1;
+   if(input_idx < 1 || input_idx >= FXAI_AI_WEIGHTS)
+      return 0.0;
+
+   int n = recent_bars;
+   if(n <= 0 || n > window_size)
+      n = window_size;
+   double lo = x_window[0][input_idx];
+   double hi = lo;
+   for(int b=0; b<n; b++)
+   {
+      double v = x_window[b][input_idx];
+      if(v < lo)
+         lo = v;
+      if(v > hi)
+         hi = v;
+   }
+   return hi - lo;
+}
+
+double FXAI_SharedTransferWindowFeatureSlope(const double &x_window[][FXAI_AI_WEIGHTS],
+                                             const int window_size,
+                                             const int feature_idx)
+{
+   if(window_size <= 1)
+      return 0.0;
+   int input_idx = feature_idx + 1;
+   if(input_idx < 1 || input_idx >= FXAI_AI_WEIGHTS)
+      return 0.0;
+   double first = x_window[0][input_idx];
+   double last = x_window[window_size - 1][input_idx];
+   return (first - last) / (double)MathMax(window_size - 1, 1);
+}
+
+double FXAI_SharedTransferWindowFeatureRecentDelta(const double &x_window[][FXAI_AI_WEIGHTS],
+                                                   const int window_size,
+                                                   const int feature_idx,
+                                                   const int recent_bars)
+{
+   if(window_size <= 0)
+      return 0.0;
+   int input_idx = feature_idx + 1;
+   if(input_idx < 1 || input_idx >= FXAI_AI_WEIGHTS)
+      return 0.0;
+
+   int n = recent_bars;
+   if(n <= 1)
+      n = MathMax(window_size / 4, 2);
+   if(n > window_size)
+      n = window_size;
+   int last_idx = n - 1;
+   if(last_idx < 0)
+      last_idx = 0;
+   return x_window[0][input_idx] - x_window[last_idx][input_idx];
+}
+
+void FXAI_BuildSharedTransferInputGlobalBase(const double &x[],
+                                             const double domain_hash,
+                                             const int horizon_minutes,
+                                             double &out[])
 {
    ArrayResize(out, FXAI_SHARED_TRANSFER_FEATURES);
+   for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
+      out[i] = 0.0;
    out[0] = 1.0;
    out[1] = FXAI_GetInputFeature(x, 62);
    out[2] = FXAI_GetInputFeature(x, 63);
@@ -298,6 +431,135 @@ void FXAI_BuildSharedTransferInputGlobal(const double &x[],
                         0.18 * macro_pre +
                         0.10 * macro_post +
                         0.10 * FXAI_GetInputFeature(x, 79),
+                        0.0,
+                        6.0);
+}
+
+void FXAI_BuildSharedTransferInputGlobal(const double &x[],
+                                         const double domain_hash,
+                                         const int horizon_minutes,
+                                         double &out[])
+{
+   FXAI_BuildSharedTransferInputGlobalBase(x, domain_hash, horizon_minutes, out);
+}
+
+void FXAI_BuildSharedTransferInputGlobal(const double &x[],
+                                         const double &x_window[][FXAI_AI_WEIGHTS],
+                                         const int window_size,
+                                         const double domain_hash,
+                                         const int horizon_minutes,
+                                         double &out[])
+{
+   FXAI_BuildSharedTransferInputGlobalBase(x, domain_hash, horizon_minutes, out);
+   if(ArraySize(out) < FXAI_SHARED_TRANSFER_FEATURES)
+      ArrayResize(out, FXAI_SHARED_TRANSFER_FEATURES);
+
+   if(window_size <= 0)
+   {
+      out[20] = FXAI_GetInputFeature(x, 0);
+      out[21] = FXAI_GetInputFeature(x, 3);
+      out[22] = FXAI_GetInputFeature(x, 41);
+      out[23] = 0.50 * FXAI_GetInputFeature(x, 68) + 0.25 * FXAI_GetInputFeature(x, 69) + 0.25 * FXAI_GetInputFeature(x, 80);
+      out[24] = 0.35 * FXAI_GetInputFeature(x, 10) + 0.25 * FXAI_GetInputFeature(x, 62) + 0.20 * FXAI_GetInputFeature(x, 63) + 0.20 * FXAI_GetInputFeature(x, 64);
+      out[25] = 0.25 * FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 0) +
+                0.15 * FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 1) +
+                0.20 * FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 2) +
+                0.20 * FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 4) +
+                0.20 * FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 5);
+      out[26] = 0.20 * FXAI_GetInputFeature(x, 72) +
+                0.15 * FXAI_GetInputFeature(x, 73) +
+                0.20 * FXAI_GetInputFeature(x, 74) +
+                0.10 * FXAI_GetInputFeature(x, 75) +
+                0.15 * FXAI_GetInputFeature(x, 78) +
+                0.10 * (FXAI_GetInputFeature(x, 76) - FXAI_GetInputFeature(x, 77)) +
+                0.10 * FXAI_GetInputFeature(x, 79);
+      out[27] = 0.30 * FXAI_GetInputFeature(x, 79) +
+                0.25 * MathAbs(FXAI_GetInputFeature(x, 63)) +
+                0.20 * MathAbs(FXAI_GetInputFeature(x, 68)) +
+                0.15 * FXAI_GetInputFeature(x, 82) +
+                0.10 * MathAbs(FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 4));
+      return;
+   }
+
+   double ret_fast = FXAI_SharedTransferWindowFeatureEMAMean(x_window, window_size, 0);
+   double ret_mid = FXAI_SharedTransferWindowFeatureEMAMean(x_window, window_size, 1);
+   double ret_long = FXAI_SharedTransferWindowFeatureEMAMean(x_window, window_size, 2);
+   double slope_m1 = FXAI_SharedTransferWindowFeatureSlope(x_window, window_size, 3);
+   double vol_mean = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 5);
+   double vol_std = FXAI_SharedTransferWindowFeatureStd(x_window, window_size, 5);
+   double atr_mean = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 41);
+   double ctx_mean = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 10);
+   double ctx_std = FXAI_SharedTransferWindowFeatureStd(x_window, window_size, 10);
+   double shared_util = FXAI_SharedTransferWindowFeatureEMAMean(x_window, window_size, 62);
+   double shared_stability = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 63);
+   double shared_lead = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 64);
+   double shared_coverage = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 65);
+   double spread_shock = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 68);
+   double spread_accel = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 69);
+   double spread_to_range = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 70);
+   double micro_trend = FXAI_SharedTransferWindowFeatureEMAMean(x_window, window_size, 71);
+   double session_transition = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 72);
+   double session_overlap = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 73);
+   double rollover_prox = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 74);
+   double triple_swap = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 75);
+   double swap_bias = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 76) -
+                      FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 77);
+   double carry_align = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 78);
+   double drift_mean = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 79);
+   double spread_log = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 80);
+   double spread_z = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 81);
+   double spread_vol = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 82);
+   double spread_rank = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 83);
+   double macro_pre = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 0);
+   double macro_post = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 1);
+   double macro_imp = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 2);
+   double macro_surprise = FXAI_SharedTransferWindowFeatureEMAMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 3);
+   double macro_surprise_abs = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 4);
+   double macro_class = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 5);
+   double ret_delta = FXAI_SharedTransferWindowFeatureRecentDelta(x_window, window_size, 0, MathMax(window_size / 4, 3));
+   double spread_delta = FXAI_SharedTransferWindowFeatureRecentDelta(x_window, window_size, 80, MathMax(window_size / 4, 3));
+
+   out[20] = FXAI_Clamp(0.42 * ret_fast + 0.33 * ret_mid + 0.15 * ret_long + 0.10 * ret_delta, -4.0, 4.0);
+   out[21] = FXAI_Clamp(0.38 * slope_m1 + 0.22 * (ret_fast - ret_mid) + 0.20 * micro_trend + 0.20 * FXAI_SharedTransferWindowFeatureSlope(x_window, window_size, 71), -4.0, 4.0);
+   out[22] = FXAI_Clamp(0.34 * vol_mean + 0.22 * vol_std + 0.22 * atr_mean + 0.22 * FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 43), 0.0, 6.0);
+   out[23] = FXAI_Clamp(0.26 * FXAI_SharedTransferWindowFeatureMean(x_window, window_size, 6) +
+                        0.24 * spread_shock +
+                        0.18 * spread_accel +
+                        0.18 * spread_log +
+                        0.14 * spread_z,
+                        -6.0,
+                        8.0);
+   out[24] = FXAI_Clamp(0.28 * ctx_mean +
+                        0.14 * ctx_std +
+                        0.22 * shared_util +
+                        0.14 * shared_stability +
+                        0.12 * shared_lead +
+                        0.10 * shared_coverage,
+                        -4.0,
+                        4.0);
+   out[25] = FXAI_Clamp(0.18 * macro_pre +
+                        0.12 * macro_post +
+                        0.22 * macro_imp +
+                        0.18 * macro_surprise +
+                        0.16 * macro_surprise_abs +
+                        0.14 * macro_class,
+                        -6.0,
+                        6.0);
+   out[26] = FXAI_Clamp(0.18 * session_transition +
+                        0.14 * session_overlap +
+                        0.20 * rollover_prox +
+                        0.12 * triple_swap +
+                        0.14 * carry_align +
+                        0.12 * swap_bias +
+                        0.10 * drift_mean,
+                        -4.0,
+                        4.0);
+   out[27] = FXAI_Clamp(0.24 * drift_mean +
+                        0.18 * FXAI_SharedTransferWindowFeatureStd(x_window, window_size, 63) +
+                        0.18 * FXAI_SharedTransferWindowFeatureRange(x_window, window_size, 10) +
+                        0.14 * MathAbs(spread_delta) +
+                        0.14 * spread_vol +
+                        0.12 * MathAbs(spread_rank),
                         0.0,
                         6.0);
 }

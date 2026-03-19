@@ -116,6 +116,12 @@ void FXAI_ResetModelPerformanceState(const int ai_idx)
    g_model_meta_weight[ai_idx] = 1.0;
    g_model_global_edge_ema[ai_idx] = 0.0;
    g_model_global_edge_ready[ai_idx] = false;
+   g_model_portfolio_mean_edge[ai_idx] = 0.0;
+   g_model_portfolio_stability[ai_idx] = 0.0;
+   g_model_portfolio_corr_penalty[ai_idx] = 0.0;
+   g_model_portfolio_diversification[ai_idx] = 0.0;
+   g_model_portfolio_ready[ai_idx] = false;
+   g_model_portfolio_symbol_count[ai_idx] = 0;
    for(int r=0; r<FXAI_REGIME_COUNT; r++)
    {
       g_model_regime_edge_ema[ai_idx][r] = 0.0;
@@ -182,6 +188,88 @@ double FXAI_GetModelContextRegret(const int ai_idx,
    return 0.0;
 }
 
+double FXAI_GetModelContextTrust(const int ai_idx,
+                                 const int regime_id,
+                                 const int horizon_minutes)
+{
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT)
+      return 0.0;
+   int r = regime_id;
+   if(r < 0 || r >= FXAI_REGIME_COUNT)
+      r = 0;
+   int hslot = FXAI_GetHorizonSlot(horizon_minutes);
+   if(hslot < 0 || hslot >= FXAI_MAX_HORIZONS)
+      return 0.0;
+   return FXAI_Clamp((double)g_model_context_obs[ai_idx][r][hslot] / 64.0, 0.0, 1.0);
+}
+
+void FXAI_SetModelPortfolioDiagnostics(const int ai_idx,
+                                       const double mean_edge_points,
+                                       const double stability,
+                                       const double corr_penalty,
+                                       const double diversification,
+                                       const int symbol_count)
+{
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT)
+      return;
+   g_model_portfolio_mean_edge[ai_idx] = mean_edge_points;
+   g_model_portfolio_stability[ai_idx] = FXAI_Clamp(stability, 0.0, 1.0);
+   g_model_portfolio_corr_penalty[ai_idx] = FXAI_Clamp(corr_penalty, 0.0, 1.0);
+   g_model_portfolio_diversification[ai_idx] = FXAI_Clamp(diversification, 0.0, 1.0);
+   g_model_portfolio_symbol_count[ai_idx] = MathMax(symbol_count, 0);
+   g_model_portfolio_ready[ai_idx] = (symbol_count > 0);
+   FXAI_MarkMetaArtifactsDirty();
+}
+
+double FXAI_GetModelPortfolioEdgeNorm(const int ai_idx,
+                                      const double min_move_points)
+{
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT || !g_model_portfolio_ready[ai_idx])
+      return 0.0;
+   double mm = MathMax(min_move_points, 0.50);
+   return FXAI_Clamp(g_model_portfolio_mean_edge[ai_idx] / mm, -4.0, 4.0) / 4.0;
+}
+
+double FXAI_GetModelPortfolioStability(const int ai_idx)
+{
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT || !g_model_portfolio_ready[ai_idx])
+      return 0.0;
+   return g_model_portfolio_stability[ai_idx];
+}
+
+double FXAI_GetModelPortfolioCorrPenalty(const int ai_idx)
+{
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT || !g_model_portfolio_ready[ai_idx])
+      return 0.0;
+   return g_model_portfolio_corr_penalty[ai_idx];
+}
+
+double FXAI_GetModelPortfolioDiversification(const int ai_idx)
+{
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT || !g_model_portfolio_ready[ai_idx])
+      return 0.0;
+   return g_model_portfolio_diversification[ai_idx];
+}
+
+double FXAI_GetModelPortfolioFactor(const int ai_idx,
+                                    const double min_move_points)
+{
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT || !g_model_portfolio_ready[ai_idx])
+      return 1.0;
+   double edge_norm = FXAI_GetModelPortfolioEdgeNorm(ai_idx, min_move_points);
+   double stability = g_model_portfolio_stability[ai_idx];
+   double corr_penalty = g_model_portfolio_corr_penalty[ai_idx];
+   double diversification = g_model_portfolio_diversification[ai_idx];
+   double symbol_cov = FXAI_Clamp((double)g_model_portfolio_symbol_count[ai_idx] / 6.0, 0.0, 1.0);
+   double factor = 1.0 +
+                   0.28 * edge_norm +
+                   0.24 * (stability - 0.50) -
+                   0.22 * corr_penalty +
+                   0.18 * (diversification - 0.50) +
+                   0.12 * symbol_cov;
+   return FXAI_Clamp(factor, 0.45, 1.85);
+}
+
 bool FXAI_IsModelPruned(const int ai_idx, const int regime_id)
 {
    if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT) return true;
@@ -227,7 +315,8 @@ double FXAI_GetModelMetaScore(const int ai_idx,
                                               -0.80,
                                               1.20);
    ctx_factor = FXAI_Clamp(ctx_factor, 0.25, 2.20);
-   return rel * meta * edge_scale * ctx_factor;
+   double portfolio_factor = FXAI_GetModelPortfolioFactor(ai_idx, min_move_points);
+   return rel * meta * edge_scale * ctx_factor * portfolio_factor;
 }
 
 void FXAI_UpdateModelPerformance(const int ai_idx,

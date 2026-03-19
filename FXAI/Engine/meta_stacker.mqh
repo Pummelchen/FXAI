@@ -30,6 +30,19 @@ void FXAI_StackBuildFeatures(const double buy_pct,
                              const double avg_fill_risk,
                              const double avg_mfe_ratio,
                              const double avg_mae_ratio,
+                             const double avg_ctx_edge_norm,
+                             const double avg_ctx_regret,
+                             const double avg_global_edge_norm,
+                             const double best_counterfactual_edge_norm,
+                             const double ensemble_vs_best_gap_norm,
+                             const double avg_portfolio_edge_norm,
+                             const double avg_portfolio_stability,
+                             const double avg_portfolio_corr_penalty,
+                             const double avg_portfolio_diversification,
+                             const double best_model_share,
+                             const double best_buy_share,
+                             const double best_sell_share,
+                             const double avg_context_trust,
                              double &feat[])
 {
    for(int k=0; k<FXAI_STACK_FEATS; k++)
@@ -116,6 +129,22 @@ void FXAI_StackBuildFeatures(const double buy_pct,
    feat[53] = FXAI_Clamp((1.0 - avg_path_risk) * avg_confidence, 0.0, 1.0);
    feat[54] = FXAI_Clamp((1.0 - avg_fill_risk) * dominant_family_ratio, 0.0, 1.0);
    feat[55] = FXAI_Clamp(avg_mfe_ratio * (1.0 - avg_mae_ratio) * MathMax(context_quality + 1.0, 0.0), 0.0, 4.0) / 2.0 - 0.5;
+   feat[56] = FXAI_Clamp(avg_ctx_edge_norm, -1.0, 1.0);
+   feat[57] = FXAI_Clamp(avg_ctx_regret, 0.0, 1.0);
+   feat[58] = FXAI_Clamp(avg_global_edge_norm, -1.0, 1.0);
+   feat[59] = FXAI_Clamp(best_counterfactual_edge_norm, -1.0, 1.0);
+   feat[60] = FXAI_Clamp(ensemble_vs_best_gap_norm, 0.0, 1.0);
+   feat[61] = FXAI_Clamp(avg_portfolio_edge_norm, -1.0, 1.0);
+   feat[62] = FXAI_Clamp(avg_portfolio_stability, 0.0, 1.0);
+   feat[63] = FXAI_Clamp(avg_portfolio_corr_penalty, 0.0, 1.0);
+   feat[64] = FXAI_Clamp(avg_portfolio_diversification, 0.0, 1.0);
+   feat[65] = FXAI_Clamp(best_model_share, 0.0, 1.0);
+   feat[66] = FXAI_Clamp(best_buy_share, 0.0, 1.0);
+   feat[67] = FXAI_Clamp(best_sell_share, 0.0, 1.0);
+   feat[68] = FXAI_Clamp(avg_context_trust, 0.0, 1.0);
+   feat[69] = FXAI_Clamp(best_counterfactual_edge_norm - avg_ctx_regret, -1.0, 1.0);
+   feat[70] = FXAI_Clamp(avg_portfolio_stability * (1.0 - avg_ctx_regret), 0.0, 1.0);
+   feat[71] = FXAI_Clamp((avg_ctx_edge_norm + avg_global_edge_norm + avg_portfolio_edge_norm) / 3.0, -1.0, 1.0);
 }
 
 void FXAI_StackPredict(const int regime_id, const double &feat[], double &probs[])
@@ -132,13 +161,18 @@ void FXAI_StackPredict(const int regime_id, const double &feat[], double &probs[
    {
       double p_sell = FXAI_Clamp(0.26 + (0.31 * feat[2]) - (0.12 * feat[3]) + (0.16 * feat[5]) -
                                  (0.07 * feat[10]) + (0.08 * feat[20]) + (0.08 * feat[21]) +
-                                 (0.05 * feat[23]) + (0.05 * feat[30]) + (0.04 * feat[34]), 0.01, 0.98);
+                                 (0.05 * feat[23]) + (0.05 * feat[30]) + (0.04 * feat[34]) +
+                                 (0.05 * feat[58]) + (0.04 * feat[59]) + (0.04 * feat[61]) +
+                                 (0.04 * feat[62]) - (0.05 * feat[57]) - (0.04 * feat[63]), 0.01, 0.98);
       double p_buy  = FXAI_Clamp(0.26 + (0.31 * feat[1]) - (0.12 * feat[3]) + (0.16 * feat[4]) -
                                  (0.07 * feat[10]) + (0.08 * feat[20]) + (0.08 * feat[21]) +
-                                 (0.05 * feat[23]) - (0.05 * feat[30]) + (0.04 * feat[34]), 0.01, 0.98);
+                                 (0.05 * feat[23]) - (0.05 * feat[30]) + (0.04 * feat[34]) +
+                                 (0.05 * feat[58]) + (0.04 * feat[59]) + (0.04 * feat[61]) +
+                                 (0.04 * feat[62]) - (0.05 * feat[57]) - (0.04 * feat[63]), 0.01, 0.98);
       double p_skip = FXAI_Clamp(0.18 + (0.32 * feat[3]) + (0.18 * feat[10]) - (0.08 * feat[8]) -
                                  (0.07 * feat[20]) - (0.07 * feat[21]) + (0.08 * feat[31]) -
-                                 (0.04 * feat[28]) - (0.03 * feat[32]), 0.01, 0.98);
+                                 (0.04 * feat[28]) - (0.03 * feat[32]) + (0.08 * feat[57]) +
+                                 (0.07 * feat[60]) + (0.05 * feat[63]) - (0.05 * feat[62]), 0.01, 0.98);
       double s0 = p_sell + p_buy + p_skip;
       if(s0 <= 0.0) s0 = 1.0;
       probs[0] = p_sell / s0;
@@ -280,7 +314,12 @@ double FXAI_TradeGatePredict(const int regime_id,
                                  0.08 * feat[54] -
                                  0.10 * feat[3] -
                                  0.08 * feat[49] -
-                                 0.08 * feat[50],
+                                 0.08 * feat[50] +
+                                 0.08 * feat[62] +
+                                 0.06 * feat[70] -
+                                 0.08 * feat[57] -
+                                 0.06 * feat[60] -
+                                 0.04 * feat[63],
                                  0.01,
                                  0.99);
    double oof_prior = FXAI_GetOOFTradeGatePrior(r, slot);

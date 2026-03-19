@@ -22,6 +22,7 @@ METAEDITOR = TERMINAL_ROOT / "MetaEditor64.exe"
 TERMINAL = TERMINAL_ROOT / "terminal64.exe"
 WINE = Path("/Applications/MetaTrader 5.app/Contents/SharedSupport/wine/bin/wine64")
 COMMON_FILES = Path("/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/andreborchert/AppData/Roaming/MetaQuotes/Terminal/Common/Files")
+RUNTIME_DIR = COMMON_FILES / "FXAI/Runtime"
 DEFAULT_REPORT = COMMON_FILES / "FXAI/Audit/fxai_audit_report.tsv"
 DEFAULT_TEXT_REPORT = ROOT / "Tools/latest_drill_report.md"
 ORACLES_PATH = ROOT / "Tools/plugin_oracles.json"
@@ -44,6 +45,9 @@ ISSUE = {
     256: "walkforward overfit",
     512: "walkforward unstable",
     1024: "walkforward weak edge",
+    2048: "macro-event blind",
+    4096: "macro-event overreaction",
+    8192: "macro-event data gap",
 }
 
 EXECUTION_PROFILES = {
@@ -138,6 +142,25 @@ def parse_brace_list(raw: str) -> list[str]:
         if token and token not in items:
             items.append(token)
     return items
+
+
+def runtime_artifact_safe_symbol(symbol: str) -> str:
+    clean = symbol or "UNKNOWN"
+    for ch in "\\/:*?\"<>|":
+        clean = clean.replace(ch, "_")
+    return clean
+
+
+def runtime_persistence_manifest_path(symbol: str) -> Path:
+    return RUNTIME_DIR / f"fxai_persistence_{runtime_artifact_safe_symbol(symbol)}.tsv"
+
+
+def runtime_feature_manifest_path(symbol: str) -> Path:
+    return RUNTIME_DIR / f"fxai_features_{runtime_artifact_safe_symbol(symbol)}.tsv"
+
+
+def runtime_macro_manifest_path(symbol: str) -> Path:
+    return RUNTIME_DIR / f"fxai_macro_{runtime_artifact_safe_symbol(symbol)}.tsv"
 
 
 def mean_std_ci(values: list[float]) -> tuple[float, float, float]:
@@ -385,6 +408,20 @@ def compile_target(relative_target: Path, stage_name: str) -> int:
 def load_rows(report: Path):
     with report.open("r", encoding="utf-8", newline="") as f:
         return list(csv.DictReader(f, delimiter="\t"))
+
+
+def load_tsv_rows(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8", newline="") as f:
+        return list(csv.DictReader(f, delimiter="\t"))
+
+
+def manifest_path(raw_path: str) -> Path | None:
+    text = (raw_path or "").strip()
+    if not text:
+        return None
+    return Path(text)
 
 
 def parse_issue_flags(v: str):
@@ -678,7 +715,7 @@ def build_multisymbol_summary(symbol_runs: list[dict]) -> dict:
 
 
 def summary_has_market_replay(summary: dict) -> bool:
-    required = {"market_recent", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward"}
+    required = {"market_recent", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event"}
     seen = set()
     for plugin in summary.get("plugins", {}).values():
         seen.update(plugin.get("scenarios", {}).keys())
@@ -721,6 +758,15 @@ def render_multisymbol_report(summary: dict, execution_profile: str, manifest_pa
                 f"PBO {float(wf.get('wf_pbo', 0.0)):.2f} | "
                 f"DSR(proxy) {float(wf.get('wf_dsr', 0.0)):.2f} | "
                 f"Pass {float(wf.get('wf_pass_rate', 0.0)):.2f}"
+            )
+        macro = info.get("scenarios", {}).get("market_macro_event", {})
+        if macro:
+            out.append(
+                "Macro events: "
+                f"Score {float(macro.get('score', 0.0)):.1f} | "
+                f"Coverage {float(macro.get('macro_data_coverage', 0.0)):.2f} | "
+                f"EventRate {float(macro.get('macro_event_rate', 0.0)):.2f} | "
+                f"Imp {float(macro.get('macro_importance_mean', 0.0)):.2f}"
             )
         issues = list(info.get("issues", [])) + list(info.get("findings", []))
         if issues:
@@ -778,7 +824,7 @@ def build_optimization_campaign(summary: dict, oracles: dict) -> dict:
         schema_candidates = []
         norm_candidates = []
         seq_candidates = []
-        scenario_focus = ["random_walk", "drift_up", "drift_down", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward"]
+        scenario_focus = ["random_walk", "drift_up", "drift_down", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event"]
 
         if family in (2, 3, 4, 5):  # recurrent/conv/transformer/state-space
             schema_candidates.extend([3, 6])
@@ -854,17 +900,17 @@ def build_optimization_campaign(summary: dict, oracles: dict) -> dict:
         })
         experiments.append({
             "name": "market_replay_cert",
-            "focus": ["market_recent", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward"],
+            "focus": ["market_recent", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event"],
         })
         experiments.append({
             "name": "execution_sweep",
             "slippage_points": [0.0, 0.5, 1.0],
             "fill_penalty_points": [0.0, 0.25, 0.50],
-            "focus": ["market_recent", "market_session_edges", "market_spread_shock", "market_walkforward"],
+            "focus": ["market_recent", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event"],
         })
         experiments.append({
             "name": "walkforward_gate",
-            "focus": ["market_walkforward", "market_session_edges", "market_spread_shock"],
+            "focus": ["market_walkforward", "market_session_edges", "market_spread_shock", "market_macro_event"],
             "train_test_pairs": [(256, 64), (384, 96), (512, 128)],
         })
 
@@ -1195,7 +1241,20 @@ def compare_summary_data(current: dict, baseline: dict) -> dict:
             if pass_delta <= -0.08:
                 plugin_notes.append(f"walkforward pass-rate down {pass_delta:.2f}")
 
-        if any(x.startswith(("score down", "statistically significant score down", "new issues", "random_walk skip down", "drift_up align down", "drift_down align down", "cross-symbol stability weak", "cross-symbol dispersion worse", "market_recent brier worse", "market_recent calibration worse", "market_recent path-quality worse", "market_recent brier stability weaker", "walkforward score down", "walkforward stability weaker", "walkforward PBO worse", "walkforward DSR weaker", "walkforward pass-rate down")) for x in plugin_notes):
+        cur_macro = cur.get("scenarios", {}).get("market_macro_event", {})
+        base_macro = base.get("scenarios", {}).get("market_macro_event", {})
+        if cur_macro and base_macro:
+            macro_score_delta = float(cur_macro.get("score", 0.0)) - float(base_macro.get("score", 0.0))
+            macro_cov_delta = float(cur_macro.get("macro_data_coverage", 0.0)) - float(base_macro.get("macro_data_coverage", 0.0))
+            macro_rate_delta = float(cur_macro.get("macro_event_rate", 0.0)) - float(base_macro.get("macro_event_rate", 0.0))
+            if macro_score_delta <= -3.0:
+                plugin_notes.append(f"macro-event score down {macro_score_delta:.1f}")
+            if macro_cov_delta <= -0.08:
+                plugin_notes.append(f"macro-event coverage down {macro_cov_delta:.2f}")
+            if macro_rate_delta <= -0.08:
+                plugin_notes.append(f"macro-event response down {macro_rate_delta:.2f}")
+
+        if any(x.startswith(("score down", "statistically significant score down", "new issues", "random_walk skip down", "drift_up align down", "drift_down align down", "cross-symbol stability weak", "cross-symbol dispersion worse", "market_recent brier worse", "market_recent calibration worse", "market_recent path-quality worse", "market_recent brier stability weaker", "walkforward score down", "walkforward stability weaker", "walkforward PBO worse", "walkforward DSR weaker", "walkforward pass-rate down", "macro-event score down", "macro-event coverage down", "macro-event response down")) for x in plugin_notes):
             regressions.append(f"{name}: " + ", ".join(plugin_notes))
         elif plugin_notes:
             improvements.append(f"{name}: " + ", ".join(plugin_notes))
@@ -1532,6 +1591,9 @@ def cmd_run_audit(args):
                 "symbol": run["symbol"],
                 "report_tsv": str(artifact_dir / f"{run['symbol']}.tsv") if len(symbol_runs) > 1 else str(DEFAULT_REPORT),
                 "plugin_count": len(run["summary"].get("plugins", {})),
+                "runtime_persistence_manifest": str(runtime_persistence_manifest_path(run["symbol"])),
+                "runtime_feature_manifest": str(runtime_feature_manifest_path(run["symbol"])),
+                "runtime_macro_manifest": str(runtime_macro_manifest_path(run["symbol"])),
             }
             for run in symbol_runs
         ],
@@ -1627,6 +1689,8 @@ def cmd_release_gate(args):
     baseline_summary = load_baseline_summary(baseline_path, oracles)
     cmp = compare_summary_data(current_summary, baseline_summary)
     cmp_text = compare_summaries(current_summary, baseline_summary)
+    manifest_json = report.with_suffix(".manifest.json")
+    manifest = load_json(manifest_json) if manifest_json.exists() else {}
 
     gate_failures = []
     if cmp["regressions"]:
@@ -1634,6 +1698,42 @@ def cmd_release_gate(args):
 
     if args.require_market_replay and not summary_has_market_replay(current_summary):
         gate_failures.append("current audit report does not contain the full required market replay certification pack")
+
+    per_symbol = manifest.get("per_symbol", []) if isinstance(manifest, dict) else []
+    seen_persistence = set()
+    for item in per_symbol:
+        p_path = manifest_path(item.get("runtime_persistence_manifest", ""))
+        if p_path is None or p_path in seen_persistence:
+            continue
+        seen_persistence.add(p_path)
+        for row in load_tsv_rows(p_path):
+            if inum(row, "stateful_checkpoint") <= 0:
+                continue
+            if inum(row, "promotion_ready") > 0:
+                continue
+            gate_failures.append(
+                f"{row.get('ai_name', 'unknown')}: live promotion blocked by checkpoint coverage "
+                f"({row.get('coverage_tag', 'unknown')})"
+            )
+
+    macro_dataset_present = False
+    seen_macro = set()
+    for item in per_symbol:
+        m_path = manifest_path(item.get("runtime_macro_manifest", ""))
+        if m_path is None or m_path in seen_macro:
+            continue
+        seen_macro.add(m_path)
+        rows = load_tsv_rows(m_path)
+        if not rows:
+            continue
+        row = rows[0]
+        if inum(row, "record_count") > 0:
+            macro_dataset_present = True
+        if inum(row, "record_count") > 0 and inum(row, "leakage_safe") <= 0:
+            gate_failures.append(
+                f"{item.get('symbol', 'unknown')}: macro dataset failed leakage guard "
+                f"(score={fnum(row, 'leakage_guard_score'):.2f}, parse_errors={inum(row, 'parse_errors')})"
+            )
 
     for name, info in sorted(current_summary.get("plugins", {}).items()):
         score = float(info.get("score", 0.0))
@@ -1654,6 +1754,22 @@ def cmd_release_gate(args):
             findings = list(info.get("findings", []))
             if issues or findings:
                 gate_failures.append(f"{name}: unresolved issues present")
+        if macro_dataset_present:
+            macro = info.get("scenarios", {}).get("market_macro_event", {})
+            if not macro:
+                gate_failures.append(f"{name}: missing market_macro_event certification while macro dataset is active")
+            else:
+                if float(macro.get("macro_data_coverage", 0.0)) < 0.60:
+                    gate_failures.append(
+                        f"{name}: macro-event coverage {float(macro.get('macro_data_coverage', 0.0)):.2f} below minimum 0.60"
+                    )
+                if float(macro.get("macro_event_rate", 0.0)) < 0.06:
+                    gate_failures.append(
+                        f"{name}: macro-event activity {float(macro.get('macro_event_rate', 0.0)):.2f} below minimum 0.06"
+                    )
+                issues = set(info.get("issues", []))
+                if {"macro-event blind", "macro-event overreaction", "macro-event data gap"} & issues:
+                    gate_failures.append(f"{name}: macro-event certification issues present")
 
     if args.output:
         Path(args.output).write_text(cmp_text, encoding="utf-8")
@@ -1702,7 +1818,7 @@ def main():
     ra.add_argument("--all-plugins", action="store_true")
     ra.add_argument("--plugin-id", type=int, default=28)
     ra.add_argument("--plugin-list", default="{all}")
-    ra.add_argument("--scenario-list", default="{random_walk, drift_up, drift_down, mean_revert, vol_cluster, monotonic_up, monotonic_down, regime_shift, market_recent, market_trend, market_chop, market_session_edges, market_spread_shock, market_walkforward}")
+    ra.add_argument("--scenario-list", default="{random_walk, drift_up, drift_down, mean_revert, vol_cluster, monotonic_up, monotonic_down, regime_shift, market_recent, market_trend, market_chop, market_session_edges, market_spread_shock, market_walkforward, market_macro_event}")
     ra.add_argument("--bars", type=int, default=20000)
     ra.add_argument("--horizon", type=int, default=5)
     ra.add_argument("--m1sync-bars", type=int, default=3)

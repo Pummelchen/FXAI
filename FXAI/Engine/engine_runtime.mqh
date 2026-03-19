@@ -806,6 +806,20 @@ int SpecialDirectionAI(const string symbol)
    double ensemble_fill_risk_sum = 0.0;
    double ensemble_mfe_ratio_sum = 0.0;
    double ensemble_mae_ratio_sum = 0.0;
+   double ensemble_ctx_edge_sum = 0.0;
+   double ensemble_ctx_regret_sum = 0.0;
+   double ensemble_global_edge_sum = 0.0;
+   double ensemble_port_edge_sum = 0.0;
+   double ensemble_port_stability_sum = 0.0;
+   double ensemble_port_corr_sum = 0.0;
+   double ensemble_port_div_sum = 0.0;
+   double ensemble_ctx_trust_sum = 0.0;
+   double best_model_signal_edge = -1e12;
+   double best_model_meta_w = 0.0;
+   double best_buy_edge = -1e12;
+   double best_sell_edge = -1e12;
+   double best_buy_meta_w = 0.0;
+   double best_sell_meta_w = 0.0;
    double family_support[FXAI_FAMILY_OTHER + 1];
    for(int fam_i=0; fam_i<=FXAI_FAMILY_OTHER; fam_i++) family_support[fam_i] = 0.0;
    double ensemble_probs[3];
@@ -1041,6 +1055,16 @@ int SpecialDirectionAI(const string symbol)
          double model_sell_ev = ((2.0 * class_probs_pred[(int)FXAI_LABEL_SELL]) - 1.0) * expected_move - min_move_pred;
          model_buy_ev = FXAI_Clamp(model_buy_ev, -10.0 * min_move_pred, 10.0 * min_move_pred);
          model_sell_ev = FXAI_Clamp(model_sell_ev, -10.0 * min_move_pred, 10.0 * min_move_pred);
+         double mm_meta = MathMax(min_move_pred, 0.50);
+         double ctx_edge_norm = FXAI_Clamp(FXAI_GetModelContextEdge(ai_idx, regime_id, H) / mm_meta, -4.0, 4.0) / 4.0;
+         double ctx_regret = FXAI_Clamp(FXAI_GetModelContextRegret(ai_idx, regime_id, H), 0.0, 6.0) / 6.0;
+         double global_edge_norm = FXAI_Clamp(FXAI_GetModelRegimeEdge(ai_idx, regime_id) / mm_meta, -4.0, 4.0) / 4.0;
+         double port_edge_norm = FXAI_GetModelPortfolioEdgeNorm(ai_idx, mm_meta);
+         double port_stability = FXAI_GetModelPortfolioStability(ai_idx);
+         double port_corr = FXAI_GetModelPortfolioCorrPenalty(ai_idx);
+         double port_div = FXAI_GetModelPortfolioDiversification(ai_idx);
+         double ctx_trust = FXAI_GetModelContextTrust(ai_idx, regime_id, H);
+         double model_best_edge = MathMax(model_buy_ev, model_sell_ev);
 
          ensemble_meta_total += meta_w;
          ensemble_buy_ev_sum += meta_w * model_buy_ev;
@@ -1055,8 +1079,32 @@ int SpecialDirectionAI(const string symbol)
          ensemble_fill_risk_sum += meta_w * FXAI_Clamp(pred.fill_risk, 0.0, 1.0);
          ensemble_mfe_ratio_sum += meta_w * FXAI_Clamp(pred.mfe_mean_points / MathMax(expected_move, min_move_pred), 0.0, 4.0);
          ensemble_mae_ratio_sum += meta_w * FXAI_Clamp(pred.mae_mean_points / MathMax(pred.mfe_mean_points, min_move_pred), 0.0, 2.0);
+         ensemble_ctx_edge_sum += meta_w * ctx_edge_norm;
+         ensemble_ctx_regret_sum += meta_w * ctx_regret;
+         ensemble_global_edge_sum += meta_w * global_edge_norm;
+         ensemble_port_edge_sum += meta_w * port_edge_norm;
+         ensemble_port_stability_sum += meta_w * port_stability;
+         ensemble_port_corr_sum += meta_w * port_corr;
+         ensemble_port_div_sum += meta_w * port_div;
+         ensemble_ctx_trust_sum += meta_w * ctx_trust;
          if(manifest.family >= 0 && manifest.family <= FXAI_FAMILY_OTHER)
             family_support[manifest.family] += meta_w;
+
+         if(model_best_edge > best_model_signal_edge)
+         {
+            best_model_signal_edge = model_best_edge;
+            best_model_meta_w = meta_w;
+         }
+         if(model_buy_ev > best_buy_edge)
+         {
+            best_buy_edge = model_buy_ev;
+            best_buy_meta_w = meta_w;
+         }
+         if(model_sell_ev > best_sell_edge)
+         {
+            best_sell_edge = model_sell_ev;
+            best_sell_meta_w = meta_w;
+         }
 
          if(signal == 1) ensemble_buy_support += meta_w;
          else if(signal == 0) ensemble_sell_support += meta_w;
@@ -1088,6 +1136,14 @@ int SpecialDirectionAI(const string symbol)
          double avg_fill_risk = ensemble_fill_risk_sum / ensemble_meta_total;
          double avg_mfe_ratio = ensemble_mfe_ratio_sum / ensemble_meta_total;
          double avg_mae_ratio = ensemble_mae_ratio_sum / ensemble_meta_total;
+         double avg_ctx_edge_norm = ensemble_ctx_edge_sum / ensemble_meta_total;
+         double avg_ctx_regret = ensemble_ctx_regret_sum / ensemble_meta_total;
+         double avg_global_edge_norm = ensemble_global_edge_sum / ensemble_meta_total;
+         double avg_port_edge_norm = ensemble_port_edge_sum / ensemble_meta_total;
+         double avg_port_stability = ensemble_port_stability_sum / ensemble_meta_total;
+         double avg_port_corr = ensemble_port_corr_sum / ensemble_meta_total;
+         double avg_port_div = ensemble_port_div_sum / ensemble_meta_total;
+         double avg_ctx_trust = ensemble_ctx_trust_sum / ensemble_meta_total;
          double move_dispersion = MathSqrt(MathMax(avg_expected_sq - avg_expected * avg_expected, 0.0));
          int active_family_count = 0;
          double dominant_family_support = 0.0;
@@ -1102,6 +1158,15 @@ int SpecialDirectionAI(const string symbol)
          }
          double active_family_ratio = (double)active_family_count / (double)MathMax(FXAI_FAMILY_OTHER + 1, 1);
          double dominant_family_ratio = dominant_family_support / MathMax(ensemble_meta_total, 1e-6);
+         double best_counterfactual_edge_norm = 0.0;
+         if(best_model_signal_edge > -1e11)
+            best_counterfactual_edge_norm = FXAI_Clamp(best_model_signal_edge / MathMax(min_move_pred, 0.10), -4.0, 4.0) / 4.0;
+         double ensemble_vs_best_gap_norm = 0.0;
+         if(best_model_signal_edge > -1e11)
+            ensemble_vs_best_gap_norm = FXAI_Clamp((MathMax(best_model_signal_edge, 0.0) - MathMax(avg_buy_ev, avg_sell_ev)) / MathMax(min_move_pred, 0.10), 0.0, 4.0) / 4.0;
+         double best_model_share = FXAI_Clamp(best_model_meta_w / MathMax(ensemble_meta_total, 1e-6), 0.0, 1.0);
+         double best_buy_share = FXAI_Clamp(best_buy_meta_w / MathMax(ensemble_meta_total, 1e-6), 0.0, 1.0);
+         double best_sell_share = FXAI_Clamp(best_sell_meta_w / MathMax(ensemble_meta_total, 1e-6), 0.0, 1.0);
          double vote_probs[3];
          vote_probs[(int)FXAI_LABEL_SELL] = FXAI_Clamp(ensemble_sell_support / ensemble_meta_total, 0.0, 1.0);
          vote_probs[(int)FXAI_LABEL_BUY] = FXAI_Clamp(ensemble_buy_support / ensemble_meta_total, 0.0, 1.0);
@@ -1132,6 +1197,19 @@ int SpecialDirectionAI(const string symbol)
                                  avg_fill_risk,
                                  avg_mfe_ratio,
                                  avg_mae_ratio,
+                                 avg_ctx_edge_norm,
+                                 avg_ctx_regret,
+                                 avg_global_edge_norm,
+                                 best_counterfactual_edge_norm,
+                                 ensemble_vs_best_gap_norm,
+                                 avg_port_edge_norm,
+                                 avg_port_stability,
+                                 avg_port_corr,
+                                 avg_port_div,
+                                 best_model_share,
+                                 best_buy_share,
+                                 best_sell_share,
+                                 avg_ctx_trust,
                                  stack_feat);
          double stack_probs_dyn[];
          ArrayResize(stack_probs_dyn, 3);

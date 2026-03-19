@@ -2,7 +2,7 @@
 #define __FXAI_RUNTIME_ARTIFACTS_MQH__
 
 #define FXAI_RUNTIME_ARTIFACT_DIR "FXAI\\Runtime"
-#define FXAI_RUNTIME_ARTIFACT_VERSION 7
+#define FXAI_RUNTIME_ARTIFACT_VERSION 8
 
 string FXAI_RuntimeArtifactSafeSymbol(const string symbol)
 {
@@ -34,6 +34,18 @@ string FXAI_RuntimePersistenceManifestFile(const string symbol)
 string FXAI_RuntimeFeatureManifestFile(const string symbol)
 {
    return FXAI_RUNTIME_ARTIFACT_DIR + "\\fxai_features_" + FXAI_RuntimeArtifactSafeSymbol(symbol) + ".tsv";
+}
+
+string FXAI_RuntimeMacroManifestFile(const string symbol)
+{
+   return FXAI_RUNTIME_ARTIFACT_DIR + "\\fxai_macro_" + FXAI_RuntimeArtifactSafeSymbol(symbol) + ".tsv";
+}
+
+bool FXAI_IsStatefulCheckpointManifest(const FXAIAIManifestV4 &manifest)
+{
+   return (FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_ONLINE_LEARNING) ||
+           FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY) ||
+           FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL));
 }
 
 void FXAI_MarkRuntimeArtifactsDirty(void)
@@ -134,7 +146,7 @@ void FXAI_WritePersistenceCoverageManifest(const string symbol)
    if(handle == INVALID_HANDLE)
       return;
 
-   FileWriteString(handle, "ai_id\tai_name\treference_tier\tcoverage_tag\tpersistent\tstate_version\tcapability_mask\tstate_file_size\tstate_file\r\n");
+   FileWriteString(handle, "ai_id\tai_name\treference_tier\tcoverage_tag\tpersistent\tstate_version\tcapability_mask\tstateful_checkpoint\tnative_required\tpromotion_ready\tstate_file_size\tstate_file\tcoverage_note\r\n");
    if(g_plugins_ready)
    {
       for(int ai=0; ai<FXAI_AI_COUNT; ai++)
@@ -147,15 +159,30 @@ void FXAI_WritePersistenceCoverageManifest(const string symbol)
          FXAI_GetPluginManifest(*plugin, manifest);
          string state_file = plugin.PersistentStateFile(symbol);
          long file_size = FXAI_CommonFileSize(state_file);
+         bool stateful_checkpoint = FXAI_IsStatefulCheckpointManifest(manifest);
+         bool native_required = stateful_checkpoint;
+         string coverage_tag = plugin.PersistentStateCoverageTag();
+         bool promotion_ready = (!native_required || coverage_tag == "native_model");
+         string coverage_note = "";
+         if(native_required && coverage_tag != "native_model")
+            coverage_note = "stateful model blocked from live promotion until native checkpoint coverage is implemented";
+         else if(coverage_tag == "native_model")
+            coverage_note = "native checkpoint verified";
+         else
+            coverage_note = "checkpoint not required";
          string line = IntegerToString(plugin.AIId()) + "\t" +
                        plugin.AIName() + "\t" +
                        FXAI_ReferenceTierName(manifest.reference_tier) + "\t" +
-                       plugin.PersistentStateCoverageTag() + "\t" +
+                       coverage_tag + "\t" +
                        IntegerToString(plugin.SupportsPersistentState() ? 1 : 0) + "\t" +
                        IntegerToString(plugin.PersistentStateVersion()) + "\t" +
                        IntegerToString((int)manifest.capability_mask) + "\t" +
+                       IntegerToString(stateful_checkpoint ? 1 : 0) + "\t" +
+                       IntegerToString(native_required ? 1 : 0) + "\t" +
+                       IntegerToString(promotion_ready ? 1 : 0) + "\t" +
                        IntegerToString((int)file_size) + "\t" +
-                       state_file + "\r\n";
+                       state_file + "\t" +
+                       coverage_note + "\r\n";
          FileWriteString(handle, line);
       }
    }
@@ -188,6 +215,34 @@ void FXAI_WriteFeatureRegistryManifest(const string symbol)
       FileWriteString(handle, line);
    }
 
+   FileClose(handle);
+}
+
+void FXAI_WriteMacroDatasetManifest(const string symbol)
+{
+   FolderCreate("FXAI", FILE_COMMON);
+   FolderCreate(FXAI_RUNTIME_ARTIFACT_DIR, FILE_COMMON);
+
+   int handle = FileOpen(FXAI_RuntimeMacroManifestFile(symbol), FILE_WRITE | FILE_TXT | FILE_COMMON);
+   if(handle == INVALID_HANDLE)
+      return;
+
+   FXAIMacroEventDatasetStats stats;
+   FXAI_GetMacroEventDatasetStats(stats);
+   FileWriteString(handle, "symbol\trecord_count\tparse_errors\tdistinct_symbols\tfirst_event_time\tlast_event_time\tavg_importance\tavg_pre_window_min\tavg_post_window_min\tchecksum01\tleakage_guard_score\tleakage_safe\r\n");
+   string line = FXAI_RuntimeArtifactSafeSymbol(symbol) + "\t" +
+                 IntegerToString(stats.record_count) + "\t" +
+                 IntegerToString(stats.parse_errors) + "\t" +
+                 IntegerToString(stats.distinct_symbols) + "\t" +
+                 IntegerToString((int)stats.first_event_time) + "\t" +
+                 IntegerToString((int)stats.last_event_time) + "\t" +
+                 DoubleToString(stats.avg_importance, 6) + "\t" +
+                 DoubleToString(stats.avg_pre_window_min, 6) + "\t" +
+                 DoubleToString(stats.avg_post_window_min, 6) + "\t" +
+                 DoubleToString(stats.checksum01, 6) + "\t" +
+                 DoubleToString(stats.leakage_guard_score, 6) + "\t" +
+                 IntegerToString(FXAI_MacroEventLeakageSafe() ? 1 : 0) + "\r\n";
+   FileWriteString(handle, line);
    FileClose(handle);
 }
 
@@ -351,6 +406,7 @@ bool FXAI_SaveRuntimeArtifacts(const string symbol)
    {
       FXAI_WritePersistenceCoverageManifest(symbol);
       FXAI_WriteFeatureRegistryManifest(symbol);
+      FXAI_WriteMacroDatasetManifest(symbol);
       g_runtime_artifacts_dirty = false;
       g_runtime_last_save_time = TimeCurrent();
    }

@@ -2,7 +2,7 @@
 #define __FXAI_META_PERSISTENCE_MQH__
 
 #define FXAI_META_ARTIFACT_DIR "FXAI\\Meta"
-#define FXAI_META_ARTIFACT_VERSION 3
+#define FXAI_META_ARTIFACT_VERSION 4
 
 string FXAI_MetaArtifactFile(const string symbol)
 {
@@ -120,6 +120,12 @@ bool FXAI_SaveMetaArtifacts(const string symbol)
          FileWriteInteger(handle, (g_model_horizon_edge_ready[ai][h] ? 1 : 0));
          FileWriteInteger(handle, g_model_horizon_obs[ai][h]);
       }
+      FileWriteDouble(handle, g_model_portfolio_mean_edge[ai]);
+      FileWriteDouble(handle, g_model_portfolio_stability[ai]);
+      FileWriteDouble(handle, g_model_portfolio_corr_penalty[ai]);
+      FileWriteDouble(handle, g_model_portfolio_diversification[ai]);
+      FileWriteInteger(handle, (g_model_portfolio_ready[ai] ? 1 : 0));
+      FileWriteInteger(handle, g_model_portfolio_symbol_count[ai]);
    }
 
    FileClose(handle);
@@ -236,6 +242,12 @@ bool FXAI_LoadMetaArtifacts(const string symbol)
             g_model_horizon_edge_ready[ai][h] = (FileReadInteger(handle) != 0);
             g_model_horizon_obs[ai][h] = FileReadInteger(handle);
          }
+         g_model_portfolio_mean_edge[ai] = FileReadDouble(handle);
+         g_model_portfolio_stability[ai] = FileReadDouble(handle);
+         g_model_portfolio_corr_penalty[ai] = FileReadDouble(handle);
+         g_model_portfolio_diversification[ai] = FileReadDouble(handle);
+         g_model_portfolio_ready[ai] = (FileReadInteger(handle) != 0);
+         g_model_portfolio_symbol_count[ai] = FileReadInteger(handle);
       }
    }
 

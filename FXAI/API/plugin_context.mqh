@@ -213,7 +213,12 @@
    void BuildSharedAdapterInput(const double &x[],
                                 double &out[]) const
    {
-      FXAI_BuildSharedTransferInputGlobal(x, m_ctx_domain_hash, m_ctx_horizon_minutes, out);
+      FXAI_BuildSharedTransferInputGlobal(x,
+                                         m_ctx_window,
+                                         m_ctx_window_size,
+                                         m_ctx_domain_hash,
+                                         m_ctx_horizon_minutes,
+                                         out);
    }
 
    bool HasSharedAdapterSignal(const double &a[]) const
@@ -229,16 +234,24 @@
    {
       if(ArraySize(a) < FXAI_SHARED_TRANSFER_FEATURES)
          return 0.0;
-      return FXAI_Clamp(0.18 +
-                        0.08 * a[4] +
-                        0.05 * MathAbs(a[8]) +
-                        0.05 * MathAbs(a[11]) +
-                        0.05 * MathAbs(a[12]) +
-                        0.05 * MathAbs(a[15]) +
-                        0.04 * MathAbs(a[18]) -
-                        0.03 * MathAbs(a[19]),
+      return FXAI_Clamp(0.14 +
+                        0.07 * a[4] +
+                        0.04 * MathAbs(a[8]) +
+                        0.04 * MathAbs(a[11]) +
+                        0.04 * MathAbs(a[12]) +
+                        0.04 * MathAbs(a[15]) +
+                        0.03 * MathAbs(a[18]) -
+                        0.02 * MathAbs(a[19]) +
+                        0.05 * MathAbs(a[20]) +
+                        0.05 * MathAbs(a[21]) +
+                        0.04 * a[22] +
+                        0.04 * MathAbs(a[23]) +
+                        0.04 * MathAbs(a[24]) +
+                        0.03 * MathAbs(a[25]) +
+                        0.03 * MathAbs(a[26]) -
+                        0.03 * a[27],
                         0.0,
-                        0.52);
+                        0.62);
    }
 
    void EncodeSharedTransferBackbone(const double &a[],
@@ -431,7 +444,7 @@
       {
          for(int c=0; c<3; c++)
             transfer_probs[c] /= transfer_mass;
-         double transfer_trust = FXAI_Clamp(0.10 + 0.35 * a[4], 0.0, 0.28);
+         double transfer_trust = FXAI_Clamp(0.08 + 0.28 * a[4] + 0.08 * MathAbs(a[24]) + 0.06 * a[22], 0.0, 0.34);
          for(int c=0; c<3; c++)
             probs[c] = FXAI_Clamp((1.0 - transfer_trust) * probs[c] + transfer_trust * transfer_probs[c], 0.0005, 0.9990);
       }
@@ -457,7 +470,10 @@
                                                       0.10 * a[4] +
                                                       0.05 * MathAbs(a[11]) +
                                                       0.05 * MathAbs(a[15]) +
-                                                      0.05 * (1.0 - MathAbs(a[19]) / 6.0) +
+                                                      0.04 * (1.0 - MathAbs(a[19]) / 6.0) +
+                                                      0.04 * a[22] +
+                                                      0.04 * MathAbs(a[24]) +
+                                                      0.03 * (1.0 - FXAI_Clamp(a[27] / 6.0, 0.0, 1.0)) +
                                                       transfer_rel_boost,
                                                       0.0,
                                                       1.0),

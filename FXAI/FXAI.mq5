@@ -430,7 +430,7 @@ datetime g_last_debug_bar = 0;
 #define FXAI_REL_MAX_PENDING 2048
 #define FXAI_REGIME_COUNT 12
 #define FXAI_MAX_HORIZONS 8
-#define FXAI_STACK_FEATS 56
+#define FXAI_STACK_FEATS 72
 #define FXAI_STACK_HIDDEN 28
 #define FXAI_TRADE_GATE_FEATS FXAI_STACK_FEATS
 #define FXAI_TRADE_GATE_HIDDEN 16
@@ -494,6 +494,12 @@ double g_model_context_edge_ema[FXAI_AI_COUNT][FXAI_REGIME_COUNT][FXAI_MAX_HORIZ
 double g_model_context_regret_ema[FXAI_AI_COUNT][FXAI_REGIME_COUNT][FXAI_MAX_HORIZONS];
 bool   g_model_context_ready[FXAI_AI_COUNT][FXAI_REGIME_COUNT][FXAI_MAX_HORIZONS];
 int    g_model_context_obs[FXAI_AI_COUNT][FXAI_REGIME_COUNT][FXAI_MAX_HORIZONS];
+double g_model_portfolio_mean_edge[FXAI_AI_COUNT];
+double g_model_portfolio_stability[FXAI_AI_COUNT];
+double g_model_portfolio_corr_penalty[FXAI_AI_COUNT];
+double g_model_portfolio_diversification[FXAI_AI_COUNT];
+bool   g_model_portfolio_ready[FXAI_AI_COUNT];
+int    g_model_portfolio_symbol_count[FXAI_AI_COUNT];
 double g_horizon_regime_edge_ema[FXAI_REGIME_COUNT][FXAI_MAX_HORIZONS];
 bool   g_horizon_regime_edge_ready[FXAI_REGIME_COUNT][FXAI_MAX_HORIZONS];
 int    g_horizon_regime_obs[FXAI_REGIME_COUNT][FXAI_MAX_HORIZONS];

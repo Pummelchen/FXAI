@@ -5,7 +5,7 @@
 #include "..\TensorCore\TensorCore.mqh"
 
 #define FXAI_PLUGIN_STATE_ARTIFACT_DIR "FXAI\\Runtime\\Plugins"
-#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 6
+#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 7
 
 class CFXAITernaryCalibrator
 {
@@ -488,7 +488,7 @@ public:
       m_native_quality_heads.Reset();
    }
    virtual bool SupportsPersistentState(void) const { return true; }
-   virtual int PersistentStateVersion(void) const { return 6; }
+   virtual int PersistentStateVersion(void) const { return 7; }
    virtual string PersistentStateCoverageTag(void) const
    {
       FXAIAIManifestV4 manifest;
@@ -662,11 +662,14 @@ public:
 
    void TrainSharedTransfer(const FXAIAIContextV4 &ctx,
                             const double &x[],
+                            const double &x_window[][FXAI_AI_WEIGHTS],
+                            const int window_size,
                             const double move_points,
                             const double sample_w,
                             const double lr)
    {
       SetContext(ctx);
+      SetWindowPayload(window_size, x_window);
       UpdateCrossSymbolTransferBank(x, move_points, sample_w);
       UpdateSharedContextAdapter(x,
                                  NormalizeClassLabel(-1, x, move_points),

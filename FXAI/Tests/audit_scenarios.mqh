@@ -13,6 +13,7 @@ void FXAI_AuditFillScenarioSpec(const int scenario_id,
    spec.spike_prob = 0.0;
    spec.spike_scale = 0.0;
    spec.spread_points = 1.2;
+   spec.macro_focus = 0.0;
 
    switch(scenario_id)
    {
@@ -89,6 +90,11 @@ void FXAI_AuditFillScenarioSpec(const int scenario_id,
          spec.name = "market_walkforward";
          spec.spread_points = 1.5;
          break;
+      case 14:
+         spec.name = "market_macro_event";
+         spec.spread_points = 1.7;
+         spec.macro_focus = 1.0;
+         break;
       default:
          break;
    }
@@ -137,6 +143,12 @@ void FXAI_AuditResetMetrics(FXAIAuditScenarioMetrics &m,
    m.brier_score = 0.0;
    m.calibration_error = 0.0;
    m.path_quality_error = 0.0;
+   m.macro_event_rate = 0.0;
+   m.macro_pre_rate = 0.0;
+   m.macro_post_rate = 0.0;
+   m.macro_importance_mean = 0.0;
+   m.macro_surprise_abs_mean = 0.0;
+   m.macro_data_coverage = 0.0;
    m.reset_delta = 0.0;
    m.sequence_delta = 0.0;
    m.wf_folds = 0;
@@ -553,6 +565,13 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
             }
             avg_spread /= MathMax((double)bars, 1.0);
             score = (max_spread - avg_spread) + 0.04 * (avg_range / MathMax(point, 1e-6));
+         }
+         else if(spec.id == 14)
+         {
+            double macro_score = FXAI_MacroEventWindowScoreRates(_Symbol, rates_m1, start, bars);
+            score = 0.80 * macro_score +
+                    0.12 * trendiness +
+                    0.08 * FXAI_Clamp(avg_range / MathMax(point, 1e-6), 0.0, 8.0);
          }
          else
          {

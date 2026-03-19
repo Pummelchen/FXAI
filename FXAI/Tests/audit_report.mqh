@@ -4,7 +4,7 @@
 bool FXAI_AuditWriteHeader(const int handle)
 {
    return FileWrite(handle,
-                    "ai_id\tai_name\tfamily\tscenario\tbars_total\tsamples_total\tvalid_preds\tinvalid_preds\tbuy_count\tsell_count\tskip_count\ttrue_buy_count\ttrue_sell_count\ttrue_skip_count\texact_match_count\tdirectional_eval_count\tdirectional_correct_count\tskip_ratio\tactive_ratio\tbias_abs\tconf_drift\tbrier_score\tcalibration_error\tpath_quality_error\treset_delta\tsequence_delta\twf_folds\twf_train_samples\twf_test_samples\twf_train_score\twf_test_score\twf_test_score_std\twf_gap\twf_pbo\twf_dsr\twf_pass_rate\tscore\tissue_flags\tavg_conf\tavg_rel\tavg_move\ttrend_align") > 0;
+                    "ai_id\tai_name\tfamily\tscenario\tbars_total\tsamples_total\tvalid_preds\tinvalid_preds\tbuy_count\tsell_count\tskip_count\ttrue_buy_count\ttrue_sell_count\ttrue_skip_count\texact_match_count\tdirectional_eval_count\tdirectional_correct_count\tskip_ratio\tactive_ratio\tbias_abs\tconf_drift\tbrier_score\tcalibration_error\tpath_quality_error\tmacro_event_rate\tmacro_pre_rate\tmacro_post_rate\tmacro_importance_mean\tmacro_surprise_abs_mean\tmacro_data_coverage\treset_delta\tsequence_delta\twf_folds\twf_train_samples\twf_test_samples\twf_train_score\twf_test_score\twf_test_score_std\twf_gap\twf_pbo\twf_dsr\twf_pass_rate\tscore\tissue_flags\tavg_conf\tavg_rel\tavg_move\ttrend_align") > 0;
 }
 
 bool FXAI_AuditWriteMetrics(const int handle,
@@ -39,6 +39,12 @@ bool FXAI_AuditWriteMetrics(const int handle,
                     DoubleToString(m.brier_score, 6) + "\t" +
                     DoubleToString(m.calibration_error, 6) + "\t" +
                     DoubleToString(m.path_quality_error, 6) + "\t" +
+                    DoubleToString(m.macro_event_rate, 6) + "\t" +
+                    DoubleToString(m.macro_pre_rate, 6) + "\t" +
+                    DoubleToString(m.macro_post_rate, 6) + "\t" +
+                    DoubleToString(m.macro_importance_mean, 6) + "\t" +
+                    DoubleToString(m.macro_surprise_abs_mean, 6) + "\t" +
+                    DoubleToString(m.macro_data_coverage, 6) + "\t" +
                     DoubleToString(m.reset_delta, 6) + "\t" +
                     DoubleToString(m.sequence_delta, 6) + "\t" +
                     IntegerToString(m.wf_folds) + "\t" +

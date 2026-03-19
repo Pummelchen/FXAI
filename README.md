@@ -60,7 +60,7 @@ You do not need to be an MQL5 programmer to use FXAI as an operator. For normal 
 - **Cross-symbol transfer warmup**
   - Shared transfer adapters now pretrain across configured horizons and capped context-symbol sample packs before live trading begins, with a deeper shared latent backbone that is conditioned by symbol-domain, horizon, and session context.
 - **Checkpoint recovery for stateful plugins**
-  - Persistent plugins now carry replay-backed checkpoint reconstruction metadata, so online or stateful models can recover a verified learned state even when they do not yet ship a full native weight serializer.
+  - Persistent plugins now carry replay-backed checkpoint reconstruction metadata, and runtime manifests plus release gating now block live promotion of stateful plugins until they provide full native checkpoint coverage.
 - **Cost-aware signals**
   - Labels and thresholds account for trading friction, improving realistic expectancy.
 - **Feature governance**
@@ -78,7 +78,7 @@ You do not need to be an MQL5 programmer to use FXAI as an operator. For normal 
 - **Backtest efficiency**
   - Lightweight online updates and shared data pipeline support large optimization runs.
 - **Audit discipline**
-  - Synthetic pressure tests and real-market replay certification catch weak plugins before large cloud backtests.
+  - Synthetic pressure tests, real-market replay certification, macro-event scenario checks, and manifest-based release gates catch weak plugins before large cloud backtests.
 - **Extensible by design**
   - New models can be added through the plugin API with consistent train/predict flow.
 - **Production-oriented workflow**
@@ -156,7 +156,8 @@ Optional macro-event input file:
 
 - `FXAI\\Runtime\\macro_events.tsv` in the MT5 common-files area
 - tab-separated columns: `symbol`, `event_time`, `pre_window_min`, `post_window_min`, `importance`, `surprise`, `actual_delta`, `forecast_delta`, `class`
-- if the file is absent, FXAI falls back to zeroed macro-event features
+- if the file is absent, FXAI falls back to zeroed macro-event features and keeps the macro-event audit scenario neutral instead of penalizing plugins for missing optional data
+- if the file is present but fails the leakage guard, release-gate checks fail until the dataset is fixed
 
 Portfolio-style audit pack example:
 

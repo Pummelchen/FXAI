@@ -554,14 +554,17 @@ bool FXAI_ComputeFeatureVector(const int i,
    double macro_surprise_signed = 0.0;
    double macro_surprise_abs = 0.0;
    double macro_event_class_bias = 0.0;
-   FXAI_GetMacroEventFeatures(symbol,
-                              t_ref,
-                              macro_pre_embargo,
-                              macro_post_embargo,
-                              macro_event_importance,
-                              macro_surprise_signed,
-                              macro_surprise_abs,
-                              macro_event_class_bias);
+   if(FXAI_MacroEventLeakageSafe())
+   {
+      FXAI_GetMacroEventFeatures(symbol,
+                                 t_ref,
+                                 macro_pre_embargo,
+                                 macro_post_embargo,
+                                 macro_event_importance,
+                                 macro_surprise_signed,
+                                 macro_surprise_abs,
+                                 macro_event_class_bias);
+   }
    features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 0] = macro_pre_embargo;
    features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 1] = macro_post_embargo;
    features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 2] = macro_event_importance;

@@ -31,6 +31,9 @@
 #define FXAI_AUDIT_ISSUE_WF_OVERFIT       256
 #define FXAI_AUDIT_ISSUE_WF_UNSTABLE      512
 #define FXAI_AUDIT_ISSUE_WF_WEAK_EDGE     1024
+#define FXAI_AUDIT_ISSUE_MACRO_BLIND      2048
+#define FXAI_AUDIT_ISSUE_MACRO_OVERREACT  4096
+#define FXAI_AUDIT_ISSUE_MACRO_DATA_GAP   8192
 
 int FXAI_AuditGetSequenceBarsOverride(void);
 int FXAI_AuditGetSchemaOverride(void);
@@ -208,6 +211,7 @@ struct FXAIAuditScenarioSpec
    double spike_prob;
    double spike_scale;
    double spread_points;
+   double macro_focus;
 };
 
 struct FXAIAuditFoldMetrics
@@ -268,6 +272,12 @@ struct FXAIAuditScenarioMetrics
     double brier_score;
    double calibration_error;
    double path_quality_error;
+   double macro_event_rate;
+   double macro_pre_rate;
+   double macro_post_rate;
+   double macro_importance_mean;
+   double macro_surprise_abs_mean;
+   double macro_data_coverage;
    double reset_delta;
    double sequence_delta;
    int wf_folds;

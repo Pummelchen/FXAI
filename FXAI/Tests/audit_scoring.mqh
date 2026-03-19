@@ -247,7 +247,19 @@ void FXAI_AuditFinalizeMetrics(FXAIAuditScenarioMetrics &m)
       m.brier_score = m.brier_sum / (double)m.valid_preds;
    if(m.path_quality_count > 0)
       m.path_quality_error = m.path_quality_abs_sum / (double)m.path_quality_count;
+   if(m.samples_total > 0)
+   {
+      double denom = (double)m.samples_total;
+      m.macro_event_rate /= denom;
+      m.macro_pre_rate /= denom;
+      m.macro_post_rate /= denom;
+      m.macro_importance_mean /= denom;
+      m.macro_surprise_abs_mean /= denom;
+      m.macro_data_coverage /= denom;
+   }
    double avg_net = (m.valid_preds > 0 ? m.net_sum / (double)m.valid_preds : 0.0);
+   bool macro_dataset_active = FXAI_HasMacroEventDataset();
+   bool macro_dataset_safe = (macro_dataset_active && FXAI_MacroEventLeakageSafe());
 
    double score = 100.0;
    if(m.invalid_preds > 0) score -= 35.0;
@@ -264,6 +276,26 @@ void FXAI_AuditFinalizeMetrics(FXAIAuditScenarioMetrics &m)
    if(m.brier_score > 0.52) score -= 8.0;
    if(m.calibration_error > 0.28) score -= 8.0;
    if(m.path_quality_error > 0.55) score -= 8.0;
+   if(m.scenario == "market_macro_event")
+   {
+      if(!macro_dataset_active)
+      {
+         // Keep the scenario neutral when no macro dataset is configured.
+      }
+      else if(!macro_dataset_safe)
+      {
+         score -= 22.0;
+      }
+      else
+      {
+         if(m.macro_data_coverage < 0.08) score -= 20.0;
+         if(m.macro_event_rate < 0.06) score -= 16.0;
+         if(m.macro_importance_mean < 0.08) score -= 10.0;
+         if(m.active_ratio < 0.05 && m.macro_event_rate > 0.10) score -= 8.0;
+         if(m.active_ratio > 0.88 && m.macro_surprise_abs_mean < 0.20) score -= 8.0;
+         if(avg_net < 0.0) score -= 10.0 * FXAI_Clamp(-avg_net / 4.0, 0.0, 1.0);
+      }
+   }
    if((m.scenario == "market_session_edges" || m.scenario == "market_spread_shock" || m.scenario == "market_walkforward") && avg_net < 0.0)
       score -= 8.0 * FXAI_Clamp(-avg_net / 4.0, 0.0, 1.0);
    if(m.reset_delta > 0.30) score -= 12.0;
@@ -287,6 +319,18 @@ void FXAI_AuditFinalizeMetrics(FXAIAuditScenarioMetrics &m)
    if(m.invalid_preds > 0) m.issue_flags |= FXAI_AUDIT_ISSUE_INVALID_PRED;
    if((m.scenario == "random_walk" || m.scenario == "market_chop" || m.scenario == "market_spread_shock" || m.scenario == "market_session_edges") && (m.skip_ratio < 0.55 || m.active_ratio > 0.70))
       m.issue_flags |= FXAI_AUDIT_ISSUE_OVERTRADES_NOISE;
+   if(m.scenario == "market_macro_event")
+   {
+      if(macro_dataset_active)
+      {
+         if(!macro_dataset_safe || m.macro_data_coverage < 0.05)
+            m.issue_flags |= FXAI_AUDIT_ISSUE_MACRO_DATA_GAP;
+         if(macro_dataset_safe && m.active_ratio < 0.05 && m.macro_event_rate > 0.10)
+            m.issue_flags |= FXAI_AUDIT_ISSUE_MACRO_BLIND;
+         if(macro_dataset_safe && m.active_ratio > 0.88 && m.macro_surprise_abs_mean < 0.20)
+            m.issue_flags |= FXAI_AUDIT_ISSUE_MACRO_OVERREACT;
+      }
+   }
    if((m.scenario == "drift_up" || m.scenario == "drift_down" || m.scenario == "monotonic_up" || m.scenario == "monotonic_down" || m.scenario == "market_trend" || m.scenario == "market_walkforward") &&
       m.trend_alignment_count > 0 && (m.trend_alignment_sum / (double)m.trend_alignment_count) < 0.25)
       m.issue_flags |= FXAI_AUDIT_ISSUE_MISSES_TREND;
@@ -607,6 +651,21 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
                                          req.x_window,
                                          req.window_size,
                                          req.x);
+
+      if(track_overall_eval)
+      {
+         double macro_pre = FXAI_GetInputFeature(req.x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 0);
+         double macro_post = FXAI_GetInputFeature(req.x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 1);
+         double macro_importance = FXAI_GetInputFeature(req.x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 2);
+         double macro_surprise_abs = FXAI_GetInputFeature(req.x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 4);
+         double macro_activity = MathMax(macro_importance, MathMax(macro_pre, macro_post));
+         out.macro_event_rate += (macro_activity > 0.05 ? 1.0 : 0.0);
+         out.macro_pre_rate += (macro_pre > 0.05 ? 1.0 : 0.0);
+         out.macro_post_rate += (macro_post > 0.05 ? 1.0 : 0.0);
+         out.macro_importance_mean += macro_importance;
+         out.macro_surprise_abs_mean += macro_surprise_abs;
+         out.macro_data_coverage += FXAI_Clamp(macro_activity, 0.0, 1.0);
+      }
 
       if(eval_enabled)
       {

@@ -1384,6 +1384,20 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
          double ensemble_fill_risk_sum = 0.0;
          double ensemble_mfe_ratio_sum = 0.0;
          double ensemble_mae_ratio_sum = 0.0;
+         double ensemble_ctx_edge_sum = 0.0;
+         double ensemble_ctx_regret_sum = 0.0;
+         double ensemble_global_edge_sum = 0.0;
+         double ensemble_port_edge_sum = 0.0;
+         double ensemble_port_stability_sum = 0.0;
+         double ensemble_port_corr_sum = 0.0;
+         double ensemble_port_div_sum = 0.0;
+         double ensemble_ctx_trust_sum = 0.0;
+         double best_model_signal_edge = -1e12;
+         double best_model_meta_w = 0.0;
+         double best_buy_edge = -1e12;
+         double best_sell_edge = -1e12;
+         double best_buy_meta_w = 0.0;
+         double best_sell_meta_w = 0.0;
          double family_support[FXAI_FAMILY_OTHER + 1];
          for(int fam_i=0; fam_i<=FXAI_FAMILY_OTHER; fam_i++) family_support[fam_i] = 0.0;
 
@@ -1493,6 +1507,16 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             double model_sell_ev = ((2.0 * probs_eval[(int)FXAI_LABEL_SELL]) - 1.0) * expected_move - samples[i].min_move_points;
             model_buy_ev = FXAI_Clamp(model_buy_ev, -10.0 * samples[i].min_move_points, 10.0 * samples[i].min_move_points);
             model_sell_ev = FXAI_Clamp(model_sell_ev, -10.0 * samples[i].min_move_points, 10.0 * samples[i].min_move_points);
+            double mm_meta = MathMax(samples[i].min_move_points, 0.50);
+            double ctx_edge_norm = FXAI_Clamp(FXAI_GetModelContextEdge(ai_idx, regime_id, H) / mm_meta, -4.0, 4.0) / 4.0;
+            double ctx_regret = FXAI_Clamp(FXAI_GetModelContextRegret(ai_idx, regime_id, H), 0.0, 6.0) / 6.0;
+            double global_edge_norm = FXAI_Clamp(FXAI_GetModelRegimeEdge(ai_idx, regime_id) / mm_meta, -4.0, 4.0) / 4.0;
+            double port_edge_norm = FXAI_GetModelPortfolioEdgeNorm(ai_idx, mm_meta);
+            double port_stability = FXAI_GetModelPortfolioStability(ai_idx);
+            double port_corr = FXAI_GetModelPortfolioCorrPenalty(ai_idx);
+            double port_div = FXAI_GetModelPortfolioDiversification(ai_idx);
+            double ctx_trust = FXAI_GetModelContextTrust(ai_idx, regime_id, H);
+            double model_best_edge = MathMax(model_buy_ev, model_sell_ev);
 
             ensemble_meta_total += meta_w;
             ensemble_buy_ev_sum += meta_w * model_buy_ev;
@@ -1507,8 +1531,31 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             ensemble_fill_risk_sum += meta_w * FXAI_Clamp(pred.fill_risk, 0.0, 1.0);
             ensemble_mfe_ratio_sum += meta_w * FXAI_Clamp(pred.mfe_mean_points / MathMax(expected_move, samples[i].min_move_points), 0.0, 4.0);
             ensemble_mae_ratio_sum += meta_w * FXAI_Clamp(pred.mae_mean_points / MathMax(pred.mfe_mean_points, samples[i].min_move_points), 0.0, 2.0);
+            ensemble_ctx_edge_sum += meta_w * ctx_edge_norm;
+            ensemble_ctx_regret_sum += meta_w * ctx_regret;
+            ensemble_global_edge_sum += meta_w * global_edge_norm;
+            ensemble_port_edge_sum += meta_w * port_edge_norm;
+            ensemble_port_stability_sum += meta_w * port_stability;
+            ensemble_port_corr_sum += meta_w * port_corr;
+            ensemble_port_div_sum += meta_w * port_div;
+            ensemble_ctx_trust_sum += meta_w * ctx_trust;
             if(plugin_manifest.family >= 0 && plugin_manifest.family <= FXAI_FAMILY_OTHER)
                family_support[plugin_manifest.family] += meta_w;
+            if(model_best_edge > best_model_signal_edge)
+            {
+               best_model_signal_edge = model_best_edge;
+               best_model_meta_w = meta_w;
+            }
+            if(model_buy_ev > best_buy_edge)
+            {
+               best_buy_edge = model_buy_ev;
+               best_buy_meta_w = meta_w;
+            }
+            if(model_sell_ev > best_sell_edge)
+            {
+               best_sell_edge = model_sell_ev;
+               best_sell_meta_w = meta_w;
+            }
             if(signal == 1) ensemble_buy_support += meta_w;
             else if(signal == 0) ensemble_sell_support += meta_w;
             else ensemble_skip_support += meta_w;
@@ -1533,6 +1580,14 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             double avg_fill_risk = ensemble_fill_risk_sum / ensemble_meta_total;
             double avg_mfe_ratio = ensemble_mfe_ratio_sum / ensemble_meta_total;
             double avg_mae_ratio = ensemble_mae_ratio_sum / ensemble_meta_total;
+            double avg_ctx_edge_norm = ensemble_ctx_edge_sum / ensemble_meta_total;
+            double avg_ctx_regret = ensemble_ctx_regret_sum / ensemble_meta_total;
+            double avg_global_edge_norm = ensemble_global_edge_sum / ensemble_meta_total;
+            double avg_port_edge_norm = ensemble_port_edge_sum / ensemble_meta_total;
+            double avg_port_stability = ensemble_port_stability_sum / ensemble_meta_total;
+            double avg_port_corr = ensemble_port_corr_sum / ensemble_meta_total;
+            double avg_port_div = ensemble_port_div_sum / ensemble_meta_total;
+            double avg_ctx_trust = ensemble_ctx_trust_sum / ensemble_meta_total;
             double move_dispersion = MathSqrt(MathMax(avg_expected_sq - avg_expected * avg_expected, 0.0));
             int active_family_count = 0;
             double dominant_family_support = 0.0;
@@ -1547,6 +1602,15 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             }
             double active_family_ratio = (double)active_family_count / (double)MathMax(FXAI_FAMILY_OTHER + 1, 1);
             double dominant_family_ratio = dominant_family_support / MathMax(ensemble_meta_total, 1e-6);
+            double best_counterfactual_edge_norm = 0.0;
+            if(best_model_signal_edge > -1e11)
+               best_counterfactual_edge_norm = FXAI_Clamp(best_model_signal_edge / MathMax(samples[i].min_move_points, 0.10), -4.0, 4.0) / 4.0;
+            double ensemble_vs_best_gap_norm = 0.0;
+            if(best_model_signal_edge > -1e11)
+               ensemble_vs_best_gap_norm = FXAI_Clamp((MathMax(best_model_signal_edge, 0.0) - MathMax(avg_buy_ev, avg_sell_ev)) / MathMax(samples[i].min_move_points, 0.10), 0.0, 4.0) / 4.0;
+            double best_model_share = FXAI_Clamp(best_model_meta_w / MathMax(ensemble_meta_total, 1e-6), 0.0, 1.0);
+            double best_buy_share = FXAI_Clamp(best_buy_meta_w / MathMax(ensemble_meta_total, 1e-6), 0.0, 1.0);
+            double best_sell_share = FXAI_Clamp(best_sell_meta_w / MathMax(ensemble_meta_total, 1e-6), 0.0, 1.0);
             double warm_ctx_strength = FXAI_Clamp(MathAbs(FXAI_GetArrayValue(samples[i].x, 10, 0.0)) +
                                                   FXAI_GetArrayValue(samples[i].x, 11, 0.0) +
                                                   MathAbs(FXAI_GetArrayValue(samples[i].x, 12, 0.0)),
@@ -1580,6 +1644,19 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
                                     avg_fill_risk,
                                     avg_mfe_ratio,
                                     avg_mae_ratio,
+                                    avg_ctx_edge_norm,
+                                    avg_ctx_regret,
+                                    avg_global_edge_norm,
+                                    best_counterfactual_edge_norm,
+                                    ensemble_vs_best_gap_norm,
+                                    avg_port_edge_norm,
+                                    avg_port_stability,
+                                    avg_port_corr,
+                                    avg_port_div,
+                                    best_model_share,
+                                    best_buy_share,
+                                    best_sell_share,
+                                    avg_ctx_trust,
                                     feat);
             FXAI_StackUpdate(regime_id, samples[i].label_class, feat, samples[i].sample_weight);
             double realized_edge = 0.0;
@@ -1665,13 +1742,17 @@ void FXAI_WarmupPretrainSharedTransferSamples(const FXAIPreparedSample &samples[
 
       FXAIAIContextV4 ctx;
       FXAI_ClearContextV4(ctx);
+      double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      int window_size = 0;
+      int sequence_span = FXAI_ContextSequenceSpan(24, samples[i].horizon_minutes, _Symbol, 8);
+      FXAI_BuildPreparedSampleWindow(samples, i, sequence_span, x_window, window_size);
       ctx.api_version = FXAI_API_VERSION_V4;
       ctx.regime_id = samples[i].regime_id;
       ctx.session_bucket = FXAI_DeriveSessionBucket(samples[i].sample_time);
       ctx.horizon_minutes = samples[i].horizon_minutes;
       ctx.feature_schema_id = (int)FXAI_SCHEMA_FULL;
       ctx.normalization_method_id = (int)FXAI_NORM_EXISTING;
-      ctx.sequence_bars = 1;
+      ctx.sequence_bars = MathMax(window_size, 1);
       ctx.cost_points = samples[i].cost_points;
       ctx.min_move_points = samples[i].min_move_points;
       ctx.point_value = (samples[i].point_value > 0.0 ? samples[i].point_value : (_Point > 0.0 ? _Point : 1.0));
@@ -1681,6 +1762,8 @@ void FXAI_WarmupPretrainSharedTransferSamples(const FXAIPreparedSample &samples[
       double sample_w = FXAI_Clamp(samples[i].sample_weight * sample_scale, 0.20, 4.00);
       plugin.TrainSharedTransfer(ctx,
                                  samples[i].x,
+                                 x_window,
+                                 window_size,
                                  samples[i].move_points,
                                  sample_w,
                                  hp.lr);
@@ -1724,7 +1807,13 @@ void FXAI_WarmupPretrainGlobalTransferSamples(const FXAIPreparedSample &samples[
       seen++;
 
       double a[];
+      double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      int window_size = 0;
+      int sequence_span = FXAI_ContextSequenceSpan(24, samples[i].horizon_minutes, _Symbol, 8);
+      FXAI_BuildPreparedSampleWindow(samples, i, sequence_span, x_window, window_size);
       FXAI_BuildSharedTransferInputGlobal(samples[i].x,
+                                          x_window,
+                                          window_size,
                                           samples[i].domain_hash,
                                           samples[i].horizon_minutes,
                                           a);
@@ -2016,6 +2105,278 @@ bool FXAI_WarmupBuildTransferSymbolSamplesForHorizon(const string target_symbol,
                                   out);
 
    return (ArraySize(out) > 0);
+}
+
+double FXAI_WarmupEstimatePortfolioSymbolCorrelation(const FXAIPreparedSample &samples[])
+{
+   int n = ArraySize(samples);
+   double corr_sum = 0.0;
+   int used = 0;
+   for(int i=0; i<n; i++)
+   {
+      if(!samples[i].valid)
+         continue;
+      corr_sum += MathAbs(FXAI_GetInputFeature(samples[i].x, 53));
+      used++;
+   }
+   if(used <= 0)
+      return 0.0;
+   return FXAI_Clamp(corr_sum / (double)used, 0.0, 1.0);
+}
+
+double FXAI_WarmupEvaluatePortfolioSymbol(CFXAIAIPlugin &plugin,
+                                          const int ai_idx,
+                                          const int horizon_minutes,
+                                          const FXAIPreparedSample &samples[],
+                                          const int sample_cap,
+                                          double &trade_rate_out)
+{
+   trade_rate_out = 0.0;
+   int n = ArraySize(samples);
+   if(n <= 0 || sample_cap <= 0)
+      return 0.0;
+
+   FXAIAIManifestV4 manifest;
+   FXAI_GetPluginManifest(plugin, manifest);
+   FXAIAIHyperParams hp_model;
+   FXAI_GetModelHyperParamsRouted(ai_idx, 0, horizon_minutes, hp_model);
+
+   int valid_total = 0;
+   for(int i=0; i<n; i++)
+      if(samples[i].valid)
+         valid_total++;
+   if(valid_total <= 0)
+      return 0.0;
+
+   int stride = 1;
+   if(valid_total > sample_cap)
+      stride = MathMax(1, valid_total / sample_cap);
+
+   double edge_sum = 0.0;
+   double weight_sum = 0.0;
+   int trades = 0;
+   int evals = 0;
+   int seen = 0;
+   for(int i=n - 1; i>=0; i--)
+   {
+      if(!samples[i].valid)
+         continue;
+      if((seen % stride) != 0)
+      {
+         seen++;
+         continue;
+      }
+      seen++;
+
+      FXAIAIPredictRequestV4 req;
+      FXAI_ClearPredictRequest(req);
+      req.valid = true;
+      req.ctx.api_version = FXAI_API_VERSION_V4;
+      req.ctx.regime_id = samples[i].regime_id;
+      req.ctx.session_bucket = FXAI_DeriveSessionBucket(samples[i].sample_time);
+      req.ctx.horizon_minutes = samples[i].horizon_minutes;
+      req.ctx.feature_schema_id = manifest.feature_schema_id;
+      req.ctx.normalization_method_id = (int)FXAI_NORM_EXISTING;
+      req.ctx.sequence_bars = FXAI_GetPluginSequenceBars(plugin, samples[i].horizon_minutes);
+      req.ctx.cost_points = samples[i].cost_points;
+      req.ctx.min_move_points = samples[i].min_move_points;
+      req.ctx.point_value = (samples[i].point_value > 0.0 ? samples[i].point_value : (_Point > 0.0 ? _Point : 1.0));
+      req.ctx.domain_hash = samples[i].domain_hash;
+      req.ctx.sample_time = samples[i].sample_time;
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         req.x[k] = samples[i].x[k];
+      FXAI_BuildPreparedSampleWindow(samples, i, req.ctx.sequence_bars, req.x_window, req.window_size);
+      FXAI_ApplyFeatureSchemaToPayloadEx(manifest.feature_schema_id,
+                                         manifest.feature_groups_mask,
+                                         req.ctx.sequence_bars,
+                                         req.x_window,
+                                         req.window_size,
+                                         req.x);
+
+      FXAIAIPredictionV4 pred;
+      if(!FXAI_PredictViaV4(plugin, req, hp_model, pred))
+         continue;
+
+      double probs_eval[3];
+      probs_eval[0] = pred.class_probs[0];
+      probs_eval[1] = pred.class_probs[1];
+      probs_eval[2] = pred.class_probs[2];
+      FXAI_ApplyRegimeCalibration(ai_idx, samples[i].regime_id, probs_eval);
+
+      double expected_move = pred.move_mean_points;
+      if(expected_move <= 0.0)
+         expected_move = MathMax(samples[i].min_move_points, 0.10);
+
+      double modelBuyThr = AI_BuyThreshold;
+      double modelSellThr = AI_SellThreshold;
+      FXAI_GetModelThresholds(ai_idx,
+                              samples[i].regime_id,
+                              samples[i].horizon_minutes,
+                              AI_BuyThreshold,
+                              AI_SellThreshold,
+                              modelBuyThr,
+                              modelSellThr);
+      double buyMinProb = modelBuyThr;
+      double sellMinProb = 1.0 - modelSellThr;
+      double skipMinProb = 0.55;
+      double vol_proxy = MathAbs(FXAI_GetInputFeature(samples[i].x, 5));
+      FXAI_DeriveAdaptiveThresholds(modelBuyThr,
+                                   modelSellThr,
+                                   samples[i].min_move_points,
+                                   expected_move,
+                                   vol_proxy,
+                                   buyMinProb,
+                                   sellMinProb,
+                                   skipMinProb);
+
+      int signal = FXAI_ClassSignalFromEV(probs_eval,
+                                          buyMinProb,
+                                          sellMinProb,
+                                          skipMinProb,
+                                          expected_move,
+                                          samples[i].min_move_points,
+                                          FXAI_Clamp(AI_EVThresholdPoints, 0.0, 100.0));
+
+      double realized_edge = 0.0;
+      if(signal == 1)
+         realized_edge = samples[i].move_points - samples[i].min_move_points;
+      else if(signal == 0)
+         realized_edge = -samples[i].move_points - samples[i].min_move_points;
+      else
+         realized_edge = -0.25 * MathMax(MathAbs(samples[i].move_points) - samples[i].min_move_points, 0.0);
+
+      double quality = 1.0 +
+                       0.20 * (1.0 - FXAI_Clamp(samples[i].time_to_hit_frac, 0.0, 1.0)) -
+                       0.08 * FXAI_Clamp(pred.path_risk, 0.0, 1.0) -
+                       0.06 * FXAI_Clamp(pred.fill_risk, 0.0, 1.0);
+      double sw = FXAI_Clamp(samples[i].sample_weight * quality, 0.20, 4.00);
+      edge_sum += sw * realized_edge;
+      weight_sum += sw;
+      if(signal >= 0)
+         trades++;
+      evals++;
+      if(evals >= sample_cap)
+         break;
+   }
+
+   if(evals <= 0 || weight_sum <= 0.0)
+      return 0.0;
+   trade_rate_out = FXAI_Clamp((double)trades / (double)MathMax(evals, 1), 0.0, 1.0);
+   return edge_sum / weight_sum;
+}
+
+void FXAI_WarmupBuildPortfolioDiagnostics(const string main_symbol,
+                                          const int needed,
+                                          const int max_h,
+                                          const int horizon_minutes,
+                                          const double commission_per_lot_side,
+                                          const double cost_buffer_points,
+                                          const double ev_threshold_points,
+                                          const int eval_cap,
+                                          const FXAIPreparedSample &primary_samples[])
+{
+   if(ArraySize(primary_samples) <= 0)
+      return;
+
+   double score_sum[FXAI_AI_COUNT];
+   double score_sq_sum[FXAI_AI_COUNT];
+   double weight_sum[FXAI_AI_COUNT];
+   double corr_sum[FXAI_AI_COUNT];
+   double div_sum[FXAI_AI_COUNT];
+   int symbol_count[FXAI_AI_COUNT];
+   for(int ai=0; ai<FXAI_AI_COUNT; ai++)
+   {
+      score_sum[ai] = 0.0;
+      score_sq_sum[ai] = 0.0;
+      weight_sum[ai] = 0.0;
+      corr_sum[ai] = 0.0;
+      div_sum[ai] = 0.0;
+      symbol_count[ai] = 0;
+   }
+
+   for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
+   {
+      CFXAIAIPlugin *runtime = g_plugins.Get(ai_idx);
+      if(runtime == NULL)
+         continue;
+      double trade_rate = 0.0;
+      double edge = FXAI_WarmupEvaluatePortfolioSymbol(*runtime,
+                                                       ai_idx,
+                                                       horizon_minutes,
+                                                       primary_samples,
+                                                       eval_cap,
+                                                       trade_rate);
+      double w = FXAI_Clamp(0.70 + 0.30 * trade_rate, 0.35, 1.20);
+      score_sum[ai_idx] += w * edge;
+      score_sq_sum[ai_idx] += w * edge * edge;
+      weight_sum[ai_idx] += w;
+      div_sum[ai_idx] += w;
+      symbol_count[ai_idx]++;
+   }
+
+   string transfer_universe[];
+   FXAI_WarmupBuildTransferUniverse(main_symbol, transfer_universe);
+   for(int s=0; s<ArraySize(transfer_universe); s++)
+   {
+      string target_symbol = transfer_universe[s];
+      if(StringLen(target_symbol) <= 0 || target_symbol == main_symbol)
+         continue;
+
+      FXAIPreparedSample transfer_samples[];
+      if(!FXAI_WarmupBuildTransferSymbolSamplesForHorizon(target_symbol,
+                                                          main_symbol,
+                                                          needed,
+                                                          max_h,
+                                                          eval_cap,
+                                                          horizon_minutes,
+                                                          commission_per_lot_side,
+                                                          cost_buffer_points,
+                                                          ev_threshold_points,
+                                                          transfer_samples))
+         continue;
+
+      double abs_corr = FXAI_WarmupEstimatePortfolioSymbolCorrelation(transfer_samples);
+      double div_weight = FXAI_Clamp(1.0 - 0.60 * abs_corr, 0.25, 1.0);
+      for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
+      {
+         CFXAIAIPlugin *runtime = g_plugins.Get(ai_idx);
+         if(runtime == NULL)
+            continue;
+         double trade_rate = 0.0;
+         double edge = FXAI_WarmupEvaluatePortfolioSymbol(*runtime,
+                                                          ai_idx,
+                                                          horizon_minutes,
+                                                          transfer_samples,
+                                                          MathMax(48, eval_cap / 2),
+                                                          trade_rate);
+         double w = FXAI_Clamp(div_weight * (0.55 + 0.45 * trade_rate), 0.15, 1.10);
+         score_sum[ai_idx] += w * edge;
+         score_sq_sum[ai_idx] += w * edge * edge;
+         weight_sum[ai_idx] += w;
+         corr_sum[ai_idx] += w * abs_corr;
+         div_sum[ai_idx] += w * div_weight;
+         symbol_count[ai_idx]++;
+      }
+   }
+
+   for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
+   {
+      if(weight_sum[ai_idx] <= 0.0)
+         continue;
+      double mean_edge = score_sum[ai_idx] / weight_sum[ai_idx];
+      double var_edge = MathMax(score_sq_sum[ai_idx] / weight_sum[ai_idx] - mean_edge * mean_edge, 0.0);
+      double std_edge = MathSqrt(var_edge);
+      double scale = MathMax(MathAbs(mean_edge), 0.50);
+      double stability = 1.0 - FXAI_Clamp(std_edge / scale, 0.0, 1.0);
+      double corr_penalty = (corr_sum[ai_idx] > 0.0 ? corr_sum[ai_idx] / weight_sum[ai_idx] : 0.0);
+      double diversification = FXAI_Clamp(div_sum[ai_idx] / weight_sum[ai_idx], 0.0, 1.0);
+      FXAI_SetModelPortfolioDiagnostics(ai_idx,
+                                        mean_edge,
+                                        stability,
+                                        corr_penalty,
+                                        diversification,
+                                        symbol_count[ai_idx]);
+   }
 }
 
 bool FXAI_WarmupTrainAndTune(const string symbol)
@@ -2644,6 +3005,17 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
                                                    runtime_norm_caches);
       }
    }
+
+   int portfolio_eval_cap = MathMin(160, MathMax(64, warmup_samples / 12));
+   FXAI_WarmupBuildPortfolioDiagnostics(symbol,
+                                        needed,
+                                        max_h,
+                                        base_h,
+                                        AI_CommissionPerLotSide,
+                                        cost_buffer_points,
+                                        evThresholdPoints,
+                                        portfolio_eval_cap,
+                                        primary_samples);
 
    for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
    {
