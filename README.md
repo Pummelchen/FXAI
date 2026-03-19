@@ -64,7 +64,7 @@ You do not need to be an MQL5 programmer to use FXAI as an operator. For normal 
 - **Feature governance**
   - A feature registry now tracks provenance, leakage guards, session-transition and rollover states, swap/carry factors, live feature-family drift diagnostics, and emits a runtime feature manifest for auditability.
 - **M1-first research data**
-  - FXAI now explicitly treats M1 OHLC plus spread as the canonical execution and feature source, with integrity checks shared by warmup, runtime, and Audit Lab.
+  - FXAI now explicitly treats M1 OHLC plus spread as the canonical execution and feature source, with integrity checks shared by warmup, runtime, and Audit Lab, plus a dedicated spread feature block for absolute spread level, spread regime, spread instability, and spread rank.
 - **Safer execution**
   - Built-in equity controls, skip class, and conservative calibration reduce overtrading.
 - **Execution parity controls**

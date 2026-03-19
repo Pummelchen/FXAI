@@ -105,6 +105,26 @@ void FXAI_GetFeatureClipBounds(const int f, double &lo, double &hi)
       lo = -6.0;
       hi = 6.0;
    }
+   else if(f == 80)
+   {
+      lo = 0.0;
+      hi = 6.0;
+   }
+   else if(f == 81)
+   {
+      lo = -8.0;
+      hi = 8.0;
+   }
+   else if(f == 82)
+   {
+      lo = 0.0;
+      hi = 4.5;
+   }
+   else if(f == 83)
+   {
+      lo = -1.1;
+      hi = 1.1;
+   }
    else if(f >= 50 && f < FXAI_AI_FEATURES)
    {
       int rel = (f - 50) % 4;

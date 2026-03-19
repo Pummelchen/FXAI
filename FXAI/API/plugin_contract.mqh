@@ -1,12 +1,11 @@
 #ifndef __FXAI_PLUGIN_CONTRACT_MQH__
 #define __FXAI_PLUGIN_CONTRACT_MQH__
 
-#include <Object.mqh>
 #include "..\Engine\core.mqh"
 #include "..\TensorCore\TensorCore.mqh"
 
 #define FXAI_PLUGIN_STATE_ARTIFACT_DIR "FXAI\\Runtime\\Plugins"
-#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 3
+#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 4
 
 class CFXAITernaryCalibrator
 {
@@ -470,7 +469,7 @@ public:
    }
 };
 
-class CFXAIAIPlugin : public CObject
+class CFXAIAIPlugin
 {
 protected:
 #include "plugin_context.mqh"
@@ -489,7 +488,7 @@ public:
       m_native_quality_heads.Reset();
    }
    virtual bool SupportsPersistentState(void) const { return true; }
-   virtual int PersistentStateVersion(void) const { return 3; }
+   virtual int PersistentStateVersion(void) const { return 4; }
    virtual string PersistentStateCoverageTag(void) const { return FXAI_ReferenceTierName(FXAI_DefaultReferenceTierForAI(AIId())); }
    virtual void Describe(FXAIAIManifestV4 &out) const = 0;
    virtual bool SupportsSyntheticSeries(void) const { return false; }

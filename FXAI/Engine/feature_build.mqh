@@ -85,8 +85,10 @@ double FXAI_LocalFeatureFamilyDrift(const double &features[])
       family_cnt[g] = 0;
    }
 
-   for(int f=0; f<79 && f < FXAI_AI_FEATURES; f++)
+   for(int f=0; f<FXAI_AI_FEATURES; f++)
    {
+      if(f == 79)
+         continue;
       int g = FXAI_GetFeatureGroupForIndex(f);
       if(g < 0 || g >= FXAI_FEATURE_GROUP_COUNT)
          continue;
@@ -103,6 +105,49 @@ double FXAI_LocalFeatureFamilyDrift(const double &features[])
    drift += MathAbs(family_mean[(int)FXAI_FEAT_GROUP_CONTEXT] - family_mean[(int)FXAI_FEAT_GROUP_COST]);
    drift += 0.50 * MathAbs(family_mean[(int)FXAI_FEAT_GROUP_MICROSTRUCTURE] - family_mean[(int)FXAI_FEAT_GROUP_FILTERS]);
    return FXAI_Clamp(drift / 3.0, 0.0, 6.0);
+}
+
+void FXAI_GetSpreadStateFeatures(const int i,
+                                 const double spread_points,
+                                 const int &main_spread_arr[],
+                                 double &avg_spread20,
+                                 double &spread_prev,
+                                 double &spread_z20,
+                                 double &spread_vol_ratio20,
+                                 double &spread_rank20)
+{
+   double cur_spread = MathMax(spread_points, 0.0);
+   avg_spread20 = MathMax(cur_spread, 0.25);
+   spread_prev = cur_spread;
+   double sum = cur_spread;
+   double sum2 = cur_spread * cur_spread;
+   int used = 1;
+   int rank_le = 1;
+
+   for(int k=1; k<20; k++)
+   {
+      int ik = i + k;
+      if(ik < 0 || ik >= ArraySize(main_spread_arr))
+         break;
+
+      double v = MathMax((double)main_spread_arr[ik], 0.0);
+      if(k == 1)
+         spread_prev = v;
+      sum += v;
+      sum2 += v * v;
+      used++;
+      if(v <= cur_spread)
+         rank_le++;
+   }
+
+   avg_spread20 = MathMax(sum / (double)MathMax(used, 1), 0.25);
+   double var = (sum2 / (double)MathMax(used, 1)) - avg_spread20 * avg_spread20;
+   if(var < 0.0)
+      var = 0.0;
+   double spread_std20 = MathSqrt(var);
+   spread_z20 = (cur_spread - avg_spread20) / MathMax(spread_std20, 0.25);
+   spread_vol_ratio20 = spread_std20 / MathMax(avg_spread20, 0.25);
+   spread_rank20 = FXAI_Clamp(2.0 * ((double)rank_le / (double)MathMax(used, 1)) - 1.0, -1.0, 1.0);
 }
 
 bool FXAI_ComputeFeatureVector(const int i,
@@ -402,25 +447,27 @@ bool FXAI_ComputeFeatureVector(const int i,
    double avg_spread20 = MathMax(spread_points, 0.25);
    double avg_range_points20 = MathMax(bar_range / point_value, 0.25);
    double spread_prev = spread_points;
-   int spread_used = 0;
+   double spread_z20 = 0.0;
+   double spread_vol_ratio20 = 0.0;
+   double spread_rank20 = 0.0;
+   FXAI_GetSpreadStateFeatures(i,
+                               spread_points,
+                               main_spread_arr,
+                               avg_spread20,
+                               spread_prev,
+                               spread_z20,
+                               spread_vol_ratio20,
+                               spread_rank20);
    int range_used = 0;
    for(int k=0; k<20; k++)
    {
       int ik = i + k;
-      if(ik >= 0 && ik < ArraySize(main_spread_arr))
-      {
-         avg_spread20 += MathMax((double)main_spread_arr[ik], 0.0);
-         spread_used++;
-         if(k == 1)
-            spread_prev = MathMax((double)main_spread_arr[ik], 0.0);
-      }
       if(ik >= 0 && ik < ArraySize(main_h1_ohlc) && ik < ArraySize(main_l1))
       {
          avg_range_points20 += MathMax(0.0, (main_h1_ohlc[ik] - main_l1[ik]) / point_value);
          range_used++;
       }
    }
-   avg_spread20 /= (double)MathMax(spread_used + 1, 1);
    avg_range_points20 /= (double)MathMax(range_used + 1, 1);
 
    double bar_range_points = MathMax(0.0, (h - l) / point_value);
@@ -448,6 +495,10 @@ bool FXAI_ComputeFeatureVector(const int i,
                              features[76],
                              features[77],
                              features[78]);
+   features[80] = FXAI_Clamp(MathLog(1.0 + MathMax(spread_points, 0.0)), 0.0, 6.0);
+   features[81] = FXAI_Clamp(spread_z20, -8.0, 8.0);
+   features[82] = FXAI_Clamp(spread_vol_ratio20, 0.0, 4.5);
+   features[83] = FXAI_Clamp(spread_rank20, -1.0, 1.0);
    features[79] = FXAI_LocalFeatureFamilyDrift(features);
 
    for(int f=0; f<FXAI_AI_FEATURES; f++)

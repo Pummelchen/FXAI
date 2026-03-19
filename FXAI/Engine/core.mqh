@@ -1,7 +1,7 @@
 #ifndef __FXAI_CORE_MQH__
 #define __FXAI_CORE_MQH__
 
-#define FXAI_AI_FEATURES 80
+#define FXAI_AI_FEATURES 84
 #define FXAI_AI_WEIGHTS (FXAI_AI_FEATURES + 1)
 #define FXAI_AI_MLP_HIDDEN 12
 #define FXAI_AI_COUNT 32
@@ -1226,6 +1226,7 @@ int FXAI_GetFeatureGroupForIndex(const int feature_idx)
    if(feature_idx <= 73) return (int)FXAI_FEAT_GROUP_TIME;
    if(feature_idx <= 78) return (int)FXAI_FEAT_GROUP_COST;
    if(feature_idx == 79) return (int)FXAI_FEAT_GROUP_FILTERS;
+   if(feature_idx <= 83) return (int)FXAI_FEAT_GROUP_COST;
    return (int)FXAI_FEAT_GROUP_CONTEXT;
 }
 

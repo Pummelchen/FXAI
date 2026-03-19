@@ -268,8 +268,10 @@
                            1.0);
       out[13] = FXAI_Clamp(0.18 * FXAI_GetInputFeature(x, 76) -
                            0.18 * FXAI_GetInputFeature(x, 77) -
-                           0.15 * FXAI_GetInputFeature(x, 79) +
-                           0.10 * FXAI_GetInputFeature(x, 6),
+                           0.12 * FXAI_GetInputFeature(x, 79) +
+                           0.08 * FXAI_GetInputFeature(x, 6) +
+                           0.08 * FXAI_GetInputFeature(x, 81) -
+                           0.06 * FXAI_GetInputFeature(x, 82),
                            -4.0,
                            4.0);
       out[14] = FXAI_Clamp(0.45 * FXAI_GetInputFeature(x, 18) +
@@ -278,15 +280,27 @@
                            0.15 * FXAI_GetInputFeature(x, 21),
                            -4.0,
                            4.0);
-      out[15] = FXAI_Clamp(0.22 * FXAI_GetInputFeature(x, 66) +
-                           0.18 * FXAI_GetInputFeature(x, 67) +
-                           0.18 * FXAI_GetInputFeature(x, 68) +
-                           0.18 * FXAI_GetInputFeature(x, 69) +
-                           0.24 * FXAI_GetInputFeature(x, 71),
+      out[15] = FXAI_Clamp(0.18 * FXAI_GetInputFeature(x, 66) +
+                           0.14 * FXAI_GetInputFeature(x, 67) +
+                           0.14 * FXAI_GetInputFeature(x, 68) +
+                           0.12 * FXAI_GetInputFeature(x, 69) +
+                           0.20 * FXAI_GetInputFeature(x, 71) +
+                           0.10 * FXAI_GetInputFeature(x, 81) +
+                           0.08 * FXAI_GetInputFeature(x, 82) +
+                           0.04 * FXAI_GetInputFeature(x, 83),
                            -6.0,
                            6.0);
-      out[16] = FXAI_Clamp(FXAI_GetInputFeature(x, 68), -4.0, 8.0);
-      out[17] = FXAI_Clamp(FXAI_GetInputFeature(x, 70), 0.0, 8.0);
+      out[16] = FXAI_Clamp(0.60 * FXAI_GetInputFeature(x, 68) +
+                           0.20 * FXAI_GetInputFeature(x, 81) +
+                           0.10 * FXAI_GetInputFeature(x, 80) +
+                           0.10 * FXAI_GetInputFeature(x, 82),
+                           -4.0,
+                           8.0);
+      out[17] = FXAI_Clamp(0.65 * FXAI_GetInputFeature(x, 70) +
+                           0.20 * FXAI_GetInputFeature(x, 82) +
+                           0.15 * MathAbs(FXAI_GetInputFeature(x, 83)),
+                           0.0,
+                           8.0);
       out[18] = FXAI_Clamp(FXAI_GetInputFeature(x, 78), -6.0, 6.0);
       out[19] = FXAI_Clamp(FXAI_GetInputFeature(x, 79), 0.0, 6.0);
    }

@@ -137,6 +137,10 @@ string FXAI_FeatureName(const int feature_idx)
       case 77: return "swap_short_pressure";
       case 78: return "carry_trend_alignment";
       case 79: return "feature_family_drift";
+      case 80: return "spread_points_log";
+      case 81: return "spread_zscore_20";
+      case 82: return "spread_vol_ratio_20";
+      case 83: return "spread_rank_20";
       default: return "";
    }
 }
@@ -145,7 +149,7 @@ int FXAI_FeatureProvenance(const int feature_idx)
 {
    if(feature_idx < 0 || feature_idx >= FXAI_AI_FEATURES)
       return (int)FXAI_PROV_DERIVED_FILTER;
-   if(feature_idx <= 6 || (feature_idx >= 18 && feature_idx <= 21) || (feature_idx >= 66 && feature_idx <= 71))
+   if(feature_idx <= 6 || (feature_idx >= 18 && feature_idx <= 21) || (feature_idx >= 66 && feature_idx <= 71) || (feature_idx >= 80 && feature_idx <= 83))
       return (int)FXAI_PROV_PRICE_BAR;
    if((feature_idx >= 7 && feature_idx <= 9) || (feature_idx >= 13 && feature_idx <= 37))
       return (int)FXAI_PROV_MULTI_TIMEFRAME;
