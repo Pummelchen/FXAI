@@ -445,7 +445,7 @@ bool FXAI_ComputeFeatureVector(const int i,
    double body_eff = MathAbs(c - o) / bar_range;
 
    double avg_spread20 = MathMax(spread_points, 0.25);
-   double avg_range_points20 = MathMax(bar_range / point_value, 0.25);
+   double avg_range_points20 = 0.0;
    double spread_prev = spread_points;
    double spread_z20 = 0.0;
    double spread_vol_ratio20 = 0.0;
@@ -468,7 +468,12 @@ bool FXAI_ComputeFeatureVector(const int i,
          range_used++;
       }
    }
-   avg_range_points20 /= (double)MathMax(range_used + 1, 1);
+   if(range_used > 0)
+      avg_range_points20 /= (double)range_used;
+   else
+      avg_range_points20 = MathMax(bar_range / point_value, 0.25);
+   if(avg_range_points20 < 0.25)
+      avg_range_points20 = 0.25;
 
    double bar_range_points = MathMax(0.0, (h - l) / point_value);
    double spread_shock = (spread_points / MathMax(avg_spread20, 0.25)) - 1.0;

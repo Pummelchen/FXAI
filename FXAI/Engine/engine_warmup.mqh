@@ -110,7 +110,7 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
          s3.ctx.sequence_bars = FXAI_GetPluginSequenceBars(*trial, samples[i].horizon_minutes);
          s3.ctx.cost_points = samples[i].cost_points;
          s3.ctx.min_move_points = samples[i].min_move_points;
-         s3.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+         s3.ctx.point_value = (samples[i].point_value > 0.0 ? samples[i].point_value : (_Point > 0.0 ? _Point : 1.0));
          s3.ctx.domain_hash = samples[i].domain_hash;
          s3.ctx.sample_time = samples[i].sample_time;
          s3.label_class = samples[i].label_class;
@@ -761,7 +761,7 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
       req.ctx.sequence_bars = FXAI_GetPluginSequenceBars(plugin, score_h);
       req.ctx.cost_points = samples[i].cost_points;
       req.ctx.min_move_points = samples[i].min_move_points;
-      req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+      req.ctx.point_value = (samples[i].point_value > 0.0 ? samples[i].point_value : (_Point > 0.0 ? _Point : 1.0));
       req.ctx.domain_hash = samples[i].domain_hash;
       req.ctx.sample_time = samples[i].sample_time;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
@@ -905,7 +905,7 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
       req.ctx.sequence_bars = FXAI_GetPluginSequenceBars(plugin, score_h);
       req.ctx.cost_points = eval_sample.cost_points;
       req.ctx.min_move_points = eval_sample.min_move_points;
-      req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+      req.ctx.point_value = (eval_sample.point_value > 0.0 ? eval_sample.point_value : (_Point > 0.0 ? _Point : 1.0));
       req.ctx.domain_hash = eval_sample.domain_hash;
       req.ctx.sample_time = eval_sample.sample_time;
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
@@ -1413,7 +1413,7 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             req.ctx.sequence_bars = FXAI_GetPluginSequenceBars(*plugin, pred_sample.horizon_minutes);
             req.ctx.cost_points = pred_sample.cost_points;
             req.ctx.min_move_points = pred_sample.min_move_points;
-            req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+            req.ctx.point_value = (pred_sample.point_value > 0.0 ? pred_sample.point_value : (_Point > 0.0 ? _Point : 1.0));
             req.ctx.domain_hash = pred_sample.domain_hash;
             req.ctx.sample_time = pred_sample.sample_time;
             for(int k=0; k<FXAI_AI_WEIGHTS; k++)
@@ -1674,7 +1674,7 @@ void FXAI_WarmupPretrainSharedTransferSamples(const FXAIPreparedSample &samples[
       ctx.sequence_bars = 1;
       ctx.cost_points = samples[i].cost_points;
       ctx.min_move_points = samples[i].min_move_points;
-      ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+      ctx.point_value = (samples[i].point_value > 0.0 ? samples[i].point_value : (_Point > 0.0 ? _Point : 1.0));
       ctx.domain_hash = samples[i].domain_hash;
       ctx.sample_time = samples[i].sample_time;
 

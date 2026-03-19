@@ -348,6 +348,7 @@ void FXAI_ResetPreparedSample(FXAIPreparedSample &sample)
    sample.next_vol_target = 0.0;
    sample.regime_shift_target = 0.0;
    sample.context_lead_target = 0.5;
+   sample.point_value = (_Point > 0.0 ? _Point : 1.0);
    sample.domain_hash = FXAI_SymbolHash01(_Symbol);
    sample.sample_time = 0;
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
@@ -519,14 +520,20 @@ bool FXAI_PrepareTrainingSample(const int i,
    sample.move_points = move_points;
    sample.min_move_points = min_move_i;
    sample.cost_points = min_move_i;
+   sample.point_value = snapshot.point;
    sample.mfe_points = mfe_points;
    sample.mae_points = mae_points;
    sample.time_to_hit_frac = time_to_hit_frac;
    sample.path_flags = path_flags;
    double spread_ref = FXAI_GetIntArrayMean(spread_m1, i, 64, snapshot.spread_points);
    double vol_ref = FXAI_RollingAbsReturn(close_arr, i, 64);
-   if(vol_ref < 1e-6) vol_ref = MathAbs(feat[5]);
-   sample.regime_id = FXAI_GetStaticRegimeId(sample.sample_time, spread_i, spread_ref, MathAbs(feat[5]), vol_ref);
+   double vol_proxy_abs = FXAI_RollingReturnStd(close_arr, i, 10);
+   if(vol_proxy_abs < 1e-6)
+      vol_proxy_abs = FXAI_RollingAbsReturn(close_arr, i, 10);
+   if(vol_ref < 1e-6) vol_ref = vol_proxy_abs;
+   if(vol_ref < 1e-6) vol_ref = FXAI_RollingAbsReturn(close_arr, i, 20);
+   if(vol_proxy_abs < 1e-6) vol_proxy_abs = vol_ref;
+   sample.regime_id = FXAI_GetStaticRegimeId(sample.sample_time, spread_i, spread_ref, vol_proxy_abs, vol_ref);
    double edge = MathMax(MathAbs(move_points) - min_move_i, 0.0);
    double spread_peak = spread_i;
    int spread_n = 0;
@@ -591,7 +598,9 @@ bool FXAI_PrepareTrainingSample(const int i,
    if(future_idx >= 0)
    {
       double spread_f = FXAI_GetSpreadAtIndex(future_idx, spread_m1, spread_i);
-      double vol_f = FXAI_RollingAbsReturn(close_arr, future_idx, 32);
+      double vol_f = FXAI_RollingReturnStd(close_arr, future_idx, 10);
+      if(vol_f < 1e-6)
+         vol_f = FXAI_RollingAbsReturn(close_arr, future_idx, 10);
       if(vol_f < 1e-6) vol_f = vol_ref;
       future_regime = FXAI_GetStaticRegimeId((future_idx < ArraySize(time_arr) ? time_arr[future_idx] : sample.sample_time),
                                              spread_f,

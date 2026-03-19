@@ -2,7 +2,7 @@
 #define __FXAI_RUNTIME_ARTIFACTS_MQH__
 
 #define FXAI_RUNTIME_ARTIFACT_DIR "FXAI\\Runtime"
-#define FXAI_RUNTIME_ARTIFACT_VERSION 5
+#define FXAI_RUNTIME_ARTIFACT_VERSION 6
 
 string FXAI_RuntimeArtifactSafeSymbol(const string symbol)
 {
@@ -81,6 +81,7 @@ void FXAI_WritePreparedSample(const int handle,
    FileWriteDouble(handle, sample.next_vol_target);
    FileWriteDouble(handle, sample.regime_shift_target);
    FileWriteDouble(handle, sample.context_lead_target);
+   FileWriteDouble(handle, sample.point_value);
    FileWriteDouble(handle, sample.domain_hash);
    FileWriteLong(handle, (long)sample.sample_time);
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
@@ -117,6 +118,7 @@ void FXAI_ReadPreparedSample(const int handle,
    sample.next_vol_target = FileReadDouble(handle);
    sample.regime_shift_target = FileReadDouble(handle);
    sample.context_lead_target = FileReadDouble(handle);
+   sample.point_value = FileReadDouble(handle);
    sample.domain_hash = FileReadDouble(handle);
    sample.sample_time = (datetime)FileReadLong(handle);
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)

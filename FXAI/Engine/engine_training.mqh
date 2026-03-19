@@ -607,7 +607,7 @@ void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
    s3.ctx.sequence_bars = FXAI_GetPluginSequenceBars(plugin, sample.horizon_minutes);
    s3.ctx.cost_points = sample.cost_points;
    s3.ctx.min_move_points = sample.min_move_points;
-   s3.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+   s3.ctx.point_value = (sample.point_value > 0.0 ? sample.point_value : (_Point > 0.0 ? _Point : 1.0));
    s3.ctx.domain_hash = sample.domain_hash;
    s3.ctx.sample_time = sample.sample_time;
    s3.label_class = sample.label_class;

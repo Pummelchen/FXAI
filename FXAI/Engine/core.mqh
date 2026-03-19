@@ -1364,15 +1364,24 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
    if(ArraySize(x) < FXAI_AI_WEIGHTS)
       return;
 
-   double raw_x[FXAI_AI_WEIGHTS];
+   bool enabled_input[FXAI_AI_WEIGHTS];
+   double masked_x[FXAI_AI_WEIGHTS];
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-      raw_x[k] = x[k];
+   {
+      enabled_input[k] = true;
+      masked_x[k] = 0.0;
+   }
 
+   enabled_input[0] = true;
+   masked_x[0] = 1.0;
    x[0] = 1.0;
    for(int f=0; f<FXAI_AI_FEATURES; f++)
    {
-      if(!FXAI_IsFeatureEnabledForSchema(f, schema_id, groups_mask))
-         x[f + 1] = 0.0;
+      int input_idx = f + 1;
+      bool enabled = FXAI_IsFeatureEnabledForSchema(f, schema_id, groups_mask);
+      enabled_input[input_idx] = enabled;
+      masked_x[input_idx] = (enabled ? x[input_idx] : 0.0);
+      x[input_idx] = masked_x[input_idx];
    }
 
    int seq_n = sequence_bars;
@@ -1390,12 +1399,12 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
    double seq_mid_delta[FXAI_AI_WEIGHTS];
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
    {
-      seq_mean[k] = raw_x[k];
+      seq_mean[k] = masked_x[k];
       seq_delta[k] = 0.0;
       seq_std[k] = 0.0;
-      seq_short_mean[k] = raw_x[k];
-      seq_mid_mean[k] = raw_x[k];
-      seq_long_mean[k] = raw_x[k];
+      seq_short_mean[k] = masked_x[k];
+      seq_mid_mean[k] = masked_x[k];
+      seq_long_mean[k] = masked_x[k];
       seq_short_delta[k] = 0.0;
       seq_mid_delta[k] = 0.0;
    }
@@ -1408,7 +1417,10 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
          if(b >= window_size) break;
          used++;
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-            seq_mean[k] += x_window[b][k];
+         {
+            double wv = (enabled_input[k] ? x_window[b][k] : 0.0);
+            seq_mean[k] += wv;
+         }
       }
       if(used > 0)
       {
@@ -1421,7 +1433,8 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
       {
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          {
-            double d = x_window[b][k] - seq_mean[k];
+            double wv = (enabled_input[k] ? x_window[b][k] : 0.0);
+            double d = wv - seq_mean[k];
             seq_std[k] += d * d;
          }
       }
@@ -1444,9 +1457,10 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
          if(use_long) long_used++;
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          {
-            if(use_short) seq_short_mean[k] += x_window[b][k];
-            if(use_mid) seq_mid_mean[k] += x_window[b][k];
-            if(use_long) seq_long_mean[k] += x_window[b][k];
+            double wv = (enabled_input[k] ? x_window[b][k] : 0.0);
+            if(use_short) seq_short_mean[k] += wv;
+            if(use_mid) seq_mid_mean[k] += wv;
+            if(use_long) seq_long_mean[k] += wv;
          }
       }
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
@@ -1460,20 +1474,29 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
       if(last_idx >= 0 && last_idx < window_size)
       {
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-            seq_delta[k] = raw_x[k] - x_window[last_idx][k];
+         {
+            double prev_v = (enabled_input[k] ? x_window[last_idx][k] : 0.0);
+            seq_delta[k] = masked_x[k] - prev_v;
+         }
       }
 
       int short_last = short_n - 1;
       if(short_last >= 0 && short_last < window_size)
       {
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-            seq_short_delta[k] = raw_x[k] - x_window[short_last][k];
+         {
+            double prev_v = (enabled_input[k] ? x_window[short_last][k] : 0.0);
+            seq_short_delta[k] = masked_x[k] - prev_v;
+         }
       }
       int mid_last = mid_n - 1;
       if(mid_last >= 0 && mid_last < window_size)
       {
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
-            seq_mid_delta[k] = raw_x[k] - x_window[mid_last][k];
+         {
+            double prev_v = (enabled_input[k] ? x_window[mid_last][k] : 0.0);
+            seq_mid_delta[k] = masked_x[k] - prev_v;
+         }
       }
    }
 
@@ -1502,12 +1525,12 @@ void FXAI_ApplyFeatureSchemaToInputEx(const int schema_id,
          bool ctx_enabled = ((groups_mask & FXAI_FeatureGroupBit((int)FXAI_FEAT_GROUP_CONTEXT)) != 0);
          if(ctx_enabled)
          {
-            ctx_ret = (FXAI_GetInputFeature(x, 10) + FXAI_GetInputFeature(raw_x, 50) +
-                       FXAI_GetInputFeature(raw_x, 54) + FXAI_GetInputFeature(raw_x, 58)) / 4.0;
-            ctx_rel = (FXAI_GetInputFeature(x, 12) + FXAI_GetInputFeature(raw_x, 52) +
-                       FXAI_GetInputFeature(raw_x, 56) + FXAI_GetInputFeature(raw_x, 60)) / 4.0;
-            ctx_corr = (FXAI_GetInputFeature(raw_x, 53) + FXAI_GetInputFeature(raw_x, 57) +
-                        FXAI_GetInputFeature(raw_x, 61)) / 3.0;
+            ctx_ret = (FXAI_GetInputFeature(x, 10) + FXAI_GetInputFeature(masked_x, 50) +
+                       FXAI_GetInputFeature(masked_x, 54) + FXAI_GetInputFeature(masked_x, 58)) / 4.0;
+            ctx_rel = (FXAI_GetInputFeature(x, 12) + FXAI_GetInputFeature(masked_x, 52) +
+                       FXAI_GetInputFeature(masked_x, 56) + FXAI_GetInputFeature(masked_x, 60)) / 4.0;
+            ctx_corr = (FXAI_GetInputFeature(masked_x, 53) + FXAI_GetInputFeature(masked_x, 57) +
+                        FXAI_GetInputFeature(masked_x, 61)) / 3.0;
          }
 
          FXAI_SetInputFeature(x, 7, mtf_ret);

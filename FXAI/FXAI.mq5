@@ -617,6 +617,7 @@ struct FXAIPreparedSample
    double next_vol_target;
    double regime_shift_target;
    double context_lead_target;
+   double point_value;
    double domain_hash;
    datetime sample_time;
    double x[FXAI_AI_WEIGHTS];

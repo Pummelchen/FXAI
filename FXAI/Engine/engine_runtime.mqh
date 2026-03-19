@@ -466,7 +466,11 @@ int SpecialDirectionAI(const string symbol)
                                                                       snapshot.point);
    if(fallback_expected_move <= 0.0)
       fallback_expected_move = 0.0;
-   double vol_proxy_abs = MathAbs(feat_pred[5]);
+   double vol_proxy_abs = FXAI_RollingReturnStd(close_arr, 0, 10);
+   if(vol_proxy_abs < 1e-6)
+      vol_proxy_abs = FXAI_RollingAbsReturn(close_arr, 0, 10);
+   if(vol_proxy_abs < 1e-6)
+      vol_proxy_abs = vol_hint;
    FXAI_UpdateRegimeEMAs(spread_pred, vol_proxy_abs);
    int regime_id = FXAI_GetRegimeId(snapshot.bar_time, spread_pred, vol_proxy_abs);
    g_ai_last_horizon_minutes = H;
@@ -876,7 +880,7 @@ int SpecialDirectionAI(const string symbol)
       req.ctx.sequence_bars = FXAI_GetPluginSequenceBars(*plugin, H);
       req.ctx.min_move_points = min_move_pred;
       req.ctx.cost_points = min_move_pred;
-      req.ctx.point_value = (_Point > 0.0 ? _Point : 1.0);
+      req.ctx.point_value = (snapshot.point > 0.0 ? snapshot.point : (_Point > 0.0 ? _Point : 1.0));
       req.ctx.domain_hash = FXAI_SymbolHash01(snapshot.symbol);
       req.ctx.sample_time = snapshot.bar_time;
       int input_idx = FXAI_FindNormInputCache(method_id, input_caches);
