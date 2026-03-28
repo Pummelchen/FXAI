@@ -60,7 +60,7 @@ You do not need to be an MQL5 programmer to use FXAI as an operator. For normal 
 - **Cross-symbol transfer warmup**
   - Shared transfer adapters now pretrain across configured horizons and capped context-symbol sample packs before live trading begins, with a deeper shared latent backbone that is conditioned by symbol-domain, horizon, session context, explicit sequence-window tokens, and temporal pooling over recent bar states.
 - **Checkpoint recovery for stateful plugins**
-  - Persistent plugins now carry deterministic replay-backed checkpoint metadata, checkpoint integrity checksums, and runtime manifests so stateful model recovery, artifact review, and release gating all use the same checkpoint contract.
+  - Persistent plugins now carry deterministic replay-backed checkpoint metadata, native-parameter snapshot declarations, checkpoint integrity checksums, and runtime manifests so stateful model recovery, artifact review, and release gating all use the same checkpoint contract.
 - **Cost-aware signals**
   - Labels and thresholds account for trading friction, improving realistic expectancy.
 - **Feature governance**
@@ -70,11 +70,13 @@ You do not need to be an MQL5 programmer to use FXAI as an operator. For normal 
 - **Safer execution**
   - Built-in equity controls, skip class, and conservative calibration reduce overtrading.
 - **Execution parity controls**
-  - Shared execution profiles, M1 replay-trace penalties, persistent broker-event trace replay keyed by symbol and order context, risk-aware sizing, correlated exposure caps, and `OrderCheck` preflight keep live trading closer to Audit Lab and tester assumptions.
+  - Shared execution profiles, M1 replay-trace penalties, persistent broker-event trace replay keyed by symbol, side, session, order type, and horizon context, risk-aware sizing, correlated exposure caps, and `OrderCheck` preflight keep live trading closer to Audit Lab and tester assumptions.
 - **Contextual model routing**
-  - The meta layer now persists regime and horizon-specific contextual value, regret, and counterfactual state so ensemble routing can adapt to where each plugin is actually earning or losing edge.
+  - The meta layer now persists regime, session, and horizon-specific contextual value, regret, and counterfactual state so ensemble routing can adapt to where each plugin is actually earning or losing edge instead of relying only on static ensemble weights.
+- **Portfolio-native promotion logic**
+  - Warmup and meta scoring now carry portfolio objective, stability, correlation-penalty, and diversification signals so model promotion is influenced by cross-symbol behavior, not only isolated single-symbol edge.
 - **Persistent research state**
-  - Runtime artifacts now persist feature-drift diagnostics and emit per-plugin checkpoint coverage plus feature-registry manifests so restart behavior and checkpoint depth are auditable.
+  - Runtime artifacts now persist feature-drift diagnostics, shared-transfer temporal backbone state, broker execution libraries, and per-plugin checkpoint-depth manifests so restart behavior and checkpoint depth are auditable.
 - **Backtest efficiency**
   - Lightweight online updates and shared data pipeline support large optimization runs.
 - **Audit discipline**
@@ -101,6 +103,7 @@ What `TensorCore` now provides inside pure MQL5:
 - dimension-aware runtime configs for model width, heads, stride, patching, and sequence caps
 - shared parameter-group training utilities for vector and matrix updates
 - sequence runtime state helpers for packed windows, resampling, and positional bias handling
+- sequence-aware shared-transfer backbone utilities that encode rolling windows, temporal state summaries, and cross-symbol adaptation context inside the same runtime
 - Audit Lab sanity coverage for the runtime itself, not only for the plugins built on top of it
 
 Why that matters:
@@ -160,8 +163,9 @@ Optional macro-event input file:
 - `FXAI\\Runtime\\macro_events.tsv` in the MT5 common-files area
 - required tab-separated columns: `symbol`, `event_time`, `pre_window_min`, `post_window_min`, `importance`, `surprise`, `actual_delta`, `forecast_delta`, `class`
 - optional appended columns supported by the current contract: `event_id`, `country`, `currency`, `source`, `revision_delta`, `prior_delta`, `surprise_z`
+- schema v2 runtime manifests now report `schema_version`, `distinct_countries`, `distinct_currencies`, `distinct_revision_chains`, `avg_source_trust`, and `avg_currency_relevance`
 - if the file is absent, FXAI falls back to zeroed macro-event features and keeps the macro-event audit scenario neutral instead of penalizing plugins for missing optional data
-- if the file is present but fails the leakage guard, release-gate checks fail until the dataset is fixed
+- if the file is present but fails the leakage guard, schema-version, source-trust, or revision-chain checks, release-gate checks fail until the dataset is fixed
 
 Portfolio-style audit pack example:
 

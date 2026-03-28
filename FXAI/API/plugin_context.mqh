@@ -20,6 +20,9 @@
    double m_shared_backbone_seq_w[FXAI_SHARED_TRANSFER_LATENT][FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS];
    double m_shared_backbone_time_w[FXAI_SHARED_TRANSFER_LATENT][FXAI_SHARED_TRANSFER_BAR_FEATURES];
    double m_shared_backbone_time_gate_w[FXAI_SHARED_TRANSFER_LATENT][FXAI_SHARED_TRANSFER_BAR_FEATURES];
+   double m_shared_backbone_state_w[FXAI_SHARED_TRANSFER_LATENT][FXAI_SHARED_TRANSFER_STATE_FEATURES];
+   double m_shared_backbone_state_rec_w[FXAI_SHARED_TRANSFER_LATENT];
+   double m_shared_backbone_state_b[FXAI_SHARED_TRANSFER_LATENT];
    double m_shared_backbone_b[FXAI_SHARED_TRANSFER_LATENT];
    double m_shared_backbone_cls[3][FXAI_SHARED_TRANSFER_LATENT];
    double m_shared_backbone_move[FXAI_SHARED_TRANSFER_LATENT];
@@ -273,6 +276,9 @@
                                         m_shared_backbone_seq_w,
                                         m_shared_backbone_time_w,
                                         m_shared_backbone_time_gate_w,
+                                        m_shared_backbone_state_w,
+                                        m_shared_backbone_state_rec_w,
+                                        m_shared_backbone_state_b,
                                         m_shared_backbone_b,
                                         m_shared_domain_emb,
                                         m_shared_horizon_emb,
@@ -676,6 +682,34 @@
                }
             }
          }
+         double state_last = 0.0;
+         double state_mean = 0.0;
+         double state_abs = 0.0;
+         FXAI_SharedTransferTemporalStateSummary(m_ctx_window,
+                                                 m_ctx_window_size,
+                                                 m_shared_backbone_state_w,
+                                                 m_shared_backbone_state_rec_w,
+                                                 m_shared_backbone_state_b,
+                                                 j,
+                                                 state_last,
+                                                 state_mean,
+                                                 state_abs);
+         for(int c=0; c<FXAI_SHARED_TRANSFER_STATE_FEATURES; c++)
+         {
+            double feat_mean = FXAI_SharedTransferWindowFeatureMean(m_ctx_window, m_ctx_window_size, c);
+            m_shared_backbone_state_w[j][c] =
+               FXAI_ClipSym(m_shared_backbone_state_w[j][c] +
+                            0.36 * bb_step * g * FXAI_ClipSym(feat_mean, 4.0),
+                            3.0);
+         }
+         m_shared_backbone_state_rec_w[j] =
+            FXAI_ClipSym(m_shared_backbone_state_rec_w[j] +
+                         0.20 * bb_step * g * FXAI_ClipSym(state_mean + 0.35 * state_last, 2.5),
+                         2.5);
+         m_shared_backbone_state_b[j] =
+            FXAI_ClipSym(m_shared_backbone_state_b[j] +
+                         0.25 * bb_step * g * (0.35 + 0.65 * state_abs),
+                         3.0);
          m_shared_domain_emb[domain_bucket][j] = FXAI_ClipSym(m_shared_domain_emb[domain_bucket][j] + 0.40 * bb_step * g, 3.0);
          m_shared_horizon_emb[horizon_bucket][j] = FXAI_ClipSym(m_shared_horizon_emb[horizon_bucket][j] + 0.40 * bb_step * g, 3.0);
          m_shared_session_emb[session_bucket][j] = FXAI_ClipSym(m_shared_session_emb[session_bucket][j] + 0.30 * bb_step * g, 3.0);
@@ -783,7 +817,10 @@
          {
             m_shared_backbone_time_w[j][c] = 0.0045 * (double)((((j + 5) * (c + 3)) % 15) - 7);
             m_shared_backbone_time_gate_w[j][c] = 0.0025 * (double)((((j + 7) * (c + 4)) % 13) - 6);
+            m_shared_backbone_state_w[j][c] = 0.0035 * (double)((((j + 9) * (c + 2)) % 15) - 7);
          }
+         m_shared_backbone_state_rec_w[j] = 0.16 + 0.02 * (double)((j % 5) - 2);
+         m_shared_backbone_state_b[j] = 0.0;
       }
       for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
          for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)

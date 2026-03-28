@@ -1711,9 +1711,12 @@ def cmd_release_gate(args):
                 continue
             if inum(row, "promotion_ready") > 0:
                 continue
+            depth = row.get("checkpoint_depth", row.get("coverage_tag", "unknown"))
+            native_snapshot = inum(row, "native_snapshot")
+            deterministic_replay = inum(row, "deterministic_replay")
             gate_failures.append(
                 f"{row.get('ai_name', 'unknown')}: live promotion blocked by checkpoint coverage "
-                f"({row.get('coverage_tag', 'unknown')})"
+                f"({depth}, native_snapshot={native_snapshot}, deterministic_replay={deterministic_replay})"
             )
 
     macro_dataset_present = False
@@ -1729,10 +1732,22 @@ def cmd_release_gate(args):
         row = rows[0]
         if inum(row, "record_count") > 0:
             macro_dataset_present = True
+        if inum(row, "record_count") > 0 and inum(row, "schema_version") < 2:
+            gate_failures.append(
+                f"{item.get('symbol', 'unknown')}: macro dataset schema {inum(row, 'schema_version')} is below required version 2"
+            )
         if inum(row, "record_count") > 0 and inum(row, "leakage_safe") <= 0:
             gate_failures.append(
                 f"{item.get('symbol', 'unknown')}: macro dataset failed leakage guard "
                 f"(score={fnum(row, 'leakage_guard_score'):.2f}, parse_errors={inum(row, 'parse_errors')})"
+            )
+        if inum(row, "record_count") > 0 and fnum(row, "avg_source_trust") < 0.60:
+            gate_failures.append(
+                f"{item.get('symbol', 'unknown')}: macro dataset source trust {fnum(row, 'avg_source_trust'):.2f} below minimum 0.60"
+            )
+        if inum(row, "record_count") > 0 and inum(row, "distinct_revision_chains") <= 0:
+            gate_failures.append(
+                f"{item.get('symbol', 'unknown')}: macro dataset has no revision-chain coverage"
             )
 
     for name, info in sorted(current_summary.get("plugins", {}).items()):
@@ -1766,6 +1781,14 @@ def cmd_release_gate(args):
                 if float(macro.get("macro_event_rate", 0.0)) < 0.06:
                     gate_failures.append(
                         f"{name}: macro-event activity {float(macro.get('macro_event_rate', 0.0)):.2f} below minimum 0.06"
+                    )
+                if float(macro.get("macro_provenance_trust_mean", 0.0)) < 0.55:
+                    gate_failures.append(
+                        f"{name}: macro provenance trust {float(macro.get('macro_provenance_trust_mean', 0.0)):.2f} below minimum 0.55"
+                    )
+                if float(macro.get("macro_currency_relevance_mean", 0.0)) < 0.45:
+                    gate_failures.append(
+                        f"{name}: macro currency relevance {float(macro.get('macro_currency_relevance_mean', 0.0)):.2f} below minimum 0.45"
                     )
                 issues = set(info.get("issues", []))
                 if {"macro-event blind", "macro-event overreaction", "macro-event data gap"} & issues:

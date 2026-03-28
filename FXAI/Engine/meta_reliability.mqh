@@ -62,6 +62,7 @@ void FXAI_ResetReliabilityPending()
          g_rel_pending_seq[ai][k] = -1;
          g_rel_pending_signal[ai][k] = -1;
          g_rel_pending_regime[ai][k] = -1;
+         g_rel_pending_session[ai][k] = 0;
          g_rel_pending_expected_move[ai][k] = 0.0;
          g_rel_pending_horizon[ai][k] = default_h;
       }
@@ -91,6 +92,7 @@ void FXAI_EnqueueReliabilityPending(const int ai_idx,
                                     const int signal_seq,
                                     const int signal,
                                     const int regime_id,
+                                    const int session_bucket,
                                     const double expected_move_points,
                                     const int horizon_minutes,
                                     const double &probs[])
@@ -111,6 +113,7 @@ void FXAI_EnqueueReliabilityPending(const int ai_idx,
       g_rel_pending_prob[ai_idx][prev][2] = probs[2];
       g_rel_pending_signal[ai_idx][prev] = signal;
       g_rel_pending_regime[ai_idx][prev] = regime_id;
+      g_rel_pending_session[ai_idx][prev] = session_bucket;
       g_rel_pending_expected_move[ai_idx][prev] = expected_move_points;
       g_rel_pending_horizon[ai_idx][prev] = h;
       return;
@@ -122,6 +125,7 @@ void FXAI_EnqueueReliabilityPending(const int ai_idx,
    g_rel_pending_prob[ai_idx][tail][2] = probs[2];
    g_rel_pending_signal[ai_idx][tail] = signal;
    g_rel_pending_regime[ai_idx][tail] = regime_id;
+   g_rel_pending_session[ai_idx][tail] = session_bucket;
    g_rel_pending_expected_move[ai_idx][tail] = expected_move_points;
    g_rel_pending_horizon[ai_idx][tail] = h;
 
@@ -162,6 +166,7 @@ void FXAI_UpdateReliabilityFromPending(const int ai_idx,
    int keep_signal[];
    int keep_regime[];
    int keep_horizon[];
+   int keep_session[];
    double keep_expected[];
    double keep_prob0[];
    double keep_prob1[];
@@ -170,6 +175,7 @@ void FXAI_UpdateReliabilityFromPending(const int ai_idx,
    ArrayResize(keep_signal, 0);
    ArrayResize(keep_regime, 0);
    ArrayResize(keep_horizon, 0);
+   ArrayResize(keep_session, 0);
    ArrayResize(keep_expected, 0);
    ArrayResize(keep_prob0, 0);
    ArrayResize(keep_prob1, 0);
@@ -181,6 +187,7 @@ void FXAI_UpdateReliabilityFromPending(const int ai_idx,
       int seq_pred = g_rel_pending_seq[ai_idx][idx];
       int pending_signal = g_rel_pending_signal[ai_idx][idx];
       int pending_regime = g_rel_pending_regime[ai_idx][idx];
+      int pending_session = g_rel_pending_session[ai_idx][idx];
       double pending_expected_move = g_rel_pending_expected_move[ai_idx][idx];
       int pending_h = FXAI_ClampHorizon(g_rel_pending_horizon[ai_idx][idx]);
 
@@ -239,6 +246,7 @@ void FXAI_UpdateReliabilityFromPending(const int ai_idx,
                FXAI_UpdateRegimeCalibration(ai_idx, pending_regime, label_class, probs_eval);
                FXAI_UpdateModelPerformance(ai_idx,
                                            pending_regime,
+                                           pending_session,
                                            label_class,
                                            pending_signal,
                                            move_points,
@@ -268,6 +276,7 @@ void FXAI_UpdateReliabilityFromPending(const int ai_idx,
             ArrayResize(keep_seq, ks + 1);
             ArrayResize(keep_signal, ks + 1);
             ArrayResize(keep_regime, ks + 1);
+            ArrayResize(keep_session, ks + 1);
             ArrayResize(keep_horizon, ks + 1);
             ArrayResize(keep_expected, ks + 1);
             ArrayResize(keep_prob0, ks + 1);
@@ -277,6 +286,7 @@ void FXAI_UpdateReliabilityFromPending(const int ai_idx,
             keep_seq[ks] = seq_pred;
             keep_signal[ks] = pending_signal;
             keep_regime[ks] = pending_regime;
+            keep_session[ks] = pending_session;
             keep_horizon[ks] = pending_h;
             keep_expected[ks] = pending_expected_move;
             keep_prob0[ks] = p0;
@@ -298,6 +308,7 @@ void FXAI_UpdateReliabilityFromPending(const int ai_idx,
       g_rel_pending_seq[ai_idx][k] = -1;
       g_rel_pending_signal[ai_idx][k] = -1;
       g_rel_pending_regime[ai_idx][k] = -1;
+      g_rel_pending_session[ai_idx][k] = 0;
       g_rel_pending_expected_move[ai_idx][k] = 0.0;
       g_rel_pending_horizon[ai_idx][k] = FXAI_ClampHorizon(PredictionTargetMinutes);
       g_rel_pending_prob[ai_idx][k][0] = 0.0;
@@ -310,6 +321,7 @@ void FXAI_UpdateReliabilityFromPending(const int ai_idx,
       g_rel_pending_seq[ai_idx][k] = keep_seq[k];
       g_rel_pending_signal[ai_idx][k] = keep_signal[k];
       g_rel_pending_regime[ai_idx][k] = keep_regime[k];
+      g_rel_pending_session[ai_idx][k] = keep_session[k];
       g_rel_pending_expected_move[ai_idx][k] = keep_expected[k];
       g_rel_pending_horizon[ai_idx][k] = keep_horizon[k];
       g_rel_pending_prob[ai_idx][k][0] = keep_prob0[k];

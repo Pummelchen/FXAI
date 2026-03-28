@@ -2,7 +2,7 @@
 #define __FXAI_RUNTIME_ARTIFACTS_MQH__
 
 #define FXAI_RUNTIME_ARTIFACT_DIR "FXAI\\Runtime"
-#define FXAI_RUNTIME_ARTIFACT_VERSION 11
+#define FXAI_RUNTIME_ARTIFACT_VERSION 12
 
 string FXAI_RuntimeArtifactSafeSymbol(const string symbol)
 {
@@ -146,7 +146,7 @@ void FXAI_WritePersistenceCoverageManifest(const string symbol)
    if(handle == INVALID_HANDLE)
       return;
 
-   FileWriteString(handle, "ai_id\tai_name\treference_tier\tcoverage_tag\tpersistent\tstate_version\tcapability_mask\tstateful_checkpoint\tnative_required\tpromotion_ready\tstate_file_size\tstate_file\tcoverage_note\r\n");
+   FileWriteString(handle, "ai_id\tai_name\treference_tier\tcoverage_tag\tcheckpoint_depth\tpersistent\tstate_version\tcapability_mask\tstateful_checkpoint\tnative_snapshot\tdeterministic_replay\tnative_required\tpromotion_ready\tstate_file_size\tstate_file\tcoverage_note\r\n");
    if(g_plugins_ready)
    {
       for(int ai=0; ai<FXAI_AI_COUNT; ai++)
@@ -162,22 +162,30 @@ void FXAI_WritePersistenceCoverageManifest(const string symbol)
          bool stateful_checkpoint = FXAI_IsStatefulCheckpointManifest(manifest);
          bool native_required = stateful_checkpoint;
          string coverage_tag = plugin.PersistentStateCoverageTag();
-         bool promotion_ready = (!native_required || coverage_tag == "native_model");
+         string depth_tag = plugin.PersistentStateDepthTag();
+         bool has_native_snapshot = plugin.SupportsNativeParameterSnapshot();
+         bool has_deterministic_replay = plugin.SupportsDeterministicReplayCheckpoint();
+         bool promotion_ready = (!native_required || (coverage_tag == "native_model" && has_native_snapshot));
          string coverage_note = "";
-         if(native_required && coverage_tag != "native_model")
-            coverage_note = "stateful model blocked from live promotion until native checkpoint coverage is implemented";
+         if(native_required && !promotion_ready)
+            coverage_note = "stateful model blocked from live promotion until native parameter snapshot coverage is implemented";
          else if(coverage_tag == "native_model")
             coverage_note = "native checkpoint verified";
+         else if(coverage_tag == "native_replay")
+            coverage_note = "deterministic replay checkpoint available for audit and research recovery only";
          else
             coverage_note = "checkpoint not required";
          string line = IntegerToString(plugin.AIId()) + "\t" +
                        plugin.AIName() + "\t" +
                        FXAI_ReferenceTierName(manifest.reference_tier) + "\t" +
                        coverage_tag + "\t" +
+                       depth_tag + "\t" +
                        IntegerToString(plugin.SupportsPersistentState() ? 1 : 0) + "\t" +
                        IntegerToString(plugin.PersistentStateVersion()) + "\t" +
                        IntegerToString((int)manifest.capability_mask) + "\t" +
                        IntegerToString(stateful_checkpoint ? 1 : 0) + "\t" +
+                       IntegerToString(has_native_snapshot ? 1 : 0) + "\t" +
+                       IntegerToString(has_deterministic_replay ? 1 : 0) + "\t" +
                        IntegerToString(native_required ? 1 : 0) + "\t" +
                        IntegerToString(promotion_ready ? 1 : 0) + "\t" +
                        IntegerToString((int)file_size) + "\t" +
@@ -229,13 +237,17 @@ void FXAI_WriteMacroDatasetManifest(const string symbol)
 
    FXAIMacroEventDatasetStats stats;
    FXAI_GetMacroEventDatasetStats(stats);
-   FileWriteString(handle, "symbol\trecord_count\tparse_errors\tdistinct_symbols\tdistinct_sources\tdistinct_event_ids\tfamily_rates_count\tfamily_inflation_count\tfamily_labor_count\tfamily_growth_count\tfamily_trade_count\tfirst_event_time\tlast_event_time\tavg_importance\tavg_pre_window_min\tavg_post_window_min\tavg_surprise_z_abs\tavg_revision_abs\tchecksum01\tprovenance_hash01\tleakage_guard_score\tleakage_safe\r\n");
+   FileWriteString(handle, "symbol\tschema_version\trecord_count\tparse_errors\tdistinct_symbols\tdistinct_sources\tdistinct_event_ids\tdistinct_countries\tdistinct_currencies\tdistinct_revision_chains\tfamily_rates_count\tfamily_inflation_count\tfamily_labor_count\tfamily_growth_count\tfamily_trade_count\tfirst_event_time\tlast_event_time\tavg_importance\tavg_pre_window_min\tavg_post_window_min\tavg_surprise_z_abs\tavg_revision_abs\tavg_source_trust\tavg_currency_relevance\tchecksum01\tprovenance_hash01\tleakage_guard_score\tleakage_safe\r\n");
    string line = FXAI_RuntimeArtifactSafeSymbol(symbol) + "\t" +
+                 IntegerToString(stats.schema_version) + "\t" +
                  IntegerToString(stats.record_count) + "\t" +
                  IntegerToString(stats.parse_errors) + "\t" +
                  IntegerToString(stats.distinct_symbols) + "\t" +
                  IntegerToString(stats.distinct_sources) + "\t" +
                  IntegerToString(stats.distinct_event_ids) + "\t" +
+                 IntegerToString(stats.distinct_countries) + "\t" +
+                 IntegerToString(stats.distinct_currencies) + "\t" +
+                 IntegerToString(stats.distinct_revision_chains) + "\t" +
                  IntegerToString(stats.family_rates_count) + "\t" +
                  IntegerToString(stats.family_inflation_count) + "\t" +
                  IntegerToString(stats.family_labor_count) + "\t" +
@@ -248,6 +260,8 @@ void FXAI_WriteMacroDatasetManifest(const string symbol)
                  DoubleToString(stats.avg_post_window_min, 6) + "\t" +
                  DoubleToString(stats.avg_surprise_z_abs, 6) + "\t" +
                  DoubleToString(stats.avg_revision_abs, 6) + "\t" +
+                 DoubleToString(stats.avg_source_trust, 6) + "\t" +
+                 DoubleToString(stats.avg_currency_relevance, 6) + "\t" +
                  DoubleToString(stats.checksum01, 6) + "\t" +
                  DoubleToString(stats.provenance_hash01, 6) + "\t" +
                  DoubleToString(stats.leakage_guard_score, 6) + "\t" +
@@ -389,6 +403,13 @@ bool FXAI_SaveRuntimeArtifacts(const string symbol)
    for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
       for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
          FileWriteDouble(handle, g_shared_transfer_global_session_emb[s][j]);
+   for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+   {
+      FileWriteDouble(handle, g_shared_transfer_global_state_rec_w[j]);
+      FileWriteDouble(handle, g_shared_transfer_global_state_b[j]);
+      for(int c=0; c<FXAI_SHARED_TRANSFER_STATE_FEATURES; c++)
+         FileWriteDouble(handle, g_shared_transfer_global_state_w[j][c]);
+   }
 
    FileWriteInteger(handle, (g_broker_execution_ready ? 1 : 0));
    for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
@@ -402,6 +423,17 @@ bool FXAI_SaveRuntimeArtifacts(const string symbol)
          FileWriteDouble(handle, g_broker_execution_partial_ema[s][h]);
       }
    }
+   for(int idx=0; idx<FXAI_BROKER_EXEC_LIBRARY_CELLS; idx++)
+   {
+      FileWriteDouble(handle, g_broker_execution_library_obs[idx]);
+      FileWriteDouble(handle, g_broker_execution_library_slippage[idx]);
+      FileWriteDouble(handle, g_broker_execution_library_latency[idx]);
+      FileWriteDouble(handle, g_broker_execution_library_reject[idx]);
+      FileWriteDouble(handle, g_broker_execution_library_partial[idx]);
+      FileWriteDouble(handle, g_broker_execution_library_fill_ratio[idx]);
+   }
+   for(int idx=0; idx<FXAI_BROKER_EXEC_LIBRARY_EVENT_CELLS; idx++)
+      FileWriteDouble(handle, g_broker_execution_library_event_mass[idx]);
    FileWriteInteger(handle, g_broker_execution_trace_head);
    FileWriteInteger(handle, g_broker_execution_trace_size);
    for(int i=0; i<FXAI_BROKER_EXEC_TRACE_CAP; i++)
@@ -596,6 +628,16 @@ bool FXAI_LoadRuntimeArtifacts(const string symbol)
             for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
                for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
                   g_shared_transfer_global_session_emb[s][j] = FileReadDouble(handle);
+            if(version >= 12)
+            {
+               for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+               {
+                  g_shared_transfer_global_state_rec_w[j] = FileReadDouble(handle);
+                  g_shared_transfer_global_state_b[j] = FileReadDouble(handle);
+                  for(int c=0; c<FXAI_SHARED_TRANSFER_STATE_FEATURES; c++)
+                     g_shared_transfer_global_state_w[j][c] = FileReadDouble(handle);
+               }
+            }
 
             g_broker_execution_ready = (FileReadInteger(handle) != 0);
             for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
@@ -608,6 +650,20 @@ bool FXAI_LoadRuntimeArtifacts(const string symbol)
                   g_broker_execution_reject_ema[s][h] = FileReadDouble(handle);
                   g_broker_execution_partial_ema[s][h] = FileReadDouble(handle);
                }
+            }
+            if(version >= 12)
+            {
+               for(int idx=0; idx<FXAI_BROKER_EXEC_LIBRARY_CELLS; idx++)
+               {
+                  g_broker_execution_library_obs[idx] = FileReadDouble(handle);
+                  g_broker_execution_library_slippage[idx] = FileReadDouble(handle);
+                  g_broker_execution_library_latency[idx] = FileReadDouble(handle);
+                  g_broker_execution_library_reject[idx] = FileReadDouble(handle);
+                  g_broker_execution_library_partial[idx] = FileReadDouble(handle);
+                  g_broker_execution_library_fill_ratio[idx] = FileReadDouble(handle);
+               }
+               for(int idx=0; idx<FXAI_BROKER_EXEC_LIBRARY_EVENT_CELLS; idx++)
+                  g_broker_execution_library_event_mass[idx] = FileReadDouble(handle);
             }
             if(version >= 10)
             {

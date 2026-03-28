@@ -281,6 +281,7 @@ public:
    virtual int AIId(void) const { return (int)AI_MOE_CONFORMAL; }
    virtual string AIName(void) const { return "mix_moe_conformal"; }
    virtual int PersistentStateVersion(void) const { return 10; }
+   virtual bool SupportsNativeParameterSnapshot(void) const { return true; }
    virtual string PersistentStateCoverageTag(void) const { return "native_model"; }
 
 

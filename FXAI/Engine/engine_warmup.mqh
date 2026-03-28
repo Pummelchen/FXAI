@@ -1538,6 +1538,7 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             FXAI_UpdateRegimeCalibration(ai_idx, regime_id, samples[i].label_class, probs_eval);
             FXAI_UpdateModelPerformance(ai_idx,
                                         regime_id,
+                                        FXAI_DeriveSessionBucket(samples[i].sample_time),
                                         samples[i].label_class,
                                         signal,
                                         samples[i].move_points,
@@ -1548,7 +1549,11 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
                                         expected_move,
                                         probs_eval);
 
-            double meta_w = FXAI_GetModelMetaScore(ai_idx, regime_id, H, samples[i].min_move_points);
+            double meta_w = FXAI_GetModelMetaScore(ai_idx,
+                                                   regime_id,
+                                                   FXAI_DeriveSessionBucket(samples[i].sample_time),
+                                                   H,
+                                                   samples[i].min_move_points);
             if(meta_w <= 0.0) meta_w = 1.0;
             double model_buy_ev = ((2.0 * probs_eval[(int)FXAI_LABEL_BUY]) - 1.0) * expected_move - samples[i].min_move_points;
             double model_sell_ev = ((2.0 * probs_eval[(int)FXAI_LABEL_SELL]) - 1.0) * expected_move - samples[i].min_move_points;

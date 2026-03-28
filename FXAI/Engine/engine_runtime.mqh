@@ -530,6 +530,7 @@ int SpecialDirectionAI(const string symbol)
 
    if(have_online_window && online_start >= 0 && online_start < ArraySize(samples))
       FXAI_AddReplaySample(samples[online_start]);
+   int runtime_session_bucket = FXAI_DeriveSessionBucket(snapshot.bar_time);
 
    int active_ai_ids[];
    ArrayResize(active_ai_ids, 0);
@@ -552,7 +553,7 @@ int SpecialDirectionAI(const string symbol)
       {
          if(g_plugins.Get(ai_idx) == NULL) continue;
          if(FXAI_IsModelPruned(ai_idx, regime_id)) continue;
-         double score = FXAI_GetModelMetaScore(ai_idx, regime_id, H, min_move_pred);
+         double score = FXAI_GetModelMetaScore(ai_idx, regime_id, runtime_session_bucket, H, min_move_pred);
          if(score <= 0.0) continue;
          int sz = ArraySize(cand_ai_ids);
          ArrayResize(cand_ai_ids, sz + 1);
@@ -1010,6 +1011,7 @@ int SpecialDirectionAI(const string symbol)
                                      signal_seq,
                                      signal,
                                      regime_id,
+                                     runtime_session_bucket,
                                      expected_move,
                                      H,
                                      class_probs_pred);
@@ -1048,7 +1050,7 @@ int SpecialDirectionAI(const string symbol)
       }
       else
       {
-         double meta_w = FXAI_GetModelMetaScore(ai_idx, regime_id, H, min_move_pred);
+         double meta_w = FXAI_GetModelMetaScore(ai_idx, regime_id, runtime_session_bucket, H, min_move_pred);
          if(meta_w <= 0.0) continue;
 
          double model_buy_ev = ((2.0 * class_probs_pred[(int)FXAI_LABEL_BUY]) - 1.0) * expected_move - min_move_pred;

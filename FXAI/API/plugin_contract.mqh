@@ -5,7 +5,7 @@
 #include "..\TensorCore\TensorCore.mqh"
 
 #define FXAI_PLUGIN_STATE_ARTIFACT_DIR "FXAI\\Runtime\\Plugins"
-#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 10
+#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 11
 
 class CFXAITernaryCalibrator
 {
@@ -529,8 +529,24 @@ public:
       m_native_quality_heads.Reset();
    }
    virtual bool SupportsPersistentState(void) const { return true; }
-   virtual int PersistentStateVersion(void) const { return 10; }
+   virtual int PersistentStateVersion(void) const { return 11; }
    virtual bool SupportsDeterministicReplayCheckpoint(void) const { return true; }
+   virtual bool SupportsNativeParameterSnapshot(void) const { return false; }
+   virtual string PersistentStateDepthTag(void) const
+   {
+      FXAIAIManifestV4 manifest;
+      Describe(manifest);
+      bool stateful = (FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_ONLINE_LEARNING) ||
+                       FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY) ||
+                       FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL));
+      if(!stateful)
+         return "stateless";
+      if(SupportsNativeParameterSnapshot())
+         return "native_parameters";
+      if(SupportsDeterministicReplayCheckpoint())
+         return "deterministic_replay";
+      return "base_only";
+   }
    virtual string PersistentStateCoverageTag(void) const
    {
       FXAIAIManifestV4 manifest;
@@ -539,7 +555,7 @@ public:
          FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY) ||
          FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL))
       {
-         return (SupportsDeterministicReplayCheckpoint() ? "native_model" : "native_replay");
+         return (SupportsNativeParameterSnapshot() ? "native_model" : "native_replay");
       }
       return FXAI_ReferenceTierName(FXAI_DefaultReferenceTierForAI(AIId()));
    }
@@ -825,6 +841,10 @@ protected:
             FileWriteDouble(handle, m_shared_backbone_time_w[j][c]);
          for(int c=0; c<FXAI_SHARED_TRANSFER_BAR_FEATURES; c++)
             FileWriteDouble(handle, m_shared_backbone_time_gate_w[j][c]);
+         for(int c=0; c<FXAI_SHARED_TRANSFER_STATE_FEATURES; c++)
+            FileWriteDouble(handle, m_shared_backbone_state_w[j][c]);
+         FileWriteDouble(handle, m_shared_backbone_state_rec_w[j]);
+         FileWriteDouble(handle, m_shared_backbone_state_b[j]);
       }
       for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
          for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
@@ -1002,6 +1022,13 @@ protected:
                   m_shared_backbone_time_w[j][c] = FileReadDouble(handle);
                for(int c=0; c<FXAI_SHARED_TRANSFER_BAR_FEATURES; c++)
                   m_shared_backbone_time_gate_w[j][c] = FileReadDouble(handle);
+            }
+            if(version >= 11)
+            {
+               for(int c=0; c<FXAI_SHARED_TRANSFER_STATE_FEATURES; c++)
+                  m_shared_backbone_state_w[j][c] = FileReadDouble(handle);
+               m_shared_backbone_state_rec_w[j] = FileReadDouble(handle);
+               m_shared_backbone_state_b[j] = FileReadDouble(handle);
             }
          }
          for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)

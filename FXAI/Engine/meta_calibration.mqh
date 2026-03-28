@@ -120,6 +120,7 @@ void FXAI_ResetModelPerformanceState(const int ai_idx)
    g_model_portfolio_stability[ai_idx] = 0.0;
    g_model_portfolio_corr_penalty[ai_idx] = 0.0;
    g_model_portfolio_diversification[ai_idx] = 0.0;
+   g_model_portfolio_objective[ai_idx] = 0.0;
    g_model_portfolio_ready[ai_idx] = false;
    g_model_portfolio_symbol_count[ai_idx] = 0;
    for(int r=0; r<FXAI_REGIME_COUNT; r++)
@@ -127,6 +128,17 @@ void FXAI_ResetModelPerformanceState(const int ai_idx)
       g_model_regime_edge_ema[ai_idx][r] = 0.0;
       g_model_regime_edge_ready[ai_idx][r] = false;
       g_model_regime_obs[ai_idx][r] = 0;
+      for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
+      {
+         for(int h=0; h<FXAI_MAX_HORIZONS; h++)
+         {
+            g_model_plugin_route_value[ai_idx][r][s][h] = 0.0;
+            g_model_plugin_route_regret[ai_idx][r][s][h] = 0.0;
+            g_model_plugin_route_counterfactual[ai_idx][r][s][h] = 0.0;
+            g_model_plugin_route_ready[ai_idx][r][s][h] = false;
+            g_model_plugin_route_obs[ai_idx][r][s][h] = 0;
+         }
+      }
       for(int h=0; h<FXAI_MAX_HORIZONS; h++)
       {
          g_model_context_edge_ema[ai_idx][r][h] = 0.0;
@@ -203,6 +215,24 @@ double FXAI_GetModelContextTrust(const int ai_idx,
    return FXAI_Clamp((double)g_model_context_obs[ai_idx][r][hslot] / 64.0, 0.0, 1.0);
 }
 
+double FXAI_ComputePortfolioObjective(const double mean_edge_points,
+                                      const double stability,
+                                      const double corr_penalty,
+                                      const double diversification,
+                                      const int symbol_count)
+{
+   double scale = MathMax(MathAbs(mean_edge_points), 0.50);
+   double edge_norm = FXAI_Clamp(mean_edge_points / scale, -4.0, 4.0) / 4.0;
+   double symbol_cov = FXAI_Clamp((double)MathMax(symbol_count, 0) / 6.0, 0.0, 1.0);
+   return FXAI_Clamp(0.34 * edge_norm +
+                     0.26 * (FXAI_Clamp(stability, 0.0, 1.0) - 0.50) -
+                     0.24 * FXAI_Clamp(corr_penalty, 0.0, 1.0) +
+                     0.24 * (FXAI_Clamp(diversification, 0.0, 1.0) - 0.50) +
+                     0.18 * (symbol_cov - 0.50),
+                     -1.0,
+                     1.0);
+}
+
 void FXAI_SetModelPortfolioDiagnostics(const int ai_idx,
                                        const double mean_edge_points,
                                        const double stability,
@@ -217,6 +247,11 @@ void FXAI_SetModelPortfolioDiagnostics(const int ai_idx,
    g_model_portfolio_corr_penalty[ai_idx] = FXAI_Clamp(corr_penalty, 0.0, 1.0);
    g_model_portfolio_diversification[ai_idx] = FXAI_Clamp(diversification, 0.0, 1.0);
    g_model_portfolio_symbol_count[ai_idx] = MathMax(symbol_count, 0);
+   g_model_portfolio_objective[ai_idx] = FXAI_ComputePortfolioObjective(mean_edge_points,
+                                                                        stability,
+                                                                        corr_penalty,
+                                                                        diversification,
+                                                                        symbol_count);
    g_model_portfolio_ready[ai_idx] = (symbol_count > 0);
    FXAI_MarkMetaArtifactsDirty();
 }
@@ -251,23 +286,142 @@ double FXAI_GetModelPortfolioDiversification(const int ai_idx)
    return g_model_portfolio_diversification[ai_idx];
 }
 
+double FXAI_GetModelPortfolioObjective(const int ai_idx)
+{
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT || !g_model_portfolio_ready[ai_idx])
+      return 0.0;
+   return g_model_portfolio_objective[ai_idx];
+}
+
 double FXAI_GetModelPortfolioFactor(const int ai_idx,
                                     const double min_move_points)
 {
    if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT || !g_model_portfolio_ready[ai_idx])
       return 1.0;
    double edge_norm = FXAI_GetModelPortfolioEdgeNorm(ai_idx, min_move_points);
-   double stability = g_model_portfolio_stability[ai_idx];
-   double corr_penalty = g_model_portfolio_corr_penalty[ai_idx];
-   double diversification = g_model_portfolio_diversification[ai_idx];
-   double symbol_cov = FXAI_Clamp((double)g_model_portfolio_symbol_count[ai_idx] / 6.0, 0.0, 1.0);
-   double objective = 0.34 * edge_norm +
-                      0.26 * (stability - 0.50) -
-                      0.24 * corr_penalty +
-                      0.24 * (diversification - 0.50) +
-                      0.16 * (symbol_cov - 0.50);
-   double factor = 1.0 + 0.70 * objective;
+   double objective = FXAI_Clamp(0.55 * g_model_portfolio_objective[ai_idx] + 0.45 * edge_norm, -1.0, 1.0);
+   double factor = 1.0 + 0.75 * objective;
    return FXAI_Clamp(factor, 0.45, 1.85);
+}
+
+double FXAI_PluginRouteActionUtility(const int action,
+                                     const int label_class,
+                                     const double realized_ratio)
+{
+   double rr = FXAI_Clamp(realized_ratio, -6.0, 6.0);
+   double opp = FXAI_Clamp(MathAbs(rr), 0.0, 6.0);
+   if(action == (int)FXAI_LABEL_BUY)
+   {
+      if(label_class == (int)FXAI_LABEL_BUY)
+         return FXAI_Clamp(0.24 + 0.60 * rr, -1.0, 1.0);
+      if(label_class == (int)FXAI_LABEL_SKIP)
+         return FXAI_Clamp(-0.22 - 0.15 * opp, -1.0, 1.0);
+      return FXAI_Clamp(-0.30 - 0.50 * opp, -1.0, 1.0);
+   }
+   if(action == (int)FXAI_LABEL_SELL)
+   {
+      if(label_class == (int)FXAI_LABEL_SELL)
+         return FXAI_Clamp(0.24 + 0.60 * rr, -1.0, 1.0);
+      if(label_class == (int)FXAI_LABEL_SKIP)
+         return FXAI_Clamp(-0.22 - 0.15 * opp, -1.0, 1.0);
+      return FXAI_Clamp(-0.30 - 0.50 * opp, -1.0, 1.0);
+   }
+   if(label_class == (int)FXAI_LABEL_SKIP)
+      return FXAI_Clamp(0.20 + 0.12 * (1.0 - FXAI_Clamp(opp / 4.0, 0.0, 1.0)), -1.0, 1.0);
+   return FXAI_Clamp(-0.18 - 0.24 * opp, -1.0, 1.0);
+}
+
+double FXAI_GetPluginRouteFactor(const int ai_idx,
+                                 const int regime_id,
+                                 const int session_bucket,
+                                 const int horizon_minutes)
+{
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT)
+      return 1.0;
+   int r = regime_id;
+   if(r < 0 || r >= FXAI_REGIME_COUNT)
+      r = 0;
+   int s = session_bucket;
+   if(s < 0 || s >= FXAI_PLUGIN_SESSION_BUCKETS)
+      s = 0;
+   int hslot = FXAI_GetHorizonSlot(horizon_minutes);
+   if(hslot < 0 || hslot >= FXAI_MAX_HORIZONS)
+      return 1.0;
+   if(!g_model_plugin_route_ready[ai_idx][r][s][hslot])
+      return 1.0;
+   int obs = g_model_plugin_route_obs[ai_idx][r][s][hslot];
+   double route_trust = FXAI_Clamp((double)obs / 64.0, 0.0, 1.0);
+   double ctx_trust = FXAI_GetModelContextTrust(ai_idx, r, horizon_minutes);
+   double score = 0.72 * g_model_plugin_route_value[ai_idx][r][s][hslot] +
+                  0.38 * g_model_plugin_route_counterfactual[ai_idx][r][s][hslot] -
+                  0.58 * g_model_plugin_route_regret[ai_idx][r][s][hslot] +
+                  0.18 * FXAI_GetModelPortfolioObjective(ai_idx);
+   double factor = MathExp(FXAI_ClipSym((0.35 + 0.65 * ctx_trust) * route_trust * score, 1.1));
+   return FXAI_Clamp(factor, 0.55, 1.90);
+}
+
+void FXAI_UpdatePluginRouteState(const int ai_idx,
+                                 const int regime_id,
+                                 const int session_bucket,
+                                 const int horizon_minutes,
+                                 const int label_class,
+                                 const int signal,
+                                 const double realized_net,
+                                 const double min_move_points,
+                                 const double pred_edge,
+                                 const double sample_weight)
+{
+   if(ai_idx < 0 || ai_idx >= FXAI_AI_COUNT)
+      return;
+   if(label_class < 0 || label_class > 2)
+      return;
+   int r = regime_id;
+   if(r < 0 || r >= FXAI_REGIME_COUNT)
+      r = 0;
+   int s = session_bucket;
+   if(s < 0 || s >= FXAI_PLUGIN_SESSION_BUCKETS)
+      s = 0;
+   int hslot = FXAI_GetHorizonSlot(horizon_minutes);
+   if(hslot < 0 || hslot >= FXAI_MAX_HORIZONS)
+      return;
+
+   double min_mv = MathMax(min_move_points, 0.10);
+   double realized_ratio = FXAI_Clamp(realized_net / min_mv, -6.0, 6.0);
+   int action = (signal == 1 ? (int)FXAI_LABEL_BUY : (signal == 0 ? (int)FXAI_LABEL_SELL : (int)FXAI_LABEL_SKIP));
+   double utility[3];
+   double best_u = -1e9;
+   for(int a=0; a<3; a++)
+   {
+      utility[a] = FXAI_PluginRouteActionUtility(a, label_class, realized_ratio);
+      if(utility[a] > best_u)
+         best_u = utility[a];
+   }
+   double action_u = utility[action];
+   double baseline = FXAI_Clamp(pred_edge / min_mv, -1.0, 1.0);
+   double counterfactual = FXAI_ClipSym(best_u - baseline, 1.0);
+   double regret = FXAI_Clamp(best_u - action_u, 0.0, 1.0);
+   double obs = (double)g_model_plugin_route_obs[ai_idx][r][s][hslot];
+   double alpha = FXAI_Clamp(0.18 / MathSqrt(1.0 + 0.05 * obs), 0.02, 0.18);
+   double blend = FXAI_Clamp(alpha * FXAI_Clamp(sample_weight, 0.20, 6.0), 0.01, 0.24);
+   if(obs <= 0.0)
+   {
+      g_model_plugin_route_value[ai_idx][r][s][hslot] = action_u;
+      g_model_plugin_route_counterfactual[ai_idx][r][s][hslot] = counterfactual;
+      g_model_plugin_route_regret[ai_idx][r][s][hslot] = regret;
+   }
+   else
+   {
+      g_model_plugin_route_value[ai_idx][r][s][hslot] =
+         (1.0 - blend) * g_model_plugin_route_value[ai_idx][r][s][hslot] + blend * action_u;
+      g_model_plugin_route_counterfactual[ai_idx][r][s][hslot] =
+         (1.0 - blend) * g_model_plugin_route_counterfactual[ai_idx][r][s][hslot] + blend * counterfactual;
+      g_model_plugin_route_regret[ai_idx][r][s][hslot] =
+         (1.0 - blend) * g_model_plugin_route_regret[ai_idx][r][s][hslot] + blend * regret;
+   }
+   g_model_plugin_route_obs[ai_idx][r][s][hslot]++;
+   if(g_model_plugin_route_obs[ai_idx][r][s][hslot] > 200000)
+      g_model_plugin_route_obs[ai_idx][r][s][hslot] = 200000;
+   g_model_plugin_route_ready[ai_idx][r][s][hslot] = true;
 }
 
 bool FXAI_IsModelPruned(const int ai_idx, const int regime_id)
@@ -293,6 +447,7 @@ bool FXAI_IsModelPruned(const int ai_idx, const int regime_id)
 
 double FXAI_GetModelMetaScore(const int ai_idx,
                               const int regime_id,
+                              const int session_bucket,
                               const int horizon_minutes,
                               const double min_move_points)
 {
@@ -316,11 +471,13 @@ double FXAI_GetModelMetaScore(const int ai_idx,
                                               1.20);
    ctx_factor = FXAI_Clamp(ctx_factor, 0.25, 2.20);
    double portfolio_factor = FXAI_GetModelPortfolioFactor(ai_idx, min_move_points);
-   return rel * meta * edge_scale * ctx_factor * portfolio_factor;
+    double route_factor = FXAI_GetPluginRouteFactor(ai_idx, regime_id, session_bucket, horizon_minutes);
+   return rel * meta * edge_scale * ctx_factor * portfolio_factor * route_factor;
 }
 
 void FXAI_UpdateModelPerformance(const int ai_idx,
                                  const int regime_id,
+                                 const int session_bucket,
                                  const int label_class,
                                  const int signal,
                                  const double realized_move_points,
@@ -565,6 +722,16 @@ void FXAI_UpdateModelPerformance(const int ai_idx,
    double lr = 0.015;
    double meta_new = g_model_meta_weight[ai_idx] + lr * grad;
    g_model_meta_weight[ai_idx] = FXAI_Clamp(meta_new, 0.20, 3.00);
+   FXAI_UpdatePluginRouteState(ai_idx,
+                               regime_id,
+                               session_bucket,
+                               horizon_minutes,
+                               label_class,
+                               signal,
+                               realized_net,
+                               min_move_points,
+                               pred_edge,
+                               1.0 + 0.25 * FXAI_Clamp(MathAbs(realized_net) / min_mv, 0.0, 4.0));
 }
 
 void FXAI_ResetModelAuxState(const int ai_idx)

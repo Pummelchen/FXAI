@@ -33,11 +33,17 @@
 #define FXAI_SHARED_TRANSFER_LATENT 12
 #define FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS 16
 #define FXAI_SHARED_TRANSFER_BAR_FEATURES 12
+#define FXAI_SHARED_TRANSFER_STATE_FEATURES FXAI_SHARED_TRANSFER_BAR_FEATURES
 #define FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS 8
 #define FXAI_SHARED_TRANSFER_HORIZON_BUCKETS 8
 #define FXAI_EXEC_TRACE_BARS 12
 #define FXAI_BROKER_EXEC_TRACE_CAP 192
 #define FXAI_BROKER_EXEC_SYMBOL_BUCKETS 12
+#define FXAI_BROKER_EXEC_SIDE_COUNT 3
+#define FXAI_BROKER_EXEC_ORDER_TYPE_COUNT 5
+#define FXAI_BROKER_EXEC_EVENT_KIND_COUNT 4
+#define FXAI_BROKER_EXEC_LIBRARY_CELLS (FXAI_BROKER_EXEC_SYMBOL_BUCKETS * FXAI_PLUGIN_SESSION_BUCKETS * FXAI_SHARED_TRANSFER_HORIZON_BUCKETS * FXAI_BROKER_EXEC_SIDE_COUNT * FXAI_BROKER_EXEC_ORDER_TYPE_COUNT)
+#define FXAI_BROKER_EXEC_LIBRARY_EVENT_CELLS (FXAI_BROKER_EXEC_LIBRARY_CELLS * FXAI_BROKER_EXEC_EVENT_KIND_COUNT)
 #define FXAI_API_VERSION_V4 4
 #define FXAI_MAX_SEQUENCE_BARS 96
 
@@ -385,6 +391,9 @@ struct FXAIBrokerExecutionStats
    double reject_prob;
    double partial_fill_prob;
    double trace_coverage;
+   double library_coverage;
+   double fill_ratio_mean;
+   double event_burst_penalty;
 };
 
 bool   g_broker_execution_ready = false;
@@ -393,6 +402,13 @@ double g_broker_execution_slippage_ema[FXAI_PLUGIN_SESSION_BUCKETS][FXAI_SHARED_
 double g_broker_execution_latency_ema[FXAI_PLUGIN_SESSION_BUCKETS][FXAI_SHARED_TRANSFER_HORIZON_BUCKETS];
 double g_broker_execution_reject_ema[FXAI_PLUGIN_SESSION_BUCKETS][FXAI_SHARED_TRANSFER_HORIZON_BUCKETS];
 double g_broker_execution_partial_ema[FXAI_PLUGIN_SESSION_BUCKETS][FXAI_SHARED_TRANSFER_HORIZON_BUCKETS];
+double g_broker_execution_library_obs[FXAI_BROKER_EXEC_LIBRARY_CELLS];
+double g_broker_execution_library_slippage[FXAI_BROKER_EXEC_LIBRARY_CELLS];
+double g_broker_execution_library_latency[FXAI_BROKER_EXEC_LIBRARY_CELLS];
+double g_broker_execution_library_reject[FXAI_BROKER_EXEC_LIBRARY_CELLS];
+double g_broker_execution_library_partial[FXAI_BROKER_EXEC_LIBRARY_CELLS];
+double g_broker_execution_library_fill_ratio[FXAI_BROKER_EXEC_LIBRARY_CELLS];
+double g_broker_execution_library_event_mass[FXAI_BROKER_EXEC_LIBRARY_EVENT_CELLS];
 int    g_broker_execution_trace_head = 0;
 int    g_broker_execution_trace_size = 0;
 datetime g_broker_execution_trace_time[FXAI_BROKER_EXEC_TRACE_CAP];
@@ -634,12 +650,67 @@ int FXAI_NormalizeBrokerExecutionSide(const int order_side)
    return 0;
 }
 
+int FXAI_BrokerExecutionSideIndex(const int order_side)
+{
+   int side = FXAI_NormalizeBrokerExecutionSide(order_side);
+   if(side < 0) return 0;
+   if(side > 0) return 2;
+   return 1;
+}
+
 int FXAI_NormalizeBrokerExecutionOrderType(const int order_type_bucket)
 {
    int t = order_type_bucket;
    if(t < 0) t = 0;
    if(t > 4) t = 4;
    return t;
+}
+
+int FXAI_BrokerExecutionEventKindIndex(const int event_kind)
+{
+   int idx = event_kind;
+   if(idx < 0) idx = 0;
+   if(idx >= FXAI_BROKER_EXEC_EVENT_KIND_COUNT)
+      idx = FXAI_BROKER_EXEC_EVENT_KIND_COUNT - 1;
+   return idx;
+}
+
+int FXAI_BrokerExecutionLibraryIndex(const int symbol_bucket,
+                                     const int session_bucket,
+                                     const int horizon_bucket,
+                                     const int side_idx,
+                                     const int type_idx)
+{
+   int sb = symbol_bucket;
+   int s = session_bucket;
+   int h = horizon_bucket;
+   int side = side_idx;
+   int type = type_idx;
+   if(sb < 0) sb = 0;
+   if(sb >= FXAI_BROKER_EXEC_SYMBOL_BUCKETS) sb = FXAI_BROKER_EXEC_SYMBOL_BUCKETS - 1;
+   if(s < 0) s = 0;
+   if(s >= FXAI_PLUGIN_SESSION_BUCKETS) s = FXAI_PLUGIN_SESSION_BUCKETS - 1;
+   if(h < 0) h = 0;
+   if(h >= FXAI_SHARED_TRANSFER_HORIZON_BUCKETS) h = FXAI_SHARED_TRANSFER_HORIZON_BUCKETS - 1;
+   if(side < 0) side = 0;
+   if(side >= FXAI_BROKER_EXEC_SIDE_COUNT) side = FXAI_BROKER_EXEC_SIDE_COUNT - 1;
+   if(type < 0) type = 0;
+   if(type >= FXAI_BROKER_EXEC_ORDER_TYPE_COUNT) type = FXAI_BROKER_EXEC_ORDER_TYPE_COUNT - 1;
+
+   int idx = (((sb * FXAI_PLUGIN_SESSION_BUCKETS + s) * FXAI_SHARED_TRANSFER_HORIZON_BUCKETS + h) * FXAI_BROKER_EXEC_SIDE_COUNT + side) * FXAI_BROKER_EXEC_ORDER_TYPE_COUNT + type;
+   return idx;
+}
+
+int FXAI_BrokerExecutionLibraryEventIndex(const int symbol_bucket,
+                                          const int session_bucket,
+                                          const int horizon_bucket,
+                                          const int side_idx,
+                                          const int type_idx,
+                                          const int event_idx)
+{
+   int base = FXAI_BrokerExecutionLibraryIndex(symbol_bucket, session_bucket, horizon_bucket, side_idx, type_idx);
+   int ev = FXAI_BrokerExecutionEventKindIndex(event_idx);
+   return base * FXAI_BROKER_EXEC_EVENT_KIND_COUNT + ev;
 }
 
 void FXAI_ResetBrokerExecutionReplayStats(void)
@@ -658,6 +729,17 @@ void FXAI_ResetBrokerExecutionReplayStats(void)
          g_broker_execution_partial_ema[s][h] = 0.0;
       }
    }
+   for(int idx=0; idx<FXAI_BROKER_EXEC_LIBRARY_CELLS; idx++)
+   {
+      g_broker_execution_library_obs[idx] = 0.0;
+      g_broker_execution_library_slippage[idx] = 0.0;
+      g_broker_execution_library_latency[idx] = 0.0;
+      g_broker_execution_library_reject[idx] = 0.0;
+      g_broker_execution_library_partial[idx] = 0.0;
+      g_broker_execution_library_fill_ratio[idx] = 0.0;
+   }
+   for(int idx=0; idx<FXAI_BROKER_EXEC_LIBRARY_EVENT_CELLS; idx++)
+      g_broker_execution_library_event_mass[idx] = 0.0;
    for(int i=0; i<FXAI_BROKER_EXEC_TRACE_CAP; i++)
    {
       g_broker_execution_trace_time[i] = 0;
@@ -723,6 +805,9 @@ void FXAI_RecordBrokerExecutionEventEx(const datetime sample_time,
    int s = FXAI_DeriveSessionBucket(sample_time);
    int h = FXAI_BrokerExecutionHorizonBucket(horizon_minutes);
    int symbol_bucket = FXAI_BrokerExecutionSymbolBucket(symbol);
+   int side_idx = FXAI_BrokerExecutionSideIndex(order_side);
+   int type_idx = FXAI_NormalizeBrokerExecutionOrderType(order_type_bucket);
+   int event_idx = FXAI_BrokerExecutionEventKindIndex(event_kind);
    if(s < 0) s = 0;
    if(s >= FXAI_PLUGIN_SESSION_BUCKETS) s = FXAI_PLUGIN_SESSION_BUCKETS - 1;
    if(h < 0) h = 0;
@@ -755,6 +840,37 @@ void FXAI_RecordBrokerExecutionEventEx(const datetime sample_time,
    }
 
    g_broker_execution_obs[s][h] = MathMin(obs + 1.0, 50000.0);
+   int lib_idx = FXAI_BrokerExecutionLibraryIndex(symbol_bucket, s, h, side_idx, type_idx);
+   double lib_obs = g_broker_execution_library_obs[lib_idx];
+   double lib_alpha = FXAI_Clamp(0.20 / MathSqrt(1.0 + 0.04 * lib_obs), 0.015, 0.20);
+   double fill = FXAI_Clamp(fill_ratio, 0.0, 1.0);
+   if(lib_obs <= 0.0)
+   {
+      g_broker_execution_library_slippage[lib_idx] = slip;
+      g_broker_execution_library_latency[lib_idx] = lat;
+      g_broker_execution_library_reject[lib_idx] = rej;
+      g_broker_execution_library_partial[lib_idx] = part;
+      g_broker_execution_library_fill_ratio[lib_idx] = fill;
+   }
+   else
+   {
+      g_broker_execution_library_slippage[lib_idx] =
+         (1.0 - lib_alpha) * g_broker_execution_library_slippage[lib_idx] + lib_alpha * slip;
+      g_broker_execution_library_latency[lib_idx] =
+         (1.0 - lib_alpha) * g_broker_execution_library_latency[lib_idx] + lib_alpha * lat;
+      g_broker_execution_library_reject[lib_idx] =
+         (1.0 - lib_alpha) * g_broker_execution_library_reject[lib_idx] + lib_alpha * rej;
+      g_broker_execution_library_partial[lib_idx] =
+         (1.0 - lib_alpha) * g_broker_execution_library_partial[lib_idx] + lib_alpha * part;
+      g_broker_execution_library_fill_ratio[lib_idx] =
+         (1.0 - lib_alpha) * g_broker_execution_library_fill_ratio[lib_idx] + lib_alpha * fill;
+   }
+   g_broker_execution_library_obs[lib_idx] = MathMin(lib_obs + 1.0, 50000.0);
+   for(int ev=0; ev<FXAI_BROKER_EXEC_EVENT_KIND_COUNT; ev++)
+      g_broker_execution_library_event_mass[FXAI_BrokerExecutionLibraryEventIndex(symbol_bucket, s, h, side_idx, type_idx, ev)] *= (1.0 - lib_alpha);
+   int event_mass_idx = FXAI_BrokerExecutionLibraryEventIndex(symbol_bucket, s, h, side_idx, type_idx, event_idx);
+   g_broker_execution_library_event_mass[event_mass_idx] =
+      MathMin(g_broker_execution_library_event_mass[event_mass_idx] + lib_alpha, 10.0);
    FXAI_AppendBrokerExecutionTrace(sample_time,
                                    symbol_bucket,
                                    s,
@@ -803,6 +919,9 @@ void FXAI_GetBrokerExecutionTraceStressEx(const datetime sample_time,
    stats.reject_prob = 0.0;
    stats.partial_fill_prob = 0.0;
    stats.trace_coverage = 0.0;
+   stats.library_coverage = 0.0;
+   stats.fill_ratio_mean = 1.0;
+   stats.event_burst_penalty = 0.0;
 
    if(g_broker_execution_trace_size <= 0)
       return;
@@ -862,7 +981,8 @@ void FXAI_GetBrokerExecutionTraceStressEx(const datetime sample_time,
       slip_sum += w * g_broker_execution_trace_slippage[idx];
       lat_sum += w * g_broker_execution_trace_latency[idx];
       rej_sum += w * g_broker_execution_trace_reject[idx];
-      part_sum += w * MathMax(g_broker_execution_trace_partial[idx], g_broker_execution_trace_fill_ratio[idx]);
+      double fill_shortfall = FXAI_Clamp(1.0 - g_broker_execution_trace_fill_ratio[idx], 0.0, 1.0);
+      part_sum += w * MathMax(g_broker_execution_trace_partial[idx], fill_shortfall);
 
       double exact_w = w * side_w * type_w;
       if(exact_w > 1e-6)
@@ -871,7 +991,8 @@ void FXAI_GetBrokerExecutionTraceStressEx(const datetime sample_time,
          exact_slip_sum += exact_w * g_broker_execution_trace_slippage[idx];
          exact_lat_sum += exact_w * g_broker_execution_trace_latency[idx];
          exact_rej_sum += exact_w * g_broker_execution_trace_reject[idx];
-         exact_part_sum += exact_w * MathMax(g_broker_execution_trace_partial[idx], g_broker_execution_trace_fill_ratio[idx]);
+         double exact_fill_shortfall = FXAI_Clamp(1.0 - g_broker_execution_trace_fill_ratio[idx], 0.0, 1.0);
+         exact_part_sum += exact_w * MathMax(g_broker_execution_trace_partial[idx], exact_fill_shortfall);
       }
    }
 
@@ -899,6 +1020,8 @@ void FXAI_GetBrokerExecutionTraceStressEx(const datetime sample_time,
    stats.latency_points = (1.0 - exact_blend) * lat_general + exact_blend * MathMax(lat_general, lat_exact);
    stats.reject_prob = FXAI_Clamp((1.0 - exact_blend) * rej_general + exact_blend * MathMax(rej_general, rej_exact), 0.0, 1.0);
    stats.partial_fill_prob = FXAI_Clamp((1.0 - exact_blend) * part_general + exact_blend * MathMax(part_general, part_exact), 0.0, 1.0);
+   stats.fill_ratio_mean = FXAI_Clamp(1.0 - stats.partial_fill_prob, 0.0, 1.0);
+   stats.event_burst_penalty = FXAI_Clamp(0.60 * stats.reject_prob + 0.40 * stats.partial_fill_prob, 0.0, 1.0);
 }
 
 void FXAI_GetBrokerExecutionTraceStress(const datetime sample_time,
@@ -906,6 +1029,93 @@ void FXAI_GetBrokerExecutionTraceStress(const datetime sample_time,
                                         FXAIBrokerExecutionStats &stats)
 {
    FXAI_GetBrokerExecutionTraceStressEx(sample_time, _Symbol, horizon_minutes, 0, 0, stats);
+}
+
+void FXAI_GetBrokerExecutionLibraryStressEx(const datetime sample_time,
+                                            const string symbol,
+                                            const int horizon_minutes,
+                                            const int order_side,
+                                            const int order_type_bucket,
+                                            FXAIBrokerExecutionStats &stats)
+{
+   stats.coverage = 0.0;
+   stats.slippage_points = 0.0;
+   stats.latency_points = 0.0;
+   stats.reject_prob = 0.0;
+   stats.partial_fill_prob = 0.0;
+   stats.trace_coverage = 0.0;
+   stats.library_coverage = 0.0;
+   stats.fill_ratio_mean = 1.0;
+   stats.event_burst_penalty = 0.0;
+
+   int target_s = FXAI_DeriveSessionBucket(sample_time);
+   int target_h = FXAI_BrokerExecutionHorizonBucket(horizon_minutes);
+   int target_symbol_bucket = FXAI_BrokerExecutionSymbolBucket(symbol);
+   int target_side = FXAI_BrokerExecutionSideIndex(order_side);
+   int target_type = FXAI_NormalizeBrokerExecutionOrderType(order_type_bucket);
+   if(target_s < 0) target_s = 0;
+   if(target_s >= FXAI_PLUGIN_SESSION_BUCKETS) target_s = FXAI_PLUGIN_SESSION_BUCKETS - 1;
+   if(target_h < 0) target_h = 0;
+   if(target_h >= FXAI_SHARED_TRANSFER_HORIZON_BUCKETS) target_h = FXAI_SHARED_TRANSFER_HORIZON_BUCKETS - 1;
+
+   double w_sum = 0.0;
+   double slip_sum = 0.0;
+   double lat_sum = 0.0;
+   double rej_sum = 0.0;
+   double part_sum = 0.0;
+   double fill_sum = 0.0;
+   double burst_sum = 0.0;
+   for(int side=0; side<FXAI_BROKER_EXEC_SIDE_COUNT; side++)
+   {
+      for(int type=0; type<FXAI_BROKER_EXEC_ORDER_TYPE_COUNT; type++)
+      {
+         int lib_idx = FXAI_BrokerExecutionLibraryIndex(target_symbol_bucket, target_s, target_h, side, type);
+         double obs = g_broker_execution_library_obs[lib_idx];
+         if(obs <= 1e-6)
+            continue;
+         double side_w = (side == target_side ? 1.0 : (target_side == 1 || side == 1 ? 0.72 : 0.48));
+         double type_w = (type == target_type ? 1.0 : (target_type == 0 || type == 0 ? 0.80 : 0.58));
+         double cov_w = FXAI_Clamp(obs / 12.0, 0.08, 1.0);
+         double w = side_w * type_w * cov_w;
+         if(w <= 1e-6)
+            continue;
+
+         double event_mass_sum = 0.0;
+         double reject_event = 0.0;
+         double partial_event = 0.0;
+         for(int ev=0; ev<FXAI_BROKER_EXEC_EVENT_KIND_COUNT; ev++)
+         {
+            double mass = g_broker_execution_library_event_mass[FXAI_BrokerExecutionLibraryEventIndex(target_symbol_bucket, target_s, target_h, side, type, ev)];
+            event_mass_sum += mass;
+            if(ev == 0)
+               reject_event += mass;
+            else if(ev == 1)
+               partial_event += mass;
+         }
+         double burst_penalty = 0.0;
+         if(event_mass_sum > 1e-6)
+            burst_penalty = FXAI_Clamp((reject_event + 0.65 * partial_event) / event_mass_sum, 0.0, 1.0);
+
+         w_sum += w;
+         slip_sum += w * g_broker_execution_library_slippage[lib_idx];
+         lat_sum += w * g_broker_execution_library_latency[lib_idx];
+         rej_sum += w * g_broker_execution_library_reject[lib_idx];
+         part_sum += w * g_broker_execution_library_partial[lib_idx];
+         fill_sum += w * g_broker_execution_library_fill_ratio[lib_idx];
+         burst_sum += w * burst_penalty;
+      }
+   }
+
+   if(w_sum <= 1e-6)
+      return;
+   stats.coverage = FXAI_Clamp(w_sum / 3.5, 0.0, 1.0);
+   stats.library_coverage = stats.coverage;
+   stats.slippage_points = MathMax(slip_sum / w_sum, 0.0);
+   stats.latency_points = MathMax(lat_sum / w_sum, 0.0);
+   stats.reject_prob = FXAI_Clamp(rej_sum / w_sum, 0.0, 1.0);
+   stats.partial_fill_prob = FXAI_Clamp(part_sum / w_sum, 0.0, 1.0);
+   stats.fill_ratio_mean = FXAI_Clamp(fill_sum / w_sum, 0.0, 1.0);
+   stats.event_burst_penalty = FXAI_Clamp(burst_sum / w_sum, 0.0, 1.0);
 }
 
 void FXAI_GetBrokerExecutionStressEx(const datetime sample_time,
@@ -921,10 +1131,27 @@ void FXAI_GetBrokerExecutionStressEx(const datetime sample_time,
    stats.reject_prob = 0.0;
    stats.partial_fill_prob = 0.0;
    stats.trace_coverage = 0.0;
+   stats.library_coverage = 0.0;
+   stats.fill_ratio_mean = 1.0;
+   stats.event_burst_penalty = 0.0;
 
    if(!g_broker_execution_ready)
    {
-      FXAI_GetBrokerExecutionTraceStressEx(sample_time, symbol, horizon_minutes, order_side, order_type_bucket, stats);
+      FXAI_GetBrokerExecutionLibraryStressEx(sample_time, symbol, horizon_minutes, order_side, order_type_bucket, stats);
+      FXAIBrokerExecutionStats trace_only;
+      FXAI_GetBrokerExecutionTraceStressEx(sample_time, symbol, horizon_minutes, order_side, order_type_bucket, trace_only);
+      if(trace_only.coverage > 1e-6)
+      {
+         stats.coverage = trace_only.coverage;
+         stats.slippage_points = trace_only.slippage_points;
+         stats.latency_points = trace_only.latency_points;
+         stats.reject_prob = trace_only.reject_prob;
+         stats.partial_fill_prob = trace_only.partial_fill_prob;
+         stats.trace_coverage = trace_only.trace_coverage;
+         stats.library_coverage = trace_only.library_coverage;
+         stats.fill_ratio_mean = trace_only.fill_ratio_mean;
+         stats.event_burst_penalty = trace_only.event_burst_penalty;
+      }
       return;
    }
 
@@ -944,6 +1171,23 @@ void FXAI_GetBrokerExecutionStressEx(const datetime sample_time,
    stats.latency_points = MathMax(g_broker_execution_latency_ema[s][h], 0.0);
    stats.reject_prob = FXAI_Clamp(g_broker_execution_reject_ema[s][h], 0.0, 1.0);
    stats.partial_fill_prob = FXAI_Clamp(g_broker_execution_partial_ema[s][h], 0.0, 1.0);
+   stats.fill_ratio_mean = FXAI_Clamp(1.0 - stats.partial_fill_prob, 0.0, 1.0);
+   stats.event_burst_penalty = FXAI_Clamp(0.55 * stats.reject_prob + 0.35 * stats.partial_fill_prob, 0.0, 1.0);
+
+   FXAIBrokerExecutionStats library_stats;
+   FXAI_GetBrokerExecutionLibraryStressEx(sample_time, symbol, horizon_minutes, order_side, order_type_bucket, library_stats);
+   if(library_stats.coverage > 1e-6)
+   {
+      double blend = FXAI_Clamp(0.25 + 0.60 * library_stats.coverage, 0.0, 0.82);
+      stats.slippage_points = (1.0 - blend) * stats.slippage_points + blend * MathMax(stats.slippage_points, library_stats.slippage_points);
+      stats.latency_points = (1.0 - blend) * stats.latency_points + blend * MathMax(stats.latency_points, library_stats.latency_points);
+      stats.reject_prob = FXAI_Clamp((1.0 - blend) * stats.reject_prob + blend * MathMax(stats.reject_prob, library_stats.reject_prob), 0.0, 1.0);
+      stats.partial_fill_prob = FXAI_Clamp((1.0 - blend) * stats.partial_fill_prob + blend * MathMax(stats.partial_fill_prob, library_stats.partial_fill_prob), 0.0, 1.0);
+      stats.fill_ratio_mean = FXAI_Clamp((1.0 - blend) * stats.fill_ratio_mean + blend * library_stats.fill_ratio_mean, 0.0, 1.0);
+      stats.event_burst_penalty = FXAI_Clamp((1.0 - blend) * stats.event_burst_penalty + blend * library_stats.event_burst_penalty, 0.0, 1.0);
+      stats.coverage = FXAI_Clamp(0.60 * stats.coverage + 0.40 * library_stats.coverage, 0.0, 1.0);
+      stats.library_coverage = library_stats.coverage;
+   }
 
    FXAIBrokerExecutionStats trace_stats;
    FXAI_GetBrokerExecutionTraceStressEx(sample_time, symbol, horizon_minutes, order_side, order_type_bucket, trace_stats);
@@ -956,6 +1200,8 @@ void FXAI_GetBrokerExecutionStressEx(const datetime sample_time,
       stats.partial_fill_prob = FXAI_Clamp((1.0 - blend) * stats.partial_fill_prob + blend * MathMax(stats.partial_fill_prob, trace_stats.partial_fill_prob), 0.0, 1.0);
       stats.coverage = FXAI_Clamp(0.60 * stats.coverage + 0.40 * trace_stats.coverage, 0.0, 1.0);
       stats.trace_coverage = trace_stats.coverage;
+      stats.fill_ratio_mean = FXAI_Clamp((1.0 - blend) * stats.fill_ratio_mean + blend * trace_stats.fill_ratio_mean, 0.0, 1.0);
+      stats.event_burst_penalty = FXAI_Clamp((1.0 - blend) * stats.event_burst_penalty + blend * trace_stats.event_burst_penalty, 0.0, 1.0);
    }
 }
 
@@ -1249,20 +1495,30 @@ void FXAI_BuildExecutionReplayFrame(const FXAIExecutionProfile &profile,
    if(broker_stats.coverage > 1e-6)
    {
       double slip_ref = MathMax(profile.slippage_points + 0.25, 0.25);
+      double fill_shortfall = FXAI_Clamp(1.0 - broker_stats.fill_ratio_mean, 0.0, 1.0);
+      double burst_penalty = FXAI_Clamp(broker_stats.event_burst_penalty, 0.0, 1.0);
       double broker_slip_mult = 1.0 + 0.35 * broker_stats.coverage *
                                 FXAI_Clamp(broker_stats.slippage_points / slip_ref, 0.0, 3.0);
       frame.slippage_mult *= broker_slip_mult;
-      frame.fill_mult *= 1.0 + 0.20 * broker_stats.coverage * broker_stats.partial_fill_prob;
+      frame.fill_mult *= 1.0 + broker_stats.coverage *
+                         (0.18 * broker_stats.partial_fill_prob + 0.12 * fill_shortfall + 0.08 * burst_penalty);
       frame.latency_add_points += broker_stats.coverage * broker_stats.latency_points;
       frame.reject_prob = FXAI_Clamp((1.0 - 0.55 * broker_stats.coverage) * frame.reject_prob +
-                                     0.55 * broker_stats.coverage * MathMax(frame.reject_prob, broker_stats.reject_prob),
+                                     0.55 * broker_stats.coverage * MathMax(frame.reject_prob,
+                                                                            FXAI_Clamp(broker_stats.reject_prob + 0.20 * burst_penalty,
+                                                                                       0.0,
+                                                                                       1.0)),
                                      0.0,
                                      0.75);
       frame.partial_fill_prob = FXAI_Clamp((1.0 - 0.55 * broker_stats.coverage) * frame.partial_fill_prob +
-                                           0.55 * broker_stats.coverage * MathMax(frame.partial_fill_prob, broker_stats.partial_fill_prob),
+                                           0.55 * broker_stats.coverage * MathMax(frame.partial_fill_prob,
+                                                                                  FXAI_Clamp(broker_stats.partial_fill_prob + 0.35 * fill_shortfall,
+                                                                                             0.0,
+                                                                                             1.0)),
                                            0.0,
                                            0.99);
-      frame.drift_penalty_points += 0.20 * broker_stats.coverage * broker_stats.slippage_points;
+      frame.drift_penalty_points += 0.20 * broker_stats.coverage * broker_stats.slippage_points +
+                                    0.12 * broker_stats.coverage * burst_penalty * MathMax(profile.cost_buffer_points, 1.0);
    }
 
    if((path_flags & FXAI_PATHFLAG_DUAL_HIT) != 0)

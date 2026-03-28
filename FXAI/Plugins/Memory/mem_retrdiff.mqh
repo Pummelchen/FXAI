@@ -315,6 +315,7 @@ public:
    virtual int AIId(void) const { return (int)AI_RETRDIFF; }
    virtual string AIName(void) const { return "mem_retrdiff"; }
    virtual int PersistentStateVersion(void) const { return 10; }
+   virtual bool SupportsNativeParameterSnapshot(void) const { return true; }
    virtual string PersistentStateCoverageTag(void) const { return "native_model"; }
 
 

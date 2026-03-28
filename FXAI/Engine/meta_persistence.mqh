@@ -2,7 +2,7 @@
 #define __FXAI_META_PERSISTENCE_MQH__
 
 #define FXAI_META_ARTIFACT_DIR "FXAI\\Meta"
-#define FXAI_META_ARTIFACT_VERSION 5
+#define FXAI_META_ARTIFACT_VERSION 6
 
 string FXAI_MetaArtifactFile(const string symbol)
 {
@@ -135,8 +135,23 @@ bool FXAI_SaveMetaArtifacts(const string symbol)
       FileWriteDouble(handle, g_model_portfolio_stability[ai]);
       FileWriteDouble(handle, g_model_portfolio_corr_penalty[ai]);
       FileWriteDouble(handle, g_model_portfolio_diversification[ai]);
+      FileWriteDouble(handle, g_model_portfolio_objective[ai]);
       FileWriteInteger(handle, (g_model_portfolio_ready[ai] ? 1 : 0));
       FileWriteInteger(handle, g_model_portfolio_symbol_count[ai]);
+      for(int r=0; r<FXAI_REGIME_COUNT; r++)
+      {
+         for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
+         {
+            for(int h=0; h<FXAI_MAX_HORIZONS; h++)
+            {
+               FileWriteDouble(handle, g_model_plugin_route_value[ai][r][s][h]);
+               FileWriteDouble(handle, g_model_plugin_route_regret[ai][r][s][h]);
+               FileWriteDouble(handle, g_model_plugin_route_counterfactual[ai][r][s][h]);
+               FileWriteInteger(handle, (g_model_plugin_route_ready[ai][r][s][h] ? 1 : 0));
+               FileWriteInteger(handle, g_model_plugin_route_obs[ai][r][s][h]);
+            }
+         }
+      }
    }
 
    FileClose(handle);
@@ -271,8 +286,36 @@ bool FXAI_LoadMetaArtifacts(const string symbol)
          g_model_portfolio_stability[ai] = FileReadDouble(handle);
          g_model_portfolio_corr_penalty[ai] = FileReadDouble(handle);
          g_model_portfolio_diversification[ai] = FileReadDouble(handle);
+         double stored_portfolio_objective = 0.0;
+         if(version >= 6)
+            stored_portfolio_objective = FileReadDouble(handle);
          g_model_portfolio_ready[ai] = (FileReadInteger(handle) != 0);
          g_model_portfolio_symbol_count[ai] = FileReadInteger(handle);
+         if(version >= 6)
+            g_model_portfolio_objective[ai] = stored_portfolio_objective;
+         else
+            g_model_portfolio_objective[ai] = FXAI_ComputePortfolioObjective(g_model_portfolio_mean_edge[ai],
+                                                                             g_model_portfolio_stability[ai],
+                                                                             g_model_portfolio_corr_penalty[ai],
+                                                                             g_model_portfolio_diversification[ai],
+                                                                             g_model_portfolio_symbol_count[ai]);
+         if(version >= 6)
+         {
+            for(int r=0; r<FXAI_REGIME_COUNT; r++)
+            {
+               for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
+               {
+                  for(int h=0; h<FXAI_MAX_HORIZONS; h++)
+                  {
+                     g_model_plugin_route_value[ai][r][s][h] = FileReadDouble(handle);
+                     g_model_plugin_route_regret[ai][r][s][h] = FileReadDouble(handle);
+                     g_model_plugin_route_counterfactual[ai][r][s][h] = FileReadDouble(handle);
+                     g_model_plugin_route_ready[ai][r][s][h] = (FileReadInteger(handle) != 0);
+                     g_model_plugin_route_obs[ai][r][s][h] = FileReadInteger(handle);
+                  }
+               }
+            }
+         }
       }
    }
 

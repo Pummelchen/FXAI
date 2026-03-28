@@ -358,6 +358,7 @@ public:
    virtual int AIId(void) const { return AI_CFX_WORLD; }
    virtual string AIName(void) const { return "wm_cfx"; }
    virtual int PersistentStateVersion(void) const { return 10; }
+   virtual bool SupportsNativeParameterSnapshot(void) const { return true; }
    virtual string PersistentStateCoverageTag(void) const { return "native_model"; }
 
 

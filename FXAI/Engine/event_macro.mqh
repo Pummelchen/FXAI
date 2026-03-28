@@ -2,6 +2,7 @@
 #define __FXAI_EVENT_MACRO_MQH__
 
 #define FXAI_MACRO_EVENT_FILE "FXAI\\Runtime\\macro_events.tsv"
+#define FXAI_MACRO_EVENT_SCHEMA_VERSION 2
 
 struct FXAIMacroEventRecord
 {
@@ -22,16 +23,23 @@ struct FXAIMacroEventRecord
    double surprise_z;
    double relevance_hint;
    double provenance_hash01;
+   double source_trust;
+   double release_hash01;
+   double revision_chain_hash01;
    int event_class;
 };
 
 struct FXAIMacroEventDatasetStats
 {
+   int schema_version;
    int record_count;
    int parse_errors;
    int distinct_symbols;
    int distinct_sources;
    int distinct_event_ids;
+   int distinct_countries;
+   int distinct_currencies;
+   int distinct_revision_chains;
    int family_rates_count;
    int family_inflation_count;
    int family_labor_count;
@@ -44,6 +52,8 @@ struct FXAIMacroEventDatasetStats
    double avg_post_window_min;
    double avg_surprise_z_abs;
    double avg_revision_abs;
+   double avg_source_trust;
+   double avg_currency_relevance;
    double checksum01;
    double provenance_hash01;
    double leakage_guard_score;
@@ -64,11 +74,15 @@ string FXAI_StripUtfBom(const string raw_value)
 
 void FXAI_ClearMacroEventDatasetStats(FXAIMacroEventDatasetStats &stats)
 {
+   stats.schema_version = FXAI_MACRO_EVENT_SCHEMA_VERSION;
    stats.record_count = 0;
    stats.parse_errors = 0;
    stats.distinct_symbols = 0;
    stats.distinct_sources = 0;
    stats.distinct_event_ids = 0;
+   stats.distinct_countries = 0;
+   stats.distinct_currencies = 0;
+   stats.distinct_revision_chains = 0;
    stats.family_rates_count = 0;
    stats.family_inflation_count = 0;
    stats.family_labor_count = 0;
@@ -81,9 +95,11 @@ void FXAI_ClearMacroEventDatasetStats(FXAIMacroEventDatasetStats &stats)
    stats.avg_post_window_min = 0.0;
    stats.avg_surprise_z_abs = 0.0;
    stats.avg_revision_abs = 0.0;
+   stats.avg_source_trust = 0.0;
+   stats.avg_currency_relevance = 0.0;
    stats.checksum01 = 0.0;
    stats.provenance_hash01 = 0.0;
-   stats.leakage_guard_score = 1.0;
+   stats.leakage_guard_score = 0.0;
 }
 
 double FXAI_MacroEventStringChecksum01(const string raw_value)
@@ -261,6 +277,44 @@ double FXAI_MacroSourceTrust(const string raw_source)
    return 0.70;
 }
 
+string FXAI_MacroRevisionChainKey(const string event_id,
+                                  const string currency,
+                                  const string country,
+                                  const int event_class)
+{
+   return FXAI_NormalizeMacroToken(event_id) + "|" +
+          FXAI_NormalizeMacroCurrencyToken(currency) + "|" +
+          FXAI_NormalizeMacroToken(country) + "|" +
+          IntegerToString(event_class);
+}
+
+double FXAI_MacroNormalizedSurpriseZ(const double surprise,
+                                     const double actual_delta,
+                                     const double forecast_delta,
+                                     const double prior_delta,
+                                     const double revision_delta,
+                                     const double importance,
+                                     const int event_class)
+{
+   double realized = surprise +
+                     0.28 * (actual_delta - forecast_delta) +
+                     0.18 * revision_delta +
+                     0.10 * (forecast_delta - prior_delta);
+   double base_scale = 0.35 +
+                       0.22 * MathAbs(forecast_delta) +
+                       0.16 * MathAbs(prior_delta) +
+                       0.12 * MathAbs(revision_delta);
+   base_scale *= (0.85 + 0.30 * FXAI_Clamp(importance, 0.0, 1.0));
+
+   if(event_class == 1) base_scale *= 1.28;
+   else if(event_class == 2) base_scale *= 1.12;
+   else if(event_class == 3) base_scale *= 1.18;
+   else if(event_class == 4) base_scale *= 0.96;
+   else if(event_class == 5) base_scale *= 0.92;
+
+   return FXAI_Clamp(realized / MathMax(base_scale, 0.22), -8.0, 8.0);
+}
+
 double FXAI_MacroCurrencyRelevance(const string raw_currency,
                                    const string raw_symbol)
 {
@@ -415,13 +469,22 @@ bool FXAI_EnsureMacroEventStoreLoaded(void)
             currency = FXAI_MacroCountryToCurrency(country);
       }
       string source = FXAI_NormalizeMacroToken(source_s);
+      double standardized_surprise_z = FXAI_MacroNormalizedSurpriseZ(surprise,
+                                                                     actual_delta,
+                                                                     forecast_delta,
+                                                                     prior_delta,
+                                                                     revision_delta,
+                                                                     importance,
+                                                                     event_class);
       if(MathAbs(surprise_z) <= 1e-9)
-      {
-         double realized_delta = surprise + 0.20 * (actual_delta - forecast_delta) + 0.15 * revision_delta;
-         double scale = 0.50 + 0.40 * MathAbs(forecast_delta) + 0.25 * MathAbs(prior_delta);
-         surprise_z = FXAI_Clamp(realized_delta / MathMax(scale, 0.25), -8.0, 8.0);
-      }
-      double provenance_hash = FXAI_MacroEventStringChecksum01(event_id + "|" + source + "|" + currency);
+         surprise_z = standardized_surprise_z;
+      else
+         surprise_z = FXAI_Clamp(0.55 * surprise_z + 0.45 * standardized_surprise_z, -8.0, 8.0);
+      double source_trust = FXAI_MacroSourceTrust(source);
+      string revision_chain_key = FXAI_MacroRevisionChainKey(event_id, currency, country, event_class);
+      double release_hash = FXAI_MacroEventStringChecksum01(revision_chain_key + "|" + IntegerToString((int)event_time));
+      double revision_chain_hash = FXAI_MacroEventStringChecksum01(revision_chain_key);
+      double provenance_hash = FXAI_MacroEventStringChecksum01(event_id + "|" + source + "|" + currency + "|" + country);
       double relevance_hint = FXAI_MacroCurrencyRelevance(currency, symbol_trim);
 
       int idx = ArraySize(g_macro_events);
@@ -443,6 +506,9 @@ bool FXAI_EnsureMacroEventStoreLoaded(void)
       g_macro_events[idx].surprise_z = surprise_z;
       g_macro_events[idx].relevance_hint = relevance_hint;
       g_macro_events[idx].provenance_hash01 = provenance_hash;
+      g_macro_events[idx].source_trust = source_trust;
+      g_macro_events[idx].release_hash01 = release_hash;
+      g_macro_events[idx].revision_chain_hash01 = revision_chain_hash;
       g_macro_events[idx].event_class = event_class;
 
       g_macro_event_stats.record_count++;
@@ -451,12 +517,17 @@ bool FXAI_EnsureMacroEventStoreLoaded(void)
       g_macro_event_stats.avg_post_window_min += (double)post_window;
       g_macro_event_stats.avg_surprise_z_abs += MathAbs(surprise_z);
       g_macro_event_stats.avg_revision_abs += MathAbs(revision_delta);
+      g_macro_event_stats.avg_source_trust += source_trust;
+      g_macro_event_stats.avg_currency_relevance += FXAI_Clamp(relevance_hint, 0.0, 1.0);
       g_macro_event_stats.checksum01 +=
          0.31 * FXAI_MacroEventStringChecksum01(symbol_trim) +
          0.11 * FXAI_MacroEventStringChecksum01(class_s) +
+         0.09 * release_hash +
+         0.07 * revision_chain_hash +
          0.07 * importance +
-         0.03 * MathAbs(surprise);
-      g_macro_event_stats.provenance_hash01 += provenance_hash;
+         0.03 * MathAbs(surprise) +
+         0.05 * source_trust;
+      g_macro_event_stats.provenance_hash01 += 0.65 * provenance_hash + 0.35 * release_hash;
       if(g_macro_event_stats.first_event_time <= 0 || event_time < g_macro_event_stats.first_event_time)
          g_macro_event_stats.first_event_time = event_time;
       if(g_macro_event_stats.last_event_time <= 0 || event_time > g_macro_event_stats.last_event_time)
@@ -473,6 +544,9 @@ bool FXAI_EnsureMacroEventStoreLoaded(void)
       bool seen_symbol = false;
       bool seen_source = false;
       bool seen_event_id = false;
+      bool seen_country = false;
+      bool seen_currency = false;
+      bool seen_revision_chain = false;
       for(int j=0; j<idx; j++)
       {
          if(g_macro_events[j].symbol == symbol_trim)
@@ -481,6 +555,12 @@ bool FXAI_EnsureMacroEventStoreLoaded(void)
             seen_source = true;
          if(g_macro_events[j].event_id == event_id)
             seen_event_id = true;
+         if(g_macro_events[j].country == country)
+            seen_country = true;
+         if(g_macro_events[j].currency == currency)
+            seen_currency = true;
+         if(MathAbs(g_macro_events[j].revision_chain_hash01 - revision_chain_hash) <= 1e-12)
+            seen_revision_chain = true;
       }
       if(!seen_symbol)
          g_macro_event_stats.distinct_symbols++;
@@ -488,6 +568,12 @@ bool FXAI_EnsureMacroEventStoreLoaded(void)
          g_macro_event_stats.distinct_sources++;
       if(!seen_event_id)
          g_macro_event_stats.distinct_event_ids++;
+      if(!seen_country && StringLen(country) > 0)
+         g_macro_event_stats.distinct_countries++;
+      if(!seen_currency && StringLen(currency) > 0)
+         g_macro_event_stats.distinct_currencies++;
+      if(!seen_revision_chain)
+         g_macro_event_stats.distinct_revision_chains++;
    }
 
    FileClose(handle);
@@ -500,19 +586,39 @@ bool FXAI_EnsureMacroEventStoreLoaded(void)
       g_macro_event_stats.avg_post_window_min /= denom;
       g_macro_event_stats.avg_surprise_z_abs /= denom;
       g_macro_event_stats.avg_revision_abs /= denom;
+      g_macro_event_stats.avg_source_trust /= denom;
+      g_macro_event_stats.avg_currency_relevance /= denom;
       double frac = g_macro_event_stats.checksum01 / 8192.0;
       g_macro_event_stats.checksum01 = frac - MathFloor(frac);
       double prov_frac = g_macro_event_stats.provenance_hash01 / denom;
       g_macro_event_stats.provenance_hash01 = prov_frac - MathFloor(prov_frac);
+
+      double parse_ratio = (double)g_macro_event_stats.parse_errors /
+                           (double)MathMax(g_macro_event_stats.record_count + g_macro_event_stats.parse_errors, 1);
+      double event_cov = FXAI_Clamp((double)g_macro_event_stats.distinct_event_ids /
+                                    (double)MathMax(g_macro_event_stats.record_count, 1), 0.0, 1.0);
+      double chain_cov = FXAI_Clamp((double)g_macro_event_stats.distinct_revision_chains /
+                                    (double)MathMax(g_macro_event_stats.distinct_event_ids, 1), 0.0, 1.0);
+      double trust_score = FXAI_Clamp(g_macro_event_stats.avg_source_trust, 0.0, 1.0);
+      double relevance_score = FXAI_Clamp(g_macro_event_stats.avg_currency_relevance, 0.0, 1.0);
+      double diversity_score = FXAI_Clamp((double)(g_macro_event_stats.distinct_currencies +
+                                                   g_macro_event_stats.distinct_countries) / 12.0,
+                                          0.0,
+                                          1.0);
+      double score = 1.0;
+      score -= 0.55 * FXAI_Clamp(parse_ratio, 0.0, 0.60);
+      score *= FXAI_Clamp(0.55 + 0.45 * trust_score, 0.0, 1.0);
+      score *= FXAI_Clamp(0.68 + 0.32 * relevance_score, 0.0, 1.0);
+      score *= FXAI_Clamp(0.72 + 0.28 * chain_cov, 0.0, 1.0);
+      score *= FXAI_Clamp(0.76 + 0.24 * MathMax(event_cov, diversity_score), 0.0, 1.0);
+      if(g_macro_event_stats.schema_version < FXAI_MACRO_EVENT_SCHEMA_VERSION)
+         score *= 0.0;
+      g_macro_event_stats.leakage_guard_score = FXAI_Clamp(score, 0.0, 1.0);
    }
    else
    {
       FXAI_ClearMacroEventDatasetStats(g_macro_event_stats);
    }
-   if(g_macro_event_stats.parse_errors > 0 && g_macro_event_stats.record_count > 0)
-      g_macro_event_stats.leakage_guard_score = 0.85;
-   else if(g_macro_event_stats.record_count > 0)
-      g_macro_event_stats.leakage_guard_score = 1.0;
    return g_macro_events_available;
 }
 
@@ -533,7 +639,14 @@ bool FXAI_MacroEventLeakageSafe(void)
 {
    FXAIMacroEventDatasetStats stats;
    FXAI_GetMacroEventDatasetStats(stats);
-   return (stats.record_count > 0 && stats.leakage_guard_score >= 0.999);
+   return (stats.record_count > 0 &&
+           stats.schema_version >= FXAI_MACRO_EVENT_SCHEMA_VERSION &&
+           stats.parse_errors == 0 &&
+           stats.distinct_event_ids > 0 &&
+           stats.distinct_revision_chains > 0 &&
+           stats.distinct_currencies > 0 &&
+           stats.avg_source_trust >= 0.60 &&
+           stats.leakage_guard_score >= 0.78);
 }
 
 double FXAI_MacroEventWindowScoreRates(const string symbol,
@@ -662,7 +775,9 @@ void FXAI_GetMacroEventFeatures(const string symbol,
          proximity = 1.0 - (dt_minutes / (double)MathMax(ev.post_window_min, 1));
       proximity = FXAI_Clamp(proximity, 0.0, 1.0);
 
-      double src_trust = FXAI_MacroSourceTrust(ev.source);
+      double src_trust = FXAI_Clamp(ev.source_trust, 0.0, 1.0);
+      if(src_trust <= 1e-6)
+         src_trust = FXAI_MacroSourceTrust(ev.source);
       double relevance = MathMax(FXAI_MacroCurrencyRelevance(ev.currency, symbol), FXAI_Clamp(ev.relevance_hint, 0.0, 1.0));
       if(relevance <= 1e-6 && StringLen(ev.currency) <= 0 && StringLen(ev.symbol) <= 0)
          relevance = 1.0;
