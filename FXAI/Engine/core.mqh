@@ -32,10 +32,12 @@
 #define FXAI_SHARED_TRANSFER_FEATURES 28
 #define FXAI_SHARED_TRANSFER_LATENT 12
 #define FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS 16
+#define FXAI_SHARED_TRANSFER_BAR_FEATURES 12
 #define FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS 8
 #define FXAI_SHARED_TRANSFER_HORIZON_BUCKETS 8
 #define FXAI_EXEC_TRACE_BARS 12
 #define FXAI_BROKER_EXEC_TRACE_CAP 192
+#define FXAI_BROKER_EXEC_SYMBOL_BUCKETS 12
 #define FXAI_API_VERSION_V4 4
 #define FXAI_MAX_SEQUENCE_BARS 96
 
@@ -396,10 +398,15 @@ int    g_broker_execution_trace_size = 0;
 datetime g_broker_execution_trace_time[FXAI_BROKER_EXEC_TRACE_CAP];
 int    g_broker_execution_trace_session[FXAI_BROKER_EXEC_TRACE_CAP];
 int    g_broker_execution_trace_horizon[FXAI_BROKER_EXEC_TRACE_CAP];
+int    g_broker_execution_trace_symbol_bucket[FXAI_BROKER_EXEC_TRACE_CAP];
+int    g_broker_execution_trace_side[FXAI_BROKER_EXEC_TRACE_CAP];
+int    g_broker_execution_trace_order_type[FXAI_BROKER_EXEC_TRACE_CAP];
+int    g_broker_execution_trace_event_kind[FXAI_BROKER_EXEC_TRACE_CAP];
 double g_broker_execution_trace_slippage[FXAI_BROKER_EXEC_TRACE_CAP];
 double g_broker_execution_trace_latency[FXAI_BROKER_EXEC_TRACE_CAP];
 double g_broker_execution_trace_reject[FXAI_BROKER_EXEC_TRACE_CAP];
 double g_broker_execution_trace_partial[FXAI_BROKER_EXEC_TRACE_CAP];
+double g_broker_execution_trace_fill_ratio[FXAI_BROKER_EXEC_TRACE_CAP];
 
 struct FXAIAIModelOutputV4
 {
@@ -608,6 +615,33 @@ int FXAI_BrokerExecutionHorizonBucket(const int horizon_minutes)
    return FXAI_SHARED_TRANSFER_HORIZON_BUCKETS - 1;
 }
 
+int FXAI_BrokerExecutionSymbolBucket(const string raw_symbol)
+{
+   string symbol = raw_symbol;
+   if(StringLen(symbol) <= 0)
+      symbol = _Symbol;
+   double h = FXAI_SymbolHash01(symbol);
+   int bucket = (int)MathFloor(FXAI_Clamp(h, 0.0, 1.0 - 1e-9) * (double)FXAI_BROKER_EXEC_SYMBOL_BUCKETS);
+   if(bucket < 0) bucket = 0;
+   if(bucket >= FXAI_BROKER_EXEC_SYMBOL_BUCKETS) bucket = FXAI_BROKER_EXEC_SYMBOL_BUCKETS - 1;
+   return bucket;
+}
+
+int FXAI_NormalizeBrokerExecutionSide(const int order_side)
+{
+   if(order_side > 0) return 1;
+   if(order_side < 0) return -1;
+   return 0;
+}
+
+int FXAI_NormalizeBrokerExecutionOrderType(const int order_type_bucket)
+{
+   int t = order_type_bucket;
+   if(t < 0) t = 0;
+   if(t > 4) t = 4;
+   return t;
+}
+
 void FXAI_ResetBrokerExecutionReplayStats(void)
 {
    g_broker_execution_ready = false;
@@ -629,45 +663,66 @@ void FXAI_ResetBrokerExecutionReplayStats(void)
       g_broker_execution_trace_time[i] = 0;
       g_broker_execution_trace_session[i] = 0;
       g_broker_execution_trace_horizon[i] = 0;
+      g_broker_execution_trace_symbol_bucket[i] = 0;
+      g_broker_execution_trace_side[i] = 0;
+      g_broker_execution_trace_order_type[i] = 0;
+      g_broker_execution_trace_event_kind[i] = 0;
       g_broker_execution_trace_slippage[i] = 0.0;
       g_broker_execution_trace_latency[i] = 0.0;
       g_broker_execution_trace_reject[i] = 0.0;
       g_broker_execution_trace_partial[i] = 0.0;
+      g_broker_execution_trace_fill_ratio[i] = 0.0;
    }
 }
 
 void FXAI_AppendBrokerExecutionTrace(const datetime sample_time,
+                                     const int symbol_bucket,
                                      const int session_bucket,
                                      const int horizon_bucket,
+                                     const int order_side,
+                                     const int order_type_bucket,
+                                     const int event_kind,
                                      const double slippage_points,
                                      const double latency_points,
                                      const double reject_prob,
-                                     const double partial_fill_prob)
+                                     const double partial_fill_prob,
+                                     const double fill_ratio)
 {
    int idx = g_broker_execution_trace_head;
    if(idx < 0 || idx >= FXAI_BROKER_EXEC_TRACE_CAP)
       idx = 0;
    g_broker_execution_trace_time[idx] = sample_time;
+    g_broker_execution_trace_symbol_bucket[idx] = symbol_bucket;
    g_broker_execution_trace_session[idx] = session_bucket;
    g_broker_execution_trace_horizon[idx] = horizon_bucket;
+   g_broker_execution_trace_side[idx] = FXAI_NormalizeBrokerExecutionSide(order_side);
+   g_broker_execution_trace_order_type[idx] = FXAI_NormalizeBrokerExecutionOrderType(order_type_bucket);
+   g_broker_execution_trace_event_kind[idx] = event_kind;
    g_broker_execution_trace_slippage[idx] = MathMax(slippage_points, 0.0);
    g_broker_execution_trace_latency[idx] = MathMax(latency_points, 0.0);
    g_broker_execution_trace_reject[idx] = FXAI_Clamp(reject_prob, 0.0, 1.0);
    g_broker_execution_trace_partial[idx] = FXAI_Clamp(partial_fill_prob, 0.0, 1.0);
+   g_broker_execution_trace_fill_ratio[idx] = FXAI_Clamp(fill_ratio, 0.0, 1.0);
    g_broker_execution_trace_head = (idx + 1) % FXAI_BROKER_EXEC_TRACE_CAP;
    if(g_broker_execution_trace_size < FXAI_BROKER_EXEC_TRACE_CAP)
       g_broker_execution_trace_size++;
 }
 
-void FXAI_RecordBrokerExecutionEvent(const datetime sample_time,
-                                     const int horizon_minutes,
-                                     const double slippage_points,
-                                     const double latency_points,
-                                     const bool rejected,
-                                     const bool partial_fill)
+void FXAI_RecordBrokerExecutionEventEx(const datetime sample_time,
+                                       const string symbol,
+                                       const int horizon_minutes,
+                                       const int order_side,
+                                       const int order_type_bucket,
+                                       const int event_kind,
+                                       const double slippage_points,
+                                       const double latency_points,
+                                       const bool rejected,
+                                       const bool partial_fill,
+                                       const double fill_ratio)
 {
    int s = FXAI_DeriveSessionBucket(sample_time);
    int h = FXAI_BrokerExecutionHorizonBucket(horizon_minutes);
+   int symbol_bucket = FXAI_BrokerExecutionSymbolBucket(symbol);
    if(s < 0) s = 0;
    if(s >= FXAI_PLUGIN_SESSION_BUCKETS) s = FXAI_PLUGIN_SESSION_BUCKETS - 1;
    if(h < 0) h = 0;
@@ -700,13 +755,47 @@ void FXAI_RecordBrokerExecutionEvent(const datetime sample_time,
    }
 
    g_broker_execution_obs[s][h] = MathMin(obs + 1.0, 50000.0);
-   FXAI_AppendBrokerExecutionTrace(sample_time, s, h, slip, lat, rej, part);
+   FXAI_AppendBrokerExecutionTrace(sample_time,
+                                   symbol_bucket,
+                                   s,
+                                   h,
+                                   order_side,
+                                   order_type_bucket,
+                                   event_kind,
+                                   slip,
+                                   lat,
+                                   rej,
+                                   part,
+                                   fill_ratio);
    g_broker_execution_ready = true;
 }
 
-void FXAI_GetBrokerExecutionTraceStress(const datetime sample_time,
-                                        const int horizon_minutes,
-                                        FXAIBrokerExecutionStats &stats)
+void FXAI_RecordBrokerExecutionEvent(const datetime sample_time,
+                                     const int horizon_minutes,
+                                     const double slippage_points,
+                                     const double latency_points,
+                                     const bool rejected,
+                                     const bool partial_fill)
+{
+   FXAI_RecordBrokerExecutionEventEx(sample_time,
+                                     _Symbol,
+                                     horizon_minutes,
+                                     0,
+                                     0,
+                                     (rejected ? 0 : (partial_fill ? 1 : 2)),
+                                     slippage_points,
+                                     latency_points,
+                                     rejected,
+                                     partial_fill,
+                                     (partial_fill ? 0.5 : (rejected ? 0.0 : 1.0)));
+}
+
+void FXAI_GetBrokerExecutionTraceStressEx(const datetime sample_time,
+                                          const string symbol,
+                                          const int horizon_minutes,
+                                          const int order_side,
+                                          const int order_type_bucket,
+                                          FXAIBrokerExecutionStats &stats)
 {
    stats.coverage = 0.0;
    stats.slippage_points = 0.0;
@@ -720,6 +809,9 @@ void FXAI_GetBrokerExecutionTraceStress(const datetime sample_time,
 
    int target_s = FXAI_DeriveSessionBucket(sample_time);
    int target_h = FXAI_BrokerExecutionHorizonBucket(horizon_minutes);
+   int target_symbol_bucket = FXAI_BrokerExecutionSymbolBucket(symbol);
+   int target_side = FXAI_NormalizeBrokerExecutionSide(order_side);
+   int target_type = FXAI_NormalizeBrokerExecutionOrderType(order_type_bucket);
    if(target_s < 0) target_s = 0;
    if(target_s >= FXAI_PLUGIN_SESSION_BUCKETS) target_s = FXAI_PLUGIN_SESSION_BUCKETS - 1;
    if(target_h < 0) target_h = 0;
@@ -730,7 +822,12 @@ void FXAI_GetBrokerExecutionTraceStress(const datetime sample_time,
    double lat_sum = 0.0;
    double rej_sum = 0.0;
    double part_sum = 0.0;
-   int lookback = MathMin(g_broker_execution_trace_size, 96);
+   double exact_w_sum = 0.0;
+   double exact_slip_sum = 0.0;
+   double exact_lat_sum = 0.0;
+   double exact_rej_sum = 0.0;
+   double exact_part_sum = 0.0;
+   int lookback = MathMin(g_broker_execution_trace_size, FXAI_BROKER_EXEC_TRACE_CAP);
    for(int n=0; n<lookback; n++)
    {
       int idx = g_broker_execution_trace_head - 1 - n;
@@ -741,6 +838,11 @@ void FXAI_GetBrokerExecutionTraceStress(const datetime sample_time,
       double sess_w = (g_broker_execution_trace_session[idx] == target_s ? 1.0 : 0.35);
       int h_delta = MathAbs(g_broker_execution_trace_horizon[idx] - target_h);
       double horizon_w = 1.0 / (1.0 + 0.75 * (double)h_delta);
+      double symbol_w = (g_broker_execution_trace_symbol_bucket[idx] == target_symbol_bucket ? 1.0 : 0.55);
+      int trace_side = FXAI_NormalizeBrokerExecutionSide(g_broker_execution_trace_side[idx]);
+      double side_w = (target_side == 0 || trace_side == 0 ? 0.85 : (trace_side == target_side ? 1.0 : 0.55));
+      int trace_type = FXAI_NormalizeBrokerExecutionOrderType(g_broker_execution_trace_order_type[idx]);
+      double type_w = (target_type == 0 || trace_type == 0 ? 0.88 : (trace_type == target_type ? 1.0 : 0.65));
       double time_w = 1.0;
       datetime ev_time = g_broker_execution_trace_time[idx];
       if(sample_time > 0 && ev_time > 0)
@@ -748,7 +850,11 @@ void FXAI_GetBrokerExecutionTraceStress(const datetime sample_time,
          double delta_hours = MathAbs((double)(sample_time - ev_time)) / 3600.0;
          time_w = 1.0 / (1.0 + delta_hours / 72.0);
       }
-      double w = age_w * sess_w * horizon_w * time_w;
+      double severity = 1.0 +
+                        0.20 * g_broker_execution_trace_reject[idx] +
+                        0.15 * g_broker_execution_trace_partial[idx] +
+                        0.10 * FXAI_Clamp(g_broker_execution_trace_latency[idx], 0.0, 4.0);
+      double w = age_w * sess_w * horizon_w * symbol_w * time_w * severity;
       if(w <= 1e-6)
          continue;
 
@@ -756,23 +862,58 @@ void FXAI_GetBrokerExecutionTraceStress(const datetime sample_time,
       slip_sum += w * g_broker_execution_trace_slippage[idx];
       lat_sum += w * g_broker_execution_trace_latency[idx];
       rej_sum += w * g_broker_execution_trace_reject[idx];
-      part_sum += w * g_broker_execution_trace_partial[idx];
+      part_sum += w * MathMax(g_broker_execution_trace_partial[idx], g_broker_execution_trace_fill_ratio[idx]);
+
+      double exact_w = w * side_w * type_w;
+      if(exact_w > 1e-6)
+      {
+         exact_w_sum += exact_w;
+         exact_slip_sum += exact_w * g_broker_execution_trace_slippage[idx];
+         exact_lat_sum += exact_w * g_broker_execution_trace_latency[idx];
+         exact_rej_sum += exact_w * g_broker_execution_trace_reject[idx];
+         exact_part_sum += exact_w * MathMax(g_broker_execution_trace_partial[idx], g_broker_execution_trace_fill_ratio[idx]);
+      }
    }
 
    if(w_sum <= 1e-6)
       return;
 
-   stats.coverage = FXAI_Clamp(w_sum / 14.0, 0.0, 1.0);
-   stats.trace_coverage = stats.coverage;
-   stats.slippage_points = MathMax(slip_sum / w_sum, 0.0);
-   stats.latency_points = MathMax(lat_sum / w_sum, 0.0);
-   stats.reject_prob = FXAI_Clamp(rej_sum / w_sum, 0.0, 1.0);
-   stats.partial_fill_prob = FXAI_Clamp(part_sum / w_sum, 0.0, 1.0);
+   double general_cov = FXAI_Clamp(w_sum / 16.0, 0.0, 1.0);
+   double exact_cov = FXAI_Clamp(exact_w_sum / 10.0, 0.0, 1.0);
+   double exact_blend = FXAI_Clamp(0.20 + 0.70 * exact_cov, 0.0, 0.85);
+   if(exact_w_sum <= 1e-6)
+      exact_blend = 0.0;
+
+   double slip_general = MathMax(slip_sum / w_sum, 0.0);
+   double lat_general = MathMax(lat_sum / w_sum, 0.0);
+   double rej_general = FXAI_Clamp(rej_sum / w_sum, 0.0, 1.0);
+   double part_general = FXAI_Clamp(part_sum / w_sum, 0.0, 1.0);
+   double slip_exact = (exact_w_sum > 1e-6 ? MathMax(exact_slip_sum / exact_w_sum, 0.0) : slip_general);
+   double lat_exact = (exact_w_sum > 1e-6 ? MathMax(exact_lat_sum / exact_w_sum, 0.0) : lat_general);
+   double rej_exact = (exact_w_sum > 1e-6 ? FXAI_Clamp(exact_rej_sum / exact_w_sum, 0.0, 1.0) : rej_general);
+   double part_exact = (exact_w_sum > 1e-6 ? FXAI_Clamp(exact_part_sum / exact_w_sum, 0.0, 1.0) : part_general);
+
+   stats.coverage = FXAI_Clamp(0.55 * general_cov + 0.45 * exact_cov, 0.0, 1.0);
+   stats.trace_coverage = exact_cov;
+   stats.slippage_points = (1.0 - exact_blend) * slip_general + exact_blend * MathMax(slip_general, slip_exact);
+   stats.latency_points = (1.0 - exact_blend) * lat_general + exact_blend * MathMax(lat_general, lat_exact);
+   stats.reject_prob = FXAI_Clamp((1.0 - exact_blend) * rej_general + exact_blend * MathMax(rej_general, rej_exact), 0.0, 1.0);
+   stats.partial_fill_prob = FXAI_Clamp((1.0 - exact_blend) * part_general + exact_blend * MathMax(part_general, part_exact), 0.0, 1.0);
 }
 
-void FXAI_GetBrokerExecutionStress(const datetime sample_time,
-                                   const int horizon_minutes,
-                                   FXAIBrokerExecutionStats &stats)
+void FXAI_GetBrokerExecutionTraceStress(const datetime sample_time,
+                                        const int horizon_minutes,
+                                        FXAIBrokerExecutionStats &stats)
+{
+   FXAI_GetBrokerExecutionTraceStressEx(sample_time, _Symbol, horizon_minutes, 0, 0, stats);
+}
+
+void FXAI_GetBrokerExecutionStressEx(const datetime sample_time,
+                                     const string symbol,
+                                     const int horizon_minutes,
+                                     const int order_side,
+                                     const int order_type_bucket,
+                                     FXAIBrokerExecutionStats &stats)
 {
    stats.coverage = 0.0;
    stats.slippage_points = 0.0;
@@ -783,7 +924,7 @@ void FXAI_GetBrokerExecutionStress(const datetime sample_time,
 
    if(!g_broker_execution_ready)
    {
-      FXAI_GetBrokerExecutionTraceStress(sample_time, horizon_minutes, stats);
+      FXAI_GetBrokerExecutionTraceStressEx(sample_time, symbol, horizon_minutes, order_side, order_type_bucket, stats);
       return;
    }
 
@@ -805,7 +946,7 @@ void FXAI_GetBrokerExecutionStress(const datetime sample_time,
    stats.partial_fill_prob = FXAI_Clamp(g_broker_execution_partial_ema[s][h], 0.0, 1.0);
 
    FXAIBrokerExecutionStats trace_stats;
-   FXAI_GetBrokerExecutionTraceStress(sample_time, horizon_minutes, trace_stats);
+   FXAI_GetBrokerExecutionTraceStressEx(sample_time, symbol, horizon_minutes, order_side, order_type_bucket, trace_stats);
    if(trace_stats.coverage > 1e-6)
    {
       double blend = FXAI_Clamp(0.30 + 0.50 * trace_stats.coverage, 0.0, 0.80);
@@ -816,6 +957,13 @@ void FXAI_GetBrokerExecutionStress(const datetime sample_time,
       stats.coverage = FXAI_Clamp(0.60 * stats.coverage + 0.40 * trace_stats.coverage, 0.0, 1.0);
       stats.trace_coverage = trace_stats.coverage;
    }
+}
+
+void FXAI_GetBrokerExecutionStress(const datetime sample_time,
+                                   const int horizon_minutes,
+                                   FXAIBrokerExecutionStats &stats)
+{
+   FXAI_GetBrokerExecutionStressEx(sample_time, _Symbol, horizon_minutes, 0, 0, stats);
 }
 
 double FXAI_Tanh(const double z)

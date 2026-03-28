@@ -693,7 +693,7 @@ public:
 
    virtual int AIId(void) const { return (int)AI_QUANTILE; }
    virtual string AIName(void) const { return "dist_quantile"; }
-   virtual int PersistentStateVersion(void) const { return 9; }
+   virtual int PersistentStateVersion(void) const { return 10; }
    virtual string PersistentStateCoverageTag(void) const { return "native_model"; }
 
 

@@ -132,15 +132,33 @@ int FXAI_ParseMacroEventClass(const string raw_value)
    int parsed = (int)StringToInteger(v);
    if(IntegerToString(parsed) == v)
       return parsed;
-   if(lower == "rates" || lower == "central_bank" || lower == "cb")
+   if(lower == "rates" || lower == "central_bank" || lower == "cb" ||
+      StringFind(lower, "rate") >= 0 || StringFind(lower, "yield") >= 0 ||
+      StringFind(lower, "fomc") >= 0 || StringFind(lower, "ecb") >= 0 ||
+      StringFind(lower, "boe") >= 0 || StringFind(lower, "boj") >= 0 ||
+      StringFind(lower, "rba") >= 0 || StringFind(lower, "rbnz") >= 0 ||
+      StringFind(lower, "boc") >= 0 || StringFind(lower, "snb") >= 0)
       return 1;
-   if(lower == "inflation" || lower == "cpi" || lower == "ppi")
+   if(lower == "inflation" || lower == "cpi" || lower == "ppi" ||
+      StringFind(lower, "pce") >= 0 || StringFind(lower, "hicp") >= 0 ||
+      StringFind(lower, "price") >= 0 || StringFind(lower, "deflator") >= 0)
       return 2;
-   if(lower == "labor" || lower == "employment" || lower == "nfp")
+   if(lower == "labor" || lower == "employment" || lower == "nfp" ||
+      StringFind(lower, "payroll") >= 0 || StringFind(lower, "unemployment") >= 0 ||
+      StringFind(lower, "jobless") >= 0 || StringFind(lower, "wage") >= 0 ||
+      StringFind(lower, "earnings") >= 0)
       return 3;
-   if(lower == "growth" || lower == "gdp" || lower == "pmi")
+   if(lower == "growth" || lower == "gdp" || lower == "pmi" ||
+      StringFind(lower, "manufacturing") >= 0 || StringFind(lower, "services") >= 0 ||
+      StringFind(lower, "retail") >= 0 || StringFind(lower, "industrial") >= 0 ||
+      StringFind(lower, "production") >= 0 || StringFind(lower, "consumer") >= 0 ||
+      StringFind(lower, "confidence") >= 0 || StringFind(lower, "sentiment") >= 0 ||
+      StringFind(lower, "housing") >= 0)
       return 4;
-   if(lower == "trade" || lower == "balance")
+   if(lower == "trade" || lower == "balance" ||
+      StringFind(lower, "current account") >= 0 ||
+      StringFind(lower, "export") >= 0 ||
+      StringFind(lower, "import") >= 0)
       return 5;
    return 0;
 }
@@ -174,7 +192,47 @@ string FXAI_MacroCountryToCurrency(const string raw_country)
    if(c == "NZ" || c == "NEW ZEALAND") return "NZD";
    if(c == "CA" || c == "CANADA") return "CAD";
    if(c == "CH" || c == "SWITZERLAND") return "CHF";
+   if(c == "CN" || c == "CHINA") return "CNY";
+   if(c == "SE" || c == "SWEDEN") return "SEK";
+   if(c == "NO" || c == "NORWAY") return "NOK";
+   if(c == "DK" || c == "DENMARK") return "DKK";
+   if(c == "SG" || c == "SINGAPORE") return "SGD";
+   if(c == "HK" || c == "HONG KONG") return "HKD";
+   if(c == "MX" || c == "MEXICO") return "MXN";
+   if(c == "ZA" || c == "SOUTH AFRICA") return "ZAR";
    return "";
+}
+
+int FXAI_MacroCurrencyBlock(const string raw_currency)
+{
+   string c = FXAI_NormalizeMacroCurrencyToken(raw_currency);
+   if(c == "EUR" || c == "CHF" || c == "GBP" || c == "SEK" || c == "NOK" || c == "DKK")
+      return 1;
+   if(c == "AUD" || c == "NZD" || c == "CAD")
+      return 2;
+   if(c == "JPY" || c == "CNY" || c == "HKD" || c == "SGD" || c == "KRW")
+      return 3;
+   if(c == "USD")
+      return 4;
+   return 0;
+}
+
+string FXAI_MacroSymbolBaseCurrency(const string raw_symbol)
+{
+   string symbol = FXAI_NormalizeMacroToken(raw_symbol);
+   StringToUpper(symbol);
+   if(StringLen(symbol) < 6)
+      return "";
+   return StringSubstr(symbol, 0, 3);
+}
+
+string FXAI_MacroSymbolQuoteCurrency(const string raw_symbol)
+{
+   string symbol = FXAI_NormalizeMacroToken(raw_symbol);
+   StringToUpper(symbol);
+   if(StringLen(symbol) < 6)
+      return "";
+   return StringSubstr(symbol, 3, 3);
 }
 
 double FXAI_MacroSourceTrust(const string raw_source)
@@ -187,9 +245,18 @@ double FXAI_MacroSourceTrust(const string raw_source)
    if(StringFind(lower, "official") >= 0 ||
       StringFind(lower, "central bank") >= 0 ||
       StringFind(lower, "statistics") >= 0 ||
-      StringFind(lower, "bureau") >= 0)
+      StringFind(lower, "bureau") >= 0 ||
+      StringFind(lower, "ministry") >= 0 ||
+      StringFind(lower, "government") >= 0)
       return 1.0;
-   if(StringFind(lower, "calendar") >= 0 || StringFind(lower, "consensus") >= 0)
+   if(StringFind(lower, "reuters") >= 0 ||
+      StringFind(lower, "bloomberg") >= 0 ||
+      StringFind(lower, "econoday") >= 0)
+      return 0.92;
+   if(StringFind(lower, "calendar") >= 0 ||
+      StringFind(lower, "consensus") >= 0 ||
+      StringFind(lower, "forexfactory") >= 0 ||
+      StringFind(lower, "investing") >= 0)
       return 0.85;
    return 0.70;
 }
@@ -198,12 +265,21 @@ double FXAI_MacroCurrencyRelevance(const string raw_currency,
                                    const string raw_symbol)
 {
    string currency = FXAI_NormalizeMacroCurrencyToken(raw_currency);
-   string symbol = FXAI_NormalizeMacroToken(raw_symbol);
-   StringToUpper(symbol);
+   string base = FXAI_MacroSymbolBaseCurrency(raw_symbol);
+   string quote = FXAI_MacroSymbolQuoteCurrency(raw_symbol);
    if(StringLen(currency) <= 0)
       return 0.0;
-   if(StringFind(symbol, currency) >= 0)
+   if(currency == base || currency == quote)
       return 1.0;
+   int ev_block = FXAI_MacroCurrencyBlock(currency);
+   int base_block = FXAI_MacroCurrencyBlock(base);
+   int quote_block = FXAI_MacroCurrencyBlock(quote);
+   if(ev_block > 0 && (ev_block == base_block || ev_block == quote_block))
+      return 0.55;
+   if(currency == "USD" && (base == "CAD" || quote == "CAD" || base == "MXN" || quote == "MXN"))
+      return 0.45;
+   if(currency == "CNY" && (base == "AUD" || quote == "AUD" || base == "NZD" || quote == "NZD"))
+      return 0.40;
    return 0.0;
 }
 
@@ -242,7 +318,7 @@ bool FXAI_MacroEventAffectsSymbol(const string raw_event_symbol,
    string currency = FXAI_NormalizeMacroCurrencyToken(raw_currency);
    if(StringLen(currency) <= 0)
       currency = FXAI_MacroCountryToCurrency(raw_country);
-   if(StringLen(currency) == 3 && StringFind(symbol, currency) >= 0)
+   if(StringLen(currency) == 3 && FXAI_MacroCurrencyRelevance(currency, symbol) > 0.35)
       return true;
    return false;
 }

@@ -1705,6 +1705,8 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
                                     best_sell_share,
                                     avg_ctx_trust,
                                     feat);
+            double stack_pred_probs[3];
+            FXAI_StackPredict(regime_id, H, feat, stack_pred_probs);
             FXAI_StackUpdate(regime_id, samples[i].label_class, feat, samples[i].sample_weight);
             double realized_edge = 0.0;
             if(samples[i].label_class == (int)FXAI_LABEL_BUY)
@@ -1713,6 +1715,14 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
                realized_edge = -samples[i].move_points - samples[i].min_move_points;
             else
                realized_edge = -MathMax(MathAbs(samples[i].move_points) - samples[i].min_move_points, 0.0);
+            FXAI_StackRouterObserve(regime_id,
+                                    H,
+                                    samples[i].label_class,
+                                    realized_edge,
+                                    samples[i].quality_score,
+                                    feat,
+                                    stack_pred_probs,
+                                    samples[i].sample_weight);
             bool trade_target = (samples[i].label_class != (int)FXAI_LABEL_SKIP &&
                                  realized_edge > 0.0 &&
                                  samples[i].quality_score > 0.70 &&

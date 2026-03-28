@@ -238,7 +238,7 @@ public:
 
    virtual int AIId(void) const { return (int)AI_GRAPHWM; }
    virtual string AIName(void) const { return "wm_graph"; }
-   virtual int PersistentStateVersion(void) const { return 9; }
+   virtual int PersistentStateVersion(void) const { return 10; }
    virtual string PersistentStateCoverageTag(void) const { return "native_model"; }
 
 

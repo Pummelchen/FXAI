@@ -33,6 +33,134 @@ double FXAI_StackRoutingObjective(const double &feat[])
                      1.0);
 }
 
+double FXAI_StackRouterContextTrust(const double &feat[])
+{
+   return FXAI_Clamp(0.18 +
+                     0.22 * FXAI_GetArrayValue(feat, 68, 0.0) +
+                     0.16 * FXAI_GetArrayValue(feat, 62, 0.0) +
+                     0.12 * FXAI_GetArrayValue(feat, 70, 0.0) +
+                     0.10 * FXAI_GetArrayValue(feat, 71, 0.0) -
+                     0.14 * FXAI_GetArrayValue(feat, 57, 0.0) -
+                     0.10 * FXAI_GetArrayValue(feat, 63, 0.0),
+                     0.0,
+                     1.0);
+}
+
+double FXAI_StackRouterActionUtility(const int action,
+                                     const int label_class,
+                                     const double realized_edge,
+                                     const double quality_score)
+{
+   double edge_norm = FXAI_Clamp(realized_edge / MathMax(MathAbs(realized_edge), 1.0), -1.0, 1.0);
+   double qual = FXAI_Clamp(quality_score, 0.0, 2.0);
+   if(action == (int)FXAI_LABEL_SKIP)
+   {
+      if(label_class == (int)FXAI_LABEL_SKIP)
+         return FXAI_Clamp(0.28 + 0.22 * qual - 0.12 * edge_norm, -1.0, 1.0);
+      return FXAI_Clamp(-0.28 - 0.46 * MathMax(edge_norm, 0.0) - 0.10 * qual, -1.0, 1.0);
+   }
+
+   if(action == label_class)
+      return FXAI_Clamp(0.32 + 0.52 * edge_norm + 0.18 * qual, -1.0, 1.0);
+   if(label_class == (int)FXAI_LABEL_SKIP)
+      return FXAI_Clamp(-0.22 - 0.18 * qual - 0.18 * MathAbs(edge_norm), -1.0, 1.0);
+   return FXAI_Clamp(-0.34 - 0.52 * MathMax(edge_norm, 0.0) - 0.12 * qual, -1.0, 1.0);
+}
+
+void FXAI_StackRouterBlend(const int regime_id,
+                           const int horizon_minutes,
+                           const double &feat[],
+                           double &probs[])
+{
+   int r = regime_id;
+   if(r < 0 || r >= FXAI_REGIME_COUNT) r = 0;
+   int slot = FXAI_GetHorizonSlot(horizon_minutes);
+   double context_trust = FXAI_StackRouterContextTrust(feat);
+   if(context_trust <= 1e-6)
+      return;
+
+   for(int c=0; c<3; c++)
+   {
+      if(!g_router_action_ready[r][slot][c] || g_router_action_obs[r][slot][c] <= 0)
+         continue;
+      double obs_trust = FXAI_Clamp((double)g_router_action_obs[r][slot][c] / 48.0, 0.0, 1.0);
+      double router_score = 0.70 * g_router_action_value[r][slot][c] +
+                            0.35 * g_router_action_counterfactual[r][slot][c] -
+                            0.55 * g_router_action_regret[r][slot][c];
+      if(c == (int)FXAI_LABEL_BUY)
+         router_score += 0.10 * FXAI_StackRoutingObjective(feat) * FXAI_Clamp(FXAI_GetArrayValue(feat, 6, 0.0), -1.0, 1.0);
+      else if(c == (int)FXAI_LABEL_SELL)
+         router_score -= 0.10 * FXAI_StackRoutingObjective(feat) * FXAI_Clamp(FXAI_GetArrayValue(feat, 6, 0.0), -1.0, 1.0);
+      else
+         router_score += 0.06 * FXAI_StackPortfolioObjective(feat) * FXAI_Clamp(FXAI_GetArrayValue(feat, 63, 0.0), 0.0, 1.0);
+
+      double mult = MathExp(FXAI_ClipSym(context_trust * obs_trust * router_score, 1.2));
+      probs[c] = FXAI_Clamp(probs[c] * mult, 0.0005, 0.9990);
+   }
+
+   double den = probs[0] + probs[1] + probs[2];
+   if(den <= 0.0) den = 1.0;
+   probs[0] /= den;
+   probs[1] /= den;
+   probs[2] /= den;
+}
+
+void FXAI_StackRouterObserve(const int regime_id,
+                             const int horizon_minutes,
+                             const int label_class,
+                             const double realized_edge,
+                             const double quality_score,
+                             const double &feat[],
+                             const double &pred_probs[],
+                             const double sample_weight)
+{
+   int r = regime_id;
+   if(r < 0 || r >= FXAI_REGIME_COUNT) r = 0;
+   int slot = FXAI_GetHorizonSlot(horizon_minutes);
+   double baseline = 0.0;
+   double utility[3];
+   double best_u = -1e9;
+   for(int c=0; c<3; c++)
+   {
+      utility[c] = FXAI_StackRouterActionUtility(c, label_class, realized_edge, quality_score);
+      baseline += FXAI_GetArrayValue(pred_probs, c, 0.3333333) * utility[c];
+      if(utility[c] > best_u)
+         best_u = utility[c];
+   }
+
+   double trust = FXAI_Clamp(sample_weight * (0.40 + 0.60 * FXAI_StackRouterContextTrust(feat)), 0.10, 6.0);
+   for(int c=0; c<3; c++)
+   {
+      double obs = (double)g_router_action_obs[r][slot][c];
+      double alpha = FXAI_Clamp(0.18 / MathSqrt(1.0 + 0.05 * obs), 0.02, 0.18);
+      double u = utility[c];
+      double cf = FXAI_ClipSym(u - baseline, 1.0);
+      double regret = FXAI_Clamp(best_u - u, 0.0, 1.0);
+      if(obs <= 0.0)
+      {
+         g_router_action_value[r][slot][c] = u;
+         g_router_action_counterfactual[r][slot][c] = cf;
+         g_router_action_regret[r][slot][c] = regret;
+      }
+      else
+      {
+         double blend = FXAI_Clamp(alpha * trust, 0.01, 0.25);
+         g_router_action_value[r][slot][c] =
+            (1.0 - blend) * g_router_action_value[r][slot][c] + blend * u;
+         g_router_action_counterfactual[r][slot][c] =
+            (1.0 - blend) * g_router_action_counterfactual[r][slot][c] + blend * cf;
+         g_router_action_regret[r][slot][c] =
+            (1.0 - blend) * g_router_action_regret[r][slot][c] + blend * regret;
+      }
+      g_router_action_obs[r][slot][c]++;
+      if(g_router_action_obs[r][slot][c] > 200000)
+         g_router_action_obs[r][slot][c] = 200000;
+      g_router_action_ready[r][slot][c] = true;
+   }
+
+   FXAI_MarkMetaArtifactsDirty();
+}
+
 void FXAI_StackBuildFeatures(const double buy_pct,
                              const double sell_pct,
                              const double skip_pct,
@@ -172,7 +300,10 @@ void FXAI_StackBuildFeatures(const double buy_pct,
    feat[71] = FXAI_Clamp((avg_ctx_edge_norm + avg_global_edge_norm + avg_portfolio_edge_norm) / 3.0, -1.0, 1.0);
 }
 
-void FXAI_StackPredict(const int regime_id, const double &feat[], double &probs[])
+void FXAI_StackPredict(const int regime_id,
+                       const int horizon_minutes,
+                       const double &feat[],
+                       double &probs[])
 {
    if(ArraySize(probs) != 3) ArrayResize(probs, 3);
    probs[0] = 0.3333;
@@ -208,6 +339,7 @@ void FXAI_StackPredict(const int regime_id, const double &feat[], double &probs[
       probs[0] = p_sell / s0;
       probs[1] = p_buy / s0;
       probs[2] = p_skip / s0;
+      FXAI_StackRouterBlend(r, horizon_minutes, feat, probs);
       return;
    }
 
@@ -253,6 +385,7 @@ void FXAI_StackPredict(const int regime_id, const double &feat[], double &probs[
    probs[0] /= sn;
    probs[1] /= sn;
    probs[2] /= sn;
+   FXAI_StackRouterBlend(r, horizon_minutes, feat, probs);
 }
 
 void FXAI_StackUpdate(const int regime_id,
@@ -519,6 +652,17 @@ void FXAI_ResetAdaptiveRoutingState()
          for(int h=0; h<FXAI_STACK_HIDDEN; h++)
             g_stack_w2[r][c][h] = 0.0;
       }
+      for(int slot=0; slot<FXAI_MAX_HORIZONS; slot++)
+      {
+         for(int c=0; c<3; c++)
+         {
+            g_router_action_value[r][slot][c] = 0.0;
+            g_router_action_regret[r][slot][c] = 0.0;
+            g_router_action_counterfactual[r][slot][c] = 0.0;
+            g_router_action_ready[r][slot][c] = false;
+            g_router_action_obs[r][slot][c] = 0;
+         }
+      }
       g_trade_gate_b2[r] = 0.0;
       for(int h=0; h<FXAI_TRADE_GATE_HIDDEN; h++)
       {
@@ -710,6 +854,18 @@ void FXAI_UpdateStackFromPending(const int current_signal_seq,
                                     realized_edge > 0.0 &&
                                     quality > 0.70 &&
                                     time_to_hit_frac < 0.95);
+               double pred_probs[3];
+               pred_probs[0] = g_stack_pending_prob[idx][0];
+               pred_probs[1] = g_stack_pending_prob[idx][1];
+               pred_probs[2] = g_stack_pending_prob[idx][2];
+               FXAI_StackRouterObserve(pending_regime,
+                                       pending_h,
+                                       label_class,
+                                       realized_edge,
+                                       quality,
+                                       feat,
+                                       pred_probs,
+                                       sw);
                FXAI_TradeGateUpdate(pending_regime, trade_target, feat, sw);
             }
             consumed = true;

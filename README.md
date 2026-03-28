@@ -58,9 +58,9 @@ You do not need to be an MQL5 programmer to use FXAI as an operator. For normal 
 - **Internal neural runtime**
   - Serious neural plugins share one native `TensorCore` layer for tensor math, sequence handling, sequence blocks, optimizers, and numeric verification.
 - **Cross-symbol transfer warmup**
-  - Shared transfer adapters now pretrain across configured horizons and capped context-symbol sample packs before live trading begins, with a deeper shared latent backbone that is conditioned by symbol-domain, horizon, session context, and explicit sequence-window tokens.
+  - Shared transfer adapters now pretrain across configured horizons and capped context-symbol sample packs before live trading begins, with a deeper shared latent backbone that is conditioned by symbol-domain, horizon, session context, explicit sequence-window tokens, and temporal pooling over recent bar states.
 - **Checkpoint recovery for stateful plugins**
-  - Persistent plugins now carry replay-backed checkpoint reconstruction metadata, and runtime manifests plus release gating now block live promotion of stateful plugins until they provide full native checkpoint coverage.
+  - Persistent plugins now carry deterministic replay-backed checkpoint metadata, checkpoint integrity checksums, and runtime manifests so stateful model recovery, artifact review, and release gating all use the same checkpoint contract.
 - **Cost-aware signals**
   - Labels and thresholds account for trading friction, improving realistic expectancy.
 - **Feature governance**
@@ -70,9 +70,9 @@ You do not need to be an MQL5 programmer to use FXAI as an operator. For normal 
 - **Safer execution**
   - Built-in equity controls, skip class, and conservative calibration reduce overtrading.
 - **Execution parity controls**
-  - Shared execution profiles, M1 replay-trace penalties, persistent broker-event trace replay, risk-aware sizing, correlated exposure caps, and `OrderCheck` preflight keep live trading closer to Audit Lab and tester assumptions.
+  - Shared execution profiles, M1 replay-trace penalties, persistent broker-event trace replay keyed by symbol and order context, risk-aware sizing, correlated exposure caps, and `OrderCheck` preflight keep live trading closer to Audit Lab and tester assumptions.
 - **Contextual model routing**
-  - The meta layer now persists regime and horizon-specific contextual edge and regret state so ensemble routing can adapt to where each plugin is actually earning or losing edge.
+  - The meta layer now persists regime and horizon-specific contextual value, regret, and counterfactual state so ensemble routing can adapt to where each plugin is actually earning or losing edge.
 - **Persistent research state**
   - Runtime artifacts now persist feature-drift diagnostics and emit per-plugin checkpoint coverage plus feature-registry manifests so restart behavior and checkpoint depth are auditable.
 - **Backtest efficiency**

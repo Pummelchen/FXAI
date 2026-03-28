@@ -1213,7 +1213,7 @@ int SpecialDirectionAI(const string symbol)
                                  stack_feat);
          double stack_probs_dyn[];
          ArrayResize(stack_probs_dyn, 3);
-         FXAI_StackPredict(regime_id, stack_feat, stack_probs_dyn);
+         FXAI_StackPredict(regime_id, H, stack_feat, stack_probs_dyn);
          double trade_gate_prob = FXAI_TradeGatePredict(regime_id, H, stack_feat);
          double trade_gate_floor = FXAI_Clamp(0.34 +
                                               0.18 * avg_conf +

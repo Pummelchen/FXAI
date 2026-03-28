@@ -543,6 +543,11 @@ double   g_stack_w2[FXAI_REGIME_COUNT][3][FXAI_STACK_HIDDEN];
 double   g_stack_b2[FXAI_REGIME_COUNT][3];
 bool     g_stack_ready[FXAI_REGIME_COUNT];
 int      g_stack_obs[FXAI_REGIME_COUNT];
+double   g_router_action_value[FXAI_REGIME_COUNT][FXAI_MAX_HORIZONS][3];
+double   g_router_action_regret[FXAI_REGIME_COUNT][FXAI_MAX_HORIZONS][3];
+double   g_router_action_counterfactual[FXAI_REGIME_COUNT][FXAI_MAX_HORIZONS][3];
+bool     g_router_action_ready[FXAI_REGIME_COUNT][FXAI_MAX_HORIZONS][3];
+int      g_router_action_obs[FXAI_REGIME_COUNT][FXAI_MAX_HORIZONS][3];
 double   g_trade_gate_w1[FXAI_REGIME_COUNT][FXAI_TRADE_GATE_HIDDEN][FXAI_TRADE_GATE_FEATS];
 double   g_trade_gate_b1[FXAI_REGIME_COUNT][FXAI_TRADE_GATE_HIDDEN];
 double   g_trade_gate_w2[FXAI_REGIME_COUNT][FXAI_TRADE_GATE_HIDDEN];
@@ -661,6 +666,8 @@ double   g_last_order_request_price = 0.0;
 double   g_last_order_request_volume = 0.0;
 double   g_last_order_request_filled_volume = 0.0;
 int      g_last_order_request_horizon = 0;
+int      g_last_order_request_side = 0;
+int      g_last_order_request_type = 0;
 bool     g_last_order_request_pending = false;
 
 
@@ -1254,6 +1261,27 @@ ENUM_ORDER_TYPE_FILLING FXAI_ResolveOrderFilling(const string symbol)
    return ORDER_FILLING_RETURN;
 }
 
+int FXAI_BrokerOrderTypeBucket(const ENUM_ORDER_TYPE order_type)
+{
+   switch(order_type)
+   {
+      case ORDER_TYPE_BUY:
+      case ORDER_TYPE_SELL:
+         return 1;
+      case ORDER_TYPE_BUY_LIMIT:
+      case ORDER_TYPE_SELL_LIMIT:
+         return 2;
+      case ORDER_TYPE_BUY_STOP:
+      case ORDER_TYPE_SELL_STOP:
+         return 3;
+      case ORDER_TYPE_BUY_STOP_LIMIT:
+      case ORDER_TYPE_SELL_STOP_LIMIT:
+         return 4;
+      default:
+         return 0;
+   }
+}
+
 bool FXAI_SendMarketOrderChecked(const string symbol,
                                  const int direction,
                                  const double trade_lot,
@@ -1322,12 +1350,17 @@ bool FXAI_SendMarketOrderChecked(const string symbol,
       ret_desc = check.comment;
       double elapsed_ms = (double)(GetMicrosecondCount() - order_start_us) / 1000.0;
       double latency_points = 0.05 * MathLog(1.0 + MathMax(elapsed_ms, 0.0));
-      FXAI_RecordBrokerExecutionEvent(order_sample_time,
-                                      g_ai_last_horizon_minutes,
-                                      0.0,
-                                      latency_points,
-                                      true,
-                                      false);
+      FXAI_RecordBrokerExecutionEventEx(order_sample_time,
+                                        symbol,
+                                        g_ai_last_horizon_minutes,
+                                        (direction == 1 ? 1 : -1),
+                                        FXAI_BrokerOrderTypeBucket(request.type),
+                                        0,
+                                        0.0,
+                                        latency_points,
+                                        true,
+                                        false,
+                                        0.0);
       FXAI_MarkRuntimeArtifactsDirty();
       reason = "order_check_failed";
       return false;
@@ -1338,12 +1371,17 @@ bool FXAI_SendMarketOrderChecked(const string symbol,
       ret_desc = check.comment;
       double elapsed_ms = (double)(GetMicrosecondCount() - order_start_us) / 1000.0;
       double latency_points = 0.05 * MathLog(1.0 + MathMax(elapsed_ms, 0.0));
-      FXAI_RecordBrokerExecutionEvent(order_sample_time,
-                                      g_ai_last_horizon_minutes,
-                                      0.0,
-                                      latency_points,
-                                      true,
-                                      false);
+      FXAI_RecordBrokerExecutionEventEx(order_sample_time,
+                                        symbol,
+                                        g_ai_last_horizon_minutes,
+                                        (direction == 1 ? 1 : -1),
+                                        FXAI_BrokerOrderTypeBucket(request.type),
+                                        0,
+                                        0.0,
+                                        latency_points,
+                                        true,
+                                        false,
+                                        0.0);
       FXAI_MarkRuntimeArtifactsDirty();
       reason = "order_check_rejected";
       return false;
@@ -1355,12 +1393,17 @@ bool FXAI_SendMarketOrderChecked(const string symbol,
       ret_desc = result.comment;
       double elapsed_ms = (double)(GetMicrosecondCount() - order_start_us) / 1000.0;
       double latency_points = 0.05 * MathLog(1.0 + MathMax(elapsed_ms, 0.0));
-      FXAI_RecordBrokerExecutionEvent(order_sample_time,
-                                      g_ai_last_horizon_minutes,
-                                      0.0,
-                                      latency_points,
-                                      true,
-                                      false);
+      FXAI_RecordBrokerExecutionEventEx(order_sample_time,
+                                        symbol,
+                                        g_ai_last_horizon_minutes,
+                                        (direction == 1 ? 1 : -1),
+                                        FXAI_BrokerOrderTypeBucket(request.type),
+                                        0,
+                                        0.0,
+                                        latency_points,
+                                        true,
+                                        false,
+                                        0.0);
       FXAI_MarkRuntimeArtifactsDirty();
       reason = "order_send_failed";
       return false;
@@ -1372,12 +1415,17 @@ bool FXAI_SendMarketOrderChecked(const string symbol,
    {
       double elapsed_ms = (double)(GetMicrosecondCount() - order_start_us) / 1000.0;
       double latency_points = 0.05 * MathLog(1.0 + MathMax(elapsed_ms, 0.0));
-      FXAI_RecordBrokerExecutionEvent(order_sample_time,
-                                      g_ai_last_horizon_minutes,
-                                      0.0,
-                                      latency_points,
-                                      true,
-                                      false);
+      FXAI_RecordBrokerExecutionEventEx(order_sample_time,
+                                        symbol,
+                                        g_ai_last_horizon_minutes,
+                                        (direction == 1 ? 1 : -1),
+                                        FXAI_BrokerOrderTypeBucket(request.type),
+                                        0,
+                                        0.0,
+                                        latency_points,
+                                        true,
+                                        false,
+                                        0.0);
       FXAI_MarkRuntimeArtifactsDirty();
       reason = "order_send_rejected";
       return false;
@@ -1389,6 +1437,8 @@ bool FXAI_SendMarketOrderChecked(const string symbol,
    g_last_order_request_volume = request.volume;
    g_last_order_request_filled_volume = 0.0;
    g_last_order_request_horizon = g_ai_last_horizon_minutes;
+   g_last_order_request_side = (direction == 1 ? 1 : -1);
+   g_last_order_request_type = FXAI_BrokerOrderTypeBucket(request.type);
    g_last_order_request_pending = true;
 
    return true;
@@ -1772,12 +1822,20 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
       bool partial_fill = (g_last_order_request_volume > 0.0 &&
                            remaining_before > 1e-9 &&
                            deal_volume + 1e-9 < remaining_before);
-      FXAI_RecordBrokerExecutionEvent((g_last_order_request_time > 0 ? g_last_order_request_time : TimeCurrent()),
-                                      g_last_order_request_horizon,
-                                      slippage_points,
-                                      latency_points,
-                                      false,
-                                      partial_fill);
+      double fill_ratio = 1.0;
+      if(g_last_order_request_volume > 1e-9)
+         fill_ratio = FXAI_Clamp(deal_volume / g_last_order_request_volume, 0.0, 1.0);
+      FXAI_RecordBrokerExecutionEventEx((g_last_order_request_time > 0 ? g_last_order_request_time : TimeCurrent()),
+                                        _Symbol,
+                                        g_last_order_request_horizon,
+                                        g_last_order_request_side,
+                                        g_last_order_request_type,
+                                        (partial_fill ? 1 : 2),
+                                        slippage_points,
+                                        latency_points,
+                                        false,
+                                        partial_fill,
+                                        fill_ratio);
       FXAI_MarkRuntimeArtifactsDirty();
       g_last_order_request_filled_volume += MathMax(deal_volume, 0.0);
       if(g_last_order_request_volume <= 1e-9 ||
@@ -1789,6 +1847,8 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
          g_last_order_request_volume = 0.0;
          g_last_order_request_filled_volume = 0.0;
          g_last_order_request_horizon = 0;
+         g_last_order_request_side = 0;
+         g_last_order_request_type = 0;
          g_last_order_request_time = 0;
       }
       return;

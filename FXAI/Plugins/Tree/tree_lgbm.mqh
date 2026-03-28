@@ -1080,7 +1080,7 @@ public:
 
    virtual int AIId(void) const { return (int)AI_LIGHTGBM; }
    virtual string AIName(void) const { return "tree_lgbm"; }
-   virtual int PersistentStateVersion(void) const { return 9; }
+   virtual int PersistentStateVersion(void) const { return 10; }
    virtual string PersistentStateCoverageTag(void) const { return "native_model"; }
 
 

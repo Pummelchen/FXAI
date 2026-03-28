@@ -2,7 +2,7 @@
 #define __FXAI_META_PERSISTENCE_MQH__
 
 #define FXAI_META_ARTIFACT_DIR "FXAI\\Meta"
-#define FXAI_META_ARTIFACT_VERSION 4
+#define FXAI_META_ARTIFACT_VERSION 5
 
 string FXAI_MetaArtifactFile(const string symbol)
 {
@@ -59,6 +59,17 @@ bool FXAI_SaveMetaArtifacts(const string symbol)
          FileWriteDouble(handle, g_stack_b2[r][c]);
          for(int h=0; h<FXAI_STACK_HIDDEN; h++)
             FileWriteDouble(handle, g_stack_w2[r][c][h]);
+      }
+      for(int slot=0; slot<FXAI_MAX_HORIZONS; slot++)
+      {
+         for(int c=0; c<3; c++)
+         {
+            FileWriteDouble(handle, g_router_action_value[r][slot][c]);
+            FileWriteDouble(handle, g_router_action_regret[r][slot][c]);
+            FileWriteDouble(handle, g_router_action_counterfactual[r][slot][c]);
+            FileWriteInteger(handle, (g_router_action_ready[r][slot][c] ? 1 : 0));
+            FileWriteInteger(handle, g_router_action_obs[r][slot][c]);
+         }
       }
 
       FileWriteInteger(handle, (g_trade_gate_ready[r] ? 1 : 0));
@@ -181,6 +192,20 @@ bool FXAI_LoadMetaArtifacts(const string symbol)
             g_stack_b2[r][c] = FileReadDouble(handle);
             for(int h=0; h<FXAI_STACK_HIDDEN; h++)
                g_stack_w2[r][c][h] = FileReadDouble(handle);
+         }
+         if(version >= 5)
+         {
+            for(int slot=0; slot<FXAI_MAX_HORIZONS; slot++)
+            {
+               for(int c=0; c<3; c++)
+               {
+                  g_router_action_value[r][slot][c] = FileReadDouble(handle);
+                  g_router_action_regret[r][slot][c] = FileReadDouble(handle);
+                  g_router_action_counterfactual[r][slot][c] = FileReadDouble(handle);
+                  g_router_action_ready[r][slot][c] = (FileReadInteger(handle) != 0);
+                  g_router_action_obs[r][slot][c] = FileReadInteger(handle);
+               }
+            }
          }
 
          g_trade_gate_ready[r] = (FileReadInteger(handle) != 0);

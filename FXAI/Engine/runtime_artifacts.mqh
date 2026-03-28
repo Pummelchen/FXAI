@@ -2,7 +2,7 @@
 #define __FXAI_RUNTIME_ARTIFACTS_MQH__
 
 #define FXAI_RUNTIME_ARTIFACT_DIR "FXAI\\Runtime"
-#define FXAI_RUNTIME_ARTIFACT_VERSION 10
+#define FXAI_RUNTIME_ARTIFACT_VERSION 11
 
 string FXAI_RuntimeArtifactSafeSymbol(const string symbol)
 {
@@ -375,6 +375,10 @@ bool FXAI_SaveRuntimeArtifacts(const string symbol)
          FileWriteDouble(handle, g_shared_transfer_global_w[j][i]);
       for(int t=0; t<FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS; t++)
          FileWriteDouble(handle, g_shared_transfer_global_seq_w[j][t]);
+      for(int c=0; c<FXAI_SHARED_TRANSFER_BAR_FEATURES; c++)
+         FileWriteDouble(handle, g_shared_transfer_global_time_w[j][c]);
+      for(int c=0; c<FXAI_SHARED_TRANSFER_BAR_FEATURES; c++)
+         FileWriteDouble(handle, g_shared_transfer_global_time_gate_w[j][c]);
    }
    for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
       for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
@@ -403,12 +407,17 @@ bool FXAI_SaveRuntimeArtifacts(const string symbol)
    for(int i=0; i<FXAI_BROKER_EXEC_TRACE_CAP; i++)
    {
       FileWriteLong(handle, (long)g_broker_execution_trace_time[i]);
+      FileWriteInteger(handle, g_broker_execution_trace_symbol_bucket[i]);
       FileWriteInteger(handle, g_broker_execution_trace_session[i]);
       FileWriteInteger(handle, g_broker_execution_trace_horizon[i]);
+      FileWriteInteger(handle, g_broker_execution_trace_side[i]);
+      FileWriteInteger(handle, g_broker_execution_trace_order_type[i]);
+      FileWriteInteger(handle, g_broker_execution_trace_event_kind[i]);
       FileWriteDouble(handle, g_broker_execution_trace_slippage[i]);
       FileWriteDouble(handle, g_broker_execution_trace_latency[i]);
       FileWriteDouble(handle, g_broker_execution_trace_reject[i]);
       FileWriteDouble(handle, g_broker_execution_trace_partial[i]);
+      FileWriteDouble(handle, g_broker_execution_trace_fill_ratio[i]);
    }
 
    FileClose(handle);
@@ -570,6 +579,13 @@ bool FXAI_LoadRuntimeArtifacts(const string symbol)
                   for(int t=0; t<FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS; t++)
                      g_shared_transfer_global_seq_w[j][t] = FileReadDouble(handle);
                }
+               if(version >= 11)
+               {
+                  for(int c=0; c<FXAI_SHARED_TRANSFER_BAR_FEATURES; c++)
+                     g_shared_transfer_global_time_w[j][c] = FileReadDouble(handle);
+                  for(int c=0; c<FXAI_SHARED_TRANSFER_BAR_FEATURES; c++)
+                     g_shared_transfer_global_time_gate_w[j][c] = FileReadDouble(handle);
+               }
             }
             for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
                for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
@@ -600,12 +616,22 @@ bool FXAI_LoadRuntimeArtifacts(const string symbol)
                for(int i=0; i<FXAI_BROKER_EXEC_TRACE_CAP; i++)
                {
                   g_broker_execution_trace_time[i] = (datetime)FileReadLong(handle);
+                  if(version >= 11)
+                     g_broker_execution_trace_symbol_bucket[i] = FileReadInteger(handle);
                   g_broker_execution_trace_session[i] = FileReadInteger(handle);
                   g_broker_execution_trace_horizon[i] = FileReadInteger(handle);
+                  if(version >= 11)
+                  {
+                     g_broker_execution_trace_side[i] = FileReadInteger(handle);
+                     g_broker_execution_trace_order_type[i] = FileReadInteger(handle);
+                     g_broker_execution_trace_event_kind[i] = FileReadInteger(handle);
+                  }
                   g_broker_execution_trace_slippage[i] = FileReadDouble(handle);
                   g_broker_execution_trace_latency[i] = FileReadDouble(handle);
                   g_broker_execution_trace_reject[i] = FileReadDouble(handle);
                   g_broker_execution_trace_partial[i] = FileReadDouble(handle);
+                  if(version >= 11)
+                     g_broker_execution_trace_fill_ratio[i] = FileReadDouble(handle);
                }
             }
          }

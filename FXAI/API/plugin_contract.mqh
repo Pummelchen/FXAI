@@ -5,7 +5,7 @@
 #include "..\TensorCore\TensorCore.mqh"
 
 #define FXAI_PLUGIN_STATE_ARTIFACT_DIR "FXAI\\Runtime\\Plugins"
-#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 9
+#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 10
 
 class CFXAITernaryCalibrator
 {
@@ -529,7 +529,8 @@ public:
       m_native_quality_heads.Reset();
    }
    virtual bool SupportsPersistentState(void) const { return true; }
-   virtual int PersistentStateVersion(void) const { return 9; }
+   virtual int PersistentStateVersion(void) const { return 10; }
+   virtual bool SupportsDeterministicReplayCheckpoint(void) const { return true; }
    virtual string PersistentStateCoverageTag(void) const
    {
       FXAIAIManifestV4 manifest;
@@ -538,7 +539,7 @@ public:
          FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY) ||
          FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL))
       {
-         return "native_replay";
+         return (SupportsDeterministicReplayCheckpoint() ? "native_model" : "native_replay");
       }
       return FXAI_ReferenceTierName(FXAI_DefaultReferenceTierForAI(AIId()));
    }
@@ -820,6 +821,10 @@ protected:
             FileWriteDouble(handle, m_shared_backbone_w[j][i]);
          for(int t=0; t<FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS; t++)
             FileWriteDouble(handle, m_shared_backbone_seq_w[j][t]);
+         for(int c=0; c<FXAI_SHARED_TRANSFER_BAR_FEATURES; c++)
+            FileWriteDouble(handle, m_shared_backbone_time_w[j][c]);
+         for(int c=0; c<FXAI_SHARED_TRANSFER_BAR_FEATURES; c++)
+            FileWriteDouble(handle, m_shared_backbone_time_gate_w[j][c]);
       }
       for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
          for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
@@ -990,6 +995,13 @@ protected:
             {
                for(int t=0; t<FXAI_SHARED_TRANSFER_SEQUENCE_TOKENS; t++)
                   m_shared_backbone_seq_w[j][t] = FileReadDouble(handle);
+            }
+            if(version >= 10)
+            {
+               for(int c=0; c<FXAI_SHARED_TRANSFER_BAR_FEATURES; c++)
+                  m_shared_backbone_time_w[j][c] = FileReadDouble(handle);
+               for(int c=0; c<FXAI_SHARED_TRANSFER_BAR_FEATURES; c++)
+                  m_shared_backbone_time_gate_w[j][c] = FileReadDouble(handle);
             }
          }
          for(int d=0; d<FXAI_SHARED_TRANSFER_DOMAIN_BUCKETS; d++)
@@ -1172,9 +1184,69 @@ protected:
       return true;
    }
 
+   double ReplayCheckpointChecksum(void) const
+   {
+      double acc = 0.0;
+      int idx6 = (FXAI_AI_WEIGHTS - 1 < 6 ? FXAI_AI_WEIGHTS - 1 : 6);
+      int idx24 = (FXAI_AI_WEIGHTS - 1 < 24 ? FXAI_AI_WEIGHTS - 1 : 24);
+      int idx_macro = (FXAI_AI_WEIGHTS - 1 < FXAI_MACRO_EVENT_FEATURE_OFFSET + 2 ? FXAI_AI_WEIGHTS - 1 : FXAI_MACRO_EVENT_FEATURE_OFFSET + 2);
+      for(int n=0; n<m_replay_size; n++)
+      {
+         int idx = (m_replay_head - 1 - n);
+         while(idx < 0) idx += FXAI_PLUGIN_REPLAY_CAPACITY;
+         idx %= FXAI_PLUGIN_REPLAY_CAPACITY;
+         acc += 0.13 * (double)(n + 1) * (double)(m_replay_label[idx] + 2);
+         acc += 0.07 * m_replay_move[idx];
+         acc += 0.03 * m_replay_mfe[idx];
+         acc += 0.03 * m_replay_mae[idx];
+         acc += 0.02 * m_replay_priority[idx];
+         acc += 0.01 * (double)m_replay_window_size[idx];
+         acc += 0.005 * m_replay_domain_hash[idx];
+         acc += 0.004 * (double)m_replay_horizon[idx];
+         acc += 0.002 * (double)(m_replay_time[idx] % 1000003);
+         acc += 0.011 * m_replay_x[idx][0];
+         acc += 0.009 * m_replay_x[idx][idx6];
+         acc += 0.007 * m_replay_x[idx][idx24];
+         acc += 0.005 * m_replay_x[idx][idx_macro];
+      }
+      double frac = acc / 131071.0;
+      return frac - MathFloor(frac);
+   }
+
+   double ReplayHyperParamsChecksum(void) const
+   {
+      double acc = 0.0;
+      acc += 0.41 * m_persist_hp.lr;
+      acc += 0.23 * m_persist_hp.l2;
+      acc += 0.17 * m_persist_hp.ftrl_alpha;
+      acc += 0.13 * m_persist_hp.ftrl_beta;
+      acc += 0.11 * m_persist_hp.ftrl_l1;
+      acc += 0.11 * m_persist_hp.ftrl_l2;
+      acc += 0.09 * m_persist_hp.pa_c;
+      acc += 0.08 * m_persist_hp.pa_margin;
+      acc += 0.07 * m_persist_hp.xgb_lr;
+      acc += 0.07 * m_persist_hp.xgb_l2;
+      acc += 0.06 * m_persist_hp.mlp_lr;
+      acc += 0.06 * m_persist_hp.mlp_l2;
+      acc += 0.05 * m_persist_hp.quantile_lr;
+      acc += 0.05 * m_persist_hp.quantile_l2;
+      acc += 0.04 * m_persist_hp.enhash_lr;
+      acc += 0.04 * m_persist_hp.enhash_l1;
+      acc += 0.04 * m_persist_hp.enhash_l2;
+      acc += 0.03 * m_persist_hp.tcn_layers;
+      acc += 0.03 * m_persist_hp.tcn_kernel;
+      acc += 0.03 * m_persist_hp.tcn_dilation_base;
+      double frac = acc / 7919.0;
+      return frac - MathFloor(frac);
+   }
+
    virtual bool SaveModelState(const int handle) const
    {
       FileWriteInteger(handle, 0x46585250);
+      FileWriteInteger(handle, m_replay_size);
+      FileWriteDouble(handle, ReplayCheckpointChecksum());
+      FileWriteDouble(handle, (m_persist_hp_ready ? ReplayHyperParamsChecksum() : 0.0));
+      FileWriteInteger(handle, m_persist_train_events);
       return true;
    }
 
@@ -1183,6 +1255,21 @@ protected:
       int marker = FileReadInteger(handle);
       if(marker != 0x46585250)
          return false;
+      if(version >= 10)
+      {
+         int expected_replay = FileReadInteger(handle);
+         double expected_replay_ck = FileReadDouble(handle);
+         double expected_hp_ck = FileReadDouble(handle);
+         int expected_train_events = FileReadInteger(handle);
+         if(expected_replay != m_replay_size)
+            return false;
+         if(MathAbs(expected_replay_ck - ReplayCheckpointChecksum()) > 1e-6)
+            return false;
+         if(m_persist_hp_ready && MathAbs(expected_hp_ck - ReplayHyperParamsChecksum()) > 1e-6)
+            return false;
+         if(expected_train_events != m_persist_train_events)
+            return false;
+      }
       if(!m_persist_hp_ready || m_replay_size <= 0)
          return true;
       return RebuildModelStateFromReplay(m_persist_hp);
