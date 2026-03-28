@@ -268,44 +268,98 @@ void FXAI_AuditReverseCloseSeries(const datetime &src_time[],
    }
 }
 
-void FXAI_AuditSynthesizeOHLCSpreadFromCloseSeries(const double &close_arr[],
-                                                   const int &spread_ref_arr[],
-                                                   const double point,
-                                                   double &open_arr[],
-                                                   double &high_arr[],
-                                                   double &low_arr[],
-                                                   int &spread_arr[])
+void FXAI_AuditDeriveContextSeriesFromBase(const double point,
+                                           const double &base_open[],
+                                           const double &base_high[],
+                                           const double &base_low[],
+                                           const double &base_close[],
+                                           const int &base_spread[],
+                                           const int transform_id,
+                                           double &ctx_open[],
+                                           double &ctx_high[],
+                                           double &ctx_low[],
+                                           double &ctx_close[],
+                                           int &ctx_spread[])
 {
-   int n = ArraySize(close_arr);
-   ArrayResize(open_arr, n);
-   ArrayResize(high_arr, n);
-   ArrayResize(low_arr, n);
-   ArrayResize(spread_arr, n);
-   ArraySetAsSeries(open_arr, true);
-   ArraySetAsSeries(high_arr, true);
-   ArraySetAsSeries(low_arr, true);
-   ArraySetAsSeries(spread_arr, true);
+   int n = ArraySize(base_close);
+   ArrayResize(ctx_open, n);
+   ArrayResize(ctx_high, n);
+   ArrayResize(ctx_low, n);
+   ArrayResize(ctx_close, n);
+   ArrayResize(ctx_spread, n);
+   ArraySetAsSeries(ctx_open, true);
+   ArraySetAsSeries(ctx_high, true);
+   ArraySetAsSeries(ctx_low, true);
+   ArraySetAsSeries(ctx_close, true);
+   ArraySetAsSeries(ctx_spread, true);
 
    double pt = (point > 0.0 ? point : 1e-5);
-   for(int i=0; i<n; i++)
+   for(int i=n - 1; i>=0; i--)
    {
-      double c = close_arr[i];
-      double prev = (i + 1 < n ? close_arr[i + 1] : c);
-      double prev2 = (i + 2 < n ? close_arr[i + 2] : prev);
-      double o = prev;
+      double c_base = FXAI_AuditGetArrayValue(base_close, i, 0.0);
+      double prev_base = FXAI_AuditGetArrayValue(base_close, i + 1, c_base);
+      double ret = (prev_base > 0.0 ? (c_base - prev_base) / prev_base : 0.0);
+      double c = c_base;
+      double gap_scale = 0.60;
+      double range_scale = 1.0;
+      double spread_scale = 1.0;
+
+      if(transform_id == 0)
+      {
+         c = c_base * (1.0 + 0.60 * ret);
+         gap_scale = 0.70;
+         range_scale = 1.05;
+         spread_scale = 1.05 + 0.20 * FXAI_Clamp(MathAbs(ret) * 4000.0, 0.0, 1.0);
+      }
+      else if(transform_id == 1)
+      {
+         c = 0.65 * c_base + 0.35 * prev_base;
+         gap_scale = 0.45;
+         range_scale = 0.90;
+         spread_scale = 0.95 + 0.10 * FXAI_Clamp(MathAbs(ret) * 3000.0, 0.0, 1.0);
+      }
+      else
+      {
+         c = c_base * (1.0 - 0.35 * ret);
+         gap_scale = -0.25;
+         range_scale = 1.08;
+         spread_scale = 1.08 + 0.15 * FXAI_Clamp(MathAbs(ret) * 3500.0, 0.0, 1.0);
+      }
+
+      if(c <= pt)
+         c = MathMax(c_base, pt);
+
+      double prev_ctx = FXAI_AuditGetArrayValue(ctx_close, i + 1, c);
+      double open_gap = (prev_base > 0.0 ? (FXAI_AuditGetArrayValue(base_open, i, c_base) - prev_base) / prev_base : 0.0);
+      double o = prev_ctx * (1.0 + gap_scale * open_gap);
+      if(o <= pt)
+         o = prev_ctx;
+      if(o <= pt)
+         o = c;
+
+      double base_open_i = FXAI_AuditGetArrayValue(base_open, i, c_base);
+      double base_high_i = FXAI_AuditGetArrayValue(base_high, i, MathMax(base_open_i, c_base));
+      double base_low_i = FXAI_AuditGetArrayValue(base_low, i, MathMin(base_open_i, c_base));
+      double base_range = MathMax(base_high_i - base_low_i, pt);
+      double base_body_hi = MathMax(base_open_i, c_base);
+      double base_body_lo = MathMin(base_open_i, c_base);
+      double upper_ratio = MathMax(base_high_i - base_body_hi, 0.0) / base_range;
+      double lower_ratio = MathMax(base_body_lo - base_low_i, 0.0) / base_range;
+      double scaled_range = range_scale * base_range * MathMax(c / MathMax(c_base, pt), 0.25);
+      double upper_wick = MathMax(0.25 * pt, scaled_range * upper_ratio);
+      double lower_wick = MathMax(0.25 * pt, scaled_range * lower_ratio);
       double body_hi = MathMax(o, c);
       double body_lo = MathMin(o, c);
-      double step = MathMax(MathAbs(c - prev), MathAbs(prev - prev2));
-      if(step < pt)
-         step = pt;
-      double wick = 0.35 * step + 0.25 * pt;
-      open_arr[i] = o;
-      high_arr[i] = body_hi + wick;
-      low_arr[i] = MathMax(pt, body_lo - wick);
 
-      int ref_spread = (i < ArraySize(spread_ref_arr) ? spread_ref_arr[i] : 1);
-      if(ref_spread < 1) ref_spread = 1;
-      spread_arr[i] = ref_spread;
+      ctx_open[i] = o;
+      ctx_high[i] = body_hi + upper_wick;
+      ctx_low[i] = MathMax(pt, body_lo - lower_wick);
+      ctx_close[i] = c;
+
+      int ref_spread = (i < ArraySize(base_spread) ? base_spread[i] : 1);
+      if(ref_spread < 1)
+         ref_spread = 1;
+      ctx_spread[i] = (int)MathMax(1.0, MathRound((double)ref_spread * spread_scale));
    }
 }
 
@@ -627,56 +681,73 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       FXAI_BuildAlignedIndexMap(time_series, time_m30, 2 * PeriodSeconds(PERIOD_M30), map_m30);
       FXAI_BuildAlignedIndexMap(time_series, time_h1, 2 * PeriodSeconds(PERIOD_H1), map_h1);
 
-      double ctx1[];
-      double ctx2[];
-      double ctx3[];
       double ctx1_open[];
       double ctx1_high[];
       double ctx1_low[];
+      double ctx1_close[];
       int ctx1_spread[];
       double ctx2_open[];
       double ctx2_high[];
       double ctx2_low[];
+      double ctx2_close[];
       int ctx2_spread[];
       double ctx3_open[];
       double ctx3_high[];
       double ctx3_low[];
+      double ctx3_close[];
       int ctx3_spread[];
-      int n = ArraySize(close_series);
-      ArrayResize(ctx1, n);
-      ArrayResize(ctx2, n);
-      ArrayResize(ctx3, n);
-      ArraySetAsSeries(ctx1, true);
-      ArraySetAsSeries(ctx2, true);
-      ArraySetAsSeries(ctx3, true);
-      for(int i=0; i<n; i++)
-      {
-         double c = close_series[i];
-         double prev = FXAI_AuditGetArrayValue(close_series, i + 1, c);
-         double ret = (prev > 0.0 ? (c - prev) / prev : 0.0);
-         ctx1[i] = c * (1.0 + 0.60 * ret);
-         ctx2[i] = 0.65 * c + 0.35 * prev;
-         ctx3[i] = c * (1.0 - 0.35 * ret);
-      }
-      FXAI_AuditSynthesizeOHLCSpreadFromCloseSeries(ctx1, spread_series, point, ctx1_open, ctx1_high, ctx1_low, ctx1_spread);
-      FXAI_AuditSynthesizeOHLCSpreadFromCloseSeries(ctx2, spread_series, point, ctx2_open, ctx2_high, ctx2_low, ctx2_spread);
-      FXAI_AuditSynthesizeOHLCSpreadFromCloseSeries(ctx3, spread_series, point, ctx3_open, ctx3_high, ctx3_low, ctx3_spread);
+      FXAI_AuditDeriveContextSeriesFromBase(point,
+                                            open_series,
+                                            high_series,
+                                            low_series,
+                                            close_series,
+                                            spread_series,
+                                            0,
+                                            ctx1_open,
+                                            ctx1_high,
+                                            ctx1_low,
+                                            ctx1_close,
+                                            ctx1_spread);
+      FXAI_AuditDeriveContextSeriesFromBase(point,
+                                            open_series,
+                                            high_series,
+                                            low_series,
+                                            close_series,
+                                            spread_series,
+                                            1,
+                                            ctx2_open,
+                                            ctx2_high,
+                                            ctx2_low,
+                                            ctx2_close,
+                                            ctx2_spread);
+      FXAI_AuditDeriveContextSeriesFromBase(point,
+                                            open_series,
+                                            high_series,
+                                            low_series,
+                                            close_series,
+                                            spread_series,
+                                            2,
+                                            ctx3_open,
+                                            ctx3_high,
+                                            ctx3_low,
+                                            ctx3_close,
+                                            ctx3_spread);
       FXAI_AuditBuildContextFeatures(close_series,
                                      point,
                                      ctx1_open,
                                      ctx1_high,
                                      ctx1_low,
-                                     ctx1,
+                                     ctx1_close,
                                      ctx1_spread,
                                      ctx2_open,
                                      ctx2_high,
                                      ctx2_low,
-                                     ctx2,
+                                     ctx2_close,
                                      ctx2_spread,
                                      ctx3_open,
                                      ctx3_high,
                                      ctx3_low,
-                                     ctx3,
+                                     ctx3_close,
                                      ctx3_spread,
                                      ctx_mean_arr,
                                      ctx_std_arr,
@@ -694,18 +765,42 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
    double chrono_low[];
    double chrono_close[];
    int chrono_spread[];
-   double ctx1[];
-   double ctx2[];
-   double ctx3[];
+   double chrono_ctx1_open[];
+   double chrono_ctx1_high[];
+   double chrono_ctx1_low[];
+   double chrono_ctx1_close[];
+   int chrono_ctx1_spread[];
+   double chrono_ctx2_open[];
+   double chrono_ctx2_high[];
+   double chrono_ctx2_low[];
+   double chrono_ctx2_close[];
+   int chrono_ctx2_spread[];
+   double chrono_ctx3_open[];
+   double chrono_ctx3_high[];
+   double chrono_ctx3_low[];
+   double chrono_ctx3_close[];
+   int chrono_ctx3_spread[];
    ArrayResize(chrono_time, bars);
    ArrayResize(chrono_open, bars);
    ArrayResize(chrono_high, bars);
    ArrayResize(chrono_low, bars);
    ArrayResize(chrono_close, bars);
    ArrayResize(chrono_spread, bars);
-   ArrayResize(ctx1, bars);
-   ArrayResize(ctx2, bars);
-   ArrayResize(ctx3, bars);
+   ArrayResize(chrono_ctx1_open, bars);
+   ArrayResize(chrono_ctx1_high, bars);
+   ArrayResize(chrono_ctx1_low, bars);
+   ArrayResize(chrono_ctx1_close, bars);
+   ArrayResize(chrono_ctx1_spread, bars);
+   ArrayResize(chrono_ctx2_open, bars);
+   ArrayResize(chrono_ctx2_high, bars);
+   ArrayResize(chrono_ctx2_low, bars);
+   ArrayResize(chrono_ctx2_close, bars);
+   ArrayResize(chrono_ctx2_spread, bars);
+   ArrayResize(chrono_ctx3_open, bars);
+   ArrayResize(chrono_ctx3_high, bars);
+   ArrayResize(chrono_ctx3_low, bars);
+   ArrayResize(chrono_ctx3_close, bars);
+   ArrayResize(chrono_ctx3_spread, bars);
 
    datetime t0 = D'2024.01.01 00:00';
    double anchor = 1.10000;
@@ -763,15 +858,48 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       double ctx_ret1 = 0.80 * ret + ctx_noise1;
       double ctx_ret2 = -0.45 * ret + ctx_noise2;
       double ctx_ret3 = 0.35 * ret + 0.50 * ctx_noise3;
-      ctx_prev1 *= (1.0 + ctx_ret1);
-      ctx_prev2 *= (1.0 + ctx_ret2);
-      ctx_prev3 *= (1.0 + ctx_ret3);
-      if(ctx_prev1 <= point) ctx_prev1 = op;
-      if(ctx_prev2 <= point) ctx_prev2 = op;
-      if(ctx_prev3 <= point) ctx_prev3 = op;
-      ctx1[k] = ctx_prev1;
-      ctx2[k] = ctx_prev2;
-      ctx3[k] = ctx_prev3;
+
+      double ctx_op1 = ctx_prev1;
+      double ctx_op2 = ctx_prev2;
+      double ctx_op3 = ctx_prev3;
+      double ctx_cl1 = ctx_prev1 * (1.0 + ctx_ret1);
+      double ctx_cl2 = ctx_prev2 * (1.0 + ctx_ret2);
+      double ctx_cl3 = ctx_prev3 * (1.0 + ctx_ret3);
+      if(ctx_cl1 <= point) ctx_cl1 = MathMax(ctx_op1, op);
+      if(ctx_cl2 <= point) ctx_cl2 = MathMax(ctx_op2, op);
+      if(ctx_cl3 <= point) ctx_cl3 = MathMax(ctx_op3, op);
+
+      double ctx_wick1 = MathMax(MathAbs(ctx_cl1 - ctx_op1) * (0.25 + 0.35 * rng.NextUnit()), point * (1.5 + 5.0 * rng.NextUnit()));
+      double ctx_wick2 = MathMax(MathAbs(ctx_cl2 - ctx_op2) * (0.25 + 0.35 * rng.NextUnit()), point * (1.5 + 5.5 * rng.NextUnit()));
+      double ctx_wick3 = MathMax(MathAbs(ctx_cl3 - ctx_op3) * (0.25 + 0.35 * rng.NextUnit()), point * (1.5 + 6.0 * rng.NextUnit()));
+
+      chrono_ctx1_open[k] = ctx_op1;
+      chrono_ctx1_high[k] = MathMax(ctx_op1, ctx_cl1) + ctx_wick1;
+      chrono_ctx1_low[k] = MathMax(point, MathMin(ctx_op1, ctx_cl1) - ctx_wick1);
+      chrono_ctx1_close[k] = ctx_cl1;
+      chrono_ctx1_spread[k] = (int)MathMax(1.0, MathRound(spec.spread_points *
+                                                           (0.85 + 0.25 * rng.NextUnit() +
+                                                            0.18 * FXAI_Clamp(MathAbs(ctx_ret1) / MathMax(sigma, 1e-6), 0.0, 2.0))));
+
+      chrono_ctx2_open[k] = ctx_op2;
+      chrono_ctx2_high[k] = MathMax(ctx_op2, ctx_cl2) + ctx_wick2;
+      chrono_ctx2_low[k] = MathMax(point, MathMin(ctx_op2, ctx_cl2) - ctx_wick2);
+      chrono_ctx2_close[k] = ctx_cl2;
+      chrono_ctx2_spread[k] = (int)MathMax(1.0, MathRound(spec.spread_points *
+                                                           (0.80 + 0.20 * rng.NextUnit() +
+                                                            0.12 * FXAI_Clamp(MathAbs(ctx_ret2) / MathMax(sigma, 1e-6), 0.0, 2.0))));
+
+      chrono_ctx3_open[k] = ctx_op3;
+      chrono_ctx3_high[k] = MathMax(ctx_op3, ctx_cl3) + ctx_wick3;
+      chrono_ctx3_low[k] = MathMax(point, MathMin(ctx_op3, ctx_cl3) - ctx_wick3);
+      chrono_ctx3_close[k] = ctx_cl3;
+      chrono_ctx3_spread[k] = (int)MathMax(1.0, MathRound(spec.spread_points *
+                                                           (0.90 + 0.25 * rng.NextUnit() +
+                                                            0.16 * FXAI_Clamp(MathAbs(ctx_ret3) / MathMax(sigma, 1e-6), 0.0, 2.0))));
+
+      ctx_prev1 = ctx_cl1;
+      ctx_prev2 = ctx_cl2;
+      ctx_prev3 = ctx_cl3;
 
       prev = cl;
    }
@@ -807,12 +935,42 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
    double ctx3_high[];
    double ctx3_low[];
    int ctx3_spread[];
-   FXAI_AuditReverseCloseSeries(chrono_time, ctx1, ctx1_time, ctx1_series);
-   FXAI_AuditReverseCloseSeries(chrono_time, ctx2, ctx2_time, ctx2_series);
-   FXAI_AuditReverseCloseSeries(chrono_time, ctx3, ctx3_time, ctx3_series);
-   FXAI_AuditSynthesizeOHLCSpreadFromCloseSeries(ctx1_series, spread_series, point, ctx1_open, ctx1_high, ctx1_low, ctx1_spread);
-   FXAI_AuditSynthesizeOHLCSpreadFromCloseSeries(ctx2_series, spread_series, point, ctx2_open, ctx2_high, ctx2_low, ctx2_spread);
-   FXAI_AuditSynthesizeOHLCSpreadFromCloseSeries(ctx3_series, spread_series, point, ctx3_open, ctx3_high, ctx3_low, ctx3_spread);
+   FXAI_AuditReverseChronoToSeries(chrono_time,
+                                   chrono_ctx1_open,
+                                   chrono_ctx1_high,
+                                   chrono_ctx1_low,
+                                   chrono_ctx1_close,
+                                   chrono_ctx1_spread,
+                                   ctx1_time,
+                                   ctx1_open,
+                                   ctx1_high,
+                                   ctx1_low,
+                                   ctx1_series,
+                                   ctx1_spread);
+   FXAI_AuditReverseChronoToSeries(chrono_time,
+                                   chrono_ctx2_open,
+                                   chrono_ctx2_high,
+                                   chrono_ctx2_low,
+                                   chrono_ctx2_close,
+                                   chrono_ctx2_spread,
+                                   ctx2_time,
+                                   ctx2_open,
+                                   ctx2_high,
+                                   ctx2_low,
+                                   ctx2_series,
+                                   ctx2_spread);
+   FXAI_AuditReverseChronoToSeries(chrono_time,
+                                   chrono_ctx3_open,
+                                   chrono_ctx3_high,
+                                   chrono_ctx3_low,
+                                   chrono_ctx3_close,
+                                   chrono_ctx3_spread,
+                                   ctx3_time,
+                                   ctx3_open,
+                                   ctx3_high,
+                                   ctx3_low,
+                                   ctx3_series,
+                                   ctx3_spread);
 
    FXAI_AuditAggregateCloseTF(chrono_time, chrono_open, chrono_high, chrono_low, chrono_close, 5, time_m5, close_m5);
    FXAI_AuditAggregateCloseTF(chrono_time, chrono_open, chrono_high, chrono_low, chrono_close, 15, time_m15, close_m15);

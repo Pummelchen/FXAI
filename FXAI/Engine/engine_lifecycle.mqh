@@ -1856,22 +1856,22 @@ bool FXAI_RunPersistenceCoverageCompliance(CFXAIAIPlugin &plugin,
        FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY) ||
        FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL));
 
-   if(stateful_checkpoint &&
-      coverage_tag != "native_model" &&
-      coverage_tag != "native_replay")
+   if(stateful_checkpoint && coverage_tag != "native_model")
    {
-      Print("FXAI compliance error: stateful model lacks checkpoint reconstruction coverage. model=", plugin.AIName(),
-            " coverage=", coverage_tag);
+      Print("FXAI compliance error: stateful model lacks native checkpoint coverage required for live promotion. model=",
+            plugin.AIName(),
+            " coverage=",
+            coverage_tag);
       return false;
    }
 
    if(manifest.reference_tier == (int)FXAI_REFERENCE_FULL_NATIVE &&
       coverage_tag != "native_model")
    {
-      Print("FXAI persistence note: full-native plugin is running on replay-verified checkpoint coverage. model=", plugin.AIName(),
+      Print("FXAI persistence note: full-native plugin is not running on native checkpoint coverage. model=", plugin.AIName(),
             " coverage=", coverage_tag);
    }
-   else if(stateful_checkpoint && coverage_tag != expected_tier && coverage_tag != "native_replay")
+   else if(!stateful_checkpoint && coverage_tag != expected_tier)
    {
       Print("FXAI persistence note: checkpoint coverage tag differs from declared reference tier. model=", plugin.AIName(),
             " coverage=", coverage_tag,

@@ -443,6 +443,18 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
    FXAI_AuditDefaultHyperParams(ai_idx, hp);
    plugin.EnsureInitialized(hp);
 
+   string runtime_scope = "AUDIT_" + _Symbol + "_" + manifest.ai_name + "_" + spec.name + "_" +
+                          IntegerToString(ai_idx) + "_" + IntegerToString(bars) + "_" + IntegerToString(horizon_minutes);
+   FXAI_AuditBindRuntimePlugin(plugin);
+   FXAI_ResetConformalState();
+   if(!FXAI_SaveRuntimeArtifacts(runtime_scope) || !FXAI_LoadRuntimeArtifacts(runtime_scope))
+   {
+      plugin.ClearSyntheticSeries();
+      FXAI_AuditBindRuntimePlugin(NULL);
+      delete plugin;
+      return false;
+   }
+
    int seq_bars = FXAI_ResolveManifestSequenceBars(manifest, horizon_minutes);
    int seq_override = FXAI_AuditGetSequenceBarsOverride();
    if(seq_override > 0) seq_bars = seq_override;
@@ -528,6 +540,14 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
             plugin.ClearSyntheticSeries();
             if(plugin.SupportsSyntheticSeries())
                plugin.SetSyntheticSeries(time_arr, open_arr, high_arr, low_arr, close_arr);
+            FXAI_ResetConformalState();
+            if(!FXAI_SaveRuntimeArtifacts(runtime_scope))
+            {
+               plugin.ClearSyntheticSeries();
+               FXAI_AuditBindRuntimePlugin(NULL);
+               delete plugin;
+               return false;
+            }
          }
 
          int phase = offset % cycle;
@@ -815,6 +835,27 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
                else if(eval_bucket == 2)
                   FXAI_AuditFoldValid(wf_test_fold[fold_idx], decision, pred, brier, net_points, directional_eval, dir_ok, calibration_abs, path_quality);
             }
+
+            FXAI_EnqueueConformalPending(ai_idx,
+                                         i,
+                                         ctx.regime_id,
+                                         horizon_minutes,
+                                         pred);
+            FXAI_UpdateConformalFromPending(ai_idx,
+                                            (long)i,
+                                            ctx.regime_id,
+                                            horizon_minutes,
+                                            label_class,
+                                            move_points,
+                                            mfe_points,
+                                            mae_points,
+                                            time_to_hit_frac,
+                                            path_flags,
+                                            spread_stress,
+                                            FXAI_AuditGetCommissionPerLotSide(),
+                                            FXAI_AuditGetCostBufferPoints(),
+                                            ctx.min_move_points);
+            FXAI_MaybeSaveRuntimeArtifacts(runtime_scope, ctx.sample_time);
          }
       }
 
@@ -974,7 +1015,15 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
    }
 
    FXAI_AuditFinalizeMetrics(out);
+   if(!FXAI_SaveRuntimeArtifacts(runtime_scope))
+   {
+      plugin.ClearSyntheticSeries();
+      FXAI_AuditBindRuntimePlugin(NULL);
+      delete plugin;
+      return false;
+   }
    plugin.ClearSyntheticSeries();
+   FXAI_AuditBindRuntimePlugin(NULL);
    delete plugin;
    return true;
 }

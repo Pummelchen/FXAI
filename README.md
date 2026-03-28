@@ -123,6 +123,9 @@ Runtime source-of-truth:
 Versioned mirror:
 - Git repo copy: `FXAI/`
 
+Live-tree guide:
+- `FXAI/README.md` is shipped inside the synced MT5 subtree so the deployed Experts folder remains self-describing.
+
 Important clarification:
 - `fxai_testlab.py` compiles and launches the live MT5 tree.
 - If you edit only the git mirror, sync those changes into the MT5 Experts folder before compiling.
@@ -195,6 +198,8 @@ What FXAI is not:
 
 - `FXAI/FXAI.mq5`  
   Main EA entry point and live trading shell
+- `FXAI/README.md`
+  Colocated MT5-subtree guide for operators working directly in the synced Experts folder
 - `FXAI/API/api.mqh`  
   API v4 registry, validation, and plugin wiring
 - `FXAI/API/plugin_base.mqh`  
