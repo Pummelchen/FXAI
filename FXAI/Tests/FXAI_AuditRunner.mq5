@@ -23,6 +23,8 @@ input int    Audit_WalkForwardTestBars = 64;
 input int    Audit_WalkForwardPurgeBars = 32;
 input int    Audit_WalkForwardEmbargoBars = 24;
 input int    Audit_WalkForwardFolds = 6;
+input long   Audit_WindowStartUnix = 0;
+input long   Audit_WindowEndUnix = 0;
 input int    Audit_Seed = 42;
 input bool   Audit_RunTensorKernelSanity = true;
 input bool   Audit_ResetOutput = true;
@@ -119,6 +121,20 @@ int FXAI_AuditGetWalkForwardFolds(void)
    if(v < 2) v = 2;
    if(v > 16) v = 16;
    return v;
+}
+
+datetime FXAI_AuditGetWindowStartTime(void)
+{
+   if(Audit_WindowStartUnix <= 0)
+      return 0;
+   return (datetime)Audit_WindowStartUnix;
+}
+
+datetime FXAI_AuditGetWindowEndTime(void)
+{
+   if(Audit_WindowEndUnix <= 0)
+      return 0;
+   return (datetime)Audit_WindowEndUnix;
 }
 
 ulong FXAI_AuditGetFeatureGroupsMaskOverride(void)

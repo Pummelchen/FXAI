@@ -187,10 +187,10 @@ bool FXAI_AuditGenerateAdversarialScenarioSeries(CFXAIAIRegistry &registry,
       search_bars = bars + 512;
 
    MqlRates rates_m1[];
-   ArraySetAsSeries(rates_m1, true);
-   int got = CopyRates(_Symbol, PERIOD_M1, 1, search_bars, rates_m1);
+   int got = FXAI_AuditCopyMarketRates(search_bars, rates_m1);
    if(got < bars + 64)
       return false;
+   search_bars = got;
 
    datetime base_time[];
    double base_open[];

@@ -1040,9 +1040,9 @@ def build_run_audit_namespace(base_args, run: dict, output_path: Path):
         plugin_id=28,
         plugin_list=f"{{{run['plugin']}}}",
         scenario_list="{" + ", ".join(run.get("scenario_list", [])) + "}",
-        bars=base_args.bars,
-        horizon=base_args.horizon,
-        m1sync_bars=base_args.m1sync_bars,
+        bars=run.get("bars", base_args.bars),
+        horizon=run.get("horizon", base_args.horizon),
+        m1sync_bars=run.get("m1sync_bars", base_args.m1sync_bars),
         normalization=run.get("normalization", base_args.normalization),
         sequence_bars=run.get("sequence_bars", base_args.sequence_bars),
         schema_id=run.get("schema_id", base_args.schema_id),
@@ -1053,10 +1053,15 @@ def build_run_audit_namespace(base_args, run: dict, output_path: Path):
         fill_penalty_points=run.get("fill_penalty_points", base_args.fill_penalty_points),
         wf_train_bars=run.get("wf_train_bars", base_args.wf_train_bars),
         wf_test_bars=run.get("wf_test_bars", base_args.wf_test_bars),
+        wf_purge_bars=run.get("wf_purge_bars", getattr(base_args, "wf_purge_bars", 32)),
+        wf_embargo_bars=run.get("wf_embargo_bars", getattr(base_args, "wf_embargo_bars", 24)),
+        wf_folds=run.get("wf_folds", getattr(base_args, "wf_folds", 6)),
         seed=base_args.seed,
         symbol=symbol,
         symbol_list=("{" + ", ".join(symbols) + "}" if symbols else "{" + symbol + "}"),
-        execution_profile=getattr(base_args, "execution_profile", "default"),
+        window_start_unix=run.get("window_start_unix", getattr(base_args, "window_start_unix", 0)),
+        window_end_unix=run.get("window_end_unix", getattr(base_args, "window_end_unix", 0)),
+        execution_profile=run.get("execution_profile", getattr(base_args, "execution_profile", "default")),
         login=base_args.login,
         server=base_args.server,
         password=base_args.password,
@@ -1064,6 +1069,7 @@ def build_run_audit_namespace(base_args, run: dict, output_path: Path):
         baseline=None,
         output=str(output_path),
         compare_output=None,
+        skip_compile=getattr(base_args, "skip_compile", False),
     )
 
 
@@ -1307,7 +1313,7 @@ def write_audit_set(path: Path, args) -> None:
         f"Audit_Plugin={args.plugin_id}||0||0||28||N",
         f"Audit_PluginList={args.plugin_list}||0||0||0||N",
         f"Audit_ScenarioList={args.scenario_list}||0||0||0||N",
-        f"Audit_Bars={args.bars}||2048||1||100000||N",
+        f"Audit_Bars={args.bars}||2048||1||1000000||N",
         f"PredictionTargetMinutes={args.horizon}||1||1||720||N",
         f"Audit_M1SyncBars={args.m1sync_bars}||2||1||12||N",
         f"Audit_Normalization={args.normalization}||0||0||14||N",
@@ -1318,11 +1324,13 @@ def write_audit_set(path: Path, args) -> None:
         f"Audit_CostBufferPoints={args.cost_buffer_points}||0||0||100||N",
         f"Audit_SlippagePoints={args.slippage_points}||0||0||100||N",
         f"Audit_FillPenaltyPoints={args.fill_penalty_points}||0||0||100||N",
-        f"Audit_WalkForwardTrainBars={args.wf_train_bars}||64||1||50000||N",
-        f"Audit_WalkForwardTestBars={args.wf_test_bars}||16||1||50000||N",
-        f"Audit_WalkForwardPurgeBars={args.wf_purge_bars}||0||0||50000||N",
-        f"Audit_WalkForwardEmbargoBars={args.wf_embargo_bars}||0||0||50000||N",
+        f"Audit_WalkForwardTrainBars={args.wf_train_bars}||64||1||1000000||N",
+        f"Audit_WalkForwardTestBars={args.wf_test_bars}||16||1||1000000||N",
+        f"Audit_WalkForwardPurgeBars={args.wf_purge_bars}||0||0||1000000||N",
+        f"Audit_WalkForwardEmbargoBars={args.wf_embargo_bars}||0||0||1000000||N",
         f"Audit_WalkForwardFolds={args.wf_folds}||2||1||64||N",
+        f"Audit_WindowStartUnix={getattr(args, 'window_start_unix', 0)}||0||0||2147483647||N",
+        f"Audit_WindowEndUnix={getattr(args, 'window_end_unix', 0)}||0||0||2147483647||N",
         f"Audit_Seed={args.seed}||0||1||1000000||N",
         "Audit_ResetOutput=true||false||0||true||N",
         "Audit_StopOnFailure=false||false||0||true||N",
@@ -1526,7 +1534,7 @@ def cmd_compile_main(_args):
 
 def cmd_run_audit(args):
     args = build_effective_audit_args(args)
-    if cmd_compile(args) != 0:
+    if not getattr(args, "skip_compile", False) and cmd_compile(args) != 0:
         return 1
 
     BASELINES_DIR.mkdir(parents=True, exist_ok=True)
@@ -1584,6 +1592,13 @@ def cmd_run_audit(args):
         "walkforward": {
             "train_bars": args.wf_train_bars,
             "test_bars": args.wf_test_bars,
+            "purge_bars": args.wf_purge_bars,
+            "embargo_bars": args.wf_embargo_bars,
+            "folds": args.wf_folds,
+        },
+        "window": {
+            "start_unix": int(getattr(args, "window_start_unix", 0) or 0),
+            "end_unix": int(getattr(args, "window_end_unix", 0) or 0),
         },
         "artifacts": {
             "report": str(output_path),
@@ -1880,6 +1895,8 @@ def main():
     ra.add_argument("--wf-purge-bars", type=int, default=32)
     ra.add_argument("--wf-embargo-bars", type=int, default=24)
     ra.add_argument("--wf-folds", type=int, default=6)
+    ra.add_argument("--window-start-unix", type=int, default=0)
+    ra.add_argument("--window-end-unix", type=int, default=0)
     ra.add_argument("--seed", type=int, default=42)
     ra.add_argument("--symbol", default="EURUSD")
     ra.add_argument("--symbol-list", default="")
@@ -1892,6 +1909,7 @@ def main():
     ra.add_argument("--baseline")
     ra.add_argument("--output")
     ra.add_argument("--compare-output")
+    ra.add_argument("--skip-compile", action="store_true", help=argparse.SUPPRESS)
     ra.set_defaults(func=cmd_run_audit)
 
     a = sub.add_parser("analyze", help="Analyze an audit TSV report")
@@ -1941,6 +1959,11 @@ def main():
     oa.add_argument("--fill-penalty-points", type=float, default=None)
     oa.add_argument("--wf-train-bars", type=int, default=256)
     oa.add_argument("--wf-test-bars", type=int, default=64)
+    oa.add_argument("--wf-purge-bars", type=int, default=32)
+    oa.add_argument("--wf-embargo-bars", type=int, default=24)
+    oa.add_argument("--wf-folds", type=int, default=6)
+    oa.add_argument("--window-start-unix", type=int, default=0)
+    oa.add_argument("--window-end-unix", type=int, default=0)
     oa.add_argument("--seed", type=int, default=42)
     oa.add_argument("--symbol", default="EURUSD")
     oa.add_argument("--symbol-list", default="")

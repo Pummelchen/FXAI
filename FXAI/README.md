@@ -14,6 +14,8 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
   MT5-side Audit Lab runner.
 - `Tools/fxai_testlab.py`
   External compile, audit, baseline, and release-gate tool.
+- `Tools/fxai_offline_lab.py`
+  SQLite-backed offline export, tuning, promotion, and control-loop tool.
 
 ## Key Runtime Areas
 
@@ -41,6 +43,7 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - Audit Lab now exercises scoped runtime-artifact persistence and conformal calibration state instead of stub no-op hooks.
 - Audit scenarios build coherent `OHLC + spread` context bars rather than reconstructing them from close-only shortcuts.
 - Macro-event datasets now run under schema version 2 with revision-chain, source-trust, and currency-relevance manifests that feed release-gate checks.
+- Offline Lab now exports exact-window `M1 OHLC + spread` datasets into SQLite, stores full tuning ledgers and scenario metrics, and promotes ready-to-use MT5 `.set` files under `Tools/OfflineLab/Profiles/`, `MQL5/Profiles/Tester/`, and `FILE_COMMON/FXAI/Offline/Promotions/`.
 
 ## Source Of Truth
 

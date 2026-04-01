@@ -48,6 +48,8 @@ int FXAI_AuditGetWalkForwardPurgeBars(void);
 int FXAI_AuditGetWalkForwardEmbargoBars(void);
 int FXAI_AuditGetWalkForwardFolds(void);
 ulong FXAI_AuditGetFeatureGroupsMaskOverride(void);
+datetime FXAI_AuditGetWindowStartTime(void);
+datetime FXAI_AuditGetWindowEndTime(void);
 
 void FXAI_AuditAssignExcursionsForRealizedMove(const double realized_move_points,
                                                const double best_up_points,

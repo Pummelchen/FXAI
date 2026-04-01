@@ -54,6 +54,16 @@ python3 FXAI/Tools/fxai_testlab.py compile-main
 python3 FXAI/Tools/fxai_testlab.py compile-audit
 ```
 
+SQLite offline lab:
+
+```bash
+python3 FXAI/Tools/fxai_offline_lab.py init-db
+python3 FXAI/Tools/fxai_offline_lab.py tune-zoo --profile continuous --auto-export --symbol-pack majors --months-list 3,6,12
+python3 FXAI/Tools/fxai_offline_lab.py best-params --profile continuous --symbol-pack majors
+```
+
+The offline lab exports exact-window `M1 OHLC + spread` data from MT5, stores datasets and run history in SQLite, tunes the real MT5 model zoo on those windows, and emits ready-to-use MT5 `.set` files so promoted parameters do not need manual copy/paste.
+
 Focused audit example:
 
 ```bash
@@ -70,6 +80,7 @@ Detailed documentation is kept in the wiki:
 - [Getting Started](https://github.com/Pummelchen/FXAI/wiki/Getting-Started)
 - [FXAI Framework](https://github.com/Pummelchen/FXAI/wiki/FXAI-Framework)
 - [Audit Lab](https://github.com/Pummelchen/FXAI/wiki/Audit-Lab)
+- [Offline Lab](https://github.com/Pummelchen/FXAI/wiki/Offline-Lab)
 - [Project Structure](https://github.com/Pummelchen/FXAI/wiki/Project-Structure)
 - [Data Policy](https://github.com/Pummelchen/FXAI/wiki/Data-Policy)
 

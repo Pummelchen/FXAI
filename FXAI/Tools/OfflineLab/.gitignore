@@ -1,0 +1,7 @@
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+Profiles/
+Reports/
+Runs/
+__pycache__/

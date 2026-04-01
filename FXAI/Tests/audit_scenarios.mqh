@@ -170,6 +170,26 @@ void FXAI_AuditResetMetrics(FXAIAuditScenarioMetrics &m,
    m.issue_flags = 0;
 }
 
+bool FXAI_AuditHasWindowOverride(void)
+{
+   datetime start_time = FXAI_AuditGetWindowStartTime();
+   datetime end_time = FXAI_AuditGetWindowEndTime();
+   return (start_time > 0 && end_time > start_time);
+}
+
+int FXAI_AuditCopyMarketRates(const int fallback_search_bars,
+                              MqlRates &rates_m1[])
+{
+   ArraySetAsSeries(rates_m1, true);
+   if(FXAI_AuditHasWindowOverride())
+   {
+      datetime start_time = FXAI_AuditGetWindowStartTime();
+      datetime end_time = FXAI_AuditGetWindowEndTime();
+      return CopyRates(_Symbol, PERIOD_M1, start_time, end_time, rates_m1);
+   }
+   return CopyRates(_Symbol, PERIOD_M1, 1, fallback_search_bars, rates_m1);
+}
+
 int FXAI_AuditDecisionFromPred(const FXAIAIPredictionV4 &pred)
 {
    int best = (int)FXAI_LABEL_SKIP;
@@ -709,11 +729,11 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
    if(spec.id >= 8)
    {
       MqlRates rates_m1[];
-      ArraySetAsSeries(rates_m1, true);
       int search_bars = bars * 4;
       if(search_bars < bars + 512) search_bars = bars + 512;
-      int got = CopyRates(_Symbol, PERIOD_M1, 1, search_bars, rates_m1);
+      int got = FXAI_AuditCopyMarketRates(search_bars, rates_m1);
       if(got < bars + 64) return false;
+      search_bars = got;
 
       int best_start = 0;
       double best_score = -1e18;
