@@ -677,6 +677,19 @@ int      g_last_order_request_side = 0;
 int      g_last_order_request_type = 0;
 bool     g_last_order_request_pending = false;
 
+void FXAI_ClearLastOrderRequestState()
+{
+   g_last_order_request_time = 0;
+   g_last_order_request_us = 0;
+   g_last_order_request_price = 0.0;
+   g_last_order_request_volume = 0.0;
+   g_last_order_request_filled_volume = 0.0;
+   g_last_order_request_horizon = 0;
+   g_last_order_request_side = 0;
+   g_last_order_request_type = 0;
+   g_last_order_request_pending = false;
+}
+
 
 #include "Engine\engine_all.mqh"
 
@@ -1394,6 +1407,16 @@ bool FXAI_SendMarketOrderChecked(const string symbol,
       return false;
    }
 
+   g_last_order_request_time = order_sample_time;
+   g_last_order_request_us = order_start_us;
+   g_last_order_request_price = request.price;
+   g_last_order_request_volume = request.volume;
+   g_last_order_request_filled_volume = 0.0;
+   g_last_order_request_horizon = g_ai_last_horizon_minutes;
+   g_last_order_request_side = (direction == 1 ? 1 : -1);
+   g_last_order_request_type = FXAI_BrokerOrderTypeBucket(request.type);
+   g_last_order_request_pending = true;
+
    if(!OrderSend(request, result))
    {
       retcode = (uint)result.retcode;
@@ -1412,6 +1435,7 @@ bool FXAI_SendMarketOrderChecked(const string symbol,
                                         false,
                                         0.0);
       FXAI_MarkRuntimeArtifactsDirty();
+      FXAI_ClearLastOrderRequestState();
       reason = "order_send_failed";
       return false;
    }
@@ -1434,19 +1458,10 @@ bool FXAI_SendMarketOrderChecked(const string symbol,
                                         false,
                                         0.0);
       FXAI_MarkRuntimeArtifactsDirty();
+      FXAI_ClearLastOrderRequestState();
       reason = "order_send_rejected";
       return false;
    }
-
-   g_last_order_request_time = order_sample_time;
-   g_last_order_request_us = order_start_us;
-   g_last_order_request_price = request.price;
-   g_last_order_request_volume = request.volume;
-   g_last_order_request_filled_volume = 0.0;
-   g_last_order_request_horizon = g_ai_last_horizon_minutes;
-   g_last_order_request_side = (direction == 1 ? 1 : -1);
-   g_last_order_request_type = FXAI_BrokerOrderTypeBucket(request.type);
-   g_last_order_request_pending = true;
 
    return true;
 }
@@ -1847,17 +1862,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
       g_last_order_request_filled_volume += MathMax(deal_volume, 0.0);
       if(g_last_order_request_volume <= 1e-9 ||
          g_last_order_request_filled_volume + 1e-9 >= g_last_order_request_volume)
-      {
-         g_last_order_request_pending = false;
-         g_last_order_request_us = 0;
-         g_last_order_request_price = 0.0;
-         g_last_order_request_volume = 0.0;
-         g_last_order_request_filled_volume = 0.0;
-         g_last_order_request_horizon = 0;
-         g_last_order_request_side = 0;
-         g_last_order_request_type = 0;
-         g_last_order_request_time = 0;
-      }
+         FXAI_ClearLastOrderRequestState();
       return;
    }
 

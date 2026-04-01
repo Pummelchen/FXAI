@@ -15,9 +15,13 @@ Main commands from the repo root:
 python3 FXAI/Tools/fxai_offline_lab.py init-db
 python3 FXAI/Tools/fxai_offline_lab.py export-dataset --symbol-pack majors --months-list 3,6,12
 python3 FXAI/Tools/fxai_offline_lab.py tune-zoo --profile continuous --auto-export --symbol-pack majors --months-list 3,6,12
-python3 FXAI/Tools/fxai_offline_lab.py best-params --profile continuous --symbol-pack majors
+python3 FXAI/Tools/fxai_offline_lab.py best-params --profile continuous
 python3 FXAI/Tools/fxai_offline_lab.py control-loop --profile continuous --symbol-pack majors --months-list 3,6,12 --cycles 0 --sleep-seconds 1800
 ```
+
+Notes:
+- `best-params` promotes all symbols under the selected profile by default; use `--symbol`, `--symbol-list`, or `--symbol-pack` only when you want to narrow the scope.
+- Exact-window datasets store the effective exported first and last bar range, so later tuning and promotion stay aligned to the data that was actually ingested.
 
 Generated promotion artifacts land in:
 - `FXAI/Tools/OfflineLab/Profiles/`

@@ -44,6 +44,7 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - Audit scenarios build coherent `OHLC + spread` context bars rather than reconstructing them from close-only shortcuts.
 - Macro-event datasets now run under schema version 2 with revision-chain, source-trust, and currency-relevance manifests that feed release-gate checks.
 - Offline Lab now exports exact-window `M1 OHLC + spread` datasets into SQLite, stores full tuning ledgers and scenario metrics, and promotes ready-to-use MT5 `.set` files under `Tools/OfflineLab/Profiles/`, `MQL5/Profiles/Tester/`, and `FILE_COMMON/FXAI/Offline/Promotions/`.
+- Offline Lab promotion is profile-wide by default in `best-params`, unless a symbol filter is passed, and exact-window audit runs now follow the effective exported first/last bar range.
 
 ## Source Of Truth
 

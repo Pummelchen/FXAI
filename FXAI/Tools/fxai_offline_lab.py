@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS tuning_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     dataset_id INTEGER NOT NULL,
     profile_name TEXT NOT NULL,
+    group_key TEXT NOT NULL DEFAULT '',
     symbol TEXT NOT NULL,
     plugin_name TEXT NOT NULL,
     ai_id INTEGER NOT NULL,
@@ -141,7 +142,7 @@ CREATE TABLE IF NOT EXISTS control_cycles (
 );
 
 CREATE INDEX IF NOT EXISTS idx_datasets_group ON datasets(group_key, symbol, months);
-CREATE INDEX IF NOT EXISTS idx_tuning_runs_lookup ON tuning_runs(profile_name, symbol, plugin_name, status);
+CREATE INDEX IF NOT EXISTS idx_tuning_runs_lookup ON tuning_runs(profile_name, group_key, symbol, plugin_name, status);
 CREATE INDEX IF NOT EXISTS idx_tuning_runs_dataset ON tuning_runs(dataset_id, profile_name, plugin_name);
 CREATE INDEX IF NOT EXISTS idx_best_configs_lookup ON best_configs(profile_name, symbol, plugin_name);
 CREATE INDEX IF NOT EXISTS idx_control_cycles_lookup ON control_cycles(profile_name, started_at);
@@ -217,7 +218,9 @@ def resolve_symbols(args) -> list[str]:
         return list(testlab.SYMBOL_PACKS.get(pack_name, [str(getattr(args, "symbol", "EURUSD")).upper()]))
     symbols = parse_csv_tokens(getattr(args, "symbol_list", ""))
     if not symbols:
-        symbols = [str(getattr(args, "symbol", "EURUSD"))]
+        symbol = str(getattr(args, "symbol", "EURUSD") or "").strip()
+        if symbol:
+            symbols = [symbol]
     return [s.upper() for s in symbols]
 
 
@@ -234,11 +237,35 @@ def resolve_months_list(raw: str) -> list[int]:
     return out or list(DEFAULT_MONTHS_LIST)
 
 
+def ensure_sqlite_column(conn: sqlite3.Connection, table: str, column: str, spec: str) -> None:
+    columns = {str(row["name"]).lower() for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column.lower() not in columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {spec}")
+
+
 def connect_db(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     conn.executescript(SQL_SCHEMA)
+    ensure_sqlite_column(conn, "tuning_runs", "group_key", "TEXT NOT NULL DEFAULT ''")
+    conn.execute("DROP INDEX IF EXISTS idx_tuning_runs_lookup")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tuning_runs_lookup "
+        "ON tuning_runs(profile_name, group_key, symbol, plugin_name, status)"
+    )
+    conn.execute(
+        """
+        UPDATE tuning_runs
+           SET group_key = COALESCE((
+               SELECT d.group_key
+                 FROM datasets d
+                WHERE d.id = tuning_runs.dataset_id
+           ), '')
+         WHERE COALESCE(group_key, '') = ''
+        """
+    )
+    conn.commit()
     return conn
 
 
@@ -507,8 +534,14 @@ def ingest_dataset(conn: sqlite3.Connection,
     meta = load_kv_tsv(meta_path)
     if not meta:
         raise OfflineLabError(f"offline export meta not found: {meta_path}")
-    start_unix = int(meta.get("window_start_unix", "0") or 0)
-    end_unix = int(meta.get("window_end_unix", "0") or 0)
+    requested_start_unix = int(meta.get("window_start_unix", "0") or 0)
+    requested_end_unix = int(meta.get("window_end_unix", "0") or 0)
+    exported_start_unix = int(meta.get("first_time_unix", "0") or 0)
+    exported_end_unix = int(meta.get("last_time_unix", "0") or 0)
+    start_unix = (exported_start_unix if exported_start_unix > 0 else requested_start_unix)
+    end_unix = (exported_end_unix if exported_end_unix > start_unix else requested_end_unix)
+    if start_unix <= 0 or end_unix <= start_unix:
+        raise OfflineLabError(f"offline export meta has invalid effective window: {meta_path}")
     source_sha = testlab.sha256_path(data_path)
     created_at = now_unix()
     conn.execute(
@@ -778,6 +811,7 @@ def grouped_rows_by_plugin(report_tsv: Path) -> dict[str, list[dict]]:
 def upsert_tuning_run(conn: sqlite3.Connection,
                       dataset: dict,
                       profile_name: str,
+                      group_key: str,
                       plugin_name: str,
                       ai_id: int,
                       experiment_name: str,
@@ -812,14 +846,15 @@ def upsert_tuning_run(conn: sqlite3.Connection,
     conn.execute(
         """
         INSERT INTO tuning_runs(
-            dataset_id, profile_name, symbol, plugin_name, ai_id, experiment_name, param_hash, parameters_json,
+            dataset_id, profile_name, group_key, symbol, plugin_name, ai_id, experiment_name, param_hash, parameters_json,
             report_path, raw_report_path, summary_path, manifest_path,
             score, grade, issue_count, issues_json,
             market_recent_score, walkforward_score, adversarial_score, macro_event_score,
             status, started_at, finished_at
         )
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(param_hash) DO UPDATE SET
+            group_key=excluded.group_key,
             report_path=excluded.report_path,
             raw_report_path=excluded.raw_report_path,
             summary_path=excluded.summary_path,
@@ -839,6 +874,7 @@ def upsert_tuning_run(conn: sqlite3.Connection,
         (
             int(dataset["id"]),
             profile_name,
+            (group_key or ""),
             str(dataset["symbol"]),
             plugin_name,
             ai_id,
@@ -891,6 +927,7 @@ def upsert_tuning_run(conn: sqlite3.Connection,
 def store_baseline_run_bundle(conn: sqlite3.Connection,
                               dataset: dict,
                               profile_name: str,
+                              group_key: str,
                               base_args,
                               report_path: Path,
                               raw_report_path: Path,
@@ -908,6 +945,7 @@ def store_baseline_run_bundle(conn: sqlite3.Connection,
             conn,
             dataset,
             profile_name,
+            group_key,
             plugin_name,
             ai_id,
             "baseline_all",
@@ -935,7 +973,8 @@ def run_dataset_baseline(conn: sqlite3.Connection, dataset: dict, profile_name: 
     shutil.copy2(testlab.DEFAULT_REPORT, raw_report_path)
     summary_path = baseline_path.with_suffix(".summary.json")
     manifest_path = baseline_path.with_suffix(".manifest.json")
-    store_baseline_run_bundle(conn, dataset, profile_name, base_args, baseline_path, raw_report_path, summary_path, manifest_path, started_at, finished_at)
+    group_key = str(getattr(args, "group_key", "") or dataset.get("group_key", "") or "")
+    store_baseline_run_bundle(conn, dataset, profile_name, group_key, base_args, baseline_path, raw_report_path, summary_path, manifest_path, started_at, finished_at)
     return {
         "report_path": baseline_path,
         "raw_report_path": raw_report_path,
@@ -954,6 +993,7 @@ def run_dataset_campaign(conn: sqlite3.Connection, dataset: dict, profile_name: 
     if getattr(args, "limit_runs", 0) > 0:
         runs = runs[: args.limit_runs]
     results = []
+    group_key = str(getattr(args, "group_key", "") or dataset.get("group_key", "") or "")
     for idx, run in enumerate(runs, start=1):
         run["bars"] = int(base_args.bars)
         run["window_start_unix"] = int(dataset["start_unix"])
@@ -986,6 +1026,7 @@ def run_dataset_campaign(conn: sqlite3.Connection, dataset: dict, profile_name: 
             conn,
             dataset,
             profile_name,
+            group_key,
             run["plugin"],
             ai_id,
             run["experiment"],
@@ -1161,7 +1202,7 @@ def load_completed_runs(conn: sqlite3.Connection, args) -> list[dict]:
         clauses.append("d.dataset_key IN (%s)" % ",".join("?" for _ in dataset_keys))
         params.extend(dataset_keys)
     elif group_key:
-        clauses.append("d.group_key = ?")
+        clauses.append("tr.group_key = ?")
         params.append(group_key)
     if symbols:
         clauses.append("tr.symbol IN (%s)" % ",".join("?" for _ in symbols))
@@ -1394,11 +1435,13 @@ def cmd_control_loop(args) -> int:
         cycle_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
         conn.commit()
         try:
-            resolve_args = args
+            cycle_args = argparse.Namespace(**vars(args))
+            cycle_args.group_key = group_key
+            resolve_args = cycle_args
             if not getattr(args, "skip_compile", False):
                 if compile_export_runner() != 0:
                     raise OfflineLabError("failed to compile FXAI_OfflineExportRunner.mq5")
-                resolve_args = argparse.Namespace(**vars(args))
+                resolve_args = argparse.Namespace(**vars(cycle_args))
                 resolve_args.skip_compile = True
             datasets = resolve_dataset_rows(conn, resolve_args, True, group_key)
             if not getattr(args, "skip_compile", False):
@@ -1408,10 +1451,10 @@ def cmd_control_loop(args) -> int:
             for dataset in datasets:
                 dataset_out_dir = RUNS_DIR / safe_token(args.profile) / safe_token(dataset["dataset_key"])
                 ensure_dir(dataset_out_dir)
-                baseline = run_dataset_baseline(conn, dataset, args.profile, args, dataset_out_dir)
-                results = run_dataset_campaign(conn, dataset, args.profile, args, dataset_out_dir, baseline["summary"], baseline["base_args"])
+                baseline = run_dataset_baseline(conn, dataset, args.profile, cycle_args, dataset_out_dir)
+                results = run_dataset_campaign(conn, dataset, args.profile, cycle_args, dataset_out_dir, baseline["summary"], baseline["base_args"])
                 summary_items.append({"dataset_key": dataset["dataset_key"], "symbol": dataset["symbol"], "run_count": len(results)})
-            best_args = argparse.Namespace(**vars(args))
+            best_args = argparse.Namespace(**vars(cycle_args))
             best_args.group_key = group_key
             cmd_best_params(best_args)
             conn.execute(
@@ -1511,7 +1554,7 @@ def build_parser() -> argparse.ArgumentParser:
     best.add_argument("--profile", default="continuous")
     best.add_argument("--dataset-keys", default="")
     best.add_argument("--group-key", default="")
-    best.add_argument("--symbol", default="EURUSD")
+    best.add_argument("--symbol", default="")
     best.add_argument("--symbol-list", default="")
     best.add_argument("--symbol-pack", default="", choices=[""] + sorted(testlab.SYMBOL_PACKS.keys()))
     best.set_defaults(func=cmd_best_params)

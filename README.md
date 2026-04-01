@@ -62,7 +62,7 @@ python3 FXAI/Tools/fxai_offline_lab.py tune-zoo --profile continuous --auto-expo
 python3 FXAI/Tools/fxai_offline_lab.py best-params --profile continuous --symbol-pack majors
 ```
 
-The offline lab exports exact-window `M1 OHLC + spread` data from MT5, stores datasets and run history in SQLite, tunes the real MT5 model zoo on those windows, and emits ready-to-use MT5 `.set` files so promoted parameters do not need manual copy/paste.
+The offline lab exports exact-window `M1 OHLC + spread` data from MT5, stores datasets and run history in SQLite, tunes the real MT5 model zoo on those windows, and emits ready-to-use MT5 `.set` files so promoted parameters do not need manual copy/paste. Standalone `best-params` promotion now scopes to all symbols in the selected profile unless a symbol filter is explicitly provided, and exact-window tuning uses the effective exported first/last bar range rather than only the originally requested window.
 
 Focused audit example:
 
