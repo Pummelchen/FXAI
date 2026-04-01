@@ -530,7 +530,83 @@ int SpecialDirectionAI(const string symbol)
 
    if(have_online_window && online_start >= 0 && online_start < ArraySize(samples))
       FXAI_AddReplaySample(samples[online_start]);
+
+   double current_raw_x[FXAI_AI_WEIGHTS];
+   current_raw_x[0] = 1.0;
+   for(int f=0; f<FXAI_AI_FEATURES; f++)
+      current_raw_x[f + 1] = feat_pred[f];
+   double current_shared_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+   int current_shared_window_size = 0;
+   FXAI_ClearInputWindow(current_shared_window, current_shared_window_size);
+   int current_shared_span = FXAI_ContextSequenceSpan(24, H, _Symbol, 8);
+   if(current_shared_span < 1) current_shared_span = 1;
+   for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      current_shared_window[0][k] = current_raw_x[k];
+   current_shared_window_size = 1;
+   for(int idx=1; idx<current_shared_span && idx<ArraySize(samples) && current_shared_window_size < FXAI_MAX_SEQUENCE_BARS; idx++)
+   {
+      if(!samples[idx].valid)
+         continue;
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+         current_shared_window[current_shared_window_size][k] = samples[idx].x[k];
+      current_shared_window_size++;
+   }
+   if(have_online_window && online_start >= 0 && online_start < ArraySize(samples) && samples[online_start].valid)
+   {
+      double online_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+      int online_window_size = 0;
+      FXAI_BuildPreparedSampleWindow(samples, online_start, current_shared_span, online_window, online_window_size);
+      double online_a[];
+      FXAI_BuildSharedTransferInputGlobal(samples[online_start].x,
+                                          online_window,
+                                          online_window_size,
+                                          samples[online_start].domain_hash,
+                                          samples[online_start].horizon_minutes,
+                                          online_a);
+      FXAI_GlobalFoundationUpdate(online_a,
+                                  online_window,
+                                  online_window_size,
+                                  samples[online_start].domain_hash,
+                                  samples[online_start].horizon_minutes,
+                                  FXAI_DeriveSessionBucket(samples[online_start].sample_time),
+                                  samples[online_start].masked_step_target,
+                                  samples[online_start].next_vol_target,
+                                  samples[online_start].regime_shift_target,
+                                  samples[online_start].context_lead_target,
+                                  samples[online_start].sample_weight,
+                                  0.012);
+   }
    int runtime_session_bucket = FXAI_DeriveSessionBucket(snapshot.bar_time);
+   double current_transfer_a[];
+   FXAI_BuildSharedTransferInputGlobal(current_raw_x,
+                                       current_shared_window,
+                                       current_shared_window_size,
+                                       FXAI_SymbolHash01(snapshot.symbol),
+                                       H,
+                                       current_transfer_a);
+   FXAIFoundationSignals current_foundation_sig;
+   FXAI_GlobalFoundationPredict(current_transfer_a,
+                                current_shared_window,
+                                current_shared_window_size,
+                                FXAI_SymbolHash01(snapshot.symbol),
+                                H,
+                                runtime_session_bucket,
+                                current_foundation_sig);
+   FXAIStudentSignals current_student_sig;
+   FXAI_GlobalStudentPredict(current_transfer_a,
+                             current_shared_window,
+                             current_shared_window_size,
+                             FXAI_SymbolHash01(snapshot.symbol),
+                             H,
+                             runtime_session_bucket,
+                             current_student_sig);
+   FXAIAnalogMemoryQuery current_analog_q;
+   FXAI_QueryAnalogMemory(current_raw_x,
+                          regime_id,
+                          runtime_session_bucket,
+                          H,
+                          FXAI_SymbolHash01(snapshot.symbol),
+                          current_analog_q);
 
    int active_ai_ids[];
    ArrayResize(active_ai_ids, 0);
@@ -1176,6 +1252,21 @@ int SpecialDirectionAI(const string symbol)
          double vs = vote_probs[0] + vote_probs[1] + vote_probs[2];
          if(vs <= 0.0) vs = 1.0;
          vote_probs[0] /= vs; vote_probs[1] /= vs; vote_probs[2] /= vs;
+         FXAIHierarchicalSignals current_hierarchy_sig;
+         FXAI_BuildHierarchicalSignals(vote_probs,
+                                       avg_expected,
+                                       min_move_pred,
+                                       avg_conf,
+                                       avg_rel,
+                                       avg_path_risk,
+                                       avg_fill_risk,
+                                       avg_hit_time,
+                                       context_quality,
+                                       H,
+                                       current_foundation_sig,
+                                       current_student_sig,
+                                       current_analog_q,
+                                       current_hierarchy_sig);
 
          FXAI_StackBuildFeatures(buyPct,
                                  sellPct,
@@ -1212,10 +1303,42 @@ int SpecialDirectionAI(const string symbol)
                                  best_buy_share,
                                  best_sell_share,
                                  avg_ctx_trust,
+                                 current_foundation_sig.trust,
+                                 current_foundation_sig.direction_bias,
+                                 current_foundation_sig.move_ratio,
+                                 current_student_sig.trust,
+                                 current_student_sig.tradability,
+                                 current_analog_q.similarity,
+                                 current_analog_q.edge_norm,
+                                 current_analog_q.quality,
+                                 current_hierarchy_sig.consistency,
+                                 current_hierarchy_sig.tradability,
+                                 current_hierarchy_sig.execution_viability,
+                                 current_hierarchy_sig.horizon_fit,
                                  stack_feat);
          double stack_probs_dyn[];
          ArrayResize(stack_probs_dyn, 3);
          FXAI_StackPredict(regime_id, H, stack_feat, stack_probs_dyn);
+         double teacher_probs[3];
+         for(int c=0; c<3; c++)
+            teacher_probs[c] = FXAI_Clamp(0.58 * stack_probs_dyn[c] + 0.42 * vote_probs[c], 0.0005, 0.9990);
+         double teacher_sum = teacher_probs[0] + teacher_probs[1] + teacher_probs[2];
+         if(teacher_sum <= 0.0) teacher_sum = 1.0;
+         teacher_probs[0] /= teacher_sum;
+         teacher_probs[1] /= teacher_sum;
+         teacher_probs[2] /= teacher_sum;
+         FXAI_GlobalStudentUpdate(current_transfer_a,
+                                  current_shared_window,
+                                  current_shared_window_size,
+                                  FXAI_SymbolHash01(snapshot.symbol),
+                                  H,
+                                  runtime_session_bucket,
+                                  teacher_probs,
+                                  FXAI_Clamp(avg_expected / MathMax(min_move_pred, 0.10), 0.05, 4.0),
+                                  current_hierarchy_sig.tradability,
+                                  current_hierarchy_sig.horizon_fit,
+                                  1.0,
+                                  0.010);
          double trade_gate_prob = FXAI_TradeGatePredict(regime_id, H, stack_feat);
          double trade_gate_floor = FXAI_Clamp(0.34 +
                                               0.18 * avg_conf +
@@ -1225,7 +1348,10 @@ int SpecialDirectionAI(const string symbol)
                                               0.10 * (1.0 - avg_path_risk) +
                                               0.08 * (1.0 - avg_fill_risk) -
                                               0.08 * drift_norm -
-                                              0.10 * vote_probs[(int)FXAI_LABEL_SKIP],
+                                              0.10 * vote_probs[(int)FXAI_LABEL_SKIP] +
+                                              0.10 * current_hierarchy_sig.tradability +
+                                              0.08 * current_hierarchy_sig.execution_viability +
+                                              0.06 * current_hierarchy_sig.consistency,
                                               0.05,
                                               0.95);
          double trade_gate = FXAI_Clamp(0.65 * trade_gate_prob + 0.35 * trade_gate_floor, 0.0, 1.0);
@@ -1234,7 +1360,9 @@ int SpecialDirectionAI(const string symbol)
                                             0.05 * FXAI_Clamp(move_dispersion / MathMax(min_move_pred, 0.10), 0.0, 1.0) -
                                             0.05 * avg_conf -
                                             0.04 * avg_rel +
-                                            0.03 * drift_norm,
+                                            0.03 * drift_norm -
+                                            0.05 * current_hierarchy_sig.consistency -
+                                            0.04 * current_hierarchy_sig.execution_viability,
                                             0.42,
                                             0.68);
          double stack_blend = FXAI_Clamp(0.40 + 0.20 * avg_conf + 0.18 * avg_rel + 0.12 * dominant_family_ratio + 0.08 * FXAI_Clamp(context_quality, 0.0, 1.5) - 0.06 * FXAI_Clamp(move_dispersion / MathMax(min_move_pred, 0.10), 0.0, 1.0),
@@ -1256,9 +1384,11 @@ int SpecialDirectionAI(const string symbol)
          g_ai_last_reliability = FXAI_Clamp(avg_rel * (1.0 - 0.15 * drift_norm), 0.0, 1.0);
          g_ai_last_path_risk = FXAI_Clamp(avg_path_risk, 0.0, 1.0);
          g_ai_last_fill_risk = FXAI_Clamp(avg_fill_risk, 0.0, 1.0);
-         g_ai_last_trade_gate = trade_gate;
+         g_ai_last_trade_gate = FXAI_Clamp(trade_gate * (0.65 + 0.35 * current_hierarchy_sig.score), 0.0, 1.0);
 
-         if(trade_gate < trade_gate_thr)
+         if(current_hierarchy_sig.consistency < 0.38 || current_hierarchy_sig.execution_viability < 0.32)
+            decision = -1;
+         else if(trade_gate < trade_gate_thr)
             decision = -1;
          else if(ensemble_probs[(int)FXAI_LABEL_SKIP] >= 0.58 || skipPct >= 75.0)
             decision = -1;

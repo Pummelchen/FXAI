@@ -95,6 +95,11 @@ void FXAI_AuditFillScenarioSpec(const int scenario_id,
          spec.spread_points = 1.7;
          spec.macro_focus = 1.0;
          break;
+      case 15:
+         spec.name = "market_adversarial";
+         spec.spread_points = 1.9;
+         spec.macro_focus = 0.5;
+         break;
       default:
          break;
    }
@@ -537,6 +542,141 @@ void FXAI_AuditBuildContextFeatures(const double &main_close[],
    }
 }
 
+bool FXAI_AuditBuildSeriesFromMarketRates(const MqlRates &sel_m1[],
+                                          const int search_bars,
+                                          const double point,
+                                          datetime &time_series[],
+                                          double &open_series[],
+                                          double &high_series[],
+                                          double &low_series[],
+                                          double &close_series[],
+                                          int &spread_series[],
+                                          datetime &time_m5[],
+                                          double &close_m5[],
+                                          int &map_m5[],
+                                          datetime &time_m15[],
+                                          double &close_m15[],
+                                          int &map_m15[],
+                                          datetime &time_m30[],
+                                          double &close_m30[],
+                                          int &map_m30[],
+                                          datetime &time_h1[],
+                                          double &close_h1[],
+                                          int &map_h1[],
+                                          double &ctx_mean_arr[],
+                                          double &ctx_std_arr[],
+                                          double &ctx_up_arr[],
+                                          double &ctx_extra_arr[])
+{
+   int bars = ArraySize(sel_m1);
+   if(bars <= 0)
+      return false;
+
+   FXAI_ExtractRatesCloseTimeSpread(sel_m1, close_series, time_series, spread_series);
+   FXAI_ExtractRatesOHLC(sel_m1, open_series, high_series, low_series, close_series);
+   if(!FXAI_ValidateM1SeriesBundle(time_series, open_series, high_series, low_series, close_series, spread_series, bars))
+      return false;
+
+   int need_m5 = (search_bars / 5) + 220;
+   int need_m15 = (search_bars / 15) + 220;
+   int need_m30 = (search_bars / 30) + 220;
+   int need_h1 = (search_bars / 60) + 220;
+   MqlRates rates_tf[];
+   ArraySetAsSeries(rates_tf, true);
+
+   int got5 = CopyRates(_Symbol, PERIOD_M5, 1, need_m5, rates_tf);
+   if(got5 > 0) FXAI_ExtractRatesCloseTime(rates_tf, close_m5, time_m5);
+   else { ArrayResize(close_m5, 0); ArrayResize(time_m5, 0); }
+   int got15 = CopyRates(_Symbol, PERIOD_M15, 1, need_m15, rates_tf);
+   if(got15 > 0) FXAI_ExtractRatesCloseTime(rates_tf, close_m15, time_m15);
+   else { ArrayResize(close_m15, 0); ArrayResize(time_m15, 0); }
+   int got30 = CopyRates(_Symbol, PERIOD_M30, 1, need_m30, rates_tf);
+   if(got30 > 0) FXAI_ExtractRatesCloseTime(rates_tf, close_m30, time_m30);
+   else { ArrayResize(close_m30, 0); ArrayResize(time_m30, 0); }
+   int got60 = CopyRates(_Symbol, PERIOD_H1, 1, need_h1, rates_tf);
+   if(got60 > 0) FXAI_ExtractRatesCloseTime(rates_tf, close_h1, time_h1);
+   else { ArrayResize(close_h1, 0); ArrayResize(time_h1, 0); }
+
+   FXAI_BuildAlignedIndexMap(time_series, time_m5, 2 * PeriodSeconds(PERIOD_M5), map_m5);
+   FXAI_BuildAlignedIndexMap(time_series, time_m15, 2 * PeriodSeconds(PERIOD_M15), map_m15);
+   FXAI_BuildAlignedIndexMap(time_series, time_m30, 2 * PeriodSeconds(PERIOD_M30), map_m30);
+   FXAI_BuildAlignedIndexMap(time_series, time_h1, 2 * PeriodSeconds(PERIOD_H1), map_h1);
+
+   double ctx1_open[];
+   double ctx1_high[];
+   double ctx1_low[];
+   double ctx1_close[];
+   int ctx1_spread[];
+   double ctx2_open[];
+   double ctx2_high[];
+   double ctx2_low[];
+   double ctx2_close[];
+   int ctx2_spread[];
+   double ctx3_open[];
+   double ctx3_high[];
+   double ctx3_low[];
+   double ctx3_close[];
+   int ctx3_spread[];
+   FXAI_AuditDeriveContextSeriesFromBase(point,
+                                         open_series,
+                                         high_series,
+                                         low_series,
+                                         close_series,
+                                         spread_series,
+                                         0,
+                                         ctx1_open,
+                                         ctx1_high,
+                                         ctx1_low,
+                                         ctx1_close,
+                                         ctx1_spread);
+   FXAI_AuditDeriveContextSeriesFromBase(point,
+                                         open_series,
+                                         high_series,
+                                         low_series,
+                                         close_series,
+                                         spread_series,
+                                         1,
+                                         ctx2_open,
+                                         ctx2_high,
+                                         ctx2_low,
+                                         ctx2_close,
+                                         ctx2_spread);
+   FXAI_AuditDeriveContextSeriesFromBase(point,
+                                         open_series,
+                                         high_series,
+                                         low_series,
+                                         close_series,
+                                         spread_series,
+                                         2,
+                                         ctx3_open,
+                                         ctx3_high,
+                                         ctx3_low,
+                                         ctx3_close,
+                                         ctx3_spread);
+   FXAI_AuditBuildContextFeatures(close_series,
+                                  point,
+                                  ctx1_open,
+                                  ctx1_high,
+                                  ctx1_low,
+                                  ctx1_close,
+                                  ctx1_spread,
+                                  ctx2_open,
+                                  ctx2_high,
+                                  ctx2_low,
+                                  ctx2_close,
+                                  ctx2_spread,
+                                  ctx3_open,
+                                  ctx3_high,
+                                  ctx3_low,
+                                  ctx3_close,
+                                  ctx3_spread,
+                                  ctx_mean_arr,
+                                  ctx_std_arr,
+                                  ctx_up_arr,
+                                  ctx_extra_arr);
+   return true;
+}
+
 bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
                                       const int bars,
                                       const ulong seed,
@@ -651,109 +791,31 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       for(int i=0; i<bars; i++)
          sel_m1[i] = rates_m1[best_start + i];
 
-      FXAI_ExtractRatesCloseTimeSpread(sel_m1, close_series, time_series, spread_series);
-      FXAI_ExtractRatesOHLC(sel_m1, open_series, high_series, low_series, close_series);
-      if(!FXAI_ValidateM1SeriesBundle(time_series, open_series, high_series, low_series, close_series, spread_series, bars))
-         return false;
-
-      int need_m5 = (search_bars / 5) + 220;
-      int need_m15 = (search_bars / 15) + 220;
-      int need_m30 = (search_bars / 30) + 220;
-      int need_h1 = (search_bars / 60) + 220;
-      MqlRates rates_tf[];
-      ArraySetAsSeries(rates_tf, true);
-
-      int got5 = CopyRates(_Symbol, PERIOD_M5, 1, need_m5, rates_tf);
-      if(got5 > 0) FXAI_ExtractRatesCloseTime(rates_tf, close_m5, time_m5);
-      else { ArrayResize(close_m5, 0); ArrayResize(time_m5, 0); }
-      int got15 = CopyRates(_Symbol, PERIOD_M15, 1, need_m15, rates_tf);
-      if(got15 > 0) FXAI_ExtractRatesCloseTime(rates_tf, close_m15, time_m15);
-      else { ArrayResize(close_m15, 0); ArrayResize(time_m15, 0); }
-      int got30 = CopyRates(_Symbol, PERIOD_M30, 1, need_m30, rates_tf);
-      if(got30 > 0) FXAI_ExtractRatesCloseTime(rates_tf, close_m30, time_m30);
-      else { ArrayResize(close_m30, 0); ArrayResize(time_m30, 0); }
-      int got60 = CopyRates(_Symbol, PERIOD_H1, 1, need_h1, rates_tf);
-      if(got60 > 0) FXAI_ExtractRatesCloseTime(rates_tf, close_h1, time_h1);
-      else { ArrayResize(close_h1, 0); ArrayResize(time_h1, 0); }
-
-      FXAI_BuildAlignedIndexMap(time_series, time_m5, 2 * PeriodSeconds(PERIOD_M5), map_m5);
-      FXAI_BuildAlignedIndexMap(time_series, time_m15, 2 * PeriodSeconds(PERIOD_M15), map_m15);
-      FXAI_BuildAlignedIndexMap(time_series, time_m30, 2 * PeriodSeconds(PERIOD_M30), map_m30);
-      FXAI_BuildAlignedIndexMap(time_series, time_h1, 2 * PeriodSeconds(PERIOD_H1), map_h1);
-
-      double ctx1_open[];
-      double ctx1_high[];
-      double ctx1_low[];
-      double ctx1_close[];
-      int ctx1_spread[];
-      double ctx2_open[];
-      double ctx2_high[];
-      double ctx2_low[];
-      double ctx2_close[];
-      int ctx2_spread[];
-      double ctx3_open[];
-      double ctx3_high[];
-      double ctx3_low[];
-      double ctx3_close[];
-      int ctx3_spread[];
-      FXAI_AuditDeriveContextSeriesFromBase(point,
-                                            open_series,
-                                            high_series,
-                                            low_series,
-                                            close_series,
-                                            spread_series,
-                                            0,
-                                            ctx1_open,
-                                            ctx1_high,
-                                            ctx1_low,
-                                            ctx1_close,
-                                            ctx1_spread);
-      FXAI_AuditDeriveContextSeriesFromBase(point,
-                                            open_series,
-                                            high_series,
-                                            low_series,
-                                            close_series,
-                                            spread_series,
-                                            1,
-                                            ctx2_open,
-                                            ctx2_high,
-                                            ctx2_low,
-                                            ctx2_close,
-                                            ctx2_spread);
-      FXAI_AuditDeriveContextSeriesFromBase(point,
-                                            open_series,
-                                            high_series,
-                                            low_series,
-                                            close_series,
-                                            spread_series,
-                                            2,
-                                            ctx3_open,
-                                            ctx3_high,
-                                            ctx3_low,
-                                            ctx3_close,
-                                            ctx3_spread);
-      FXAI_AuditBuildContextFeatures(close_series,
-                                     point,
-                                     ctx1_open,
-                                     ctx1_high,
-                                     ctx1_low,
-                                     ctx1_close,
-                                     ctx1_spread,
-                                     ctx2_open,
-                                     ctx2_high,
-                                     ctx2_low,
-                                     ctx2_close,
-                                     ctx2_spread,
-                                     ctx3_open,
-                                     ctx3_high,
-                                     ctx3_low,
-                                     ctx3_close,
-                                     ctx3_spread,
-                                     ctx_mean_arr,
-                                     ctx_std_arr,
-                                     ctx_up_arr,
-                                     ctx_extra_arr);
-      return true;
+      return FXAI_AuditBuildSeriesFromMarketRates(sel_m1,
+                                                  search_bars,
+                                                  point,
+                                                  time_series,
+                                                  open_series,
+                                                  high_series,
+                                                  low_series,
+                                                  close_series,
+                                                  spread_series,
+                                                  time_m5,
+                                                  close_m5,
+                                                  map_m5,
+                                                  time_m15,
+                                                  close_m15,
+                                                  map_m15,
+                                                  time_m30,
+                                                  close_m30,
+                                                  map_m30,
+                                                  time_h1,
+                                                  close_h1,
+                                                  map_h1,
+                                                  ctx_mean_arr,
+                                                  ctx_std_arr,
+                                                  ctx_up_arr,
+                                                  ctx_extra_arr);
    }
 
    CFXAIAuditRng rng;

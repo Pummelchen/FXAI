@@ -34,6 +34,7 @@
 #define FXAI_AUDIT_ISSUE_MACRO_BLIND      2048
 #define FXAI_AUDIT_ISSUE_MACRO_OVERREACT  4096
 #define FXAI_AUDIT_ISSUE_MACRO_DATA_GAP   8192
+#define FXAI_AUDIT_ISSUE_ADVERSARIAL_WEAK 16384
 
 int FXAI_AuditGetSequenceBarsOverride(void);
 int FXAI_AuditGetSchemaOverride(void);

@@ -28,10 +28,15 @@ FXAI stays MT5-native. There are no external inference services and no DLL depen
 ## Current Architecture Highlights
 - Canonical market input is `M1 OHLC + spread`.
 - Shared transfer warmup now uses a deeper temporal backbone across symbols, horizons, sessions, and rolling windows.
+- A self-supervised foundation encoder learns masked-step, volatility, regime-shift, and context-alignment signals from the shared transfer backbone.
+- A teacher-student layer distills ensemble behavior into a lighter live routing signal.
+- Hierarchical forecasting separates tradability, direction confidence, move adequacy, path quality, execution viability, and horizon fit before trade gating.
+- Persistent analog regime memory retrieves similar past states and feeds similarity, edge, and execution-safety context back into runtime routing.
 - Stateful plugin promotion is gated by native checkpoint coverage and runtime persistence manifests.
 - Ensemble routing now uses contextual regret, counterfactual state, and portfolio-objective signals.
 - Broker execution replay persists richer trace state for runtime and audit reuse.
 - Macro-event data uses the hardened schema v2 contract with provenance and leakage checks.
+- Audit Lab now includes `market_adversarial`, which mines real hostile market windows from `M1 OHLC + spread` history and folds them into release gating.
 
 ## Quick Start
 
@@ -54,7 +59,7 @@ Focused audit example:
 ```bash
 python3 FXAI/Tools/fxai_testlab.py run-audit \
   --plugin-list "{ai_mlp}" \
-  --scenario-list "{market_recent, market_walkforward, market_macro_event}" \
+  --scenario-list "{market_recent, market_walkforward, market_macro_event, market_adversarial}" \
   --symbol EURUSD
 ```
 

@@ -2,7 +2,7 @@
 #define __FXAI_RUNTIME_ARTIFACTS_MQH__
 
 #define FXAI_RUNTIME_ARTIFACT_DIR "FXAI\\Runtime"
-#define FXAI_RUNTIME_ARTIFACT_VERSION 12
+#define FXAI_RUNTIME_ARTIFACT_VERSION 13
 
 string FXAI_RuntimeArtifactSafeSymbol(const string symbol)
 {
@@ -411,6 +411,58 @@ bool FXAI_SaveRuntimeArtifacts(const string symbol)
          FileWriteDouble(handle, g_shared_transfer_global_state_w[j][c]);
    }
 
+   FileWriteInteger(handle, (g_foundation_global_ready ? 1 : 0));
+   FileWriteInteger(handle, g_foundation_global_steps);
+   for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+   {
+      FileWriteDouble(handle, g_foundation_mask_w[j]);
+      FileWriteDouble(handle, g_foundation_vol_w[j]);
+      FileWriteDouble(handle, g_foundation_shift_w[j]);
+      FileWriteDouble(handle, g_foundation_ctx_w[j]);
+   }
+   FileWriteDouble(handle, g_foundation_mask_b);
+   FileWriteDouble(handle, g_foundation_vol_b);
+   FileWriteDouble(handle, g_foundation_shift_b);
+   FileWriteDouble(handle, g_foundation_ctx_b);
+
+   FileWriteInteger(handle, (g_student_global_ready ? 1 : 0));
+   FileWriteInteger(handle, g_student_global_steps);
+   for(int c=0; c<3; c++)
+   {
+      FileWriteDouble(handle, g_student_cls_b[c]);
+      for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+         FileWriteDouble(handle, g_student_cls[c][j]);
+   }
+   FileWriteDouble(handle, g_student_move_b);
+   FileWriteDouble(handle, g_student_trade_b);
+   FileWriteDouble(handle, g_student_horizon_b);
+   for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+   {
+      FileWriteDouble(handle, g_student_move_w[j]);
+      FileWriteDouble(handle, g_student_trade_w[j]);
+      FileWriteDouble(handle, g_student_horizon_w[j]);
+   }
+
+   FileWriteInteger(handle, (g_analog_memory_ready ? 1 : 0));
+   FileWriteInteger(handle, g_analog_memory_head);
+   FileWriteInteger(handle, g_analog_memory_size);
+   for(int i=0; i<FXAI_ANALOG_MEMORY_CAP; i++)
+   {
+      FileWriteLong(handle, (long)g_analog_memory_time[i]);
+      FileWriteInteger(handle, g_analog_memory_regime[i]);
+      FileWriteInteger(handle, g_analog_memory_session[i]);
+      FileWriteInteger(handle, g_analog_memory_horizon[i]);
+      FileWriteDouble(handle, g_analog_memory_domain_hash[i]);
+      FileWriteDouble(handle, g_analog_memory_direction[i]);
+      FileWriteDouble(handle, g_analog_memory_edge_norm[i]);
+      FileWriteDouble(handle, g_analog_memory_quality[i]);
+      FileWriteDouble(handle, g_analog_memory_path_risk[i]);
+      FileWriteDouble(handle, g_analog_memory_fill_risk[i]);
+      FileWriteDouble(handle, g_analog_memory_weight[i]);
+      for(int j=0; j<FXAI_ANALOG_MEMORY_FEATS; j++)
+         FileWriteDouble(handle, g_analog_memory_vec[i][j]);
+   }
+
    FileWriteInteger(handle, (g_broker_execution_ready ? 1 : 0));
    for(int s=0; s<FXAI_PLUGIN_SESSION_BUCKETS; s++)
    {
@@ -637,6 +689,68 @@ bool FXAI_LoadRuntimeArtifacts(const string symbol)
                   for(int c=0; c<FXAI_SHARED_TRANSFER_STATE_FEATURES; c++)
                      g_shared_transfer_global_state_w[j][c] = FileReadDouble(handle);
                }
+            }
+
+            if(version >= 13)
+            {
+               g_foundation_global_ready = (FileReadInteger(handle) != 0);
+               g_foundation_global_steps = FileReadInteger(handle);
+               for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+               {
+                  g_foundation_mask_w[j] = FileReadDouble(handle);
+                  g_foundation_vol_w[j] = FileReadDouble(handle);
+                  g_foundation_shift_w[j] = FileReadDouble(handle);
+                  g_foundation_ctx_w[j] = FileReadDouble(handle);
+               }
+               g_foundation_mask_b = FileReadDouble(handle);
+               g_foundation_vol_b = FileReadDouble(handle);
+               g_foundation_shift_b = FileReadDouble(handle);
+               g_foundation_ctx_b = FileReadDouble(handle);
+
+               g_student_global_ready = (FileReadInteger(handle) != 0);
+               g_student_global_steps = FileReadInteger(handle);
+               for(int c=0; c<3; c++)
+               {
+                  g_student_cls_b[c] = FileReadDouble(handle);
+                  for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+                     g_student_cls[c][j] = FileReadDouble(handle);
+               }
+               g_student_move_b = FileReadDouble(handle);
+               g_student_trade_b = FileReadDouble(handle);
+               g_student_horizon_b = FileReadDouble(handle);
+               for(int j=0; j<FXAI_SHARED_TRANSFER_LATENT; j++)
+               {
+                  g_student_move_w[j] = FileReadDouble(handle);
+                  g_student_trade_w[j] = FileReadDouble(handle);
+                  g_student_horizon_w[j] = FileReadDouble(handle);
+               }
+
+               g_analog_memory_ready = (FileReadInteger(handle) != 0);
+               g_analog_memory_head = FileReadInteger(handle);
+               g_analog_memory_size = FileReadInteger(handle);
+               for(int i=0; i<FXAI_ANALOG_MEMORY_CAP; i++)
+               {
+                  g_analog_memory_time[i] = (datetime)FileReadLong(handle);
+                  g_analog_memory_regime[i] = FileReadInteger(handle);
+                  g_analog_memory_session[i] = FileReadInteger(handle);
+                  g_analog_memory_horizon[i] = FileReadInteger(handle);
+                  g_analog_memory_domain_hash[i] = FileReadDouble(handle);
+                  g_analog_memory_direction[i] = FileReadDouble(handle);
+                  g_analog_memory_edge_norm[i] = FileReadDouble(handle);
+                  g_analog_memory_quality[i] = FileReadDouble(handle);
+                  g_analog_memory_path_risk[i] = FileReadDouble(handle);
+                  g_analog_memory_fill_risk[i] = FileReadDouble(handle);
+                  g_analog_memory_weight[i] = FileReadDouble(handle);
+                  for(int j=0; j<FXAI_ANALOG_MEMORY_FEATS; j++)
+                     g_analog_memory_vec[i][j] = FileReadDouble(handle);
+               }
+               if(g_analog_memory_size < 0)
+                  g_analog_memory_size = 0;
+               if(g_analog_memory_size > FXAI_ANALOG_MEMORY_CAP)
+                  g_analog_memory_size = FXAI_ANALOG_MEMORY_CAP;
+               if(g_analog_memory_head < 0 || g_analog_memory_head >= FXAI_ANALOG_MEMORY_CAP)
+                  g_analog_memory_head = (g_analog_memory_size % FXAI_ANALOG_MEMORY_CAP);
+               g_analog_memory_ready = (g_analog_memory_size >= FXAI_ANALOG_MEMORY_MIN_MATCHES);
             }
 
             g_broker_execution_ready = (FileReadInteger(handle) != 0);

@@ -451,6 +451,57 @@
             probs[c] = FXAI_Clamp((1.0 - blend) * probs[c] + blend * global_probs[c], 0.0005, 0.9990);
       }
 
+      FXAIFoundationSignals foundation;
+      FXAI_GlobalFoundationPredict(a,
+                                   m_ctx_window,
+                                   m_ctx_window_size,
+                                   m_ctx_domain_hash,
+                                   m_ctx_horizon_minutes,
+                                   m_ctx_session_bucket,
+                                   foundation);
+      double foundation_trust = foundation.trust *
+                                FXAI_Clamp(0.10 + 1.10 * SharedAdapterSignalStrength(a), 0.0, 0.60);
+      if(foundation_trust > 1e-6)
+      {
+         double dir_hint = FXAI_Clamp(foundation.direction_bias, -1.0, 1.0);
+         probs[(int)FXAI_LABEL_BUY] = FXAI_Clamp(probs[(int)FXAI_LABEL_BUY] + 0.08 * foundation_trust * MathMax(dir_hint, 0.0), 0.0005, 0.9990);
+         probs[(int)FXAI_LABEL_SELL] = FXAI_Clamp(probs[(int)FXAI_LABEL_SELL] + 0.08 * foundation_trust * MathMax(-dir_hint, 0.0), 0.0005, 0.9990);
+         probs[(int)FXAI_LABEL_SKIP] = FXAI_Clamp(probs[(int)FXAI_LABEL_SKIP] - 0.06 * foundation_trust * foundation.tradability, 0.0005, 0.9990);
+      }
+
+      FXAIStudentSignals student;
+      FXAI_GlobalStudentPredict(a,
+                                m_ctx_window,
+                                m_ctx_window_size,
+                                m_ctx_domain_hash,
+                                m_ctx_horizon_minutes,
+                                m_ctx_session_bucket,
+                                student);
+      double student_trust = student.trust *
+                             FXAI_Clamp(0.10 + 1.00 * SharedAdapterSignalStrength(a), 0.0, 0.62);
+      if(student_trust > 1e-6)
+      {
+         double blend = FXAI_Clamp(0.24 + 0.52 * student_trust, 0.0, 0.70);
+         for(int c=0; c<3; c++)
+            probs[c] = FXAI_Clamp((1.0 - blend) * probs[c] + blend * student.class_probs[c], 0.0005, 0.9990);
+      }
+
+      FXAIAnalogMemoryQuery analog;
+      FXAI_QueryAnalogMemory(x,
+                             m_ctx_regime_id,
+                             m_ctx_session_bucket,
+                             m_ctx_horizon_minutes,
+                             m_ctx_domain_hash,
+                             analog);
+      double analog_trust = FXAI_Clamp(0.50 * analog.similarity + 0.25 * analog.quality + 0.10 * analog.domain_alignment, 0.0, 0.40);
+      if(analog_trust > 1e-6)
+      {
+         double analog_dir = FXAI_Clamp(analog.direction_agreement, -1.0, 1.0);
+         probs[(int)FXAI_LABEL_BUY] = FXAI_Clamp(probs[(int)FXAI_LABEL_BUY] + analog_trust * MathMax(analog_dir, 0.0), 0.0005, 0.9990);
+         probs[(int)FXAI_LABEL_SELL] = FXAI_Clamp(probs[(int)FXAI_LABEL_SELL] + analog_trust * MathMax(-analog_dir, 0.0), 0.0005, 0.9990);
+         probs[(int)FXAI_LABEL_SKIP] = FXAI_Clamp(probs[(int)FXAI_LABEL_SKIP] - 0.08 * analog_trust * analog.quality, 0.0005, 0.9990);
+      }
+
       double transfer_probs[3];
       transfer_probs[0] = 0.0;
       transfer_probs[1] = 0.0;
@@ -476,7 +527,16 @@
       for(int i=0; i<FXAI_SHARED_TRANSFER_FEATURES; i++)
          move_adj += m_shared_move_w[i] * a[i];
       move_adj = 0.55 * move_adj + 0.20 * bb_move_adj + 0.25 * global_move_adj;
-      double scale = FXAI_Clamp((1.0 + 0.16 * trust * FXAI_ClipSym(move_adj, 1.5)) * transfer_move_mult, 0.75, 1.45);
+      double scale = FXAI_Clamp((1.0 + 0.16 * trust * FXAI_ClipSym(move_adj, 1.5)) *
+                                transfer_move_mult *
+                                FXAI_Clamp(0.90 +
+                                           0.06 * foundation_trust * foundation.move_ratio +
+                                           0.05 * student_trust * student.move_ratio +
+                                           0.04 * analog_trust * (1.0 + analog.edge_norm),
+                                           0.75,
+                                           1.50),
+                                0.75,
+                                1.55);
       out.move_mean_points = MathMax(0.0, out.move_mean_points * scale);
       out.move_q25_points = MathMax(0.0, out.move_q25_points * scale);
       out.move_q50_points = MathMax(out.move_q25_points, out.move_q50_points * scale);
@@ -493,11 +553,22 @@
                                                       0.04 * a[22] +
                                                       0.04 * MathAbs(a[24]) +
                                                       0.03 * (1.0 - FXAI_Clamp(a[27] / 6.0, 0.0, 1.0)) +
+                                                      0.04 * foundation_trust * foundation.tradability +
+                                                      0.03 * student_trust * student.tradability +
+                                                      0.03 * analog_trust * analog.quality +
                                                       transfer_rel_boost,
                                                       0.0,
                                                       1.0),
                                    0.0,
                                    1.0);
+      out.path_risk = FXAI_Clamp(out.path_risk * (1.0 - 0.08 * analog_trust) +
+                                 analog_trust * (1.0 - analog.path_safety),
+                                 0.0,
+                                 1.0);
+      out.fill_risk = FXAI_Clamp(out.fill_risk * (1.0 - 0.08 * analog_trust) +
+                                 analog_trust * (1.0 - analog.execution_safety),
+                                 0.0,
+                                 1.0);
    }
 
    void UpdateCrossSymbolTransferBank(const double &x[],

@@ -2,7 +2,7 @@
 #define __FXAI_META_PERSISTENCE_MQH__
 
 #define FXAI_META_ARTIFACT_DIR "FXAI\\Meta"
-#define FXAI_META_ARTIFACT_VERSION 6
+#define FXAI_META_ARTIFACT_VERSION 7
 
 string FXAI_MetaArtifactFile(const string symbol)
 {

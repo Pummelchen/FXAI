@@ -1201,6 +1201,7 @@ void ResetAIState(const string symbol)
    FXAI_ResetReplayReservoir();
    FXAI_ResetFeatureDriftDiagnostics();
    FXAI_ResetGlobalSharedTransferBackbone();
+   FXAI_ResetAnalogMemory();
    FXAI_ResetBrokerExecutionReplayStats();
    FXAI_ResetMacroEventStore();
    if(g_plugins_ready)

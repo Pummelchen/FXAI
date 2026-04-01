@@ -1406,6 +1406,9 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
                                                    norm_caches);
       }
 
+      FXAI_ResetAnalogMemory();
+      FXAI_WarmupPrimeAnalogMemorySamples(samples, train_start, train_end);
+
       double fallback_move_ema = 0.0;
       bool fallback_move_ready = false;
       for(int i=val_end; i>=val_start; i--)
@@ -1447,6 +1450,40 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
          double best_sell_meta_w = 0.0;
          double family_support[FXAI_FAMILY_OTHER + 1];
          for(int fam_i=0; fam_i<=FXAI_FAMILY_OTHER; fam_i++) family_support[fam_i] = 0.0;
+         double shared_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+         int shared_window_size = 0;
+         int shared_span = FXAI_ContextSequenceSpan(24, H, _Symbol, 8);
+         FXAI_BuildPreparedSampleWindow(samples, i, shared_span, shared_window, shared_window_size);
+         double shared_transfer_a[];
+         FXAI_BuildSharedTransferInputGlobal(samples[i].x,
+                                             shared_window,
+                                             shared_window_size,
+                                             samples[i].domain_hash,
+                                             H,
+                                             shared_transfer_a);
+         FXAIFoundationSignals foundation_sig;
+         FXAI_GlobalFoundationPredict(shared_transfer_a,
+                                      shared_window,
+                                      shared_window_size,
+                                      samples[i].domain_hash,
+                                      H,
+                                      FXAI_DeriveSessionBucket(samples[i].sample_time),
+                                      foundation_sig);
+         FXAIStudentSignals student_sig;
+         FXAI_GlobalStudentPredict(shared_transfer_a,
+                                   shared_window,
+                                   shared_window_size,
+                                   samples[i].domain_hash,
+                                   H,
+                                   FXAI_DeriveSessionBucket(samples[i].sample_time),
+                                   student_sig);
+         FXAIAnalogMemoryQuery analog_q;
+         FXAI_QueryAnalogMemory(samples[i].x,
+                                regime_id,
+                                FXAI_DeriveSessionBucket(samples[i].sample_time),
+                                H,
+                                samples[i].domain_hash,
+                                analog_q);
 
          for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
          {
@@ -1663,6 +1700,15 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             double best_model_share = FXAI_Clamp(best_model_meta_w / MathMax(ensemble_meta_total, 1e-6), 0.0, 1.0);
             double best_buy_share = FXAI_Clamp(best_buy_meta_w / MathMax(ensemble_meta_total, 1e-6), 0.0, 1.0);
             double best_sell_share = FXAI_Clamp(best_sell_meta_w / MathMax(ensemble_meta_total, 1e-6), 0.0, 1.0);
+            double vote_probs[3];
+            vote_probs[(int)FXAI_LABEL_SELL] = FXAI_Clamp(ensemble_sell_support / ensemble_meta_total, 0.0, 1.0);
+            vote_probs[(int)FXAI_LABEL_BUY] = FXAI_Clamp(ensemble_buy_support / ensemble_meta_total, 0.0, 1.0);
+            vote_probs[(int)FXAI_LABEL_SKIP] = FXAI_Clamp(ensemble_skip_support / ensemble_meta_total, 0.0, 1.0);
+            double vote_sum = vote_probs[0] + vote_probs[1] + vote_probs[2];
+            if(vote_sum <= 0.0) vote_sum = 1.0;
+            vote_probs[0] /= vote_sum;
+            vote_probs[1] /= vote_sum;
+            vote_probs[2] /= vote_sum;
             double warm_ctx_strength = FXAI_Clamp(MathAbs(FXAI_GetArrayValue(samples[i].x, 10, 0.0)) +
                                                   FXAI_GetArrayValue(samples[i].x, 11, 0.0) +
                                                   MathAbs(FXAI_GetArrayValue(samples[i].x, 12, 0.0)),
@@ -1673,6 +1719,21 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
                                                  0.20 * FXAI_GetArrayValue(samples[i].x, 12, 0.0),
                                                  -1.0,
                                                  2.0);
+            FXAIHierarchicalSignals hierarchy_sig;
+            FXAI_BuildHierarchicalSignals(vote_probs,
+                                          avg_expected,
+                                          samples[i].min_move_points,
+                                          avg_conf,
+                                          avg_rel,
+                                          avg_path_risk,
+                                          avg_fill_risk,
+                                          avg_hit_time,
+                                          warm_ctx_quality,
+                                          H,
+                                          foundation_sig,
+                                          student_sig,
+                                          analog_q,
+                                          hierarchy_sig);
             double feat[FXAI_STACK_FEATS];
             FXAI_StackBuildFeatures(buyPct,
                                     sellPct,
@@ -1709,9 +1770,41 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
                                     best_buy_share,
                                     best_sell_share,
                                     avg_ctx_trust,
+                                    foundation_sig.trust,
+                                    foundation_sig.direction_bias,
+                                    foundation_sig.move_ratio,
+                                    student_sig.trust,
+                                    student_sig.tradability,
+                                    analog_q.similarity,
+                                    analog_q.edge_norm,
+                                    analog_q.quality,
+                                    hierarchy_sig.consistency,
+                                    hierarchy_sig.tradability,
+                                    hierarchy_sig.execution_viability,
+                                    hierarchy_sig.horizon_fit,
                                     feat);
             double stack_pred_probs[3];
             FXAI_StackPredict(regime_id, H, feat, stack_pred_probs);
+            double teacher_probs[3];
+            for(int c=0; c<3; c++)
+               teacher_probs[c] = FXAI_Clamp(0.55 * stack_pred_probs[c] + 0.45 * vote_probs[c], 0.0005, 0.9990);
+            double teacher_sum = teacher_probs[0] + teacher_probs[1] + teacher_probs[2];
+            if(teacher_sum <= 0.0) teacher_sum = 1.0;
+            teacher_probs[0] /= teacher_sum;
+            teacher_probs[1] /= teacher_sum;
+            teacher_probs[2] /= teacher_sum;
+            FXAI_GlobalStudentUpdate(shared_transfer_a,
+                                     shared_window,
+                                     shared_window_size,
+                                     samples[i].domain_hash,
+                                     H,
+                                     FXAI_DeriveSessionBucket(samples[i].sample_time),
+                                     teacher_probs,
+                                     FXAI_Clamp(avg_expected / MathMax(samples[i].min_move_points, 0.10), 0.05, 4.0),
+                                     hierarchy_sig.tradability,
+                                     hierarchy_sig.horizon_fit,
+                                     samples[i].sample_weight,
+                                     0.012);
             FXAI_StackUpdate(regime_id, samples[i].label_class, feat, samples[i].sample_weight);
             double realized_edge = 0.0;
             if(samples[i].label_class == (int)FXAI_LABEL_BUY)
@@ -1743,6 +1836,30 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
                                         samples[i].quality_score,
                                         trade_target);
             FXAI_TradeGateUpdate(regime_id, trade_target, feat, samples[i].sample_weight);
+            FXAI_GlobalFoundationUpdate(shared_transfer_a,
+                                        shared_window,
+                                        shared_window_size,
+                                        samples[i].domain_hash,
+                                        H,
+                                        FXAI_DeriveSessionBucket(samples[i].sample_time),
+                                        samples[i].masked_step_target,
+                                        samples[i].next_vol_target,
+                                        samples[i].regime_shift_target,
+                                        samples[i].context_lead_target,
+                                        samples[i].sample_weight,
+                                        0.012);
+            FXAI_UpdateAnalogMemory(samples[i].x,
+                                    regime_id,
+                                    FXAI_DeriveSessionBucket(samples[i].sample_time),
+                                    H,
+                                    samples[i].domain_hash,
+                                    samples[i].move_points,
+                                    samples[i].min_move_points,
+                                    samples[i].quality_score,
+                                    FXAI_Clamp(0.50 * samples[i].trace_reversal_ratio + 0.50 * samples[i].trace_gap_ratio, 0.0, 1.0),
+                                    FXAI_Clamp(samples[i].trace_spread_mean_ratio / 2.0, 0.0, 1.0),
+                                    samples[i].sample_time,
+                                    samples[i].sample_weight);
          }
       }
 
@@ -1765,6 +1882,40 @@ void FXAI_WarmupPrimeFeatureDriftBaseline(const FXAIPreparedSample &samples[])
       if(!samples[i].valid)
          continue;
       FXAI_UpdateFeatureDriftBaselineFromInput(samples[i].x);
+   }
+}
+
+void FXAI_WarmupPrimeAnalogMemorySamples(const FXAIPreparedSample &samples[],
+                                         const int start_idx,
+                                         const int end_idx)
+{
+   int n = ArraySize(samples);
+   if(n <= 0)
+      return;
+
+   int start = start_idx;
+   int stop = end_idx;
+   if(start < 0) start = 0;
+   if(stop >= n) stop = n - 1;
+   if(stop < start)
+      return;
+
+   for(int i=stop; i>=start; i--)
+   {
+      if(!samples[i].valid)
+         continue;
+      FXAI_UpdateAnalogMemory(samples[i].x,
+                              samples[i].regime_id,
+                              FXAI_DeriveSessionBucket(samples[i].sample_time),
+                              samples[i].horizon_minutes,
+                              samples[i].domain_hash,
+                              samples[i].move_points,
+                              samples[i].min_move_points,
+                              samples[i].quality_score,
+                              FXAI_Clamp(0.50 * samples[i].trace_reversal_ratio + 0.50 * samples[i].trace_gap_ratio, 0.0, 1.0),
+                              FXAI_Clamp(samples[i].trace_spread_mean_ratio / 2.0, 0.0, 1.0),
+                              samples[i].sample_time,
+                              samples[i].sample_weight);
    }
 }
 
@@ -1891,6 +2042,18 @@ void FXAI_WarmupPretrainGlobalTransferSamples(const FXAIPreparedSample &samples[
                                       samples[i].move_points,
                                       sample_w,
                                       lr);
+      FXAI_GlobalFoundationUpdate(a,
+                                  x_window,
+                                  window_size,
+                                  samples[i].domain_hash,
+                                  samples[i].horizon_minutes,
+                                  FXAI_DeriveSessionBucket(samples[i].sample_time),
+                                  samples[i].masked_step_target,
+                                  samples[i].next_vol_target,
+                                  samples[i].regime_shift_target,
+                                  samples[i].context_lead_target,
+                                  sample_w,
+                                  lr);
       emitted++;
       if(emitted >= sample_cap)
          break;
@@ -2962,6 +3125,7 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
       }
 
       FXAI_WarmupPrimeFeatureDriftBaseline(runtime_samples);
+      FXAI_WarmupPrimeAnalogMemorySamples(runtime_samples, 1, ArraySize(runtime_samples) - 1);
       int transfer_cap = MathMin(640, MathMax(128, warmup_samples / 6));
       FXAI_WarmupPretrainGlobalTransferSamples(runtime_samples,
                                                MathMin(transfer_cap * 2, 1536),
@@ -3000,6 +3164,7 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
                                                              transfer_samples))
             continue;
 
+         FXAI_WarmupPrimeAnalogMemorySamples(transfer_samples, 0, ArraySize(transfer_samples) - 1);
          FXAI_WarmupPretrainGlobalTransferSamples(transfer_samples,
                                                   MathMax(96, transfer_cap),
                                                   0.60,

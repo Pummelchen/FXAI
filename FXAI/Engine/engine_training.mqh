@@ -970,6 +970,18 @@ void FXAI_AddReplaySample(const FXAIPreparedSample &sample)
    g_replay_used[slot] = true;
    g_replay_bucket_count[regime_id][hslot]++;
    if(sample.sample_time > 0) g_replay_last_sample_time[hslot] = sample.sample_time;
+   FXAI_UpdateAnalogMemory(sample.x,
+                           regime_id,
+                           FXAI_DeriveSessionBucket(sample.sample_time),
+                           sample.horizon_minutes,
+                           sample.domain_hash,
+                           sample.move_points,
+                           sample.min_move_points,
+                           sample.quality_score,
+                           FXAI_Clamp(0.50 * sample.trace_reversal_ratio + 0.50 * sample.trace_gap_ratio, 0.0, 1.0),
+                           FXAI_Clamp(sample.trace_spread_mean_ratio / 2.0, 0.0, 1.0),
+                           sample.sample_time,
+                           sample.sample_weight);
    FXAI_MarkRuntimeArtifactsDirty();
 }
 

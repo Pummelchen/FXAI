@@ -48,6 +48,7 @@ ISSUE = {
     2048: "macro-event blind",
     4096: "macro-event overreaction",
     8192: "macro-event data gap",
+    16384: "adversarial audit weak",
 }
 
 EXECUTION_PROFILES = {
@@ -715,7 +716,7 @@ def build_multisymbol_summary(symbol_runs: list[dict]) -> dict:
 
 
 def summary_has_market_replay(summary: dict) -> bool:
-    required = {"market_recent", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event"}
+    required = {"market_recent", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event", "market_adversarial"}
     seen = set()
     for plugin in summary.get("plugins", {}).values():
         seen.update(plugin.get("scenarios", {}).keys())
@@ -767,6 +768,15 @@ def render_multisymbol_report(summary: dict, execution_profile: str, manifest_pa
                 f"Coverage {float(macro.get('macro_data_coverage', 0.0)):.2f} | "
                 f"EventRate {float(macro.get('macro_event_rate', 0.0)):.2f} | "
                 f"Imp {float(macro.get('macro_importance_mean', 0.0)):.2f}"
+            )
+        adversarial = info.get("scenarios", {}).get("market_adversarial", {})
+        if adversarial:
+            out.append(
+                "Adversarial: "
+                f"Score {float(adversarial.get('score', 0.0)):.1f} | "
+                f"Brier {float(adversarial.get('brier_score', 0.0)):.3f} | "
+                f"CalErr {float(adversarial.get('calibration_error', 0.0)):.3f} | "
+                f"PathErr {float(adversarial.get('path_quality_error', 0.0)):.3f}"
             )
         issues = list(info.get("issues", [])) + list(info.get("findings", []))
         if issues:
@@ -824,7 +834,7 @@ def build_optimization_campaign(summary: dict, oracles: dict) -> dict:
         schema_candidates = []
         norm_candidates = []
         seq_candidates = []
-        scenario_focus = ["random_walk", "drift_up", "drift_down", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event"]
+        scenario_focus = ["random_walk", "drift_up", "drift_down", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event", "market_adversarial"]
 
         if family in (2, 3, 4, 5):  # recurrent/conv/transformer/state-space
             schema_candidates.extend([3, 6])
@@ -900,17 +910,17 @@ def build_optimization_campaign(summary: dict, oracles: dict) -> dict:
         })
         experiments.append({
             "name": "market_replay_cert",
-            "focus": ["market_recent", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event"],
+            "focus": ["market_recent", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event", "market_adversarial"],
         })
         experiments.append({
             "name": "execution_sweep",
             "slippage_points": [0.0, 0.5, 1.0],
             "fill_penalty_points": [0.0, 0.25, 0.50],
-            "focus": ["market_recent", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event"],
+            "focus": ["market_recent", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event", "market_adversarial"],
         })
         experiments.append({
             "name": "walkforward_gate",
-            "focus": ["market_walkforward", "market_session_edges", "market_spread_shock", "market_macro_event"],
+            "focus": ["market_walkforward", "market_session_edges", "market_spread_shock", "market_macro_event", "market_adversarial"],
             "train_test_pairs": [(256, 64), (384, 96), (512, 128)],
         })
 
@@ -1769,6 +1779,18 @@ def cmd_release_gate(args):
             findings = list(info.get("findings", []))
             if issues or findings:
                 gate_failures.append(f"{name}: unresolved issues present")
+        adversarial = info.get("scenarios", {}).get("market_adversarial", {})
+        if not adversarial:
+            gate_failures.append(f"{name}: missing market_adversarial certification")
+        else:
+            if float(adversarial.get("score", 0.0)) < 68.0:
+                gate_failures.append(f"{name}: adversarial score {float(adversarial.get('score', 0.0)):.1f} below minimum 68.0")
+            if float(adversarial.get("calibration_error", 0.0)) > 0.26:
+                gate_failures.append(f"{name}: adversarial calibration error {float(adversarial.get('calibration_error', 0.0)):.3f} above maximum 0.260")
+            if float(adversarial.get("path_quality_error", 0.0)) > 0.50:
+                gate_failures.append(f"{name}: adversarial path-quality error {float(adversarial.get('path_quality_error', 0.0)):.3f} above maximum 0.500")
+            if "adversarial audit weak" in set(info.get("issues", [])):
+                gate_failures.append(f"{name}: adversarial certification issues present")
         if macro_dataset_present:
             macro = info.get("scenarios", {}).get("market_macro_event", {})
             if not macro:
@@ -1841,7 +1863,7 @@ def main():
     ra.add_argument("--all-plugins", action="store_true")
     ra.add_argument("--plugin-id", type=int, default=28)
     ra.add_argument("--plugin-list", default="{all}")
-    ra.add_argument("--scenario-list", default="{random_walk, drift_up, drift_down, mean_revert, vol_cluster, monotonic_up, monotonic_down, regime_shift, market_recent, market_trend, market_chop, market_session_edges, market_spread_shock, market_walkforward, market_macro_event}")
+    ra.add_argument("--scenario-list", default="{random_walk, drift_up, drift_down, mean_revert, vol_cluster, monotonic_up, monotonic_down, regime_shift, market_recent, market_trend, market_chop, market_session_edges, market_spread_shock, market_walkforward, market_macro_event, market_adversarial}")
     ra.add_argument("--bars", type=int, default=20000)
     ra.add_argument("--horizon", type=int, default=5)
     ra.add_argument("--m1sync-bars", type=int, default=3)

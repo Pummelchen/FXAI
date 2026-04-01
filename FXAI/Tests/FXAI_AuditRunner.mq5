@@ -6,7 +6,7 @@
 input bool   Audit_AllPlugins = true;
 input ENUM_AI_TYPE Audit_Plugin = AI_M1SYNC;
 input string Audit_PluginList = "{all}";
-input string Audit_ScenarioList = "{random_walk, drift_up, drift_down, mean_revert, vol_cluster, monotonic_up, monotonic_down, regime_shift, market_recent, market_trend, market_chop, market_session_edges, market_spread_shock, market_walkforward, market_macro_event}";
+input string Audit_ScenarioList = "{random_walk, drift_up, drift_down, mean_revert, vol_cluster, monotonic_up, monotonic_down, regime_shift, market_recent, market_trend, market_chop, market_session_edges, market_spread_shock, market_walkforward, market_macro_event, market_adversarial}";
 input int    Audit_Bars = 20000;
 input int    PredictionTargetMinutes = 5;
 input int    Audit_M1SyncBars = 3;
@@ -149,6 +149,7 @@ bool FXAI_AuditScenarioIdFromName(const string raw_name,
    if(name == "market_spread_shock") { out_id = 12; return true; }
    if(name == "market_walkforward") { out_id = 13; return true; }
    if(name == "market_macro_event") { out_id = 14; return true; }
+   if(name == "market_adversarial") { out_id = 15; return true; }
    return false;
 }
 
