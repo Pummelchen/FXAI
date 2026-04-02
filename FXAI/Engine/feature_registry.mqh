@@ -194,6 +194,12 @@ string FXAI_FeatureName(const int feature_idx)
       case FXAI_MACRO_EVENT_FEATURE_OFFSET + 11: return "macro_inflation_activity";
       case FXAI_MACRO_EVENT_FEATURE_OFFSET + 12: return "macro_labor_activity";
       case FXAI_MACRO_EVENT_FEATURE_OFFSET + 13: return "macro_growth_activity";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 14: return "macro_policy_divergence";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 15: return "macro_policy_pressure";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 16: return "macro_inflation_pressure";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 17: return "macro_labor_pressure";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 18: return "macro_growth_pressure";
+      case FXAI_MACRO_EVENT_FEATURE_OFFSET + 19: return "macro_state_quality";
       default:
       {
          if(feature_idx >= FXAI_MAIN_MTF_FEATURE_OFFSET && feature_idx < FXAI_CONTEXT_MTF_FEATURE_OFFSET)

@@ -562,6 +562,8 @@ bool FXAI_ComputeFeatureVector(const int i,
    double macro_inflation_activity = 0.0;
    double macro_labor_activity = 0.0;
    double macro_growth_activity = 0.0;
+   FXAIMacroState macro_state;
+   FXAI_ClearMacroState(macro_state);
    if(FXAI_MacroEventLeakageSafe())
    {
       FXAI_GetMacroEventFeatures(symbol,
@@ -580,6 +582,7 @@ bool FXAI_ComputeFeatureVector(const int i,
                                  macro_inflation_activity,
                                  macro_labor_activity,
                                  macro_growth_activity);
+      FXAI_BuildMacroState(symbol, t_ref, macro_state);
    }
    features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 0] = macro_pre_embargo;
    features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 1] = macro_post_embargo;
@@ -595,6 +598,12 @@ bool FXAI_ComputeFeatureVector(const int i,
    features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 11] = macro_inflation_activity;
    features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 12] = macro_labor_activity;
    features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 13] = macro_growth_activity;
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 14] = FXAI_Clamp(macro_state.policy_divergence, -1.0, 1.0);
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 15] = FXAI_Clamp(macro_state.policy_pressure, -1.0, 1.0);
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 16] = FXAI_Clamp(macro_state.inflation_pressure, -1.0, 1.0);
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 17] = FXAI_Clamp(macro_state.labor_pressure, -1.0, 1.0);
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 18] = FXAI_Clamp(macro_state.growth_pressure, -1.0, 1.0);
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 19] = FXAI_Clamp(macro_state.state_quality, 0.0, 1.0);
 
    features[80] = FXAI_Clamp(MathLog(1.0 + MathMax(spread_points, 0.0)), 0.0, 6.0);
    features[81] = FXAI_Clamp(spread_z20, -8.0, 8.0);

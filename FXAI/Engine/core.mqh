@@ -8,7 +8,7 @@
 #define FXAI_MAIN_MTF_FEATURE_OFFSET 84
 #define FXAI_CONTEXT_MTF_FEATURE_OFFSET (FXAI_MAIN_MTF_FEATURE_OFFSET + FXAI_MAIN_MTF_TF_COUNT * FXAI_MTF_STATE_FEATURES_PER_TF)
 #define FXAI_MACRO_EVENT_FEATURE_OFFSET (FXAI_CONTEXT_MTF_FEATURE_OFFSET + FXAI_CONTEXT_TOP_SYMBOLS * FXAI_CONTEXT_MTF_TF_COUNT * FXAI_MTF_STATE_FEATURES_PER_TF)
-#define FXAI_MACRO_EVENT_FEATURES 14
+#define FXAI_MACRO_EVENT_FEATURES 20
 #define FXAI_AI_FEATURES (FXAI_MACRO_EVENT_FEATURE_OFFSET + FXAI_MACRO_EVENT_FEATURES)
 #define FXAI_AI_WEIGHTS (FXAI_AI_FEATURES + 1)
 #define FXAI_AI_MLP_HIDDEN 12
@@ -585,8 +585,14 @@ double FXAI_AnalogFeatureByIndex(const double &x[],
       case 7:  return FXAI_Clamp(FXAI_GetInputFeature(x, 78), -6.0, 8.0);
       case 8:  return FXAI_Clamp(FXAI_GetInputFeature(x, 80), -4.0, 8.0);
       case 9:  return FXAI_Clamp(FXAI_GetInputFeature(x, 82), 0.0, 8.0);
-      case 10: return FXAI_Clamp(FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 2), 0.0, 1.0);
-      case 11: return FXAI_Clamp(FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 3), -6.0, 6.0);
+      case 10: return FXAI_Clamp(0.70 * FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 2) +
+                                 0.30 * FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 19),
+                                 0.0,
+                                 1.0);
+      case 11: return FXAI_Clamp(0.60 * FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 3) +
+                                 0.40 * FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 15),
+                                 -6.0,
+                                 6.0);
       default: return 0.0;
    }
 }

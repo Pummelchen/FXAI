@@ -151,11 +151,29 @@ void FXAI_SharedTransferExtractBarFeatures(const double &x_window[][FXAI_AI_WEIG
                                                                  0.0),
                               0.0,
                               1.0);
-   bar_feats[11] = FXAI_Clamp(FXAI_SharedTransferWindowFeatureAt(x_window,
-                                                                 window_size,
-                                                                 bar_idx,
-                                                                 FXAI_MACRO_EVENT_FEATURE_OFFSET + 3,
-                                                                 0.0),
+   double macro_state_quality = FXAI_SharedTransferWindowFeatureAt(x_window,
+                                                                   window_size,
+                                                                   bar_idx,
+                                                                   FXAI_MACRO_EVENT_FEATURE_OFFSET + 19,
+                                                                   0.0);
+   double macro_policy_pressure = FXAI_SharedTransferWindowFeatureAt(x_window,
+                                                                     window_size,
+                                                                     bar_idx,
+                                                                     FXAI_MACRO_EVENT_FEATURE_OFFSET + 15,
+                                                                     0.0);
+   double macro_policy_div = FXAI_SharedTransferWindowFeatureAt(x_window,
+                                                                window_size,
+                                                                bar_idx,
+                                                                FXAI_MACRO_EVENT_FEATURE_OFFSET + 14,
+                                                                0.0);
+   bar_feats[10] = FXAI_Clamp(0.70 * bar_feats[10] + 0.30 * macro_state_quality, 0.0, 1.0);
+   bar_feats[11] = FXAI_Clamp(0.50 * FXAI_SharedTransferWindowFeatureAt(x_window,
+                                                                        window_size,
+                                                                        bar_idx,
+                                                                        FXAI_MACRO_EVENT_FEATURE_OFFSET + 3,
+                                                                        0.0) +
+                              0.30 * macro_policy_pressure +
+                              0.20 * macro_policy_div,
                               -6.0,
                               6.0);
 }
@@ -772,6 +790,11 @@ void FXAI_BuildSharedTransferInputGlobalBase(const double &x[],
    double macro_revision_abs = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 7);
    double macro_currency_rel = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 8);
    double macro_provenance = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 9);
+   double macro_policy_div = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 14);
+   double macro_policy_pressure = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 15);
+   double macro_inflation_pressure = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 16);
+   double macro_growth_pressure = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 18);
+   double macro_state_quality = FXAI_GetInputFeature(x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 19);
 
    out[9] = 2.0 * domain - 1.0;
    out[10] = 2.0 * horizon_scale - 1.0;
@@ -847,6 +870,7 @@ void FXAI_BuildSharedTransferInputGlobalBase(const double &x[],
                         0.10 * FXAI_GetInputFeature(x, 72) +
                         0.10 * FXAI_GetInputFeature(x, 73) +
                         0.12 * macro_surprise_z +
+                        0.10 * macro_policy_div +
                         0.08 * macro_currency_rel,
                         -6.0,
                         6.0);
@@ -856,7 +880,11 @@ void FXAI_BuildSharedTransferInputGlobalBase(const double &x[],
                         0.10 * macro_post +
                         0.10 * FXAI_GetInputFeature(x, 79) +
                         0.10 * macro_revision_abs +
-                        0.08 * macro_provenance,
+                        0.08 * macro_provenance +
+                        0.08 * macro_policy_pressure +
+                        0.06 * macro_inflation_pressure +
+                        0.06 * macro_growth_pressure +
+                        0.08 * macro_state_quality,
                         0.0,
                         6.0);
 }
@@ -942,6 +970,11 @@ void FXAI_BuildSharedTransferInputGlobal(const double &x[],
    double macro_surprise = FXAI_SharedTransferWindowFeatureEMAMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 3);
    double macro_surprise_abs = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 4);
    double macro_class = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 5);
+   double macro_policy_div = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 14);
+   double macro_policy_pressure = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 15);
+   double macro_inflation_pressure = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 16);
+   double macro_growth_pressure = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 18);
+   double macro_state_quality = FXAI_SharedTransferWindowFeatureMean(x_window, window_size, FXAI_MACRO_EVENT_FEATURE_OFFSET + 19);
    double ret_delta = FXAI_SharedTransferWindowFeatureRecentDelta(x_window, window_size, 0, MathMax(window_size / 4, 3));
    double spread_delta = FXAI_SharedTransferWindowFeatureRecentDelta(x_window, window_size, 80, MathMax(window_size / 4, 3));
 
@@ -968,7 +1001,9 @@ void FXAI_BuildSharedTransferInputGlobal(const double &x[],
                         0.22 * macro_imp +
                         0.18 * macro_surprise +
                         0.16 * macro_surprise_abs +
-                        0.14 * macro_class,
+                        0.10 * macro_class +
+                        0.08 * macro_policy_pressure +
+                        0.06 * macro_state_quality,
                         -6.0,
                         6.0);
    out[26] = FXAI_Clamp(0.18 * session_transition +
@@ -977,7 +1012,9 @@ void FXAI_BuildSharedTransferInputGlobal(const double &x[],
                         0.12 * triple_swap +
                         0.14 * carry_align +
                         0.12 * swap_bias +
-                        0.10 * drift_mean,
+                        0.08 * drift_mean +
+                        0.10 * macro_policy_div +
+                        0.08 * macro_growth_pressure,
                         -4.0,
                         4.0);
    out[27] = FXAI_Clamp(0.24 * drift_mean +
@@ -985,7 +1022,9 @@ void FXAI_BuildSharedTransferInputGlobal(const double &x[],
                         0.18 * FXAI_SharedTransferWindowFeatureRange(x_window, window_size, 10) +
                         0.14 * MathAbs(spread_delta) +
                         0.14 * spread_vol +
-                        0.12 * MathAbs(spread_rank),
+                        0.10 * MathAbs(spread_rank) +
+                        0.12 * macro_inflation_pressure +
+                        0.10 * macro_state_quality,
                         0.0,
                         6.0);
 }

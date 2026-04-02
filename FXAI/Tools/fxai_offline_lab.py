@@ -21,6 +21,8 @@ OFFLINE_DIR = Path(__file__).resolve().parent / "OfflineLab"
 DEFAULT_DB = OFFLINE_DIR / "fxai_offline_lab.sqlite"
 RUNS_DIR = OFFLINE_DIR / "Runs"
 PROFILES_DIR = OFFLINE_DIR / "Profiles"
+RESEARCH_DIR = OFFLINE_DIR / "ResearchOS"
+DISTILL_DIR = OFFLINE_DIR / "Distillation"
 COMMON_EXPORT_DIR = testlab.COMMON_FILES / "FXAI/Offline/Exports"
 COMMON_PROMOTION_DIR = testlab.COMMON_FILES / "FXAI/Offline/Promotions"
 
@@ -74,6 +76,7 @@ CREATE TABLE IF NOT EXISTS tuning_runs (
     symbol TEXT NOT NULL,
     plugin_name TEXT NOT NULL,
     ai_id INTEGER NOT NULL,
+    family_id INTEGER NOT NULL DEFAULT 11,
     experiment_name TEXT NOT NULL,
     param_hash TEXT NOT NULL UNIQUE,
     parameters_json TEXT NOT NULL,
@@ -118,6 +121,7 @@ CREATE TABLE IF NOT EXISTS best_configs (
     symbol TEXT NOT NULL,
     plugin_name TEXT NOT NULL,
     ai_id INTEGER NOT NULL,
+    family_id INTEGER NOT NULL DEFAULT 11,
     run_id INTEGER,
     promoted_at INTEGER NOT NULL,
     score REAL NOT NULL DEFAULT 0.0,
@@ -141,11 +145,103 @@ CREATE TABLE IF NOT EXISTS control_cycles (
     notes TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS champion_registry (
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    plugin_name TEXT NOT NULL,
+    family_id INTEGER NOT NULL DEFAULT 11,
+    champion_best_config_id INTEGER,
+    challenger_run_id INTEGER,
+    status TEXT NOT NULL DEFAULT 'candidate',
+    champion_score REAL NOT NULL DEFAULT 0.0,
+    challenger_score REAL NOT NULL DEFAULT 0.0,
+    portfolio_score REAL NOT NULL DEFAULT 0.0,
+    promoted_at INTEGER NOT NULL DEFAULT 0,
+    reviewed_at INTEGER NOT NULL DEFAULT 0,
+    champion_set_path TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY(profile_name, symbol, plugin_name)
+);
+
+CREATE TABLE IF NOT EXISTS config_lineage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    plugin_name TEXT NOT NULL,
+    family_id INTEGER NOT NULL DEFAULT 11,
+    source_run_id INTEGER,
+    best_config_id INTEGER,
+    relation TEXT NOT NULL DEFAULT 'candidate',
+    lineage_hash TEXT NOT NULL DEFAULT '',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS family_scorecards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    group_key TEXT NOT NULL DEFAULT '',
+    symbol TEXT NOT NULL,
+    family_id INTEGER NOT NULL,
+    family_name TEXT NOT NULL,
+    run_count INTEGER NOT NULL DEFAULT 0,
+    mean_score REAL NOT NULL DEFAULT 0.0,
+    mean_recent_score REAL NOT NULL DEFAULT 0.0,
+    mean_walkforward_score REAL NOT NULL DEFAULT 0.0,
+    mean_adversarial_score REAL NOT NULL DEFAULT 0.0,
+    mean_macro_score REAL NOT NULL DEFAULT 0.0,
+    mean_issue_count REAL NOT NULL DEFAULT 0.0,
+    stability_score REAL NOT NULL DEFAULT 0.0,
+    promotion_count INTEGER NOT NULL DEFAULT 0,
+    champion_count INTEGER NOT NULL DEFAULT 0,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name, group_key, symbol, family_id)
+);
+
+CREATE TABLE IF NOT EXISTS distillation_artifacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    plugin_name TEXT NOT NULL,
+    family_id INTEGER NOT NULL DEFAULT 11,
+    source_run_id INTEGER,
+    best_config_id INTEGER,
+    dataset_scope TEXT NOT NULL DEFAULT 'aggregate',
+    artifact_path TEXT NOT NULL,
+    artifact_sha256 TEXT NOT NULL DEFAULT '',
+    teacher_summary_json TEXT NOT NULL DEFAULT '{}',
+    student_target_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'ready',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name, symbol, plugin_name, dataset_scope)
+);
+
+CREATE TABLE IF NOT EXISTS redteam_cycles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    group_key TEXT NOT NULL DEFAULT '',
+    symbol TEXT NOT NULL,
+    plugin_name TEXT NOT NULL,
+    family_id INTEGER NOT NULL DEFAULT 11,
+    weak_scenarios_json TEXT NOT NULL DEFAULT '[]',
+    plan_json TEXT NOT NULL DEFAULT '{}',
+    report_path TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'ready',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name, group_key, symbol, plugin_name)
+);
+
 CREATE INDEX IF NOT EXISTS idx_datasets_group ON datasets(group_key, symbol, months);
 CREATE INDEX IF NOT EXISTS idx_tuning_runs_lookup ON tuning_runs(profile_name, group_key, symbol, plugin_name, status);
 CREATE INDEX IF NOT EXISTS idx_tuning_runs_dataset ON tuning_runs(dataset_id, profile_name, plugin_name);
 CREATE INDEX IF NOT EXISTS idx_best_configs_lookup ON best_configs(profile_name, symbol, plugin_name);
 CREATE INDEX IF NOT EXISTS idx_control_cycles_lookup ON control_cycles(profile_name, started_at);
+CREATE INDEX IF NOT EXISTS idx_lineage_lookup ON config_lineage(profile_name, symbol, plugin_name, created_at);
+CREATE INDEX IF NOT EXISTS idx_family_scorecards_lookup ON family_scorecards(profile_name, group_key, symbol, family_id);
+CREATE INDEX IF NOT EXISTS idx_champion_lookup ON champion_registry(profile_name, symbol, plugin_name, status);
+CREATE INDEX IF NOT EXISTS idx_distill_lookup ON distillation_artifacts(profile_name, symbol, plugin_name, dataset_scope);
+CREATE INDEX IF NOT EXISTS idx_redteam_lookup ON redteam_cycles(profile_name, group_key, symbol, plugin_name);
 """
 
 
@@ -245,28 +341,132 @@ def ensure_sqlite_column(conn: sqlite3.Connection, table: str, column: str, spec
 
 def connect_db(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    conn.executescript(SQL_SCHEMA)
-    ensure_sqlite_column(conn, "tuning_runs", "group_key", "TEXT NOT NULL DEFAULT ''")
-    conn.execute("DROP INDEX IF EXISTS idx_tuning_runs_lookup")
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_tuning_runs_lookup "
-        "ON tuning_runs(profile_name, group_key, symbol, plugin_name, status)"
-    )
-    conn.execute(
-        """
-        UPDATE tuning_runs
-           SET group_key = COALESCE((
-               SELECT d.group_key
-                 FROM datasets d
-                WHERE d.id = tuning_runs.dataset_id
-           ), '')
-         WHERE COALESCE(group_key, '') = ''
-        """
-    )
-    conn.commit()
-    return conn
+    last_error: Exception | None = None
+    for attempt in range(6):
+        conn: sqlite3.Connection | None = None
+        try:
+            conn = sqlite3.connect(str(db_path), timeout=30.0)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA busy_timeout=30000")
+            conn.executescript(SQL_SCHEMA)
+            ensure_sqlite_column(conn, "tuning_runs", "group_key", "TEXT NOT NULL DEFAULT ''")
+            ensure_sqlite_column(conn, "tuning_runs", "family_id", "INTEGER NOT NULL DEFAULT 11")
+            ensure_sqlite_column(conn, "best_configs", "family_id", "INTEGER NOT NULL DEFAULT 11")
+            conn.execute("DROP INDEX IF EXISTS idx_tuning_runs_lookup")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tuning_runs_lookup "
+                "ON tuning_runs(profile_name, group_key, symbol, plugin_name, status)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tuning_runs_family "
+                "ON tuning_runs(profile_name, family_id, symbol, plugin_name, status)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_best_configs_family "
+                "ON best_configs(profile_name, family_id, symbol)"
+            )
+            conn.execute(
+                """
+                UPDATE tuning_runs
+                   SET group_key = COALESCE((
+                       SELECT d.group_key
+                         FROM datasets d
+                        WHERE d.id = tuning_runs.dataset_id
+                   ), '')
+                 WHERE COALESCE(group_key, '') = ''
+                """
+            )
+            conn.commit()
+            return conn
+        except sqlite3.OperationalError as exc:
+            last_error = exc
+            if conn is not None:
+                conn.close()
+            if "locked" not in str(exc).lower() or attempt >= 5:
+                raise
+            time.sleep(0.25 * float(attempt + 1))
+        except Exception:
+            if conn is not None:
+                conn.close()
+            raise
+    if last_error is not None:
+        raise last_error
+    raise OfflineLabError(f"failed to open sqlite lab: {db_path}")
+
+
+def plugin_family_name(family_id: int) -> str:
+    mapping = {
+        0: "linear",
+        1: "tree",
+        2: "recurrent",
+        3: "convolutional",
+        4: "transformer",
+        5: "state_space",
+        6: "distribution",
+        7: "mixture",
+        8: "memory",
+        9: "world",
+        10: "rule",
+        11: "other",
+    }
+    return mapping.get(int(family_id), "other")
+
+
+def mean_std(values: list[float]) -> tuple[float, float]:
+    if not values:
+        return 0.0, 0.0
+    mean_v = sum(values) / float(len(values))
+    if len(values) <= 1:
+        return mean_v, 0.0
+    var = sum((v - mean_v) * (v - mean_v) for v in values) / float(len(values))
+    return mean_v, math.sqrt(max(var, 0.0))
+
+
+def param_identity_hash(row: dict) -> str:
+    profile = str(row.get("profile_name", ""))
+    symbol = str(row.get("symbol", ""))
+    plugin = str(row.get("plugin_name", ""))
+    params_json = str(row.get("parameters_json", "{}"))
+    return sha256_text(f"{profile}|{symbol}|{plugin}|{params_json}")
+
+
+def family_distillation_profile(family_id: int) -> dict:
+    fam = int(family_id)
+    if fam in (2, 3, 4, 5):
+        return {
+            "temperature": 1.35,
+            "teacher_weight": 0.70,
+            "student_weight": 0.30,
+            "self_supervised_weight": 0.28,
+            "analog_weight": 0.18,
+            "foundation_weight": 0.32,
+        }
+    if fam in (0, 1, 6):
+        return {
+            "temperature": 1.15,
+            "teacher_weight": 0.62,
+            "student_weight": 0.38,
+            "self_supervised_weight": 0.16,
+            "analog_weight": 0.12,
+            "foundation_weight": 0.18,
+        }
+    if fam in (7, 8, 9):
+        return {
+            "temperature": 1.28,
+            "teacher_weight": 0.66,
+            "student_weight": 0.34,
+            "self_supervised_weight": 0.22,
+            "analog_weight": 0.24,
+            "foundation_weight": 0.24,
+        }
+    return {
+        "temperature": 1.10,
+        "teacher_weight": 0.58,
+        "student_weight": 0.42,
+        "self_supervised_weight": 0.10,
+        "analog_weight": 0.08,
+        "foundation_weight": 0.14,
+    }
 
 
 def row_to_dict(row: sqlite3.Row | None) -> dict | None:
@@ -771,6 +971,233 @@ def campaign_runs_extended(campaign: dict, limit_plugins: int = 0, limit_experim
     return runs
 
 
+def historical_scenario_weaknesses(conn: sqlite3.Connection,
+                                   profile_name: str,
+                                   symbol: str,
+                                   plugin_name: str,
+                                   exclude_group_key: str = "") -> list[dict]:
+    clauses = [
+        "tr.status = 'ok'",
+        "tr.profile_name = ?",
+        "tr.symbol = ?",
+        "tr.plugin_name = ?",
+    ]
+    params: list[object] = [profile_name, symbol, plugin_name]
+    if exclude_group_key:
+        clauses.append("COALESCE(tr.group_key, '') <> ?")
+        params.append(exclude_group_key)
+    sql = f"""
+        SELECT rs.scenario,
+               AVG(rs.score) AS mean_score,
+               AVG(rs.calibration_error) AS mean_calibration_error,
+               AVG(rs.path_quality_error) AS mean_path_quality_error,
+               AVG(rs.wf_pbo) AS mean_wf_pbo,
+               AVG(rs.wf_dsr) AS mean_wf_dsr,
+               AVG(rs.issue_flags) AS mean_issue_flags,
+               COUNT(*) AS obs_count
+          FROM run_scenarios rs
+          JOIN tuning_runs tr ON tr.id = rs.run_id
+         WHERE {' AND '.join(clauses)}
+         GROUP BY rs.scenario
+         ORDER BY mean_score ASC, mean_calibration_error DESC, mean_path_quality_error DESC
+    """
+    rows = conn.execute(sql, params).fetchall()
+    return [dict(row) for row in rows]
+
+
+def build_redteam_runs_for_plugin(plugin_name: str,
+                                  family_id: int,
+                                  weakness_rows: list[dict],
+                                  base_args) -> tuple[list[dict], dict]:
+    weak = []
+    for row in weakness_rows:
+        if float(row.get("mean_score", 0.0)) < 74.0 or float(row.get("mean_issue_flags", 0.0)) > 0.35:
+            weak.append(dict(row))
+    weak = weak[:3]
+    if not weak:
+        return [], {"plugin": plugin_name, "family_id": int(family_id), "weak_scenarios": [], "runs": []}
+
+    weak_names = [str(row["scenario"]) for row in weak]
+    focus = []
+    for name in weak_names:
+        if name not in focus:
+            focus.append(name)
+    if "market_adversarial" not in focus:
+        focus.append("market_adversarial")
+    if "market_walkforward" not in focus:
+        focus.append("market_walkforward")
+
+    base_horizon = max(int(getattr(base_args, "horizon", 5)), 1)
+    base_seq = max(int(getattr(base_args, "sequence_bars", 0)), 0)
+    base_sync = max(int(getattr(base_args, "m1sync_bars", 3)), 1)
+    family = int(family_id)
+    seq_target = base_seq
+    if family in (2, 3, 4, 5):
+        seq_target = max(seq_target, 32)
+    elif family in (7, 8, 9):
+        seq_target = max(seq_target, 16)
+    else:
+        seq_target = max(seq_target, 8)
+
+    runs: list[dict] = []
+    rationale: list[str] = []
+    if any(name in ("market_adversarial", "market_walkforward") for name in weak_names):
+        runs.append({
+            "plugin": plugin_name,
+            "experiment": "redteam_stability",
+            "scenario_list": focus,
+            "schema_id": 6 if family != 10 else 4,
+            "sequence_bars": seq_target,
+            "normalization": 14 if family in (2, 3, 4, 5) else 9,
+            "execution_profile": "stress",
+            "wf_train_bars": max(int(getattr(base_args, "wf_train_bars", 256)), 384),
+            "wf_test_bars": max(int(getattr(base_args, "wf_test_bars", 64)), 96),
+        })
+        rationale.append("stability and walk-forward weakness triggered deeper sequence and stress execution replay")
+
+    if "market_macro_event" in weak_names:
+        runs.append({
+            "plugin": plugin_name,
+            "experiment": "redteam_macro",
+            "scenario_list": focus,
+            "schema_id": 6 if family in (2, 3, 4, 5, 7, 8, 9) else 5,
+            "normalization": 13 if family != 10 else 0,
+            "horizon": max(base_horizon, 8),
+            "feature_mask": 0x7F if family != 10 else 0x29,
+        })
+        rationale.append("macro weakness triggered macro-heavy schema and full feature coverage")
+
+    if any(name in ("market_session_edges", "market_spread_shock") for name in weak_names):
+        runs.append({
+            "plugin": plugin_name,
+            "experiment": "redteam_execution",
+            "scenario_list": focus,
+            "execution_profile": "stress",
+            "slippage_points": 1.0,
+            "fill_penalty_points": 0.50,
+            "m1sync_bars": max(base_sync, 5),
+        })
+        rationale.append("session/spread weakness triggered harsher execution stress and stricter M1 sync")
+
+    if not runs:
+        runs.append({
+            "plugin": plugin_name,
+            "experiment": "redteam_general",
+            "scenario_list": focus,
+            "schema_id": 6 if family != 10 else 4,
+            "sequence_bars": seq_target,
+            "horizon": max(base_horizon, 5),
+        })
+        rationale.append("general weakness triggered a broad adversarial certification pass")
+
+    deduped: list[dict] = []
+    seen = set()
+    for run in runs:
+        sig = json_compact(run)
+        if sig in seen:
+            continue
+        seen.add(sig)
+        deduped.append(run)
+
+    plan = {
+        "plugin": plugin_name,
+        "family_id": int(family_id),
+        "family_name": plugin_family_name(family_id),
+        "weak_scenarios": weak,
+        "rationale": rationale,
+        "runs": deduped,
+    }
+    return deduped, plan
+
+
+def persist_redteam_plan(conn: sqlite3.Connection,
+                         profile_name: str,
+                         group_key: str,
+                         symbol: str,
+                         plugin_name: str,
+                         family_id: int,
+                         plan: dict,
+                         report_path: Path) -> None:
+    ensure_dir(report_path.parent)
+    md_lines = [
+        f"# FXAI Red-Team Plan: {plugin_name}",
+        "",
+        f"profile: {profile_name}",
+        f"symbol: {symbol}",
+        f"family: {plugin_family_name(family_id)} ({int(family_id)})",
+        "",
+        "Weak scenarios:",
+    ]
+    weak = plan.get("weak_scenarios", [])
+    if weak:
+        for row in weak:
+            md_lines.append(
+                f"- {row.get('scenario', 'unknown')} | score {float(row.get('mean_score', 0.0)):.2f} | "
+                f"cal {float(row.get('mean_calibration_error', 0.0)):.3f} | "
+                f"path {float(row.get('mean_path_quality_error', 0.0)):.3f} | "
+                f"obs {int(row.get('obs_count', 0))}"
+            )
+    else:
+        md_lines.append("- none")
+    md_lines.append("")
+    md_lines.append("Planned targeted runs:")
+    for run in plan.get("runs", []):
+        md_lines.append(f"- {run.get('experiment', 'unknown')}: {json_compact(run)}")
+    report_path.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
+
+    conn.execute(
+        """
+        INSERT INTO redteam_cycles(profile_name, group_key, symbol, plugin_name, family_id, weak_scenarios_json, plan_json, report_path, status, created_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?)
+        ON CONFLICT(profile_name, group_key, symbol, plugin_name) DO UPDATE SET
+            family_id=excluded.family_id,
+            weak_scenarios_json=excluded.weak_scenarios_json,
+            plan_json=excluded.plan_json,
+            report_path=excluded.report_path,
+            status=excluded.status,
+            created_at=excluded.created_at
+        """,
+        (
+            profile_name,
+            group_key,
+            symbol,
+            plugin_name,
+            int(family_id),
+            json.dumps(plan.get("weak_scenarios", []), indent=2, sort_keys=True),
+            json.dumps(plan, indent=2, sort_keys=True),
+            str(report_path),
+            now_unix(),
+        ),
+    )
+    conn.commit()
+
+
+def generate_redteam_runs(conn: sqlite3.Connection,
+                          profile_name: str,
+                          group_key: str,
+                          dataset: dict,
+                          baseline_summary: dict,
+                          base_args,
+                          out_dir: Path) -> list[dict]:
+    generated: list[dict] = []
+    for plugin_name, info in sorted(baseline_summary.get("plugins", {}).items()):
+        family_id = int(info.get("family", 11))
+        weakness_rows = historical_scenario_weaknesses(
+            conn,
+            profile_name,
+            str(dataset["symbol"]),
+            plugin_name,
+            group_key,
+        )
+        runs, plan = build_redteam_runs_for_plugin(plugin_name, family_id, weakness_rows, base_args)
+        if not runs:
+            continue
+        report_path = out_dir / "redteam" / f"{safe_token(plugin_name)}__redteam.md"
+        persist_redteam_plan(conn, profile_name, group_key, str(dataset["symbol"]), plugin_name, family_id, plan, report_path)
+        generated.extend(runs)
+    return generated
+
+
 def normalize_namespace_parameters(args, plugin_name: str, experiment_name: str, dataset: dict) -> dict:
     return {
         "plugin": plugin_name,
@@ -814,6 +1241,7 @@ def upsert_tuning_run(conn: sqlite3.Connection,
                       group_key: str,
                       plugin_name: str,
                       ai_id: int,
+                      family_id: int,
                       experiment_name: str,
                       parameters: dict,
                       report_path: Path,
@@ -846,15 +1274,16 @@ def upsert_tuning_run(conn: sqlite3.Connection,
     conn.execute(
         """
         INSERT INTO tuning_runs(
-            dataset_id, profile_name, group_key, symbol, plugin_name, ai_id, experiment_name, param_hash, parameters_json,
+            dataset_id, profile_name, group_key, symbol, plugin_name, ai_id, family_id, experiment_name, param_hash, parameters_json,
             report_path, raw_report_path, summary_path, manifest_path,
             score, grade, issue_count, issues_json,
             market_recent_score, walkforward_score, adversarial_score, macro_event_score,
             status, started_at, finished_at
         )
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(param_hash) DO UPDATE SET
             group_key=excluded.group_key,
+            family_id=excluded.family_id,
             report_path=excluded.report_path,
             raw_report_path=excluded.raw_report_path,
             summary_path=excluded.summary_path,
@@ -878,6 +1307,7 @@ def upsert_tuning_run(conn: sqlite3.Connection,
             str(dataset["symbol"]),
             plugin_name,
             ai_id,
+            int(family_id),
             experiment_name,
             param_hash,
             parameters_json,
@@ -940,6 +1370,7 @@ def store_baseline_run_bundle(conn: sqlite3.Connection,
     for plugin_name, plugin_summary in sorted(summary.get("plugins", {}).items()):
         rows = grouped_rows.get(plugin_name, [])
         ai_id = int(float(rows[0]["ai_id"])) if rows else -1
+        family_id = int(plugin_summary.get("family", rows[0].get("family", 11) if rows else 11))
         params = normalize_namespace_parameters(base_args, plugin_name, "baseline_all", dataset)
         upsert_tuning_run(
             conn,
@@ -948,6 +1379,7 @@ def store_baseline_run_bundle(conn: sqlite3.Connection,
             group_key,
             plugin_name,
             ai_id,
+            family_id,
             "baseline_all",
             params,
             report_path,
@@ -990,10 +1422,13 @@ def run_dataset_campaign(conn: sqlite3.Connection, dataset: dict, profile_name: 
     campaign = extend_campaign(testlab.build_optimization_campaign(baseline_summary, oracles), base_args)
     (out_dir / "campaign.json").write_text(json.dumps(campaign, indent=2, sort_keys=True), encoding="utf-8")
     runs = campaign_runs_extended(campaign, getattr(args, "top_plugins", 0), getattr(args, "limit_experiments", 0))
+    group_key = str(getattr(args, "group_key", "") or dataset.get("group_key", "") or "")
+    redteam_runs = generate_redteam_runs(conn, profile_name, group_key, dataset, baseline_summary, base_args, out_dir)
+    if redteam_runs:
+        runs.extend(redteam_runs)
     if getattr(args, "limit_runs", 0) > 0:
         runs = runs[: args.limit_runs]
     results = []
-    group_key = str(getattr(args, "group_key", "") or dataset.get("group_key", "") or "")
     for idx, run in enumerate(runs, start=1):
         run["bars"] = int(base_args.bars)
         run["window_start_unix"] = int(dataset["start_unix"])
@@ -1013,6 +1448,7 @@ def run_dataset_campaign(conn: sqlite3.Connection, dataset: dict, profile_name: 
         manifest_path = report_path.with_suffix(".manifest.json")
         plugin_summary = None
         ai_id = -1
+        family_id = 11
         status = "failed"
         if rc == 0:
             shutil.copy2(testlab.DEFAULT_REPORT, raw_report_path)
@@ -1021,6 +1457,9 @@ def run_dataset_campaign(conn: sqlite3.Connection, dataset: dict, profile_name: 
             rows = grouped_rows_by_plugin(raw_report_path).get(run["plugin"], [])
             if rows:
                 ai_id = int(float(rows[0]["ai_id"]))
+                family_id = int(float(rows[0].get("family", plugin_summary.get("family", 11))))
+            else:
+                family_id = int(plugin_summary.get("family", 11))
             status = "ok"
         run_id = upsert_tuning_run(
             conn,
@@ -1029,6 +1468,7 @@ def run_dataset_campaign(conn: sqlite3.Connection, dataset: dict, profile_name: 
             group_key,
             run["plugin"],
             ai_id,
+            family_id,
             run["experiment"],
             parameters,
             report_path,
@@ -1256,6 +1696,7 @@ def aggregate_best_candidates(rows: list[dict]) -> tuple[list[dict], dict[str, i
             "symbol": symbol,
             "plugin_name": plugin_name,
             "ai_id": int(best_row["ai_id"]),
+            "family_id": int(best_row.get("family_id", 11)),
             "run_id": int(best_row["id"]),
             "score": mean_score,
             "ranking_score": ranking,
@@ -1289,6 +1730,476 @@ def aggregate_best_candidates(rows: list[dict]) -> tuple[list[dict], dict[str, i
     return winners, total_datasets_per_symbol
 
 
+def render_family_scorecards(conn: sqlite3.Connection,
+                             profile_name: str,
+                             group_key: str,
+                             rows: list[dict],
+                             promoted_rows: list[dict]) -> list[dict]:
+    promoted_by_family: dict[tuple[str, int], int] = defaultdict(int)
+    for row in promoted_rows:
+        promoted_by_family[(str(row["symbol"]), int(row.get("family_id", 11)))] += 1
+
+    champion_rows = conn.execute(
+        "SELECT symbol, family_id, COUNT(*) AS champion_count "
+        "FROM champion_registry WHERE profile_name = ? AND status = 'champion' "
+        "GROUP BY symbol, family_id",
+        (profile_name,),
+    ).fetchall()
+    champion_by_family = {
+        (str(row["symbol"]), int(row["family_id"])): int(row["champion_count"])
+        for row in champion_rows
+    }
+
+    grouped: dict[tuple[str, int], list[dict]] = defaultdict(list)
+    for row in rows:
+        grouped[(str(row["symbol"]), int(row.get("family_id", 11)))].append(row)
+
+    scorecards: list[dict] = []
+    for (symbol, family_id), items in sorted(grouped.items()):
+        scores = [float(item["score"]) for item in items]
+        mean_score, score_std = mean_std(scores)
+        stability = 1.0
+        if mean_score > 1e-9:
+            stability = max(0.0, 1.0 - min(score_std / max(mean_score, 10.0), 1.0))
+        mean_recent = sum(float(item["market_recent_score"]) for item in items) / float(len(items))
+        mean_wf = sum(float(item["walkforward_score"]) for item in items) / float(len(items))
+        mean_adv = sum(float(item["adversarial_score"]) for item in items) / float(len(items))
+        mean_macro = sum(float(item["macro_event_score"]) for item in items) / float(len(items))
+        mean_issues = sum(float(item["issue_count"]) for item in items) / float(len(items))
+        top_plugins = []
+        ranked = sorted(
+            items,
+            key=lambda item: (float(item["score"]), float(item["walkforward_score"]), -float(item["issue_count"])),
+            reverse=True,
+        )
+        seen_plugins = set()
+        for item in ranked:
+            name = str(item["plugin_name"])
+            if name in seen_plugins:
+                continue
+            seen_plugins.add(name)
+            top_plugins.append({
+                "plugin_name": name,
+                "score": float(item["score"]),
+                "walkforward_score": float(item["walkforward_score"]),
+                "adversarial_score": float(item["adversarial_score"]),
+                "macro_event_score": float(item["macro_event_score"]),
+            })
+            if len(top_plugins) >= 5:
+                break
+        payload = {
+            "symbol": symbol,
+            "family_id": family_id,
+            "family_name": plugin_family_name(family_id),
+            "run_count": len(items),
+            "score_std": score_std,
+            "top_plugins": top_plugins,
+        }
+        scorecards.append({
+            "profile_name": profile_name,
+            "group_key": group_key,
+            "symbol": symbol,
+            "family_id": family_id,
+            "family_name": plugin_family_name(family_id),
+            "run_count": len(items),
+            "mean_score": mean_score,
+            "mean_recent_score": mean_recent,
+            "mean_walkforward_score": mean_wf,
+            "mean_adversarial_score": mean_adv,
+            "mean_macro_score": mean_macro,
+            "mean_issue_count": mean_issues,
+            "stability_score": stability,
+            "promotion_count": promoted_by_family.get((symbol, family_id), 0),
+            "champion_count": champion_by_family.get((symbol, family_id), 0),
+            "payload_json": json.dumps(payload, indent=2, sort_keys=True),
+        })
+    return scorecards
+
+
+def persist_family_scorecards(conn: sqlite3.Connection,
+                              args,
+                              rows: list[dict],
+                              promoted_rows: list[dict]) -> list[dict]:
+    group_key = (getattr(args, "group_key", "") or "").strip()
+    scorecards = render_family_scorecards(conn, args.profile, group_key, rows, promoted_rows)
+    out_dir = RESEARCH_DIR / safe_token(args.profile)
+    ensure_dir(out_dir)
+    now_ts = now_unix()
+    for row in scorecards:
+        conn.execute(
+            """
+            INSERT INTO family_scorecards(profile_name, group_key, symbol, family_id, family_name,
+                                         run_count, mean_score, mean_recent_score, mean_walkforward_score,
+                                         mean_adversarial_score, mean_macro_score, mean_issue_count,
+                                         stability_score, promotion_count, champion_count, payload_json, created_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(profile_name, group_key, symbol, family_id) DO UPDATE SET
+                family_name=excluded.family_name,
+                run_count=excluded.run_count,
+                mean_score=excluded.mean_score,
+                mean_recent_score=excluded.mean_recent_score,
+                mean_walkforward_score=excluded.mean_walkforward_score,
+                mean_adversarial_score=excluded.mean_adversarial_score,
+                mean_macro_score=excluded.mean_macro_score,
+                mean_issue_count=excluded.mean_issue_count,
+                stability_score=excluded.stability_score,
+                promotion_count=excluded.promotion_count,
+                champion_count=excluded.champion_count,
+                payload_json=excluded.payload_json,
+                created_at=excluded.created_at
+            """,
+            (
+                row["profile_name"],
+                row["group_key"],
+                row["symbol"],
+                int(row["family_id"]),
+                row["family_name"],
+                int(row["run_count"]),
+                float(row["mean_score"]),
+                float(row["mean_recent_score"]),
+                float(row["mean_walkforward_score"]),
+                float(row["mean_adversarial_score"]),
+                float(row["mean_macro_score"]),
+                float(row["mean_issue_count"]),
+                float(row["stability_score"]),
+                int(row["promotion_count"]),
+                int(row["champion_count"]),
+                row["payload_json"],
+                now_ts,
+            ),
+        )
+    conn.commit()
+
+    score_json = out_dir / "family_scorecards.json"
+    score_tsv = out_dir / "family_scorecards.tsv"
+    score_md = out_dir / "family_scorecards.md"
+    score_json.write_text(json.dumps(scorecards, indent=2, sort_keys=True), encoding="utf-8")
+    with score_tsv.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle, delimiter="\t")
+        writer.writerow([
+            "symbol", "family_id", "family_name", "run_count", "mean_score", "mean_walkforward_score",
+            "mean_adversarial_score", "mean_macro_score", "stability_score", "promotion_count", "champion_count",
+        ])
+        for row in scorecards:
+            writer.writerow([
+                row["symbol"],
+                row["family_id"],
+                row["family_name"],
+                row["run_count"],
+                f"{float(row['mean_score']):.4f}",
+                f"{float(row['mean_walkforward_score']):.4f}",
+                f"{float(row['mean_adversarial_score']):.4f}",
+                f"{float(row['mean_macro_score']):.4f}",
+                f"{float(row['stability_score']):.4f}",
+                row["promotion_count"],
+                row["champion_count"],
+            ])
+    md_lines = ["# FXAI Family Scorecards", "", f"profile: {args.profile}", ""]
+    for row in scorecards:
+        md_lines.append(
+            f"- {row['symbol']} | {row['family_name']} | score {float(row['mean_score']):.2f} | "
+            f"wf {float(row['mean_walkforward_score']):.2f} | adv {float(row['mean_adversarial_score']):.2f} | "
+            f"macro {float(row['mean_macro_score']):.2f} | stability {float(row['stability_score']):.2f} | "
+            f"promoted {int(row['promotion_count'])} | champions {int(row['champion_count'])}"
+        )
+    score_md.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
+    return scorecards
+
+
+def persist_lineage_entry(conn: sqlite3.Connection,
+                          profile_name: str,
+                          symbol: str,
+                          plugin_name: str,
+                          family_id: int,
+                          source_run_id: int,
+                          best_config_id: int,
+                          relation: str,
+                          payload: dict) -> None:
+    lineage_hash = sha256_text(
+        f"{profile_name}|{symbol}|{plugin_name}|{family_id}|{source_run_id}|{best_config_id}|{relation}|{json_compact(payload)}"
+    )
+    conn.execute(
+        """
+        INSERT INTO config_lineage(profile_name, symbol, plugin_name, family_id, source_run_id, best_config_id, relation, lineage_hash, payload_json, created_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            profile_name,
+            symbol,
+            plugin_name,
+            int(family_id),
+            int(source_run_id) if source_run_id else None,
+            int(best_config_id) if best_config_id else None,
+            relation,
+            lineage_hash,
+            json.dumps(payload, indent=2, sort_keys=True),
+            now_unix(),
+        ),
+    )
+
+
+def update_champion_registry(conn: sqlite3.Connection,
+                             args,
+                             promoted_rows: list[dict]) -> list[dict]:
+    profile_dir = PROFILES_DIR / safe_token(args.profile)
+    ensure_dir(profile_dir)
+    decisions: list[dict] = []
+    for row in promoted_rows:
+        symbol = str(row["symbol"])
+        plugin_name = str(row["plugin_name"])
+        family_id = int(row.get("family_id", 11))
+        candidate_rank = float(row["ranking_score"])
+        candidate_score = float(row["score"])
+        registry = row_to_dict(conn.execute(
+            "SELECT * FROM champion_registry WHERE profile_name = ? AND symbol = ? AND plugin_name = ?",
+            (args.profile, symbol, plugin_name),
+        ).fetchone())
+        best_cfg = row_to_dict(conn.execute(
+            "SELECT id FROM best_configs WHERE profile_name = ? AND dataset_scope = 'aggregate' AND symbol = ? AND plugin_name = ?",
+            (args.profile, symbol, plugin_name),
+        ).fetchone())
+        best_config_id = int(best_cfg["id"]) if best_cfg else 0
+        champion_dir = profile_dir / safe_token(symbol)
+        ensure_dir(champion_dir)
+        champion_audit = champion_dir / f"{plugin_name}__champion__audit.set"
+        champion_ea = champion_dir / f"{plugin_name}__champion__ea.set"
+
+        promote = False
+        note = ""
+        if registry is None or int(registry.get("champion_best_config_id") or 0) <= 0:
+            promote = True
+            note = "bootstrap_champion"
+        else:
+            current_rank = float(registry.get("champion_score", 0.0))
+            current_portfolio = float(registry.get("portfolio_score", 0.0))
+            challenger_portfolio = 0.65 * candidate_rank + 0.35 * float(row.get("support_count", 0))
+            if candidate_rank > current_rank + 1.10 or challenger_portfolio > current_portfolio + 0.90:
+                promote = True
+                note = "challenger_promoted"
+            else:
+                note = "challenger_held_out"
+
+        if promote:
+            shutil.copy2(row["audit_set_path"], champion_audit)
+            shutil.copy2(row["ea_set_path"], champion_ea)
+            conn.execute(
+                """
+                INSERT INTO champion_registry(profile_name, symbol, plugin_name, family_id, champion_best_config_id, challenger_run_id,
+                                              status, champion_score, challenger_score, portfolio_score, promoted_at, reviewed_at,
+                                              champion_set_path, notes)
+                VALUES(?, ?, ?, ?, ?, ?, 'champion', ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(profile_name, symbol, plugin_name) DO UPDATE SET
+                    family_id=excluded.family_id,
+                    champion_best_config_id=excluded.champion_best_config_id,
+                    challenger_run_id=excluded.challenger_run_id,
+                    status=excluded.status,
+                    champion_score=excluded.champion_score,
+                    challenger_score=excluded.challenger_score,
+                    portfolio_score=excluded.portfolio_score,
+                    promoted_at=excluded.promoted_at,
+                    reviewed_at=excluded.reviewed_at,
+                    champion_set_path=excluded.champion_set_path,
+                    notes=excluded.notes
+                """,
+                (
+                    args.profile,
+                    symbol,
+                    plugin_name,
+                    family_id,
+                    best_config_id,
+                    int(row["run_id"]),
+                    candidate_rank,
+                    candidate_score,
+                    0.65 * candidate_rank + 0.35 * float(row.get("support_count", 0)),
+                    now_unix(),
+                    now_unix(),
+                    str(champion_ea),
+                    note,
+                ),
+            )
+            persist_lineage_entry(
+                conn,
+                args.profile,
+                symbol,
+                plugin_name,
+                family_id,
+                int(row["run_id"]),
+                best_config_id,
+                "champion",
+                {"note": note, "ranking_score": candidate_rank, "score": candidate_score},
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO champion_registry(profile_name, symbol, plugin_name, family_id, champion_best_config_id, challenger_run_id,
+                                              status, champion_score, challenger_score, portfolio_score, promoted_at, reviewed_at,
+                                              champion_set_path, notes)
+                VALUES(?, ?, ?, ?, ?, ?, 'champion', ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(profile_name, symbol, plugin_name) DO UPDATE SET
+                    family_id=excluded.family_id,
+                    challenger_run_id=excluded.challenger_run_id,
+                    challenger_score=excluded.challenger_score,
+                    reviewed_at=excluded.reviewed_at,
+                    notes=excluded.notes
+                """,
+                (
+                    args.profile,
+                    symbol,
+                    plugin_name,
+                    family_id,
+                    int(registry.get("champion_best_config_id", 0)),
+                    int(row["run_id"]),
+                    float(registry.get("champion_score", 0.0)),
+                    candidate_score,
+                    float(registry.get("portfolio_score", 0.0)),
+                    int(registry.get("promoted_at", 0)),
+                    now_unix(),
+                    str(registry.get("champion_set_path", "")),
+                    note,
+                ),
+            )
+            persist_lineage_entry(
+                conn,
+                args.profile,
+                symbol,
+                plugin_name,
+                family_id,
+                int(row["run_id"]),
+                best_config_id,
+                "challenger",
+                {"note": note, "ranking_score": candidate_rank, "score": candidate_score},
+            )
+
+        decisions.append({
+            "symbol": symbol,
+            "plugin_name": plugin_name,
+            "family_id": family_id,
+            "status": ("champion" if promote else "challenger"),
+            "note": note,
+            "ranking_score": candidate_rank,
+            "score": candidate_score,
+        })
+
+    conn.commit()
+
+    champion_rows = conn.execute(
+        "SELECT * FROM champion_registry WHERE profile_name = ? AND status = 'champion' ORDER BY symbol, champion_score DESC",
+        (args.profile,),
+    ).fetchall()
+    champion_rows_dict = [dict(row) for row in champion_rows]
+    by_symbol: dict[str, list[dict]] = defaultdict(list)
+    for row in champion_rows_dict:
+        by_symbol[str(row["symbol"])].append(row)
+    for symbol, items in by_symbol.items():
+        top = max(items, key=lambda item: (float(item["champion_score"]), float(item["portfolio_score"])))
+        src_ea = Path(str(top["champion_set_path"]))
+        src_audit = src_ea.with_name(src_ea.name.replace("__ea.set", "__audit.set"))
+        dst_dir = profile_dir / safe_token(symbol)
+        ensure_dir(dst_dir)
+        if src_audit.exists():
+            shutil.copy2(src_audit, dst_dir / "__TOP__audit.set")
+            shutil.copy2(src_audit, testlab.TESTER_PRESET_DIR / f"fxai_offline_{safe_token(args.profile)}__{safe_token(symbol)}__top__audit.set")
+        if src_ea.exists():
+            shutil.copy2(src_ea, dst_dir / "__TOP__ea.set")
+            shutil.copy2(src_ea, testlab.TESTER_PRESET_DIR / f"fxai_offline_{safe_token(args.profile)}__{safe_token(symbol)}__top__ea.set")
+
+    summary_path = RESEARCH_DIR / safe_token(args.profile) / "champions.json"
+    ensure_dir(summary_path.parent)
+    summary_path.write_text(json.dumps(champion_rows_dict, indent=2, sort_keys=True), encoding="utf-8")
+    return decisions
+
+
+def write_distillation_artifacts(conn: sqlite3.Connection,
+                                 args,
+                                 promoted_rows: list[dict]) -> list[dict]:
+    out_dir = DISTILL_DIR / safe_token(args.profile)
+    ensure_dir(out_dir)
+    artifacts: list[dict] = []
+    created_at = now_unix()
+    for row in promoted_rows:
+        params = json.loads(row["parameters_json"])
+        family_id = int(row.get("family_id", 11))
+        distill_profile = family_distillation_profile(family_id)
+        support_items = json.loads(row.get("support_json", "[]") or "[]")
+        teacher_summary = {
+            "plugin_name": row["plugin_name"],
+            "symbol": row["symbol"],
+            "ai_id": int(row["ai_id"]),
+            "family_id": family_id,
+            "family_name": plugin_family_name(family_id),
+            "ranking_score": float(row["ranking_score"]),
+            "score": float(row["score"]),
+            "support_count": int(row["support_count"]),
+            "support": support_items,
+            "parameters": params,
+        }
+        student_target = dict(distill_profile)
+        student_target.update({
+            "target_horizon": int(params.get("horizon", 5)),
+            "target_execution_profile": str(params.get("execution_profile", "default")),
+            "target_sequence_bars": int(params.get("sequence_bars", 0)),
+            "target_reliability_floor": round(max(0.42, min(0.86, 0.42 + 0.0035 * float(row["score"]))), 4),
+            "target_trade_gate_floor": round(max(0.44, min(0.88, 0.44 + 0.0030 * float(row["ranking_score"]))), 4),
+            "support_weight_floor": round(max(0.20, min(0.90, 0.18 + 0.08 * int(row["support_count"]))), 4),
+        })
+        symbol_dir = out_dir / safe_token(str(row["symbol"]))
+        ensure_dir(symbol_dir)
+        artifact_path = symbol_dir / f"{row['plugin_name']}__distill.json"
+        payload = {
+            "teacher_summary": teacher_summary,
+            "student_target": student_target,
+        }
+        artifact_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        artifact_sha = testlab.sha256_path(artifact_path)
+        best_cfg = row_to_dict(conn.execute(
+            "SELECT id FROM best_configs WHERE profile_name = ? AND dataset_scope = 'aggregate' AND symbol = ? AND plugin_name = ?",
+            (args.profile, row["symbol"], row["plugin_name"]),
+        ).fetchone())
+        best_config_id = int(best_cfg["id"]) if best_cfg else 0
+        conn.execute(
+            """
+            INSERT INTO distillation_artifacts(profile_name, symbol, plugin_name, family_id, source_run_id, best_config_id,
+                                               dataset_scope, artifact_path, artifact_sha256, teacher_summary_json,
+                                               student_target_json, status, created_at)
+            VALUES(?, ?, ?, ?, ?, ?, 'aggregate', ?, ?, ?, ?, 'ready', ?)
+            ON CONFLICT(profile_name, symbol, plugin_name, dataset_scope) DO UPDATE SET
+                family_id=excluded.family_id,
+                source_run_id=excluded.source_run_id,
+                best_config_id=excluded.best_config_id,
+                artifact_path=excluded.artifact_path,
+                artifact_sha256=excluded.artifact_sha256,
+                teacher_summary_json=excluded.teacher_summary_json,
+                student_target_json=excluded.student_target_json,
+                status=excluded.status,
+                created_at=excluded.created_at
+            """,
+            (
+                args.profile,
+                row["symbol"],
+                row["plugin_name"],
+                family_id,
+                int(row["run_id"]),
+                best_config_id,
+                str(artifact_path),
+                artifact_sha,
+                json.dumps(teacher_summary, indent=2, sort_keys=True),
+                json.dumps(student_target, indent=2, sort_keys=True),
+                created_at,
+            ),
+        )
+        artifacts.append({
+            "symbol": row["symbol"],
+            "plugin_name": row["plugin_name"],
+            "family_id": family_id,
+            "artifact_path": str(artifact_path),
+            "artifact_sha256": artifact_sha,
+        })
+    conn.commit()
+    summary = out_dir / "distillation_artifacts.json"
+    summary.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
+    return artifacts
+
+
 def persist_best_configs(conn: sqlite3.Connection, args, winners: list[dict]) -> list[dict]:
     profile_dir = PROFILES_DIR / safe_token(args.profile)
     ensure_dir(profile_dir)
@@ -1315,12 +2226,13 @@ def persist_best_configs(conn: sqlite3.Connection, args, winners: list[dict]) ->
 
         conn.execute(
             """
-            INSERT INTO best_configs(dataset_scope, dataset_id, profile_name, symbol, plugin_name, ai_id, run_id, promoted_at,
+            INSERT INTO best_configs(dataset_scope, dataset_id, profile_name, symbol, plugin_name, ai_id, family_id, run_id, promoted_at,
                                      score, ranking_score, support_count, parameters_json, audit_set_path, ea_set_path, support_json)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(dataset_scope, profile_name, symbol, plugin_name) DO UPDATE SET
                 dataset_id=excluded.dataset_id,
                 ai_id=excluded.ai_id,
+                family_id=excluded.family_id,
                 run_id=excluded.run_id,
                 promoted_at=excluded.promoted_at,
                 score=excluded.score,
@@ -1338,6 +2250,7 @@ def persist_best_configs(conn: sqlite3.Connection, args, winners: list[dict]) ->
                 winner["symbol"],
                 winner["plugin_name"],
                 int(winner["ai_id"]),
+                int(winner.get("family_id", 11)),
                 int(winner["run_id"]),
                 now_ts,
                 float(winner["score"]),
@@ -1415,7 +2328,17 @@ def cmd_best_params(args) -> int:
         raise OfflineLabError("no completed tuning runs found for best-params")
     winners, _dataset_counts = aggregate_best_candidates(rows)
     promoted = persist_best_configs(conn, args, winners)
-    print(json.dumps({"profile": args.profile, "promoted_count": len(promoted)}, indent=2, sort_keys=True))
+    champion_decisions = update_champion_registry(conn, args, promoted)
+    family_scorecards = persist_family_scorecards(conn, args, rows, promoted)
+    distill_artifacts = write_distillation_artifacts(conn, args, promoted)
+    print(json.dumps({
+        "profile": args.profile,
+        "promoted_count": len(promoted),
+        "champion_count": sum(1 for item in champion_decisions if item["status"] == "champion"),
+        "challenger_count": sum(1 for item in champion_decisions if item["status"] == "challenger"),
+        "family_scorecards": len(family_scorecards),
+        "distillation_artifacts": len(distill_artifacts),
+    }, indent=2, sort_keys=True))
     conn.close()
     return 0
 

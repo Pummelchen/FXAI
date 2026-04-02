@@ -120,6 +120,10 @@ input double MaxCorrelatedExposureLots = 0.20;
 // Models: all (portfolio/risk layer).
 // Purpose: caps FXAI exposure in symbols sharing major currency risk with the active symbol.
 // Importance/Range: 0 disables; practical value is usually below portfolio cap.
+input double MaxDirectionalClusterLots = 0.18;
+// Models: all (portfolio/risk layer).
+// Purpose: caps aligned directional exposure across correlated currency clusters.
+// Importance/Range: 0 disables; use below correlated exposure cap for multi-symbol portfolios.
 input double RiskMinConfidence = 0.52;
 // Models: all (trade admission layer).
 // Purpose: blocks entries when model confidence is below the live quality floor.
@@ -140,6 +144,30 @@ input double RiskMinTradeGate = 0.52;
 // Models: all (trade admission layer).
 // Purpose: blocks entries when the learned trade gate is below the live acceptance floor.
 // Importance/Range: 0..1; higher is stricter.
+input double RiskMinHierarchyScore = 0.46;
+// Models: all (hierarchical decision layer).
+// Purpose: blocks entries when the multi-head hierarchy score is too weak.
+// Importance/Range: 0..1; higher is stricter.
+input double RiskMinHierarchyConsistency = 0.40;
+// Models: all (hierarchical decision layer).
+// Purpose: blocks entries when direction, move, path, and execution heads disagree too much.
+// Importance/Range: 0..1; higher is stricter.
+input double RiskMinHierarchyTradability = 0.38;
+// Models: all (hierarchical decision layer).
+// Purpose: blocks entries when tradability quality from the hierarchy is too weak.
+// Importance/Range: 0..1; higher is stricter.
+input double RiskMinHierarchyExecution = 0.34;
+// Models: all (hierarchical decision layer).
+// Purpose: blocks entries when execution viability from the hierarchy is too weak.
+// Importance/Range: 0..1; higher is stricter.
+input double RiskMinMacroStateQuality = 0.24;
+// Models: all (macro-state layer).
+// Purpose: scales or blocks entries when macro-state coverage is too weak for event-aware routing.
+// Importance/Range: 0..1; only active when a leakage-safe macro dataset is present.
+input double RiskMaxPortfolioPressure = 0.78;
+// Models: all (portfolio-native runtime).
+// Purpose: blocks entries when gross, correlated, and directional cluster pressure are too high.
+// Importance/Range: 0..1; lower is stricter.
 input double RiskKillTradeGate = 0.24;
 // Models: all (open-position safety layer).
 // Purpose: forces exit when the live gate collapses under the post-entry kill threshold.
@@ -419,6 +447,13 @@ double   g_ai_last_reliability = 0.0;
 double   g_ai_last_path_risk = 1.0;
 double   g_ai_last_fill_risk = 1.0;
 double   g_ai_last_trade_gate = 0.0;
+double   g_ai_last_hierarchy_score = 0.0;
+double   g_ai_last_hierarchy_consistency = 0.0;
+double   g_ai_last_hierarchy_tradability = 0.0;
+double   g_ai_last_hierarchy_execution = 0.0;
+double   g_ai_last_hierarchy_horizon_fit = 0.0;
+double   g_ai_last_macro_state_quality = 0.0;
+double   g_ai_last_portfolio_pressure = 0.0;
 double   g_ai_last_context_quality = 0.0;
 double   g_ai_last_context_strength = 0.0;
 double   g_ai_last_min_move_points = 0.0;
@@ -1081,6 +1116,138 @@ double FXAI_ManagedCorrelatedExposureLots(const string symbol = "")
    return lots;
 }
 
+string FXAI_RuntimeBaseCurrency(const string raw_symbol)
+{
+   string symbol = raw_symbol;
+   StringToUpper(symbol);
+   if(StringLen(symbol) < 6)
+      return "";
+   return StringSubstr(symbol, 0, 3);
+}
+
+string FXAI_RuntimeQuoteCurrency(const string raw_symbol)
+{
+   string symbol = raw_symbol;
+   StringToUpper(symbol);
+   if(StringLen(symbol) < 6)
+      return "";
+   return StringSubstr(symbol, 3, 3);
+}
+
+int FXAI_DirectionalExposureSign(const string symbol,
+                                 const int direction,
+                                 const string currency)
+{
+   string base = FXAI_RuntimeBaseCurrency(symbol);
+   string quote = FXAI_RuntimeQuoteCurrency(symbol);
+   if(direction != 0 && direction != 1)
+      return 0;
+   int dir_sign = (direction == 1 ? 1 : -1);
+   if(currency == base)
+      return dir_sign;
+   if(currency == quote)
+      return -dir_sign;
+   return 0;
+}
+
+double FXAI_DirectionalClusterAlignment(const string anchor_symbol,
+                                        const int anchor_direction,
+                                        const string other_symbol,
+                                        const int other_direction)
+{
+   string anchor_base = FXAI_RuntimeBaseCurrency(anchor_symbol);
+   string anchor_quote = FXAI_RuntimeQuoteCurrency(anchor_symbol);
+   string other_base = FXAI_RuntimeBaseCurrency(other_symbol);
+   string other_quote = FXAI_RuntimeQuoteCurrency(other_symbol);
+   if(StringLen(anchor_base) != 3 || StringLen(anchor_quote) != 3 ||
+      StringLen(other_base) != 3 || StringLen(other_quote) != 3)
+      return 0.0;
+
+   string currencies[2];
+   currencies[0] = anchor_base;
+   currencies[1] = anchor_quote;
+   double align = 0.0;
+   for(int i=0; i<2; i++)
+   {
+      string cur = currencies[i];
+      int anchor_sign = FXAI_DirectionalExposureSign(anchor_symbol, anchor_direction, cur);
+      int other_sign = FXAI_DirectionalExposureSign(other_symbol, other_direction, cur);
+      if(anchor_sign == 0 || other_sign == 0)
+         continue;
+      if(anchor_sign == other_sign)
+         align += 0.50;
+      else
+         align -= 0.25;
+   }
+   if(anchor_symbol == other_symbol && anchor_direction == other_direction)
+      align = 1.0;
+   else if(anchor_base == other_quote && anchor_quote == other_base && anchor_direction != other_direction)
+      align = MathMax(align, 0.95);
+   return FXAI_Clamp(align, 0.0, 1.0);
+}
+
+double FXAI_ManagedDirectionalClusterLots(const string symbol,
+                                          const int direction)
+{
+   if(direction != 0 && direction != 1)
+      return 0.0;
+
+   double lots = 0.0;
+   for(int i=PositionsTotal() - 1; i>=0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(!PositionSelectByTicket(ticket)) continue;
+      if((ulong)PositionGetInteger(POSITION_MAGIC) != TradeMagic) continue;
+      string pos_symbol = PositionGetString(POSITION_SYMBOL);
+      int pos_direction = (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ? 1 : 0);
+      double weight = FXAI_DirectionalClusterAlignment(symbol, direction, pos_symbol, pos_direction);
+      if(weight <= 0.0) continue;
+      lots += weight * MathMax(PositionGetDouble(POSITION_VOLUME), 0.0);
+   }
+
+   for(int i=OrdersTotal() - 1; i>=0; i--)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket == 0) continue;
+      if(!OrderSelect(ticket)) continue;
+      if((ulong)OrderGetInteger(ORDER_MAGIC) != TradeMagic) continue;
+      string order_symbol = OrderGetString(ORDER_SYMBOL);
+      ENUM_ORDER_TYPE order_type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+      int order_direction = -1;
+      if(order_type == ORDER_TYPE_BUY || order_type == ORDER_TYPE_BUY_LIMIT || order_type == ORDER_TYPE_BUY_STOP || order_type == ORDER_TYPE_BUY_STOP_LIMIT)
+         order_direction = 1;
+      else if(order_type == ORDER_TYPE_SELL || order_type == ORDER_TYPE_SELL_LIMIT || order_type == ORDER_TYPE_SELL_STOP || order_type == ORDER_TYPE_SELL_STOP_LIMIT)
+         order_direction = 0;
+      if(order_direction < 0) continue;
+      double weight = FXAI_DirectionalClusterAlignment(symbol, direction, order_symbol, order_direction);
+      if(weight <= 0.0) continue;
+      lots += weight * MathMax(OrderGetDouble(ORDER_VOLUME_CURRENT), 0.0);
+   }
+
+   return lots;
+}
+
+double FXAI_PortfolioPressureScore(const string symbol,
+                                   const int direction)
+{
+   double portfolio_cap = MathMax(MaxPortfolioExposureLots, 0.0);
+   double corr_cap = MathMax(MaxCorrelatedExposureLots, 0.0);
+   double dir_cap = MathMax(MaxDirectionalClusterLots, 0.0);
+   double gross_ratio = (portfolio_cap > 1e-9 ? FXAI_ManagedExposureLots("") / portfolio_cap : 0.0);
+   double corr_ratio = (corr_cap > 1e-9 ? FXAI_ManagedCorrelatedExposureLots(symbol) / corr_cap : 0.0);
+   double dir_ratio = (dir_cap > 1e-9 ? FXAI_ManagedDirectionalClusterLots(symbol, direction) / dir_cap : 0.0);
+   double hierarchy_penalty = 1.0 - FXAI_Clamp(g_ai_last_hierarchy_score, 0.0, 1.0);
+   double macro_penalty = (FXAI_MacroEventLeakageSafe() ? (1.0 - FXAI_Clamp(g_ai_last_macro_state_quality, 0.0, 1.0)) : 0.0);
+   return FXAI_Clamp(0.34 * FXAI_Clamp(gross_ratio, 0.0, 2.0) +
+                     0.28 * FXAI_Clamp(corr_ratio, 0.0, 2.0) +
+                     0.22 * FXAI_Clamp(dir_ratio, 0.0, 2.0) +
+                     0.10 * hierarchy_penalty +
+                     0.06 * macro_penalty,
+                     0.0,
+                     1.5);
+}
+
 double FXAI_MoneyPerPointPerLot(const string symbol)
 {
    double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
@@ -1165,6 +1332,32 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       reason = "risk_trade_gate_floor";
       return 0.0;
    }
+   if(g_ai_last_hierarchy_score < FXAI_Clamp(RiskMinHierarchyScore, 0.0, 1.0))
+   {
+      reason = "risk_hierarchy_score_floor";
+      return 0.0;
+   }
+   if(g_ai_last_hierarchy_consistency < FXAI_Clamp(RiskMinHierarchyConsistency, 0.0, 1.0))
+   {
+      reason = "risk_hierarchy_consistency_floor";
+      return 0.0;
+   }
+   if(g_ai_last_hierarchy_tradability < FXAI_Clamp(RiskMinHierarchyTradability, 0.0, 1.0))
+   {
+      reason = "risk_hierarchy_tradability_floor";
+      return 0.0;
+   }
+   if(g_ai_last_hierarchy_execution < FXAI_Clamp(RiskMinHierarchyExecution, 0.0, 1.0))
+   {
+      reason = "risk_hierarchy_execution_floor";
+      return 0.0;
+   }
+   if(FXAI_MacroEventLeakageSafe() &&
+      g_ai_last_macro_state_quality < FXAI_Clamp(RiskMinMacroStateQuality, 0.0, 1.0))
+   {
+      reason = "risk_macro_state_floor";
+      return 0.0;
+   }
 
    double requested_lot = Lot;
    double hard_cap_lot = 1000000.0;
@@ -1173,9 +1366,12 @@ double FXAI_CalcRiskAwareLot(const string symbol,
                                   0.22 * FXAI_Clamp(g_ai_last_confidence, 0.0, 1.0) +
                                   0.18 * FXAI_Clamp(g_ai_last_reliability, 0.0, 1.0) +
                                   0.16 * FXAI_Clamp(g_ai_last_trade_gate, 0.0, 1.0) +
+                                  0.12 * FXAI_Clamp(g_ai_last_hierarchy_score, 0.0, 1.0) +
+                                  0.08 * FXAI_Clamp(g_ai_last_hierarchy_consistency, 0.0, 1.0) +
                                   0.10 * FXAI_Clamp(g_ai_last_context_strength / 2.0, 0.0, 1.0) +
                                   0.10 * (1.0 - FXAI_Clamp(g_ai_last_path_risk, 0.0, 1.0)) +
                                   0.08 * (1.0 - FXAI_Clamp(g_ai_last_fill_risk, 0.0, 1.0)) +
+                                  0.06 * FXAI_Clamp(g_ai_last_macro_state_quality, 0.0, 1.0) +
                                   0.10 * FXAI_Clamp(edge_scale / 2.0, 0.0, 1.0),
                                   0.20,
                                   1.60);
@@ -1226,6 +1422,15 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       return 0.0;
    }
 
+   double portfolio_pressure = FXAI_PortfolioPressureScore(symbol, direction);
+   g_ai_last_portfolio_pressure = portfolio_pressure;
+   if(portfolio_pressure > FXAI_Clamp(RiskMaxPortfolioPressure, 0.0, 1.5))
+   {
+      reason = "risk_portfolio_pressure";
+      return 0.0;
+   }
+   requested_lot *= FXAI_Clamp(1.08 - 0.60 * portfolio_pressure, 0.30, 1.05);
+
    double portfolio_cap = MathMax(MaxPortfolioExposureLots, 0.0);
    if(portfolio_cap > 0.0)
    {
@@ -1255,6 +1460,21 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       if(available < hard_cap_lot)
          hard_cap_lot = available;
    }
+
+    double dir_cap = MathMax(MaxDirectionalClusterLots, 0.0);
+    if(dir_cap > 0.0)
+    {
+       double available = dir_cap - FXAI_ManagedDirectionalClusterLots(symbol, direction);
+       if(available <= 0.0)
+       {
+          reason = "risk_directional_cluster_cap";
+          return 0.0;
+       }
+       if(requested_lot > available)
+          requested_lot = available;
+       if(available < hard_cap_lot)
+          hard_cap_lot = available;
+    }
 
    requested_lot = FXAI_NormalizeLot(symbol, requested_lot);
    if(requested_lot > hard_cap_lot + 1e-9)
@@ -1769,6 +1989,11 @@ void SendTrade(const int precomputed_direction = -2)
                " conf=", DoubleToString(g_ai_last_confidence, 3),
                " rel=", DoubleToString(g_ai_last_reliability, 3),
                " gate=", DoubleToString(g_ai_last_trade_gate, 3),
+               " hier=", DoubleToString(g_ai_last_hierarchy_score, 3),
+               " hcons=", DoubleToString(g_ai_last_hierarchy_consistency, 3),
+               " hexec=", DoubleToString(g_ai_last_hierarchy_execution, 3),
+               " macroq=", DoubleToString(g_ai_last_macro_state_quality, 3),
+               " ppress=", DoubleToString(g_ai_last_portfolio_pressure, 3),
                " path=", DoubleToString(g_ai_last_path_risk, 3),
                " fill=", DoubleToString(g_ai_last_fill_risk, 3));
       return;

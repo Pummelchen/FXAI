@@ -32,11 +32,14 @@ FXAI stays MT5-native. There are no external inference services and no DLL depen
 - A teacher-student layer distills ensemble behavior into a lighter live routing signal.
 - Hierarchical forecasting separates tradability, direction confidence, move adequacy, path quality, execution viability, and horizon fit before trade gating.
 - Persistent analog regime memory retrieves similar past states and feeds similarity, edge, and execution-safety context back into runtime routing.
+- Live decisioning is now more portfolio-native, with directional-cluster pressure, hierarchy floors, macro-state quality, and portfolio-pressure gating wired directly into position sizing.
+- The macro layer now includes a richer macro-state engine instead of only raw event flags, so routing can react to policy, inflation, labor, growth, carry, and state-quality context.
 - Stateful plugin promotion is gated by native checkpoint coverage and runtime persistence manifests.
 - Ensemble routing now uses contextual regret, counterfactual state, and portfolio-objective signals.
 - Broker execution replay persists richer trace state for runtime and audit reuse.
 - Macro-event data uses the hardened schema v2 contract with provenance and leakage checks.
 - Audit Lab now includes `market_adversarial`, which mines real hostile market windows from `M1 OHLC + spread` history and folds them into release gating.
+- Offline Lab now behaves more like a research operating system: SQLite-backed champion/challenger governance, config lineage, family scorecards, distillation artifacts, and learned red-team plans all sit alongside the existing export and tuning loop.
 
 ## Quick Start
 
@@ -60,6 +63,7 @@ SQLite offline lab:
 python3 FXAI/Tools/fxai_offline_lab.py init-db
 python3 FXAI/Tools/fxai_offline_lab.py tune-zoo --profile continuous --auto-export --symbol-pack majors --months-list 3,6,12
 python3 FXAI/Tools/fxai_offline_lab.py best-params --profile continuous --symbol-pack majors
+python3 FXAI/Tools/fxai_offline_lab.py control-loop --profile continuous --symbol-pack majors --months-list 3,6,12 --cycles 0 --sleep-seconds 1800
 ```
 
 The offline lab exports exact-window `M1 OHLC + spread` data from MT5, stores datasets and run history in SQLite, tunes the real MT5 model zoo on those windows, and emits ready-to-use MT5 `.set` files so promoted parameters do not need manual copy/paste. Standalone `best-params` promotion now scopes to all symbols in the selected profile unless a symbol filter is explicitly provided, and exact-window tuning uses the effective exported first/last bar range rather than only the originally requested window.

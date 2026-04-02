@@ -11,6 +11,13 @@ int SpecialDirectionAI(const string symbol)
    double cached_path_risk = g_ai_last_path_risk;
    double cached_fill_risk = g_ai_last_fill_risk;
    double cached_trade_gate = g_ai_last_trade_gate;
+   double cached_hierarchy_score = g_ai_last_hierarchy_score;
+   double cached_hierarchy_consistency = g_ai_last_hierarchy_consistency;
+   double cached_hierarchy_tradability = g_ai_last_hierarchy_tradability;
+   double cached_hierarchy_execution = g_ai_last_hierarchy_execution;
+   double cached_hierarchy_horizon_fit = g_ai_last_hierarchy_horizon_fit;
+   double cached_macro_state_quality = g_ai_last_macro_state_quality;
+   double cached_portfolio_pressure = g_ai_last_portfolio_pressure;
    double cached_context_quality = g_ai_last_context_quality;
    double cached_context_strength = g_ai_last_context_strength;
    double cached_min_move_points = g_ai_last_min_move_points;
@@ -23,6 +30,13 @@ int SpecialDirectionAI(const string symbol)
    g_ai_last_path_risk = 1.0;
    g_ai_last_fill_risk = 1.0;
    g_ai_last_trade_gate = 0.0;
+   g_ai_last_hierarchy_score = 0.0;
+   g_ai_last_hierarchy_consistency = 0.0;
+   g_ai_last_hierarchy_tradability = 0.0;
+   g_ai_last_hierarchy_execution = 0.0;
+   g_ai_last_hierarchy_horizon_fit = 0.0;
+   g_ai_last_macro_state_quality = 0.0;
+   g_ai_last_portfolio_pressure = 0.0;
    g_ai_last_context_quality = 0.0;
    g_ai_last_context_strength = 0.0;
    g_ai_last_min_move_points = 0.0;
@@ -98,6 +112,13 @@ int SpecialDirectionAI(const string symbol)
       g_ai_last_path_risk = cached_path_risk;
       g_ai_last_fill_risk = cached_fill_risk;
       g_ai_last_trade_gate = cached_trade_gate;
+      g_ai_last_hierarchy_score = cached_hierarchy_score;
+      g_ai_last_hierarchy_consistency = cached_hierarchy_consistency;
+      g_ai_last_hierarchy_tradability = cached_hierarchy_tradability;
+      g_ai_last_hierarchy_execution = cached_hierarchy_execution;
+      g_ai_last_hierarchy_horizon_fit = cached_hierarchy_horizon_fit;
+      g_ai_last_macro_state_quality = cached_macro_state_quality;
+      g_ai_last_portfolio_pressure = cached_portfolio_pressure;
       g_ai_last_context_quality = cached_context_quality;
       g_ai_last_context_strength = cached_context_strength;
       g_ai_last_min_move_points = cached_min_move_points;
@@ -607,6 +628,7 @@ int SpecialDirectionAI(const string symbol)
                           H,
                           FXAI_SymbolHash01(snapshot.symbol),
                           current_analog_q);
+   g_ai_last_macro_state_quality = FXAI_Clamp(FXAI_GetInputFeature(current_raw_x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 19), 0.0, 1.0);
 
    int active_ai_ids[];
    ArrayResize(active_ai_ids, 0);
@@ -1122,6 +1144,26 @@ int SpecialDirectionAI(const string symbol)
          g_ai_last_path_risk = FXAI_Clamp(pred.path_risk, 0.0, 1.0);
          g_ai_last_fill_risk = FXAI_Clamp(pred.fill_risk, 0.0, 1.0);
          g_ai_last_trade_gate = single_trade_gate;
+         FXAIHierarchicalSignals single_hierarchy_sig;
+         FXAI_BuildHierarchicalSignals(class_probs_pred,
+                                       expected_move,
+                                       min_move_pred,
+                                       pred.confidence,
+                                       pred.reliability,
+                                       pred.path_risk,
+                                       pred.fill_risk,
+                                       pred.hit_time_frac,
+                                       context_quality,
+                                       H,
+                                       current_foundation_sig,
+                                       current_student_sig,
+                                       current_analog_q,
+                                       single_hierarchy_sig);
+         g_ai_last_hierarchy_score = FXAI_Clamp(single_hierarchy_sig.score, 0.0, 1.0);
+         g_ai_last_hierarchy_consistency = FXAI_Clamp(single_hierarchy_sig.consistency, 0.0, 1.0);
+         g_ai_last_hierarchy_tradability = FXAI_Clamp(single_hierarchy_sig.tradability, 0.0, 1.0);
+         g_ai_last_hierarchy_execution = FXAI_Clamp(single_hierarchy_sig.execution_viability, 0.0, 1.0);
+         g_ai_last_hierarchy_horizon_fit = FXAI_Clamp(single_hierarchy_sig.horizon_fit, 0.0, 1.0);
          singleSignal = signal;
       }
       else
@@ -1267,6 +1309,11 @@ int SpecialDirectionAI(const string symbol)
                                        current_student_sig,
                                        current_analog_q,
                                        current_hierarchy_sig);
+         g_ai_last_hierarchy_score = FXAI_Clamp(current_hierarchy_sig.score, 0.0, 1.0);
+         g_ai_last_hierarchy_consistency = FXAI_Clamp(current_hierarchy_sig.consistency, 0.0, 1.0);
+         g_ai_last_hierarchy_tradability = FXAI_Clamp(current_hierarchy_sig.tradability, 0.0, 1.0);
+         g_ai_last_hierarchy_execution = FXAI_Clamp(current_hierarchy_sig.execution_viability, 0.0, 1.0);
+         g_ai_last_hierarchy_horizon_fit = FXAI_Clamp(current_hierarchy_sig.horizon_fit, 0.0, 1.0);
 
          FXAI_StackBuildFeatures(buyPct,
                                  sellPct,

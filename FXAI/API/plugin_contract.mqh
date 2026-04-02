@@ -5,7 +5,7 @@
 #include "..\TensorCore\TensorCore.mqh"
 
 #define FXAI_PLUGIN_STATE_ARTIFACT_DIR "FXAI\\Runtime\\Plugins"
-#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 11
+#define FXAI_PLUGIN_STATE_ARTIFACT_VERSION 12
 
 class CFXAITernaryCalibrator
 {
@@ -529,7 +529,7 @@ public:
       m_native_quality_heads.Reset();
    }
    virtual bool SupportsPersistentState(void) const { return true; }
-   virtual int PersistentStateVersion(void) const { return 11; }
+   virtual int PersistentStateVersion(void) const { return 12; }
    virtual bool SupportsDeterministicReplayCheckpoint(void) const { return true; }
    virtual bool SupportsNativeParameterSnapshot(void) const { return false; }
    virtual string PersistentStateDepthTag(void) const

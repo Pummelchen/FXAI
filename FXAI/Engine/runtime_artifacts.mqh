@@ -2,7 +2,7 @@
 #define __FXAI_RUNTIME_ARTIFACTS_MQH__
 
 #define FXAI_RUNTIME_ARTIFACT_DIR "FXAI\\Runtime"
-#define FXAI_RUNTIME_ARTIFACT_VERSION 13
+#define FXAI_RUNTIME_ARTIFACT_VERSION 14
 
 string FXAI_RuntimeArtifactSafeSymbol(const string symbol)
 {

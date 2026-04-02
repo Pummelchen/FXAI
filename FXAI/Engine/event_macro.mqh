@@ -59,10 +59,34 @@ struct FXAIMacroEventDatasetStats
    double leakage_guard_score;
 };
 
+struct FXAIMacroState
+{
+   double policy_divergence;
+   double policy_pressure;
+   double inflation_pressure;
+   double labor_pressure;
+   double growth_pressure;
+   double carry_pressure;
+   double event_decay;
+   double state_quality;
+};
+
 FXAIMacroEventRecord g_macro_events[];
 bool g_macro_events_loaded = false;
 bool g_macro_events_available = false;
 FXAIMacroEventDatasetStats g_macro_event_stats;
+
+void FXAI_ClearMacroState(FXAIMacroState &out)
+{
+   out.policy_divergence = 0.0;
+   out.policy_pressure = 0.0;
+   out.inflation_pressure = 0.0;
+   out.labor_pressure = 0.0;
+   out.growth_pressure = 0.0;
+   out.carry_pressure = 0.0;
+   out.event_decay = 0.0;
+   out.state_quality = 0.0;
+}
 
 string FXAI_StripUtfBom(const string raw_value)
 {
@@ -375,6 +399,173 @@ bool FXAI_MacroEventAffectsSymbol(const string raw_event_symbol,
    if(StringLen(currency) == 3 && FXAI_MacroCurrencyRelevance(currency, symbol) > 0.35)
       return true;
    return false;
+}
+
+double FXAI_MacroCurrencyOrientation(const string raw_currency,
+                                     const string raw_symbol)
+{
+   string currency = FXAI_NormalizeMacroCurrencyToken(raw_currency);
+   if(StringLen(currency) <= 0)
+      return 0.0;
+
+   string base = FXAI_MacroSymbolBaseCurrency(raw_symbol);
+   string quote = FXAI_MacroSymbolQuoteCurrency(raw_symbol);
+   if(currency == base)
+      return 1.0;
+   if(currency == quote)
+      return -1.0;
+
+   int cur_block = FXAI_MacroCurrencyBlock(currency);
+   int base_block = FXAI_MacroCurrencyBlock(base);
+   int quote_block = FXAI_MacroCurrencyBlock(quote);
+   if(cur_block > 0 && cur_block == base_block && cur_block != quote_block)
+      return 0.35;
+   if(cur_block > 0 && cur_block == quote_block && cur_block != base_block)
+      return -0.35;
+   return 0.0;
+}
+
+double FXAI_MacroImpactSigned(const FXAIMacroEventRecord &ev)
+{
+   double realized = FXAI_Clamp(0.55 * ev.surprise_z +
+                                0.30 * ev.surprise +
+                                0.10 * (ev.actual_delta - ev.forecast_delta) +
+                                0.05 * ev.revision_delta,
+                                -8.0,
+                                8.0);
+   return realized / 8.0;
+}
+
+void FXAI_BuildMacroState(const string symbol,
+                          const datetime sample_time,
+                          FXAIMacroState &out)
+{
+   FXAI_ClearMacroState(out);
+   if(sample_time <= 0 || !FXAI_EnsureMacroEventStoreLoaded())
+      return;
+
+   double policy_acc = 0.0;
+   double policy_weight = 0.0;
+   double inflation_acc = 0.0;
+   double inflation_weight = 0.0;
+   double labor_acc = 0.0;
+   double labor_weight = 0.0;
+   double growth_acc = 0.0;
+   double growth_weight = 0.0;
+   double trade_acc = 0.0;
+   double trade_weight = 0.0;
+   double trust_sum = 0.0;
+   double relevance_sum = 0.0;
+   double coverage_weight = 0.0;
+   int family_hits = 0;
+
+   for(int i=0; i<ArraySize(g_macro_events); i++)
+   {
+      FXAIMacroEventRecord ev = g_macro_events[i];
+      if(!FXAI_MacroEventAffectsSymbol(ev.symbol, ev.currency, ev.country, symbol))
+         continue;
+
+      double dt_minutes = (double)(sample_time - ev.event_time) / 60.0;
+      double lookback = (double)MathMax(ev.post_window_min * 3, 240);
+      double lookahead = (double)MathMax(ev.pre_window_min, 60);
+      if(dt_minutes < -lookahead || dt_minutes > lookback)
+         continue;
+
+      double orientation = FXAI_MacroCurrencyOrientation(ev.currency, symbol);
+      if(MathAbs(orientation) <= 1e-9)
+         continue;
+
+      double src_trust = FXAI_Clamp(ev.source_trust, 0.0, 1.0);
+      if(src_trust <= 1e-6)
+         src_trust = FXAI_MacroSourceTrust(ev.source);
+      double relevance = MathMax(FXAI_MacroCurrencyRelevance(ev.currency, symbol),
+                                 FXAI_Clamp(ev.relevance_hint, 0.0, 1.0));
+      if(relevance <= 1e-6)
+         continue;
+
+      double importance = FXAI_Clamp(ev.importance, 0.0, 1.0);
+      double temporal = 0.0;
+      if(dt_minutes < 0.0)
+         temporal = 0.60 + 0.40 * FXAI_Clamp(1.0 - ((-dt_minutes) / MathMax(lookahead, 1.0)), 0.0, 1.0);
+      else
+         temporal = MathExp(-dt_minutes / MathMax(lookback, 1.0));
+      temporal = FXAI_Clamp(temporal, 0.0, 1.0);
+
+      double w = FXAI_Clamp((0.25 + 0.75 * importance) *
+                            (0.20 + 0.80 * src_trust) *
+                            (0.25 + 0.75 * relevance) *
+                            temporal,
+                            0.0,
+                            1.0);
+      if(w <= 1e-6)
+         continue;
+
+      double impact = orientation * FXAI_MacroImpactSigned(ev);
+      trust_sum += w * src_trust;
+      relevance_sum += w * FXAI_Clamp(relevance, 0.0, 1.0);
+      coverage_weight += w;
+      out.event_decay = MathMax(out.event_decay, w);
+
+      if(ev.event_class == 1)
+      {
+         policy_acc += w * impact;
+         policy_weight += w;
+         family_hits++;
+      }
+      else if(ev.event_class == 2)
+      {
+         inflation_acc += w * impact;
+         inflation_weight += w;
+         family_hits++;
+      }
+      else if(ev.event_class == 3)
+      {
+         labor_acc += w * impact;
+         labor_weight += w;
+         family_hits++;
+      }
+      else if(ev.event_class == 4)
+      {
+         growth_acc += w * impact;
+         growth_weight += w;
+         family_hits++;
+      }
+      else if(ev.event_class == 5)
+      {
+         trade_acc += w * impact;
+         trade_weight += w;
+         family_hits++;
+      }
+   }
+
+   double policy_norm = (policy_weight > 1e-6 ? policy_acc / policy_weight : 0.0);
+   double inflation_norm = (inflation_weight > 1e-6 ? inflation_acc / inflation_weight : 0.0);
+   double labor_norm = (labor_weight > 1e-6 ? labor_acc / labor_weight : 0.0);
+   double growth_norm = (growth_weight > 1e-6 ? growth_acc / growth_weight : 0.0);
+   double trade_norm = (trade_weight > 1e-6 ? trade_acc / trade_weight : 0.0);
+
+   out.policy_divergence = FXAI_Clamp(policy_norm - 0.35 * inflation_norm + 0.20 * growth_norm, -1.0, 1.0);
+   out.policy_pressure = FXAI_Clamp(0.70 * policy_norm + 0.30 * inflation_norm, -1.0, 1.0);
+   out.inflation_pressure = FXAI_Clamp(inflation_norm, -1.0, 1.0);
+   out.labor_pressure = FXAI_Clamp(labor_norm, -1.0, 1.0);
+   out.growth_pressure = FXAI_Clamp(0.78 * growth_norm + 0.22 * trade_norm, -1.0, 1.0);
+   out.carry_pressure = FXAI_Clamp(0.60 * out.policy_pressure +
+                                   0.25 * out.policy_divergence +
+                                   0.15 * out.growth_pressure,
+                                   -1.0,
+                                   1.0);
+   out.event_decay = FXAI_Clamp(out.event_decay, 0.0, 1.0);
+
+   double trust_mean = (coverage_weight > 1e-6 ? trust_sum / coverage_weight : 0.0);
+   double relevance_mean = (coverage_weight > 1e-6 ? relevance_sum / coverage_weight : 0.0);
+   double family_diversity = FXAI_Clamp((double)family_hits / 5.0, 0.0, 1.0);
+   double density = FXAI_Clamp(coverage_weight / 2.0, 0.0, 1.0);
+   out.state_quality = FXAI_Clamp(0.34 * trust_mean +
+                                  0.28 * relevance_mean +
+                                  0.20 * density +
+                                  0.18 * family_diversity,
+                                  0.0,
+                                  1.0);
 }
 
 void FXAI_ResetMacroEventStore(void)
