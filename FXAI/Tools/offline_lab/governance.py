@@ -12,6 +12,18 @@ def _clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, float(v)))
 
 
+def _unlink_if_exists(raw_path: str) -> None:
+    path_text = str(raw_path or "").strip()
+    if not path_text:
+        return
+    try:
+        path = Path(path_text)
+        if path.exists() and path.is_file():
+            path.unlink()
+    except Exception:
+        pass
+
+
 def write_portfolio_supervisor_profile(conn: sqlite3.Connection,
                                        args) -> dict:
     rows = conn.execute(
@@ -25,6 +37,21 @@ def write_portfolio_supervisor_profile(conn: sqlite3.Connection,
     ).fetchall()
     deployments = [dict(row) for row in rows]
     if not deployments:
+        stale_rows = conn.execute(
+            "SELECT artifact_path FROM portfolio_supervisor_profiles WHERE profile_name = ?",
+            (args.profile,),
+        ).fetchall()
+        for row in stale_rows:
+            _unlink_if_exists(str(row["artifact_path"] or ""))
+        conn.execute(
+            "DELETE FROM portfolio_supervisor_profiles WHERE profile_name = ?",
+            (args.profile,),
+        )
+        out_dir = RESEARCH_DIR / safe_token(args.profile)
+        stale_json = out_dir / "portfolio_supervisor.json"
+        if stale_json.exists():
+            stale_json.unlink()
+        conn.commit()
         return {}
 
     mean_shadow = 0.0
@@ -165,6 +192,7 @@ def write_world_simulator_plans(conn: sqlite3.Connection,
     ensure_dir(COMMON_PROMOTION_DIR)
     plans: list[dict] = []
     created_at = now_unix()
+    active_symbols = set(symbols)
 
     for symbol in symbols:
         shadow = symbol_shadow_summary(conn, args.profile, symbol)
@@ -313,6 +341,27 @@ def write_world_simulator_plans(conn: sqlite3.Connection,
             ),
         )
         plans.append({"symbol": symbol, "artifact_path": str(tsv_path), "artifact_sha256": sha})
+
+    stale_rows = conn.execute(
+        """
+        SELECT symbol, artifact_path
+          FROM world_simulator_plans
+         WHERE profile_name = ?
+        """,
+        (args.profile,),
+    ).fetchall()
+    for row in stale_rows:
+        symbol = str(row["symbol"])
+        if symbol in active_symbols:
+            continue
+        _unlink_if_exists(str(row["artifact_path"] or ""))
+        stale_json = out_dir / f"world_simulator_{safe_token(symbol)}.json"
+        if stale_json.exists():
+            stale_json.unlink()
+        conn.execute(
+            "DELETE FROM world_simulator_plans WHERE profile_name = ? AND symbol = ?",
+            (args.profile, symbol),
+        )
 
     conn.commit()
     summary_path = out_dir / "world_simulator_plans.json"

@@ -13,6 +13,18 @@ def _clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, float(v)))
 
 
+def _unlink_if_exists(raw_path: str) -> None:
+    path_text = str(raw_path or "").strip()
+    if not path_text:
+        return
+    try:
+        path = Path(path_text)
+        if path.exists() and path.is_file():
+            path.unlink()
+    except Exception:
+        pass
+
+
 def _weighted_mean(items: list[tuple[float, float]], default: float) -> float:
     total_w = 0.0
     total_v = 0.0
@@ -84,6 +96,7 @@ def write_foundation_teacher_artifacts(conn: sqlite3.Connection,
 
     artifacts: list[dict] = []
     created_at = now_unix()
+    active_keys = set(grouped.keys())
     for (symbol, family_id), items in sorted(grouped.items()):
         weights = [max(float(item.get("ranking_score", 0.0)), 1.0) for item in items]
         total_w = max(sum(weights), 1.0)
@@ -175,6 +188,27 @@ def write_foundation_teacher_artifacts(conn: sqlite3.Connection,
             "artifact_sha256": artifact_sha,
         })
 
+    stale_rows = conn.execute(
+        """
+        SELECT symbol, family_id, artifact_path
+          FROM foundation_teacher_artifacts
+         WHERE profile_name = ? AND scope = 'symbol_family'
+        """,
+        (args.profile,),
+    ).fetchall()
+    for row in stale_rows:
+        key = (str(row["symbol"]), int(row["family_id"]))
+        if key in active_keys:
+            continue
+        _unlink_if_exists(str(row["artifact_path"] or ""))
+        conn.execute(
+            """
+            DELETE FROM foundation_teacher_artifacts
+             WHERE profile_name = ? AND symbol = ? AND scope = 'symbol_family' AND family_id = ?
+            """,
+            (args.profile, key[0], key[1]),
+        )
+
     conn.commit()
     summary_path = out_dir / "foundation_teachers.json"
     summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
@@ -191,10 +225,12 @@ def write_teacher_factory_artifacts(conn: sqlite3.Connection,
     shadow_map = latest_shadow_rows(conn, args.profile)
     artifacts: list[dict] = []
     created_at = now_unix()
+    active_keys: set[tuple[str, str]] = set()
 
     for row in promoted_rows:
         symbol = str(row["symbol"])
         plugin_name = str(row["plugin_name"])
+        active_keys.add((symbol, plugin_name))
         family_id = int(row.get("family_id", 11))
         params = json.loads(row["parameters_json"])
         distill = distill_map.get((symbol, plugin_name))
@@ -288,6 +324,27 @@ def write_teacher_factory_artifacts(conn: sqlite3.Connection,
             "teacher_artifact_path": str(teacher_path),
             "teacher_artifact_sha256": teacher_sha,
         })
+
+    stale_rows = conn.execute(
+        """
+        SELECT symbol, plugin_name, teacher_artifact_path
+          FROM teacher_factories
+         WHERE profile_name = ?
+        """,
+        (args.profile,),
+    ).fetchall()
+    for row in stale_rows:
+        key = (str(row["symbol"]), str(row["plugin_name"]))
+        if key in active_keys:
+            continue
+        _unlink_if_exists(str(row["teacher_artifact_path"] or ""))
+        conn.execute(
+            """
+            DELETE FROM teacher_factories
+             WHERE profile_name = ? AND symbol = ? AND plugin_name = ?
+            """,
+            (args.profile, key[0], key[1]),
+        )
 
     conn.commit()
     summary_path = out_dir / "teacher_factories.json"
