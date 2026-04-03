@@ -6,6 +6,8 @@ from pathlib import Path
 
 from .common import *
 from .shadow_fleet import symbol_shadow_summary
+from .supervisor_service import write_supervisor_service_artifacts
+from .world_simulator import write_world_model_artifacts
 
 
 def _clamp(v: float, lo: float, hi: float) -> float:
@@ -190,12 +192,17 @@ def write_world_simulator_plans(conn: sqlite3.Connection,
     out_dir = RESEARCH_DIR / safe_token(args.profile)
     ensure_dir(out_dir)
     ensure_dir(COMMON_PROMOTION_DIR)
+    world_models = {
+        item["symbol"]: item["payload"]
+        for item in write_world_model_artifacts(conn, args, symbols)
+    }
     plans: list[dict] = []
     created_at = now_unix()
     active_symbols = set(symbols)
 
     for symbol in symbols:
         shadow = symbol_shadow_summary(conn, args.profile, symbol)
+        model = dict(world_models.get(symbol, {}))
         redteam = conn.execute(
             """
             SELECT plan_json, weak_scenarios_json
@@ -223,59 +230,99 @@ def write_world_simulator_plans(conn: sqlite3.Connection,
             "profile_name": args.profile,
             "symbol": symbol,
             "sigma_scale": _clamp(
-                1.0 + 0.30 * adversarial_flag + 0.20 * walkforward_flag +
+                0.62 * float(model.get("sigma_scale", 1.0)) +
+                0.20 * (1.0 + 0.30 * adversarial_flag + 0.20 * walkforward_flag) +
                 0.18 * float(shadow.get("mean_route_regret", 0.0)),
                 0.50,
                 3.00,
             ),
             "drift_bias": _clamp(
+                0.70 * float(model.get("drift_bias", 0.0)) +
                 0.00004 * float(shadow.get("mean_route_value", 0.0)) -
                 0.00005 * float(shadow.get("mean_policy_no_trade_prob", 0.0)),
                 -0.001,
                 0.001,
             ),
             "spread_scale": _clamp(
-                1.0 + 0.25 * spread_flag + 0.18 * session_flag +
+                0.62 * float(model.get("spread_scale", 1.0)) +
+                0.20 * (1.0 + 0.25 * spread_flag + 0.18 * session_flag) +
                 0.12 * float(shadow.get("mean_portfolio_pressure", 0.0)),
                 0.50,
                 4.00,
             ),
             "gap_prob": _clamp(
+                0.65 * float(model.get("gap_prob", 0.0)) +
                 0.02 * adversarial_flag + 0.02 * walkforward_flag +
                 0.05 * float(shadow.get("mean_route_regret", 0.0)),
                 0.0,
                 0.30,
             ),
             "gap_scale": _clamp(
-                1.2 + 1.8 * adversarial_flag + 1.5 * float(shadow.get("mean_portfolio_pressure", 0.0)),
+                0.55 * float(model.get("gap_scale", 1.2)) +
+                0.45 * (1.2 + 1.8 * adversarial_flag + 1.5 * float(shadow.get("mean_portfolio_pressure", 0.0))),
                 0.0,
                 8.0,
             ),
             "flip_prob": _clamp(
+                0.65 * float(model.get("flip_prob", 0.0)) +
                 0.04 * adversarial_flag + 0.03 * walkforward_flag +
                 0.06 * float(shadow.get("mean_policy_no_trade_prob", 0.0)),
                 0.0,
                 0.50,
             ),
             "context_corr_bias": _clamp(
+                0.55 * float(model.get("context_corr_bias", 0.0)) +
                 0.35 * float(shadow.get("mean_portfolio_div", 0.0)) -
                 0.30 * float(shadow.get("mean_portfolio_corr", 0.0)),
                 -1.0,
                 1.0,
             ),
             "liquidity_stress": _clamp(
+                0.58 * float(model.get("liquidity_stress", 0.0)) +
                 0.30 * spread_flag + 0.22 * session_flag +
                 0.25 * float(shadow.get("mean_portfolio_supervisor_score", 0.0)),
                 0.0,
                 3.0,
             ),
             "macro_focus": _clamp(
+                0.58 * float(model.get("macro_focus", 0.0)) +
                 0.25 * macro_flag + 0.15 * float(shadow.get("mean_policy_no_trade_prob", 0.0)),
                 0.0,
                 1.5,
             ),
+            "session_edge_focus": _clamp(
+                0.75 * float(model.get("session_edge_focus", 0.0)) + 0.25 * session_flag,
+                0.0,
+                1.5,
+            ),
+            "trend_persistence": _clamp(
+                0.70 * float(model.get("trend_persistence", 0.5)) + 0.15 * (1.0 - adversarial_flag) + 0.15 * walkforward_flag,
+                0.0,
+                1.0,
+            ),
+            "shock_memory": _clamp(
+                0.75 * float(model.get("shock_memory", 0.0)) + 0.25 * adversarial_flag,
+                0.0,
+                1.0,
+            ),
+            "recovery_bias": _clamp(
+                0.75 * float(model.get("recovery_bias", 0.0)) - 0.10 * float(shadow.get("mean_route_regret", 0.0)),
+                -1.0,
+                1.0,
+            ),
+            "spread_shock_prob": _clamp(
+                0.72 * float(model.get("spread_shock_prob", 0.0)) + 0.28 * spread_flag,
+                0.0,
+                0.50,
+            ),
+            "spread_shock_scale": _clamp(
+                0.72 * float(model.get("spread_shock_scale", 1.0)) + 0.28 * (1.0 + spread_flag),
+                1.0,
+                8.0,
+            ),
             "weak_scenarios": weak_scenarios,
             "shadow_summary": shadow,
+            "world_model": model,
         }
 
         tsv_path = COMMON_PROMOTION_DIR / f"fxai_world_plan_{safe_token(symbol)}.tsv"
@@ -294,6 +341,12 @@ def write_world_simulator_plans(conn: sqlite3.Connection,
                     ("context_corr_bias", payload["context_corr_bias"]),
                     ("liquidity_stress", payload["liquidity_stress"]),
                     ("macro_focus", payload["macro_focus"]),
+                    ("session_edge_focus", payload["session_edge_focus"]),
+                    ("trend_persistence", payload["trend_persistence"]),
+                    ("shock_memory", payload["shock_memory"]),
+                    ("recovery_bias", payload["recovery_bias"]),
+                    ("spread_shock_prob", payload["spread_shock_prob"]),
+                    ("spread_shock_scale", payload["spread_shock_scale"]),
                 ]
             ),
             encoding="utf-8",
@@ -432,6 +485,7 @@ def run_autonomous_governance(conn: sqlite3.Connection,
         })
 
     supervisor = write_portfolio_supervisor_profile(conn, args)
+    supervisor_service = write_supervisor_service_artifacts(conn, args)
     world_plans = write_world_simulator_plans(conn, args)
     artifact_dir = RESEARCH_DIR / safe_token(args.profile)
     ensure_dir(artifact_dir)
@@ -444,6 +498,7 @@ def run_autonomous_governance(conn: sqlite3.Connection,
         "rollback_count": rollback,
         "decisions": decisions,
         "portfolio_supervisor": supervisor,
+        "supervisor_service": supervisor_service,
         "world_plans": world_plans,
     }
     json_path = artifact_dir / "autonomous_governance.json"

@@ -82,6 +82,56 @@ def _latest_distill_artifacts(conn: sqlite3.Connection,
     return out
 
 
+def _latest_foundation_bundles(conn: sqlite3.Connection,
+                               profile_name: str) -> dict[str, dict]:
+    rows = conn.execute(
+        """
+        SELECT *
+          FROM foundation_model_bundles
+         WHERE profile_name = ? AND bundle_scope = 'symbol'
+         ORDER BY created_at DESC
+        """,
+        (profile_name,),
+    ).fetchall()
+    out: dict[str, dict] = {}
+    for row in rows:
+        symbol = str(row["symbol"])
+        if symbol in out:
+            continue
+        payload = {}
+        try:
+            payload = json.loads(row["payload_json"] or "{}")
+        except Exception:
+            payload = {}
+        out[symbol] = payload
+    return out
+
+
+def _latest_student_bundles(conn: sqlite3.Connection,
+                            profile_name: str) -> dict[tuple[str, str], dict]:
+    rows = conn.execute(
+        """
+        SELECT *
+          FROM student_deployment_bundles
+         WHERE profile_name = ?
+         ORDER BY created_at DESC
+        """,
+        (profile_name,),
+    ).fetchall()
+    out: dict[tuple[str, str], dict] = {}
+    for row in rows:
+        key = (str(row["symbol"]), str(row["plugin_name"]))
+        if key in out:
+            continue
+        payload = {}
+        try:
+            payload = json.loads(row["deployment_json"] or "{}")
+        except Exception:
+            payload = {}
+        out[key] = payload
+    return out
+
+
 def write_foundation_teacher_artifacts(conn: sqlite3.Connection,
                                        args,
                                        promoted_rows: list[dict]) -> list[dict]:
@@ -359,6 +409,8 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
     ensure_dir(out_dir)
     family_cards = _latest_family_scorecards(conn, args.profile)
     distill_map = _latest_distill_artifacts(conn, args.profile)
+    foundation_bundles = _latest_foundation_bundles(conn, args.profile)
+    student_bundles = _latest_student_bundles(conn, args.profile)
 
     champion_rows = conn.execute(
         """
@@ -402,6 +454,16 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
         macro_quality_floor = 0.24
         capital_efficiency_bias = 1.0
         supervisor_blend = 0.45
+        hold_floor_items: list[tuple[float, float]] = []
+        exit_floor_items: list[tuple[float, float]] = []
+        add_floor_items: list[tuple[float, float]] = []
+        reduce_floor_items: list[tuple[float, float]] = []
+        timeout_floor_items: list[tuple[float, float]] = []
+        max_add_items: list[tuple[float, float]] = []
+        reduce_fraction_items: list[tuple[float, float]] = []
+        soft_timeout_items: list[tuple[float, float]] = []
+        hard_timeout_items: list[tuple[float, float]] = []
+        foundation_bundle = foundation_bundles.get(symbol, {})
 
         deployment_champions: list[dict] = []
         mean_macro_score = 0.0
@@ -420,6 +482,7 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
                 except Exception:
                     pass
             family_card = family_cards.get((symbol, family_id), {})
+            student_bundle = student_bundles.get((symbol, str(item["plugin_name"])), {})
             macro_score = float(family_card.get("mean_macro_score", 0.0))
             stability = float(family_card.get("stability_score", 0.0))
 
@@ -432,6 +495,16 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             foundation_weights.append((distill_target.get("foundation_weight", 0.14), champion_weight))
             mean_macro_score += macro_score * champion_weight
             mean_stability += stability * champion_weight
+            lifecycle = dict(student_bundle.get("lifecycle_policy", {}))
+            hold_floor_items.append((lifecycle.get("policy_hold_floor", 0.48), champion_weight))
+            exit_floor_items.append((lifecycle.get("policy_exit_floor", 0.58), champion_weight))
+            add_floor_items.append((lifecycle.get("policy_add_floor", 0.68), champion_weight))
+            reduce_floor_items.append((lifecycle.get("policy_reduce_floor", 0.56), champion_weight))
+            timeout_floor_items.append((lifecycle.get("policy_timeout_floor", 0.72), champion_weight))
+            max_add_items.append((lifecycle.get("max_add_fraction", 0.50), champion_weight))
+            reduce_fraction_items.append((lifecycle.get("reduce_fraction", 0.35), champion_weight))
+            soft_timeout_items.append((lifecycle.get("soft_timeout_bars", 8), champion_weight))
+            hard_timeout_items.append((lifecycle.get("hard_timeout_bars", 18), champion_weight))
             deployment_champions.append({
                 "plugin_name": item["plugin_name"],
                 "family_id": family_id,
@@ -439,6 +512,7 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
                 "portfolio_score": float(item.get("portfolio_score", 0.0)),
                 "distillation": distill_target,
                 "family_scorecard": family_card,
+                "student_bundle": student_bundle,
             })
 
         total_weight = max(sum(weight for _value, weight in teacher_weights), 1.0)
@@ -523,6 +597,74 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             0.0,
             1.0,
         )
+        foundation_teacher_floor = _clamp(float(foundation_bundle.get("teacher_floor", 0.58)), 0.20, 0.95)
+        foundation_student_floor = _clamp(float(foundation_bundle.get("student_floor", 0.42)), 0.10, 0.90)
+        policy_hold_floor = _clamp(
+            0.70 * _weighted_mean(hold_floor_items, 0.48) +
+            0.18 * foundation_student_floor +
+            0.12 * _clamp(shadow_summary.get("mean_policy_capital_efficiency", 0.0), 0.0, 1.0),
+            0.20,
+            0.95,
+        )
+        policy_exit_floor = _clamp(
+            0.68 * _weighted_mean(exit_floor_items, 0.58) +
+            0.16 * _clamp(shadow_summary.get("mean_policy_no_trade_prob", 0.0), 0.0, 1.0) +
+            0.16 * _clamp(shadow_summary.get("mean_portfolio_pressure", 0.0) / 1.5, 0.0, 1.0),
+            0.20,
+            0.99,
+        )
+        policy_add_floor = _clamp(
+            0.66 * _weighted_mean(add_floor_items, 0.68) +
+            0.14 * foundation_teacher_floor +
+            0.12 * _clamp(shadow_summary.get("mean_policy_enter_prob", 0.0), 0.0, 1.0) -
+            0.08 * _clamp(shadow_summary.get("mean_portfolio_pressure", 0.0) / 1.5, 0.0, 1.0),
+            0.30,
+            0.99,
+        )
+        policy_reduce_floor = _clamp(
+            0.70 * _weighted_mean(reduce_floor_items, 0.56) +
+            0.16 * _clamp(shadow_summary.get("mean_policy_no_trade_prob", 0.0), 0.0, 1.0) +
+            0.14 * _clamp(shadow_summary.get("mean_portfolio_pressure", 0.0) / 1.5, 0.0, 1.0),
+            0.25,
+            0.99,
+        )
+        policy_timeout_floor = _clamp(
+            0.70 * _weighted_mean(timeout_floor_items, 0.72) +
+            0.16 * _clamp(shadow_summary.get("mean_route_regret", 0.0), 0.0, 1.0) +
+            0.14 * _clamp(shadow_summary.get("mean_policy_no_trade_prob", 0.0), 0.0, 1.0),
+            0.30,
+            0.99,
+        )
+        max_add_fraction = _clamp(
+            0.70 * _weighted_mean(max_add_items, 0.50) +
+            0.15 * foundation_student_floor +
+            0.15 * _clamp(shadow_summary.get("mean_portfolio_div", 0.0), 0.0, 1.0),
+            0.05,
+            1.00,
+        )
+        reduce_fraction = _clamp(
+            0.72 * _weighted_mean(reduce_fraction_items, 0.35) +
+            0.14 * _clamp(shadow_summary.get("mean_portfolio_pressure", 0.0) / 1.5, 0.0, 1.0) +
+            0.14 * _clamp(shadow_summary.get("mean_policy_no_trade_prob", 0.0), 0.0, 1.0),
+            0.10,
+            0.90,
+        )
+        soft_timeout_bars = int(round(_clamp(
+            0.70 * _weighted_mean(soft_timeout_items, 8.0) +
+            0.18 * foundation_student_floor * 12.0 +
+            0.12 * _clamp(shadow_summary.get("mean_policy_capital_efficiency", 0.0), 0.0, 1.0) * 8.0,
+            4.0,
+            48.0,
+        )))
+        hard_timeout_bars = int(round(_clamp(
+            0.70 * _weighted_mean(hard_timeout_items, 18.0) +
+            0.18 * foundation_teacher_floor * 18.0 +
+            0.12 * _clamp(shadow_summary.get("mean_policy_capital_efficiency", 0.0), 0.0, 1.0) * 10.0,
+            8.0,
+            96.0,
+        )))
+        if hard_timeout_bars <= soft_timeout_bars:
+            hard_timeout_bars = soft_timeout_bars + 4
 
         payload = {
             "profile_name": args.profile,
@@ -540,6 +682,16 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             "macro_quality_floor": macro_quality_floor,
             "capital_efficiency_bias": capital_efficiency_bias,
             "supervisor_blend": supervisor_blend,
+            "policy_hold_floor": policy_hold_floor,
+            "policy_exit_floor": policy_exit_floor,
+            "policy_add_floor": policy_add_floor,
+            "policy_reduce_floor": policy_reduce_floor,
+            "policy_timeout_floor": policy_timeout_floor,
+            "max_add_fraction": max_add_fraction,
+            "reduce_fraction": reduce_fraction,
+            "soft_timeout_bars": soft_timeout_bars,
+            "hard_timeout_bars": hard_timeout_bars,
+            "foundation_bundle": foundation_bundle,
             "champions": deployment_champions,
             "shadow_summary": shadow_summary,
         }
@@ -561,6 +713,15 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             ("macro_quality_floor", f"{macro_quality_floor:.6f}"),
             ("capital_efficiency_bias", f"{capital_efficiency_bias:.6f}"),
             ("supervisor_blend", f"{supervisor_blend:.6f}"),
+            ("policy_hold_floor", f"{policy_hold_floor:.6f}"),
+            ("policy_exit_floor", f"{policy_exit_floor:.6f}"),
+            ("policy_add_floor", f"{policy_add_floor:.6f}"),
+            ("policy_reduce_floor", f"{policy_reduce_floor:.6f}"),
+            ("policy_timeout_floor", f"{policy_timeout_floor:.6f}"),
+            ("max_add_fraction", f"{max_add_fraction:.6f}"),
+            ("reduce_fraction", f"{reduce_fraction:.6f}"),
+            ("soft_timeout_bars", str(int(soft_timeout_bars))),
+            ("hard_timeout_bars", str(int(hard_timeout_bars))),
         ]
         tsv_path.write_text("".join(f"{key}\t{value}\n" for key, value in lines), encoding="utf-8")
         tsv_sha = testlab.sha256_path(tsv_path)
@@ -574,8 +735,11 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
                                                  policy_trade_floor, policy_size_bias, portfolio_budget_bias,
                                                  challenger_promote_margin, regime_transition_weight, macro_quality_floor,
                                                  policy_no_trade_cap, capital_efficiency_bias, supervisor_blend,
+                                                 policy_hold_floor, policy_exit_floor, policy_add_floor, policy_reduce_floor,
+                                                 policy_timeout_floor, max_add_fraction, reduce_fraction,
+                                                 soft_timeout_bars, hard_timeout_bars,
                                                  payload_json, created_at)
-            VALUES(?, ?, 'symbol', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES(?, ?, 'symbol', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(profile_name, symbol, deployment_scope) DO UPDATE SET
                 artifact_path=excluded.artifact_path,
                 artifact_sha256=excluded.artifact_sha256,
@@ -592,6 +756,15 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
                 policy_no_trade_cap=excluded.policy_no_trade_cap,
                 capital_efficiency_bias=excluded.capital_efficiency_bias,
                 supervisor_blend=excluded.supervisor_blend,
+                policy_hold_floor=excluded.policy_hold_floor,
+                policy_exit_floor=excluded.policy_exit_floor,
+                policy_add_floor=excluded.policy_add_floor,
+                policy_reduce_floor=excluded.policy_reduce_floor,
+                policy_timeout_floor=excluded.policy_timeout_floor,
+                max_add_fraction=excluded.max_add_fraction,
+                reduce_fraction=excluded.reduce_fraction,
+                soft_timeout_bars=excluded.soft_timeout_bars,
+                hard_timeout_bars=excluded.hard_timeout_bars,
                 payload_json=excluded.payload_json,
                 created_at=excluded.created_at
             """,
@@ -613,6 +786,15 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
                 policy_no_trade_cap,
                 capital_efficiency_bias,
                 supervisor_blend,
+                policy_hold_floor,
+                policy_exit_floor,
+                policy_add_floor,
+                policy_reduce_floor,
+                policy_timeout_floor,
+                max_add_fraction,
+                reduce_fraction,
+                soft_timeout_bars,
+                hard_timeout_bars,
                 json.dumps(payload, indent=2, sort_keys=True),
                 created_at,
             ),
@@ -637,6 +819,15 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             "policy_no_trade_cap": policy_no_trade_cap,
             "capital_efficiency_bias": capital_efficiency_bias,
             "supervisor_blend": supervisor_blend,
+            "policy_hold_floor": policy_hold_floor,
+            "policy_exit_floor": policy_exit_floor,
+            "policy_add_floor": policy_add_floor,
+            "policy_reduce_floor": policy_reduce_floor,
+            "policy_timeout_floor": policy_timeout_floor,
+            "max_add_fraction": max_add_fraction,
+            "reduce_fraction": reduce_fraction,
+            "soft_timeout_bars": soft_timeout_bars,
+            "hard_timeout_bars": hard_timeout_bars,
         })
 
     stale_symbols = sorted(set(existing_symbols) - set(by_symbol))

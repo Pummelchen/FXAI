@@ -8,7 +8,7 @@ It is not a single strategy EA. It is a research and deployment framework with:
 - an internal `TensorCore` runtime for stronger neural and sequence models
 - an Audit Lab for certification, regression checks, and release gating
 - a SQLite-backed Offline Lab for export, tuning, promotion, and champion-challenger control loops
-- foundation-teacher distillation artifacts, autonomous governance, and live deployment profiles for promoted MT5 runtime behavior
+- foundation-teacher and student-deployment bundles, autonomous governance, supervisor-service artifacts, and live deployment profiles for promoted MT5 runtime behavior
 - one workflow for research, backtesting, audit, and live operation
 
 FXAI stays MT5-native. There are no external inference services and no DLL dependency in live trading.
@@ -19,7 +19,7 @@ FXAI stays MT5-native. There are no external inference services and no DLL depen
 - Compare many model families under one execution shell instead of running isolated EA experiments.
 - Test under realistic FX costs, skip logic, and execution stress instead of optimistic toy assumptions.
 - Use Audit Lab and release gates to reject weak models before cloud optimization or live deployment.
-- Keep live behavior closer to research with shared persistence, broker replay, macro-data guards, portfolio-aware control-plane signals, and execution controls.
+- Keep live behavior closer to research with shared persistence, broker replay, macro-data guards, portfolio-aware control-plane signals, policy-driven lifecycle control, and promoted supervisor-service constraints.
 - Promote stronger parameter packs and live deployment profiles from the Offline Lab without manual copy and paste.
 
 ### For Trade System Architects
@@ -28,7 +28,7 @@ FXAI stays MT5-native. There are no external inference services and no DLL depen
 - Shared TensorCore, transfer backbone, contextual routing, policy-first gating, and portfolio-aware meta scoring reduce duplicated model infrastructure.
 - Runtime manifests, feature governance, and macro-data leakage guards make the framework auditable and reproducible.
 - SQLite experiment ledgers, teacher-factory artifacts, shadow-fleet telemetry, and deployment profiles provide a serious research OS around MT5 instead of ad hoc backtest folders.
-- Portfolio-supervisor artifacts, world-simulator plans, and foundation-teacher payloads let the research OS steer live gating, peer-pressure handling, and future distillation without manual copy and paste.
+- Portfolio-supervisor artifacts, supervisor-service snapshots, world-simulator plans, and foundation or student payloads let the research OS steer live gating, peer-pressure handling, lifecycle actions, and future distillation without manual copy and paste.
 
 ## Documentation
 

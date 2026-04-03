@@ -19,6 +19,180 @@ string FXAI_AuditWorldPlanFile(const string symbol)
    return "FXAI\\Offline\\Promotions\\fxai_world_plan_" + clean + ".tsv";
 }
 
+double FXAI_AuditWorldHashUnit(const datetime t,
+                               const int salt)
+{
+   long x = (long)t + (long)(salt + 1) * 1315423911;
+   x ^= (x << 13);
+   x ^= (x >> 17);
+   x ^= (x << 5);
+   if(x < 0)
+      x = -x;
+   return (double)(x % 1000000) / 1000000.0;
+}
+
+double FXAI_AuditWorldSign(const datetime t,
+                           const int salt)
+{
+   return (FXAI_AuditWorldHashUnit(t, salt) < 0.5 ? -1.0 : 1.0);
+}
+
+double FXAI_AuditSessionEdgeStrength(const datetime t)
+{
+   MqlDateTime dt;
+   TimeToStruct(t, dt);
+   double edge = 0.0;
+   double dist_lon = MathAbs((double)dt.hour - 8.0);
+   double dist_ny = MathAbs((double)dt.hour - 16.0);
+   double dist_roll = MathMin(MathAbs((double)dt.hour - 23.0), MathAbs((double)dt.hour - 0.0));
+   edge = MathMax(edge, 1.0 - dist_lon / 4.0);
+   edge = MathMax(edge, 1.0 - dist_ny / 4.0);
+   edge = MathMax(edge, 1.0 - dist_roll / 3.0);
+   return FXAI_Clamp(edge, 0.0, 1.0);
+}
+
+void FXAI_AuditNormalizeRateBar(MqlRates &bar,
+                                const double point)
+{
+   double pt = (point > 0.0 ? point : 1e-5);
+   if(bar.open <= pt)
+      bar.open = MathMax(bar.close, 10.0 * pt);
+   if(bar.close <= pt)
+      bar.close = MathMax(bar.open, 10.0 * pt);
+   double body_hi = MathMax(bar.open, bar.close);
+   double body_lo = MathMin(bar.open, bar.close);
+   if(bar.high < body_hi)
+      bar.high = body_hi;
+   if(bar.low <= 0.0 || bar.low > body_lo)
+      bar.low = MathMax(pt, body_lo - pt);
+   if(bar.high - bar.low < 2.0 * pt)
+   {
+      bar.high = body_hi + pt;
+      bar.low = MathMax(pt, body_lo - pt);
+   }
+   if(bar.spread < 1)
+      bar.spread = 1;
+}
+
+void FXAI_AuditApplyWorldPlanToMarketRates(MqlRates &rates_m1[],
+                                           const FXAIAuditScenarioSpec &spec,
+                                           const double point)
+{
+   int bars = ArraySize(rates_m1);
+   if(bars <= 0 || point <= 0.0)
+      return;
+
+   double prev_close_t = 0.0;
+   double prev_ret_t = 0.0;
+   double prev_shock_strength = 0.0;
+   double pt = MathMax(point, 1e-5);
+
+   for(int i=bars - 1; i>=0; i--)
+   {
+      MqlRates bar = rates_m1[i];
+      double orig_open = MathMax(bar.open, pt);
+      double orig_close = MathMax(bar.close, pt);
+      double orig_high = MathMax(bar.high, MathMax(orig_open, orig_close));
+      double orig_low = MathMax(pt, MathMin(bar.low, MathMin(orig_open, orig_close)));
+      double orig_prev_close = orig_open;
+      if(i < bars - 1)
+         orig_prev_close = MathMax(rates_m1[i + 1].close, pt);
+      if(prev_close_t <= pt)
+         prev_close_t = orig_prev_close;
+
+      double base_ret = (orig_prev_close > pt ? (orig_close - orig_prev_close) / orig_prev_close : 0.0);
+      double base_gap = (orig_prev_close > pt ? (orig_open - orig_prev_close) / orig_prev_close : 0.0);
+      double base_range = MathMax(orig_high - orig_low, 2.0 * pt);
+      double body_hi = MathMax(orig_open, orig_close);
+      double body_lo = MathMin(orig_open, orig_close);
+      double upper_ratio = MathMax(orig_high - body_hi, 0.0) / base_range;
+      double lower_ratio = MathMax(body_lo - orig_low, 0.0) / base_range;
+      double session_edge = FXAI_AuditSessionEdgeStrength(bar.time);
+      double sigma_scale = FXAI_Clamp(spec.world_sigma_scale, 0.50, 3.00);
+      double edge_focus = FXAI_Clamp(spec.world_session_edge_focus, 0.0, 1.5);
+      double persistence = FXAI_Clamp(spec.world_trend_persistence, 0.0, 1.0);
+      double shock_memory = FXAI_Clamp(spec.world_shock_memory, 0.0, 1.0);
+      double recovery_bias = FXAI_Clamp(spec.world_recovery_bias, -1.0, 1.0);
+      double gap_prob = FXAI_Clamp(spec.world_gap_prob, 0.0, 0.30);
+      double gap_scale = FXAI_Clamp(spec.world_gap_scale, 0.0, 8.0);
+      double spread_scale = FXAI_Clamp(spec.world_spread_scale, 0.50, 4.00);
+      double liquidity = FXAI_Clamp(spec.world_liquidity_stress, 0.0, 3.0);
+      double spread_shock_prob = FXAI_Clamp(spec.world_spread_shock_prob, 0.0, 0.50);
+      double spread_shock_scale = FXAI_Clamp(spec.world_spread_shock_scale, 1.0, 8.0);
+      double flip_prob = FXAI_Clamp(spec.world_flip_prob, 0.0, 0.50);
+
+      double edge_vol_mult = 1.0 + 0.32 * edge_focus * session_edge;
+      double trend_bias = (persistence - 0.50) * 0.30 * MathAbs(prev_ret_t);
+      if(prev_ret_t >= 0.0)
+         base_ret += trend_bias;
+      else
+         base_ret -= trend_bias;
+      if(prev_shock_strength > 0.0)
+      {
+         double shock_term = prev_shock_strength * (0.18 * shock_memory - 0.14 * recovery_bias);
+         if(prev_ret_t >= 0.0)
+            base_ret += shock_term;
+         else
+            base_ret -= shock_term;
+      }
+
+      double ret = base_ret * sigma_scale * edge_vol_mult + spec.world_drift_bias * (0.70 + 0.30 * session_edge);
+      if(FXAI_AuditWorldHashUnit(bar.time, 5) < flip_prob)
+         ret *= -1.0;
+
+      double micro_gap = 0.40 * pt / MathMax(prev_close_t, pt);
+      double gap_term = base_gap * (0.65 + 0.35 * sigma_scale) +
+                        0.06 * session_edge * edge_focus * FXAI_AuditWorldSign(bar.time, 7) * micro_gap;
+      if(FXAI_AuditWorldHashUnit(bar.time, 11) < gap_prob)
+         gap_term += gap_scale * MathMax(MathAbs(base_ret), 0.20 * pt / MathMax(prev_close_t, pt)) * FXAI_AuditWorldSign(bar.time, 13);
+
+      double new_open = prev_close_t * (1.0 + gap_term);
+      if(new_open <= pt)
+         new_open = prev_close_t;
+      if(new_open <= pt)
+         new_open = orig_open;
+      double new_close = prev_close_t * (1.0 + ret);
+      if(new_close <= pt)
+         new_close = MathMax(new_open, orig_close);
+
+      double range_scale = (0.78 + 0.22 * sigma_scale) *
+                           (1.0 + 0.22 * edge_focus * session_edge + 0.10 * liquidity);
+      if(prev_shock_strength > 0.0)
+         range_scale *= (1.0 + 0.20 * prev_shock_strength * (0.60 + shock_memory));
+      double new_range = MathMax(2.0 * pt, base_range * range_scale);
+      double wick_up = MathMax(0.5 * pt, new_range * MathMax(upper_ratio, 0.15));
+      double wick_dn = MathMax(0.5 * pt, new_range * MathMax(lower_ratio, 0.15));
+      if(recovery_bias > 0.0 && prev_shock_strength > 0.0)
+      {
+         if(ret >= 0.0)
+            wick_dn *= (1.0 + 0.20 * recovery_bias * prev_shock_strength);
+         else
+            wick_up *= (1.0 + 0.20 * recovery_bias * prev_shock_strength);
+      }
+
+      double new_body_hi = MathMax(new_open, new_close);
+      double new_body_lo = MathMin(new_open, new_close);
+      bar.open = new_open;
+      bar.close = new_close;
+      bar.high = new_body_hi + wick_up;
+      bar.low = MathMax(pt, new_body_lo - wick_dn);
+      double live_spread_scale = spread_scale *
+                                 (1.0 + 0.20 * edge_focus * session_edge + 0.16 * liquidity);
+      if(FXAI_AuditWorldHashUnit(bar.time, 17) < spread_shock_prob)
+         live_spread_scale *= spread_shock_scale;
+      bar.spread = (int)MathMax(1.0, MathRound(MathMax((double)bar.spread, 1.0) * live_spread_scale));
+      FXAI_AuditNormalizeRateBar(bar, pt);
+      rates_m1[i] = bar;
+
+      prev_ret_t = (prev_close_t > pt ? (bar.close - prev_close_t) / prev_close_t : 0.0);
+      prev_shock_strength = FXAI_Clamp(MathAbs(prev_ret_t) /
+                                       MathMax(MathAbs(base_ret) + 1e-6, 1e-6),
+                                       0.0,
+                                       3.0);
+      prev_close_t = bar.close;
+   }
+}
+
 void FXAI_AuditApplyWorldPlan(FXAIAuditScenarioSpec &spec,
                               const string symbol)
 {
@@ -56,6 +230,18 @@ void FXAI_AuditApplyWorldPlan(FXAIAuditScenarioSpec &spec,
          spec.world_context_corr_bias = StringToDouble(value);
       else if(key == "liquidity_stress")
          spec.world_liquidity_stress = StringToDouble(value);
+      else if(key == "session_edge_focus")
+         spec.world_session_edge_focus = StringToDouble(value);
+      else if(key == "trend_persistence")
+         spec.world_trend_persistence = StringToDouble(value);
+      else if(key == "shock_memory")
+         spec.world_shock_memory = StringToDouble(value);
+      else if(key == "recovery_bias")
+         spec.world_recovery_bias = StringToDouble(value);
+      else if(key == "spread_shock_prob")
+         spec.world_spread_shock_prob = StringToDouble(value);
+      else if(key == "spread_shock_scale")
+         spec.world_spread_shock_scale = StringToDouble(value);
       else if(key == "macro_focus")
          spec.macro_focus = StringToDouble(value);
    }
@@ -69,6 +255,12 @@ void FXAI_AuditApplyWorldPlan(FXAIAuditScenarioSpec &spec,
    spec.world_flip_prob = FXAI_Clamp(spec.world_flip_prob, 0.0, 0.50);
    spec.world_context_corr_bias = FXAI_Clamp(spec.world_context_corr_bias, -1.0, 1.0);
    spec.world_liquidity_stress = FXAI_Clamp(spec.world_liquidity_stress, 0.0, 3.0);
+   spec.world_session_edge_focus = FXAI_Clamp(spec.world_session_edge_focus, 0.0, 1.5);
+   spec.world_trend_persistence = FXAI_Clamp(spec.world_trend_persistence, 0.0, 1.0);
+   spec.world_shock_memory = FXAI_Clamp(spec.world_shock_memory, 0.0, 1.0);
+   spec.world_recovery_bias = FXAI_Clamp(spec.world_recovery_bias, -1.0, 1.0);
+   spec.world_spread_shock_prob = FXAI_Clamp(spec.world_spread_shock_prob, 0.0, 0.50);
+   spec.world_spread_shock_scale = FXAI_Clamp(spec.world_spread_shock_scale, 1.0, 8.0);
    spec.macro_focus = FXAI_Clamp(spec.macro_focus, 0.0, 1.5);
 }
 
@@ -93,6 +285,12 @@ void FXAI_AuditFillScenarioSpec(const int scenario_id,
    spec.world_flip_prob = 0.0;
    spec.world_context_corr_bias = 0.0;
    spec.world_liquidity_stress = 0.0;
+   spec.world_session_edge_focus = 0.0;
+   spec.world_trend_persistence = 0.5;
+   spec.world_shock_memory = 0.0;
+   spec.world_recovery_bias = 0.0;
+   spec.world_spread_shock_prob = 0.0;
+   spec.world_spread_shock_scale = 1.0;
 
    switch(scenario_id)
    {
@@ -892,6 +1090,7 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       ArraySetAsSeries(sel_m1, true);
       for(int i=0; i<bars; i++)
          sel_m1[i] = rates_m1[best_start + i];
+      FXAI_AuditApplyWorldPlanToMarketRates(sel_m1, spec, point);
 
       return FXAI_AuditBuildSeriesFromMarketRates(sel_m1,
                                                   search_bars,
@@ -970,6 +1169,8 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
    double anchor = 1.10000;
    double prev = anchor;
    double prev_sigma = spec.sigma_per_bar;
+   double prev_ret = 0.0;
+   double prev_shock_strength = 0.0;
    double ctx_prev1 = anchor * 0.97;
    double ctx_prev2 = anchor * 1.03;
    double ctx_prev3 = anchor * 0.91;
@@ -977,12 +1178,18 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
    for(int k=0; k<bars; k++)
    {
       double sigma = spec.sigma_per_bar;
+      double session_edge = FXAI_AuditSessionEdgeStrength(t0 + (datetime)(60 * k));
+      double edge_focus = FXAI_Clamp(spec.world_session_edge_focus, 0.0, 1.5);
+      double persistence = FXAI_Clamp(spec.world_trend_persistence, 0.0, 1.0);
+      double shock_memory = FXAI_Clamp(spec.world_shock_memory, 0.0, 1.0);
+      double recovery_bias = FXAI_Clamp(spec.world_recovery_bias, -1.0, 1.0);
       if(spec.vol_cluster > 0.0)
       {
          sigma = MathMax(1e-6, spec.vol_cluster * prev_sigma + (1.0 - spec.vol_cluster) * spec.sigma_per_bar * (0.5 + 1.5 * rng.NextUnit()));
          prev_sigma = sigma;
       }
-      sigma *= FXAI_Clamp(spec.world_sigma_scale, 0.50, 3.00);
+      sigma *= FXAI_Clamp(spec.world_sigma_scale, 0.50, 3.00) *
+               (1.0 + 0.28 * edge_focus * session_edge);
 
       double drift = spec.drift_per_bar + spec.world_drift_bias;
       if(spec.id == 7 && k > bars / 2)
@@ -992,6 +1199,19 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       }
 
       double ret = drift + sigma * rng.NextNormal();
+      double persistence_bias = (persistence - 0.50) * 0.35 * MathAbs(prev_ret);
+      if(prev_ret >= 0.0)
+         ret += persistence_bias;
+      else
+         ret -= persistence_bias;
+      if(prev_shock_strength > 0.0)
+      {
+         double shock_term = prev_shock_strength * (0.22 * shock_memory - 0.16 * recovery_bias);
+         if(prev_ret >= 0.0)
+            ret += shock_term;
+         else
+            ret -= shock_term;
+      }
       if(spec.mean_revert_strength > 0.0)
          ret += spec.mean_revert_strength * ((anchor - prev) / MathMax(prev, point));
       if(spec.spike_prob > 0.0 && rng.NextUnit() < spec.spike_prob)
@@ -1010,6 +1230,7 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       double cl = prev * (1.0 + ret);
       if(cl <= point) cl = prev + 10.0 * point;
       double wick = MathMax(MathAbs(cl - op) * (0.30 + 0.40 * rng.NextUnit()), point * (2.0 + 8.0 * rng.NextUnit()));
+      wick *= (1.0 + 0.18 * edge_focus * session_edge + 0.10 * prev_shock_strength);
       double hi = MathMax(op, cl) + wick;
       double lo = MathMin(op, cl) - wick;
       if(lo <= point) lo = point;
@@ -1023,7 +1244,11 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
                                       MathRound(spec.spread_points *
                                                 FXAI_Clamp(spec.world_spread_scale, 0.50, 4.00) *
                                                 (0.85 + 0.30 * rng.NextUnit() +
-                                                 0.18 * FXAI_Clamp(spec.world_liquidity_stress, 0.0, 3.0))));
+                                                 0.18 * FXAI_Clamp(spec.world_liquidity_stress, 0.0, 3.0) +
+                                                 0.16 * edge_focus * session_edge) *
+                                                (rng.NextUnit() < FXAI_Clamp(spec.world_spread_shock_prob, 0.0, 0.50)
+                                                 ? FXAI_Clamp(spec.world_spread_shock_scale, 1.0, 8.0)
+                                                 : 1.0)));
 
       double ctx_noise1 = 0.35 * sigma * rng.NextNormal();
       double ctx_noise2 = 0.45 * sigma * rng.NextNormal();
@@ -1081,6 +1306,8 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       ctx_prev2 = ctx_cl2;
       ctx_prev3 = ctx_cl3;
 
+      prev_ret = (prev > point ? (cl - prev) / prev : 0.0);
+      prev_shock_strength = FXAI_Clamp(MathAbs(prev_ret) / MathMax(sigma, 1e-6), 0.0, 3.0);
       prev = cl;
    }
 

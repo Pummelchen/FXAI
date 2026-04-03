@@ -4,6 +4,32 @@
 #define FXAI_CONTROL_PLANE_DIR "FXAI\\ControlPlane"
 #define FXAI_CONTROL_PLANE_TTL_SEC 7200
 #define FXAI_PORTFOLIO_SUPERVISOR_FILE "FXAI\\Offline\\Promotions\\fxai_portfolio_supervisor.tsv"
+#define FXAI_SUPERVISOR_SERVICE_GLOBAL_FILE "FXAI\\Offline\\Promotions\\fxai_supervisor_service_global.tsv"
+
+#ifndef FXAI_POLICY_ACTION_NO_TRADE
+#define FXAI_POLICY_ACTION_NO_TRADE 0
+#endif
+#ifndef FXAI_POLICY_ACTION_ENTER
+#define FXAI_POLICY_ACTION_ENTER 1
+#endif
+#ifndef FXAI_POLICY_ACTION_HOLD
+#define FXAI_POLICY_ACTION_HOLD 2
+#endif
+#ifndef FXAI_POLICY_ACTION_EXIT
+#define FXAI_POLICY_ACTION_EXIT 3
+#endif
+#ifndef FXAI_POLICY_ACTION_ADD
+#define FXAI_POLICY_ACTION_ADD 4
+#endif
+#ifndef FXAI_POLICY_ACTION_REDUCE
+#define FXAI_POLICY_ACTION_REDUCE 5
+#endif
+#ifndef FXAI_POLICY_ACTION_TIGHTEN
+#define FXAI_POLICY_ACTION_TIGHTEN 6
+#endif
+#ifndef FXAI_POLICY_ACTION_TIMEOUT
+#define FXAI_POLICY_ACTION_TIMEOUT 7
+#endif
 
 struct FXAILiveDeploymentProfile
 {
@@ -23,6 +49,15 @@ struct FXAILiveDeploymentProfile
    double policy_no_trade_cap;
    double capital_efficiency_bias;
    double supervisor_blend;
+   double policy_hold_floor;
+   double policy_exit_floor;
+   double policy_add_floor;
+   double policy_reduce_floor;
+   double policy_timeout_floor;
+   double max_add_fraction;
+   double reduce_fraction;
+   int    soft_timeout_bars;
+   int    hard_timeout_bars;
    datetime loaded_at;
 };
 
@@ -64,9 +99,14 @@ struct FXAIControlPlaneSnapshot
    double policy_no_trade_prob;
    double policy_enter_prob;
    double policy_exit_prob;
+   double policy_add_prob;
+   double policy_reduce_prob;
+   double policy_tighten_prob;
+   double policy_timeout_prob;
    double policy_size_mult;
    double policy_portfolio_fit;
    double policy_capital_efficiency;
+   int    policy_lifecycle_action;
    double gross_exposure_lots;
    double correlated_exposure_lots;
    double directional_cluster_lots;
@@ -93,6 +133,27 @@ struct FXAIControlPlaneAggregate
    double score;
 };
 
+struct FXAISupervisorServiceState
+{
+   bool   ready;
+   string profile_name;
+   string symbol;
+   int    snapshot_count;
+   double gross_pressure;
+   double directional_long_pressure;
+   double directional_short_pressure;
+   double macro_pressure;
+   double concentration_pressure;
+   double budget_multiplier;
+   double add_multiplier;
+   double reduce_bias;
+   double exit_bias;
+   double entry_floor;
+   double block_score;
+   double supervisor_score;
+   datetime loaded_at;
+};
+
 double g_control_plane_last_score = 0.0;
 double g_control_plane_last_buy_score = 0.0;
 double g_control_plane_last_sell_score = 0.0;
@@ -100,6 +161,7 @@ string g_control_plane_last_symbol = "";
 datetime g_control_plane_last_bar_time = 0;
 double g_portfolio_supervisor_last_score = 0.0;
 double g_portfolio_supervisor_last_capital_risk_pct = 0.0;
+double g_supervisor_service_last_score = 0.0;
 
 void FXAI_ParseSymbolLegs(const string symbol,
                          string &base_out,
@@ -135,6 +197,15 @@ void FXAI_ResetLiveDeploymentProfile(FXAILiveDeploymentProfile &out)
    out.policy_no_trade_cap = 0.62;
    out.capital_efficiency_bias = 1.0;
    out.supervisor_blend = 0.45;
+   out.policy_hold_floor = 0.48;
+   out.policy_exit_floor = 0.58;
+   out.policy_add_floor = 0.68;
+   out.policy_reduce_floor = 0.56;
+   out.policy_timeout_floor = 0.72;
+   out.max_add_fraction = 0.50;
+   out.reduce_fraction = 0.35;
+   out.soft_timeout_bars = 8;
+   out.hard_timeout_bars = 18;
    out.loaded_at = 0;
 }
 
@@ -176,9 +247,14 @@ void FXAI_ResetControlPlaneSnapshot(FXAIControlPlaneSnapshot &out)
    out.policy_no_trade_prob = 1.0;
    out.policy_enter_prob = 0.0;
    out.policy_exit_prob = 0.0;
+   out.policy_add_prob = 0.0;
+   out.policy_reduce_prob = 0.0;
+   out.policy_tighten_prob = 0.0;
+   out.policy_timeout_prob = 0.0;
    out.policy_size_mult = 0.0;
    out.policy_portfolio_fit = 0.0;
    out.policy_capital_efficiency = 0.0;
+   out.policy_lifecycle_action = FXAI_POLICY_ACTION_NO_TRADE;
    out.gross_exposure_lots = 0.0;
    out.correlated_exposure_lots = 0.0;
    out.directional_cluster_lots = 0.0;
@@ -205,6 +281,27 @@ void FXAI_ResetControlPlaneAggregate(FXAIControlPlaneAggregate &out)
    out.score = 0.0;
 }
 
+void FXAI_ResetSupervisorServiceState(FXAISupervisorServiceState &out)
+{
+   out.ready = false;
+   out.profile_name = "";
+   out.symbol = "";
+   out.snapshot_count = 0;
+   out.gross_pressure = 0.0;
+   out.directional_long_pressure = 0.0;
+   out.directional_short_pressure = 0.0;
+   out.macro_pressure = 0.0;
+   out.concentration_pressure = 0.0;
+   out.budget_multiplier = 1.0;
+   out.add_multiplier = 1.0;
+   out.reduce_bias = 0.0;
+   out.exit_bias = 0.0;
+   out.entry_floor = 0.42;
+   out.block_score = 1.10;
+   out.supervisor_score = 0.0;
+   out.loaded_at = 0;
+}
+
 string FXAI_ControlPlaneSafeToken(const string raw)
 {
    string clean = raw;
@@ -221,6 +318,12 @@ string FXAI_ControlPlaneSafeToken(const string raw)
    StringReplace(clean, "|", "_");
    StringReplace(clean, " ", "_");
    return clean;
+}
+
+string FXAI_SupervisorServiceSymbolFile(const string symbol)
+{
+   return "FXAI\\Offline\\Promotions\\fxai_supervisor_service_" +
+          FXAI_ControlPlaneSafeToken(symbol) + ".tsv";
 }
 
 string FXAI_ControlPlaneSnapshotFile(const string symbol)
@@ -372,6 +475,24 @@ bool FXAI_LoadLiveDeploymentProfile(const string symbol,
          out.capital_efficiency_bias = StringToDouble(value);
       else if(key == "supervisor_blend")
          out.supervisor_blend = StringToDouble(value);
+      else if(key == "policy_hold_floor")
+         out.policy_hold_floor = StringToDouble(value);
+      else if(key == "policy_exit_floor")
+         out.policy_exit_floor = StringToDouble(value);
+      else if(key == "policy_add_floor")
+         out.policy_add_floor = StringToDouble(value);
+      else if(key == "policy_reduce_floor")
+         out.policy_reduce_floor = StringToDouble(value);
+      else if(key == "policy_timeout_floor")
+         out.policy_timeout_floor = StringToDouble(value);
+      else if(key == "max_add_fraction")
+         out.max_add_fraction = StringToDouble(value);
+      else if(key == "reduce_fraction")
+         out.reduce_fraction = StringToDouble(value);
+      else if(key == "soft_timeout_bars")
+         out.soft_timeout_bars = (int)StringToInteger(value);
+      else if(key == "hard_timeout_bars")
+         out.hard_timeout_bars = (int)StringToInteger(value);
    }
    FileClose(handle);
 
@@ -385,9 +506,18 @@ bool FXAI_LoadLiveDeploymentProfile(const string symbol,
    out.challenger_promote_margin = FXAI_Clamp(out.challenger_promote_margin, 0.50, 3.00);
    out.regime_transition_weight = FXAI_Clamp(out.regime_transition_weight, 0.0, 1.0);
    out.macro_quality_floor = FXAI_Clamp(out.macro_quality_floor, 0.0, 1.0);
-    out.policy_no_trade_cap = FXAI_Clamp(out.policy_no_trade_cap, 0.25, 0.95);
-    out.capital_efficiency_bias = FXAI_Clamp(out.capital_efficiency_bias, 0.40, 1.80);
-    out.supervisor_blend = FXAI_Clamp(out.supervisor_blend, 0.0, 1.0);
+   out.policy_no_trade_cap = FXAI_Clamp(out.policy_no_trade_cap, 0.25, 0.95);
+   out.capital_efficiency_bias = FXAI_Clamp(out.capital_efficiency_bias, 0.40, 1.80);
+   out.supervisor_blend = FXAI_Clamp(out.supervisor_blend, 0.0, 1.0);
+   out.policy_hold_floor = FXAI_Clamp(out.policy_hold_floor, 0.20, 0.95);
+   out.policy_exit_floor = FXAI_Clamp(out.policy_exit_floor, 0.20, 0.99);
+   out.policy_add_floor = FXAI_Clamp(out.policy_add_floor, 0.20, 0.99);
+   out.policy_reduce_floor = FXAI_Clamp(out.policy_reduce_floor, 0.20, 0.99);
+   out.policy_timeout_floor = FXAI_Clamp(out.policy_timeout_floor, 0.20, 0.99);
+   out.max_add_fraction = FXAI_Clamp(out.max_add_fraction, 0.05, 1.00);
+   out.reduce_fraction = FXAI_Clamp(out.reduce_fraction, 0.05, 0.95);
+   out.soft_timeout_bars = (int)FXAI_Clamp((double)out.soft_timeout_bars, 1.0, 10000.0);
+   out.hard_timeout_bars = (int)FXAI_Clamp((double)out.hard_timeout_bars, (double)(out.soft_timeout_bars + 1), 20000.0);
    out.ready = true;
    out.loaded_at = now;
 
@@ -484,6 +614,141 @@ bool FXAI_LoadPortfolioSupervisorProfile(FXAIPortfolioSupervisorProfile &out,
    return true;
 }
 
+bool FXAI_LoadSupervisorServiceStateFromFile(const string file_name,
+                                             FXAISupervisorServiceState &out)
+{
+   FXAI_ResetSupervisorServiceState(out);
+   int handle = FileOpen(file_name,
+                         FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON |
+                         FILE_SHARE_READ | FILE_SHARE_WRITE);
+   if(handle == INVALID_HANDLE)
+      return false;
+
+   while(!FileIsEnding(handle))
+   {
+      string line = FileReadString(handle);
+      if(StringLen(line) <= 0)
+         continue;
+      string parts[];
+      int n = StringSplit(line, '\t', parts);
+      if(n < 2)
+         continue;
+      string key = parts[0];
+      string value = parts[1];
+      if(key == "profile_name")
+         out.profile_name = value;
+      else if(key == "symbol")
+         out.symbol = value;
+      else if(key == "snapshot_count")
+         out.snapshot_count = (int)StringToInteger(value);
+      else if(key == "gross_pressure")
+         out.gross_pressure = StringToDouble(value);
+      else if(key == "directional_long_pressure")
+         out.directional_long_pressure = StringToDouble(value);
+      else if(key == "directional_short_pressure")
+         out.directional_short_pressure = StringToDouble(value);
+      else if(key == "macro_pressure")
+         out.macro_pressure = StringToDouble(value);
+      else if(key == "concentration_pressure")
+         out.concentration_pressure = StringToDouble(value);
+      else if(key == "budget_multiplier")
+         out.budget_multiplier = StringToDouble(value);
+      else if(key == "add_multiplier")
+         out.add_multiplier = StringToDouble(value);
+      else if(key == "reduce_bias")
+         out.reduce_bias = StringToDouble(value);
+      else if(key == "exit_bias")
+         out.exit_bias = StringToDouble(value);
+      else if(key == "entry_floor")
+         out.entry_floor = StringToDouble(value);
+      else if(key == "block_score")
+         out.block_score = StringToDouble(value);
+      else if(key == "supervisor_score")
+         out.supervisor_score = StringToDouble(value);
+   }
+   FileClose(handle);
+
+   out.snapshot_count = (int)FXAI_Clamp((double)out.snapshot_count, 0.0, 10000.0);
+   out.gross_pressure = FXAI_Clamp(out.gross_pressure, 0.0, 2.0);
+   out.directional_long_pressure = FXAI_Clamp(out.directional_long_pressure, 0.0, 2.0);
+   out.directional_short_pressure = FXAI_Clamp(out.directional_short_pressure, 0.0, 2.0);
+   out.macro_pressure = FXAI_Clamp(out.macro_pressure, 0.0, 1.5);
+   out.concentration_pressure = FXAI_Clamp(out.concentration_pressure, 0.0, 1.0);
+   out.budget_multiplier = FXAI_Clamp(out.budget_multiplier, 0.10, 1.20);
+   out.add_multiplier = FXAI_Clamp(out.add_multiplier, 0.10, 1.40);
+   out.reduce_bias = FXAI_Clamp(out.reduce_bias, 0.0, 1.0);
+   out.exit_bias = FXAI_Clamp(out.exit_bias, 0.0, 1.0);
+   out.entry_floor = FXAI_Clamp(out.entry_floor, 0.10, 0.95);
+   out.block_score = FXAI_Clamp(out.block_score, 0.20, 3.0);
+   out.supervisor_score = FXAI_Clamp(out.supervisor_score, 0.0, 3.0);
+   out.ready = (StringLen(out.symbol) > 0);
+   out.loaded_at = TimeCurrent();
+   if(out.loaded_at <= 0)
+      out.loaded_at = TimeTradeServer();
+   return out.ready;
+}
+
+bool FXAI_LoadSupervisorServiceState(const string symbol,
+                                     FXAISupervisorServiceState &out,
+                                     const bool force_reload = false)
+{
+   static FXAISupervisorServiceState cache_symbol;
+   static FXAISupervisorServiceState cache_global;
+   static string cache_symbol_name = "";
+   static datetime cache_symbol_time = 0;
+   static datetime cache_global_time = 0;
+
+   datetime now = TimeCurrent();
+   if(now <= 0)
+      now = TimeTradeServer();
+   if(now <= 0)
+      now = iTime(_Symbol, PERIOD_M1, 0);
+
+   if(!force_reload &&
+      cache_symbol.ready &&
+      cache_symbol_name == symbol &&
+      cache_symbol_time > 0 &&
+      now > 0 &&
+      (now - cache_symbol_time) < 90)
+   {
+      out = cache_symbol;
+      return true;
+   }
+
+   if(FXAI_LoadSupervisorServiceStateFromFile(FXAI_SupervisorServiceSymbolFile(symbol), out))
+   {
+      cache_symbol = out;
+      cache_symbol_name = symbol;
+      cache_symbol_time = now;
+      return true;
+   }
+
+   if(!force_reload &&
+      cache_global.ready &&
+      cache_global_time > 0 &&
+      now > 0 &&
+      (now - cache_global_time) < 90)
+   {
+      out = cache_global;
+      if(StringLen(out.symbol) <= 0)
+         out.symbol = symbol;
+      return true;
+   }
+
+   if(FXAI_LoadSupervisorServiceStateFromFile(FXAI_SUPERVISOR_SERVICE_GLOBAL_FILE, out))
+   {
+      cache_global = out;
+      cache_global_time = now;
+      if(StringLen(out.symbol) <= 0 || out.symbol == "__GLOBAL__")
+         out.symbol = symbol;
+      return true;
+   }
+
+   FXAI_ResetSupervisorServiceState(out);
+   out.symbol = symbol;
+   return false;
+}
+
 bool FXAI_ReadControlPlaneSnapshotFile(const string file_name,
                                        FXAIControlPlaneSnapshot &out)
 {
@@ -541,12 +806,22 @@ bool FXAI_ReadControlPlaneSnapshotFile(const string file_name,
          out.policy_enter_prob = StringToDouble(value);
       else if(key == "policy_exit_prob")
          out.policy_exit_prob = StringToDouble(value);
+      else if(key == "policy_add_prob")
+         out.policy_add_prob = StringToDouble(value);
+      else if(key == "policy_reduce_prob")
+         out.policy_reduce_prob = StringToDouble(value);
+      else if(key == "policy_tighten_prob")
+         out.policy_tighten_prob = StringToDouble(value);
+      else if(key == "policy_timeout_prob")
+         out.policy_timeout_prob = StringToDouble(value);
       else if(key == "policy_size_mult")
          out.policy_size_mult = StringToDouble(value);
       else if(key == "policy_portfolio_fit")
          out.policy_portfolio_fit = StringToDouble(value);
       else if(key == "policy_capital_efficiency")
          out.policy_capital_efficiency = StringToDouble(value);
+      else if(key == "policy_lifecycle_action")
+         out.policy_lifecycle_action = (int)StringToInteger(value);
       else if(key == "gross_exposure_lots")
          out.gross_exposure_lots = StringToDouble(value);
       else if(key == "correlated_exposure_lots")
@@ -572,9 +847,16 @@ bool FXAI_ReadControlPlaneSnapshotFile(const string file_name,
    out.policy_no_trade_prob = FXAI_Clamp(out.policy_no_trade_prob, 0.0, 1.0);
    out.policy_enter_prob = FXAI_Clamp(out.policy_enter_prob, 0.0, 1.0);
    out.policy_exit_prob = FXAI_Clamp(out.policy_exit_prob, 0.0, 1.0);
+   out.policy_add_prob = FXAI_Clamp(out.policy_add_prob, 0.0, 1.0);
+   out.policy_reduce_prob = FXAI_Clamp(out.policy_reduce_prob, 0.0, 1.0);
+   out.policy_tighten_prob = FXAI_Clamp(out.policy_tighten_prob, 0.0, 1.0);
+   out.policy_timeout_prob = FXAI_Clamp(out.policy_timeout_prob, 0.0, 1.0);
    out.policy_size_mult = FXAI_Clamp(out.policy_size_mult, 0.0, 2.0);
    out.policy_portfolio_fit = FXAI_Clamp(out.policy_portfolio_fit, 0.0, 1.0);
    out.policy_capital_efficiency = FXAI_Clamp(out.policy_capital_efficiency, 0.0, 1.0);
+   out.policy_lifecycle_action = (int)FXAI_Clamp((double)out.policy_lifecycle_action,
+                                                 (double)FXAI_POLICY_ACTION_NO_TRADE,
+                                                 (double)FXAI_POLICY_ACTION_TIMEOUT);
    out.gross_exposure_lots = FXAI_Clamp(out.gross_exposure_lots, 0.0, 1000.0);
    out.correlated_exposure_lots = FXAI_Clamp(out.correlated_exposure_lots, 0.0, 1000.0);
    out.directional_cluster_lots = FXAI_Clamp(out.directional_cluster_lots, 0.0, 1000.0);
@@ -633,9 +915,14 @@ bool FXAI_WriteControlPlaneLocalSnapshot(const string symbol,
    FileWriteString(handle, "policy_no_trade_prob\t" + DoubleToString(FXAI_Clamp(g_policy_last_no_trade_prob, 0.0, 1.0), 6) + "\r\n");
    FileWriteString(handle, "policy_enter_prob\t" + DoubleToString(FXAI_Clamp(g_policy_last_enter_prob, 0.0, 1.0), 6) + "\r\n");
    FileWriteString(handle, "policy_exit_prob\t" + DoubleToString(FXAI_Clamp(g_policy_last_exit_prob, 0.0, 1.0), 6) + "\r\n");
+   FileWriteString(handle, "policy_add_prob\t" + DoubleToString(FXAI_Clamp(g_policy_last_add_prob, 0.0, 1.0), 6) + "\r\n");
+   FileWriteString(handle, "policy_reduce_prob\t" + DoubleToString(FXAI_Clamp(g_policy_last_reduce_prob, 0.0, 1.0), 6) + "\r\n");
+   FileWriteString(handle, "policy_tighten_prob\t" + DoubleToString(FXAI_Clamp(g_policy_last_tighten_prob, 0.0, 1.0), 6) + "\r\n");
+   FileWriteString(handle, "policy_timeout_prob\t" + DoubleToString(FXAI_Clamp(g_policy_last_timeout_prob, 0.0, 1.0), 6) + "\r\n");
    FileWriteString(handle, "policy_size_mult\t" + DoubleToString(FXAI_Clamp(g_policy_last_size_mult, 0.0, 2.0), 6) + "\r\n");
    FileWriteString(handle, "policy_portfolio_fit\t" + DoubleToString(FXAI_Clamp(g_policy_last_portfolio_fit, 0.0, 1.0), 6) + "\r\n");
    FileWriteString(handle, "policy_capital_efficiency\t" + DoubleToString(FXAI_Clamp(g_policy_last_capital_efficiency, 0.0, 1.0), 6) + "\r\n");
+   FileWriteString(handle, "policy_lifecycle_action\t" + IntegerToString(g_policy_last_action) + "\r\n");
    FileWriteString(handle, "gross_exposure_lots\t" + DoubleToString(gross_exposure, 6) + "\r\n");
    FileWriteString(handle, "correlated_exposure_lots\t" + DoubleToString(corr_exposure, 6) + "\r\n");
    FileWriteString(handle, "directional_cluster_lots\t" + DoubleToString(dir_exposure, 6) + "\r\n");
@@ -787,6 +1074,39 @@ double FXAI_PortfolioSupervisorScore(const string symbol,
    score = FXAI_Clamp(score, 0.0, 3.0);
    g_portfolio_supervisor_last_score = score;
    g_portfolio_supervisor_last_capital_risk_pct = cp.max_capital_risk_pct;
+   return score;
+}
+
+double FXAI_SupervisorServiceDirectionalPressure(const FXAISupervisorServiceState &state,
+                                                 const int direction)
+{
+   if(direction == 1)
+      return state.directional_long_pressure;
+   if(direction == 0)
+      return state.directional_short_pressure;
+   return MathMax(state.directional_long_pressure, state.directional_short_pressure);
+}
+
+double FXAI_SupervisorServiceScore(const int direction,
+                                   const FXAISupervisorServiceState &state)
+{
+   if(!state.ready)
+   {
+      g_supervisor_service_last_score = 0.0;
+      return 0.0;
+   }
+
+   double directional = FXAI_SupervisorServiceDirectionalPressure(state, direction);
+   double score = FXAI_Clamp(0.34 * state.gross_pressure +
+                             0.22 * directional +
+                             0.16 * state.macro_pressure +
+                             0.12 * state.concentration_pressure +
+                             0.10 * state.reduce_bias +
+                             0.06 * state.exit_bias,
+                             0.0,
+                             3.0);
+   score = FXAI_Clamp(0.55 * state.supervisor_score + 0.45 * score, 0.0, 3.0);
+   g_supervisor_service_last_score = score;
    return score;
 }
 

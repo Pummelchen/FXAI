@@ -7,6 +7,10 @@
 #define FXAI_POLICY_ACTION_ENTER 1
 #define FXAI_POLICY_ACTION_HOLD 2
 #define FXAI_POLICY_ACTION_EXIT 3
+#define FXAI_POLICY_ACTION_ADD 4
+#define FXAI_POLICY_ACTION_REDUCE 5
+#define FXAI_POLICY_ACTION_TIGHTEN 6
+#define FXAI_POLICY_ACTION_TIMEOUT 7
 
 struct FXAIPolicyDecision
 {
@@ -21,6 +25,10 @@ struct FXAIPolicyDecision
    double confidence;
    double portfolio_fit;
    double capital_efficiency;
+   double add_prob;
+   double reduce_prob;
+   double tighten_prob;
+   double timeout_prob;
    int    action_code;
 };
 
@@ -56,6 +64,10 @@ double g_policy_last_expected_utility = 0.0;
 double g_policy_last_confidence = 0.0;
 double g_policy_last_portfolio_fit = 0.0;
 double g_policy_last_capital_efficiency = 0.0;
+double g_policy_last_add_prob = 0.0;
+double g_policy_last_reduce_prob = 0.0;
+double g_policy_last_tighten_prob = 0.0;
+double g_policy_last_timeout_prob = 0.0;
 int    g_policy_last_action = FXAI_POLICY_ACTION_NO_TRADE;
 
 void FXAI_ClearPolicyDecision(FXAIPolicyDecision &out)
@@ -71,6 +83,10 @@ void FXAI_ClearPolicyDecision(FXAIPolicyDecision &out)
    out.confidence = 0.0;
    out.portfolio_fit = 0.0;
    out.capital_efficiency = 0.0;
+   out.add_prob = 0.0;
+   out.reduce_prob = 0.0;
+   out.tighten_prob = 0.0;
+   out.timeout_prob = 0.0;
    out.action_code = FXAI_POLICY_ACTION_NO_TRADE;
 }
 
@@ -103,6 +119,10 @@ void FXAI_ResetPolicyState(void)
    g_policy_last_confidence = 0.0;
    g_policy_last_portfolio_fit = 0.0;
    g_policy_last_capital_efficiency = 0.0;
+   g_policy_last_add_prob = 0.0;
+   g_policy_last_reduce_prob = 0.0;
+   g_policy_last_tighten_prob = 0.0;
+   g_policy_last_timeout_prob = 0.0;
    g_policy_last_action = FXAI_POLICY_ACTION_NO_TRADE;
    FXAI_ResetPolicyPending();
    for(int r=0; r<FXAI_REGIME_COUNT; r++)
@@ -304,6 +324,31 @@ void FXAI_PolicyPredict(const int regime_id,
                                         -1.0,
                                         1.0);
       out.confidence = FXAI_Clamp(0.45 * heuristic_trade + 0.30 * heuristic_hold + 0.25 * (1.0 - FXAI_GetArrayValue(feat, 31, 0.0)), 0.0, 1.0);
+      out.add_prob = FXAI_Clamp(0.42 * out.enter_prob +
+                                0.20 * out.hold_quality +
+                                0.20 * out.capital_efficiency +
+                                0.18 * out.portfolio_fit -
+                                0.26 * out.no_trade_prob,
+                                0.0,
+                                1.0);
+      out.reduce_prob = FXAI_Clamp(0.34 * out.no_trade_prob +
+                                   0.28 * out.exit_prob +
+                                   0.20 * (1.0 - out.hold_quality) +
+                                   0.18 * FXAI_GetArrayValue(feat, 31, 0.0),
+                                   0.0,
+                                   1.0);
+      out.tighten_prob = FXAI_Clamp(0.44 * out.reduce_prob +
+                                    0.22 * transition_pressure +
+                                    0.18 * macro_shortfall +
+                                    0.16 * (1.0 - out.portfolio_fit),
+                                    0.0,
+                                    1.0);
+      out.timeout_prob = FXAI_Clamp(0.32 * out.reduce_prob +
+                                    0.26 * transition_pressure +
+                                    0.20 * macro_shortfall +
+                                    0.22 * (1.0 - out.hold_quality),
+                                    0.0,
+                                    1.0);
       out.action_code = FXAI_POLICY_ACTION_NO_TRADE;
       if(out.enter_prob > MathMax(out.no_trade_prob, out.exit_prob) && out.enter_prob >= 0.42)
          out.action_code = FXAI_POLICY_ACTION_ENTER;
@@ -400,6 +445,33 @@ void FXAI_PolicyPredict(const int regime_id,
                               0.18 * MathMax(-FXAI_GetArrayValue(feat, 5, 0.0), 0.0),
                               0.0,
                               1.0);
+   out.add_prob = FXAI_Clamp(0.40 * out.enter_prob +
+                             0.18 * out.hold_quality +
+                             0.18 * out.capital_efficiency +
+                             0.14 * out.portfolio_fit +
+                             0.10 * MathMax(out.expected_utility, 0.0) -
+                             0.22 * out.no_trade_prob,
+                             0.0,
+                             1.0);
+   out.reduce_prob = FXAI_Clamp(0.32 * out.no_trade_prob +
+                                0.28 * out.exit_prob +
+                                0.16 * (1.0 - out.hold_quality) +
+                                0.14 * transition_pressure +
+                                0.10 * FXAI_GetArrayValue(feat, 31, 0.0),
+                                0.0,
+                                1.0);
+   out.tighten_prob = FXAI_Clamp(0.46 * out.reduce_prob +
+                                 0.20 * transition_pressure +
+                                 0.18 * macro_shortfall +
+                                 0.16 * (1.0 - out.portfolio_fit),
+                                 0.0,
+                                 1.0);
+   out.timeout_prob = FXAI_Clamp(0.28 * out.reduce_prob +
+                                 0.24 * out.exit_prob +
+                                 0.24 * transition_pressure +
+                                 0.24 * macro_shortfall,
+                                 0.0,
+                                 1.0);
    out.action_code = FXAI_POLICY_ACTION_NO_TRADE;
    double hold_score = FXAI_Clamp(0.52 * out.hold_quality + 0.28 * out.portfolio_fit + 0.20 * out.confidence, 0.0, 1.0);
    if(out.enter_prob > MathMax(out.no_trade_prob, MathMax(out.exit_prob, hold_score)) && out.enter_prob >= 0.40)

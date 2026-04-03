@@ -1286,6 +1286,22 @@ void OnTick()
          }
          return;
       }
+
+      string lifecycle_reason = "lifecycle_hold";
+      bool lifecycle_changed = FXAI_ApplyPolicyLifecycle(_Symbol, precomputed_signal, lifecycle_reason);
+      if(AI_DebugFlow && lifecycle_changed)
+      {
+         Print("FXAI debug: lifecycle action. reason=", lifecycle_reason,
+               " action=", g_policy_last_action,
+               " enter=", DoubleToString(g_policy_last_enter_prob, 3),
+               " exit=", DoubleToString(g_policy_last_exit_prob, 3),
+               " add=", DoubleToString(g_policy_last_add_prob, 3),
+               " reduce=", DoubleToString(g_policy_last_reduce_prob, 3),
+               " tighten=", DoubleToString(g_policy_last_tighten_prob, 3),
+               " timeout=", DoubleToString(g_policy_last_timeout_prob, 3),
+               " hold=", DoubleToString(g_policy_last_hold_quality, 3));
+      }
+      return;
    }
 
    if(managed_total == 0)

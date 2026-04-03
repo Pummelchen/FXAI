@@ -273,6 +273,31 @@ CREATE TABLE IF NOT EXISTS teacher_factories (
     UNIQUE(profile_name, symbol, plugin_name)
 );
 
+CREATE TABLE IF NOT EXISTS foundation_model_bundles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    bundle_scope TEXT NOT NULL DEFAULT 'symbol',
+    artifact_path TEXT NOT NULL DEFAULT '',
+    artifact_sha256 TEXT NOT NULL DEFAULT '',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name, symbol, bundle_scope)
+);
+
+CREATE TABLE IF NOT EXISTS student_deployment_bundles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    plugin_name TEXT NOT NULL,
+    family_id INTEGER NOT NULL DEFAULT 11,
+    artifact_path TEXT NOT NULL DEFAULT '',
+    artifact_sha256 TEXT NOT NULL DEFAULT '',
+    deployment_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name, symbol, plugin_name)
+);
+
 CREATE TABLE IF NOT EXISTS live_deployment_profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     profile_name TEXT NOT NULL,
@@ -293,6 +318,15 @@ CREATE TABLE IF NOT EXISTS live_deployment_profiles (
     policy_no_trade_cap REAL NOT NULL DEFAULT 0.62,
     capital_efficiency_bias REAL NOT NULL DEFAULT 1.0,
     supervisor_blend REAL NOT NULL DEFAULT 0.45,
+    policy_hold_floor REAL NOT NULL DEFAULT 0.48,
+    policy_exit_floor REAL NOT NULL DEFAULT 0.58,
+    policy_add_floor REAL NOT NULL DEFAULT 0.68,
+    policy_reduce_floor REAL NOT NULL DEFAULT 0.56,
+    policy_timeout_floor REAL NOT NULL DEFAULT 0.72,
+    max_add_fraction REAL NOT NULL DEFAULT 0.50,
+    reduce_fraction REAL NOT NULL DEFAULT 0.35,
+    soft_timeout_bars INTEGER NOT NULL DEFAULT 8,
+    hard_timeout_bars INTEGER NOT NULL DEFAULT 18,
     payload_json TEXT NOT NULL DEFAULT '{}',
     created_at INTEGER NOT NULL,
     UNIQUE(profile_name, symbol, deployment_scope)
@@ -346,13 +380,41 @@ CREATE TABLE IF NOT EXISTS shadow_fleet_observations (
     policy_enter_prob REAL NOT NULL DEFAULT 0.0,
     policy_no_trade_prob REAL NOT NULL DEFAULT 0.0,
     policy_exit_prob REAL NOT NULL DEFAULT 0.0,
+    policy_add_prob REAL NOT NULL DEFAULT 0.0,
+    policy_reduce_prob REAL NOT NULL DEFAULT 0.0,
+    policy_timeout_prob REAL NOT NULL DEFAULT 0.0,
+    policy_tighten_prob REAL NOT NULL DEFAULT 0.0,
     policy_portfolio_fit REAL NOT NULL DEFAULT 0.0,
     policy_capital_efficiency REAL NOT NULL DEFAULT 0.0,
+    policy_lifecycle_action INTEGER NOT NULL DEFAULT 0,
     portfolio_pressure REAL NOT NULL DEFAULT 0.0,
     control_plane_score REAL NOT NULL DEFAULT 0.0,
     portfolio_supervisor_score REAL NOT NULL DEFAULT 0.0,
     payload_json TEXT NOT NULL DEFAULT '{}',
     UNIQUE(profile_name, symbol, plugin_name, captured_at, source_sha256)
+);
+
+CREATE TABLE IF NOT EXISTS supervisor_service_states (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    artifact_path TEXT NOT NULL DEFAULT '',
+    artifact_sha256 TEXT NOT NULL DEFAULT '',
+    snapshot_count INTEGER NOT NULL DEFAULT 0,
+    gross_pressure REAL NOT NULL DEFAULT 0.0,
+    directional_long_pressure REAL NOT NULL DEFAULT 0.0,
+    directional_short_pressure REAL NOT NULL DEFAULT 0.0,
+    macro_pressure REAL NOT NULL DEFAULT 0.0,
+    concentration_pressure REAL NOT NULL DEFAULT 0.0,
+    budget_multiplier REAL NOT NULL DEFAULT 1.0,
+    add_multiplier REAL NOT NULL DEFAULT 1.0,
+    reduce_bias REAL NOT NULL DEFAULT 0.0,
+    exit_bias REAL NOT NULL DEFAULT 0.0,
+    entry_floor REAL NOT NULL DEFAULT 0.42,
+    block_score REAL NOT NULL DEFAULT 1.10,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name, symbol)
 );
 
 CREATE TABLE IF NOT EXISTS world_simulator_plans (
@@ -401,9 +463,12 @@ CREATE INDEX IF NOT EXISTS idx_distill_lookup ON distillation_artifacts(profile_
 CREATE INDEX IF NOT EXISTS idx_foundation_teacher_lookup ON foundation_teacher_artifacts(profile_name, symbol, scope, family_id);
 CREATE INDEX IF NOT EXISTS idx_redteam_lookup ON redteam_cycles(profile_name, group_key, symbol, plugin_name);
 CREATE INDEX IF NOT EXISTS idx_teacher_factories_lookup ON teacher_factories(profile_name, symbol, plugin_name, status);
+CREATE INDEX IF NOT EXISTS idx_foundation_bundle_lookup ON foundation_model_bundles(profile_name, symbol, bundle_scope, created_at);
+CREATE INDEX IF NOT EXISTS idx_student_bundle_lookup ON student_deployment_bundles(profile_name, symbol, plugin_name, created_at);
 CREATE INDEX IF NOT EXISTS idx_live_deploy_lookup ON live_deployment_profiles(profile_name, symbol, deployment_scope);
 CREATE INDEX IF NOT EXISTS idx_portfolio_supervisor_lookup ON portfolio_supervisor_profiles(profile_name, created_at);
 CREATE INDEX IF NOT EXISTS idx_shadow_fleet_lookup ON shadow_fleet_observations(profile_name, symbol, plugin_name, captured_at);
+CREATE INDEX IF NOT EXISTS idx_supervisor_service_lookup ON supervisor_service_states(profile_name, symbol, created_at);
 CREATE INDEX IF NOT EXISTS idx_world_sim_lookup ON world_simulator_plans(profile_name, symbol, created_at);
 CREATE INDEX IF NOT EXISTS idx_governance_runs_lookup ON autonomous_governance_runs(profile_name, created_at);
 """
@@ -520,11 +585,25 @@ def connect_db(db_path: Path) -> sqlite3.Connection:
             ensure_sqlite_column(conn, "live_deployment_profiles", "policy_no_trade_cap", "REAL NOT NULL DEFAULT 0.62")
             ensure_sqlite_column(conn, "live_deployment_profiles", "capital_efficiency_bias", "REAL NOT NULL DEFAULT 1.0")
             ensure_sqlite_column(conn, "live_deployment_profiles", "supervisor_blend", "REAL NOT NULL DEFAULT 0.45")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "policy_hold_floor", "REAL NOT NULL DEFAULT 0.48")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "policy_exit_floor", "REAL NOT NULL DEFAULT 0.58")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "policy_add_floor", "REAL NOT NULL DEFAULT 0.68")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "policy_reduce_floor", "REAL NOT NULL DEFAULT 0.56")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "policy_timeout_floor", "REAL NOT NULL DEFAULT 0.72")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "max_add_fraction", "REAL NOT NULL DEFAULT 0.50")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "reduce_fraction", "REAL NOT NULL DEFAULT 0.35")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "soft_timeout_bars", "INTEGER NOT NULL DEFAULT 8")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "hard_timeout_bars", "INTEGER NOT NULL DEFAULT 18")
             ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_enter_prob", "REAL NOT NULL DEFAULT 0.0")
             ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_no_trade_prob", "REAL NOT NULL DEFAULT 0.0")
             ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_exit_prob", "REAL NOT NULL DEFAULT 0.0")
+            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_add_prob", "REAL NOT NULL DEFAULT 0.0")
+            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_reduce_prob", "REAL NOT NULL DEFAULT 0.0")
+            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_timeout_prob", "REAL NOT NULL DEFAULT 0.0")
+            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_tighten_prob", "REAL NOT NULL DEFAULT 0.0")
             ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_portfolio_fit", "REAL NOT NULL DEFAULT 0.0")
             ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_capital_efficiency", "REAL NOT NULL DEFAULT 0.0")
+            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_lifecycle_action", "INTEGER NOT NULL DEFAULT 0")
             ensure_sqlite_column(conn, "shadow_fleet_observations", "portfolio_pressure", "REAL NOT NULL DEFAULT 0.0")
             ensure_sqlite_column(conn, "shadow_fleet_observations", "control_plane_score", "REAL NOT NULL DEFAULT 0.0")
             ensure_sqlite_column(conn, "shadow_fleet_observations", "portfolio_supervisor_score", "REAL NOT NULL DEFAULT 0.0")

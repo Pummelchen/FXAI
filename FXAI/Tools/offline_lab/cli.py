@@ -6,9 +6,11 @@ from pathlib import Path
 
 from .common import *
 from .exporter import *
+from .foundation_factory import *
 from .governance import *
 from .promotion import *
 from .shadow_fleet import *
+from .supervisor_service import *
 from .teacher_factory import *
 
 def serious_base_args(args, dataset: dict, output_path: Path) -> argparse.Namespace:
@@ -742,6 +744,8 @@ def cmd_best_params(args) -> int:
     shadow_ingest = ingest_shadow_fleet_ledgers(conn, args.profile)
     teacher_factories = write_teacher_factory_artifacts(conn, args, promoted)
     foundation_teachers = write_foundation_teacher_artifacts(conn, args, promoted)
+    foundation_bundles = write_foundation_model_bundles(conn, args, promoted)
+    student_bundles = write_student_deployment_bundles(conn, args, promoted)
     live_deployments = write_live_deployment_profiles(conn, args)
     governance_payload = run_autonomous_governance(conn, args, str(getattr(args, "group_key", "") or ""))
     print(json.dumps({
@@ -753,11 +757,14 @@ def cmd_best_params(args) -> int:
         "distillation_artifacts": len(distill_artifacts),
         "teacher_factories": len(teacher_factories),
         "foundation_teachers": len(foundation_teachers),
+        "foundation_bundles": len(foundation_bundles),
+        "student_bundles": len(student_bundles),
         "live_deployments": len(live_deployments),
         "shadow_rows_ingested": int(shadow_ingest.get("rows_ingested", 0)),
         "governance_decisions": len(governance_payload.get("decisions", [])),
         "world_plans": len(governance_payload.get("world_plans", [])),
         "portfolio_supervisor_artifact": str(governance_payload.get("portfolio_supervisor", {}).get("artifact_path", "")),
+        "supervisor_service_artifacts": len(governance_payload.get("supervisor_service", [])),
     }, indent=2, sort_keys=True))
     conn.close()
     return 0
@@ -790,7 +797,24 @@ def cmd_autonomous_governance(args) -> int:
         "governance_decisions": len(payload.get("decisions", [])),
         "world_plans": len(payload.get("world_plans", [])),
         "portfolio_supervisor_artifact": str(payload.get("portfolio_supervisor", {}).get("artifact_path", "")),
+        "supervisor_service_artifacts": len(payload.get("supervisor_service", [])),
     }, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_supervisor_sync(args) -> int:
+    conn = connect_db(Path(args.db))
+    payload = write_supervisor_service_artifacts(conn, args)
+    conn.close()
+    print(json.dumps({"profile": args.profile, "artifacts": payload}, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_supervisor_daemon(args) -> int:
+    conn = connect_db(Path(args.db))
+    payload = run_supervisor_daemon(conn, args)
+    conn.close()
+    print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
 
@@ -945,6 +969,16 @@ def build_parser() -> argparse.ArgumentParser:
     gov.add_argument("--profile", default="continuous")
     gov.add_argument("--group-key", default="")
     gov.set_defaults(func=cmd_autonomous_governance)
+
+    sup = sub.add_parser("supervisor-sync", help="Build central supervisor-service artifacts from live control-plane snapshots")
+    sup.add_argument("--profile", default="continuous")
+    sup.set_defaults(func=cmd_supervisor_sync)
+
+    supd = sub.add_parser("supervisor-daemon", help="Continuously refresh supervisor-service artifacts from live control-plane snapshots")
+    supd.add_argument("--profile", default="continuous")
+    supd.add_argument("--interval-seconds", type=int, default=30)
+    supd.add_argument("--iterations", type=int, default=0, help="0 means run forever")
+    supd.set_defaults(func=cmd_supervisor_daemon)
 
     loop = sub.add_parser("control-loop", help="Run the full export -> tune -> promote cycle continuously")
     loop.add_argument("--profile", default="continuous")

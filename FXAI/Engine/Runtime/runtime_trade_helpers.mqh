@@ -289,6 +289,104 @@ double FXAI_ManagedDirectionalClusterLots(const string symbol,
    return lots;
 }
 
+struct FXAIManagedPositionState
+{
+   bool has_position;
+   int direction;
+   double total_volume;
+   double avg_price;
+   double open_profit;
+   double profit_points;
+   int position_count;
+   int pending_count;
+   datetime oldest_time;
+};
+
+void FXAI_ResetManagedPositionState(FXAIManagedPositionState &out)
+{
+   out.has_position = false;
+   out.direction = -1;
+   out.total_volume = 0.0;
+   out.avg_price = 0.0;
+   out.open_profit = 0.0;
+   out.profit_points = 0.0;
+   out.position_count = 0;
+   out.pending_count = 0;
+   out.oldest_time = 0;
+}
+
+bool FXAI_ReadManagedPositionState(const string symbol,
+                                   FXAIManagedPositionState &out)
+{
+   FXAI_ResetManagedPositionState(out);
+   double signed_volume = 0.0;
+   double weighted_price = 0.0;
+   for(int i=PositionsTotal() - 1; i>=0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(!PositionSelectByTicket(ticket)) continue;
+      if((ulong)PositionGetInteger(POSITION_MAGIC) != TradeMagic) continue;
+      if(PositionGetString(POSITION_SYMBOL) != symbol) continue;
+
+      double volume = MathMax(PositionGetDouble(POSITION_VOLUME), 0.0);
+      if(volume <= 0.0)
+         continue;
+      int dir = (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ? 1 : 0);
+      double sign = (dir == 1 ? 1.0 : -1.0);
+      signed_volume += sign * volume;
+      weighted_price += volume * PositionGetDouble(POSITION_PRICE_OPEN);
+      out.total_volume += volume;
+      out.open_profit += PositionGetDouble(POSITION_PROFIT) +
+                         PositionGetDouble(POSITION_SWAP);
+      out.position_count++;
+      datetime pos_time = (datetime)PositionGetInteger(POSITION_TIME);
+      if(out.oldest_time <= 0 || (pos_time > 0 && pos_time < out.oldest_time))
+         out.oldest_time = pos_time;
+   }
+
+   out.pending_count = FXAI_ManagedOrdersTotal(symbol);
+   if(out.total_volume <= 0.0)
+      return false;
+
+   out.has_position = true;
+   out.direction = (signed_volume >= 0.0 ? 1 : 0);
+   out.avg_price = weighted_price / MathMax(out.total_volume, 1e-9);
+   out.open_profit = FXAI_ManagedOpenProfit(symbol);
+
+   MqlTick tick;
+   if(SymbolInfoTick(symbol, tick))
+   {
+      double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+      if(point <= 0.0)
+         point = (_Point > 0.0 ? _Point : 1.0);
+      double current_price = (out.direction == 1 ? tick.bid : tick.ask);
+      if(current_price > 0.0 && point > 0.0)
+      {
+         if(out.direction == 1)
+            out.profit_points = (current_price - out.avg_price) / point;
+         else
+            out.profit_points = (out.avg_price - current_price) / point;
+      }
+   }
+   return true;
+}
+
+int FXAI_ManagedPositionHeldBars(const FXAIManagedPositionState &state)
+{
+   if(!state.has_position || state.oldest_time <= 0)
+      return 0;
+   datetime now_t = TimeCurrent();
+   if(now_t <= 0)
+      now_t = TimeTradeServer();
+   if(now_t <= 0 || now_t <= state.oldest_time)
+      return 0;
+   int bars = (int)((now_t - state.oldest_time) / 60);
+   if(bars < 0)
+      bars = 0;
+   return bars;
+}
+
 double FXAI_PortfolioPressureScore(const string symbol,
                                    const int direction)
 {
@@ -306,20 +404,26 @@ double FXAI_PortfolioPressureScore(const string symbol,
    FXAI_ReadControlPlaneAggregate(symbol, direction, cp);
    FXAIPortfolioSupervisorProfile supervisor;
    double supervisor_score = FXAI_PortfolioSupervisorScore(symbol, direction, cp, supervisor);
+   FXAISupervisorServiceState service_state;
+   FXAI_LoadSupervisorServiceState(symbol, service_state, false);
+   double service_score = FXAI_SupervisorServiceScore(direction, service_state);
    double supervisor_blend = FXAI_Clamp(0.55 * FXAI_Clamp(supervisor.supervisor_weight, 0.0, 1.0) +
                                         0.45 * FXAI_Clamp(deploy_profile.supervisor_blend, 0.0, 1.0),
                                         0.0,
                                         1.0);
    g_control_plane_last_score = FXAI_Clamp((1.0 - supervisor_blend) * cp.score +
-                                           supervisor_blend * supervisor_score,
+                                           0.55 * supervisor_blend * supervisor_score +
+                                           0.45 * supervisor_blend * service_score,
                                            0.0,
-                                           2.0);
+                                           3.0);
    return FXAI_Clamp(0.30 * FXAI_Clamp(gross_ratio / MathMax(supervisor.gross_budget_bias, 0.40), 0.0, 2.0) +
                      0.28 * FXAI_Clamp(corr_ratio, 0.0, 2.0) +
                      0.22 * FXAI_Clamp(dir_ratio, 0.0, 2.0) +
                      0.12 * FXAI_Clamp(cp.score, 0.0, 1.5) +
-                     0.10 * FXAI_Clamp(supervisor_score, 0.0, 1.5) +
+                     0.08 * FXAI_Clamp(supervisor_score, 0.0, 1.5) +
+                     0.08 * FXAI_Clamp(service_score, 0.0, 1.5) +
                      0.06 * FXAI_Clamp(cp.macro_overlap, 0.0, 1.0) +
+                     0.06 * FXAI_Clamp(service_state.macro_pressure, 0.0, 1.0) +
                      0.10 * hierarchy_penalty +
                      0.06 * macro_penalty,
                      0.0,
@@ -548,6 +652,9 @@ double FXAI_CalcRiskAwareLot(const string symbol,
    FXAI_ReadControlPlaneAggregate(symbol, direction, cp);
    FXAIPortfolioSupervisorProfile supervisor;
    double supervisor_score = FXAI_PortfolioSupervisorScore(symbol, direction, cp, supervisor);
+   FXAISupervisorServiceState service_state;
+   FXAI_LoadSupervisorServiceState(symbol, service_state, false);
+   double service_score = FXAI_SupervisorServiceScore(direction, service_state);
    if(cp.max_capital_risk_pct > FXAI_Clamp(supervisor.capital_risk_cap_pct, 0.10, 10.0))
    {
       reason = "risk_supervisor_capital";
@@ -558,6 +665,19 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       reason = "risk_supervisor_block";
       return 0.0;
    }
+   if(service_state.ready)
+   {
+      if(service_score > FXAI_Clamp(service_state.block_score, 0.20, 3.0))
+      {
+         reason = "risk_supervisor_service_block";
+         return 0.0;
+      }
+      if(g_policy_last_enter_prob < MathMax(FXAI_Clamp(service_state.entry_floor, 0.10, 0.95), 0.05))
+      {
+         reason = "risk_supervisor_service_entry_floor";
+         return 0.0;
+      }
+   }
    double control_plane_pressure = g_control_plane_last_score;
    if(direction == 1)
       control_plane_pressure = MathMax(control_plane_pressure, g_control_plane_last_buy_score);
@@ -566,6 +686,7 @@ double FXAI_CalcRiskAwareLot(const string symbol,
    requested_lot *= FXAI_Clamp((1.08 - 0.60 * portfolio_pressure) *
                                (1.02 - 0.25 * FXAI_Clamp(control_plane_pressure, 0.0, 1.5)) *
                                FXAI_Clamp(1.04 - 0.22 * supervisor_score, 0.25, 1.10) *
+                               FXAI_Clamp(service_state.ready ? service_state.budget_multiplier : 1.0, 0.10, 1.20) *
                                FXAI_Clamp(g_policy_last_size_mult, 0.25, 1.60) *
                                FXAI_Clamp(0.70 + 0.30 * g_policy_last_enter_prob, 0.20, 1.10) *
                                FXAI_Clamp(0.72 + 0.28 * g_policy_last_capital_efficiency, 0.25, 1.15),
@@ -825,6 +946,303 @@ bool FXAI_SendMarketOrderChecked(const string symbol,
    }
 
    return true;
+}
+
+bool FXAI_CloseManagedFraction(const string symbol,
+                               const double fraction)
+{
+   double frac = FXAI_Clamp(fraction, 0.0, 1.0);
+   if(frac <= 0.0)
+      return false;
+
+   double total_volume = FXAI_ManagedPositionLots(symbol);
+   if(total_volume <= 0.0)
+      return false;
+
+   bool hedging = (AccountInfoInteger(ACCOUNT_MARGIN_MODE) == ACCOUNT_MARGIN_MODE_RETAIL_HEDGING);
+   double target_close = total_volume * frac;
+   double closed = 0.0;
+   bool any = false;
+
+   for(int i=PositionsTotal() - 1; i>=0 && closed + 1e-9 < target_close; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(!PositionSelectByTicket(ticket)) continue;
+      if((ulong)PositionGetInteger(POSITION_MAGIC) != TradeMagic) continue;
+      if(PositionGetString(POSITION_SYMBOL) != symbol) continue;
+
+      double volume = MathMax(PositionGetDouble(POSITION_VOLUME), 0.0);
+      if(volume <= 0.0)
+         continue;
+
+      double remaining = MathMax(target_close - closed, 0.0);
+      bool ok = false;
+      if(hedging && remaining + 1e-9 < volume)
+      {
+         ok = trade.PositionClosePartial(ticket, remaining);
+         if(ok)
+            closed += remaining;
+      }
+      else
+      {
+         ok = trade.PositionClose(ticket);
+         if(ok)
+            closed += volume;
+      }
+      if(ok)
+         any = true;
+   }
+   return any;
+}
+
+bool FXAI_TightenManagedStops(const string symbol,
+                              const FXAIManagedPositionState &state,
+                              const double tighten_strength)
+{
+   if(!state.has_position)
+      return false;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(symbol, tick))
+      return false;
+
+   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   if(point <= 0.0)
+      point = (_Point > 0.0 ? _Point : 1.0);
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   if(digits <= 0)
+      digits = _Digits;
+   double strength = FXAI_Clamp(tighten_strength, 0.0, 1.0);
+   double tighten_points = MathMax(g_ai_last_min_move_points,
+                                   FXAI_EstimatedRiskPointsForDecision() *
+                                   FXAI_Clamp(0.65 - 0.35 * strength, 0.15, 0.65));
+   bool any = false;
+
+   for(int i=PositionsTotal() - 1; i>=0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(!PositionSelectByTicket(ticket)) continue;
+      if((ulong)PositionGetInteger(POSITION_MAGIC) != TradeMagic) continue;
+      if(PositionGetString(POSITION_SYMBOL) != symbol) continue;
+
+      long pos_type = PositionGetInteger(POSITION_TYPE);
+      double existing_sl = PositionGetDouble(POSITION_SL);
+      double existing_tp = PositionGetDouble(POSITION_TP);
+      double new_sl = existing_sl;
+      if(pos_type == POSITION_TYPE_BUY)
+      {
+         new_sl = tick.bid - tighten_points * point;
+         double max_sl = tick.bid - 2.0 * point;
+         if(new_sl > max_sl)
+            new_sl = max_sl;
+         if(existing_sl > 0.0)
+            new_sl = MathMax(existing_sl, new_sl);
+      }
+      else
+      {
+         new_sl = tick.ask + tighten_points * point;
+         double min_sl = tick.ask + 2.0 * point;
+         if(new_sl < min_sl)
+            new_sl = min_sl;
+         if(existing_sl > 0.0)
+            new_sl = MathMin(existing_sl, new_sl);
+      }
+      if(new_sl <= 0.0)
+         continue;
+      new_sl = NormalizeDouble(new_sl, digits);
+      if(existing_sl > 0.0 && MathAbs(new_sl - existing_sl) < point)
+         continue;
+      if(trade.PositionModify(ticket, new_sl, existing_tp))
+         any = true;
+   }
+   return any;
+}
+
+bool FXAI_SendLifecycleAddOrder(const string symbol,
+                                const int direction,
+                                const double trade_lot,
+                                string &reason)
+{
+   uint retcode = 0;
+   string ret_desc = "";
+   bool exec_ok = FXAI_SendMarketOrderChecked(symbol, direction, trade_lot, reason, retcode, ret_desc);
+   if(!exec_ok)
+      return false;
+
+   if(!CycleActive)
+   {
+      ResetCycleState();
+      CycleActive = true;
+      CycleEntryEquity = AccountInfoDouble(ACCOUNT_EQUITY);
+      CycleEntryManagedPnl = FXAI_ManagedOpenProfit(symbol);
+      CycleEntryRealizedProfit = RealizedManagedProfit;
+      CycleStartTime = TimeCurrent();
+      if(CycleStartTime <= 0)
+         CycleStartTime = TimeTradeServer();
+      if(CycleStartTime <= 0)
+         CycleStartTime = iTime(symbol, PERIOD_M1, 0);
+   }
+   return true;
+}
+
+bool FXAI_ApplyPolicyLifecycle(const string symbol,
+                               const int signal_direction,
+                               string &action_reason)
+{
+   action_reason = "lifecycle_idle";
+   FXAIManagedPositionState state;
+   if(!FXAI_ReadManagedPositionState(symbol, state))
+      return false;
+
+   FXAILiveDeploymentProfile deploy;
+   FXAI_LoadLiveDeploymentProfile(symbol, deploy, false);
+   FXAISupervisorServiceState service_state;
+   FXAI_LoadSupervisorServiceState(symbol, service_state, false);
+   FXAIControlPlaneAggregate cp;
+   FXAI_ReadControlPlaneAggregate(symbol, state.direction, cp);
+   FXAIPortfolioSupervisorProfile supervisor;
+   double supervisor_score = FXAI_PortfolioSupervisorScore(symbol, state.direction, cp, supervisor);
+   double service_score = FXAI_SupervisorServiceScore(state.direction, service_state);
+   int held_bars = FXAI_ManagedPositionHeldBars(state);
+   bool direction_match = (signal_direction == state.direction);
+   bool opposite_signal = (signal_direction >= 0 && signal_direction != state.direction);
+   double profit_norm = FXAI_Clamp(state.profit_points / MathMax(g_ai_last_min_move_points, 0.25), -4.0, 4.0) / 4.0;
+   double time_soft = (deploy.soft_timeout_bars > 0
+                       ? FXAI_Clamp((double)held_bars / (double)deploy.soft_timeout_bars, 0.0, 3.0)
+                       : 0.0);
+   double time_hard = (deploy.hard_timeout_bars > 0
+                       ? FXAI_Clamp((double)held_bars / (double)deploy.hard_timeout_bars, 0.0, 3.0)
+                       : 0.0);
+   double control_pressure = FXAI_Clamp(g_control_plane_last_score / 2.0, 0.0, 1.5);
+   double service_pressure = FXAI_Clamp(service_score / MathMax(service_state.block_score, 0.20), 0.0, 1.5);
+
+   double add_prob = FXAI_Clamp(g_policy_last_add_prob +
+                                (direction_match ? 0.16 : -0.18) +
+                                0.10 * MathMax(profit_norm, 0.0) +
+                                0.10 * g_policy_last_capital_efficiency +
+                                0.08 * g_policy_last_portfolio_fit -
+                                0.14 * FXAI_Clamp(g_ai_last_portfolio_pressure / 1.5, 0.0, 1.0) -
+                                0.12 * control_pressure -
+                                0.10 * service_pressure,
+                                0.0,
+                                1.0);
+   double reduce_prob = FXAI_Clamp(g_policy_last_reduce_prob +
+                                   0.16 * FXAI_Clamp(g_ai_last_portfolio_pressure / 1.5, 0.0, 1.0) +
+                                   0.10 * control_pressure +
+                                   0.12 * service_pressure +
+                                   0.12 * MathMax(-profit_norm, 0.0) +
+                                   (opposite_signal ? 0.22 : 0.0),
+                                   0.0,
+                                   1.0);
+   double timeout_prob = FXAI_Clamp(g_policy_last_timeout_prob +
+                                    0.20 * FXAI_Clamp(time_soft / 1.5, 0.0, 1.0) +
+                                    0.18 * FXAI_Clamp(time_hard - 1.0, 0.0, 1.0) +
+                                    0.10 * service_pressure,
+                                    0.0,
+                                    1.0);
+   double tighten_prob = FXAI_Clamp(g_policy_last_tighten_prob +
+                                    0.18 * FXAI_Clamp(time_soft / 1.5, 0.0, 1.0) +
+                                    0.12 * MathMax(profit_norm, 0.0) +
+                                    0.10 * service_state.reduce_bias,
+                                    0.0,
+                                    1.0);
+   double exit_prob = FXAI_Clamp(g_policy_last_exit_prob +
+                                 0.18 * service_state.exit_bias +
+                                 0.14 * FXAI_Clamp(time_hard - 1.0, 0.0, 1.0) +
+                                 0.12 * MathMax(-profit_norm, 0.0) +
+                                 (opposite_signal ? 0.24 : 0.0),
+                                 0.0,
+                                 1.0);
+
+   g_policy_last_add_prob = add_prob;
+   g_policy_last_reduce_prob = reduce_prob;
+   g_policy_last_timeout_prob = timeout_prob;
+   g_policy_last_tighten_prob = tighten_prob;
+
+   if(held_bars >= deploy.hard_timeout_bars &&
+      deploy.hard_timeout_bars > 0 &&
+      (timeout_prob >= FXAI_Clamp(deploy.policy_timeout_floor, 0.30, 0.99) || exit_prob >= FXAI_Clamp(deploy.policy_exit_floor, 0.20, 0.99)))
+   {
+      if(CloseAll())
+      {
+         ResetCycleState();
+         Calc_TP();
+         g_policy_last_action = FXAI_POLICY_ACTION_TIMEOUT;
+         action_reason = "lifecycle_timeout_exit";
+         return true;
+      }
+   }
+
+   if(exit_prob >= FXAI_Clamp(deploy.policy_exit_floor, 0.20, 0.99))
+   {
+      if(CloseAll())
+      {
+         ResetCycleState();
+         Calc_TP();
+         g_policy_last_action = FXAI_POLICY_ACTION_EXIT;
+         action_reason = "lifecycle_exit";
+         return true;
+      }
+   }
+
+   if(reduce_prob >= FXAI_Clamp(deploy.policy_reduce_floor, 0.25, 0.99))
+   {
+      double reduce_fraction = FXAI_Clamp(deploy.reduce_fraction *
+                                          (0.70 + 0.30 * reduce_prob) *
+                                          (service_state.ready ? (0.85 + 0.35 * service_state.reduce_bias) : 1.0),
+                                          0.05,
+                                          0.95);
+      if(FXAI_CloseManagedFraction(symbol, reduce_fraction))
+      {
+         Calc_TP();
+         g_policy_last_action = FXAI_POLICY_ACTION_REDUCE;
+         action_reason = "lifecycle_reduce";
+         return true;
+      }
+   }
+
+   if(tighten_prob >= 0.52 ||
+      (held_bars >= deploy.soft_timeout_bars && deploy.soft_timeout_bars > 0 && state.profit_points > 0.0))
+   {
+      if(FXAI_TightenManagedStops(symbol, state, tighten_prob))
+      {
+         g_policy_last_action = FXAI_POLICY_ACTION_TIGHTEN;
+         action_reason = "lifecycle_tighten";
+         return true;
+      }
+   }
+
+   if(direction_match &&
+      state.pending_count <= 0 &&
+      add_prob >= FXAI_Clamp(deploy.policy_add_floor, 0.30, 0.99))
+   {
+      string add_reason = "lifecycle_add";
+      double base_lot = FXAI_CalcRiskAwareLot(symbol, state.direction, add_reason);
+      if(base_lot > 0.0)
+      {
+         double add_lot = FXAI_NormalizeLot(symbol,
+                                            base_lot *
+                                            FXAI_Clamp(deploy.max_add_fraction, 0.05, 1.00) *
+                                            (service_state.ready ? service_state.add_multiplier : 1.0));
+         if(add_lot > 0.0 &&
+            add_lot <= FXAI_Clamp(state.total_volume * 1.25 + base_lot, add_lot, 1000.0) &&
+            FXAI_SendLifecycleAddOrder(symbol, state.direction, add_lot, add_reason))
+         {
+            g_policy_last_action = FXAI_POLICY_ACTION_ADD;
+            action_reason = "lifecycle_add";
+            return true;
+         }
+      }
+   }
+
+   if(g_policy_last_hold_quality >= FXAI_Clamp(deploy.policy_hold_floor, 0.20, 0.95))
+      g_policy_last_action = FXAI_POLICY_ACTION_HOLD;
+   else
+      g_policy_last_action = FXAI_POLICY_ACTION_NO_TRADE;
+   action_reason = "lifecycle_hold";
+   return false;
 }
 
 //------------------------- CLOSE ALL --------------------------------

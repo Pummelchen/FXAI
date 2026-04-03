@@ -41,6 +41,10 @@ int SpecialDirectionAI(const string symbol)
    double cached_policy_confidence = g_policy_last_confidence;
    double cached_policy_portfolio_fit = g_policy_last_portfolio_fit;
    double cached_policy_capital_efficiency = g_policy_last_capital_efficiency;
+   double cached_policy_add_prob = g_policy_last_add_prob;
+   double cached_policy_reduce_prob = g_policy_last_reduce_prob;
+   double cached_policy_tighten_prob = g_policy_last_tighten_prob;
+   double cached_policy_timeout_prob = g_policy_last_timeout_prob;
    int cached_policy_action = g_policy_last_action;
    double cached_control_plane_score = g_control_plane_last_score;
    double cached_control_plane_buy_score = g_control_plane_last_buy_score;
@@ -77,6 +81,10 @@ int SpecialDirectionAI(const string symbol)
    g_policy_last_confidence = 0.0;
    g_policy_last_portfolio_fit = 0.0;
    g_policy_last_capital_efficiency = 0.0;
+   g_policy_last_add_prob = 0.0;
+   g_policy_last_reduce_prob = 0.0;
+   g_policy_last_tighten_prob = 0.0;
+   g_policy_last_timeout_prob = 0.0;
    g_policy_last_action = FXAI_POLICY_ACTION_NO_TRADE;
    g_control_plane_last_score = 0.0;
    g_control_plane_last_buy_score = 0.0;
@@ -179,6 +187,10 @@ int SpecialDirectionAI(const string symbol)
       g_policy_last_confidence = cached_policy_confidence;
       g_policy_last_portfolio_fit = cached_policy_portfolio_fit;
       g_policy_last_capital_efficiency = cached_policy_capital_efficiency;
+      g_policy_last_add_prob = cached_policy_add_prob;
+      g_policy_last_reduce_prob = cached_policy_reduce_prob;
+      g_policy_last_tighten_prob = cached_policy_tighten_prob;
+      g_policy_last_timeout_prob = cached_policy_timeout_prob;
       g_policy_last_action = cached_policy_action;
       g_control_plane_last_score = cached_control_plane_score;
       g_control_plane_last_buy_score = cached_control_plane_buy_score;
@@ -1301,6 +1313,10 @@ int SpecialDirectionAI(const string symbol)
          g_policy_last_confidence = single_policy.confidence;
          g_policy_last_portfolio_fit = single_policy.portfolio_fit;
          g_policy_last_capital_efficiency = single_policy.capital_efficiency;
+         g_policy_last_add_prob = single_policy.add_prob;
+         g_policy_last_reduce_prob = single_policy.reduce_prob;
+         g_policy_last_tighten_prob = single_policy.tighten_prob;
+         g_policy_last_timeout_prob = single_policy.timeout_prob;
          g_policy_last_action = single_policy.action_code;
          double single_transition_guard = FXAI_Clamp(1.0 - 0.35 * regime_transition_penalty -
                                                      0.40 * macro_profile_shortfall,
@@ -1629,6 +1645,10 @@ int SpecialDirectionAI(const string symbol)
          g_policy_last_confidence = policy_decision.confidence;
          g_policy_last_portfolio_fit = policy_decision.portfolio_fit;
          g_policy_last_capital_efficiency = policy_decision.capital_efficiency;
+         g_policy_last_add_prob = policy_decision.add_prob;
+         g_policy_last_reduce_prob = policy_decision.reduce_prob;
+         g_policy_last_tighten_prob = policy_decision.tighten_prob;
+         g_policy_last_timeout_prob = policy_decision.timeout_prob;
          g_policy_last_action = policy_decision.action_code;
          double policy_gate = FXAI_Clamp(0.40 * policy_decision.trade_prob +
                                          0.24 * policy_decision.enter_prob +

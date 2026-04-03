@@ -223,6 +223,12 @@ struct FXAIAuditScenarioSpec
    double world_flip_prob;
    double world_context_corr_bias;
    double world_liquidity_stress;
+   double world_session_edge_focus;
+   double world_trend_persistence;
+   double world_shock_memory;
+   double world_recovery_bias;
+   double world_spread_shock_prob;
+   double world_spread_shock_scale;
 };
 
 struct FXAIAuditFoldMetrics

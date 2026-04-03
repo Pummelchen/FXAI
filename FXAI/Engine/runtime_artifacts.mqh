@@ -285,7 +285,7 @@ void FXAI_WriteShadowFleetLedger(const string symbol)
    if(handle == INVALID_HANDLE)
       return;
 
-   FileWriteString(handle, "symbol\tai_id\tai_name\tfamily_id\tmeta_weight\treliability\tglobal_edge\tcontext_edge\tcontext_regret\tportfolio_objective\tportfolio_stability\tportfolio_corr\tportfolio_div\troute_value\troute_regret\troute_counterfactual\tshadow_score\tregime_id\thorizon_minutes\tobs\tpolicy_enter_prob\tpolicy_no_trade_prob\tpolicy_exit_prob\tpolicy_portfolio_fit\tpolicy_capital_efficiency\tportfolio_pressure\tcontrol_plane_score\tportfolio_supervisor_score\r\n");
+   FileWriteString(handle, "symbol\tai_id\tai_name\tfamily_id\tmeta_weight\treliability\tglobal_edge\tcontext_edge\tcontext_regret\tportfolio_objective\tportfolio_stability\tportfolio_corr\tportfolio_div\troute_value\troute_regret\troute_counterfactual\tshadow_score\tregime_id\thorizon_minutes\tobs\tpolicy_enter_prob\tpolicy_no_trade_prob\tpolicy_exit_prob\tpolicy_add_prob\tpolicy_reduce_prob\tpolicy_timeout_prob\tpolicy_tighten_prob\tpolicy_portfolio_fit\tpolicy_capital_efficiency\tpolicy_lifecycle_action\tportfolio_pressure\tcontrol_plane_score\tportfolio_supervisor_score\r\n");
    int r = g_ai_last_regime_id;
    if(r < 0 || r >= FXAI_REGIME_COUNT)
       r = 0;
@@ -353,8 +353,13 @@ void FXAI_WriteShadowFleetLedger(const string symbol)
                     DoubleToString(FXAI_Clamp(g_policy_last_enter_prob, 0.0, 1.0), 6) + "\t" +
                     DoubleToString(FXAI_Clamp(g_policy_last_no_trade_prob, 0.0, 1.0), 6) + "\t" +
                     DoubleToString(FXAI_Clamp(g_policy_last_exit_prob, 0.0, 1.0), 6) + "\t" +
+                    DoubleToString(FXAI_Clamp(g_policy_last_add_prob, 0.0, 1.0), 6) + "\t" +
+                    DoubleToString(FXAI_Clamp(g_policy_last_reduce_prob, 0.0, 1.0), 6) + "\t" +
+                    DoubleToString(FXAI_Clamp(g_policy_last_timeout_prob, 0.0, 1.0), 6) + "\t" +
+                    DoubleToString(FXAI_Clamp(g_policy_last_tighten_prob, 0.0, 1.0), 6) + "\t" +
                     DoubleToString(FXAI_Clamp(g_policy_last_portfolio_fit, 0.0, 1.0), 6) + "\t" +
                     DoubleToString(FXAI_Clamp(g_policy_last_capital_efficiency, 0.0, 1.0), 6) + "\t" +
+                    IntegerToString(g_policy_last_action) + "\t" +
                     DoubleToString(FXAI_Clamp(g_ai_last_portfolio_pressure, 0.0, 2.0), 6) + "\t" +
                     DoubleToString(FXAI_Clamp(g_control_plane_last_score, 0.0, 2.0), 6) + "\t" +
                     DoubleToString(FXAI_Clamp(g_portfolio_supervisor_last_score, 0.0, 3.0), 6) + "\r\n";
