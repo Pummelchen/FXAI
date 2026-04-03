@@ -113,6 +113,9 @@ void FXAI_AuditApplyWorldPlanToMarketRates(MqlRates &rates_m1[],
       double persistence = FXAI_Clamp(spec.world_trend_persistence, 0.0, 1.0);
       double shock_memory = FXAI_Clamp(spec.world_shock_memory, 0.0, 1.0);
       double recovery_bias = FXAI_Clamp(spec.world_recovery_bias, -1.0, 1.0);
+      double transition_burst = FXAI_Clamp(spec.world_regime_transition_burst, 0.0, 1.0);
+      double mean_revert_bias = FXAI_Clamp(spec.world_mean_revert_bias, 0.0, 1.0);
+      double vol_cluster_bias = FXAI_Clamp(spec.world_vol_cluster_bias, 0.0, 1.0);
       double gap_prob = FXAI_Clamp(spec.world_gap_prob, 0.0, 0.30);
       double gap_scale = FXAI_Clamp(spec.world_gap_scale, 0.0, 8.0);
       double spread_scale = FXAI_Clamp(spec.world_spread_scale, 0.50, 4.00);
@@ -121,8 +124,9 @@ void FXAI_AuditApplyWorldPlanToMarketRates(MqlRates &rates_m1[],
       double spread_shock_scale = FXAI_Clamp(spec.world_spread_shock_scale, 1.0, 8.0);
       double flip_prob = FXAI_Clamp(spec.world_flip_prob, 0.0, 0.50);
 
-      double edge_vol_mult = 1.0 + 0.32 * edge_focus * session_edge;
-      double trend_bias = (persistence - 0.50) * 0.30 * MathAbs(prev_ret_t);
+      double edge_vol_mult = 1.0 + 0.32 * edge_focus * session_edge +
+                             0.18 * vol_cluster_bias * prev_shock_strength;
+      double trend_bias = (persistence - 0.50) * (0.30 - 0.18 * mean_revert_bias) * MathAbs(prev_ret_t);
       if(prev_ret_t >= 0.0)
          base_ret += trend_bias;
       else
@@ -137,13 +141,18 @@ void FXAI_AuditApplyWorldPlanToMarketRates(MqlRates &rates_m1[],
       }
 
       double ret = base_ret * sigma_scale * edge_vol_mult + spec.world_drift_bias * (0.70 + 0.30 * session_edge);
-      if(FXAI_AuditWorldHashUnit(bar.time, 5) < flip_prob)
+      double live_flip_prob = FXAI_Clamp(flip_prob + 0.14 * mean_revert_bias +
+                                         0.10 * transition_burst * (1.0 - session_edge),
+                                         0.0,
+                                         0.65);
+      if(FXAI_AuditWorldHashUnit(bar.time, 5) < live_flip_prob)
          ret *= -1.0;
 
       double micro_gap = 0.40 * pt / MathMax(prev_close_t, pt);
       double gap_term = base_gap * (0.65 + 0.35 * sigma_scale) +
                         0.06 * session_edge * edge_focus * FXAI_AuditWorldSign(bar.time, 7) * micro_gap;
-      if(FXAI_AuditWorldHashUnit(bar.time, 11) < gap_prob)
+      if(FXAI_AuditWorldHashUnit(bar.time, 11) <
+         FXAI_Clamp(gap_prob + 0.10 * transition_burst, 0.0, 0.40))
          gap_term += gap_scale * MathMax(MathAbs(base_ret), 0.20 * pt / MathMax(prev_close_t, pt)) * FXAI_AuditWorldSign(bar.time, 13);
 
       double new_open = prev_close_t * (1.0 + gap_term);
@@ -156,9 +165,9 @@ void FXAI_AuditApplyWorldPlanToMarketRates(MqlRates &rates_m1[],
          new_close = MathMax(new_open, orig_close);
 
       double range_scale = (0.78 + 0.22 * sigma_scale) *
-                           (1.0 + 0.22 * edge_focus * session_edge + 0.10 * liquidity);
+                           (1.0 + 0.22 * edge_focus * session_edge + 0.10 * liquidity + 0.12 * transition_burst);
       if(prev_shock_strength > 0.0)
-         range_scale *= (1.0 + 0.20 * prev_shock_strength * (0.60 + shock_memory));
+         range_scale *= (1.0 + 0.20 * prev_shock_strength * (0.60 + shock_memory + 0.35 * vol_cluster_bias));
       double new_range = MathMax(2.0 * pt, base_range * range_scale);
       double wick_up = MathMax(0.5 * pt, new_range * MathMax(upper_ratio, 0.15));
       double wick_dn = MathMax(0.5 * pt, new_range * MathMax(lower_ratio, 0.15));
@@ -242,6 +251,12 @@ void FXAI_AuditApplyWorldPlan(FXAIAuditScenarioSpec &spec,
          spec.world_spread_shock_prob = StringToDouble(value);
       else if(key == "spread_shock_scale")
          spec.world_spread_shock_scale = StringToDouble(value);
+      else if(key == "regime_transition_burst")
+         spec.world_regime_transition_burst = StringToDouble(value);
+      else if(key == "mean_revert_bias")
+         spec.world_mean_revert_bias = StringToDouble(value);
+      else if(key == "vol_cluster_bias")
+         spec.world_vol_cluster_bias = StringToDouble(value);
       else if(key == "macro_focus")
          spec.macro_focus = StringToDouble(value);
    }
@@ -261,6 +276,9 @@ void FXAI_AuditApplyWorldPlan(FXAIAuditScenarioSpec &spec,
    spec.world_recovery_bias = FXAI_Clamp(spec.world_recovery_bias, -1.0, 1.0);
    spec.world_spread_shock_prob = FXAI_Clamp(spec.world_spread_shock_prob, 0.0, 0.50);
    spec.world_spread_shock_scale = FXAI_Clamp(spec.world_spread_shock_scale, 1.0, 8.0);
+   spec.world_regime_transition_burst = FXAI_Clamp(spec.world_regime_transition_burst, 0.0, 1.0);
+   spec.world_mean_revert_bias = FXAI_Clamp(spec.world_mean_revert_bias, 0.0, 1.0);
+   spec.world_vol_cluster_bias = FXAI_Clamp(spec.world_vol_cluster_bias, 0.0, 1.0);
    spec.macro_focus = FXAI_Clamp(spec.macro_focus, 0.0, 1.5);
 }
 
@@ -291,6 +309,9 @@ void FXAI_AuditFillScenarioSpec(const int scenario_id,
    spec.world_recovery_bias = 0.0;
    spec.world_spread_shock_prob = 0.0;
    spec.world_spread_shock_scale = 1.0;
+   spec.world_regime_transition_burst = 0.0;
+   spec.world_mean_revert_bias = 0.0;
+   spec.world_vol_cluster_bias = 0.0;
 
    switch(scenario_id)
    {
@@ -1183,13 +1204,16 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       double persistence = FXAI_Clamp(spec.world_trend_persistence, 0.0, 1.0);
       double shock_memory = FXAI_Clamp(spec.world_shock_memory, 0.0, 1.0);
       double recovery_bias = FXAI_Clamp(spec.world_recovery_bias, -1.0, 1.0);
+      double transition_burst = FXAI_Clamp(spec.world_regime_transition_burst, 0.0, 1.0);
+      double mean_revert_bias = FXAI_Clamp(spec.world_mean_revert_bias, 0.0, 1.0);
+      double vol_cluster_bias = FXAI_Clamp(spec.world_vol_cluster_bias, 0.0, 1.0);
       if(spec.vol_cluster > 0.0)
       {
          sigma = MathMax(1e-6, spec.vol_cluster * prev_sigma + (1.0 - spec.vol_cluster) * spec.sigma_per_bar * (0.5 + 1.5 * rng.NextUnit()));
          prev_sigma = sigma;
       }
       sigma *= FXAI_Clamp(spec.world_sigma_scale, 0.50, 3.00) *
-               (1.0 + 0.28 * edge_focus * session_edge);
+               (1.0 + 0.28 * edge_focus * session_edge + 0.14 * vol_cluster_bias * prev_shock_strength);
 
       double drift = spec.drift_per_bar + spec.world_drift_bias;
       if(spec.id == 7 && k > bars / 2)
@@ -1199,7 +1223,7 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       }
 
       double ret = drift + sigma * rng.NextNormal();
-      double persistence_bias = (persistence - 0.50) * 0.35 * MathAbs(prev_ret);
+      double persistence_bias = (persistence - 0.50) * (0.35 - 0.18 * mean_revert_bias) * MathAbs(prev_ret);
       if(prev_ret >= 0.0)
          ret += persistence_bias;
       else
@@ -1216,9 +1240,11 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
          ret += spec.mean_revert_strength * ((anchor - prev) / MathMax(prev, point));
       if(spec.spike_prob > 0.0 && rng.NextUnit() < spec.spike_prob)
          ret += spec.spike_scale * sigma * rng.NextNormal();
-      if(spec.world_gap_prob > 0.0 && rng.NextUnit() < spec.world_gap_prob)
+      if(spec.world_gap_prob > 0.0 &&
+         rng.NextUnit() < FXAI_Clamp(spec.world_gap_prob + 0.10 * transition_burst, 0.0, 0.40))
          ret += spec.world_gap_scale * sigma * (rng.NextUnit() < 0.5 ? -1.0 : 1.0);
-      if(spec.world_flip_prob > 0.0 && rng.NextUnit() < spec.world_flip_prob)
+      if(spec.world_flip_prob > 0.0 &&
+         rng.NextUnit() < FXAI_Clamp(spec.world_flip_prob + 0.14 * mean_revert_bias + 0.10 * transition_burst, 0.0, 0.65))
          ret *= -1.0;
 
       if(spec.id == 5)

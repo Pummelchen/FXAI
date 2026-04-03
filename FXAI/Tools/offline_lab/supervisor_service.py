@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 import sqlite3
 from collections import defaultdict
@@ -11,6 +12,7 @@ from .shadow_fleet import symbol_shadow_summary
 
 CONTROL_PLANE_DIR = testlab.COMMON_FILES / "FXAI/ControlPlane"
 SUPERVISOR_GLOBAL_FILE = COMMON_PROMOTION_DIR / "fxai_supervisor_service_global.tsv"
+SUPERVISOR_COMMAND_GLOBAL_FILE = COMMON_PROMOTION_DIR / "fxai_supervisor_command_global.tsv"
 
 
 def _clamp(v: float, lo: float, hi: float) -> float:
@@ -29,6 +31,13 @@ def _safe_int(raw, default: int = 0) -> int:
         return int(float(raw))
     except Exception:
         return int(default)
+
+
+def _safe_json(raw, default):
+    try:
+        return json.loads(raw or "")
+    except Exception:
+        return default
 
 
 def _parse_symbol_legs(symbol: str) -> tuple[str, str]:
@@ -60,6 +69,10 @@ def _correlation_weight(anchor_symbol: str, other_symbol: str) -> float:
 
 def _snapshot_file(symbol: str) -> Path:
     return COMMON_PROMOTION_DIR / f"fxai_supervisor_service_{safe_token(symbol)}.tsv"
+
+
+def _command_file(symbol: str) -> Path:
+    return COMMON_PROMOTION_DIR / f"fxai_supervisor_command_{safe_token(symbol)}.tsv"
 
 
 def _load_snapshot(path: Path) -> dict | None:
@@ -452,15 +465,227 @@ def write_supervisor_service_artifacts(conn: sqlite3.Connection,
     return artifacts
 
 
+def write_supervisor_command_artifacts(conn: sqlite3.Connection,
+                                       args) -> list[dict]:
+    ensure_dir(COMMON_PROMOTION_DIR)
+    out_dir = RESEARCH_DIR / safe_token(args.profile)
+    ensure_dir(out_dir)
+    service_rows = conn.execute(
+        """
+        SELECT symbol, payload_json
+          FROM supervisor_service_states
+         WHERE profile_name = ?
+         ORDER BY created_at DESC
+        """,
+        (args.profile,),
+    ).fetchall()
+    deploy_rows = conn.execute(
+        "SELECT symbol, payload_json FROM live_deployment_profiles WHERE profile_name = ?",
+        (args.profile,),
+    ).fetchall()
+    router_rows = conn.execute(
+        "SELECT symbol, payload_json FROM student_router_profiles WHERE profile_name = ?",
+        (args.profile,),
+    ).fetchall()
+    service_map: dict[str, dict] = {}
+    for row in service_rows:
+        symbol = str(row["symbol"])
+        if symbol not in service_map:
+            service_map[symbol] = _safe_json(str(row["payload_json"] or "{}"), {})
+    deploy_map = {str(row["symbol"]): _safe_json(str(row["payload_json"] or "{}"), {}) for row in deploy_rows}
+    router_map = {str(row["symbol"]): _safe_json(str(row["payload_json"] or "{}"), {}) for row in router_rows}
+    symbols = sorted(set(service_map) | set(deploy_map) | set(router_map))
+    active_symbols = set(symbols)
+    created_at = now_unix()
+    artifacts: list[dict] = []
+
+    global_payload = {
+        "profile_name": args.profile,
+        "symbol": "__GLOBAL__",
+        "entry_budget_mult": 1.0,
+        "hold_budget_mult": 1.0,
+        "add_cap_mult": 1.0,
+        "reduce_bias": 0.0,
+        "exit_bias": 0.0,
+        "tighten_bias": 0.0,
+        "timeout_bias": 0.0,
+        "long_block": 0,
+        "short_block": 0,
+        "block_score": 1.10,
+    }
+    SUPERVISOR_COMMAND_GLOBAL_FILE.write_text(
+        "".join(f"{key}\t{value}\n" for key, value in global_payload.items()),
+        encoding="utf-8",
+    )
+
+    for symbol in symbols:
+        shadow = symbol_shadow_summary(conn, args.profile, symbol)
+        service = dict(service_map.get(symbol, {}))
+        deploy = dict(deploy_map.get(symbol, {}))
+        router = dict(router_map.get(symbol, {}))
+        gross_pressure = _clamp(float(service.get("gross_pressure", 0.0)), 0.0, 2.0)
+        macro_pressure = _clamp(float(service.get("macro_pressure", 0.0)), 0.0, 1.5)
+        concentration = _clamp(float(service.get("concentration_pressure", 0.0)), 0.0, 1.0)
+        long_pressure = _clamp(float(service.get("directional_long_pressure", 0.0)), 0.0, 2.0)
+        short_pressure = _clamp(float(service.get("directional_short_pressure", 0.0)), 0.0, 2.0)
+        route_regret = _clamp(float(shadow.get("mean_route_regret", 0.0)), 0.0, 1.0)
+        shadow_score = _clamp(float(shadow.get("mean_shadow_score", 0.0)), -1.0, 1.0)
+        no_trade = _clamp(float(shadow.get("mean_policy_no_trade_prob", 0.0)), 0.0, 1.0)
+        champion_only = bool(router.get("champion_only", False))
+        max_active_models = int(router.get("max_active_models", 12) or 12)
+        payload = {
+            "profile_name": args.profile,
+            "symbol": symbol,
+            "entry_budget_mult": _clamp(
+                float(service.get("budget_multiplier", 1.0)) *
+                (0.96 - 0.18 * gross_pressure - 0.10 * concentration - 0.08 * route_regret),
+                0.10,
+                1.20,
+            ),
+            "hold_budget_mult": _clamp(
+                0.96 - 0.12 * gross_pressure - 0.08 * macro_pressure + 0.06 * max(shadow_score, 0.0),
+                0.20,
+                1.20,
+            ),
+            "add_cap_mult": _clamp(
+                float(service.get("add_multiplier", 1.0)) *
+                (0.92 - 0.18 * concentration - 0.14 * gross_pressure - 0.10 * no_trade),
+                0.05,
+                1.20,
+            ),
+            "reduce_bias": _clamp(
+                float(service.get("reduce_bias", 0.0)) +
+                0.12 * concentration + 0.12 * route_regret + 0.10 * no_trade,
+                0.0,
+                1.0,
+            ),
+            "exit_bias": _clamp(
+                float(service.get("exit_bias", 0.0)) +
+                0.12 * macro_pressure + 0.12 * no_trade + 0.08 * max(-shadow_score, 0.0),
+                0.0,
+                1.0,
+            ),
+            "tighten_bias": _clamp(
+                0.24 * gross_pressure + 0.22 * concentration + 0.18 * route_regret + 0.18 * no_trade,
+                0.0,
+                1.0,
+            ),
+            "timeout_bias": _clamp(
+                0.26 * gross_pressure + 0.18 * macro_pressure + 0.18 * route_regret + 0.18 * no_trade,
+                0.0,
+                1.0,
+            ),
+            "long_block": 1 if (long_pressure > 0.92 and gross_pressure > 0.70 and (champion_only or no_trade > 0.64)) else 0,
+            "short_block": 1 if (short_pressure > 0.92 and gross_pressure > 0.70 and (champion_only or no_trade > 0.64)) else 0,
+            "block_score": _clamp(
+                float(service.get("block_score", 1.10)) + 0.12 * route_regret,
+                0.20,
+                3.0,
+            ),
+            "max_active_models": max_active_models,
+            "champion_only": 1 if champion_only else 0,
+            "student_router_ready": 1 if router else 0,
+            "deployment_ready": 1 if deploy else 0,
+            "shadow_summary": shadow,
+            "service_state": service,
+        }
+        tsv_path = _command_file(symbol)
+        tsv_path.write_text(
+            "".join(
+                f"{key}\t{value:.6f}\n" if isinstance(value, float) else f"{key}\t{value}\n"
+                for key, value in payload.items()
+                if key not in ("shadow_summary", "service_state")
+            ),
+            encoding="utf-8",
+        )
+        artifact_sha = testlab.sha256_path(tsv_path)
+        json_path = out_dir / f"supervisor_command_{safe_token(symbol)}.json"
+        json_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        conn.execute(
+            """
+            INSERT INTO supervisor_command_profiles(profile_name, symbol, artifact_path, artifact_sha256,
+                                                    entry_budget_mult, hold_budget_mult, add_cap_mult,
+                                                    reduce_bias, exit_bias, tighten_bias, timeout_bias,
+                                                    long_block, short_block, block_score,
+                                                    payload_json, created_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(profile_name, symbol) DO UPDATE SET
+                artifact_path=excluded.artifact_path,
+                artifact_sha256=excluded.artifact_sha256,
+                entry_budget_mult=excluded.entry_budget_mult,
+                hold_budget_mult=excluded.hold_budget_mult,
+                add_cap_mult=excluded.add_cap_mult,
+                reduce_bias=excluded.reduce_bias,
+                exit_bias=excluded.exit_bias,
+                tighten_bias=excluded.tighten_bias,
+                timeout_bias=excluded.timeout_bias,
+                long_block=excluded.long_block,
+                short_block=excluded.short_block,
+                block_score=excluded.block_score,
+                payload_json=excluded.payload_json,
+                created_at=excluded.created_at
+            """,
+            (
+                args.profile,
+                symbol,
+                str(tsv_path),
+                artifact_sha,
+                float(payload["entry_budget_mult"]),
+                float(payload["hold_budget_mult"]),
+                float(payload["add_cap_mult"]),
+                float(payload["reduce_bias"]),
+                float(payload["exit_bias"]),
+                float(payload["tighten_bias"]),
+                float(payload["timeout_bias"]),
+                int(payload["long_block"]),
+                int(payload["short_block"]),
+                float(payload["block_score"]),
+                json.dumps(payload, indent=2, sort_keys=True),
+                created_at,
+            ),
+        )
+        artifacts.append({
+            "symbol": symbol,
+            "artifact_path": str(tsv_path),
+            "artifact_sha256": artifact_sha,
+        })
+
+    stale_rows = conn.execute(
+        "SELECT symbol, artifact_path FROM supervisor_command_profiles WHERE profile_name = ?",
+        (args.profile,),
+    ).fetchall()
+    for row in stale_rows:
+        symbol = str(row["symbol"])
+        if symbol in active_symbols:
+            continue
+        path = Path(str(row["artifact_path"] or "").strip())
+        if path.exists() and path.is_file():
+            path.unlink()
+        stale_json = out_dir / f"supervisor_command_{safe_token(symbol)}.json"
+        if stale_json.exists():
+            stale_json.unlink()
+        conn.execute(
+            "DELETE FROM supervisor_command_profiles WHERE profile_name = ? AND symbol = ?",
+            (args.profile, symbol),
+        )
+
+    conn.commit()
+    summary_path = out_dir / "supervisor_commands.json"
+    summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
+    return artifacts
+
+
 def run_supervisor_daemon(conn: sqlite3.Connection,
                           args) -> dict:
     interval = max(int(getattr(args, "interval_seconds", 30) or 0), 5)
     iterations = int(getattr(args, "iterations", 0) or 0)
     cycle = 0
     last_payload: list[dict] = []
+    last_commands: list[dict] = []
     while True:
         cycle += 1
         last_payload = write_supervisor_service_artifacts(conn, args)
+        last_commands = write_supervisor_command_artifacts(conn, args)
         if iterations > 0 and cycle >= iterations:
             break
         time.sleep(interval)
@@ -468,5 +693,6 @@ def run_supervisor_daemon(conn: sqlite3.Connection,
         "profile_name": args.profile,
         "iterations": cycle,
         "artifacts": last_payload,
+        "commands": last_commands,
         "interval_seconds": interval,
     }

@@ -297,6 +297,9 @@ struct FXAIManagedPositionState
    double avg_price;
    double open_profit;
    double profit_points;
+   double cycle_realized_profit;
+   double cycle_peak_profit;
+   double giveback_fraction;
    int position_count;
    int pending_count;
    datetime oldest_time;
@@ -310,6 +313,9 @@ void FXAI_ResetManagedPositionState(FXAIManagedPositionState &out)
    out.avg_price = 0.0;
    out.open_profit = 0.0;
    out.profit_points = 0.0;
+   out.cycle_realized_profit = 0.0;
+   out.cycle_peak_profit = 0.0;
+   out.giveback_fraction = 0.0;
    out.position_count = 0;
    out.pending_count = 0;
    out.oldest_time = 0;
@@ -353,6 +359,14 @@ bool FXAI_ReadManagedPositionState(const string symbol,
    out.direction = (signed_volume >= 0.0 ? 1 : 0);
    out.avg_price = weighted_price / MathMax(out.total_volume, 1e-9);
    out.open_profit = FXAI_ManagedOpenProfit(symbol);
+   out.cycle_realized_profit = (RealizedManagedProfit - CycleEntryRealizedProfit);
+   out.cycle_peak_profit = MathMax(TrailPeakProfit, 0.0);
+   double cycle_total = out.open_profit + out.cycle_realized_profit;
+   if(out.cycle_peak_profit > 1e-9)
+      out.giveback_fraction = FXAI_Clamp((out.cycle_peak_profit - MathMax(cycle_total, 0.0)) /
+                                         out.cycle_peak_profit,
+                                         0.0,
+                                         1.0);
 
    MqlTick tick;
    if(SymbolInfoTick(symbol, tick))
@@ -406,6 +420,8 @@ double FXAI_PortfolioPressureScore(const string symbol,
    double supervisor_score = FXAI_PortfolioSupervisorScore(symbol, direction, cp, supervisor);
    FXAISupervisorServiceState service_state;
    FXAI_LoadSupervisorServiceState(symbol, service_state, false);
+   FXAISupervisorCommandState command_state;
+   FXAI_LoadSupervisorCommandState(symbol, command_state, false);
    double service_score = FXAI_SupervisorServiceScore(direction, service_state);
    double supervisor_blend = FXAI_Clamp(0.55 * FXAI_Clamp(supervisor.supervisor_weight, 0.0, 1.0) +
                                         0.45 * FXAI_Clamp(deploy_profile.supervisor_blend, 0.0, 1.0),
@@ -654,6 +670,8 @@ double FXAI_CalcRiskAwareLot(const string symbol,
    double supervisor_score = FXAI_PortfolioSupervisorScore(symbol, direction, cp, supervisor);
    FXAISupervisorServiceState service_state;
    FXAI_LoadSupervisorServiceState(symbol, service_state, false);
+   FXAISupervisorCommandState command_state;
+   FXAI_LoadSupervisorCommandState(symbol, command_state, false);
    double service_score = FXAI_SupervisorServiceScore(direction, service_state);
    if(cp.max_capital_risk_pct > FXAI_Clamp(supervisor.capital_risk_cap_pct, 0.10, 10.0))
    {
@@ -678,6 +696,14 @@ double FXAI_CalcRiskAwareLot(const string symbol,
          return 0.0;
       }
    }
+   if(command_state.ready)
+   {
+      if(FXAI_SupervisorCommandBlocksDirection(command_state, direction))
+      {
+         reason = "risk_supervisor_command_block";
+         return 0.0;
+      }
+   }
    double control_plane_pressure = g_control_plane_last_score;
    if(direction == 1)
       control_plane_pressure = MathMax(control_plane_pressure, g_control_plane_last_buy_score);
@@ -687,6 +713,7 @@ double FXAI_CalcRiskAwareLot(const string symbol,
                                (1.02 - 0.25 * FXAI_Clamp(control_plane_pressure, 0.0, 1.5)) *
                                FXAI_Clamp(1.04 - 0.22 * supervisor_score, 0.25, 1.10) *
                                FXAI_Clamp(service_state.ready ? service_state.budget_multiplier : 1.0, 0.10, 1.20) *
+                               FXAI_Clamp(command_state.ready ? command_state.entry_budget_mult : 1.0, 0.10, 1.20) *
                                FXAI_Clamp(g_policy_last_size_mult, 0.25, 1.60) *
                                FXAI_Clamp(0.70 + 0.30 * g_policy_last_enter_prob, 0.20, 1.10) *
                                FXAI_Clamp(0.72 + 0.28 * g_policy_last_capital_efficiency, 0.25, 1.15),
@@ -1100,6 +1127,8 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
    FXAI_LoadLiveDeploymentProfile(symbol, deploy, false);
    FXAISupervisorServiceState service_state;
    FXAI_LoadSupervisorServiceState(symbol, service_state, false);
+   FXAISupervisorCommandState command_state;
+   FXAI_LoadSupervisorCommandState(symbol, command_state, false);
    FXAIControlPlaneAggregate cp;
    FXAI_ReadControlPlaneAggregate(symbol, state.direction, cp);
    FXAIPortfolioSupervisorProfile supervisor;
@@ -1109,6 +1138,11 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
    bool direction_match = (signal_direction == state.direction);
    bool opposite_signal = (signal_direction >= 0 && signal_direction != state.direction);
    double profit_norm = FXAI_Clamp(state.profit_points / MathMax(g_ai_last_min_move_points, 0.25), -4.0, 4.0) / 4.0;
+   double cycle_profit_norm = FXAI_Clamp((state.open_profit + state.cycle_realized_profit) /
+                                         MathMax(MathAbs(state.cycle_peak_profit) + 1e-6, 1.0),
+                                         -1.0,
+                                         1.0);
+   double giveback = FXAI_Clamp(state.giveback_fraction, 0.0, 1.0);
    double time_soft = (deploy.soft_timeout_bars > 0
                        ? FXAI_Clamp((double)held_bars / (double)deploy.soft_timeout_bars, 0.0, 3.0)
                        : 0.0);
@@ -1117,21 +1151,38 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
                        : 0.0);
    double control_pressure = FXAI_Clamp(g_control_plane_last_score / 2.0, 0.0, 1.5);
    double service_pressure = FXAI_Clamp(service_score / MathMax(service_state.block_score, 0.20), 0.0, 1.5);
+   double hold_budget = FXAI_Clamp(command_state.ready ? command_state.hold_budget_mult : 1.0, 0.10, 1.20);
+   double command_pressure = (command_state.ready
+                              ? FXAI_Clamp(0.34 * command_state.reduce_bias +
+                                           0.30 * command_state.exit_bias +
+                                           0.20 * command_state.tighten_bias +
+                                           0.16 * command_state.timeout_bias,
+                                           0.0,
+                                           1.0)
+                              : 0.0);
 
    double add_prob = FXAI_Clamp(g_policy_last_add_prob +
                                 (direction_match ? 0.16 : -0.18) +
                                 0.10 * MathMax(profit_norm, 0.0) +
+                                0.08 * MathMax(cycle_profit_norm, 0.0) -
+                                0.14 * giveback +
+                                0.08 * (hold_budget - 1.0) +
                                 0.10 * g_policy_last_capital_efficiency +
                                 0.08 * g_policy_last_portfolio_fit -
                                 0.14 * FXAI_Clamp(g_ai_last_portfolio_pressure / 1.5, 0.0, 1.0) -
                                 0.12 * control_pressure -
-                                0.10 * service_pressure,
+                                0.10 * service_pressure -
+                                0.12 * command_pressure +
+                                0.10 * (command_state.ready ? command_state.add_cap_mult - 1.0 : 0.0),
                                 0.0,
                                 1.0);
    double reduce_prob = FXAI_Clamp(g_policy_last_reduce_prob +
                                    0.16 * FXAI_Clamp(g_ai_last_portfolio_pressure / 1.5, 0.0, 1.0) +
                                    0.10 * control_pressure +
                                    0.12 * service_pressure +
+                                   0.14 * (1.0 - hold_budget) +
+                                   0.12 * giveback +
+                                   0.10 * command_pressure +
                                    0.12 * MathMax(-profit_norm, 0.0) +
                                    (opposite_signal ? 0.22 : 0.0),
                                    0.0,
@@ -1139,18 +1190,27 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
    double timeout_prob = FXAI_Clamp(g_policy_last_timeout_prob +
                                     0.20 * FXAI_Clamp(time_soft / 1.5, 0.0, 1.0) +
                                     0.18 * FXAI_Clamp(time_hard - 1.0, 0.0, 1.0) +
-                                    0.10 * service_pressure,
+                                    0.10 * (1.0 - hold_budget) +
+                                    0.10 * service_pressure +
+                                    0.16 * giveback +
+                                    0.14 * (command_state.ready ? command_state.timeout_bias : 0.0),
                                     0.0,
                                     1.0);
    double tighten_prob = FXAI_Clamp(g_policy_last_tighten_prob +
                                     0.18 * FXAI_Clamp(time_soft / 1.5, 0.0, 1.0) +
                                     0.12 * MathMax(profit_norm, 0.0) +
-                                    0.10 * service_state.reduce_bias,
+                                    0.10 * (1.0 - hold_budget) +
+                                    0.18 * giveback +
+                                    0.10 * service_state.reduce_bias +
+                                    0.14 * (command_state.ready ? command_state.tighten_bias : 0.0),
                                     0.0,
                                     1.0);
    double exit_prob = FXAI_Clamp(g_policy_last_exit_prob +
                                  0.18 * service_state.exit_bias +
                                  0.14 * FXAI_Clamp(time_hard - 1.0, 0.0, 1.0) +
+                                 0.10 * (1.0 - hold_budget) +
+                                 0.18 * giveback +
+                                 0.12 * (command_state.ready ? command_state.exit_bias : 0.0) +
                                  0.12 * MathMax(-profit_norm, 0.0) +
                                  (opposite_signal ? 0.24 : 0.0),
                                  0.0,
@@ -1225,7 +1285,8 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
          double add_lot = FXAI_NormalizeLot(symbol,
                                             base_lot *
                                             FXAI_Clamp(deploy.max_add_fraction, 0.05, 1.00) *
-                                            (service_state.ready ? service_state.add_multiplier : 1.0));
+                                            (service_state.ready ? service_state.add_multiplier : 1.0) *
+                                            (command_state.ready ? command_state.add_cap_mult : 1.0));
          if(add_lot > 0.0 &&
             add_lot <= FXAI_Clamp(state.total_volume * 1.25 + base_lot, add_lot, 1000.0) &&
             FXAI_SendLifecycleAddOrder(symbol, state.direction, add_lot, add_reason))

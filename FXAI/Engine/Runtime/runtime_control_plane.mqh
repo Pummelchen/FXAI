@@ -5,6 +5,7 @@
 #define FXAI_CONTROL_PLANE_TTL_SEC 7200
 #define FXAI_PORTFOLIO_SUPERVISOR_FILE "FXAI\\Offline\\Promotions\\fxai_portfolio_supervisor.tsv"
 #define FXAI_SUPERVISOR_SERVICE_GLOBAL_FILE "FXAI\\Offline\\Promotions\\fxai_supervisor_service_global.tsv"
+#define FXAI_SUPERVISOR_COMMAND_GLOBAL_FILE "FXAI\\Offline\\Promotions\\fxai_supervisor_command_global.tsv"
 
 #ifndef FXAI_POLICY_ACTION_NO_TRADE
 #define FXAI_POLICY_ACTION_NO_TRADE 0
@@ -151,6 +152,39 @@ struct FXAISupervisorServiceState
    double entry_floor;
    double block_score;
    double supervisor_score;
+   datetime loaded_at;
+};
+
+struct FXAIStudentRouterProfile
+{
+   bool   ready;
+   string profile_name;
+   string symbol;
+   bool   champion_only;
+   int    max_active_models;
+   double min_meta_weight;
+   string allow_plugins_csv;
+   double family_weight[FXAI_FAMILY_OTHER + 1];
+   datetime loaded_at;
+};
+
+struct FXAISupervisorCommandState
+{
+   bool   ready;
+   string profile_name;
+   string symbol;
+   double entry_budget_mult;
+   double hold_budget_mult;
+   double add_cap_mult;
+   double reduce_bias;
+   double exit_bias;
+   double tighten_bias;
+   double timeout_bias;
+   bool   long_block;
+   bool   short_block;
+   double block_score;
+   int    max_active_models;
+   bool   champion_only;
    datetime loaded_at;
 };
 
@@ -302,6 +336,40 @@ void FXAI_ResetSupervisorServiceState(FXAISupervisorServiceState &out)
    out.loaded_at = 0;
 }
 
+void FXAI_ResetStudentRouterProfile(FXAIStudentRouterProfile &out)
+{
+   out.ready = false;
+   out.profile_name = "";
+   out.symbol = "";
+   out.champion_only = false;
+   out.max_active_models = 12;
+   out.min_meta_weight = 0.0;
+   out.allow_plugins_csv = "";
+   for(int i=0; i<=FXAI_FAMILY_OTHER; i++)
+      out.family_weight[i] = 1.0;
+   out.loaded_at = 0;
+}
+
+void FXAI_ResetSupervisorCommandState(FXAISupervisorCommandState &out)
+{
+   out.ready = false;
+   out.profile_name = "";
+   out.symbol = "";
+   out.entry_budget_mult = 1.0;
+   out.hold_budget_mult = 1.0;
+   out.add_cap_mult = 1.0;
+   out.reduce_bias = 0.0;
+   out.exit_bias = 0.0;
+   out.tighten_bias = 0.0;
+   out.timeout_bias = 0.0;
+   out.long_block = false;
+   out.short_block = false;
+   out.block_score = 1.10;
+   out.max_active_models = 12;
+   out.champion_only = false;
+   out.loaded_at = 0;
+}
+
 string FXAI_ControlPlaneSafeToken(const string raw)
 {
    string clean = raw;
@@ -320,9 +388,40 @@ string FXAI_ControlPlaneSafeToken(const string raw)
    return clean;
 }
 
+string FXAI_FamilyName(const int family_id)
+{
+   switch(family_id)
+   {
+      case FXAI_FAMILY_LINEAR: return "linear";
+      case FXAI_FAMILY_TREE: return "tree";
+      case FXAI_FAMILY_RECURRENT: return "recurrent";
+      case FXAI_FAMILY_CONVOLUTIONAL: return "convolutional";
+      case FXAI_FAMILY_TRANSFORMER: return "transformer";
+      case FXAI_FAMILY_STATE_SPACE: return "state_space";
+      case FXAI_FAMILY_DISTRIBUTIONAL: return "distribution";
+      case FXAI_FAMILY_MIXTURE: return "mixture";
+      case FXAI_FAMILY_RETRIEVAL: return "memory";
+      case FXAI_FAMILY_WORLD_MODEL: return "world";
+      case FXAI_FAMILY_RULE_BASED: return "rule";
+      default: return "other";
+   }
+}
+
 string FXAI_SupervisorServiceSymbolFile(const string symbol)
 {
    return "FXAI\\Offline\\Promotions\\fxai_supervisor_service_" +
+          FXAI_ControlPlaneSafeToken(symbol) + ".tsv";
+}
+
+string FXAI_SupervisorCommandSymbolFile(const string symbol)
+{
+   return "FXAI\\Offline\\Promotions\\fxai_supervisor_command_" +
+          FXAI_ControlPlaneSafeToken(symbol) + ".tsv";
+}
+
+string FXAI_StudentRouterProfileFile(const string symbol)
+{
+   return "FXAI\\Offline\\Promotions\\fxai_student_router_" +
           FXAI_ControlPlaneSafeToken(symbol) + ".tsv";
 }
 
@@ -393,6 +492,28 @@ bool FXAI_ControlPlaneReadKV(const string file_name,
    }
    FileClose(handle);
    return found;
+}
+
+bool FXAI_CSVContainsToken(const string csv,
+                           const string token)
+{
+   string clean_token = token;
+   StringTrimLeft(clean_token);
+   StringTrimRight(clean_token);
+   if(StringLen(clean_token) <= 0)
+      return false;
+   string work = csv;
+   string parts[];
+   int n = StringSplit(work, ',', parts);
+   for(int i=0; i<n; i++)
+   {
+      string item = parts[i];
+      StringTrimLeft(item);
+      StringTrimRight(item);
+      if(item == clean_token)
+         return true;
+   }
+   return false;
 }
 
 bool FXAI_LoadLiveDeploymentProfile(const string symbol,
@@ -747,6 +868,251 @@ bool FXAI_LoadSupervisorServiceState(const string symbol,
    FXAI_ResetSupervisorServiceState(out);
    out.symbol = symbol;
    return false;
+}
+
+bool FXAI_LoadStudentRouterProfile(const string symbol,
+                                   FXAIStudentRouterProfile &out,
+                                   const bool force_reload = false)
+{
+   static FXAIStudentRouterProfile cache;
+   static string cache_symbol = "";
+   static datetime cache_time = 0;
+
+   datetime now = TimeCurrent();
+   if(now <= 0)
+      now = TimeTradeServer();
+   if(now <= 0)
+      now = iTime(_Symbol, PERIOD_M1, 0);
+
+   if(!force_reload &&
+      cache.ready &&
+      cache_symbol == symbol &&
+      cache_time > 0 &&
+      now > 0 &&
+      (now - cache_time) < 300)
+   {
+      out = cache;
+      return true;
+   }
+
+   FXAI_ResetStudentRouterProfile(out);
+   out.symbol = symbol;
+   int handle = FileOpen(FXAI_StudentRouterProfileFile(symbol),
+                         FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON |
+                         FILE_SHARE_READ | FILE_SHARE_WRITE);
+   if(handle == INVALID_HANDLE)
+   {
+      cache = out;
+      cache_symbol = symbol;
+      cache_time = now;
+      return false;
+   }
+
+   while(!FileIsEnding(handle))
+   {
+      string line = FileReadString(handle);
+      if(StringLen(line) <= 0)
+         continue;
+      string parts[];
+      int n = StringSplit(line, '\t', parts);
+      if(n < 2)
+         continue;
+      string key = parts[0];
+      string value = parts[1];
+      if(key == "profile_name")
+         out.profile_name = value;
+      else if(key == "symbol")
+         out.symbol = value;
+      else if(key == "champion_only")
+         out.champion_only = (StringToInteger(value) != 0);
+      else if(key == "max_active_models")
+         out.max_active_models = (int)StringToInteger(value);
+      else if(key == "min_meta_weight")
+         out.min_meta_weight = StringToDouble(value);
+      else if(key == "allow_plugins_csv")
+         out.allow_plugins_csv = value;
+      else if(StringFind(key, "family_weight_") == 0)
+      {
+         string family_name = StringSubstr(key, 14);
+         for(int fam=0; fam<=FXAI_FAMILY_OTHER; fam++)
+         {
+            if(FXAI_FamilyName(fam) == family_name)
+            {
+               out.family_weight[fam] = StringToDouble(value);
+               break;
+            }
+         }
+      }
+   }
+   FileClose(handle);
+
+   out.max_active_models = (int)FXAI_Clamp((double)out.max_active_models, 1.0, (double)FXAI_AI_COUNT);
+   out.min_meta_weight = FXAI_Clamp(out.min_meta_weight, 0.0, 0.25);
+   for(int fam=0; fam<=FXAI_FAMILY_OTHER; fam++)
+      out.family_weight[fam] = FXAI_Clamp(out.family_weight[fam], 0.05, 1.50);
+   out.ready = true;
+   out.loaded_at = now;
+   cache = out;
+   cache_symbol = symbol;
+   cache_time = now;
+   return true;
+}
+
+double FXAI_StudentRouterFamilyWeight(const FXAIStudentRouterProfile &profile,
+                                      const int family_id)
+{
+   if(!profile.ready || family_id < 0 || family_id > FXAI_FAMILY_OTHER)
+      return 1.0;
+   return FXAI_Clamp(profile.family_weight[family_id], 0.05, 1.50);
+}
+
+bool FXAI_StudentRouterAllowsPlugin(const FXAIStudentRouterProfile &profile,
+                                    const string plugin_name,
+                                    const int family_id)
+{
+   if(!profile.ready)
+      return true;
+   if(family_id >= 0 && family_id <= FXAI_FAMILY_OTHER &&
+      profile.family_weight[family_id] <= 0.051)
+      return false;
+   if(!profile.champion_only)
+      return true;
+   if(StringLen(profile.allow_plugins_csv) <= 0)
+      return true;
+   return FXAI_CSVContainsToken(profile.allow_plugins_csv, plugin_name);
+}
+
+bool FXAI_LoadSupervisorCommandState(const string symbol,
+                                     FXAISupervisorCommandState &out,
+                                     const bool force_reload = false)
+{
+   static FXAISupervisorCommandState cache_symbol;
+   static FXAISupervisorCommandState cache_global;
+   static string cache_symbol_name = "";
+   static datetime cache_symbol_time = 0;
+   static datetime cache_global_time = 0;
+
+   datetime now = TimeCurrent();
+   if(now <= 0)
+      now = TimeTradeServer();
+   if(now <= 0)
+      now = iTime(_Symbol, PERIOD_M1, 0);
+
+   if(!force_reload &&
+      cache_symbol.ready &&
+      cache_symbol_name == symbol &&
+      cache_symbol_time > 0 &&
+      now > 0 &&
+      (now - cache_symbol_time) < 90)
+   {
+      out = cache_symbol;
+      return true;
+   }
+
+   FXAI_ResetSupervisorCommandState(out);
+   out.symbol = symbol;
+   int handle = FileOpen(FXAI_SupervisorCommandSymbolFile(symbol),
+                         FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON |
+                         FILE_SHARE_READ | FILE_SHARE_WRITE);
+   if(handle == INVALID_HANDLE)
+   {
+      if(!force_reload &&
+         cache_global.ready &&
+         cache_global_time > 0 &&
+         now > 0 &&
+         (now - cache_global_time) < 90)
+      {
+         out = cache_global;
+         if(StringLen(out.symbol) <= 0 || out.symbol == "__GLOBAL__")
+            out.symbol = symbol;
+         return true;
+      }
+      int global_handle = FileOpen(FXAI_SUPERVISOR_COMMAND_GLOBAL_FILE,
+                                   FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON |
+                                   FILE_SHARE_READ | FILE_SHARE_WRITE);
+      if(global_handle == INVALID_HANDLE)
+         return false;
+      handle = global_handle;
+   }
+
+   while(!FileIsEnding(handle))
+   {
+      string line = FileReadString(handle);
+      if(StringLen(line) <= 0)
+         continue;
+      string parts[];
+      int n = StringSplit(line, '\t', parts);
+      if(n < 2)
+         continue;
+      string key = parts[0];
+      string value = parts[1];
+      if(key == "profile_name")
+         out.profile_name = value;
+      else if(key == "symbol")
+         out.symbol = value;
+      else if(key == "entry_budget_mult")
+         out.entry_budget_mult = StringToDouble(value);
+      else if(key == "hold_budget_mult")
+         out.hold_budget_mult = StringToDouble(value);
+      else if(key == "add_cap_mult")
+         out.add_cap_mult = StringToDouble(value);
+      else if(key == "reduce_bias")
+         out.reduce_bias = StringToDouble(value);
+      else if(key == "exit_bias")
+         out.exit_bias = StringToDouble(value);
+      else if(key == "tighten_bias")
+         out.tighten_bias = StringToDouble(value);
+      else if(key == "timeout_bias")
+         out.timeout_bias = StringToDouble(value);
+      else if(key == "long_block")
+         out.long_block = (StringToInteger(value) != 0);
+      else if(key == "short_block")
+         out.short_block = (StringToInteger(value) != 0);
+      else if(key == "block_score")
+         out.block_score = StringToDouble(value);
+      else if(key == "max_active_models")
+         out.max_active_models = (int)StringToInteger(value);
+      else if(key == "champion_only")
+         out.champion_only = (StringToInteger(value) != 0);
+   }
+   FileClose(handle);
+
+   out.entry_budget_mult = FXAI_Clamp(out.entry_budget_mult, 0.10, 1.20);
+   out.hold_budget_mult = FXAI_Clamp(out.hold_budget_mult, 0.10, 1.20);
+   out.add_cap_mult = FXAI_Clamp(out.add_cap_mult, 0.05, 1.20);
+   out.reduce_bias = FXAI_Clamp(out.reduce_bias, 0.0, 1.0);
+   out.exit_bias = FXAI_Clamp(out.exit_bias, 0.0, 1.0);
+   out.tighten_bias = FXAI_Clamp(out.tighten_bias, 0.0, 1.0);
+   out.timeout_bias = FXAI_Clamp(out.timeout_bias, 0.0, 1.0);
+   out.block_score = FXAI_Clamp(out.block_score, 0.20, 3.0);
+   out.max_active_models = (int)FXAI_Clamp((double)out.max_active_models, 1.0, (double)FXAI_AI_COUNT);
+   out.ready = true;
+   out.loaded_at = now;
+   if(out.symbol == "__GLOBAL__")
+   {
+      cache_global = out;
+      cache_global_time = now;
+      out.symbol = symbol;
+   }
+   else
+   {
+      cache_symbol = out;
+      cache_symbol_name = symbol;
+      cache_symbol_time = now;
+   }
+   return true;
+}
+
+bool FXAI_SupervisorCommandBlocksDirection(const FXAISupervisorCommandState &state,
+                                           const int direction)
+{
+   if(!state.ready)
+      return false;
+   if(direction == 1)
+      return state.long_block;
+   if(direction == 0)
+      return state.short_block;
+   return (state.long_block && state.short_block);
 }
 
 bool FXAI_ReadControlPlaneSnapshotFile(const string file_name,

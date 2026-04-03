@@ -229,6 +229,9 @@ struct FXAIAuditScenarioSpec
    double world_recovery_bias;
    double world_spread_shock_prob;
    double world_spread_shock_scale;
+   double world_regime_transition_burst;
+   double world_mean_revert_bias;
+   double world_vol_cluster_bias;
 };
 
 struct FXAIAuditFoldMetrics

@@ -8,6 +8,9 @@ It does not replace the MT5 model engine. MT5 and MQL5 still execute the real pl
 - repeated model-zoo tuning on 3/6/12-month windows
 - automatic promotion of best parameter packs per symbol and plugin
 - champion/challenger governance, parameter lineage, and family scorecards
+- attribution and pruning profiles for feature families, plugin families, and live router policy
+- student-router profiles that bound live model breadth and family weighting per symbol
+- supervisor-service and supervisor-command artifacts for live portfolio-pressure and lifecycle control
 - distillation artifacts for lighter student targets and learned red-team plans for future hostile-market runs
 - ready-to-use MT5 `.set` files so no parameter copy/paste is needed
 
@@ -18,11 +21,19 @@ python3 FXAI/Tools/fxai_offline_lab.py init-db
 python3 FXAI/Tools/fxai_offline_lab.py export-dataset --symbol-pack majors --months-list 3,6,12
 python3 FXAI/Tools/fxai_offline_lab.py tune-zoo --profile continuous --auto-export --symbol-pack majors --months-list 3,6,12
 python3 FXAI/Tools/fxai_offline_lab.py best-params --profile continuous
+python3 FXAI/Tools/fxai_offline_lab.py attribution-prune --profile continuous
+python3 FXAI/Tools/fxai_offline_lab.py deploy-profiles --profile continuous
+python3 FXAI/Tools/fxai_offline_lab.py supervisor-sync --profile continuous
+python3 FXAI/Tools/fxai_offline_lab.py autonomous-governance --profile continuous
 python3 FXAI/Tools/fxai_offline_lab.py control-loop --profile continuous --symbol-pack majors --months-list 3,6,12 --cycles 0 --sleep-seconds 1800
 ```
 
 Notes:
 - `best-params` promotes all symbols under the selected profile by default; use `--symbol`, `--symbol-list`, or `--symbol-pack` only when you want to narrow the scope.
+- `attribution-prune` builds `FILE_COMMON` attribution and student-router artifacts without needing a full deployment refresh.
+- `deploy-profiles` emits the live deployment TSVs consumed by the MT5 runtime.
+- `supervisor-sync` refreshes central supervisor-service and supervisor-command artifacts from live control-plane snapshots.
+- `autonomous-governance` rebuilds portfolio supervisor and world-plan outputs from current research telemetry.
 - Exact-window datasets store the effective exported first and last bar range, so later tuning and promotion stay aligned to the data that was actually ingested.
 - SQLite access is opened with a bounded retry and busy timeout so overlapping admin and control-loop calls do not fail on transient lock contention.
 

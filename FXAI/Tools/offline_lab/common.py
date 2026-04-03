@@ -417,6 +417,27 @@ CREATE TABLE IF NOT EXISTS supervisor_service_states (
     UNIQUE(profile_name, symbol)
 );
 
+CREATE TABLE IF NOT EXISTS supervisor_command_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    artifact_path TEXT NOT NULL DEFAULT '',
+    artifact_sha256 TEXT NOT NULL DEFAULT '',
+    entry_budget_mult REAL NOT NULL DEFAULT 1.0,
+    hold_budget_mult REAL NOT NULL DEFAULT 1.0,
+    add_cap_mult REAL NOT NULL DEFAULT 1.0,
+    reduce_bias REAL NOT NULL DEFAULT 0.0,
+    exit_bias REAL NOT NULL DEFAULT 0.0,
+    tighten_bias REAL NOT NULL DEFAULT 0.0,
+    timeout_bias REAL NOT NULL DEFAULT 0.0,
+    long_block INTEGER NOT NULL DEFAULT 0,
+    short_block INTEGER NOT NULL DEFAULT 0,
+    block_score REAL NOT NULL DEFAULT 1.1,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name, symbol)
+);
+
 CREATE TABLE IF NOT EXISTS world_simulator_plans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     profile_name TEXT NOT NULL,
@@ -432,6 +453,34 @@ CREATE TABLE IF NOT EXISTS world_simulator_plans (
     context_corr_bias REAL NOT NULL DEFAULT 0.0,
     liquidity_stress REAL NOT NULL DEFAULT 0.0,
     macro_focus REAL NOT NULL DEFAULT 0.0,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name, symbol)
+);
+
+CREATE TABLE IF NOT EXISTS attribution_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    artifact_path TEXT NOT NULL DEFAULT '',
+    artifact_sha256 TEXT NOT NULL DEFAULT '',
+    champion_only INTEGER NOT NULL DEFAULT 0,
+    max_active_models INTEGER NOT NULL DEFAULT 12,
+    min_meta_weight REAL NOT NULL DEFAULT 0.0,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name, symbol)
+);
+
+CREATE TABLE IF NOT EXISTS student_router_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    artifact_path TEXT NOT NULL DEFAULT '',
+    artifact_sha256 TEXT NOT NULL DEFAULT '',
+    champion_only INTEGER NOT NULL DEFAULT 0,
+    max_active_models INTEGER NOT NULL DEFAULT 12,
+    min_meta_weight REAL NOT NULL DEFAULT 0.0,
     payload_json TEXT NOT NULL DEFAULT '{}',
     created_at INTEGER NOT NULL,
     UNIQUE(profile_name, symbol)
@@ -469,7 +518,10 @@ CREATE INDEX IF NOT EXISTS idx_live_deploy_lookup ON live_deployment_profiles(pr
 CREATE INDEX IF NOT EXISTS idx_portfolio_supervisor_lookup ON portfolio_supervisor_profiles(profile_name, created_at);
 CREATE INDEX IF NOT EXISTS idx_shadow_fleet_lookup ON shadow_fleet_observations(profile_name, symbol, plugin_name, captured_at);
 CREATE INDEX IF NOT EXISTS idx_supervisor_service_lookup ON supervisor_service_states(profile_name, symbol, created_at);
+CREATE INDEX IF NOT EXISTS idx_supervisor_command_lookup ON supervisor_command_profiles(profile_name, symbol, created_at);
 CREATE INDEX IF NOT EXISTS idx_world_sim_lookup ON world_simulator_plans(profile_name, symbol, created_at);
+CREATE INDEX IF NOT EXISTS idx_attribution_lookup ON attribution_profiles(profile_name, symbol, created_at);
+CREATE INDEX IF NOT EXISTS idx_student_router_lookup ON student_router_profiles(profile_name, symbol, created_at);
 CREATE INDEX IF NOT EXISTS idx_governance_runs_lookup ON autonomous_governance_runs(profile_name, created_at);
 """
 

@@ -739,7 +739,7 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
                                                  policy_timeout_floor, max_add_fraction, reduce_fraction,
                                                  soft_timeout_bars, hard_timeout_bars,
                                                  payload_json, created_at)
-            VALUES(?, ?, 'symbol', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES(?, ?, 'symbol', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(profile_name, symbol, deployment_scope) DO UPDATE SET
                 artifact_path=excluded.artifact_path,
                 artifact_sha256=excluded.artifact_sha256,

@@ -87,6 +87,7 @@ def build_symbol_world_model(conn: sqlite3.Connection,
     edge_spreads: list[float] = []
     non_edge_abs_returns: list[float] = []
     non_edge_spreads: list[float] = []
+    bar_records: list[tuple[float, float, float]] = []
     same_sign = 0
     sign_pairs = 0
     shock_hits = 0
@@ -136,6 +137,8 @@ def build_symbol_world_model(conn: sqlite3.Connection,
 
             hour = datetime.fromtimestamp(int(cur["bar_time_unix"]), tz=timezone.utc).hour
             edge_hour = (7 <= hour <= 9) or (15 <= hour <= 17) or hour in (22, 23, 0)
+            edge_score = 1.0 if edge_hour else 0.0
+            bar_records.append((ret, spread, edge_score))
             if edge_hour:
                 edge_abs_returns.append(abs(ret))
                 edge_spreads.append(spread)
@@ -187,6 +190,60 @@ def build_symbol_world_model(conn: sqlite3.Connection,
     persistence = (same_sign / float(sign_pairs)) if sign_pairs > 0 else 0.5
     shock_memory = (shock_follow_same / float(shock_hits)) if shock_hits > 0 else 0.0
     shock_reversal = (shock_follow_reverse / float(shock_hits)) if shock_hits > 0 else 0.0
+    vol_thr = max(_quantile(abs_returns, 0.65, sigma), sigma)
+    spread_thr = max(_quantile(spread_values, 0.75, median_spread), median_spread)
+    state_names = ["calm_trend", "calm_revert", "stress_trend", "stress_revert"]
+    state_counts = [0, 0, 0, 0]
+    state_ret_sum = [0.0, 0.0, 0.0, 0.0]
+    state_abs_sum = [0.0, 0.0, 0.0, 0.0]
+    state_spread_sum = [0.0, 0.0, 0.0, 0.0]
+    transition = [[0, 0, 0, 0] for _ in range(4)]
+    prev_state = -1
+    prev_ret = 0.0
+    state_changes = 0
+    stress_stay = 0
+    stress_obs = 0
+    revert_obs = 0
+    for ret, spread, edge_score in bar_records:
+        vol_hi = abs(ret) >= vol_thr
+        trend_like = (prev_ret == 0.0 or ret * prev_ret >= 0.0)
+        state = (2 if vol_hi or spread >= spread_thr else 0) + (0 if trend_like else 1)
+        state_counts[state] += 1
+        state_ret_sum[state] += ret
+        state_abs_sum[state] += abs(ret)
+        state_spread_sum[state] += spread
+        if state in (1, 3):
+            revert_obs += 1
+        if prev_state >= 0:
+            transition[prev_state][state] += 1
+            if state != prev_state:
+                state_changes += 1
+        if prev_state in (2, 3):
+            stress_obs += 1
+            if state in (2, 3):
+                stress_stay += 1
+        prev_state = state
+        prev_ret = ret * (1.0 + 0.10 * edge_score)
+
+    total_states = float(max(sum(state_counts), 1))
+    regime_transition_burst = state_changes / float(max(len(bar_records) - 1, 1))
+    vol_cluster_bias = (stress_stay / float(max(stress_obs, 1))) if stress_obs > 0 else 0.0
+    mean_revert_bias = (revert_obs / total_states)
+    state_prototypes = []
+    for idx, name in enumerate(state_names):
+        count = max(state_counts[idx], 1)
+        row_sum = max(sum(transition[idx]), 1)
+        state_prototypes.append({
+            "state": name,
+            "weight": state_counts[idx] / total_states,
+            "sigma_scale": _clamp((state_abs_sum[idx] / float(count)) / max(sigma, 1e-6), 0.40, 4.00),
+            "drift_bias": _clamp(state_ret_sum[idx] / float(count), -0.001, 0.001),
+            "spread_scale": _clamp((state_spread_sum[idx] / float(count)) / max(median_spread, 1.0), 0.50, 6.00),
+            "transition": [
+                _clamp(transition[idx][j] / float(row_sum), 0.0, 1.0)
+                for j in range(4)
+            ],
+        })
 
     return {
         "profile_name": profile_name,
@@ -258,6 +315,10 @@ def build_symbol_world_model(conn: sqlite3.Connection,
         "recovery_bias": _clamp(shock_reversal - shock_memory, -1.0, 1.0),
         "spread_shock_prob": _clamp(spread_shock_prob, 0.0, 0.50),
         "spread_shock_scale": _clamp(p98_spread / median_spread, 1.0, 8.0),
+        "regime_transition_burst": _clamp(regime_transition_burst, 0.0, 1.0),
+        "mean_revert_bias": _clamp(mean_revert_bias, 0.0, 1.0),
+        "vol_cluster_bias": _clamp(vol_cluster_bias, 0.0, 1.0),
+        "state_prototypes": state_prototypes,
         "shadow_summary": shadow,
         "datasets": dataset_payloads,
     }

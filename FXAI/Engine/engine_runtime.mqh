@@ -457,6 +457,8 @@ int SpecialDirectionAI(const string symbol)
    snapshot.min_move_points = min_move_pred;
    FXAILiveDeploymentProfile deploy_profile;
    FXAI_LoadLiveDeploymentProfile(symbol, deploy_profile, false);
+   FXAIStudentRouterProfile student_router;
+   FXAI_LoadStudentRouterProfile(symbol, student_router, false);
    double vol_hint = MathAbs(FXAI_SafeReturn(close_arr, 0, 1));
    int regime_hint = FXAI_GetRegimeId(snapshot.bar_time, spread_pred, vol_hint);
    int ai_hint = (ensembleMode ? -1 : aiType);
@@ -1031,6 +1033,66 @@ int SpecialDirectionAI(const string symbol)
    bool feature_drift_updated = false;
    double live_feature_drift = FXAI_GetFeatureDriftPenalty();
    double drift_norm = FXAI_Clamp(live_feature_drift / 4.0, 0.0, 1.0);
+   double routed_meta_weight[FXAI_AI_COUNT];
+   bool routed_meta_selected[FXAI_AI_COUNT];
+   for(int ai_i=0; ai_i<FXAI_AI_COUNT; ai_i++)
+   {
+      routed_meta_weight[ai_i] = -1.0;
+      routed_meta_selected[ai_i] = true;
+   }
+   double route_cutoff = -1.0;
+   if(ensembleMode != 0 && student_router.ready)
+   {
+      double top_scores[FXAI_AI_COUNT];
+      for(int ti=0; ti<FXAI_AI_COUNT; ti++)
+         top_scores[ti] = -1.0;
+      int candidate_count = 0;
+      for(int m=0; m<ArraySize(active_ai_ids); m++)
+      {
+         int ai_idx = active_ai_ids[m];
+         CFXAIAIPlugin *plugin_scan = g_plugins.Get(ai_idx);
+         if(plugin_scan == NULL)
+            continue;
+         FXAIAIManifestV4 scan_manifest;
+         FXAI_GetPluginManifest(*plugin_scan, scan_manifest);
+         if(!FXAI_StudentRouterAllowsPlugin(student_router, scan_manifest.ai_name, scan_manifest.family))
+         {
+            routed_meta_selected[ai_idx] = false;
+            continue;
+         }
+         double base_meta_w = FXAI_GetModelMetaScore(ai_idx, regime_id, runtime_session_bucket, H, min_move_pred);
+         double family_weight = FXAI_StudentRouterFamilyWeight(student_router, scan_manifest.family);
+         double routed_w = base_meta_w * family_weight;
+         routed_meta_weight[ai_idx] = routed_w;
+         if(routed_w + 1e-12 < student_router.min_meta_weight)
+         {
+            routed_meta_selected[ai_idx] = false;
+            continue;
+         }
+         candidate_count++;
+         for(int ti=0; ti<FXAI_AI_COUNT; ti++)
+         {
+            if(routed_w > top_scores[ti])
+            {
+               for(int tj=FXAI_AI_COUNT - 1; tj>ti; tj--)
+                  top_scores[tj] = top_scores[tj - 1];
+               top_scores[ti] = routed_w;
+               break;
+            }
+         }
+      }
+      if(candidate_count > student_router.max_active_models)
+         route_cutoff = top_scores[student_router.max_active_models - 1];
+      for(int ai_i=0; ai_i<FXAI_AI_COUNT; ai_i++)
+      {
+         if(routed_meta_weight[ai_i] < student_router.min_meta_weight - 1e-12)
+            routed_meta_selected[ai_i] = false;
+         if(route_cutoff >= 0.0 &&
+            routed_meta_weight[ai_i] >= 0.0 &&
+            routed_meta_weight[ai_i] + 1e-12 < route_cutoff)
+            routed_meta_selected[ai_i] = false;
+      }
+   }
 
    for(int m=0; m<ArraySize(active_ai_ids); m++)
    {
@@ -1042,6 +1104,11 @@ int SpecialDirectionAI(const string symbol)
 
       FXAIAIManifestV4 manifest;
       FXAI_GetPluginManifest(*plugin, manifest);
+      if(student_router.ready &&
+         !FXAI_StudentRouterAllowsPlugin(student_router, manifest.ai_name, manifest.family))
+         continue;
+      if(ensembleMode != 0 && student_router.ready && !routed_meta_selected[ai_idx])
+         continue;
 
       FXAIAIHyperParams hp_model;
       FXAI_GetModelHyperParamsRouted(ai_idx, regime_id, H, hp_model);
@@ -1352,7 +1419,12 @@ int SpecialDirectionAI(const string symbol)
       }
       else
       {
-         double meta_w = FXAI_GetModelMetaScore(ai_idx, regime_id, runtime_session_bucket, H, min_move_pred);
+         double meta_w = routed_meta_weight[ai_idx];
+         if(meta_w < 0.0)
+         {
+            meta_w = FXAI_GetModelMetaScore(ai_idx, regime_id, runtime_session_bucket, H, min_move_pred);
+            meta_w *= FXAI_StudentRouterFamilyWeight(student_router, manifest.family);
+         }
          if(meta_w <= 0.0) continue;
 
          double model_buy_ev = ((2.0 * class_probs_pred[(int)FXAI_LABEL_BUY]) - 1.0) * expected_move - min_move_pred;

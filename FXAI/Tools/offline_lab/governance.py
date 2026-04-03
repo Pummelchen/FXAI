@@ -6,7 +6,10 @@ from pathlib import Path
 
 from .common import *
 from .shadow_fleet import symbol_shadow_summary
-from .supervisor_service import write_supervisor_service_artifacts
+from .supervisor_service import (
+    write_supervisor_command_artifacts,
+    write_supervisor_service_artifacts,
+)
 from .world_simulator import write_world_model_artifacts
 
 
@@ -320,6 +323,24 @@ def write_world_simulator_plans(conn: sqlite3.Connection,
                 1.0,
                 8.0,
             ),
+            "regime_transition_burst": _clamp(
+                0.70 * float(model.get("regime_transition_burst", 0.0)) +
+                0.18 * adversarial_flag + 0.12 * walkforward_flag,
+                0.0,
+                1.0,
+            ),
+            "mean_revert_bias": _clamp(
+                0.72 * float(model.get("mean_revert_bias", 0.0)) +
+                0.16 * adversarial_flag + 0.12 * float(shadow.get("mean_policy_no_trade_prob", 0.0)),
+                0.0,
+                1.0,
+            ),
+            "vol_cluster_bias": _clamp(
+                0.72 * float(model.get("vol_cluster_bias", 0.0)) +
+                0.16 * spread_flag + 0.12 * float(shadow.get("mean_portfolio_pressure", 0.0)),
+                0.0,
+                1.0,
+            ),
             "weak_scenarios": weak_scenarios,
             "shadow_summary": shadow,
             "world_model": model,
@@ -347,6 +368,9 @@ def write_world_simulator_plans(conn: sqlite3.Connection,
                     ("recovery_bias", payload["recovery_bias"]),
                     ("spread_shock_prob", payload["spread_shock_prob"]),
                     ("spread_shock_scale", payload["spread_shock_scale"]),
+                    ("regime_transition_burst", payload["regime_transition_burst"]),
+                    ("mean_revert_bias", payload["mean_revert_bias"]),
+                    ("vol_cluster_bias", payload["vol_cluster_bias"]),
                 ]
             ),
             encoding="utf-8",
@@ -486,6 +510,7 @@ def run_autonomous_governance(conn: sqlite3.Connection,
 
     supervisor = write_portfolio_supervisor_profile(conn, args)
     supervisor_service = write_supervisor_service_artifacts(conn, args)
+    supervisor_commands = write_supervisor_command_artifacts(conn, args)
     world_plans = write_world_simulator_plans(conn, args)
     artifact_dir = RESEARCH_DIR / safe_token(args.profile)
     ensure_dir(artifact_dir)
@@ -499,6 +524,7 @@ def run_autonomous_governance(conn: sqlite3.Connection,
         "decisions": decisions,
         "portfolio_supervisor": supervisor,
         "supervisor_service": supervisor_service,
+        "supervisor_commands": supervisor_commands,
         "world_plans": world_plans,
     }
     json_path = artifact_dir / "autonomous_governance.json"
