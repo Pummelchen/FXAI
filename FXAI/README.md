@@ -23,10 +23,14 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 
 - `API/`
   Plugin contracts, runtime context helpers, and TensorCore bridges.
+- `API/Context/`
+  Split plugin-context internals for state, payload, transfer, quality, replay, and runtime projection helpers.
 - `Engine/`
   Data loading, feature building, normalization, warmup, runtime orchestration, persistence, and meta layers.
 - `Engine/Core/`
   Shared core helpers split out from `Engine/core.mqh` for analog memory, broker replay, model context, schema handling, and request validation.
+- `Engine/Lifecycle/`
+  Split lifecycle internals for context-symbol discovery, reset and recovery, bootstrap, and compliance or promotion-readiness checks.
 - `Engine/Warmup/`
   Warmup modules split by normalization search, scoring, transfer, portfolio diagnostics, and entrypoint orchestration.
 - `Engine/Runtime/`
@@ -36,9 +40,15 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - `Plugins/`
   Model families and plugin implementations.
 - `Plugins/Sequence/ai_*/`
-  Internal split state and public sections for the largest sequence-model plugins.
+  Internal split state and public sections for the largest sequence-model plugins, including `ai_tcn/`, `ai_s4/`, and `ai_stmn/`.
+- `Plugins/Tree/tree_catboost/`, `Plugins/Tree/tree_lgbm/`
+  Internal split class sections for the largest tree-model plugins.
 - `Tests/`
   Audit Lab scenarios, scoring, reports, and TensorCore sanity checks.
+- `Tests/Scoring/`
+  Split Audit Lab scoring internals for core helpers, adversarial packs, metrics, and scenario execution.
+- `Tools/testlab/`
+  Internal Python package behind `fxai_testlab.py`, split into compile, audit-run, reporting, baseline, optimization, release-gate, and CLI modules.
 
 ## Operating Notes
 
