@@ -21,6 +21,7 @@ from .common import (
     RESEARCH_DIR,
     RUNS_DIR,
     connect_db,
+    close_db,
     current_lab_versions,
     ensure_dir,
     turso_environment_status,
@@ -106,7 +107,7 @@ def bootstrap_environment(db_path: Path = DEFAULT_DB,
     if init_db:
         conn = connect_db(db_path)
         payload["db_versions"] = current_lab_versions(conn)
-        conn.close()
+        close_db(conn)
         payload["db_initialized"] = True
     else:
         payload["db_initialized"] = False

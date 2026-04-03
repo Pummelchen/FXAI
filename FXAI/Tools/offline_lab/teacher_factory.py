@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from .db_backend import LabConnection
 from collections import defaultdict
 from pathlib import Path
+import libsql
 
 from .common import *
 from .mode import resolve_runtime_mode
@@ -81,11 +81,12 @@ DEPLOYMENT_MODEL_FEATURES = [
 ]
 
 
-def _symbol_shadow_training_rows(conn: LabConnection,
+def _symbol_shadow_training_rows(conn: libsql.Connection,
                                  profile_name: str,
                                  symbol: str,
                                  limit: int = 512) -> list[dict]:
-    rows = conn.execute(
+    return query_all(
+        conn,
         """
         SELECT *
           FROM shadow_fleet_observations
@@ -94,8 +95,7 @@ def _symbol_shadow_training_rows(conn: LabConnection,
          LIMIT ?
         """,
         (profile_name, symbol, limit),
-    ).fetchall()
-    return [dict(row) for row in rows]
+    )
 
 
 def _mean_feature_snapshot(rows: list[dict], feature_names: list[str]) -> dict[str, float]:
@@ -144,9 +144,10 @@ def _fit_symbol_deployment_models(rows: list[dict]) -> dict[str, dict]:
     }
 
 
-def _latest_family_scorecards(conn: LabConnection,
+def _latest_family_scorecards(conn: libsql.Connection,
                               profile_name: str) -> dict[tuple[str, int], dict]:
-    rows = conn.execute(
+    rows = query_all(
+        conn,
         """
         SELECT fs.*
           FROM family_scorecards fs
@@ -163,16 +164,17 @@ def _latest_family_scorecards(conn: LabConnection,
          WHERE fs.profile_name = ?
         """,
         (profile_name, profile_name),
-    ).fetchall()
+    )
     return {
         (str(row["symbol"]), int(row["family_id"])): dict(row)
         for row in rows
     }
 
 
-def _latest_distill_artifacts(conn: LabConnection,
+def _latest_distill_artifacts(conn: libsql.Connection,
                               profile_name: str) -> dict[tuple[str, str], dict]:
-    rows = conn.execute(
+    rows = query_all(
+        conn,
         """
         SELECT *
           FROM distillation_artifacts
@@ -180,7 +182,7 @@ def _latest_distill_artifacts(conn: LabConnection,
          ORDER BY created_at DESC
         """,
         (profile_name,),
-    ).fetchall()
+    )
     out: dict[tuple[str, str], dict] = {}
     for row in rows:
         key = (str(row["symbol"]), str(row["plugin_name"]))
@@ -189,9 +191,10 @@ def _latest_distill_artifacts(conn: LabConnection,
     return out
 
 
-def _latest_foundation_bundles(conn: LabConnection,
+def _latest_foundation_bundles(conn: libsql.Connection,
                                profile_name: str) -> dict[str, dict]:
-    rows = conn.execute(
+    rows = query_all(
+        conn,
         """
         SELECT *
           FROM foundation_model_bundles
@@ -199,7 +202,7 @@ def _latest_foundation_bundles(conn: LabConnection,
          ORDER BY created_at DESC
         """,
         (profile_name,),
-    ).fetchall()
+    )
     out: dict[str, dict] = {}
     for row in rows:
         symbol = str(row["symbol"])
@@ -214,9 +217,10 @@ def _latest_foundation_bundles(conn: LabConnection,
     return out
 
 
-def _latest_student_bundles(conn: LabConnection,
+def _latest_student_bundles(conn: libsql.Connection,
                             profile_name: str) -> dict[tuple[str, str], dict]:
-    rows = conn.execute(
+    rows = query_all(
+        conn,
         """
         SELECT *
           FROM student_deployment_bundles
@@ -224,7 +228,7 @@ def _latest_student_bundles(conn: LabConnection,
          ORDER BY created_at DESC
         """,
         (profile_name,),
-    ).fetchall()
+    )
     out: dict[tuple[str, str], dict] = {}
     for row in rows:
         key = (str(row["symbol"]), str(row["plugin_name"]))
@@ -239,7 +243,7 @@ def _latest_student_bundles(conn: LabConnection,
     return out
 
 
-def write_foundation_teacher_artifacts(conn: LabConnection,
+def write_foundation_teacher_artifacts(conn: libsql.Connection,
                                        args,
                                        promoted_rows: list[dict]) -> list[dict]:
     out_dir = DISTILL_DIR / safe_token(args.profile) / "Foundations"
@@ -345,14 +349,15 @@ def write_foundation_teacher_artifacts(conn: LabConnection,
             "artifact_sha256": artifact_sha,
         })
 
-    stale_rows = conn.execute(
+    stale_rows = query_all(
+        conn,
         """
         SELECT symbol, family_id, artifact_path
           FROM foundation_teacher_artifacts
          WHERE profile_name = ? AND scope = 'symbol_family'
         """,
         (args.profile,),
-    ).fetchall()
+    )
     for row in stale_rows:
         key = (str(row["symbol"]), int(row["family_id"]))
         if key in active_keys:
@@ -366,13 +371,13 @@ def write_foundation_teacher_artifacts(conn: LabConnection,
             (args.profile, key[0], key[1]),
         )
 
-    conn.commit()
+    commit_db(conn)
     summary_path = out_dir / "foundation_teachers.json"
     summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
     return artifacts
 
 
-def write_teacher_factory_artifacts(conn: LabConnection,
+def write_teacher_factory_artifacts(conn: libsql.Connection,
                                     args,
                                     promoted_rows: list[dict]) -> list[dict]:
     out_dir = DISTILL_DIR / safe_token(args.profile) / "TeacherFactory"
@@ -424,10 +429,11 @@ def write_teacher_factory_artifacts(conn: LabConnection,
         teacher_path.write_text(json.dumps(teacher_payload, indent=2, sort_keys=True), encoding="utf-8")
         teacher_sha = testlab.sha256_path(teacher_path)
 
-        best_cfg = row_to_dict(conn.execute(
+        best_cfg = query_one(
+            conn,
             "SELECT id FROM best_configs WHERE profile_name = ? AND dataset_scope = 'aggregate' AND symbol = ? AND plugin_name = ?",
             (args.profile, symbol, plugin_name),
-        ).fetchone())
+        )
         best_config_id = int(best_cfg["id"]) if best_cfg else 0
 
         conn.execute(
@@ -482,14 +488,15 @@ def write_teacher_factory_artifacts(conn: LabConnection,
             "teacher_artifact_sha256": teacher_sha,
         })
 
-    stale_rows = conn.execute(
+    stale_rows = query_all(
+        conn,
         """
         SELECT symbol, plugin_name, teacher_artifact_path
           FROM teacher_factories
          WHERE profile_name = ?
-        """,
+       """,
         (args.profile,),
-    ).fetchall()
+    )
     for row in stale_rows:
         key = (str(row["symbol"]), str(row["plugin_name"]))
         if key in active_keys:
@@ -503,13 +510,13 @@ def write_teacher_factory_artifacts(conn: LabConnection,
             (args.profile, key[0], key[1]),
         )
 
-    conn.commit()
+    commit_db(conn)
     summary_path = out_dir / "teacher_factories.json"
     summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
     return artifacts
 
 
-def write_live_deployment_profiles(conn: LabConnection,
+def write_live_deployment_profiles(conn: libsql.Connection,
                                    args) -> list[dict]:
     ensure_dir(COMMON_PROMOTION_DIR)
     out_dir = RESEARCH_DIR / safe_token(args.profile)
@@ -519,7 +526,8 @@ def write_live_deployment_profiles(conn: LabConnection,
     foundation_bundles = _latest_foundation_bundles(conn, args.profile)
     student_bundles = _latest_student_bundles(conn, args.profile)
 
-    champion_rows = conn.execute(
+    champion_rows = query_all(
+        conn,
         """
         SELECT cr.*, bc.parameters_json
           FROM champion_registry cr
@@ -528,20 +536,21 @@ def write_live_deployment_profiles(conn: LabConnection,
          ORDER BY cr.symbol, cr.champion_score DESC, cr.portfolio_score DESC
         """,
         (args.profile,),
-    ).fetchall()
+    )
 
     by_symbol: dict[str, list[dict]] = defaultdict(list)
     for row in champion_rows:
         by_symbol[str(row["symbol"])].append(dict(row))
 
-    existing_rows = conn.execute(
+    existing_rows = query_all(
+        conn,
         """
         SELECT symbol, artifact_path
           FROM live_deployment_profiles
          WHERE profile_name = ?
         """,
         (args.profile,),
-    ).fetchall()
+    )
     existing_symbols = {str(row["symbol"]): str(row["artifact_path"] or "") for row in existing_rows}
 
     deployments: list[dict] = []
@@ -1085,7 +1094,7 @@ def write_live_deployment_profiles(conn: LabConnection,
             (args.profile, symbol),
         )
 
-    conn.commit()
+    commit_db(conn)
     summary_path = out_dir / "live_deployments.json"
     summary_path.write_text(json.dumps(deployments, indent=2, sort_keys=True), encoding="utf-8")
     return deployments

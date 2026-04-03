@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import time
-from .db_backend import LabConnection
 from collections import defaultdict
 from pathlib import Path
+import libsql
 
 from .common import *
 from .shadow_fleet import symbol_shadow_summary
@@ -323,22 +323,25 @@ def _supervisor_payload(symbol: str,
     }
 
 
-def write_supervisor_service_artifacts(conn: LabConnection,
+def write_supervisor_service_artifacts(conn: libsql.Connection,
                                        args) -> list[dict]:
     ensure_dir(COMMON_PROMOTION_DIR)
     out_dir = RESEARCH_DIR / safe_token(args.profile)
     ensure_dir(out_dir)
 
     snapshots = iter_control_plane_snapshots()
-    deploy_rows = conn.execute(
+    deploy_rows = query_all(
+        conn,
         "SELECT symbol, payload_json FROM live_deployment_profiles WHERE profile_name = ?",
         (args.profile,),
-    ).fetchall()
-    prev_rows = conn.execute(
+    )
+    prev_rows = query_all(
+        conn,
         "SELECT symbol, payload_json FROM supervisor_service_states WHERE profile_name = ?",
         (args.profile,),
-    ).fetchall()
-    supervisor_row = row_to_dict(conn.execute(
+    )
+    supervisor_row = query_one(
+        conn,
         """
         SELECT *
           FROM portfolio_supervisor_profiles
@@ -347,7 +350,7 @@ def write_supervisor_service_artifacts(conn: LabConnection,
          LIMIT 1
         """,
         (args.profile,),
-    ).fetchone())
+    )
     deploy_map = {
         str(row["symbol"]): json.loads(row["payload_json"] or "{}")
         for row in deploy_rows
@@ -499,10 +502,11 @@ def write_supervisor_service_artifacts(conn: LabConnection,
             "artifact_sha256": sha,
         })
 
-    stale_rows = conn.execute(
+    stale_rows = query_all(
+        conn,
         "SELECT symbol, artifact_path FROM supervisor_service_states WHERE profile_name = ?",
         (args.profile,),
-    ).fetchall()
+    )
     for row in stale_rows:
         symbol = str(row["symbol"])
         if symbol in active_symbols:
@@ -518,7 +522,7 @@ def write_supervisor_service_artifacts(conn: LabConnection,
             (args.profile, symbol),
         )
 
-    conn.commit()
+    commit_db(conn)
     summary_path = out_dir / "supervisor_service.json"
     summary_path.write_text(json.dumps({
         "profile_name": args.profile,
@@ -529,12 +533,13 @@ def write_supervisor_service_artifacts(conn: LabConnection,
     return artifacts
 
 
-def write_supervisor_command_artifacts(conn: LabConnection,
+def write_supervisor_command_artifacts(conn: libsql.Connection,
                                        args) -> list[dict]:
     ensure_dir(COMMON_PROMOTION_DIR)
     out_dir = RESEARCH_DIR / safe_token(args.profile)
     ensure_dir(out_dir)
-    service_rows = conn.execute(
+    service_rows = query_all(
+        conn,
         """
         SELECT symbol, payload_json
           FROM supervisor_service_states
@@ -542,15 +547,17 @@ def write_supervisor_command_artifacts(conn: LabConnection,
          ORDER BY created_at DESC
         """,
         (args.profile,),
-    ).fetchall()
-    deploy_rows = conn.execute(
+    )
+    deploy_rows = query_all(
+        conn,
         "SELECT symbol, payload_json FROM live_deployment_profiles WHERE profile_name = ?",
         (args.profile,),
-    ).fetchall()
-    router_rows = conn.execute(
+    )
+    router_rows = query_all(
+        conn,
         "SELECT symbol, payload_json FROM student_router_profiles WHERE profile_name = ?",
         (args.profile,),
-    ).fetchall()
+    )
     service_map: dict[str, dict] = {}
     for row in service_rows:
         symbol = str(row["symbol"])
@@ -722,10 +729,11 @@ def write_supervisor_command_artifacts(conn: LabConnection,
             "artifact_sha256": artifact_sha,
         })
 
-    stale_rows = conn.execute(
+    stale_rows = query_all(
+        conn,
         "SELECT symbol, artifact_path FROM supervisor_command_profiles WHERE profile_name = ?",
         (args.profile,),
-    ).fetchall()
+    )
     for row in stale_rows:
         symbol = str(row["symbol"])
         if symbol in active_symbols:
@@ -741,13 +749,13 @@ def write_supervisor_command_artifacts(conn: LabConnection,
             (args.profile, symbol),
         )
 
-    conn.commit()
+    commit_db(conn)
     summary_path = out_dir / "supervisor_commands.json"
     summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
     return artifacts
 
 
-def run_supervisor_daemon(conn: LabConnection,
+def run_supervisor_daemon(conn: libsql.Connection,
                           args) -> dict:
     interval = max(int(getattr(args, "interval_seconds", 30) or 0), 5)
     iterations = int(getattr(args, "iterations", 0) or 0)

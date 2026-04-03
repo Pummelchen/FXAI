@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import csv
 import json
-from .db_backend import LabConnection
 from collections import defaultdict
 from pathlib import Path
+import libsql
 
 from .common import *
 
@@ -29,7 +29,7 @@ def iter_shadow_ledger_files() -> list[Path]:
     return sorted(SHADOW_LEDGER_DIR.glob("fxai_shadow_*.tsv"))
 
 
-def ingest_shadow_fleet_ledgers(conn: LabConnection,
+def ingest_shadow_fleet_ledgers(conn: libsql.Connection,
                                 profile_name: str) -> dict:
     files = iter_shadow_ledger_files()
     rows_ingested = 0
@@ -169,7 +169,7 @@ def ingest_shadow_fleet_ledgers(conn: LabConnection,
                     "portfolio_pressure": row["portfolio_pressure"],
                     "captured_at": captured_at,
                 })
-    conn.commit()
+    commit_db(conn)
 
     out_dir = RESEARCH_DIR / safe_token(profile_name)
     ensure_dir(out_dir)
@@ -205,7 +205,7 @@ def ingest_shadow_fleet_ledgers(conn: LabConnection,
     return summary_payload
 
 
-def latest_shadow_rows(conn: LabConnection,
+def latest_shadow_rows(conn: libsql.Connection,
                        profile_name: str) -> dict[tuple[str, str], dict]:
     sql = """
         SELECT s.*
@@ -223,14 +223,14 @@ def latest_shadow_rows(conn: LabConnection,
                    )
           )
     """
-    rows = conn.execute(sql, (profile_name,)).fetchall()
+    rows = query_all(conn, sql, (profile_name,))
     return {
         (str(row["symbol"]), str(row["plugin_name"])): dict(row)
         for row in rows
     }
 
 
-def symbol_shadow_summary(conn: LabConnection,
+def symbol_shadow_summary(conn: libsql.Connection,
                           profile_name: str,
                           symbol: str) -> dict:
     rows = list(latest_shadow_rows(conn, profile_name).values())

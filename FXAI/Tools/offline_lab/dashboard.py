@@ -5,7 +5,7 @@ import time
 from html import escape
 from pathlib import Path
 
-from .common import COMMON_PROMOTION_DIR, RESEARCH_DIR, current_lab_versions, ensure_dir, safe_token
+from .common import COMMON_PROMOTION_DIR, RESEARCH_DIR, current_lab_versions, ensure_dir, query_all, safe_token
 from .performance import build_symbol_performance_report
 
 
@@ -33,7 +33,8 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
     symbols = sorted(
         {
             str(row["symbol"])
-            for row in conn.execute(
+            for row in query_all(
+                conn,
                 """
                 SELECT symbol FROM live_deployment_profiles WHERE profile_name = ?
                 UNION
@@ -43,10 +44,11 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
                 ORDER BY symbol
                 """,
                 (profile_name, profile_name, profile_name),
-            ).fetchall()
+            )
         }
     )
-    rows = conn.execute(
+    champions = query_all(
+        conn,
         """
         SELECT symbol, plugin_name, status, champion_score, challenger_score, portfolio_score, reviewed_at
           FROM champion_registry
@@ -54,9 +56,9 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
          ORDER BY symbol, plugin_name
         """,
         (profile_name,),
-    ).fetchall()
-    champions = [dict(row) for row in rows]
-    live_rows = conn.execute(
+    )
+    live_rows = query_all(
+        conn,
         """
         SELECT symbol, payload_json, artifact_path, artifact_sha256, created_at
           FROM live_deployment_profiles
@@ -64,7 +66,7 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
          ORDER BY symbol
         """,
         (profile_name,),
-    ).fetchall()
+    )
     deployments = []
     now_unix = int(time.time())
     for row in live_rows:

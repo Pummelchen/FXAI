@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import libsql
 
 from .attribution import *
 from .bundle import *
@@ -153,7 +154,7 @@ def campaign_runs_extended(campaign: dict, limit_plugins: int = 0, limit_experim
     return runs
 
 
-def historical_scenario_weaknesses(conn: LabConnection,
+def historical_scenario_weaknesses(conn: libsql.Connection,
                                    profile_name: str,
                                    symbol: str,
                                    plugin_name: str,
@@ -183,8 +184,7 @@ def historical_scenario_weaknesses(conn: LabConnection,
          GROUP BY rs.scenario
          ORDER BY mean_score ASC, mean_calibration_error DESC, mean_path_quality_error DESC
     """
-    rows = conn.execute(sql, params).fetchall()
-    return [dict(row) for row in rows]
+    return query_all(conn, sql, params)
 
 
 def build_redteam_runs_for_plugin(plugin_name: str,
@@ -292,7 +292,7 @@ def build_redteam_runs_for_plugin(plugin_name: str,
     return deduped, plan
 
 
-def persist_redteam_plan(conn: LabConnection,
+def persist_redteam_plan(conn: libsql.Connection,
                          profile_name: str,
                          group_key: str,
                          symbol: str,
@@ -351,10 +351,10 @@ def persist_redteam_plan(conn: LabConnection,
             now_unix(),
         ),
     )
-    conn.commit()
+    commit_db(conn)
 
 
-def generate_redteam_runs(conn: LabConnection,
+def generate_redteam_runs(conn: libsql.Connection,
                           profile_name: str,
                           group_key: str,
                           dataset: dict,
@@ -417,7 +417,7 @@ def grouped_rows_by_plugin(report_tsv: Path) -> dict[str, list[dict]]:
     return out
 
 
-def upsert_tuning_run(conn: LabConnection,
+def upsert_tuning_run(conn: libsql.Connection,
                       dataset: dict,
                       profile_name: str,
                       group_key: str,
@@ -510,7 +510,7 @@ def upsert_tuning_run(conn: LabConnection,
             finished_at,
         ),
     )
-    run_id = int(conn.execute("SELECT id FROM tuning_runs WHERE param_hash = ?", (param_hash,)).fetchone()[0])
+    run_id = int(query_scalar(conn, "SELECT id FROM tuning_runs WHERE param_hash = ?", (param_hash,), 0))
     conn.execute("DELETE FROM run_scenarios WHERE run_id = ?", (run_id,))
     if summary_plugin:
         for scenario, metrics in summary_plugin.get("scenarios", {}).items():
@@ -532,11 +532,11 @@ def upsert_tuning_run(conn: LabConnection,
                     int(metrics.get("issue_flags", 0)),
                 ),
             )
-    conn.commit()
+    commit_db(conn)
     return run_id
 
 
-def store_baseline_run_bundle(conn: LabConnection,
+def store_baseline_run_bundle(conn: libsql.Connection,
                               dataset: dict,
                               profile_name: str,
                               group_key: str,
@@ -575,7 +575,7 @@ def store_baseline_run_bundle(conn: LabConnection,
         )
 
 
-def run_dataset_baseline(conn: LabConnection, dataset: dict, profile_name: str, args, out_dir: Path) -> dict:
+def run_dataset_baseline(conn: libsql.Connection, dataset: dict, profile_name: str, args, out_dir: Path) -> dict:
     baseline_path = out_dir / "baseline_all.md"
     base_args = testlab.build_effective_audit_args(serious_base_args(args, dataset, baseline_path))
     started_at = now_unix()
@@ -599,7 +599,7 @@ def run_dataset_baseline(conn: LabConnection, dataset: dict, profile_name: str, 
     }
 
 
-def run_dataset_campaign(conn: LabConnection, dataset: dict, profile_name: str, args, out_dir: Path, baseline_summary: dict, base_args) -> list[dict]:
+def run_dataset_campaign(conn: libsql.Connection, dataset: dict, profile_name: str, args, out_dir: Path, baseline_summary: dict, base_args) -> list[dict]:
     oracles = testlab.load_oracles()
     campaign = extend_campaign(testlab.build_optimization_campaign(baseline_summary, oracles), base_args)
     (out_dir / "campaign.json").write_text(json.dumps(campaign, indent=2, sort_keys=True), encoding="utf-8")
@@ -678,7 +678,7 @@ def run_dataset_campaign(conn: LabConnection, dataset: dict, profile_name: str, 
 
 def cmd_init_db(args) -> int:
     conn = connect_db(Path(args.db))
-    conn.close()
+    close_db(conn)
     print(f"initialized Turso/libSQL lab: {args.db}")
     return 0
 
@@ -720,7 +720,7 @@ def cmd_bootstrap(args) -> int:
                 "minimal_bundle": bundle,
             }
         finally:
-            conn.close()
+            close_db(conn)
     if getattr(args, "report", ""):
         report_path = Path(args.report)
         write_environment_report(report_path)
@@ -748,7 +748,7 @@ def cmd_export_dataset(args) -> int:
         for months in months_list:
             datasets.append(export_single_dataset(conn, args, symbol, months, group_key))
     print(json.dumps({"group_key": group_key, "datasets": datasets}, indent=2, sort_keys=True))
-    conn.close()
+    close_db(conn)
     return 0
 
 
@@ -783,7 +783,7 @@ def cmd_tune_zoo(args) -> int:
             "run_count": len(results),
         })
     print(json.dumps({"profile": args.profile, "datasets": all_results}, indent=2, sort_keys=True))
-    conn.close()
+    close_db(conn)
     return 0
 
 
@@ -827,14 +827,14 @@ def cmd_best_params(args) -> int:
         "supervisor_service_artifacts": len(governance_payload.get("supervisor_service", [])),
         "supervisor_command_artifacts": len(governance_payload.get("supervisor_commands", [])),
     }, indent=2, sort_keys=True))
-    conn.close()
+    close_db(conn)
     return 0
 
 
 def cmd_shadow_sync(args) -> int:
     conn = connect_db(Path(args.db))
     payload = ingest_shadow_fleet_ledgers(conn, args.profile)
-    conn.close()
+    close_db(conn)
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
@@ -847,7 +847,7 @@ def cmd_dashboard(args) -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
     finally:
-        conn.close()
+        close_db(conn)
 
 
 def cmd_live_state(args) -> int:
@@ -863,7 +863,7 @@ def cmd_lineage_report(args) -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
     finally:
-        conn.close()
+        close_db(conn)
 
 
 def cmd_minimal_bundle(args) -> int:
@@ -874,7 +874,7 @@ def cmd_minimal_bundle(args) -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
     finally:
-        conn.close()
+        close_db(conn)
 
 
 def cmd_seed_demo(args) -> int:
@@ -919,7 +919,7 @@ def cmd_seed_demo(args) -> int:
         )
         return 0
     finally:
-        conn.close()
+        close_db(conn)
 
 
 def cmd_verify_deterministic(args) -> int:
@@ -951,7 +951,7 @@ def cmd_deploy_profiles(args) -> int:
         }, indent=2, sort_keys=True))
         return 0
     finally:
-        conn.close()
+        close_db(conn)
 
 
 def cmd_autonomous_governance(args) -> int:
@@ -982,14 +982,14 @@ def cmd_autonomous_governance(args) -> int:
         }, indent=2, sort_keys=True))
         return 0
     finally:
-        conn.close()
+        close_db(conn)
 
 
 def cmd_supervisor_sync(args) -> int:
     conn = connect_db(Path(args.db))
     payload = write_supervisor_service_artifacts(conn, args)
     commands = write_supervisor_command_artifacts(conn, args)
-    conn.close()
+    close_db(conn)
     print(json.dumps({"profile": args.profile, "artifacts": payload, "commands": commands}, indent=2, sort_keys=True))
     return 0
 
@@ -1007,7 +1007,7 @@ def cmd_attribution_prune(args) -> int:
         }, indent=2, sort_keys=True))
         return 0
     finally:
-        conn.close()
+        close_db(conn)
 
 
 def cmd_recover_artifacts(args) -> int:
@@ -1042,13 +1042,13 @@ def cmd_recover_artifacts(args) -> int:
         }, indent=2, sort_keys=True))
         return 0
     finally:
-        conn.close()
+        close_db(conn)
 
 
 def cmd_supervisor_daemon(args) -> int:
     conn = connect_db(Path(args.db))
     payload = run_supervisor_daemon(conn, args)
-    conn.close()
+    close_db(conn)
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
@@ -1065,8 +1065,8 @@ def cmd_control_loop(args) -> int:
             "INSERT INTO control_cycles(profile_name, group_key, started_at, status, notes) VALUES(?, ?, ?, 'running', ?)",
             (args.profile, group_key, started_at, f"cycle={cycle_idx}"),
         )
-        cycle_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
-        conn.commit()
+        cycle_id = int(query_scalar(conn, "SELECT last_insert_rowid()", default=0))
+        commit_db(conn)
         try:
             cycle_args = argparse.Namespace(**vars(args))
             cycle_args.group_key = group_key
@@ -1094,14 +1094,14 @@ def cmd_control_loop(args) -> int:
                 "UPDATE control_cycles SET finished_at = ?, status = 'ok', datasets_json = ? WHERE id = ?",
                 (now_unix(), json.dumps(summary_items, indent=2, sort_keys=True), cycle_id),
             )
-            conn.commit()
+            commit_db(conn)
         except Exception as exc:
             conn.execute(
                 "UPDATE control_cycles SET finished_at = ?, status = 'failed', notes = ? WHERE id = ?",
                 (now_unix(), str(exc), cycle_id),
             )
-            conn.commit()
-            conn.close()
+            commit_db(conn)
+            close_db(conn)
             raise
 
         if cycles > 0 and cycle_idx >= cycles:
@@ -1109,7 +1109,7 @@ def cmd_control_loop(args) -> int:
         sleep_seconds = int(getattr(args, "sleep_seconds", 0) or 0)
         if sleep_seconds > 0:
             time.sleep(sleep_seconds)
-    conn.close()
+    close_db(conn)
     return 0
 
 

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-from .db_backend import LabConnection
 import shutil
 from collections import defaultdict
 from pathlib import Path
+import libsql
 
 from .common import *
 
@@ -81,7 +81,7 @@ def write_audit_set_generic(path: Path, row: dict, params: dict) -> None:
     testlab.write_audit_set(path, ns)
 
 
-def load_completed_runs(conn: LabConnection, args) -> list[dict]:
+def load_completed_runs(conn: libsql.Connection, args) -> list[dict]:
     clauses = ["tr.status = 'ok'", "tr.profile_name = ?"]
     params: list[object] = [args.profile]
     dataset_keys = parse_csv_tokens(getattr(args, "dataset_keys", ""))
@@ -103,8 +103,7 @@ def load_completed_runs(conn: LabConnection, args) -> list[dict]:
         WHERE {' AND '.join(clauses)}
         ORDER BY tr.symbol, tr.plugin_name, tr.score DESC, tr.finished_at DESC
     """
-    rows = conn.execute(sql, params).fetchall()
-    return [dict(row) for row in rows]
+    return query_all(conn, sql, params)
 
 
 def aggregate_best_candidates(rows: list[dict]) -> tuple[list[dict], dict[str, int]]:
@@ -179,7 +178,7 @@ def aggregate_best_candidates(rows: list[dict]) -> tuple[list[dict], dict[str, i
     return winners, total_datasets_per_symbol
 
 
-def render_family_scorecards(conn: LabConnection,
+def render_family_scorecards(conn: libsql.Connection,
                              profile_name: str,
                              group_key: str,
                              rows: list[dict],
@@ -188,12 +187,13 @@ def render_family_scorecards(conn: LabConnection,
     for row in promoted_rows:
         promoted_by_family[(str(row["symbol"]), int(row.get("family_id", 11)))] += 1
 
-    champion_rows = conn.execute(
+    champion_rows = query_all(
+        conn,
         "SELECT symbol, family_id, COUNT(*) AS champion_count "
         "FROM champion_registry WHERE profile_name = ? AND status = 'champion' "
         "GROUP BY symbol, family_id",
         (profile_name,),
-    ).fetchall()
+    )
     champion_by_family = {
         (str(row["symbol"]), int(row["family_id"])): int(row["champion_count"])
         for row in champion_rows
@@ -265,7 +265,7 @@ def render_family_scorecards(conn: LabConnection,
     return scorecards
 
 
-def persist_family_scorecards(conn: LabConnection,
+def persist_family_scorecards(conn: libsql.Connection,
                               args,
                               rows: list[dict],
                               promoted_rows: list[dict]) -> list[dict]:
@@ -317,7 +317,7 @@ def persist_family_scorecards(conn: LabConnection,
                 now_ts,
             ),
         )
-    conn.commit()
+    commit_db(conn)
 
     score_json = out_dir / "family_scorecards.json"
     score_tsv = out_dir / "family_scorecards.tsv"
@@ -355,7 +355,7 @@ def persist_family_scorecards(conn: LabConnection,
     return scorecards
 
 
-def persist_lineage_entry(conn: LabConnection,
+def persist_lineage_entry(conn: libsql.Connection,
                           profile_name: str,
                           symbol: str,
                           plugin_name: str,
@@ -387,7 +387,7 @@ def persist_lineage_entry(conn: LabConnection,
     )
 
 
-def update_champion_registry(conn: LabConnection,
+def update_champion_registry(conn: libsql.Connection,
                              args,
                              promoted_rows: list[dict]) -> list[dict]:
     profile_dir = PROFILES_DIR / safe_token(args.profile)
@@ -399,14 +399,16 @@ def update_champion_registry(conn: LabConnection,
         family_id = int(row.get("family_id", 11))
         candidate_rank = float(row["ranking_score"])
         candidate_score = float(row["score"])
-        registry = row_to_dict(conn.execute(
+        registry = query_one(
+            conn,
             "SELECT * FROM champion_registry WHERE profile_name = ? AND symbol = ? AND plugin_name = ?",
             (args.profile, symbol, plugin_name),
-        ).fetchone())
-        best_cfg = row_to_dict(conn.execute(
+        )
+        best_cfg = query_one(
+            conn,
             "SELECT id FROM best_configs WHERE profile_name = ? AND dataset_scope = 'aggregate' AND symbol = ? AND plugin_name = ?",
             (args.profile, symbol, plugin_name),
-        ).fetchone())
+        )
         best_config_id = int(best_cfg["id"]) if best_cfg else 0
         champion_dir = profile_dir / safe_token(symbol)
         ensure_dir(champion_dir)
@@ -529,12 +531,13 @@ def update_champion_registry(conn: LabConnection,
             "score": candidate_score,
         })
 
-    conn.commit()
+    commit_db(conn)
 
-    champion_rows = conn.execute(
+    champion_rows = query_all(
+        conn,
         "SELECT * FROM champion_registry WHERE profile_name = ? AND status = 'champion' ORDER BY symbol, champion_score DESC",
         (args.profile,),
-    ).fetchall()
+    )
     champion_rows_dict = [dict(row) for row in champion_rows]
     by_symbol: dict[str, list[dict]] = defaultdict(list)
     for row in champion_rows_dict:
@@ -558,7 +561,7 @@ def update_champion_registry(conn: LabConnection,
     return decisions
 
 
-def write_distillation_artifacts(conn: LabConnection,
+def write_distillation_artifacts(conn: libsql.Connection,
                                  args,
                                  promoted_rows: list[dict]) -> list[dict]:
     out_dir = DISTILL_DIR / safe_token(args.profile)
@@ -600,10 +603,11 @@ def write_distillation_artifacts(conn: LabConnection,
         }
         artifact_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         artifact_sha = testlab.sha256_path(artifact_path)
-        best_cfg = row_to_dict(conn.execute(
+        best_cfg = query_one(
+            conn,
             "SELECT id FROM best_configs WHERE profile_name = ? AND dataset_scope = 'aggregate' AND symbol = ? AND plugin_name = ?",
             (args.profile, row["symbol"], row["plugin_name"]),
-        ).fetchone())
+        )
         best_config_id = int(best_cfg["id"]) if best_cfg else 0
         conn.execute(
             """
@@ -643,13 +647,13 @@ def write_distillation_artifacts(conn: LabConnection,
             "artifact_path": str(artifact_path),
             "artifact_sha256": artifact_sha,
         })
-    conn.commit()
+    commit_db(conn)
     summary = out_dir / "distillation_artifacts.json"
     summary.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
     return artifacts
 
 
-def persist_best_configs(conn: LabConnection, args, winners: list[dict]) -> list[dict]:
+def persist_best_configs(conn: libsql.Connection, args, winners: list[dict]) -> list[dict]:
     profile_dir = PROFILES_DIR / safe_token(args.profile)
     ensure_dir(profile_dir)
     ensure_dir(COMMON_PROMOTION_DIR)
@@ -719,7 +723,7 @@ def persist_best_configs(conn: LabConnection, args, winners: list[dict]) -> list
         by_symbol[winner["symbol"]].append(promoted)
         promoted_rows.append(promoted)
 
-    conn.commit()
+    commit_db(conn)
 
     for symbol, rows in by_symbol.items():
         top = max(rows, key=lambda item: (float(item["ranking_score"]), float(item["score"])))
@@ -768,5 +772,3 @@ def persist_best_configs(conn: LabConnection, args, winners: list[dict]) -> list
     shutil.copy2(summary_json, common_json)
     shutil.copy2(summary_tsv, common_tsv)
     return promoted_rows
-
-

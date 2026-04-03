@@ -56,7 +56,7 @@ Notes:
 - `verify-deterministic` refreshes or checks the golden fixture outputs for the research OS artifact contract.
 - `fxai_testlab.py verify-all` is the one-command platform verification path: Python tests, deterministic fixture checks, and clean MT5 compiles.
 - Exact-window datasets store the effective exported first and last bar range, so later tuning and promotion stay aligned to the data that was actually ingested.
-- Turso/libSQL access is opened with a bounded retry and busy timeout so overlapping admin and control-loop calls do not fail on transient lock contention.
+- Turso access uses bounded open retry so overlapping admin and control-loop calls fail cleanly instead of drifting silently.
 
 Runtime modes:
 - `research`

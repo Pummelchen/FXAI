@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from .db_backend import LabConnection
 from collections import defaultdict
 from pathlib import Path
+import libsql
 
 from .common import *
 from .shadow_fleet import latest_shadow_rows, symbol_shadow_summary
@@ -45,11 +45,12 @@ FOUNDATION_MODEL_FEATURES = [
 ]
 
 
-def _symbol_shadow_rows(conn: LabConnection,
+def _symbol_shadow_rows(conn: libsql.Connection,
                        profile_name: str,
                        symbol: str,
                        limit: int = 512) -> list[dict]:
-    rows = conn.execute(
+    return query_all(
+        conn,
         """
         SELECT *
           FROM shadow_fleet_observations
@@ -58,8 +59,7 @@ def _symbol_shadow_rows(conn: LabConnection,
          LIMIT ?
         """,
         (profile_name, symbol, limit),
-    ).fetchall()
-    return [dict(row) for row in rows]
+    )
 
 
 def _shadow_feature_snapshot(rows: list[dict]) -> dict[str, float]:
@@ -71,9 +71,10 @@ def _shadow_feature_snapshot(rows: list[dict]) -> dict[str, float]:
     return out
 
 
-def _latest_family_cards(conn: LabConnection,
+def _latest_family_cards(conn: libsql.Connection,
                          profile_name: str) -> dict[tuple[str, int], dict]:
-    rows = conn.execute(
+    rows = query_all(
+        conn,
         """
         SELECT fs.*
           FROM family_scorecards fs
@@ -90,16 +91,17 @@ def _latest_family_cards(conn: LabConnection,
          WHERE fs.profile_name = ?
         """,
         (profile_name, profile_name),
-    ).fetchall()
+    )
     return {
         (str(row["symbol"]), int(row["family_id"])): dict(row)
         for row in rows
     }
 
 
-def _latest_distill_map(conn: LabConnection,
+def _latest_distill_map(conn: libsql.Connection,
                         profile_name: str) -> dict[tuple[str, str], dict]:
-    rows = conn.execute(
+    rows = query_all(
+        conn,
         """
         SELECT *
           FROM distillation_artifacts
@@ -107,7 +109,7 @@ def _latest_distill_map(conn: LabConnection,
          ORDER BY created_at DESC
         """,
         (profile_name,),
-    ).fetchall()
+    )
     out: dict[tuple[str, str], dict] = {}
     for row in rows:
         key = (str(row["symbol"]), str(row["plugin_name"]))
@@ -116,10 +118,11 @@ def _latest_distill_map(conn: LabConnection,
     return out
 
 
-def _latest_dataset_windows(conn: LabConnection,
+def _latest_dataset_windows(conn: libsql.Connection,
                             symbol: str,
                             limit: int = 8) -> list[dict]:
-    rows = conn.execute(
+    return query_all(
+        conn,
         """
         SELECT dataset_key, group_key, months, bars, start_unix, end_unix, source_sha256
           FROM datasets
@@ -128,11 +131,10 @@ def _latest_dataset_windows(conn: LabConnection,
          LIMIT ?
         """,
         (symbol, limit),
-    ).fetchall()
-    return [dict(row) for row in rows]
+    )
 
 
-def write_foundation_model_bundles(conn: LabConnection,
+def write_foundation_model_bundles(conn: libsql.Connection,
                                    args,
                                    promoted_rows: list[dict]) -> list[dict]:
     out_dir = DISTILL_DIR / safe_token(args.profile) / "FoundationFactory"
@@ -277,14 +279,15 @@ def write_foundation_model_bundles(conn: LabConnection,
             "artifact_sha256": artifact_sha,
         })
 
-    stale_rows = conn.execute(
+    stale_rows = query_all(
+        conn,
         """
         SELECT symbol, artifact_path
           FROM foundation_model_bundles
          WHERE profile_name = ? AND bundle_scope = 'symbol'
         """,
         (args.profile,),
-    ).fetchall()
+    )
     for row in stale_rows:
         symbol = str(row["symbol"])
         if symbol in active_symbols:
@@ -297,27 +300,28 @@ def write_foundation_model_bundles(conn: LabConnection,
             (args.profile, symbol),
         )
 
-    conn.commit()
+    commit_db(conn)
     summary_path = out_dir / "foundation_bundles.json"
     summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
     return artifacts
 
 
-def write_student_deployment_bundles(conn: LabConnection,
+def write_student_deployment_bundles(conn: libsql.Connection,
                                      args,
                                      promoted_rows: list[dict]) -> list[dict]:
     out_dir = DISTILL_DIR / safe_token(args.profile) / "StudentFactory"
     ensure_dir(out_dir)
     distill_map = _latest_distill_map(conn, args.profile)
     shadow_map = latest_shadow_rows(conn, args.profile)
-    foundation_rows = conn.execute(
+    foundation_rows = query_all(
+        conn,
         """
         SELECT symbol, payload_json
           FROM foundation_model_bundles
          WHERE profile_name = ? AND bundle_scope = 'symbol'
         """,
         (args.profile,),
-    ).fetchall()
+    )
     foundation_map = {
         str(row["symbol"]): json.loads(row["payload_json"] or "{}")
         for row in foundation_rows
@@ -441,14 +445,15 @@ def write_student_deployment_bundles(conn: LabConnection,
             "artifact_sha256": artifact_sha,
         })
 
-    stale_rows = conn.execute(
+    stale_rows = query_all(
+        conn,
         """
         SELECT symbol, plugin_name, artifact_path
           FROM student_deployment_bundles
          WHERE profile_name = ?
         """,
         (args.profile,),
-    ).fetchall()
+    )
     for row in stale_rows:
         key = (str(row["symbol"]), str(row["plugin_name"]))
         if key in active_keys:
@@ -461,7 +466,7 @@ def write_student_deployment_bundles(conn: LabConnection,
             (args.profile, key[0], key[1]),
         )
 
-    conn.commit()
+    commit_db(conn)
     summary_path = out_dir / "student_bundles.json"
     summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
     return artifacts

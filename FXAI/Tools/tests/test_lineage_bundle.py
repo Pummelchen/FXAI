@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 from offline_lab.attribution import write_attribution_profiles
-from offline_lab.common import connect_db
+from offline_lab.common import close_db, connect_db
 from offline_lab.dashboard import write_profile_dashboard
 from offline_lab.environment import bootstrap_environment
 from offline_lab.fixtures import patched_paths, seed_profile_fixture
@@ -31,7 +31,7 @@ def test_lineage_and_bundle_outputs_render():
             write_profile_dashboard(conn, fixture["profile_name"])
             lineage = write_lineage_report(conn, fixture["profile_name"], fixture["symbol"])
             bundle = write_minimal_live_bundle(conn, fixture["profile_name"])
-            conn.close()
+            close_db(conn)
 
             assert Path(lineage["json_path"]).exists()
             assert Path(lineage["md_path"]).exists()
@@ -39,4 +39,3 @@ def test_lineage_and_bundle_outputs_render():
             assert fixture["symbol"] in lineage["symbols"]
             assert Path(bundle["manifest_path"]).exists()
             assert int(bundle["symbol_count"]) == 1
-

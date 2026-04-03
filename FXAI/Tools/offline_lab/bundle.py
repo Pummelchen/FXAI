@@ -4,7 +4,7 @@ import json
 import shutil
 from pathlib import Path
 
-from .common import COMMON_PROMOTION_DIR, RESEARCH_DIR, ensure_dir, safe_token
+from .common import COMMON_PROMOTION_DIR, RESEARCH_DIR, ensure_dir, query_all, safe_token
 from .performance import runtime_performance_manifest_path
 
 
@@ -17,7 +17,8 @@ def _copy_if_exists(src: Path, dst: Path) -> bool:
 
 
 def write_minimal_live_bundle(conn, profile_name: str, output_dir: Path | None = None) -> dict[str, object]:
-    rows = conn.execute(
+    rows = query_all(
+        conn,
         """
         SELECT symbol, payload_json, artifact_path, artifact_sha256, created_at
           FROM live_deployment_profiles
@@ -25,7 +26,7 @@ def write_minimal_live_bundle(conn, profile_name: str, output_dir: Path | None =
          ORDER BY symbol
         """,
         (profile_name,),
-    ).fetchall()
+    )
     bundle_root = output_dir or (RESEARCH_DIR / safe_token(profile_name) / "minimal_live_bundle")
     ensure_dir(bundle_root)
 

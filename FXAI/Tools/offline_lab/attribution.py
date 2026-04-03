@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-from .db_backend import LabConnection
 from pathlib import Path
+import libsql
 
 from .common import *
 from .mode import resolve_runtime_mode
@@ -32,18 +32,19 @@ def _safe_json(raw: str, default):
         return default
 
 
-def _latest_family_rows(conn: LabConnection,
+def _latest_family_rows(conn: libsql.Connection,
                         profile_name: str,
                         symbol: str) -> dict[int, dict]:
-    rows = conn.execute(
+    rows = query_all(
+        conn,
         """
         SELECT *
           FROM family_scorecards
          WHERE profile_name = ? AND symbol = ?
-         ORDER BY family_id ASC, created_at DESC
+        ORDER BY family_id ASC, created_at DESC
         """,
         (profile_name, symbol),
-    ).fetchall()
+    )
     out: dict[int, dict] = {}
     for row in rows:
         family_id = int(row["family_id"])
@@ -52,28 +53,26 @@ def _latest_family_rows(conn: LabConnection,
     return out
 
 
-def _champion_rows(conn: LabConnection,
+def _champion_rows(conn: libsql.Connection,
                    profile_name: str,
                    symbol: str) -> list[dict]:
-    return [
-        dict(row)
-        for row in conn.execute(
-            """
-            SELECT *
-              FROM champion_registry
-             WHERE profile_name = ? AND symbol = ?
-             ORDER BY
-                   CASE status WHEN 'champion' THEN 0 WHEN 'challenger' THEN 1 ELSE 2 END,
-                   champion_score DESC,
-                   challenger_score DESC,
-                   plugin_name ASC
-            """,
-            (profile_name, symbol),
-        ).fetchall()
-    ]
+    return query_all(
+        conn,
+        """
+        SELECT *
+          FROM champion_registry
+         WHERE profile_name = ? AND symbol = ?
+         ORDER BY
+               CASE status WHEN 'champion' THEN 0 WHEN 'challenger' THEN 1 ELSE 2 END,
+               champion_score DESC,
+               challenger_score DESC,
+               plugin_name ASC
+        """,
+        (profile_name, symbol),
+    )
 
 
-def _latest_plugin_shadow_rows(conn: LabConnection,
+def _latest_plugin_shadow_rows(conn: libsql.Connection,
                                profile_name: str,
                                symbol: str) -> dict[str, dict]:
     rows = latest_shadow_rows(conn, profile_name)
@@ -85,11 +84,12 @@ def _latest_plugin_shadow_rows(conn: LabConnection,
     return out
 
 
-def _feature_group_weights(conn: LabConnection,
+def _feature_group_weights(conn: libsql.Connection,
                            profile_name: str,
                            symbol: str,
                            shadow: dict) -> dict[str, float]:
-    baseline_rows = conn.execute(
+    baseline_rows = query_all(
+        conn,
         """
         SELECT plugin_name, MAX(score) AS best_score
           FROM tuning_runs
@@ -97,13 +97,14 @@ def _feature_group_weights(conn: LabConnection,
          GROUP BY plugin_name
         """,
         (profile_name, symbol),
-    ).fetchall()
+    )
     baseline = {str(row["plugin_name"]): float(row["best_score"]) for row in baseline_rows}
     loss_sum = {name: 0.0 for _, name in FEATURE_GROUPS}
     gain_sum = {name: 0.0 for _, name in FEATURE_GROUPS}
     obs = {name: 0 for _, name in FEATURE_GROUPS}
 
-    rows = conn.execute(
+    rows = query_all(
+        conn,
         """
         SELECT plugin_name, score, parameters_json, experiment_name
           FROM tuning_runs
@@ -113,7 +114,7 @@ def _feature_group_weights(conn: LabConnection,
          LIMIT 512
         """,
         (profile_name, symbol),
-    ).fetchall()
+    )
     for row in rows:
         params = _safe_json(str(row["parameters_json"] or "{}"), {})
         plugin_name = str(row["plugin_name"])
@@ -181,7 +182,7 @@ def _family_weights(family_rows: dict[int, dict],
     return out
 
 
-def _plugin_weights(conn: LabConnection,
+def _plugin_weights(conn: libsql.Connection,
                     profile_name: str,
                     symbol: str,
                     champion_rows: list[dict],
@@ -242,12 +243,13 @@ def _plugin_weights(conn: LabConnection,
     return plugin_weights, prune_reasons, pruned_plugins
 
 
-def write_attribution_profiles(conn: LabConnection,
+def write_attribution_profiles(conn: libsql.Connection,
                                args) -> list[dict]:
     mode_cfg = resolve_runtime_mode(getattr(args, "runtime_mode", None))
     symbols = sorted({
         str(row["symbol"])
-        for row in conn.execute(
+        for row in query_all(
+            conn,
             """
             SELECT DISTINCT symbol
               FROM (
@@ -260,7 +262,7 @@ def write_attribution_profiles(conn: LabConnection,
              ORDER BY symbol
             """,
             (args.profile, args.profile, args.profile),
-        ).fetchall()
+        )
     })
     out_dir = RESEARCH_DIR / safe_token(args.profile)
     ensure_dir(out_dir)
@@ -379,10 +381,11 @@ def write_attribution_profiles(conn: LabConnection,
             "min_meta_weight": float(min_meta_weight),
         })
 
-    stale_rows = conn.execute(
+    stale_rows = query_all(
+        conn,
         "SELECT symbol, artifact_path FROM attribution_profiles WHERE profile_name = ?",
         (args.profile,),
-    ).fetchall()
+    )
     for row in stale_rows:
         symbol = str(row["symbol"])
         if symbol in active_symbols:
@@ -398,7 +401,7 @@ def write_attribution_profiles(conn: LabConnection,
             (args.profile, symbol),
         )
 
-    conn.commit()
+    commit_db(conn)
     summary_path = out_dir / "attribution_profiles.json"
     summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
     return artifacts

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-from .db_backend import LabConnection
 from pathlib import Path
+import libsql
 
 from .common import *
 from .shadow_fleet import symbol_shadow_summary
@@ -29,9 +29,10 @@ def _unlink_if_exists(raw_path: str) -> None:
         pass
 
 
-def write_portfolio_supervisor_profile(conn: LabConnection,
+def write_portfolio_supervisor_profile(conn: libsql.Connection,
                                        args) -> dict:
-    rows = conn.execute(
+    deployments = query_all(
+        conn,
         """
         SELECT *
           FROM live_deployment_profiles
@@ -39,13 +40,13 @@ def write_portfolio_supervisor_profile(conn: LabConnection,
          ORDER BY created_at DESC
         """,
         (args.profile,),
-    ).fetchall()
-    deployments = [dict(row) for row in rows]
+    )
     if not deployments:
-        stale_rows = conn.execute(
+        stale_rows = query_all(
+            conn,
             "SELECT artifact_path FROM portfolio_supervisor_profiles WHERE profile_name = ?",
             (args.profile,),
-        ).fetchall()
+        )
         for row in stale_rows:
             _unlink_if_exists(str(row["artifact_path"] or ""))
         conn.execute(
@@ -56,7 +57,7 @@ def write_portfolio_supervisor_profile(conn: LabConnection,
         stale_json = out_dir / "portfolio_supervisor.json"
         if stale_json.exists():
             stale_json.unlink()
-        conn.commit()
+        commit_db(conn)
         return {}
 
     mean_shadow = 0.0
@@ -175,7 +176,7 @@ def write_portfolio_supervisor_profile(conn: LabConnection,
             now_unix(),
         ),
     )
-    conn.commit()
+    commit_db(conn)
     return {
         "artifact_path": str(tsv_path),
         "artifact_sha256": sha,
@@ -183,14 +184,15 @@ def write_portfolio_supervisor_profile(conn: LabConnection,
     }
 
 
-def write_world_simulator_plans(conn: LabConnection,
+def write_world_simulator_plans(conn: libsql.Connection,
                                 args) -> list[dict]:
     symbols = [
         str(row["symbol"])
-        for row in conn.execute(
+        for row in query_all(
+            conn,
             "SELECT DISTINCT symbol FROM live_deployment_profiles WHERE profile_name = ? ORDER BY symbol",
             (args.profile,),
-        ).fetchall()
+        )
     ]
     out_dir = RESEARCH_DIR / safe_token(args.profile)
     ensure_dir(out_dir)
@@ -206,16 +208,17 @@ def write_world_simulator_plans(conn: LabConnection,
     for symbol in symbols:
         shadow = symbol_shadow_summary(conn, args.profile, symbol)
         model = dict(world_models.get(symbol, {}))
-        redteam = conn.execute(
+        redteam = query_one(
+            conn,
             """
             SELECT plan_json, weak_scenarios_json
               FROM redteam_cycles
              WHERE profile_name = ? AND symbol = ?
              ORDER BY created_at DESC
-             LIMIT 1
+            LIMIT 1
             """,
             (args.profile, symbol),
-        ).fetchone()
+        )
         weak_scenarios = []
         if redteam is not None:
             try:
@@ -445,14 +448,15 @@ def write_world_simulator_plans(conn: LabConnection,
         )
         plans.append({"symbol": symbol, "artifact_path": str(tsv_path), "artifact_sha256": sha})
 
-    stale_rows = conn.execute(
+    stale_rows = query_all(
+        conn,
         """
         SELECT symbol, artifact_path
           FROM world_simulator_plans
          WHERE profile_name = ?
         """,
         (args.profile,),
-    ).fetchall()
+    )
     for row in stale_rows:
         symbol = str(row["symbol"])
         if symbol in active_symbols:
@@ -466,16 +470,17 @@ def write_world_simulator_plans(conn: LabConnection,
             (args.profile, symbol),
         )
 
-    conn.commit()
+    commit_db(conn)
     summary_path = out_dir / "world_simulator_plans.json"
     summary_path.write_text(json.dumps(plans, indent=2, sort_keys=True), encoding="utf-8")
     return plans
 
 
-def run_autonomous_governance(conn: LabConnection,
+def run_autonomous_governance(conn: libsql.Connection,
                               args,
                               cycle_group_key: str = "") -> dict:
-    champion_rows = conn.execute(
+    champion_rows = query_all(
+        conn,
         """
         SELECT *
           FROM champion_registry
@@ -483,15 +488,14 @@ def run_autonomous_governance(conn: LabConnection,
          ORDER BY symbol, plugin_name
         """,
         (args.profile,),
-    ).fetchall()
+    )
     promoted = 0
     challengers = 0
     review = 0
     rollback = 0
     decisions: list[dict] = []
     created_at = now_unix()
-    for row in champion_rows:
-        item = dict(row)
+    for item in champion_rows:
         symbol = str(item["symbol"])
         shadow = symbol_shadow_summary(conn, args.profile, symbol)
         action = "keep"
@@ -589,5 +593,5 @@ def run_autonomous_governance(conn: LabConnection,
             created_at,
         ),
     )
-    conn.commit()
+    commit_db(conn)
     return payload

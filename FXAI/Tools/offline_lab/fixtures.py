@@ -4,10 +4,10 @@ import contextlib
 import importlib
 import json
 import shutil
-from .db_backend import LabConnection
 from pathlib import Path
+import libsql
 
-from .common import ensure_dir, json_compact, now_unix, safe_token, sha256_text
+from .common import commit_db, ensure_dir, json_compact, now_unix, query_one, query_scalar, safe_token, sha256_text
 
 
 PATCH_MODULES = [
@@ -44,7 +44,7 @@ def patched_paths(base_dir: Path):
     distill_dir = offline_dir / "Distillation"
     profiles_dir = offline_dir / "Profiles"
     runs_dir = offline_dir / "Runs"
-    default_db = offline_dir / "fxai_offline_lab.sqlite"
+    default_db = offline_dir / "fxai_offline_lab.turso.db"
     for path in [offline_dir, common_promotion_dir, common_export_dir, runtime_dir, tester_dir, research_dir, distill_dir, profiles_dir, runs_dir]:
         ensure_dir(path)
 
@@ -102,7 +102,7 @@ def _artifact_file(path: Path, text: str) -> tuple[str, str]:
     return str(path), sha256_text(text)
 
 
-def seed_profile_fixture(conn: LabConnection,
+def seed_profile_fixture(conn: libsql.Connection,
                          profile_name: str = "fixture",
                          symbol: str = "EURUSD",
                          plugin_name: str = "ai_mlp",
@@ -123,7 +123,7 @@ def seed_profile_fixture(conn: LabConnection,
         """,
         (dataset_key, group_key, symbol, start_unix, end_unix, dataset_path, sha256_text(dataset_path), now),
     )
-    dataset_id = int(conn.execute("SELECT id FROM datasets WHERE dataset_key = ?", (dataset_key,)).fetchone()[0])
+    dataset_id = int(query_scalar(conn, "SELECT id FROM datasets WHERE dataset_key = ?", (dataset_key,), 0))
 
     params = {"PredictionTargetMinutes": 5, "M1SyncBars": 3, "FeatureSchema": 6}
     params_json = json.dumps(params, sort_keys=True)
@@ -139,10 +139,12 @@ def seed_profile_fixture(conn: LabConnection,
         (dataset_id, profile_name, symbol, plugin_name, family_id, now, params_json, audit_set_path, ea_set_path),
     )
     best_config_id = int(
-        conn.execute(
+        query_scalar(
+            conn,
             "SELECT id FROM best_configs WHERE dataset_scope='aggregate' AND profile_name=? AND symbol=? AND plugin_name=?",
             (profile_name, symbol, plugin_name),
-        ).fetchone()[0]
+            0,
+        )
     )
 
     conn.execute(
@@ -201,7 +203,7 @@ def seed_profile_fixture(conn: LabConnection,
             payload_json,
         ),
     )
-    conn.commit()
+    commit_db(conn)
     return {
         "profile_name": profile_name,
         "symbol": symbol,
@@ -212,14 +214,15 @@ def seed_profile_fixture(conn: LabConnection,
     }
 
 
-def seed_completed_run_fixture(conn: LabConnection,
+def seed_completed_run_fixture(conn: libsql.Connection,
                                fixture: dict[str, object],
                                parameters: dict[str, object] | None = None,
                                score: float = 83.5) -> dict[str, object]:
-    dataset_row = conn.execute(
+    dataset_row = query_one(
+        conn,
         "SELECT id, symbol, dataset_key FROM datasets WHERE dataset_key = ?",
         (str(fixture["dataset_key"]),),
-    ).fetchone()
+    )
     if dataset_row is None:
         raise ValueError("fixture dataset not found")
 
@@ -279,10 +282,11 @@ def seed_completed_run_fixture(conn: LabConnection,
             finished_at,
         ),
     )
-    run_row = conn.execute(
+    run_row = query_one(
+        conn,
         "SELECT id FROM tuning_runs WHERE param_hash = ?",
         (param_hash,),
-    ).fetchone()
+    )
     if run_row is None:
         raise RuntimeError("failed to seed tuning run fixture")
     run_id = int(run_row["id"])
@@ -300,7 +304,7 @@ def seed_completed_run_fixture(conn: LabConnection,
             """,
             (run_id, scenario_name, scenario_score, 0.10, 0.20, 0.15, 0.55, 0.62, 0.0, 0),
         )
-    conn.commit()
+    commit_db(conn)
     return {
         "run_id": run_id,
         "dataset_id": int(dataset_row["id"]),

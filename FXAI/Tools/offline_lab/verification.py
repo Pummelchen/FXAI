@@ -7,7 +7,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from .common import connect_db, safe_token
+from .common import close_db, connect_db, safe_token
 from .dashboard import live_state_snapshot, write_profile_dashboard
 from .environment import bootstrap_environment
 from .fixtures import clear_generated_outputs, patched_paths, seed_profile_fixture
@@ -62,7 +62,7 @@ def verify_deterministic_outputs(refresh_golden: bool = False) -> dict[str, obje
             dashboard = write_profile_dashboard(conn, profile_name)
             lineage = write_lineage_report(conn, profile_name, "EURUSD")
             bundle = write_minimal_live_bundle(conn, profile_name)
-            conn.close()
+            close_db(conn)
 
             live = live_state_snapshot(profile_name, "EURUSD")
             checks = {

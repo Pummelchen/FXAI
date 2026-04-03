@@ -1,6 +1,4 @@
-FXAI/Tools/OfflineLab/fxai_offline_lab.sqlite
-FXAI/Tools/OfflineLab/fxai_offline_lab.sqlite-shm
-FXAI/Tools/OfflineLab/fxai_offline_lab.sqlite-wal
+FXAI/Tools/OfflineLab/fxai_offline_lab.turso.db
 FXAI/Tools/OfflineLab/Profiles/
 FXAI/Tools/OfflineLab/ResearchOS/
 FXAI/Tools/OfflineLab/Distillation/

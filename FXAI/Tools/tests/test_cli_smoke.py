@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 
 from offline_lab import cli as offline_cli
-from offline_lab.common import connect_db
+from offline_lab.common import close_db, connect_db, query_one
 from offline_lab.environment import bootstrap_environment
 from offline_lab.fixtures import patched_paths, seed_completed_run_fixture, seed_profile_fixture
 
@@ -17,7 +17,7 @@ def test_best_params_smoke():
             conn = connect_db(paths["default_db"])
             fixture = seed_profile_fixture(conn, profile_name="bestparams")
             seed_completed_run_fixture(conn, fixture)
-            conn.close()
+            close_db(conn)
 
             args = argparse.Namespace(
                 db=str(paths["default_db"]),
@@ -39,12 +39,12 @@ def test_control_loop_smoke():
             bootstrap_environment(paths["default_db"], init_db=True)
             conn = connect_db(paths["default_db"])
             fixture = seed_profile_fixture(conn, profile_name="loop")
-            dataset = dict(
-                conn.execute(
-                    "SELECT * FROM datasets WHERE dataset_key = ?",
-                    (fixture["dataset_key"],),
-                ).fetchone()
+            dataset = query_one(
+                conn,
+                "SELECT * FROM datasets WHERE dataset_key = ?",
+                (fixture["dataset_key"],),
             )
+            assert dataset is not None
 
             saved = {
                 "compile_export_runner": offline_cli.compile_export_runner,
@@ -94,10 +94,11 @@ def test_control_loop_smoke():
                 rc = offline_cli.cmd_control_loop(args)
                 assert rc == 0
                 assert best_params_called["count"] == 1
-                row = conn.execute(
+                row = query_one(
+                    conn,
                     "SELECT status FROM control_cycles WHERE profile_name = ? ORDER BY id DESC LIMIT 1",
                     ("loop",),
-                ).fetchone()
+                )
                 assert row is not None
                 assert str(row["status"]) == "ok"
             finally:
@@ -107,7 +108,7 @@ def test_control_loop_smoke():
                 offline_cli.run_dataset_baseline = saved["run_dataset_baseline"]
                 offline_cli.run_dataset_campaign = saved["run_dataset_campaign"]
                 offline_cli.cmd_best_params = saved["cmd_best_params"]
-                conn.close()
+                close_db(conn)
 
 
 def test_seed_demo_respects_runtime_mode():
@@ -123,10 +124,11 @@ def test_seed_demo_respects_runtime_mode():
             rc = offline_cli.cmd_seed_demo(args)
             assert rc == 0
             conn = connect_db(paths["default_db"])
-            row = conn.execute(
+            row = query_one(
+                conn,
                 "SELECT runtime_mode FROM live_deployment_profiles WHERE profile_name = ? AND symbol = ?",
                 ("seedmode", "EURUSD"),
-            ).fetchone()
-            conn.close()
+            )
+            close_db(conn)
             assert row is not None
             assert str(row["runtime_mode"]) == "production"

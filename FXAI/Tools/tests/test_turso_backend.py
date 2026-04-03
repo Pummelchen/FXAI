@@ -4,13 +4,13 @@ import tempfile
 from pathlib import Path
 from unittest.mock import Mock
 
-from offline_lab.db_backend import LabConnection, TursoConfig, connect_backend
-from offline_lab.common import OfflineLabError, connect_db
+from offline_lab.db_backend import TursoConfig, commit_backend, connect_backend, register_connection_config
+from offline_lab.common import OfflineLabError, close_db, connect_db, query_one
 from offline_lab.environment import bootstrap_environment, validate_environment
 from offline_lab.fixtures import patched_paths
 
 
-def test_turso_row_compatibility_supports_mapping_and_index_access():
+def test_turso_queries_use_explicit_mapping_helpers():
     with tempfile.TemporaryDirectory(prefix="fxai_turso_") as tmp_dir:
         with patched_paths(Path(tmp_dir)) as paths:
             bootstrap_environment(paths["default_db"], init_db=True)
@@ -24,19 +24,17 @@ def test_turso_row_compatibility_supports_mapping_and_index_access():
                     updated_at=excluded.updated_at
                 """
             )
-            conn.commit()
-            row = conn.execute(
+            commit_backend(conn)
+            row = query_one(
+                conn,
                 "SELECT meta_key, meta_value FROM lab_metadata WHERE meta_key = ?",
                 ("row_test",),
-            ).fetchone()
-            conn.close()
+            )
+            close_db(conn)
 
             assert row is not None
             assert row["meta_key"] == "row_test"
             assert row["meta_value"] == "ok"
-            assert row[0] == "row_test"
-            assert row[1] == "ok"
-            assert dict(row) == {"meta_key": "row_test", "meta_value": "ok"}
 
 
 def test_environment_reports_turso_dependencies():
@@ -48,7 +46,7 @@ def test_environment_reports_turso_dependencies():
 
 def test_embedded_replica_commit_triggers_sync():
     raw = Mock()
-    conn = LabConnection(
+    register_connection_config(
         raw,
         TursoConfig(
             database=Path("/tmp/fxai-test.db"),
@@ -56,7 +54,7 @@ def test_embedded_replica_commit_triggers_sync():
             auth_token="token",
         ),
     )
-    conn.commit()
+    commit_backend(raw)
     raw.commit.assert_called_once()
     raw.sync.assert_called_once()
 

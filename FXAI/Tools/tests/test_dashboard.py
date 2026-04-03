@@ -3,7 +3,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from offline_lab.common import connect_db
+from offline_lab.common import close_db, connect_db
 from offline_lab.dashboard import live_state_snapshot, write_profile_dashboard
 from offline_lab.environment import bootstrap_environment
 from offline_lab.fixtures import patched_paths, seed_profile_fixture
@@ -26,8 +26,7 @@ def test_dashboard_and_live_state_render():
             run_autonomous_governance(conn, args, "dash")
             payload = write_profile_dashboard(conn, fixture["profile_name"])
             live = live_state_snapshot(fixture["profile_name"], fixture["symbol"])
-            conn.close()
+            close_db(conn)
             assert Path(payload["html_path"]).exists()
             assert live["deployment"]
             assert live["router"]
-

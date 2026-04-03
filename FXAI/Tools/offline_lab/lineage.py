@@ -4,7 +4,7 @@ import json
 from html import escape
 from pathlib import Path
 
-from .common import RESEARCH_DIR, ensure_dir, safe_token
+from .common import RESEARCH_DIR, ensure_dir, query_all, safe_token
 from .dashboard import live_state_snapshot
 
 
@@ -15,37 +15,40 @@ def build_lineage_report(conn, profile_name: str, symbol: str = "") -> dict[str,
         symbol_clause = " AND symbol = ?"
         params.append(symbol)
 
-    champion_rows = conn.execute(
+    champion_rows = query_all(
+        conn,
         f"""
         SELECT profile_name, symbol, plugin_name, family_id, status, champion_score, challenger_score,
                portfolio_score, champion_best_config_id, promoted_at, reviewed_at, notes
           FROM champion_registry
          WHERE profile_name = ?{symbol_clause}
-         ORDER BY symbol, plugin_name
+        ORDER BY symbol, plugin_name
         """,
         params,
-    ).fetchall()
+    )
 
-    deploy_rows = conn.execute(
+    deploy_rows = query_all(
+        conn,
         f"""
         SELECT symbol, payload_json, artifact_path, artifact_sha256, created_at
           FROM live_deployment_profiles
          WHERE profile_name = ?{symbol_clause}
-         ORDER BY symbol
+        ORDER BY symbol
         """,
         params,
-    ).fetchall()
+    )
 
-    lineage_rows = conn.execute(
+    lineage_rows = query_all(
+        conn,
         f"""
         SELECT symbol, plugin_name, family_id, source_run_id, best_config_id, relation, lineage_hash,
                payload_json, created_at
           FROM config_lineage
          WHERE profile_name = ?{symbol_clause}
-         ORDER BY symbol, plugin_name, created_at DESC
+        ORDER BY symbol, plugin_name, created_at DESC
         """,
         params,
-    ).fetchall()
+    )
 
     champion_by_symbol: dict[str, list[dict[str, object]]] = {}
     for row in champion_rows:

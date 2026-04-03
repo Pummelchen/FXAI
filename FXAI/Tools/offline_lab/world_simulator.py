@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import math
-from .db_backend import LabConnection
 from datetime import datetime, timezone
 from pathlib import Path
+import libsql
 
 from .common import *
 from .shadow_fleet import symbol_shadow_summary
@@ -55,11 +55,12 @@ def _session_bucket_from_hour(hour: int) -> str:
     return "asia"
 
 
-def build_symbol_world_model(conn: LabConnection,
+def build_symbol_world_model(conn: libsql.Connection,
                              profile_name: str,
                              symbol: str,
                              dataset_limit: int = 4) -> dict:
-    dataset_rows = conn.execute(
+    dataset_rows = query_all(
+        conn,
         """
         SELECT id, dataset_key, months, bars, start_unix, end_unix
           FROM datasets
@@ -68,7 +69,7 @@ def build_symbol_world_model(conn: LabConnection,
          LIMIT ?
         """,
         (symbol, dataset_limit),
-    ).fetchall()
+    )
     if not dataset_rows:
         shadow = symbol_shadow_summary(conn, profile_name, symbol)
         return {
@@ -119,7 +120,8 @@ def build_symbol_world_model(conn: LabConnection,
     total_bars = 0
 
     for dataset in dataset_rows:
-        bars = conn.execute(
+        bars = query_all(
+            conn,
             """
             SELECT bar_time_unix, open, high, low, close, spread_points
               FROM dataset_bars
@@ -127,7 +129,7 @@ def build_symbol_world_model(conn: LabConnection,
              ORDER BY bar_time_unix ASC
             """,
             (int(dataset["id"]),),
-        ).fetchall()
+        )
         if len(bars) < 8:
             continue
         dataset_payloads.append({
@@ -361,7 +363,7 @@ def build_symbol_world_model(conn: LabConnection,
     }
 
 
-def write_world_model_artifacts(conn: LabConnection,
+def write_world_model_artifacts(conn: libsql.Connection,
                                 args,
                                 symbols: list[str]) -> list[dict]:
     out_dir = RESEARCH_DIR / safe_token(args.profile) / "WorldModels"

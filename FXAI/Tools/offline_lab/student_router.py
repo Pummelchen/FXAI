@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-from .db_backend import LabConnection
 from pathlib import Path
+import libsql
 
 from .common import *
 from .mode import resolve_runtime_mode
@@ -20,9 +20,10 @@ def _safe_json(raw: str, default):
         return default
 
 
-def _latest_attribution_payload(conn: LabConnection,
+def _latest_attribution_payload(conn: libsql.Connection,
                                 profile_name: str) -> dict[str, dict]:
-    rows = conn.execute(
+    rows = query_all(
+        conn,
         """
         SELECT symbol, payload_json
           FROM attribution_profiles
@@ -30,7 +31,7 @@ def _latest_attribution_payload(conn: LabConnection,
          ORDER BY created_at DESC
         """,
         (profile_name,),
-    ).fetchall()
+    )
     out: dict[str, dict] = {}
     for row in rows:
         symbol = str(row["symbol"])
@@ -39,10 +40,11 @@ def _latest_attribution_payload(conn: LabConnection,
     return out
 
 
-def _family_strengths(conn: LabConnection,
+def _family_strengths(conn: libsql.Connection,
                       profile_name: str,
                       symbol: str) -> dict[str, float]:
-    rows = conn.execute(
+    rows = query_all(
+        conn,
         """
         SELECT family_id, MAX(mean_score) AS best_score, MAX(stability_score) AS best_stability
           FROM family_scorecards
@@ -50,7 +52,7 @@ def _family_strengths(conn: LabConnection,
          GROUP BY family_id
         """,
         (profile_name, symbol),
-    ).fetchall()
+    )
     out: dict[str, float] = {}
     for row in rows:
         family_name = plugin_family_name(int(row["family_id"]))
@@ -77,12 +79,13 @@ def _parse_plugin_weights(payload: dict) -> dict[str, float]:
     return out
 
 
-def write_student_router_profiles(conn: LabConnection,
+def write_student_router_profiles(conn: libsql.Connection,
                                   args) -> list[dict]:
     mode_cfg = resolve_runtime_mode(getattr(args, "runtime_mode", None))
     symbols = sorted({
         str(row["symbol"])
-        for row in conn.execute(
+        for row in query_all(
+            conn,
             """
             SELECT DISTINCT symbol
               FROM (
@@ -95,7 +98,7 @@ def write_student_router_profiles(conn: LabConnection,
              ORDER BY symbol
             """,
             (args.profile, args.profile, args.profile),
-        ).fetchall()
+        )
     })
     out_dir = RESEARCH_DIR / safe_token(args.profile)
     ensure_dir(out_dir)
@@ -108,7 +111,8 @@ def write_student_router_profiles(conn: LabConnection,
     for symbol in symbols:
         shadow = symbol_shadow_summary(conn, args.profile, symbol)
         attr = dict(attribution_map.get(symbol, {}))
-        bundle_rows = conn.execute(
+        bundle_rows = query_all(
+            conn,
             """
             SELECT plugin_name, family_id, deployment_json
               FROM student_deployment_bundles
@@ -116,10 +120,11 @@ def write_student_router_profiles(conn: LabConnection,
              ORDER BY created_at DESC, plugin_name ASC
             """,
             (args.profile, symbol),
-        ).fetchall()
+        )
         champions = [
             dict(row)
-            for row in conn.execute(
+            for row in query_all(
+                conn,
                 """
                 SELECT plugin_name, status, champion_score, challenger_score, family_id
                   FROM champion_registry
@@ -131,7 +136,7 @@ def write_student_router_profiles(conn: LabConnection,
                        plugin_name ASC
                 """,
                 (args.profile, symbol),
-            ).fetchall()
+            )
         ]
         family_weights = {plugin_family_name(fid): 0.90 for fid in range(0, 12)}
         family_weights.update(_family_strengths(conn, args.profile, symbol))
@@ -270,10 +275,11 @@ def write_student_router_profiles(conn: LabConnection,
             "min_meta_weight": float(min_meta_weight),
         })
 
-    stale_rows = conn.execute(
+    stale_rows = query_all(
+        conn,
         "SELECT symbol, artifact_path FROM student_router_profiles WHERE profile_name = ?",
         (args.profile,),
-    ).fetchall()
+    )
     for row in stale_rows:
         symbol = str(row["symbol"])
         if symbol in active_symbols:
@@ -289,7 +295,7 @@ def write_student_router_profiles(conn: LabConnection,
             (args.profile, symbol),
         )
 
-    conn.commit()
+    commit_db(conn)
     summary_path = out_dir / "student_router_profiles.json"
     summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
     return artifacts

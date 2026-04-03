@@ -12,22 +12,25 @@ import sys
 import tempfile
 import time
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 
 import fxai_testlab as testlab
+import libsql
 
 from .db_backend import (
     TURSO_AUTH_TOKEN_ENV,
     TURSO_DATABASE_URL_ENV,
-    LabConnection,
     TursoConfig,
+    close_backend,
+    commit_backend,
     connect_backend,
+    sync_backend,
 )
 
 OFFLINE_DIR = Path(__file__).resolve().parent.parent / "OfflineLab"
-DEFAULT_DB = OFFLINE_DIR / "fxai_offline_lab.sqlite"
+DEFAULT_DB = OFFLINE_DIR / "fxai_offline_lab.turso.db"
 RUNS_DIR = OFFLINE_DIR / "Runs"
 PROFILES_DIR = OFFLINE_DIR / "Profiles"
 RESEARCH_DIR = OFFLINE_DIR / "ResearchOS"
@@ -47,8 +50,6 @@ OFFLINE_ARTIFACT_SCHEMA_VERSION = 2
 OFFLINE_MACRO_SCHEMA_MIN = 2
 
 SQL_SCHEMA = """
-PRAGMA journal_mode=WAL;
-PRAGMA synchronous=NORMAL;
 PRAGMA foreign_keys=ON;
 
 CREATE TABLE IF NOT EXISTS lab_metadata (
@@ -640,13 +641,70 @@ def resolve_months_list(raw: str) -> list[int]:
     return out or list(DEFAULT_MONTHS_LIST)
 
 
-def ensure_table_column(conn: LabConnection, table: str, column: str, spec: str) -> None:
-    columns = {str(row["name"]).lower() for row in conn.execute(f"PRAGMA table_info({table})")}
+def _cursor_column_names(cursor: libsql.Cursor) -> list[str]:
+    description = cursor.description or []
+    return [str(item[0] or "") for item in description]
+
+
+def _row_to_mapping(column_names: Sequence[str], row: Sequence[object]) -> dict[str, object]:
+    return {
+        str(column_names[idx]): row[idx]
+        for idx in range(min(len(column_names), len(row)))
+    }
+
+
+def fetch_all_dicts(cursor: libsql.Cursor) -> list[dict[str, object]]:
+    column_names = _cursor_column_names(cursor)
+    return [_row_to_mapping(column_names, row) for row in cursor.fetchall()]
+
+
+def fetch_one_dict(cursor: libsql.Cursor) -> dict[str, object] | None:
+    column_names = _cursor_column_names(cursor)
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    return _row_to_mapping(column_names, row)
+
+
+def query_all(conn: libsql.Connection,
+              sql: str,
+              params: Sequence[object] | None = None) -> list[dict[str, object]]:
+    cursor = conn.execute(sql, tuple(params or ()))
+    return fetch_all_dicts(cursor)
+
+
+def query_one(conn: libsql.Connection,
+              sql: str,
+              params: Sequence[object] | None = None) -> dict[str, object] | None:
+    cursor = conn.execute(sql, tuple(params or ()))
+    return fetch_one_dict(cursor)
+
+
+def query_scalar(conn: libsql.Connection,
+                 sql: str,
+                 params: Sequence[object] | None = None,
+                 default=None):
+    row = conn.execute(sql, tuple(params or ())).fetchone()
+    if row is None or len(row) <= 0:
+        return default
+    return row[0]
+
+
+def commit_db(conn: libsql.Connection) -> None:
+    commit_backend(conn)
+
+
+def close_db(conn: libsql.Connection) -> None:
+    close_backend(conn)
+
+
+def ensure_table_column(conn: libsql.Connection, table: str, column: str, spec: str) -> None:
+    columns = {str(row["name"]).lower() for row in query_all(conn, f"PRAGMA table_info({table})")}
     if column.lower() not in columns:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {spec}")
 
 
-def set_metadata(conn: LabConnection, key: str, value: str) -> None:
+def set_metadata(conn: libsql.Connection, key: str, value: str) -> None:
     conn.execute(
         """
         INSERT INTO lab_metadata(meta_key, meta_value, updated_at)
@@ -659,25 +717,23 @@ def set_metadata(conn: LabConnection, key: str, value: str) -> None:
     )
 
 
-def get_metadata(conn: LabConnection, key: str, default: str = "") -> str:
-    row = conn.execute(
+def get_metadata(conn: libsql.Connection, key: str, default: str = "") -> str:
+    row = query_one(
+        conn,
         "SELECT meta_value FROM lab_metadata WHERE meta_key = ?",
         (str(key),),
-    ).fetchone()
+    )
     if row is None:
         return str(default)
-    try:
-        return str(row["meta_value"])
-    except Exception:
-        return str(default)
+    return str(row.get("meta_value", default))
 
 
-def current_lab_versions(conn: LabConnection) -> dict[str, str]:
+def current_lab_versions(conn: libsql.Connection) -> dict[str, str]:
     return {
         "offline_schema_version": get_metadata(conn, "offline_schema_version", str(OFFLINE_SCHEMA_VERSION)),
         "artifact_schema_version": get_metadata(conn, "artifact_schema_version", str(OFFLINE_ARTIFACT_SCHEMA_VERSION)),
         "macro_schema_min": get_metadata(conn, "macro_schema_min", str(OFFLINE_MACRO_SCHEMA_MIN)),
-        "db_backend": get_metadata(conn, "db_backend", "turso_local_libsql"),
+        "db_backend": get_metadata(conn, "db_backend", "turso_local"),
         "turso_sync_mode": get_metadata(conn, "turso_sync_mode", "local_only"),
     }
 
@@ -706,7 +762,7 @@ def _is_retryable_db_error(exc: Exception) -> bool:
     return "locked" in text or "busy" in text
 
 
-def connect_db(db_path: Path) -> LabConnection:
+def connect_db(db_path: Path) -> libsql.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     config = resolve_turso_config(db_path)
     try:
@@ -715,12 +771,10 @@ def connect_db(db_path: Path) -> LabConnection:
         raise OfflineLabError(str(exc)) from exc
     last_error: Exception | None = None
     for attempt in range(6):
-        conn: LabConnection | None = None
+        conn: libsql.Connection | None = None
         try:
             conn = connect_backend(config, timeout=30.0)
-            conn.execute("PRAGMA busy_timeout=30000")
-            if conn.sync_enabled:
-                conn.sync()
+            sync_backend(conn)
             conn.executescript(SQL_SCHEMA)
             ensure_table_column(conn, "tuning_runs", "group_key", "TEXT NOT NULL DEFAULT ''")
             ensure_table_column(conn, "tuning_runs", "family_id", "INTEGER NOT NULL DEFAULT 11")
@@ -792,18 +846,18 @@ def connect_db(db_path: Path) -> LabConnection:
             set_metadata(conn, "macro_schema_min", str(OFFLINE_MACRO_SCHEMA_MIN))
             set_metadata(conn, "db_backend", str(config.backend_name))
             set_metadata(conn, "turso_sync_mode", str(config.sync_mode))
-            conn.commit()
+            commit_db(conn)
             return conn
         except Exception as exc:
             last_error = exc
             if conn is not None:
-                conn.close()
+                close_db(conn)
             if not _is_retryable_db_error(exc) or attempt >= 5:
                 raise
             time.sleep(0.25 * float(attempt + 1))
     if last_error is not None:
         raise last_error
-    raise OfflineLabError(f"failed to open Turso libSQL lab: {db_path}")
+    raise OfflineLabError(f"failed to open Turso lab: {db_path}")
 
 
 def plugin_family_name(family_id: int) -> str:
@@ -1041,10 +1095,6 @@ def family_distillation_profile(family_id: int) -> dict:
         "analog_weight": 0.08,
         "foundation_weight": 0.14,
     }
-
-
-def row_to_dict(row: Mapping[str, object] | None) -> dict | None:
-    return dict(row) if row is not None else None
 
 
 def ensure_dir(path: Path) -> None:
