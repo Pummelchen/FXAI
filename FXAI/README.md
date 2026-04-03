@@ -15,7 +15,9 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - `Tools/fxai_testlab.py`
   External compile, audit, baseline, and release-gate tool.
 - `Tools/fxai_offline_lab.py`
-  SQLite-backed offline export, tuning, promotion, and control-loop tool.
+  Stable CLI wrapper for the SQLite-backed offline export, tuning, promotion, and control-loop tool.
+- `Tools/offline_lab/`
+  Internal Python package for Offline Lab database, export, campaign, and promotion modules.
 
 ## Key Runtime Areas
 
@@ -23,10 +25,18 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
   Plugin contracts, runtime context helpers, and TensorCore bridges.
 - `Engine/`
   Data loading, feature building, normalization, warmup, runtime orchestration, persistence, and meta layers.
+- `Engine/Core/`
+  Shared core helpers split out from `Engine/core.mqh` for analog memory, broker replay, model context, schema handling, and request validation.
+- `Engine/Warmup/`
+  Warmup modules split by normalization search, scoring, transfer, portfolio diagnostics, and entrypoint orchestration.
+- `Engine/Runtime/`
+  Extracted live-trading helpers used by the EA entrypoint.
 - `TensorCore/`
   Internal neural runtime shared by the stronger sequence and tensor-heavy plugins.
 - `Plugins/`
   Model families and plugin implementations.
+- `Plugins/Sequence/ai_*/`
+  Internal split state and public sections for the largest sequence-model plugins.
 - `Tests/`
   Audit Lab scenarios, scoring, reports, and TensorCore sanity checks.
 
