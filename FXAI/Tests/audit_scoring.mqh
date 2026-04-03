@@ -863,7 +863,7 @@ bool FXAI_AuditRunScenario(CFXAIAIRegistry &registry,
    if(plugin == NULL) return false;
 
    FXAIAIManifestV4 manifest;
-   plugin.Describe(manifest);
+   FXAI_GetPluginManifest(*plugin, manifest);
    FXAI_AuditResetMetrics(out, ai_idx, manifest.ai_name, manifest.family, spec.name, bars);
 
    datetime time_arr[];

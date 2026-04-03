@@ -10,7 +10,7 @@ void FXAI_ClearContextV4(FXAIAIContextV4 &ctx)
    ctx.cost_points = 0.0;
    ctx.min_move_points = 0.0;
    ctx.point_value = 0.0;
-    ctx.domain_hash = FXAI_SymbolHash01(_Symbol);
+   ctx.domain_hash = FXAI_SymbolHash01(_Symbol);
    ctx.sample_time = 0;
 }
 
@@ -76,6 +76,61 @@ bool FXAI_ValidateContextV4(const FXAIAIContextV4 &ctx,
    return true;
 }
 
+bool FXAI_ValidateWindowPayloadV4(const double &x_window[][FXAI_AI_WEIGHTS],
+                                  const int window_size,
+                                  string &reason)
+{
+   if(window_size < 0 || window_size > FXAI_MAX_SEQUENCE_BARS)
+   {
+      reason = "req.window_size";
+      return false;
+   }
+
+   for(int b=0; b<window_size; b++)
+   {
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      {
+         if(!MathIsValidNumber(x_window[b][k]))
+         {
+            reason = "req.x_window";
+            return false;
+         }
+      }
+   }
+
+   reason = "";
+   return true;
+}
+
+bool FXAI_ValidateManifestContextCompatibilityV4(const FXAIAIManifestV4 &manifest,
+                                                 const FXAIAIContextV4 &ctx,
+                                                 string &reason)
+{
+   if(ctx.horizon_minutes < manifest.min_horizon_minutes ||
+      ctx.horizon_minutes > manifest.max_horizon_minutes)
+   {
+      reason = "ctx.horizon_manifest";
+      return false;
+   }
+   if(ctx.sequence_bars < manifest.min_sequence_bars ||
+      ctx.sequence_bars > manifest.max_sequence_bars)
+   {
+      reason = "ctx.sequence_manifest";
+      return false;
+   }
+
+   bool expects_window = (FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_WINDOW_CONTEXT) ||
+                          FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL));
+   if(!expects_window && ctx.sequence_bars != 1)
+   {
+      reason = "ctx.sequence_unexpected";
+      return false;
+   }
+
+   reason = "";
+   return true;
+}
+
 void FXAI_ClearPredictRequest(FXAIAIPredictRequestV4 &req)
 {
    req.valid = false;
@@ -123,9 +178,11 @@ bool FXAI_ValidatePredictRequestV4(const FXAIAIPredictRequestV4 &req,
    }
    if(!FXAI_ValidateContextV4(req.ctx, reason))
       return false;
-   if(req.window_size < 0 || req.window_size > FXAI_MAX_SEQUENCE_BARS)
+   if(!FXAI_ValidateWindowPayloadV4(req.x_window, req.window_size, reason))
+      return false;
+   if(req.window_size > MathMax(req.ctx.sequence_bars - 1, 0))
    {
-      reason = "req.window_size";
+      reason = "req.window_size_ctx";
       return false;
    }
    if(req.ctx.sequence_bars > 1 && req.window_size <= 0)
@@ -155,9 +212,11 @@ bool FXAI_ValidateTrainRequestV4(const FXAIAITrainRequestV4 &req,
    }
    if(!FXAI_ValidateContextV4(req.ctx, reason))
       return false;
-   if(req.window_size < 0 || req.window_size > FXAI_MAX_SEQUENCE_BARS)
+   if(!FXAI_ValidateWindowPayloadV4(req.x_window, req.window_size, reason))
+      return false;
+   if(req.window_size > MathMax(req.ctx.sequence_bars - 1, 0))
    {
-      reason = "req.window_size";
+      reason = "req.window_size_ctx";
       return false;
    }
    if(req.ctx.sequence_bars > 1 && req.window_size <= 0)
@@ -275,4 +334,3 @@ void FXAI_CopyWindowPayload(const double &src[][FXAI_AI_WEIGHTS], const int src_
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          dst[b][k] = (b < dst_size ? src[b][k] : 0.0);
 }
-

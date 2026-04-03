@@ -535,7 +535,7 @@ public:
    virtual string PersistentStateDepthTag(void) const
    {
       FXAIAIManifestV4 manifest;
-      Describe(manifest);
+      DescribeResolved(manifest);
       bool stateful = (FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_ONLINE_LEARNING) ||
                        FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY) ||
                        FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL));
@@ -550,7 +550,7 @@ public:
    virtual string PersistentStateCoverageTag(void) const
    {
       FXAIAIManifestV4 manifest;
-      Describe(manifest);
+      DescribeResolved(manifest);
       if(FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_ONLINE_LEARNING) ||
          FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY) ||
          FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_STATEFUL))
@@ -560,6 +560,19 @@ public:
       return FXAI_ReferenceTierName(FXAI_DefaultReferenceTierForAI(AIId()));
    }
    virtual void Describe(FXAIAIManifestV4 &out) const = 0;
+   void DescribeResolved(FXAIAIManifestV4 &out) const
+   {
+      Describe(out);
+      if(out.feature_groups_mask == 0)
+         out.feature_groups_mask = FXAI_DefaultFeatureGroupsForFamily(out.family);
+      if(out.feature_schema_id <= 0)
+         out.feature_schema_id = FXAI_DefaultFeatureSchemaForFamily(out.family);
+      if(out.reference_tier < (int)FXAI_REFERENCE_FULL_NATIVE ||
+         out.reference_tier > (int)FXAI_REFERENCE_RULE_BASELINE)
+      {
+         out.reference_tier = FXAI_DefaultReferenceTierForAI(AIId());
+      }
+   }
    virtual bool SupportsSyntheticSeries(void) const { return false; }
    virtual bool SetSyntheticSeries(const datetime &time_arr[],
                                    const double &open_arr[],
@@ -577,7 +590,7 @@ public:
    virtual bool SelfTest(void)
    {
       FXAIAIManifestV4 manifest;
-      Describe(manifest);
+      DescribeResolved(manifest);
       return (manifest.api_version == FXAI_API_VERSION_V4 &&
               manifest.ai_id == AIId() &&
               StringLen(manifest.ai_name) > 0);
@@ -669,13 +682,15 @@ public:
       string reason = "";
       if(!FXAI_ValidateTrainRequestV4(req, reason))
          return;
+
+      FXAIAIManifestV4 manifest;
+      DescribeResolved(manifest);
+      if(!FXAI_ValidateManifestContextCompatibilityV4(manifest, req.ctx, reason))
+         return;
       EnsureInitialized(hp);
       SetContext(req.ctx);
       SetWindowPayload(req.window_size, req.x_window);
       SetTrainingTargets(req);
-
-      FXAIAIManifestV4 manifest;
-      Describe(manifest);
       bool can_learn = FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_ONLINE_LEARNING);
       bool can_replay = can_learn && FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY);
       if(!can_learn)
@@ -726,6 +741,20 @@ public:
                             const double sample_w,
                             const double lr)
    {
+      string reason = "";
+      if(!FXAI_ValidateContextV4(ctx, reason))
+         return;
+      if(!FXAI_ValidateWindowPayloadV4(x_window, window_size, reason))
+         return;
+      if(window_size > MathMax(ctx.sequence_bars - 1, 0))
+         return;
+      if(ctx.sequence_bars > 1 && window_size <= 0)
+         return;
+      for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      {
+         if(!MathIsValidNumber(x[k]))
+            return;
+      }
       SetContext(ctx);
       SetWindowPayload(window_size, x_window);
       UpdateCrossSymbolTransferBank(x, move_points, sample_w);
@@ -759,11 +788,30 @@ public:
          out.reliability = 0.0;
          return false;
       }
+      FXAIAIManifestV4 manifest;
+      DescribeResolved(manifest);
+      FXAIAIModelOutputV4 model_out;
+      if(!FXAI_ValidateManifestContextCompatibilityV4(manifest, req.ctx, reason))
+      {
+         out.class_probs[(int)FXAI_LABEL_SELL] = 0.0;
+         out.class_probs[(int)FXAI_LABEL_BUY] = 0.0;
+         out.class_probs[(int)FXAI_LABEL_SKIP] = 1.0;
+         out.move_mean_points = 0.0;
+         out.move_q25_points = 0.0;
+         out.move_q50_points = 0.0;
+         out.move_q75_points = 0.0;
+         out.mfe_mean_points = 0.0;
+         out.mae_mean_points = 0.0;
+         out.hit_time_frac = 1.0;
+         out.path_risk = 0.0;
+         out.fill_risk = 0.0;
+         out.confidence = 0.0;
+         out.reliability = 0.0;
+         return false;
+      }
       EnsureInitialized(hp);
       SetContext(req.ctx);
       SetWindowPayload(req.window_size, req.x_window);
-
-      FXAIAIModelOutputV4 model_out;
       ResetModelOutput(model_out);
       m_core_predict_calls++;
       if(!PredictDistributionCore(req.x, hp, model_out))

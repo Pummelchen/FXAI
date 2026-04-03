@@ -36,7 +36,7 @@
                                  const double execution_quality = -1.0) const
    {
       FXAIAIManifestV4 manifest;
-      Describe(manifest);
+      DescribeResolved(manifest);
       double bank_mfe = 0.0;
       double bank_mae = 0.0;
       double bank_hit = 1.0;

@@ -224,7 +224,7 @@ bool FXAI_AuditPluginMatchesToken(CFXAIAIRegistry &registry,
    CFXAIAIPlugin *plugin = registry.CreateInstance(ai_id);
    if(plugin == NULL) return false;
    FXAIAIManifestV4 manifest;
-   plugin.Describe(manifest);
+   FXAI_GetPluginManifest(*plugin, manifest);
    string name = manifest.ai_name;
    delete plugin;
    StringToLower(name);

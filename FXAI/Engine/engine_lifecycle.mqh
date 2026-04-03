@@ -1966,7 +1966,7 @@ bool FXAI_RunPluginComplianceHarness()
       plugin.EnsureInitialized(hp);
 
       FXAIAIManifestV4 manifest;
-      plugin.Describe(manifest);
+      FXAI_GetPluginManifest(*plugin, manifest);
       string reason = "";
       if(!FXAI_ValidateManifestV4(manifest, reason))
       {

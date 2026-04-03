@@ -177,18 +177,14 @@ int FXAI_GetPluginSequenceBars(CFXAIAIPlugin &plugin,
                                const int horizon_minutes)
 {
    FXAIAIManifestV4 manifest;
-   plugin.Describe(manifest);
+   plugin.DescribeResolved(manifest);
    return FXAI_ResolveManifestSequenceBars(manifest, horizon_minutes);
 }
 
 void FXAI_GetPluginManifest(CFXAIAIPlugin &plugin,
                             FXAIAIManifestV4 &manifest)
 {
-   plugin.Describe(manifest);
-   if(manifest.feature_groups_mask == 0)
-      manifest.feature_groups_mask = FXAI_DefaultFeatureGroupsForFamily(manifest.family);
-   if(manifest.feature_schema_id <= 0)
-      manifest.feature_schema_id = FXAI_DefaultFeatureSchemaForFamily(manifest.family);
+   plugin.DescribeResolved(manifest);
 }
 
 int FXAI_GetPluginFeatureSchema(CFXAIAIPlugin &plugin)

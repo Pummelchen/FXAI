@@ -1055,7 +1055,7 @@ void FXAI_TrainModelReplay(const int ai_idx,
    if(epochs <= 0 || g_replay_count <= 0) return;
 
    FXAIAIManifestV4 manifest;
-   plugin.Describe(manifest);
+   FXAI_GetPluginManifest(plugin, manifest);
    if(!FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_REPLAY))
       return;
 
