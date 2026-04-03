@@ -207,6 +207,16 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
     for row in champion_rows:
         by_symbol[str(row["symbol"])].append(dict(row))
 
+    existing_rows = conn.execute(
+        """
+        SELECT symbol, artifact_path
+          FROM live_deployment_profiles
+         WHERE profile_name = ?
+        """,
+        (args.profile,),
+    ).fetchall()
+    existing_symbols = {str(row["symbol"]): str(row["artifact_path"] or "") for row in existing_rows}
+
     deployments: list[dict] = []
     created_at = now_unix()
     for symbol, items in sorted(by_symbol.items()):
@@ -417,6 +427,28 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             "analog_weight": analog_weight,
             "foundation_weight": foundation_weight,
         })
+
+    stale_symbols = sorted(set(existing_symbols) - set(by_symbol))
+    for symbol in stale_symbols:
+        artifact_raw = str(existing_symbols.get(symbol, "") or "").strip()
+        artifact_path = Path(artifact_raw) if artifact_raw else None
+        if artifact_path is not None and artifact_path.exists() and artifact_path.is_file():
+            artifact_path.unlink()
+        stale_json = out_dir / f"live_deploy_{safe_token(symbol)}.json"
+        if stale_json.exists():
+            stale_json.unlink()
+        conn.execute(
+            "DELETE FROM live_deployment_profiles WHERE profile_name = ? AND symbol = ?",
+            (args.profile, symbol),
+        )
+        conn.execute(
+            """
+            UPDATE teacher_factories
+               SET deployment_profile_path = '', deployment_profile_sha256 = ''
+             WHERE profile_name = ? AND symbol = ?
+            """,
+            (args.profile, symbol),
+        )
 
     conn.commit()
     summary_path = out_dir / "live_deployments.json"

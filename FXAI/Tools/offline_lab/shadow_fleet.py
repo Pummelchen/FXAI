@@ -163,19 +163,20 @@ def latest_shadow_rows(conn: sqlite3.Connection,
     sql = """
         SELECT s.*
           FROM shadow_fleet_observations s
-          JOIN (
-                SELECT profile_name, symbol, plugin_name, MAX(captured_at) AS max_captured_at
-                  FROM shadow_fleet_observations
-                 WHERE profile_name = ?
-                 GROUP BY profile_name, symbol, plugin_name
-          ) latest
-            ON latest.profile_name = s.profile_name
-           AND latest.symbol = s.symbol
-           AND latest.plugin_name = s.plugin_name
-           AND latest.max_captured_at = s.captured_at
          WHERE s.profile_name = ?
+           AND NOT EXISTS (
+                SELECT 1
+                  FROM shadow_fleet_observations newer
+                 WHERE newer.profile_name = s.profile_name
+                   AND newer.symbol = s.symbol
+                   AND newer.plugin_name = s.plugin_name
+                   AND (
+                        newer.captured_at > s.captured_at OR
+                        (newer.captured_at = s.captured_at AND newer.id > s.id)
+                   )
+          )
     """
-    rows = conn.execute(sql, (profile_name, profile_name)).fetchall()
+    rows = conn.execute(sql, (profile_name,)).fetchall()
     return {
         (str(row["symbol"]), str(row["plugin_name"])): dict(row)
         for row in rows

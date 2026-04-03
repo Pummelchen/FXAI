@@ -1,6 +1,13 @@
 #ifndef __FXAI_ENGINE_RUNTIME_MQH__
 #define __FXAI_ENGINE_RUNTIME_MQH__
 
+void FXAI_RuntimePublishIdleSnapshot(const string symbol)
+{
+   if(StringLen(symbol) <= 0)
+      return;
+   FXAI_WriteControlPlaneLocalSnapshot(symbol, -1, 0.0);
+}
+
 int SpecialDirectionAI(const string symbol)
 {
    g_ai_last_reason = "start";
@@ -67,6 +74,7 @@ int SpecialDirectionAI(const string symbol)
    if(!g_plugins_ready)
    {
       g_ai_last_reason = "plugins_not_ready";
+      FXAI_RuntimePublishIdleSnapshot(symbol);
       return -1;
    }
 
@@ -112,6 +120,7 @@ int SpecialDirectionAI(const string symbol)
       if(!FXAI_WarmupTrainAndTune(symbol))
       {
          g_ai_last_reason = "warmup_pending";
+         FXAI_RuntimePublishIdleSnapshot(symbol);
          return -1;
       }
    }
@@ -120,6 +129,7 @@ int SpecialDirectionAI(const string symbol)
    if(signal_bar == 0)
    {
       g_ai_last_reason = "bar_time_failed";
+      FXAI_RuntimePublishIdleSnapshot(symbol);
       return -1;
    }
 
@@ -165,6 +175,7 @@ int SpecialDirectionAI(const string symbol)
    if(!FXAI_ExportDataSnapshot(symbol, AI_CommissionPerLotSide, AI_CostBufferPoints, snapshot))
    {
       g_ai_last_reason = "snapshot_export_failed";
+      FXAI_RuntimePublishIdleSnapshot(symbol);
       return -1;
    }
    // Keep cache/training keyed to the same closed bar anchor.
@@ -223,6 +234,7 @@ int SpecialDirectionAI(const string symbol)
    if(!FXAI_UpdateRatesRolling(symbol, PERIOD_M1, needed, last_bar_m1, rates_m1))
    {
       g_ai_last_reason = "m1_series_load_failed";
+      FXAI_RuntimePublishIdleSnapshot(symbol);
       return -1;
    }
    FXAI_ExtractRatesCloseTimeSpread(rates_m1, close_arr, time_arr, spread_m1);
@@ -230,11 +242,13 @@ int SpecialDirectionAI(const string symbol)
    if(ArraySize(close_arr) < needed || ArraySize(time_arr) < needed || ArraySize(spread_m1) < needed)
    {
       g_ai_last_reason = "m1_series_size_failed";
+      FXAI_RuntimePublishIdleSnapshot(symbol);
       return -1;
    }
    if(!FXAI_ValidateM1SeriesBundle(time_arr, open_arr, high_arr, low_arr, close_arr, spread_m1, needed))
    {
       g_ai_last_reason = "m1_series_integrity_failed";
+      FXAI_RuntimePublishIdleSnapshot(symbol);
       return -1;
    }
 
@@ -513,6 +527,7 @@ int SpecialDirectionAI(const string symbol)
       g_ai_last_signal_key = decisionKey;
       g_ai_last_signal = -1;
       g_ai_last_reason = "predict_features_failed";
+      FXAI_RuntimePublishIdleSnapshot(symbol);
       return -1;
    }
 
@@ -811,6 +826,7 @@ int SpecialDirectionAI(const string symbol)
       g_ai_last_signal_key = decisionKey;
       g_ai_last_signal = -1;
       g_ai_last_reason = "no_active_models";
+      FXAI_RuntimePublishIdleSnapshot(symbol);
       return -1;
    }
 
