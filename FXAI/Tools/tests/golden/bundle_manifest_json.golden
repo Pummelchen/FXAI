@@ -4,7 +4,7 @@
   "symbols": [
     {
       "artifact_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Offline/Promotions/fxai_live_deploy_EURUSD.tsv",
-      "artifact_sha256": "0828b3ca6378f61b90d43a5a4aaa1ac3b45f5a579b2fe69d3a4e87d86b6f8ba1",
+      "artifact_sha256": "5df7f7063017d50b4edde39c510f3e99182e031e071592e10d0811b60b48278a",
       "copied_files": [
         "fxai_live_deploy_EURUSD.tsv",
         "fxai_student_router_EURUSD.tsv",

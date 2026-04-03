@@ -8,6 +8,7 @@ import libsql
 from .common import *
 from .mode import resolve_runtime_mode
 from .shadow_fleet import latest_shadow_rows, symbol_shadow_summary
+from .vector_store import latest_symbol_shadow_neighbors, refresh_research_vectors
 
 
 def _clamp(v: float, lo: float, hi: float) -> float:
@@ -525,6 +526,7 @@ def write_live_deployment_profiles(conn: libsql.Connection,
     distill_map = _latest_distill_artifacts(conn, args.profile)
     foundation_bundles = _latest_foundation_bundles(conn, args.profile)
     student_bundles = _latest_student_bundles(conn, args.profile)
+    refresh_research_vectors(conn, args.profile)
 
     champion_rows = query_all(
         conn,
@@ -558,6 +560,7 @@ def write_live_deployment_profiles(conn: libsql.Connection,
     mode_cfg = resolve_runtime_mode(getattr(args, "runtime_mode", None))
     for symbol, items in sorted(by_symbol.items()):
         shadow_summary = symbol_shadow_summary(conn, args.profile, symbol)
+        analog_neighbors = latest_symbol_shadow_neighbors(conn, args.profile, symbol, limit=5)
         shadow_training_rows = _symbol_shadow_training_rows(conn, args.profile, symbol)
         deployment_models = _fit_symbol_deployment_models(shadow_training_rows)
         deployment_features = _mean_feature_snapshot(shadow_training_rows, DEPLOYMENT_MODEL_FEATURES)
@@ -640,10 +643,22 @@ def write_live_deployment_profiles(conn: libsql.Connection,
         mean_stability /= total_weight
         mean_route_value = float(shadow_summary.get("mean_route_value", 0.0))
         mean_route_regret = float(shadow_summary.get("mean_route_regret", 0.0))
+        neighbor_score = 0.0
+        neighbor_distance = 0.0
+        if analog_neighbors:
+            neighbor_score = sum(float(item.get("score", 0.0)) for item in analog_neighbors) / float(len(analog_neighbors))
+            neighbor_distance = sum(float(item.get("cosine_distance", 0.0)) for item in analog_neighbors) / float(len(analog_neighbors))
 
         teacher_weight = _clamp(_weighted_mean(teacher_weights, 0.58), 0.05, 0.95)
         student_weight = _clamp(_weighted_mean(student_weights, 0.42), 0.05, 0.95)
-        analog_weight = _clamp(_weighted_mean(analog_weights, 0.18) + 0.08 * shadow_summary.get("mean_portfolio_div", 0.0), 0.0, 0.80)
+        analog_weight = _clamp(
+            _weighted_mean(analog_weights, 0.18) +
+            0.08 * shadow_summary.get("mean_portfolio_div", 0.0) +
+            0.04 * _clamp(neighbor_score, 0.0, 1.0) +
+            0.10 * _clamp(1.0 - neighbor_distance, 0.0, 1.0),
+            0.0,
+            0.80,
+        )
         foundation_weight = _clamp(_weighted_mean(foundation_weights, 0.24) + 0.06 * shadow_summary.get("mean_shadow_score", 0.0), 0.0, 0.90)
         policy_trade_floor = _clamp(
             0.48 +
@@ -894,6 +909,7 @@ def write_live_deployment_profiles(conn: libsql.Connection,
             "foundation_bundle": foundation_bundle,
             "champions": deployment_champions,
             "shadow_summary": shadow_summary,
+            "analog_neighbors": analog_neighbors,
             "deployment_models": deployment_models,
             "deployment_features": deployment_features,
         }

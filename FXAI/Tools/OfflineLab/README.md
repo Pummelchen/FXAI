@@ -1,10 +1,10 @@
 # FXAI Offline Lab
 
-`fxai_offline_lab.py` is the Turso/libSQL-backed offline control loop for FXAI.
+`fxai_offline_lab.py` is the Turso-backed offline control loop for FXAI.
 
 It does not replace the MT5 model engine. MT5 and MQL5 still execute the real plugins. The offline lab adds:
 - exact-window `M1 OHLC + spread` export from MT5
-- Turso/libSQL storage for exported bars, tuning runs, scenario metrics, and promoted configs
+- Turso storage for exported bars, tuning runs, scenario metrics, promoted configs, branch/PITR metadata, audit-log events, and native research vectors
 - repeated model-zoo tuning on 3/6/12-month windows
 - automatic promotion of best parameter packs per symbol and plugin
 - champion/challenger governance, parameter lineage, and family scorecards
@@ -23,7 +23,12 @@ python3 FXAI/Tools/fxai_offline_lab.py init-db
 python3 FXAI/Tools/fxai_offline_lab.py export-dataset --symbol-pack majors --months-list 3,6,12
 python3 FXAI/Tools/fxai_offline_lab.py tune-zoo --profile continuous --auto-export --symbol-pack majors --months-list 3,6,12
 python3 FXAI/Tools/fxai_offline_lab.py best-params --profile continuous
+python3 FXAI/Tools/fxai_offline_lab.py turso-branch-create --profile continuous --source-database fxai-main
+python3 FXAI/Tools/fxai_offline_lab.py turso-pitr-restore --profile continuous --source-database fxai-main --timestamp 2026-04-04T00:00:00Z
+python3 FXAI/Tools/fxai_offline_lab.py turso-audit-sync --limit 50 --pages 1
 python3 FXAI/Tools/fxai_offline_lab.py attribution-prune --profile continuous
+python3 FXAI/Tools/fxai_offline_lab.py turso-vector-reindex --profile continuous
+python3 FXAI/Tools/fxai_offline_lab.py turso-vector-neighbors --profile continuous --symbol EURUSD
 python3 FXAI/Tools/fxai_offline_lab.py deploy-profiles --profile continuous
 python3 FXAI/Tools/fxai_offline_lab.py supervisor-sync --profile continuous
 python3 FXAI/Tools/fxai_offline_lab.py autonomous-governance --profile continuous
@@ -38,11 +43,20 @@ python3 FXAI/Tools/fxai_testlab.py verify-all
 Notes:
 - `validate-env` checks Python, pytest, libSQL, MT5 path assumptions, `FILE_COMMON`, and local writeability before a long run starts. The Turso CLI is reported when present, but it is not required for local-only or already-credentialed runs.
 - Set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` together to run the lab as a Turso embedded replica; without them the lab runs local-only via libSQL against the same on-disk lab file.
+- Set `TURSO_ENCRYPTION_KEY` if you want the local `.turso.db` file encrypted at rest.
+- Set `TURSO_SYNC_INTERVAL_SECONDS` if you want the embedded replica to auto-sync periodically in addition to explicit commit-time sync.
+- Set `TURSO_DATABASE_NAME`, `TURSO_ORGANIZATION`, and `TURSO_API_TOKEN` when you want branch inventory, point-in-time restore branches, or audit-log ingestion.
 - A partial Turso environment is treated as invalid on purpose. If only one of `TURSO_DATABASE_URL` or `TURSO_AUTH_TOKEN` is set, `validate-env` will fail and the lab will refuse to open until the configuration is complete or cleared.
+- A partial Turso Platform API environment is also treated as invalid on purpose. If only one of `TURSO_ORGANIZATION` or `TURSO_API_TOKEN` is set, the lab will refuse to open until the configuration is completed or cleared.
 - `bootstrap --seed-demo` creates the full directory and Turso/libSQL layout, validates the environment, and emits a deterministic smoke profile with dashboard, lineage, supervisor, world-plan, and minimal-bundle artifacts.
 - `seed-demo` can rebuild the smoke profile later without recreating the whole lab.
 - `best-params` promotes all symbols under the selected profile by default; use `--symbol`, `--symbol-list`, or `--symbol-pack` only when you want to narrow the scope.
+- `turso-branch-create` creates an isolated Turso branch, mints a database token, and writes a branch env artifact for safe research isolation.
+- `turso-pitr-restore` creates a new branch from an RFC3339 timestamp so governance or promotion state can be rolled back without mutating the current primary database.
+- `turso-audit-sync` ingests Turso organization audit-log events into the research store so dashboards and incident review can include platform-side actions.
 - `attribution-prune` builds `FILE_COMMON` attribution and student-router artifacts without needing a full deployment refresh.
+- `turso-vector-reindex` builds native Turso vector embeddings for shadow observations and family scorecards.
+- `turso-vector-neighbors` inspects nearest analog-state neighbors from the Turso vector index.
 - `deploy-profiles` emits the live deployment TSVs consumed by the MT5 runtime.
 - `deploy-profiles` now also emits fitted deployment gains derived from shadow telemetry so live teacher, student, macro, foundation, and lifecycle trust can be tuned per symbol.
 - `deploy-profiles`, `autonomous-governance`, and `recover-artifacts` also emit operator dashboard, lineage, performance, and minimal live-bundle artifacts.
@@ -66,6 +80,7 @@ Runtime modes:
 
 Source of truth and recovery:
 - Turso/libSQL is the authoritative research and promotion state.
+- Turso branches are the preferred isolation surface for risky governance rehearsals or destructive what-if runs.
 - `FILE_COMMON/FXAI/Offline/Promotions/` is the authoritative MT5 runtime consumption layer.
 - Generated Offline Lab outputs must be rebuilt from Turso/libSQL or runtime artifacts, never edited by hand.
 - If runtime artifacts drift or disappear, run `recover-artifacts`, then `deploy-profiles`, then `supervisor-sync`.

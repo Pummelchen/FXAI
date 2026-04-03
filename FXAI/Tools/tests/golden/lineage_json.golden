@@ -2,7 +2,7 @@
   "deployments": [
     {
       "artifact_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Offline/Promotions/fxai_live_deploy_EURUSD.tsv",
-      "artifact_sha256": "0828b3ca6378f61b90d43a5a4aaa1ac3b45f5a579b2fe69d3a4e87d86b6f8ba1",
+      "artifact_sha256": "5df7f7063017d50b4edde39c510f3e99182e031e071592e10d0811b60b48278a",
       "champions": [
         {
           "challenger_score": 81.2,
@@ -51,7 +51,7 @@
           "symbol": "EURUSD"
         },
         "deployment": {
-          "analog_weight": "0.236800",
+          "analog_weight": "0.336800",
           "capital_efficiency_bias": "1.016400",
           "challenger_promote_margin": "1.288000",
           "foundation_quality_gain": "1.012000",
@@ -274,7 +274,8 @@
         }
       },
       "payload": {
-        "analog_weight": 0.23679999999999998,
+        "analog_neighbors": [],
+        "analog_weight": 0.3368,
         "capital_efficiency_bias": 1.0164,
         "challenger_promote_margin": 1.2879999999999998,
         "champions": [

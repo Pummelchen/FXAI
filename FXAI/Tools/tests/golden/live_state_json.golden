@@ -28,7 +28,7 @@
     "symbol": "EURUSD"
   },
   "deployment": {
-    "analog_weight": "0.236800",
+    "analog_weight": "0.336800",
     "capital_efficiency_bias": "1.016400",
     "challenger_promote_margin": "1.288000",
     "foundation_quality_gain": "1.012000",

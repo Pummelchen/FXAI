@@ -20,8 +20,16 @@ import fxai_testlab as testlab
 import libsql
 
 from .db_backend import (
+    TURSO_API_TOKEN_ENV,
     TURSO_AUTH_TOKEN_ENV,
+    TURSO_CONFIG_PATH_ENV,
     TURSO_DATABASE_URL_ENV,
+    TURSO_DATABASE_NAME_ENV,
+    TURSO_ENCRYPTION_KEY_ENV,
+    TURSO_GROUP_ENV,
+    TURSO_LOCATION_ENV,
+    TURSO_ORGANIZATION_ENV,
+    TURSO_SYNC_INTERVAL_ENV,
     TursoConfig,
     close_backend,
     commit_backend,
@@ -45,9 +53,10 @@ DEFAULT_HORIZON_CANDIDATES = [3, 5, 8, 13, 21, 34]
 DEFAULT_M1SYNC_CANDIDATES = [2, 3, 5, 8]
 DEFAULT_EXECUTION_PROFILES = ["default", "tight-fx", "prime-ecn", "retail-fx", "stress"]
 EXPORT_EXPERT = r"FXAI\Tests\FXAI_OfflineExportRunner.ex5"
-OFFLINE_SCHEMA_VERSION = 3
+OFFLINE_SCHEMA_VERSION = 4
 OFFLINE_ARTIFACT_SCHEMA_VERSION = 2
 OFFLINE_MACRO_SCHEMA_MIN = 2
+RESEARCH_VECTOR_DIMS = 16
 
 SQL_SCHEMA = """
 PRAGMA foreign_keys=ON;
@@ -527,6 +536,55 @@ CREATE TABLE IF NOT EXISTS autonomous_governance_runs (
     created_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS turso_branch_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL DEFAULT '',
+    source_database TEXT NOT NULL,
+    target_database TEXT NOT NULL,
+    branch_kind TEXT NOT NULL DEFAULT 'campaign',
+    source_timestamp TEXT NOT NULL DEFAULT '',
+    group_name TEXT NOT NULL DEFAULT '',
+    location_name TEXT NOT NULL DEFAULT '',
+    sync_url TEXT NOT NULL DEFAULT '',
+    auth_token_sha256 TEXT NOT NULL DEFAULT '',
+    env_artifact_path TEXT NOT NULL DEFAULT '',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'created',
+    created_at INTEGER NOT NULL,
+    UNIQUE(target_database)
+);
+
+CREATE TABLE IF NOT EXISTS turso_audit_log_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    organization_slug TEXT NOT NULL,
+    event_id TEXT NOT NULL,
+    event_type TEXT NOT NULL DEFAULT '',
+    actor_name TEXT NOT NULL DEFAULT '',
+    actor_email TEXT NOT NULL DEFAULT '',
+    target_type TEXT NOT NULL DEFAULT '',
+    target_name TEXT NOT NULL DEFAULT '',
+    occurred_at TEXT NOT NULL DEFAULT '',
+    source_page INTEGER NOT NULL DEFAULT 1,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    observed_at INTEGER NOT NULL,
+    UNIQUE(organization_slug, event_id)
+);
+
+CREATE TABLE IF NOT EXISTS research_vectors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    vector_scope TEXT NOT NULL DEFAULT 'analog_shadow',
+    source_type TEXT NOT NULL DEFAULT 'shadow_observation',
+    source_key TEXT NOT NULL,
+    dims INTEGER NOT NULL DEFAULT 16,
+    vector_blob F32_BLOB(16) NOT NULL,
+    score REAL NOT NULL DEFAULT 0.0,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name, symbol, vector_scope, source_type, source_key)
+);
+
 CREATE INDEX IF NOT EXISTS idx_datasets_group ON datasets(group_key, symbol, months);
 CREATE INDEX IF NOT EXISTS idx_tuning_runs_lookup ON tuning_runs(profile_name, group_key, symbol, plugin_name, status);
 CREATE INDEX IF NOT EXISTS idx_tuning_runs_dataset ON tuning_runs(dataset_id, profile_name, plugin_name);
@@ -550,6 +608,10 @@ CREATE INDEX IF NOT EXISTS idx_world_sim_lookup ON world_simulator_plans(profile
 CREATE INDEX IF NOT EXISTS idx_attribution_lookup ON attribution_profiles(profile_name, symbol, created_at);
 CREATE INDEX IF NOT EXISTS idx_student_router_lookup ON student_router_profiles(profile_name, symbol, created_at);
 CREATE INDEX IF NOT EXISTS idx_governance_runs_lookup ON autonomous_governance_runs(profile_name, created_at);
+CREATE INDEX IF NOT EXISTS idx_turso_branch_lookup ON turso_branch_runs(profile_name, branch_kind, created_at);
+CREATE INDEX IF NOT EXISTS idx_turso_audit_lookup ON turso_audit_log_events(organization_slug, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_research_vectors_lookup ON research_vectors(profile_name, symbol, vector_scope, source_type, created_at);
+CREATE INDEX IF NOT EXISTS idx_research_vectors_ann ON research_vectors(libsql_vector_idx(vector_blob));
 """
 
 
@@ -735,13 +797,45 @@ def current_lab_versions(conn: libsql.Connection) -> dict[str, str]:
         "macro_schema_min": get_metadata(conn, "macro_schema_min", str(OFFLINE_MACRO_SCHEMA_MIN)),
         "db_backend": get_metadata(conn, "db_backend", "turso_local"),
         "turso_sync_mode": get_metadata(conn, "turso_sync_mode", "local_only"),
+        "turso_encryption": get_metadata(conn, "turso_encryption", "disabled"),
+        "turso_database_name": get_metadata(conn, "turso_database_name", ""),
+        "turso_organization": get_metadata(conn, "turso_organization", ""),
+        "turso_sync_interval_seconds": get_metadata(conn, "turso_sync_interval_seconds", "0"),
     }
 
 
 def resolve_turso_config(db_path: Path) -> TursoConfig:
     sync_url = (os.getenv(TURSO_DATABASE_URL_ENV, "") or "").strip()
     auth_token = (os.getenv(TURSO_AUTH_TOKEN_ENV, "") or "").strip()
-    return TursoConfig(database=Path(db_path), sync_url=sync_url, auth_token=auth_token)
+    encryption_key = (os.getenv(TURSO_ENCRYPTION_KEY_ENV, "") or "").strip()
+    database_name = (os.getenv(TURSO_DATABASE_NAME_ENV, "") or "").strip()
+    organization_slug = (os.getenv(TURSO_ORGANIZATION_ENV, "") or "").strip()
+    api_token = (os.getenv(TURSO_API_TOKEN_ENV, "") or "").strip()
+    group_name = (os.getenv(TURSO_GROUP_ENV, "") or "").strip()
+    location_name = (os.getenv(TURSO_LOCATION_ENV, "") or "").strip()
+    cli_config_path = (os.getenv(TURSO_CONFIG_PATH_ENV, "") or "").strip()
+    sync_interval_raw = (os.getenv(TURSO_SYNC_INTERVAL_ENV, "") or "").strip()
+    sync_interval_seconds = 0.0
+    if sync_interval_raw:
+        try:
+            sync_interval_seconds = float(sync_interval_raw)
+        except ValueError as exc:
+            raise OfflineLabError(
+                f"{TURSO_SYNC_INTERVAL_ENV} must be numeric"
+            ) from exc
+    return TursoConfig(
+        database=Path(db_path),
+        sync_url=sync_url,
+        auth_token=auth_token,
+        encryption_key=encryption_key,
+        sync_interval_seconds=sync_interval_seconds,
+        database_name=database_name,
+        organization_slug=organization_slug,
+        api_token=api_token,
+        group_name=group_name,
+        location_name=location_name,
+        cli_config_path=cli_config_path,
+    )
 
 
 def turso_environment_status(db_path: Path = DEFAULT_DB) -> dict[str, object]:
@@ -753,7 +847,22 @@ def turso_environment_status(db_path: Path = DEFAULT_DB) -> dict[str, object]:
         "sync_mode": config.sync_mode,
         "sync_url_configured": bool(config.sync_url),
         "auth_token_configured": bool(config.auth_token),
-        "config_error": ("partial_sync_credentials" if config.partial_sync_config else ""),
+        "encryption_enabled": config.encryption_enabled,
+        "sync_interval_seconds": config.sync_interval_seconds,
+        "database_name": config.database_name,
+        "organization_slug": config.organization_slug,
+        "api_token_configured": bool(config.api_token),
+        "group_name": config.group_name,
+        "location_name": config.location_name,
+        "cli_config_path": config.cli_config_path,
+        "platform_api_enabled": config.platform_api_enabled,
+        "config_error": (
+            "partial_sync_credentials"
+            if config.partial_sync_config
+            else "partial_platform_api_credentials"
+            if config.partial_platform_api_config
+            else ""
+        ),
     }
 
 
@@ -846,6 +955,10 @@ def connect_db(db_path: Path) -> libsql.Connection:
             set_metadata(conn, "macro_schema_min", str(OFFLINE_MACRO_SCHEMA_MIN))
             set_metadata(conn, "db_backend", str(config.backend_name))
             set_metadata(conn, "turso_sync_mode", str(config.sync_mode))
+            set_metadata(conn, "turso_encryption", "enabled" if config.encryption_enabled else "disabled")
+            set_metadata(conn, "turso_database_name", str(config.database_name))
+            set_metadata(conn, "turso_organization", str(config.organization_slug))
+            set_metadata(conn, "turso_sync_interval_seconds", str(config.sync_interval_seconds))
             commit_db(conn)
             return conn
         except Exception as exc:

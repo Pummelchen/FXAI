@@ -5,8 +5,18 @@ import time
 from html import escape
 from pathlib import Path
 
-from .common import COMMON_PROMOTION_DIR, RESEARCH_DIR, current_lab_versions, ensure_dir, query_all, safe_token
+from .common import (
+    COMMON_PROMOTION_DIR,
+    DEFAULT_DB,
+    RESEARCH_DIR,
+    current_lab_versions,
+    ensure_dir,
+    query_all,
+    safe_token,
+    turso_environment_status,
+)
 from .performance import build_symbol_performance_report
+from .vector_store import latest_symbol_shadow_neighbors
 
 
 def _load_json(path: Path) -> dict:
@@ -30,6 +40,7 @@ def _load_tsv_map(path: Path) -> dict[str, str]:
 
 
 def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
+    turso_status = turso_environment_status(DEFAULT_DB)
     symbols = sorted(
         {
             str(row["symbol"])
@@ -57,6 +68,26 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
         """,
         (profile_name,),
     )
+    branch_rows = query_all(
+        conn,
+        """
+        SELECT source_database, target_database, branch_kind, source_timestamp, status, created_at
+          FROM turso_branch_runs
+         WHERE profile_name IN (?, '')
+         ORDER BY created_at DESC
+         LIMIT 25
+        """,
+        (profile_name,),
+    )
+    audit_rows = query_all(
+        conn,
+        """
+        SELECT organization_slug, event_id, event_type, target_name, occurred_at, observed_at
+          FROM turso_audit_log_events
+         ORDER BY observed_at DESC, id DESC
+         LIMIT 25
+        """
+    )
     live_rows = query_all(
         conn,
         """
@@ -81,6 +112,7 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
             "service_tsv": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_supervisor_service_{safe_token(symbol)}.tsv"),
             "command_tsv": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_supervisor_command_{safe_token(symbol)}.tsv"),
         }
+        analog_neighbors = latest_symbol_shadow_neighbors(conn, profile_name, symbol, limit=5)
         artifact_age_sec = max(now_unix - int(row["created_at"]), 0)
         deployments.append(
             {
@@ -90,6 +122,7 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
                 "payload": payload,
                 "performance": perf,
                 "live_state": live_state,
+                "analog_neighbors": analog_neighbors,
                 "artifact_health": {
                     "artifact_exists": artifact_path.exists(),
                     "artifact_age_sec": artifact_age_sec,
@@ -107,6 +140,11 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
     dashboard = {
         "profile_name": profile_name,
         "versions": current_lab_versions(conn),
+        "turso": {
+            "environment": turso_status,
+            "branches": branch_rows,
+            "recent_audit_logs": audit_rows,
+        },
         "symbols": symbols,
         "champions": champions,
         "deployments": deployments,
@@ -130,6 +168,14 @@ def write_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
     json_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
     md_lines = [f"# FXAI Operator Dashboard: {profile_name}", ""]
+    md_lines.append("## Turso")
+    md_lines.append(f"- backend: {payload['turso']['environment'].get('backend', '')}")
+    md_lines.append(f"- sync_mode: {payload['turso']['environment'].get('sync_mode', '')}")
+    md_lines.append(f"- encryption_enabled: {payload['turso']['environment'].get('encryption_enabled', False)}")
+    md_lines.append(f"- platform_api_enabled: {payload['turso']['environment'].get('platform_api_enabled', False)}")
+    md_lines.append(f"- tracked_branches: {len(payload['turso']['branches'])}")
+    md_lines.append(f"- recent_audit_events: {len(payload['turso']['recent_audit_logs'])}")
+    md_lines.append("")
     for item in payload["deployments"]:
         md_lines.append(f"## {item['symbol']}")
         md_lines.append(f"- performance_failures: {len(item['performance'].get('budget_failures', []))}")
@@ -139,6 +185,7 @@ def write_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
         md_lines.append(f"- supervisor_missing: {item['artifact_health']['missing_supervisor_service'] or item['artifact_health']['missing_supervisor_command']}")
         md_lines.append(f"- stale_artifact: {item['artifact_health']['stale_artifact']}")
         md_lines.append(f"- artifact_size_failures: {len(item['artifact_health']['artifact_size_failures'])}")
+        md_lines.append(f"- analog_neighbors: {len(item.get('analog_neighbors', []))}")
         md_lines.append("")
     md_path.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
 

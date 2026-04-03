@@ -22,6 +22,15 @@ from .shadow_fleet import *
 from .student_router import *
 from .supervisor_service import *
 from .teacher_factory import *
+from .turso_platform import (
+    branch_inventory,
+    create_branch_database,
+    destroy_database,
+    persist_branch_result,
+    resolve_platform_config,
+    sync_audit_logs,
+)
+from .vector_store import latest_symbol_shadow_neighbors, refresh_research_vectors
 from .verification import verify_deterministic_outputs
 
 def serious_base_args(args, dataset: dict, output_path: Path) -> argparse.Namespace:
@@ -689,6 +698,175 @@ def cmd_validate_env(_args) -> int:
     return 0 if bool(payload.get("ok")) else 1
 
 
+def _default_turso_branch_name(profile_name: str, branch_kind: str) -> str:
+    token = safe_token(profile_name or "fxai")
+    return f"{token}-{safe_token(branch_kind)}-{now_unix()}"
+
+
+def cmd_turso_branch_create(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        config = resolve_platform_config(Path(args.db))
+        source_database = str(getattr(args, "source_database", "") or config.database_name or "").strip()
+        if not source_database:
+            raise OfflineLabError("source database is required; set --source-database or TURSO_DATABASE_NAME")
+        target_database = str(getattr(args, "target_database", "") or _default_turso_branch_name(args.profile, "campaign")).strip()
+        result = create_branch_database(
+            config=config,
+            source_database=source_database,
+            target_database=target_database,
+            profile_name=args.profile,
+            branch_kind="campaign",
+            timestamp=str(getattr(args, "timestamp", "") or ""),
+            group_name=str(getattr(args, "group_name", "") or ""),
+            location_name=str(getattr(args, "location_name", "") or ""),
+            token_expiration=str(getattr(args, "token_expiration", "7d") or "7d"),
+            read_only_token=bool(getattr(args, "read_only_token", False)),
+        )
+        payload = persist_branch_result(conn, args.profile, result)
+        commit_db(conn)
+        print(json.dumps({
+            "profile_name": args.profile,
+            "branch": payload,
+            "env_artifact_path": str(result.env_artifact_path),
+        }, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
+
+
+def cmd_turso_pitr_restore(args) -> int:
+    if not str(getattr(args, "timestamp", "") or "").strip():
+        raise OfflineLabError("point-in-time restore requires --timestamp in RFC3339 format")
+    conn = connect_db(Path(args.db))
+    try:
+        config = resolve_platform_config(Path(args.db))
+        source_database = str(getattr(args, "source_database", "") or config.database_name or "").strip()
+        if not source_database:
+            raise OfflineLabError("source database is required; set --source-database or TURSO_DATABASE_NAME")
+        target_database = str(getattr(args, "target_database", "") or _default_turso_branch_name(args.profile, "pitr")).strip()
+        result = create_branch_database(
+            config=config,
+            source_database=source_database,
+            target_database=target_database,
+            profile_name=args.profile,
+            branch_kind="pitr_restore",
+            timestamp=str(args.timestamp),
+            group_name=str(getattr(args, "group_name", "") or ""),
+            location_name=str(getattr(args, "location_name", "") or ""),
+            token_expiration=str(getattr(args, "token_expiration", "7d") or "7d"),
+            read_only_token=bool(getattr(args, "read_only_token", False)),
+        )
+        payload = persist_branch_result(conn, args.profile, result)
+        commit_db(conn)
+        print(json.dumps({
+            "profile_name": args.profile,
+            "restore_branch": payload,
+            "env_artifact_path": str(result.env_artifact_path),
+        }, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
+
+
+def cmd_turso_branch_inventory(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        config = resolve_platform_config(Path(args.db))
+        source_database = str(getattr(args, "source_database", "") or config.database_name or "")
+        if config.platform_api_enabled:
+            branches = branch_inventory(config, source_database)
+            source = "platform_api"
+        else:
+            branches = query_all(
+                conn,
+                """
+                SELECT profile_name, source_database, target_database, branch_kind, source_timestamp,
+                       group_name, location_name, sync_url, env_artifact_path, status, created_at
+                  FROM turso_branch_runs
+                 WHERE (? = '' OR source_database = ?)
+                 ORDER BY created_at DESC
+                """,
+                (source_database, source_database),
+            )
+            source = "local_registry"
+        payload = {
+            "profile_name": args.profile,
+            "source_database": source_database,
+            "source": source,
+            "branches": branches,
+        }
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
+
+
+def cmd_turso_branch_destroy(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        config = resolve_platform_config(Path(args.db))
+        target_database = str(getattr(args, "target_database", "") or "").strip()
+        if not target_database:
+            raise OfflineLabError("target database is required for destroy")
+        row = query_one(
+            conn,
+            "SELECT env_artifact_path FROM turso_branch_runs WHERE target_database = ?",
+            (target_database,),
+        )
+        destroy_database(config, target_database)
+        conn.execute(
+            "UPDATE turso_branch_runs SET status = 'destroyed' WHERE target_database = ?",
+            (target_database,),
+        )
+        artifact_path = Path(str((row or {}).get("env_artifact_path", "") or "").strip())
+        if artifact_path and artifact_path.exists() and artifact_path.is_file():
+            artifact_path.unlink()
+        commit_db(conn)
+        print(json.dumps({"target_database": target_database, "status": "destroyed"}, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
+
+
+def cmd_turso_audit_sync(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        config = resolve_platform_config(Path(args.db))
+        payload = sync_audit_logs(conn, config, limit=int(getattr(args, "limit", 50) or 50), pages=int(getattr(args, "pages", 1) or 1))
+        commit_db(conn)
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
+
+
+def cmd_turso_vector_reindex(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        payload = refresh_research_vectors(conn, args.profile, str(getattr(args, "symbol", "") or ""))
+        commit_db(conn)
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
+
+
+def cmd_turso_vector_neighbors(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        refresh_research_vectors(conn, args.profile, args.symbol)
+        payload = {
+            "profile_name": args.profile,
+            "symbol": args.symbol,
+            "neighbors": latest_symbol_shadow_neighbors(conn, args.profile, args.symbol, limit=int(getattr(args, "limit", 5) or 5)),
+        }
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
+
+
 def cmd_bootstrap(args) -> int:
     payload = bootstrap_environment(Path(args.db), init_db=(not getattr(args, "no_init_db", False)))
     if getattr(args, "seed_demo", False):
@@ -842,6 +1020,7 @@ def cmd_shadow_sync(args) -> int:
 def cmd_dashboard(args) -> int:
     conn = connect_db(Path(args.db))
     try:
+        refresh_research_vectors(conn, args.profile)
         payload = write_profile_dashboard(conn, args.profile)
         write_performance_reports(list(payload.get("symbols", [])), args.profile)
         print(json.dumps(payload, indent=2, sort_keys=True))
@@ -892,6 +1071,7 @@ def cmd_seed_demo(args) -> int:
         supervisor_service = write_supervisor_service_artifacts(conn, demo_args)
         supervisor_commands = write_supervisor_command_artifacts(conn, demo_args)
         world_plans = write_world_simulator_plans(conn, demo_args)
+        vector_payload = refresh_research_vectors(conn, args.profile, args.symbol)
         write_performance_reports([args.symbol], args.profile)
         dashboard = write_profile_dashboard(conn, args.profile)
         lineage = write_lineage_report(conn, args.profile, args.symbol)
@@ -909,6 +1089,7 @@ def cmd_seed_demo(args) -> int:
                     "supervisor_service_artifacts": len(supervisor_service),
                     "supervisor_command_artifacts": len(supervisor_commands),
                     "world_plan_artifacts": len(world_plans),
+                    "vector_refresh": vector_payload,
                     "dashboard": dashboard,
                     "lineage": lineage,
                     "minimal_bundle": bundle,
@@ -934,6 +1115,7 @@ def cmd_deploy_profiles(args) -> int:
         attribution_payload = write_attribution_profiles(conn, args)
         router_payload = write_student_router_profiles(conn, args)
         payload = write_live_deployment_profiles(conn, args)
+        vector_payload = refresh_research_vectors(conn, args.profile)
         symbols = [str(item["symbol"]) for item in payload]
         write_performance_reports(symbols, args.profile)
         dashboard = write_profile_dashboard(conn, args.profile)
@@ -945,6 +1127,7 @@ def cmd_deploy_profiles(args) -> int:
             "attribution_profiles": attribution_payload,
             "student_router_profiles": router_payload,
             "deployments": payload,
+            "vector_refresh": vector_payload,
             "dashboard": dashboard,
             "lineage": lineage,
             "minimal_bundle": bundle,
@@ -960,6 +1143,7 @@ def cmd_autonomous_governance(args) -> int:
         shadow_ingest = ingest_shadow_fleet_ledgers(conn, args.profile)
         attribution_payload = write_attribution_profiles(conn, args)
         router_payload = write_student_router_profiles(conn, args)
+        vector_payload = refresh_research_vectors(conn, args.profile)
         payload = run_autonomous_governance(conn, args, str(getattr(args, "group_key", "") or ""))
         write_performance_reports(sorted({str(item["symbol"]) for item in payload.get("decisions", [])}), args.profile)
         dashboard = write_profile_dashboard(conn, args.profile)
@@ -971,6 +1155,7 @@ def cmd_autonomous_governance(args) -> int:
             "shadow_rows_ingested": int(shadow_ingest.get("rows_ingested", 0)),
             "attribution_profiles": len(attribution_payload),
             "student_router_profiles": len(router_payload),
+            "vector_refresh": vector_payload,
             "governance_decisions": len(payload.get("decisions", [])),
             "world_plans": len(payload.get("world_plans", [])),
             "portfolio_supervisor_artifact": str(payload.get("portfolio_supervisor", {}).get("artifact_path", "")),
@@ -1016,6 +1201,7 @@ def cmd_recover_artifacts(args) -> int:
         attribution_payload = write_attribution_profiles(conn, args)
         router_payload = write_student_router_profiles(conn, args)
         deploy_payload = write_live_deployment_profiles(conn, args)
+        vector_payload = refresh_research_vectors(conn, args.profile)
         supervisor_payload = write_portfolio_supervisor_profile(conn, args)
         supervisor_service = write_supervisor_service_artifacts(conn, args)
         supervisor_commands = write_supervisor_command_artifacts(conn, args)
@@ -1031,6 +1217,7 @@ def cmd_recover_artifacts(args) -> int:
             "attribution_profiles": len(attribution_payload),
             "student_router_profiles": len(router_payload),
             "deployments": len(deploy_payload),
+            "vector_refresh": vector_payload,
             "portfolio_supervisor_artifact": str(supervisor_payload.get("artifact_path", "")),
             "supervisor_service_artifacts": len(supervisor_service),
             "supervisor_command_artifacts": len(supervisor_commands),
@@ -1114,17 +1301,17 @@ def cmd_control_loop(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(description="FXAI Turso/libSQL-backed offline tuning and control lab")
+    ap = argparse.ArgumentParser(description="FXAI Turso-backed offline tuning and control lab")
     ap.add_argument("--db", default=str(DEFAULT_DB))
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    init_db = sub.add_parser("init-db", help="Initialize the Turso/libSQL offline lab schema")
+    init_db = sub.add_parser("init-db", help="Initialize the Turso offline lab schema")
     init_db.set_defaults(func=cmd_init_db)
 
     val = sub.add_parser("validate-env", help="Validate Python, MT5, FILE_COMMON, and Offline Lab path assumptions")
     val.set_defaults(func=cmd_validate_env)
 
-    boot = sub.add_parser("bootstrap", help="Create required lab folders, validate the environment, and initialize Turso/libSQL")
+    boot = sub.add_parser("bootstrap", help="Create required lab folders, validate the environment, and initialize Turso")
     boot.add_argument("--report", default="")
     boot.add_argument("--no-init-db", action="store_true")
     boot.add_argument("--seed-demo", action="store_true")
@@ -1133,7 +1320,7 @@ def build_parser() -> argparse.ArgumentParser:
     comp = sub.add_parser("compile-export", help="Compile the MT5 offline export runner")
     comp.set_defaults(func=cmd_compile_export)
 
-    exp = sub.add_parser("export-dataset", help="Export exact-window M1 OHLC+spread history from MT5 into Turso/libSQL")
+    exp = sub.add_parser("export-dataset", help="Export exact-window M1 OHLC+spread history from MT5 into Turso")
     exp.add_argument("--symbol", default="EURUSD")
     exp.add_argument("--symbol-list", default="")
     exp.add_argument("--symbol-pack", default="", choices=[""] + sorted(testlab.SYMBOL_PACKS.keys()))
@@ -1201,9 +1388,56 @@ def build_parser() -> argparse.ArgumentParser:
     best.add_argument("--symbol-pack", default="", choices=[""] + sorted(testlab.SYMBOL_PACKS.keys()))
     best.set_defaults(func=cmd_best_params)
 
-    shadow = sub.add_parser("shadow-sync", help="Ingest live shadow-fleet ledgers from FILE_COMMON into Turso/libSQL")
+    shadow = sub.add_parser("shadow-sync", help="Ingest live shadow-fleet ledgers from FILE_COMMON into Turso")
     shadow.add_argument("--profile", default="continuous")
     shadow.set_defaults(func=cmd_shadow_sync)
+
+    tbranch = sub.add_parser("turso-branch-create", help="Create a Turso branch database and emit a branch env artifact")
+    tbranch.add_argument("--profile", default="continuous")
+    tbranch.add_argument("--source-database", default="")
+    tbranch.add_argument("--target-database", default="")
+    tbranch.add_argument("--timestamp", default="")
+    tbranch.add_argument("--group-name", default="")
+    tbranch.add_argument("--location-name", default="")
+    tbranch.add_argument("--token-expiration", default="7d")
+    tbranch.add_argument("--read-only-token", action="store_true")
+    tbranch.set_defaults(func=cmd_turso_branch_create)
+
+    tpitr = sub.add_parser("turso-pitr-restore", help="Create a point-in-time restore branch from Turso")
+    tpitr.add_argument("--profile", default="continuous")
+    tpitr.add_argument("--source-database", default="")
+    tpitr.add_argument("--target-database", default="")
+    tpitr.add_argument("--timestamp", required=True)
+    tpitr.add_argument("--group-name", default="")
+    tpitr.add_argument("--location-name", default="")
+    tpitr.add_argument("--token-expiration", default="7d")
+    tpitr.add_argument("--read-only-token", action="store_true")
+    tpitr.set_defaults(func=cmd_turso_pitr_restore)
+
+    tinv = sub.add_parser("turso-branch-inventory", help="List Turso branch inventory from the Platform API")
+    tinv.add_argument("--profile", default="continuous")
+    tinv.add_argument("--source-database", default="")
+    tinv.set_defaults(func=cmd_turso_branch_inventory)
+
+    tkill = sub.add_parser("turso-branch-destroy", help="Destroy a Turso branch database and mark it destroyed locally")
+    tkill.add_argument("--target-database", required=True)
+    tkill.set_defaults(func=cmd_turso_branch_destroy)
+
+    taudit = sub.add_parser("turso-audit-sync", help="Ingest Turso organization audit logs into the Offline Lab")
+    taudit.add_argument("--limit", type=int, default=50)
+    taudit.add_argument("--pages", type=int, default=1)
+    taudit.set_defaults(func=cmd_turso_audit_sync)
+
+    tvec = sub.add_parser("turso-vector-reindex", help="Refresh Turso native vectors for analog-state retrieval")
+    tvec.add_argument("--profile", default="continuous")
+    tvec.add_argument("--symbol", default="")
+    tvec.set_defaults(func=cmd_turso_vector_reindex)
+
+    tnn = sub.add_parser("turso-vector-neighbors", help="Show nearest analog-state neighbors from Turso vectors")
+    tnn.add_argument("--profile", default="continuous")
+    tnn.add_argument("--symbol", required=True)
+    tnn.add_argument("--limit", type=int, default=5)
+    tnn.set_defaults(func=cmd_turso_vector_neighbors)
 
     demo = sub.add_parser("seed-demo", help="Seed a deterministic smoke profile and emit MT5 runtime artifacts without broker data")
     demo.add_argument("--profile", default="smoke")
@@ -1260,7 +1494,7 @@ def build_parser() -> argparse.ArgumentParser:
     det.add_argument("--refresh-golden", action="store_true")
     det.set_defaults(func=cmd_verify_deterministic)
 
-    rec = sub.add_parser("recover-artifacts", help="Rebuild generated promotions, dashboards, and summaries from Turso/libSQL state")
+    rec = sub.add_parser("recover-artifacts", help="Rebuild generated promotions, dashboards, and summaries from Turso state")
     rec.add_argument("--profile", default="continuous")
     rec.add_argument("--runtime-mode", default="research", choices=sorted(RUNTIME_MODES.keys()))
     rec.set_defaults(func=cmd_recover_artifacts)

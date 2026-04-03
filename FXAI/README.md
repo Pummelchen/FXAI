@@ -79,6 +79,7 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - Offline Lab promotion is profile-wide by default in `best-params`, unless a symbol filter is passed, and exact-window audit runs now follow the effective exported first/last bar range.
 - Offline Lab now also emits operator dashboards, lineage reports, deterministic fixture artifacts, and minimal live bundles so operators can inspect or recover the promoted state without reading Turso/libSQL directly.
 - Offline Lab can run local-only through libSQL or as a Turso embedded replica when `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are configured.
+- Offline Lab now also supports local Turso file encryption, bounded sync intervals for embedded replicas, branch and point-in-time restore env artifacts, Turso audit-log ingestion, and native vector-backed analog-state retrieval in the research OS.
 - Runtime profiles now support explicit `research` and `production` modes so the same framework can run either as the full research OS or as a leaner live deployment surface.
 
 ## Source Of Truth

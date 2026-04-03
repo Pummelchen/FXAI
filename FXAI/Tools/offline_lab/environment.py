@@ -88,6 +88,8 @@ def validate_environment() -> dict[str, object]:
     ok = python_ok and pytest_ok and libsql_ok and not partial_sync_config
     for item in report["paths"].values():
         ok = ok and bool(item["parent_exists"])
+    if report["database"].get("platform_api_enabled"):
+        ok = ok and bool(report["database"].get("organization_slug")) and bool(report["database"].get("api_token_configured"))
     report["ok"] = bool(ok)
     return report
 

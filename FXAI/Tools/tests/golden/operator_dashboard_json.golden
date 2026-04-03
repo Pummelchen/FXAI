@@ -12,6 +12,7 @@
   ],
   "deployments": [
     {
+      "analog_neighbors": [],
       "artifact_health": {
         "artifact_age_sec": 0,
         "artifact_exists": true,
@@ -50,7 +51,7 @@
           "timeout_bias": "0.082800"
         },
         "deployment_tsv": {
-          "analog_weight": "0.236800",
+          "analog_weight": "0.336800",
           "capital_efficiency_bias": "1.016400",
           "challenger_promote_margin": "1.288000",
           "foundation_quality_gain": "1.012000",
@@ -164,7 +165,8 @@
         }
       },
       "payload": {
-        "analog_weight": 0.23679999999999998,
+        "analog_neighbors": [],
+        "analog_weight": 0.3368,
         "capital_efficiency_bias": 1.0164,
         "challenger_promote_margin": 1.2879999999999998,
         "champions": [
@@ -535,11 +537,37 @@
   "symbols": [
     "EURUSD"
   ],
+  "turso": {
+    "branches": [],
+    "environment": {
+      "api_token_configured": false,
+      "auth_token_configured": false,
+      "backend": "turso_local",
+      "cli_config_path": "",
+      "config_error": "",
+      "database_name": "",
+      "database_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/OfflineLab/fxai_offline_lab.turso.db",
+      "encryption_enabled": false,
+      "group_name": "",
+      "location_name": "",
+      "organization_slug": "",
+      "platform_api_enabled": false,
+      "sync_enabled": false,
+      "sync_interval_seconds": 0.0,
+      "sync_mode": "local_only",
+      "sync_url_configured": false
+    },
+    "recent_audit_logs": []
+  },
   "versions": {
     "artifact_schema_version": "2",
     "db_backend": "turso_local",
     "macro_schema_min": "2",
-    "offline_schema_version": "3",
+    "offline_schema_version": "4",
+    "turso_database_name": "",
+    "turso_encryption": "disabled",
+    "turso_organization": "",
+    "turso_sync_interval_seconds": "0.0",
     "turso_sync_mode": "local_only"
   }
 }

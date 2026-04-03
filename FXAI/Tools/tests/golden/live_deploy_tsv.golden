@@ -2,7 +2,7 @@ profile_name	fixture
 symbol	EURUSD
 teacher_weight	0.700000
 student_weight	0.300000
-analog_weight	0.236800
+analog_weight	0.336800
 foundation_weight	0.346400
 policy_trade_floor	0.628200
 policy_no_trade_cap	0.712333
