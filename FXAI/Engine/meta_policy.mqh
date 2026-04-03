@@ -172,6 +172,11 @@ void FXAI_BuildPolicyFeatures(const double &stack_feat[],
    double analog_weight = FXAI_Clamp(deploy.analog_weight, 0.0, 0.80);
    double transition_weight = FXAI_Clamp(deploy.regime_transition_weight, 0.0, 1.0);
    double macro_floor = FXAI_Clamp(deploy.macro_quality_floor, 0.0, 1.0);
+   double teacher_gain = FXAI_Clamp(deploy.teacher_signal_gain, 0.40, 1.80);
+   double student_gain = FXAI_Clamp(deploy.student_signal_gain, 0.40, 1.80);
+   double foundation_gain = FXAI_Clamp(deploy.foundation_quality_gain, 0.40, 1.80);
+   double macro_gain = FXAI_Clamp(deploy.macro_state_gain, 0.40, 1.80);
+   double lifecycle_gain = FXAI_Clamp(deploy.policy_lifecycle_gain, 0.40, 1.80);
    feat[0] = 1.0;
    feat[1] = FXAI_Clamp(0.5 + 0.5 * FXAI_GetArrayValue(stack_feat, 1, 0.0), 0.0, 1.0);
    feat[2] = FXAI_Clamp(0.5 + 0.5 * FXAI_GetArrayValue(stack_feat, 2, 0.0), 0.0, 1.0);
@@ -187,14 +192,15 @@ void FXAI_BuildPolicyFeatures(const double &stack_feat[],
    feat[12] = FXAI_Clamp(FXAI_GetArrayValue(stack_feat, 83, 0.0), 0.0, 1.0);
    feat[13] = 1.0 - FXAI_Clamp(FXAI_GetArrayValue(stack_feat, 49, 1.0), 0.0, 1.0);
    feat[14] = 1.0 - FXAI_Clamp(FXAI_GetArrayValue(stack_feat, 50, 1.0), 0.0, 1.0);
-   feat[15] = FXAI_Clamp(macro_quality, 0.0, 1.0);
+   feat[15] = FXAI_Clamp(macro_quality * (0.80 + 0.20 * macro_gain), 0.0, 1.0);
    feat[16] = FXAI_Clamp(0.5 + 0.5 * context_quality, 0.0, 1.0);
    feat[17] = FXAI_Clamp(context_strength / 3.0, 0.0, 1.0);
-   feat[18] = FXAI_Clamp(foundation_trust * (0.82 + 0.50 * FXAI_Clamp(deploy.foundation_weight, 0.0, 0.90)),
+   feat[18] = FXAI_Clamp(foundation_trust * (0.82 + 0.50 * FXAI_Clamp(deploy.foundation_weight, 0.0, 0.90)) *
+                         (0.75 + 0.25 * foundation_gain),
                          0.0,
                          1.0);
    feat[19] = FXAI_Clamp(foundation_direction_bias, -1.0, 1.0);
-   feat[20] = FXAI_Clamp(student_trust, 0.0, 1.0);
+   feat[20] = FXAI_Clamp(student_trust * (0.78 + 0.22 * student_gain), 0.0, 1.0);
    feat[21] = FXAI_Clamp(analog_similarity * (0.80 + 0.60 * analog_weight), 0.0, 1.0);
    feat[22] = FXAI_Clamp(analog_quality * (0.80 + 0.60 * analog_weight), 0.0, 1.0);
    feat[23] = FXAI_Clamp(regime_q.persistence, 0.0, 1.0);
@@ -207,8 +213,10 @@ void FXAI_BuildPolicyFeatures(const double &stack_feat[],
                          0.15 * (1.0 - FXAI_Clamp(MathMax(macro_floor - macro_quality, 0.0), 0.0, 1.0)),
                          0.0,
                          1.0);
-   feat[29] = FXAI_Clamp(deploy.teacher_weight - 0.50, -0.50, 0.50);
-   feat[30] = FXAI_Clamp(0.65 * deploy.policy_trade_floor + 0.35 * macro_floor, 0.0, 1.0);
+   feat[29] = FXAI_Clamp((deploy.teacher_weight - 0.50) * teacher_gain, -0.75, 0.75);
+   feat[30] = FXAI_Clamp((0.65 * deploy.policy_trade_floor + 0.35 * macro_floor) * (0.80 + 0.20 * lifecycle_gain),
+                         0.0,
+                         1.0);
    feat[31] = FXAI_Clamp(portfolio_pressure_hint, 0.0, 1.5) / 1.5;
 }
 
@@ -223,6 +231,11 @@ void FXAI_PolicyPredict(const int regime_id,
       r = 0;
 
    double macro_floor = FXAI_Clamp(deploy.macro_quality_floor, 0.0, 1.0);
+   double teacher_gain = FXAI_Clamp(deploy.teacher_signal_gain, 0.40, 1.80);
+   double student_gain = FXAI_Clamp(deploy.student_signal_gain, 0.40, 1.80);
+   double foundation_gain = FXAI_Clamp(deploy.foundation_quality_gain, 0.40, 1.80);
+   double macro_gain = FXAI_Clamp(deploy.macro_state_gain, 0.40, 1.80);
+   double lifecycle_gain = FXAI_Clamp(deploy.policy_lifecycle_gain, 0.40, 1.80);
    double macro_shortfall = FXAI_Clamp(macro_floor - FXAI_GetArrayValue(feat, 15, 0.0), 0.0, 1.0);
    double transition_pressure = FXAI_Clamp(deploy.regime_transition_weight, 0.0, 1.0) *
                                 FXAI_GetArrayValue(feat, 25, 0.0);
@@ -246,10 +259,12 @@ void FXAI_PolicyPredict(const int regime_id,
                                        0.05 * analog_bonus +
                                        0.03 * FXAI_GetArrayValue(feat, 23, 0.0) -
                                        0.08 * transition_pressure -
-                                       0.14 * macro_shortfall -
+                                       0.14 * macro_shortfall * macro_gain -
                                        0.10 * FXAI_GetArrayValue(feat, 31, 0.0) +
-                                       0.08 * FXAI_GetArrayValue(feat, 29, 0.0) +
-                                       0.08 * FXAI_GetArrayValue(feat, 30, 0.0),
+                                       0.08 * FXAI_GetArrayValue(feat, 29, 0.0) * teacher_gain +
+                                       0.08 * FXAI_GetArrayValue(feat, 30, 0.0) * lifecycle_gain +
+                                       0.04 * FXAI_GetArrayValue(feat, 18, 0.0) * foundation_gain +
+                                       0.04 * FXAI_GetArrayValue(feat, 20, 0.0) * student_gain,
                                        0.01,
                                        0.99);
    double heuristic_dir = FXAI_Clamp(0.70 * (FXAI_GetArrayValue(feat, 1, 0.5) - FXAI_GetArrayValue(feat, 2, 0.5)) +
@@ -280,7 +295,8 @@ void FXAI_PolicyPredict(const int regime_id,
                                       0.18 * FXAI_GetArrayValue(feat, 31, 0.0),
                                       0.25,
                                       1.50);
-   heuristic_size *= FXAI_Clamp(deploy.policy_size_bias, 0.40, 1.60);
+   heuristic_size *= FXAI_Clamp(deploy.policy_size_bias, 0.40, 1.60) *
+                     FXAI_Clamp(0.80 + 0.20 * lifecycle_gain, 0.40, 1.80);
    heuristic_size = FXAI_Clamp(heuristic_size, 0.25, 1.60);
 
    if(!g_policy_ready[r])

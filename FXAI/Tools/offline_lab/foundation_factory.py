@@ -25,6 +25,52 @@ def _weighted_mean(items: list[tuple[float, float]], default: float) -> float:
     return total_v / total_w
 
 
+FOUNDATION_MODEL_FEATURES = [
+    "shadow_score",
+    "route_value",
+    "route_regret",
+    "portfolio_objective",
+    "portfolio_stability",
+    "portfolio_corr",
+    "portfolio_div",
+    "policy_enter_prob",
+    "policy_no_trade_prob",
+    "policy_add_prob",
+    "policy_reduce_prob",
+    "policy_timeout_prob",
+    "policy_capital_efficiency",
+    "portfolio_pressure",
+    "control_plane_score",
+    "portfolio_supervisor_score",
+]
+
+
+def _symbol_shadow_rows(conn: sqlite3.Connection,
+                       profile_name: str,
+                       symbol: str,
+                       limit: int = 512) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT *
+          FROM shadow_fleet_observations
+         WHERE profile_name = ? AND symbol = ?
+         ORDER BY captured_at DESC, id DESC
+         LIMIT ?
+        """,
+        (profile_name, symbol, limit),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _shadow_feature_snapshot(rows: list[dict]) -> dict[str, float]:
+    if not rows:
+        return {name: 0.0 for name in FOUNDATION_MODEL_FEATURES}
+    out: dict[str, float] = {}
+    for name in FOUNDATION_MODEL_FEATURES:
+        out[name] = sum(row_float(row, name, 0.0) for row in rows) / float(len(rows))
+    return out
+
+
 def _latest_family_cards(conn: sqlite3.Connection,
                          profile_name: str) -> dict[tuple[str, int], dict]:
     rows = conn.execute(
@@ -102,6 +148,29 @@ def write_foundation_model_bundles(conn: sqlite3.Connection,
     active_symbols = set(grouped.keys())
     for symbol, items in sorted(grouped.items()):
         shadow = symbol_shadow_summary(conn, args.profile, symbol)
+        shadow_rows = _symbol_shadow_rows(conn, args.profile, symbol)
+        shadow_features = _shadow_feature_snapshot(shadow_rows)
+        foundation_fit_rows: list[dict] = []
+        for row in shadow_rows:
+            enriched = dict(row)
+            enriched["_teacher_floor_target"] = (
+                0.46 * row_float(row, "shadow_score", 0.0) +
+                0.22 * row_float(row, "portfolio_stability", 0.0) +
+                0.18 * row_float(row, "policy_capital_efficiency", 0.0) -
+                0.16 * row_float(row, "route_regret", 0.0)
+            )
+            enriched["_student_floor_target"] = (
+                0.34 * row_float(row, "route_value", 0.0) +
+                0.22 * row_float(row, "portfolio_div", 0.0) +
+                0.18 * row_float(row, "policy_enter_prob", 0.0) -
+                0.16 * row_float(row, "policy_no_trade_prob", 0.0) -
+                0.10 * row_float(row, "portfolio_pressure", 0.0)
+            )
+            foundation_fit_rows.append(enriched)
+        foundation_models = {
+            "teacher_floor": fit_weighted_linear_model(foundation_fit_rows, FOUNDATION_MODEL_FEATURES, "_teacher_floor_target", "obs_count"),
+            "student_floor": fit_weighted_linear_model(foundation_fit_rows, FOUNDATION_MODEL_FEATURES, "_student_floor_target", "obs_count"),
+        }
         family_payload = []
         family_weights: list[tuple[int, float]] = []
         for row in items:
@@ -141,19 +210,23 @@ def write_foundation_model_bundles(conn: sqlite3.Connection,
             "family_mix": family_payload,
             "curriculum": curriculum,
             "shadow_summary": shadow,
+            "training_models": foundation_models,
+            "training_features": shadow_features,
             "teacher_floor": _clamp(
-                0.52 +
+                0.48 +
                 0.16 * _clamp(shadow.get("mean_shadow_score", 0.0), 0.0, 1.0) +
                 0.12 * _clamp(shadow.get("mean_portfolio_stability", 0.0), 0.0, 1.0) -
-                0.10 * _clamp(shadow.get("mean_route_regret", 0.0), 0.0, 1.0),
+                0.10 * _clamp(shadow.get("mean_route_regret", 0.0), 0.0, 1.0) +
+                0.20 * predict_linear_model(foundation_models["teacher_floor"], shadow_features, 0.0),
                 0.20,
                 0.95,
             ),
             "student_floor": _clamp(
-                0.38 +
+                0.34 +
                 0.14 * _clamp(shadow.get("mean_policy_enter_prob", 0.0), 0.0, 1.0) +
                 0.10 * _clamp(shadow.get("mean_portfolio_div", 0.0), 0.0, 1.0) -
-                0.08 * _clamp(shadow.get("mean_portfolio_pressure", 0.0) / 1.5, 0.0, 1.0),
+                0.08 * _clamp(shadow.get("mean_portfolio_pressure", 0.0) / 1.5, 0.0, 1.0) +
+                0.22 * predict_linear_model(foundation_models["student_floor"], shadow_features, 0.0),
                 0.10,
                 0.90,
             ),
@@ -261,6 +334,24 @@ def write_student_deployment_bundles(conn: sqlite3.Connection,
         distill = distill_map.get((symbol, plugin_name), {})
         shadow = shadow_map.get((symbol, plugin_name), {})
         foundation = foundation_map.get(symbol, {})
+        fit_features = {
+            name: row_float(shadow, name, 0.0)
+            for name in FOUNDATION_MODEL_FEATURES
+        }
+        lifecycle_fit_rows = [dict(shadow)] if shadow else []
+        for row_payload in lifecycle_fit_rows:
+            row_payload["_hold_target"] = (
+                0.42 * row_float(row_payload, "policy_capital_efficiency", 0.0) +
+                0.24 * row_float(row_payload, "shadow_score", 0.0) -
+                0.16 * row_float(row_payload, "route_regret", 0.0) -
+                0.12 * row_float(row_payload, "portfolio_pressure", 0.0)
+            )
+        lifecycle_model = fit_weighted_linear_model(
+            lifecycle_fit_rows,
+            FOUNDATION_MODEL_FEATURES,
+            "_hold_target",
+            "obs_count",
+        )
         target = family_distillation_profile(family_id)
         if distill:
             try:
@@ -304,6 +395,8 @@ def write_student_deployment_bundles(conn: sqlite3.Connection,
             "foundation_bundle": foundation,
             "shadow_live": shadow,
             "lifecycle_policy": lifecycle_policy,
+            "lifecycle_model": lifecycle_model,
+            "fit_features": fit_features,
             "deployable_student_floor": _clamp(
                 0.40 * foundation_student_floor +
                 0.30 * target.get("student_weight", 0.42) +

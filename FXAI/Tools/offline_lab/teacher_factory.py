@@ -37,6 +37,94 @@ def _weighted_mean(items: list[tuple[float, float]], default: float) -> float:
     return total_v / total_w
 
 
+DEPLOYMENT_MODEL_FEATURES = [
+    "meta_weight",
+    "reliability",
+    "global_edge",
+    "context_edge",
+    "context_regret",
+    "portfolio_objective",
+    "portfolio_stability",
+    "portfolio_corr",
+    "portfolio_div",
+    "route_value",
+    "route_regret",
+    "route_counterfactual",
+    "policy_enter_prob",
+    "policy_no_trade_prob",
+    "policy_add_prob",
+    "policy_reduce_prob",
+    "policy_timeout_prob",
+    "policy_capital_efficiency",
+    "portfolio_pressure",
+    "control_plane_score",
+    "portfolio_supervisor_score",
+]
+
+
+def _symbol_shadow_training_rows(conn: sqlite3.Connection,
+                                 profile_name: str,
+                                 symbol: str,
+                                 limit: int = 512) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT *
+          FROM shadow_fleet_observations
+         WHERE profile_name = ? AND symbol = ?
+         ORDER BY captured_at DESC, id DESC
+         LIMIT ?
+        """,
+        (profile_name, symbol, limit),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _mean_feature_snapshot(rows: list[dict], feature_names: list[str]) -> dict[str, float]:
+    if not rows:
+        return {name: 0.0 for name in feature_names}
+    out: dict[str, float] = {}
+    for name in feature_names:
+        out[name] = sum(row_float(row, name, 0.0) for row in rows) / float(len(rows))
+    return out
+
+
+def _fit_symbol_deployment_models(rows: list[dict]) -> dict[str, dict]:
+    if not rows:
+        zero_model = fit_weighted_linear_model([], DEPLOYMENT_MODEL_FEATURES, "shadow_score", "obs_count")
+        return {
+            "teacher": zero_model,
+            "student": zero_model,
+            "lifecycle": zero_model,
+        }
+    lifecycle_rows: list[dict] = []
+    for row in rows:
+        enriched = dict(row)
+        enriched["_student_target"] = (
+            0.46 * row_float(row, "route_value", 0.0) +
+            0.28 * row_float(row, "portfolio_objective", 0.0) +
+            0.16 * row_float(row, "policy_capital_efficiency", 0.0) +
+            0.10 * row_float(row, "portfolio_stability", 0.0) -
+            0.22 * row_float(row, "route_regret", 0.0)
+        )
+        enriched["_lifecycle_target"] = (
+            0.34 * row_float(row, "policy_enter_prob", 0.0) +
+            0.20 * row_float(row, "policy_add_prob", 0.0) -
+            0.24 * row_float(row, "policy_no_trade_prob", 0.0) -
+            0.20 * row_float(row, "policy_timeout_prob", 0.0) -
+            0.10 * row_float(row, "policy_reduce_prob", 0.0) +
+            0.16 * row_float(row, "policy_capital_efficiency", 0.0) +
+            0.10 * row_float(row, "portfolio_objective", 0.0) -
+            0.18 * row_float(row, "portfolio_pressure", 0.0) -
+            0.14 * row_float(row, "portfolio_supervisor_score", 0.0)
+        )
+        lifecycle_rows.append(enriched)
+    return {
+        "teacher": fit_weighted_linear_model(rows, DEPLOYMENT_MODEL_FEATURES, "shadow_score", "obs_count"),
+        "student": fit_weighted_linear_model(lifecycle_rows, DEPLOYMENT_MODEL_FEATURES, "_student_target", "obs_count"),
+        "lifecycle": fit_weighted_linear_model(lifecycle_rows, DEPLOYMENT_MODEL_FEATURES, "_lifecycle_target", "obs_count"),
+    }
+
+
 def _latest_family_scorecards(conn: sqlite3.Connection,
                               profile_name: str) -> dict[tuple[str, int], dict]:
     rows = conn.execute(
@@ -441,6 +529,9 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
     created_at = now_unix()
     for symbol, items in sorted(by_symbol.items()):
         shadow_summary = symbol_shadow_summary(conn, args.profile, symbol)
+        shadow_training_rows = _symbol_shadow_training_rows(conn, args.profile, symbol)
+        deployment_models = _fit_symbol_deployment_models(shadow_training_rows)
+        deployment_features = _mean_feature_snapshot(shadow_training_rows, DEPLOYMENT_MODEL_FEATURES)
         teacher_weights: list[tuple[float, float]] = []
         student_weights: list[tuple[float, float]] = []
         analog_weights: list[tuple[float, float]] = []
@@ -666,6 +757,38 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
         if hard_timeout_bars <= soft_timeout_bars:
             hard_timeout_bars = soft_timeout_bars + 4
 
+        teacher_signal_gain = _clamp(
+            0.94 + 0.34 * predict_linear_model(deployment_models["teacher"], deployment_features, 0.0),
+            0.40,
+            1.80,
+        )
+        student_signal_gain = _clamp(
+            0.94 + 0.30 * predict_linear_model(deployment_models["student"], deployment_features, 0.0),
+            0.40,
+            1.80,
+        )
+        foundation_quality_gain = _clamp(
+            0.82 +
+            0.24 * _clamp(float(foundation_bundle.get("teacher_floor", 0.58)), 0.0, 1.0) +
+            0.20 * _clamp(float(foundation_bundle.get("macro_state_bias", 0.0)), 0.0, 1.0) +
+            0.12 * max(predict_linear_model(deployment_models["teacher"], deployment_features, 0.0), 0.0),
+            0.40,
+            1.80,
+        )
+        macro_state_gain = _clamp(
+            0.78 +
+            0.34 * macro_quality_floor +
+            0.20 * _clamp(float(foundation_bundle.get("macro_state_bias", 0.0)), 0.0, 1.0) +
+            0.12 * _clamp(mean_macro_score / 100.0, 0.0, 1.0),
+            0.40,
+            1.80,
+        )
+        policy_lifecycle_gain = _clamp(
+            0.90 + 0.36 * predict_linear_model(deployment_models["lifecycle"], deployment_features, 0.0),
+            0.40,
+            1.80,
+        )
+
         payload = {
             "profile_name": args.profile,
             "symbol": symbol,
@@ -682,6 +805,11 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             "macro_quality_floor": macro_quality_floor,
             "capital_efficiency_bias": capital_efficiency_bias,
             "supervisor_blend": supervisor_blend,
+            "teacher_signal_gain": teacher_signal_gain,
+            "student_signal_gain": student_signal_gain,
+            "foundation_quality_gain": foundation_quality_gain,
+            "macro_state_gain": macro_state_gain,
+            "policy_lifecycle_gain": policy_lifecycle_gain,
             "policy_hold_floor": policy_hold_floor,
             "policy_exit_floor": policy_exit_floor,
             "policy_add_floor": policy_add_floor,
@@ -694,6 +822,8 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             "foundation_bundle": foundation_bundle,
             "champions": deployment_champions,
             "shadow_summary": shadow_summary,
+            "deployment_models": deployment_models,
+            "deployment_features": deployment_features,
         }
 
         tsv_path = COMMON_PROMOTION_DIR / f"fxai_live_deploy_{safe_token(symbol)}.tsv"
@@ -713,6 +843,11 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             ("macro_quality_floor", f"{macro_quality_floor:.6f}"),
             ("capital_efficiency_bias", f"{capital_efficiency_bias:.6f}"),
             ("supervisor_blend", f"{supervisor_blend:.6f}"),
+            ("teacher_signal_gain", f"{teacher_signal_gain:.6f}"),
+            ("student_signal_gain", f"{student_signal_gain:.6f}"),
+            ("foundation_quality_gain", f"{foundation_quality_gain:.6f}"),
+            ("macro_state_gain", f"{macro_state_gain:.6f}"),
+            ("policy_lifecycle_gain", f"{policy_lifecycle_gain:.6f}"),
             ("policy_hold_floor", f"{policy_hold_floor:.6f}"),
             ("policy_exit_floor", f"{policy_exit_floor:.6f}"),
             ("policy_add_floor", f"{policy_add_floor:.6f}"),
@@ -819,6 +954,11 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             "policy_no_trade_cap": policy_no_trade_cap,
             "capital_efficiency_bias": capital_efficiency_bias,
             "supervisor_blend": supervisor_blend,
+            "teacher_signal_gain": teacher_signal_gain,
+            "student_signal_gain": student_signal_gain,
+            "foundation_quality_gain": foundation_quality_gain,
+            "macro_state_gain": macro_state_gain,
+            "policy_lifecycle_gain": policy_lifecycle_gain,
             "policy_hold_floor": policy_hold_floor,
             "policy_exit_floor": policy_exit_floor,
             "policy_add_floor": policy_add_floor,

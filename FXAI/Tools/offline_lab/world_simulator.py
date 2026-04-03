@@ -35,6 +35,26 @@ def _quantile(values: list[float], q: float, default: float = 0.0) -> float:
     return seq[lo] * (1.0 - frac) + seq[hi] * frac
 
 
+def _norm_entropy(counts: list[int]) -> float:
+    total = float(sum(max(int(v), 0) for v in counts))
+    if total <= 1e-9:
+        return 0.0
+    probs = [float(v) / total for v in counts if int(v) > 0]
+    if len(probs) <= 1:
+        return 0.0
+    ent = -sum(p * math.log(p) for p in probs if p > 0.0)
+    return _clamp(ent / math.log(float(len(probs))), 0.0, 1.0)
+
+
+def _session_bucket_from_hour(hour: int) -> str:
+    h = int(hour) % 24
+    if 7 <= h <= 12:
+        return "london"
+    if 13 <= h <= 20:
+        return "newyork"
+    return "asia"
+
+
 def build_symbol_world_model(conn: sqlite3.Connection,
                              profile_name: str,
                              symbol: str,
@@ -87,6 +107,8 @@ def build_symbol_world_model(conn: sqlite3.Connection,
     edge_spreads: list[float] = []
     non_edge_abs_returns: list[float] = []
     non_edge_spreads: list[float] = []
+    session_abs_returns: dict[str, list[float]] = {"asia": [], "london": [], "newyork": []}
+    session_spreads: dict[str, list[float]] = {"asia": [], "london": [], "newyork": []}
     bar_records: list[tuple[float, float, float]] = []
     same_sign = 0
     sign_pairs = 0
@@ -138,7 +160,10 @@ def build_symbol_world_model(conn: sqlite3.Connection,
             hour = datetime.fromtimestamp(int(cur["bar_time_unix"]), tz=timezone.utc).hour
             edge_hour = (7 <= hour <= 9) or (15 <= hour <= 17) or hour in (22, 23, 0)
             edge_score = 1.0 if edge_hour else 0.0
+            session_key = _session_bucket_from_hour(hour)
             bar_records.append((ret, spread, edge_score))
+            session_abs_returns[session_key].append(abs(ret))
+            session_spreads[session_key].append(spread)
             if edge_hour:
                 edge_abs_returns.append(abs(ret))
                 edge_spreads.append(spread)
@@ -229,6 +254,10 @@ def build_symbol_world_model(conn: sqlite3.Connection,
     regime_transition_burst = state_changes / float(max(len(bar_records) - 1, 1))
     vol_cluster_bias = (stress_stay / float(max(stress_obs, 1))) if stress_obs > 0 else 0.0
     mean_revert_bias = (revert_obs / total_states)
+    transition_entropy = 0.0
+    for idx in range(4):
+        transition_entropy += (state_counts[idx] / total_states) * _norm_entropy(transition[idx])
+    shock_decay = _clamp(0.35 + 0.45 * (1.0 - shock_memory) + 0.20 * shock_reversal, 0.0, 1.5)
     state_prototypes = []
     for idx, name in enumerate(state_names):
         count = max(state_counts[idx], 1)
@@ -316,8 +345,16 @@ def build_symbol_world_model(conn: sqlite3.Connection,
         "spread_shock_prob": _clamp(spread_shock_prob, 0.0, 0.50),
         "spread_shock_scale": _clamp(p98_spread / median_spread, 1.0, 8.0),
         "regime_transition_burst": _clamp(regime_transition_burst, 0.0, 1.0),
+        "transition_entropy": _clamp(transition_entropy, 0.0, 1.0),
         "mean_revert_bias": _clamp(mean_revert_bias, 0.0, 1.0),
         "vol_cluster_bias": _clamp(vol_cluster_bias, 0.0, 1.0),
+        "shock_decay": shock_decay,
+        "asia_sigma_scale": _clamp(_mean(session_abs_returns["asia"], sigma) / max(sigma, 1e-6), 0.50, 3.00),
+        "london_sigma_scale": _clamp(_mean(session_abs_returns["london"], sigma) / max(sigma, 1e-6), 0.50, 3.00),
+        "newyork_sigma_scale": _clamp(_mean(session_abs_returns["newyork"], sigma) / max(sigma, 1e-6), 0.50, 3.00),
+        "asia_spread_scale": _clamp(_mean(session_spreads["asia"], median_spread) / max(median_spread, 1.0), 0.50, 4.00),
+        "london_spread_scale": _clamp(_mean(session_spreads["london"], median_spread) / max(median_spread, 1.0), 0.50, 4.00),
+        "newyork_spread_scale": _clamp(_mean(session_spreads["newyork"], median_spread) / max(median_spread, 1.0), 0.50, 4.00),
         "state_prototypes": state_prototypes,
         "shadow_summary": shadow,
         "datasets": dataset_payloads,

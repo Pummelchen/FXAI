@@ -32,8 +32,11 @@ Notes:
 - `best-params` promotes all symbols under the selected profile by default; use `--symbol`, `--symbol-list`, or `--symbol-pack` only when you want to narrow the scope.
 - `attribution-prune` builds `FILE_COMMON` attribution and student-router artifacts without needing a full deployment refresh.
 - `deploy-profiles` emits the live deployment TSVs consumed by the MT5 runtime.
+- `deploy-profiles` now also emits fitted deployment gains derived from shadow telemetry so live teacher, student, macro, foundation, and lifecycle trust can be tuned per symbol.
 - `supervisor-sync` refreshes central supervisor-service and supervisor-command artifacts from live control-plane snapshots.
+- `supervisor-sync` now emits freshness-bounded supervisor artifacts with directional entry-budget multipliers and pressure velocity, so stale or asymmetric portfolio pressure can be rejected by MT5 runtime loaders.
 - `autonomous-governance` rebuilds portfolio supervisor and world-plan outputs from current research telemetry.
+- `autonomous-governance` now also rebuilds causal attribution, plugin-pruning, and richer world plans with transition entropy, shock decay, and session-level stress scales.
 - Exact-window datasets store the effective exported first and last bar range, so later tuning and promotion stay aligned to the data that was actually ingested.
 - SQLite access is opened with a bounded retry and busy timeout so overlapping admin and control-loop calls do not fail on transient lock contention.
 
@@ -45,3 +48,5 @@ Generated promotion artifacts land in:
 Research and governance artifacts land in:
 - `FXAI/Tools/OfflineLab/ResearchOS/`
 - `FXAI/Tools/OfflineLab/Distillation/`
+
+These Offline Lab runtime outputs are generated artifacts and should not be versioned in git.

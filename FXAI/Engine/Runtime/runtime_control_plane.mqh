@@ -50,6 +50,11 @@ struct FXAILiveDeploymentProfile
    double policy_no_trade_cap;
    double capital_efficiency_bias;
    double supervisor_blend;
+   double teacher_signal_gain;
+   double student_signal_gain;
+   double foundation_quality_gain;
+   double macro_state_gain;
+   double policy_lifecycle_gain;
    double policy_hold_floor;
    double policy_exit_floor;
    double policy_add_floor;
@@ -139,12 +144,19 @@ struct FXAISupervisorServiceState
    bool   ready;
    string profile_name;
    string symbol;
+   datetime generated_at;
+   datetime expires_at;
    int    snapshot_count;
    double gross_pressure;
    double directional_long_pressure;
    double directional_short_pressure;
    double macro_pressure;
    double concentration_pressure;
+   double freshness_penalty;
+   double pressure_velocity;
+   double gross_velocity;
+   double long_entry_budget_mult;
+   double short_entry_budget_mult;
    double budget_multiplier;
    double add_multiplier;
    double reduce_bias;
@@ -164,6 +176,7 @@ struct FXAIStudentRouterProfile
    int    max_active_models;
    double min_meta_weight;
    string allow_plugins_csv;
+   string plugin_weights_csv;
    double family_weight[FXAI_FAMILY_OTHER + 1];
    datetime loaded_at;
 };
@@ -173,7 +186,11 @@ struct FXAISupervisorCommandState
    bool   ready;
    string profile_name;
    string symbol;
+   datetime generated_at;
+   datetime expires_at;
    double entry_budget_mult;
+   double long_entry_budget_mult;
+   double short_entry_budget_mult;
    double hold_budget_mult;
    double add_cap_mult;
    double reduce_bias;
@@ -231,6 +248,11 @@ void FXAI_ResetLiveDeploymentProfile(FXAILiveDeploymentProfile &out)
    out.policy_no_trade_cap = 0.62;
    out.capital_efficiency_bias = 1.0;
    out.supervisor_blend = 0.45;
+   out.teacher_signal_gain = 1.0;
+   out.student_signal_gain = 1.0;
+   out.foundation_quality_gain = 1.0;
+   out.macro_state_gain = 1.0;
+   out.policy_lifecycle_gain = 1.0;
    out.policy_hold_floor = 0.48;
    out.policy_exit_floor = 0.58;
    out.policy_add_floor = 0.68;
@@ -320,12 +342,19 @@ void FXAI_ResetSupervisorServiceState(FXAISupervisorServiceState &out)
    out.ready = false;
    out.profile_name = "";
    out.symbol = "";
+   out.generated_at = 0;
+   out.expires_at = 0;
    out.snapshot_count = 0;
    out.gross_pressure = 0.0;
    out.directional_long_pressure = 0.0;
    out.directional_short_pressure = 0.0;
    out.macro_pressure = 0.0;
    out.concentration_pressure = 0.0;
+   out.freshness_penalty = 0.0;
+   out.pressure_velocity = 0.0;
+   out.gross_velocity = 0.0;
+   out.long_entry_budget_mult = 1.0;
+   out.short_entry_budget_mult = 1.0;
    out.budget_multiplier = 1.0;
    out.add_multiplier = 1.0;
    out.reduce_bias = 0.0;
@@ -345,6 +374,7 @@ void FXAI_ResetStudentRouterProfile(FXAIStudentRouterProfile &out)
    out.max_active_models = 12;
    out.min_meta_weight = 0.0;
    out.allow_plugins_csv = "";
+   out.plugin_weights_csv = "";
    for(int i=0; i<=FXAI_FAMILY_OTHER; i++)
       out.family_weight[i] = 1.0;
    out.loaded_at = 0;
@@ -355,7 +385,11 @@ void FXAI_ResetSupervisorCommandState(FXAISupervisorCommandState &out)
    out.ready = false;
    out.profile_name = "";
    out.symbol = "";
+   out.generated_at = 0;
+   out.expires_at = 0;
    out.entry_budget_mult = 1.0;
+   out.long_entry_budget_mult = 1.0;
+   out.short_entry_budget_mult = 1.0;
    out.hold_budget_mult = 1.0;
    out.add_cap_mult = 1.0;
    out.reduce_bias = 0.0;
@@ -516,6 +550,57 @@ bool FXAI_CSVContainsToken(const string csv,
    return false;
 }
 
+double FXAI_CSVMapWeight(const string csv,
+                         const string key,
+                         const double default_value = 1.0)
+{
+   string clean_key = key;
+   StringTrimLeft(clean_key);
+   StringTrimRight(clean_key);
+   if(StringLen(clean_key) <= 0)
+      return default_value;
+   string parts[];
+   int n = StringSplit(csv, ',', parts);
+   for(int i=0; i<n; i++)
+   {
+      string item = parts[i];
+      StringTrimLeft(item);
+      StringTrimRight(item);
+      if(StringLen(item) <= 0)
+         continue;
+      string kv[];
+      int kv_n = StringSplit(item, '=', kv);
+      if(kv_n < 2)
+         continue;
+      string item_key = kv[0];
+      StringTrimLeft(item_key);
+      StringTrimRight(item_key);
+      if(item_key != clean_key)
+         continue;
+      return StringToDouble(kv[1]);
+   }
+   return default_value;
+}
+
+bool FXAI_ControlPlaneArtifactFresh(const datetime generated_at,
+                                    const datetime expires_at,
+                                    const int fallback_ttl_sec)
+{
+   datetime now = TimeCurrent();
+   if(now <= 0)
+      now = TimeTradeServer();
+   if(now <= 0)
+      now = iTime(_Symbol, PERIOD_M1, 0);
+   if(now <= 0)
+      return true;
+   if(expires_at > 0 && now > expires_at)
+      return false;
+   if(generated_at > 0 && fallback_ttl_sec > 0 && now > generated_at &&
+      (now - generated_at) > fallback_ttl_sec)
+      return false;
+   return true;
+}
+
 bool FXAI_LoadLiveDeploymentProfile(const string symbol,
                                     FXAILiveDeploymentProfile &out,
                                     const bool force_reload = false)
@@ -596,6 +681,16 @@ bool FXAI_LoadLiveDeploymentProfile(const string symbol,
          out.capital_efficiency_bias = StringToDouble(value);
       else if(key == "supervisor_blend")
          out.supervisor_blend = StringToDouble(value);
+      else if(key == "teacher_signal_gain")
+         out.teacher_signal_gain = StringToDouble(value);
+      else if(key == "student_signal_gain")
+         out.student_signal_gain = StringToDouble(value);
+      else if(key == "foundation_quality_gain")
+         out.foundation_quality_gain = StringToDouble(value);
+      else if(key == "macro_state_gain")
+         out.macro_state_gain = StringToDouble(value);
+      else if(key == "policy_lifecycle_gain")
+         out.policy_lifecycle_gain = StringToDouble(value);
       else if(key == "policy_hold_floor")
          out.policy_hold_floor = StringToDouble(value);
       else if(key == "policy_exit_floor")
@@ -630,6 +725,11 @@ bool FXAI_LoadLiveDeploymentProfile(const string symbol,
    out.policy_no_trade_cap = FXAI_Clamp(out.policy_no_trade_cap, 0.25, 0.95);
    out.capital_efficiency_bias = FXAI_Clamp(out.capital_efficiency_bias, 0.40, 1.80);
    out.supervisor_blend = FXAI_Clamp(out.supervisor_blend, 0.0, 1.0);
+   out.teacher_signal_gain = FXAI_Clamp(out.teacher_signal_gain, 0.40, 1.80);
+   out.student_signal_gain = FXAI_Clamp(out.student_signal_gain, 0.40, 1.80);
+   out.foundation_quality_gain = FXAI_Clamp(out.foundation_quality_gain, 0.40, 1.80);
+   out.macro_state_gain = FXAI_Clamp(out.macro_state_gain, 0.40, 1.80);
+   out.policy_lifecycle_gain = FXAI_Clamp(out.policy_lifecycle_gain, 0.40, 1.80);
    out.policy_hold_floor = FXAI_Clamp(out.policy_hold_floor, 0.20, 0.95);
    out.policy_exit_floor = FXAI_Clamp(out.policy_exit_floor, 0.20, 0.99);
    out.policy_add_floor = FXAI_Clamp(out.policy_add_floor, 0.20, 0.99);
@@ -760,6 +860,10 @@ bool FXAI_LoadSupervisorServiceStateFromFile(const string file_name,
          out.profile_name = value;
       else if(key == "symbol")
          out.symbol = value;
+      else if(key == "generated_at")
+         out.generated_at = (datetime)StringToInteger(value);
+      else if(key == "expires_at")
+         out.expires_at = (datetime)StringToInteger(value);
       else if(key == "snapshot_count")
          out.snapshot_count = (int)StringToInteger(value);
       else if(key == "gross_pressure")
@@ -772,6 +876,16 @@ bool FXAI_LoadSupervisorServiceStateFromFile(const string file_name,
          out.macro_pressure = StringToDouble(value);
       else if(key == "concentration_pressure")
          out.concentration_pressure = StringToDouble(value);
+      else if(key == "freshness_penalty")
+         out.freshness_penalty = StringToDouble(value);
+      else if(key == "pressure_velocity")
+         out.pressure_velocity = StringToDouble(value);
+      else if(key == "gross_velocity")
+         out.gross_velocity = StringToDouble(value);
+      else if(key == "long_entry_budget_mult")
+         out.long_entry_budget_mult = StringToDouble(value);
+      else if(key == "short_entry_budget_mult")
+         out.short_entry_budget_mult = StringToDouble(value);
       else if(key == "budget_multiplier")
          out.budget_multiplier = StringToDouble(value);
       else if(key == "add_multiplier")
@@ -795,14 +909,27 @@ bool FXAI_LoadSupervisorServiceStateFromFile(const string file_name,
    out.directional_short_pressure = FXAI_Clamp(out.directional_short_pressure, 0.0, 2.0);
    out.macro_pressure = FXAI_Clamp(out.macro_pressure, 0.0, 1.5);
    out.concentration_pressure = FXAI_Clamp(out.concentration_pressure, 0.0, 1.0);
+   out.freshness_penalty = FXAI_Clamp(out.freshness_penalty, 0.0, 1.0);
+   out.pressure_velocity = FXAI_Clamp(out.pressure_velocity, -1.0, 1.0);
+   out.gross_velocity = FXAI_Clamp(out.gross_velocity, -1.0, 1.0);
+   out.long_entry_budget_mult = FXAI_Clamp(out.long_entry_budget_mult, 0.10, 1.20);
+   out.short_entry_budget_mult = FXAI_Clamp(out.short_entry_budget_mult, 0.10, 1.20);
    out.budget_multiplier = FXAI_Clamp(out.budget_multiplier, 0.10, 1.20);
+   if(MathAbs(out.long_entry_budget_mult - 1.0) < 1e-6 &&
+      MathAbs(out.short_entry_budget_mult - 1.0) < 1e-6 &&
+      MathAbs(out.budget_multiplier - 1.0) > 1e-6)
+   {
+      out.long_entry_budget_mult = out.budget_multiplier;
+      out.short_entry_budget_mult = out.budget_multiplier;
+   }
    out.add_multiplier = FXAI_Clamp(out.add_multiplier, 0.10, 1.40);
    out.reduce_bias = FXAI_Clamp(out.reduce_bias, 0.0, 1.0);
    out.exit_bias = FXAI_Clamp(out.exit_bias, 0.0, 1.0);
    out.entry_floor = FXAI_Clamp(out.entry_floor, 0.10, 0.95);
    out.block_score = FXAI_Clamp(out.block_score, 0.20, 3.0);
    out.supervisor_score = FXAI_Clamp(out.supervisor_score, 0.0, 3.0);
-   out.ready = (StringLen(out.symbol) > 0);
+   out.ready = (StringLen(out.symbol) > 0 &&
+                FXAI_ControlPlaneArtifactFresh(out.generated_at, out.expires_at, 240));
    out.loaded_at = TimeCurrent();
    if(out.loaded_at <= 0)
       out.loaded_at = TimeTradeServer();
@@ -931,6 +1058,8 @@ bool FXAI_LoadStudentRouterProfile(const string symbol,
          out.min_meta_weight = StringToDouble(value);
       else if(key == "allow_plugins_csv")
          out.allow_plugins_csv = value;
+      else if(key == "plugin_weights_csv")
+         out.plugin_weights_csv = value;
       else if(StringFind(key, "family_weight_") == 0)
       {
          string family_name = StringSubstr(key, 14);
@@ -966,6 +1095,17 @@ double FXAI_StudentRouterFamilyWeight(const FXAIStudentRouterProfile &profile,
    return FXAI_Clamp(profile.family_weight[family_id], 0.05, 1.50);
 }
 
+double FXAI_StudentRouterPluginWeight(const FXAIStudentRouterProfile &profile,
+                                      const string plugin_name,
+                                      const int family_id)
+{
+   double family_weight = FXAI_StudentRouterFamilyWeight(profile, family_id);
+   if(!profile.ready)
+      return family_weight;
+   double plugin_weight = FXAI_CSVMapWeight(profile.plugin_weights_csv, plugin_name, family_weight);
+   return FXAI_Clamp(plugin_weight, 0.01, 1.60);
+}
+
 bool FXAI_StudentRouterAllowsPlugin(const FXAIStudentRouterProfile &profile,
                                     const string plugin_name,
                                     const int family_id)
@@ -974,6 +1114,8 @@ bool FXAI_StudentRouterAllowsPlugin(const FXAIStudentRouterProfile &profile,
       return true;
    if(family_id >= 0 && family_id <= FXAI_FAMILY_OTHER &&
       profile.family_weight[family_id] <= 0.051)
+      return false;
+   if(FXAI_StudentRouterPluginWeight(profile, plugin_name, family_id) <= 0.021)
       return false;
    if(!profile.champion_only)
       return true;
@@ -1050,8 +1192,16 @@ bool FXAI_LoadSupervisorCommandState(const string symbol,
          out.profile_name = value;
       else if(key == "symbol")
          out.symbol = value;
+      else if(key == "generated_at")
+         out.generated_at = (datetime)StringToInteger(value);
+      else if(key == "expires_at")
+         out.expires_at = (datetime)StringToInteger(value);
       else if(key == "entry_budget_mult")
          out.entry_budget_mult = StringToDouble(value);
+      else if(key == "long_entry_budget_mult")
+         out.long_entry_budget_mult = StringToDouble(value);
+      else if(key == "short_entry_budget_mult")
+         out.short_entry_budget_mult = StringToDouble(value);
       else if(key == "hold_budget_mult")
          out.hold_budget_mult = StringToDouble(value);
       else if(key == "add_cap_mult")
@@ -1078,6 +1228,15 @@ bool FXAI_LoadSupervisorCommandState(const string symbol,
    FileClose(handle);
 
    out.entry_budget_mult = FXAI_Clamp(out.entry_budget_mult, 0.10, 1.20);
+   out.long_entry_budget_mult = FXAI_Clamp(out.long_entry_budget_mult, 0.10, 1.20);
+   out.short_entry_budget_mult = FXAI_Clamp(out.short_entry_budget_mult, 0.10, 1.20);
+   if(MathAbs(out.long_entry_budget_mult - 1.0) < 1e-6 &&
+      MathAbs(out.short_entry_budget_mult - 1.0) < 1e-6 &&
+      MathAbs(out.entry_budget_mult - 1.0) > 1e-6)
+   {
+      out.long_entry_budget_mult = out.entry_budget_mult;
+      out.short_entry_budget_mult = out.entry_budget_mult;
+   }
    out.hold_budget_mult = FXAI_Clamp(out.hold_budget_mult, 0.10, 1.20);
    out.add_cap_mult = FXAI_Clamp(out.add_cap_mult, 0.05, 1.20);
    out.reduce_bias = FXAI_Clamp(out.reduce_bias, 0.0, 1.0);
@@ -1086,6 +1245,8 @@ bool FXAI_LoadSupervisorCommandState(const string symbol,
    out.timeout_bias = FXAI_Clamp(out.timeout_bias, 0.0, 1.0);
    out.block_score = FXAI_Clamp(out.block_score, 0.20, 3.0);
    out.max_active_models = (int)FXAI_Clamp((double)out.max_active_models, 1.0, (double)FXAI_AI_COUNT);
+   if(!FXAI_ControlPlaneArtifactFresh(out.generated_at, out.expires_at, 240))
+      return false;
    out.ready = true;
    out.loaded_at = now;
    if(out.symbol == "__GLOBAL__")
@@ -1113,6 +1274,18 @@ bool FXAI_SupervisorCommandBlocksDirection(const FXAISupervisorCommandState &sta
    if(direction == 0)
       return state.short_block;
    return (state.long_block && state.short_block);
+}
+
+double FXAI_SupervisorCommandEntryBudgetMult(const FXAISupervisorCommandState &state,
+                                             const int direction)
+{
+   if(!state.ready)
+      return 1.0;
+   if(direction == 1)
+      return FXAI_Clamp(state.long_entry_budget_mult, 0.10, 1.20);
+   if(direction == 0)
+      return FXAI_Clamp(state.short_entry_budget_mult, 0.10, 1.20);
+   return FXAI_Clamp(state.entry_budget_mult, 0.10, 1.20);
 }
 
 bool FXAI_ReadControlPlaneSnapshotFile(const string file_name,

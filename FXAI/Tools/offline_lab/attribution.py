@@ -5,7 +5,7 @@ import sqlite3
 from pathlib import Path
 
 from .common import *
-from .shadow_fleet import symbol_shadow_summary
+from .shadow_fleet import latest_shadow_rows, symbol_shadow_summary
 
 
 FEATURE_GROUPS: list[tuple[int, str]] = [
@@ -70,6 +70,18 @@ def _champion_rows(conn: sqlite3.Connection,
             (profile_name, symbol),
         ).fetchall()
     ]
+
+
+def _latest_plugin_shadow_rows(conn: sqlite3.Connection,
+                               profile_name: str,
+                               symbol: str) -> dict[str, dict]:
+    rows = latest_shadow_rows(conn, profile_name)
+    out: dict[str, dict] = {}
+    for (row_symbol, plugin_name), row in rows.items():
+        if str(row_symbol) != symbol:
+            continue
+        out[str(plugin_name)] = dict(row)
+    return out
 
 
 def _feature_group_weights(conn: sqlite3.Connection,
@@ -168,6 +180,67 @@ def _family_weights(family_rows: dict[int, dict],
     return out
 
 
+def _plugin_weights(conn: sqlite3.Connection,
+                    profile_name: str,
+                    symbol: str,
+                    champion_rows: list[dict],
+                    family_weights: dict[str, float],
+                    shadow: dict) -> tuple[dict[str, float], dict[str, str], list[str]]:
+    latest_rows = _latest_plugin_shadow_rows(conn, profile_name, symbol)
+    shadow_pressure = _clamp(float(shadow.get("mean_portfolio_pressure", 0.0)) / 1.5, 0.0, 1.0)
+    route_regret = _clamp(float(shadow.get("mean_route_regret", 0.0)), 0.0, 1.0)
+    plugin_weights: dict[str, float] = {}
+    prune_reasons: dict[str, str] = {}
+    pruned_plugins: list[str] = []
+
+    for row in champion_rows:
+        plugin_name = str(row["plugin_name"])
+        family_name = plugin_family_name(int(row.get("family_id", 11)))
+        family_weight = _clamp(float(family_weights.get(family_name, 0.90)), 0.05, 1.50)
+        shadow_row = latest_rows.get(plugin_name, {})
+        status = str(row.get("status", "")).lower()
+        champion_score = _clamp(float(row.get("champion_score", 0.0)) / 100.0, -1.0, 1.0)
+        challenger_score = _clamp(float(row.get("challenger_score", 0.0)) / 100.0, -1.0, 1.0)
+        shadow_score = _clamp(float(shadow_row.get("shadow_score", 0.0)), -1.0, 1.0)
+        route_value = _clamp(float(shadow_row.get("route_value", 0.0)), -1.0, 1.0)
+        context_regret = _clamp(float(shadow_row.get("context_regret", 0.0)), 0.0, 1.0)
+        route_row_regret = _clamp(float(shadow_row.get("route_regret", route_regret)), 0.0, 1.0)
+        portfolio_objective = _clamp(float(shadow_row.get("portfolio_objective", 0.0)), -1.0, 1.0)
+        reliability = _clamp(float(shadow_row.get("reliability", 0.0)), 0.0, 1.0)
+        base = 0.62
+        if status == "champion":
+            base += 0.18
+        elif status == "challenger":
+            base += 0.06
+        score = base
+        score += 0.18 * family_weight
+        score += 0.16 * champion_score
+        score += 0.10 * challenger_score
+        score += 0.16 * shadow_score
+        score += 0.12 * route_value
+        score += 0.08 * portfolio_objective
+        score += 0.06 * reliability
+        score -= 0.14 * route_row_regret
+        score -= 0.08 * context_regret
+        score -= 0.08 * shadow_pressure
+        score = _clamp(score, 0.05, 1.60)
+        plugin_weights[plugin_name] = score
+
+        reason = ""
+        if score <= 0.22:
+            reason = "router_weight_too_low"
+        elif shadow_score < -0.18 and route_row_regret > 0.55:
+            reason = "negative_live_shadow_and_high_regret"
+        elif reliability < 0.20 and route_value < -0.10:
+            reason = "low_reliability_and_negative_route_value"
+        if reason:
+            prune_reasons[plugin_name] = reason
+            pruned_plugins.append(plugin_name)
+
+    pruned_plugins = sorted(set(pruned_plugins))
+    return plugin_weights, prune_reasons, pruned_plugins
+
+
 def write_attribution_profiles(conn: sqlite3.Connection,
                                args) -> list[dict]:
     symbols = sorted({
@@ -200,6 +273,14 @@ def write_attribution_profiles(conn: sqlite3.Connection,
         champion_rows = _champion_rows(conn, args.profile, symbol)
         family_weights = _family_weights(family_rows, shadow)
         feature_weights = _feature_group_weights(conn, args.profile, symbol, shadow)
+        plugin_weights, prune_reasons, pruned_plugins = _plugin_weights(
+            conn,
+            args.profile,
+            symbol,
+            champion_rows,
+            family_weights,
+            shadow,
+        )
 
         champion_plugins = [str(row["plugin_name"]) for row in champion_rows if str(row.get("status", "")) == "champion"]
         challenger_plugins = [str(row["plugin_name"]) for row in champion_rows if str(row.get("status", "")) == "challenger"]
@@ -228,6 +309,9 @@ def write_attribution_profiles(conn: sqlite3.Connection,
             "symbol": symbol,
             "family_weights": family_weights,
             "feature_group_weights": feature_weights,
+            "plugin_weights": plugin_weights,
+            "plugin_prune_reasons": prune_reasons,
+            "pruned_plugins": pruned_plugins,
             "champion_only": bool(champion_only),
             "max_active_models": int(max_active_models),
             "min_meta_weight": float(min_meta_weight),

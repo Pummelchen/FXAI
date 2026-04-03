@@ -57,6 +57,9 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - The live EA now uses portfolio-native sizing and gating with directional-cluster pressure, hierarchy floors, and macro-state quality controls instead of only scalar conviction scaling.
 - The live runtime now emits per-instance control-plane snapshots and consumes promoted symbol deployment profiles so research-side promotion decisions can steer trade floors, sizing bias, and peer-pressure handling.
 - The live runtime now also consumes promoted supervisor-service artifacts and policy lifecycle thresholds so add, reduce, tighten, timeout, and exit behavior can be governed by the research OS rather than static EA-only logic.
+- Live deployment profiles now carry fitted teacher, student, foundation, macro, and lifecycle gains so runtime trust and adaptation can be steered from shadow telemetry instead of only static profile weights.
+- Student-router promotion now includes plugin-level weights and hard pruning, not only family-level breadth limits.
+- Supervisor-service and supervisor-command artifacts now include freshness windows, directional entry-budget multipliers, and pressure velocity so stale or one-sided supervisor state is less likely to leak into live admission logic.
 - Stateful plugins now persist deterministic replay-backed checkpoint metadata under the `native_model` promotion contract, including replay and hyperparameter integrity checks.
 - Stateful runtime manifests now expose checkpoint depth, native snapshot coverage, and deterministic replay flags for release gating.
 - Shared transfer warmup now uses a deeper temporal backbone over the rolling window instead of only static current-bar summary features, and runtime artifacts persist that backbone state.
@@ -69,6 +72,7 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - Offline Lab now exports exact-window `M1 OHLC + spread` datasets into SQLite, stores full tuning ledgers and scenario metrics, and promotes ready-to-use MT5 `.set` files under `Tools/OfflineLab/Profiles/`, `MQL5/Profiles/Tester/`, and `FILE_COMMON/FXAI/Offline/Promotions/`.
 - Offline Lab also maintains champion/challenger governance, parameter lineage, family scorecards, distillation artifacts, teacher-factory payloads, live deployment profiles, shadow-fleet telemetry, and learned red-team plans under `Tools/OfflineLab/ResearchOS/` and `Tools/OfflineLab/Distillation/`.
 - Offline Lab now emits foundation-teacher artifacts, portfolio-supervisor profiles, and per-symbol world-simulator plans that are consumed by MT5 runtime control-plane logic and Audit Lab adversarial generation.
+- World-simulator plans now include transition entropy, shock decay, and session-specific sigma/spread scaling learned from exported market windows instead of only coarse global stress factors.
 - Offline Lab now also emits student deployment bundles and per-symbol or global supervisor-service artifacts so the promoted runtime can blend peer pressure, capital budget, add or reduce bias, and lifecycle floors without manual operator edits.
 - Offline Lab promotion is profile-wide by default in `best-params`, unless a symbol filter is passed, and exact-window audit runs now follow the effective exported first/last bar range.
 

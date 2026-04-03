@@ -51,6 +51,33 @@ double FXAI_AuditSessionEdgeStrength(const datetime t)
    return FXAI_Clamp(edge, 0.0, 1.0);
 }
 
+int FXAI_AuditHourOf(const datetime t)
+{
+   MqlDateTime dt;
+   TimeToStruct(t, dt);
+   return dt.hour;
+}
+
+double FXAI_AuditSessionSigmaScale(const FXAIAuditScenarioSpec &spec,
+                                   const int hour)
+{
+   if(hour >= 7 && hour <= 12)
+      return FXAI_Clamp(spec.world_london_sigma_scale, 0.50, 3.00);
+   if(hour >= 13 && hour <= 20)
+      return FXAI_Clamp(spec.world_newyork_sigma_scale, 0.50, 3.00);
+   return FXAI_Clamp(spec.world_asia_sigma_scale, 0.50, 3.00);
+}
+
+double FXAI_AuditSessionSpreadScale(const FXAIAuditScenarioSpec &spec,
+                                    const int hour)
+{
+   if(hour >= 7 && hour <= 12)
+      return FXAI_Clamp(spec.world_london_spread_scale, 0.50, 4.00);
+   if(hour >= 13 && hour <= 20)
+      return FXAI_Clamp(spec.world_newyork_spread_scale, 0.50, 4.00);
+   return FXAI_Clamp(spec.world_asia_spread_scale, 0.50, 4.00);
+}
+
 void FXAI_AuditNormalizeRateBar(MqlRates &bar,
                                 const double point)
 {
@@ -112,13 +139,18 @@ void FXAI_AuditApplyWorldPlanToMarketRates(MqlRates &rates_m1[],
       double edge_focus = FXAI_Clamp(spec.world_session_edge_focus, 0.0, 1.5);
       double persistence = FXAI_Clamp(spec.world_trend_persistence, 0.0, 1.0);
       double shock_memory = FXAI_Clamp(spec.world_shock_memory, 0.0, 1.0);
+      double shock_decay = FXAI_Clamp(spec.world_shock_decay, 0.0, 1.5);
       double recovery_bias = FXAI_Clamp(spec.world_recovery_bias, -1.0, 1.0);
       double transition_burst = FXAI_Clamp(spec.world_regime_transition_burst, 0.0, 1.0);
+      double transition_entropy = FXAI_Clamp(spec.world_transition_entropy, 0.0, 1.0);
       double mean_revert_bias = FXAI_Clamp(spec.world_mean_revert_bias, 0.0, 1.0);
       double vol_cluster_bias = FXAI_Clamp(spec.world_vol_cluster_bias, 0.0, 1.0);
       double gap_prob = FXAI_Clamp(spec.world_gap_prob, 0.0, 0.30);
       double gap_scale = FXAI_Clamp(spec.world_gap_scale, 0.0, 8.0);
       double spread_scale = FXAI_Clamp(spec.world_spread_scale, 0.50, 4.00);
+      int session_hour = FXAI_AuditHourOf(bar.time);
+      sigma_scale *= FXAI_AuditSessionSigmaScale(spec, session_hour);
+      spread_scale *= FXAI_AuditSessionSpreadScale(spec, session_hour);
       double liquidity = FXAI_Clamp(spec.world_liquidity_stress, 0.0, 3.0);
       double spread_shock_prob = FXAI_Clamp(spec.world_spread_shock_prob, 0.0, 0.50);
       double spread_shock_scale = FXAI_Clamp(spec.world_spread_shock_scale, 1.0, 8.0);
@@ -142,7 +174,8 @@ void FXAI_AuditApplyWorldPlanToMarketRates(MqlRates &rates_m1[],
 
       double ret = base_ret * sigma_scale * edge_vol_mult + spec.world_drift_bias * (0.70 + 0.30 * session_edge);
       double live_flip_prob = FXAI_Clamp(flip_prob + 0.14 * mean_revert_bias +
-                                         0.10 * transition_burst * (1.0 - session_edge),
+                                         0.10 * transition_burst * (1.0 - session_edge) +
+                                         0.08 * transition_entropy,
                                          0.0,
                                          0.65);
       if(FXAI_AuditWorldHashUnit(bar.time, 5) < live_flip_prob)
@@ -167,7 +200,8 @@ void FXAI_AuditApplyWorldPlanToMarketRates(MqlRates &rates_m1[],
       double range_scale = (0.78 + 0.22 * sigma_scale) *
                            (1.0 + 0.22 * edge_focus * session_edge + 0.10 * liquidity + 0.12 * transition_burst);
       if(prev_shock_strength > 0.0)
-         range_scale *= (1.0 + 0.20 * prev_shock_strength * (0.60 + shock_memory + 0.35 * vol_cluster_bias));
+         range_scale *= (1.0 + 0.20 * prev_shock_strength * (0.60 + shock_memory + 0.35 * vol_cluster_bias) *
+                         (1.0 + 0.20 * transition_entropy));
       double new_range = MathMax(2.0 * pt, base_range * range_scale);
       double wick_up = MathMax(0.5 * pt, new_range * MathMax(upper_ratio, 0.15));
       double wick_dn = MathMax(0.5 * pt, new_range * MathMax(lower_ratio, 0.15));
@@ -194,8 +228,10 @@ void FXAI_AuditApplyWorldPlanToMarketRates(MqlRates &rates_m1[],
       rates_m1[i] = bar;
 
       prev_ret_t = (prev_close_t > pt ? (bar.close - prev_close_t) / prev_close_t : 0.0);
-      prev_shock_strength = FXAI_Clamp(MathAbs(prev_ret_t) /
-                                       MathMax(MathAbs(base_ret) + 1e-6, 1e-6),
+      prev_shock_strength = FXAI_Clamp((MathAbs(prev_ret_t) /
+                                       MathMax(MathAbs(base_ret) + 1e-6, 1e-6)) *
+                                       (1.0 - 0.25 * shock_decay) +
+                                       0.10 * transition_entropy,
                                        0.0,
                                        3.0);
       prev_close_t = bar.close;
@@ -253,10 +289,26 @@ void FXAI_AuditApplyWorldPlan(FXAIAuditScenarioSpec &spec,
          spec.world_spread_shock_scale = StringToDouble(value);
       else if(key == "regime_transition_burst")
          spec.world_regime_transition_burst = StringToDouble(value);
+      else if(key == "transition_entropy")
+         spec.world_transition_entropy = StringToDouble(value);
       else if(key == "mean_revert_bias")
          spec.world_mean_revert_bias = StringToDouble(value);
       else if(key == "vol_cluster_bias")
          spec.world_vol_cluster_bias = StringToDouble(value);
+      else if(key == "shock_decay")
+         spec.world_shock_decay = StringToDouble(value);
+      else if(key == "asia_sigma_scale")
+         spec.world_asia_sigma_scale = StringToDouble(value);
+      else if(key == "london_sigma_scale")
+         spec.world_london_sigma_scale = StringToDouble(value);
+      else if(key == "newyork_sigma_scale")
+         spec.world_newyork_sigma_scale = StringToDouble(value);
+      else if(key == "asia_spread_scale")
+         spec.world_asia_spread_scale = StringToDouble(value);
+      else if(key == "london_spread_scale")
+         spec.world_london_spread_scale = StringToDouble(value);
+      else if(key == "newyork_spread_scale")
+         spec.world_newyork_spread_scale = StringToDouble(value);
       else if(key == "macro_focus")
          spec.macro_focus = StringToDouble(value);
    }
@@ -277,8 +329,16 @@ void FXAI_AuditApplyWorldPlan(FXAIAuditScenarioSpec &spec,
    spec.world_spread_shock_prob = FXAI_Clamp(spec.world_spread_shock_prob, 0.0, 0.50);
    spec.world_spread_shock_scale = FXAI_Clamp(spec.world_spread_shock_scale, 1.0, 8.0);
    spec.world_regime_transition_burst = FXAI_Clamp(spec.world_regime_transition_burst, 0.0, 1.0);
+   spec.world_transition_entropy = FXAI_Clamp(spec.world_transition_entropy, 0.0, 1.0);
    spec.world_mean_revert_bias = FXAI_Clamp(spec.world_mean_revert_bias, 0.0, 1.0);
    spec.world_vol_cluster_bias = FXAI_Clamp(spec.world_vol_cluster_bias, 0.0, 1.0);
+   spec.world_shock_decay = FXAI_Clamp(spec.world_shock_decay, 0.0, 1.5);
+   spec.world_asia_sigma_scale = FXAI_Clamp(spec.world_asia_sigma_scale, 0.50, 3.00);
+   spec.world_london_sigma_scale = FXAI_Clamp(spec.world_london_sigma_scale, 0.50, 3.00);
+   spec.world_newyork_sigma_scale = FXAI_Clamp(spec.world_newyork_sigma_scale, 0.50, 3.00);
+   spec.world_asia_spread_scale = FXAI_Clamp(spec.world_asia_spread_scale, 0.50, 4.00);
+   spec.world_london_spread_scale = FXAI_Clamp(spec.world_london_spread_scale, 0.50, 4.00);
+   spec.world_newyork_spread_scale = FXAI_Clamp(spec.world_newyork_spread_scale, 0.50, 4.00);
    spec.macro_focus = FXAI_Clamp(spec.macro_focus, 0.0, 1.5);
 }
 
@@ -310,8 +370,16 @@ void FXAI_AuditFillScenarioSpec(const int scenario_id,
    spec.world_spread_shock_prob = 0.0;
    spec.world_spread_shock_scale = 1.0;
    spec.world_regime_transition_burst = 0.0;
+   spec.world_transition_entropy = 0.0;
    spec.world_mean_revert_bias = 0.0;
    spec.world_vol_cluster_bias = 0.0;
+   spec.world_shock_decay = 0.6;
+   spec.world_asia_sigma_scale = 1.0;
+   spec.world_london_sigma_scale = 1.0;
+   spec.world_newyork_sigma_scale = 1.0;
+   spec.world_asia_spread_scale = 1.0;
+   spec.world_london_spread_scale = 1.0;
+   spec.world_newyork_spread_scale = 1.0;
 
    switch(scenario_id)
    {
@@ -1203,17 +1271,25 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       double edge_focus = FXAI_Clamp(spec.world_session_edge_focus, 0.0, 1.5);
       double persistence = FXAI_Clamp(spec.world_trend_persistence, 0.0, 1.0);
       double shock_memory = FXAI_Clamp(spec.world_shock_memory, 0.0, 1.0);
+      double shock_decay = FXAI_Clamp(spec.world_shock_decay, 0.0, 1.5);
       double recovery_bias = FXAI_Clamp(spec.world_recovery_bias, -1.0, 1.0);
       double transition_burst = FXAI_Clamp(spec.world_regime_transition_burst, 0.0, 1.0);
+      double transition_entropy = FXAI_Clamp(spec.world_transition_entropy, 0.0, 1.0);
       double mean_revert_bias = FXAI_Clamp(spec.world_mean_revert_bias, 0.0, 1.0);
       double vol_cluster_bias = FXAI_Clamp(spec.world_vol_cluster_bias, 0.0, 1.0);
+      datetime bar_time = t0 + (datetime)(60 * k);
+      int session_hour = FXAI_AuditHourOf(bar_time);
+      double session_sigma_scale = FXAI_AuditSessionSigmaScale(spec, session_hour);
+      double session_spread_scale = FXAI_AuditSessionSpreadScale(spec, session_hour);
+      sigma *= session_sigma_scale;
       if(spec.vol_cluster > 0.0)
       {
          sigma = MathMax(1e-6, spec.vol_cluster * prev_sigma + (1.0 - spec.vol_cluster) * spec.sigma_per_bar * (0.5 + 1.5 * rng.NextUnit()));
          prev_sigma = sigma;
       }
       sigma *= FXAI_Clamp(spec.world_sigma_scale, 0.50, 3.00) *
-               (1.0 + 0.28 * edge_focus * session_edge + 0.14 * vol_cluster_bias * prev_shock_strength);
+               (1.0 + 0.28 * edge_focus * session_edge + 0.14 * vol_cluster_bias * prev_shock_strength +
+                0.08 * transition_entropy);
 
       double drift = spec.drift_per_bar + spec.world_drift_bias;
       if(spec.id == 7 && k > bars / 2)
@@ -1244,7 +1320,8 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
          rng.NextUnit() < FXAI_Clamp(spec.world_gap_prob + 0.10 * transition_burst, 0.0, 0.40))
          ret += spec.world_gap_scale * sigma * (rng.NextUnit() < 0.5 ? -1.0 : 1.0);
       if(spec.world_flip_prob > 0.0 &&
-         rng.NextUnit() < FXAI_Clamp(spec.world_flip_prob + 0.14 * mean_revert_bias + 0.10 * transition_burst, 0.0, 0.65))
+         rng.NextUnit() < FXAI_Clamp(spec.world_flip_prob + 0.14 * mean_revert_bias + 0.10 * transition_burst +
+                                     0.08 * transition_entropy, 0.0, 0.65))
          ret *= -1.0;
 
       if(spec.id == 5)
@@ -1269,6 +1346,7 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       chrono_spread[k] = (int)MathMax(1.0,
                                       MathRound(spec.spread_points *
                                                 FXAI_Clamp(spec.world_spread_scale, 0.50, 4.00) *
+                                                session_spread_scale *
                                                 (0.85 + 0.30 * rng.NextUnit() +
                                                  0.18 * FXAI_Clamp(spec.world_liquidity_stress, 0.0, 3.0) +
                                                  0.16 * edge_focus * session_edge) *
@@ -1304,6 +1382,7 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       chrono_ctx1_close[k] = ctx_cl1;
       chrono_ctx1_spread[k] = (int)MathMax(1.0, MathRound(spec.spread_points *
                                                            FXAI_Clamp(spec.world_spread_scale, 0.50, 4.00) *
+                                                           session_spread_scale *
                                                            (0.85 + 0.25 * rng.NextUnit() +
                                                             0.10 * spec.world_liquidity_stress +
                                                             0.18 * FXAI_Clamp(MathAbs(ctx_ret1) / MathMax(sigma, 1e-6), 0.0, 2.0))));
@@ -1314,6 +1393,7 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       chrono_ctx2_close[k] = ctx_cl2;
       chrono_ctx2_spread[k] = (int)MathMax(1.0, MathRound(spec.spread_points *
                                                            FXAI_Clamp(spec.world_spread_scale, 0.50, 4.00) *
+                                                           session_spread_scale *
                                                            (0.80 + 0.20 * rng.NextUnit() +
                                                             0.08 * spec.world_liquidity_stress +
                                                             0.12 * FXAI_Clamp(MathAbs(ctx_ret2) / MathMax(sigma, 1e-6), 0.0, 2.0))));
@@ -1324,6 +1404,7 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       chrono_ctx3_close[k] = ctx_cl3;
       chrono_ctx3_spread[k] = (int)MathMax(1.0, MathRound(spec.spread_points *
                                                            FXAI_Clamp(spec.world_spread_scale, 0.50, 4.00) *
+                                                           session_spread_scale *
                                                            (0.90 + 0.25 * rng.NextUnit() +
                                                             0.12 * spec.world_liquidity_stress +
                                                             0.16 * FXAI_Clamp(MathAbs(ctx_ret3) / MathMax(sigma, 1e-6), 0.0, 2.0))));
@@ -1333,7 +1414,11 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       ctx_prev3 = ctx_cl3;
 
       prev_ret = (prev > point ? (cl - prev) / prev : 0.0);
-      prev_shock_strength = FXAI_Clamp(MathAbs(prev_ret) / MathMax(sigma, 1e-6), 0.0, 3.0);
+      prev_shock_strength = FXAI_Clamp((MathAbs(prev_ret) / MathMax(sigma, 1e-6)) *
+                                       (1.0 - 0.25 * shock_decay) +
+                                       0.10 * transition_entropy,
+                                       0.0,
+                                       3.0);
       prev = cl;
    }
 

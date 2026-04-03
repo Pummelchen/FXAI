@@ -5,6 +5,37 @@ bool FXAI_IsTradeRetcodeSuccess(const uint retcode)
            retcode == TRADE_RETCODE_DONE_PARTIAL);
 }
 
+datetime g_lifecycle_last_action_bar = 0;
+int      g_lifecycle_last_action_code = -1;
+
+datetime FXAI_CurrentLifecycleBarTime(const string symbol)
+{
+   datetime bar_time = iTime(symbol, PERIOD_M1, 0);
+   if(bar_time > 0)
+      return bar_time;
+   bar_time = TimeCurrent();
+   if(bar_time > 0)
+      return bar_time;
+   return TimeTradeServer();
+}
+
+bool FXAI_LifecycleActionCooling(const string symbol,
+                                 const int action_code)
+{
+   datetime bar_time = FXAI_CurrentLifecycleBarTime(symbol);
+   if(bar_time <= 0)
+      return false;
+   return (g_lifecycle_last_action_bar == bar_time &&
+           g_lifecycle_last_action_code == action_code);
+}
+
+void FXAI_RememberLifecycleAction(const string symbol,
+                                  const int action_code)
+{
+   g_lifecycle_last_action_bar = FXAI_CurrentLifecycleBarTime(symbol);
+   g_lifecycle_last_action_code = action_code;
+}
+
 double FXAI_NormalizeLot(const string symbol, const double requested_lot)
 {
    double vmin  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
@@ -709,11 +740,20 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       control_plane_pressure = MathMax(control_plane_pressure, g_control_plane_last_buy_score);
    else if(direction == 0)
       control_plane_pressure = MathMax(control_plane_pressure, g_control_plane_last_sell_score);
+   double service_entry_budget = FXAI_Clamp(service_state.ready
+                                            ? (direction == 1
+                                               ? service_state.long_entry_budget_mult
+                                               : (direction == 0
+                                                  ? service_state.short_entry_budget_mult
+                                                  : service_state.budget_multiplier))
+                                            : 1.0,
+                                            0.10,
+                                            1.20);
    requested_lot *= FXAI_Clamp((1.08 - 0.60 * portfolio_pressure) *
                                (1.02 - 0.25 * FXAI_Clamp(control_plane_pressure, 0.0, 1.5)) *
                                FXAI_Clamp(1.04 - 0.22 * supervisor_score, 0.25, 1.10) *
-                               FXAI_Clamp(service_state.ready ? service_state.budget_multiplier : 1.0, 0.10, 1.20) *
-                               FXAI_Clamp(command_state.ready ? command_state.entry_budget_mult : 1.0, 0.10, 1.20) *
+                               service_entry_budget *
+                               FXAI_SupervisorCommandEntryBudgetMult(command_state, direction) *
                                FXAI_Clamp(g_policy_last_size_mult, 0.25, 1.60) *
                                FXAI_Clamp(0.70 + 0.30 * g_policy_last_enter_prob, 0.20, 1.10) *
                                FXAI_Clamp(0.72 + 0.28 * g_policy_last_capital_efficiency, 0.25, 1.15),
@@ -1134,6 +1174,7 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
    FXAIPortfolioSupervisorProfile supervisor;
    double supervisor_score = FXAI_PortfolioSupervisorScore(symbol, state.direction, cp, supervisor);
    double service_score = FXAI_SupervisorServiceScore(state.direction, service_state);
+   double lifecycle_gain = FXAI_Clamp(deploy.policy_lifecycle_gain, 0.40, 1.80);
    int held_bars = FXAI_ManagedPositionHeldBars(state);
    bool direction_match = (signal_direction == state.direction);
    bool opposite_signal = (signal_direction >= 0 && signal_direction != state.direction);
@@ -1166,6 +1207,7 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
                                 0.10 * MathMax(profit_norm, 0.0) +
                                 0.08 * MathMax(cycle_profit_norm, 0.0) -
                                 0.14 * giveback +
+                                0.10 * (lifecycle_gain - 1.0) +
                                 0.08 * (hold_budget - 1.0) +
                                 0.10 * g_policy_last_capital_efficiency +
                                 0.08 * g_policy_last_portfolio_fit -
@@ -1182,6 +1224,7 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
                                    0.12 * service_pressure +
                                    0.14 * (1.0 - hold_budget) +
                                    0.12 * giveback +
+                                   0.08 * MathMax(1.0 - lifecycle_gain, 0.0) +
                                    0.10 * command_pressure +
                                    0.12 * MathMax(-profit_norm, 0.0) +
                                    (opposite_signal ? 0.22 : 0.0),
@@ -1193,6 +1236,7 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
                                     0.10 * (1.0 - hold_budget) +
                                     0.10 * service_pressure +
                                     0.16 * giveback +
+                                    0.08 * MathMax(1.0 - lifecycle_gain, 0.0) +
                                     0.14 * (command_state.ready ? command_state.timeout_bias : 0.0),
                                     0.0,
                                     1.0);
@@ -1201,6 +1245,7 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
                                     0.12 * MathMax(profit_norm, 0.0) +
                                     0.10 * (1.0 - hold_budget) +
                                     0.18 * giveback +
+                                    0.06 * (lifecycle_gain - 1.0) +
                                     0.10 * service_state.reduce_bias +
                                     0.14 * (command_state.ready ? command_state.tighten_bias : 0.0),
                                     0.0,
@@ -1210,6 +1255,7 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
                                  0.14 * FXAI_Clamp(time_hard - 1.0, 0.0, 1.0) +
                                  0.10 * (1.0 - hold_budget) +
                                  0.18 * giveback +
+                                 0.08 * MathMax(1.0 - lifecycle_gain, 0.0) +
                                  0.12 * (command_state.ready ? command_state.exit_bias : 0.0) +
                                  0.12 * MathMax(-profit_norm, 0.0) +
                                  (opposite_signal ? 0.24 : 0.0),
@@ -1230,6 +1276,7 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
          ResetCycleState();
          Calc_TP();
          g_policy_last_action = FXAI_POLICY_ACTION_TIMEOUT;
+         FXAI_RememberLifecycleAction(symbol, FXAI_POLICY_ACTION_TIMEOUT);
          action_reason = "lifecycle_timeout_exit";
          return true;
       }
@@ -1242,6 +1289,7 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
          ResetCycleState();
          Calc_TP();
          g_policy_last_action = FXAI_POLICY_ACTION_EXIT;
+         FXAI_RememberLifecycleAction(symbol, FXAI_POLICY_ACTION_EXIT);
          action_reason = "lifecycle_exit";
          return true;
       }
@@ -1254,10 +1302,12 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
                                           (service_state.ready ? (0.85 + 0.35 * service_state.reduce_bias) : 1.0),
                                           0.05,
                                           0.95);
-      if(FXAI_CloseManagedFraction(symbol, reduce_fraction))
+      if(!FXAI_LifecycleActionCooling(symbol, FXAI_POLICY_ACTION_REDUCE) &&
+         FXAI_CloseManagedFraction(symbol, reduce_fraction))
       {
          Calc_TP();
          g_policy_last_action = FXAI_POLICY_ACTION_REDUCE;
+         FXAI_RememberLifecycleAction(symbol, FXAI_POLICY_ACTION_REDUCE);
          action_reason = "lifecycle_reduce";
          return true;
       }
@@ -1266,9 +1316,11 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
    if(tighten_prob >= 0.52 ||
       (held_bars >= deploy.soft_timeout_bars && deploy.soft_timeout_bars > 0 && state.profit_points > 0.0))
    {
-      if(FXAI_TightenManagedStops(symbol, state, tighten_prob))
+      if(!FXAI_LifecycleActionCooling(symbol, FXAI_POLICY_ACTION_TIGHTEN) &&
+         FXAI_TightenManagedStops(symbol, state, tighten_prob))
       {
          g_policy_last_action = FXAI_POLICY_ACTION_TIGHTEN;
+         FXAI_RememberLifecycleAction(symbol, FXAI_POLICY_ACTION_TIGHTEN);
          action_reason = "lifecycle_tighten";
          return true;
       }
@@ -1289,9 +1341,11 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
                                             (command_state.ready ? command_state.add_cap_mult : 1.0));
          if(add_lot > 0.0 &&
             add_lot <= FXAI_Clamp(state.total_volume * 1.25 + base_lot, add_lot, 1000.0) &&
+            !FXAI_LifecycleActionCooling(symbol, FXAI_POLICY_ACTION_ADD) &&
             FXAI_SendLifecycleAddOrder(symbol, state.direction, add_lot, add_reason))
          {
             g_policy_last_action = FXAI_POLICY_ACTION_ADD;
+            FXAI_RememberLifecycleAction(symbol, FXAI_POLICY_ACTION_ADD);
             action_reason = "lifecycle_add";
             return true;
          }

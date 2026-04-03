@@ -63,6 +63,19 @@ def _family_strengths(conn: sqlite3.Connection,
     return out
 
 
+def _parse_plugin_weights(payload: dict) -> dict[str, float]:
+    raw = payload.get("plugin_weights", {})
+    out: dict[str, float] = {}
+    if not isinstance(raw, dict):
+        return out
+    for key, value in raw.items():
+        try:
+            out[str(key)] = float(value)
+        except Exception:
+            continue
+    return out
+
+
 def write_student_router_profiles(conn: sqlite3.Connection,
                                   args) -> list[dict]:
     symbols = sorted({
@@ -126,17 +139,54 @@ def write_student_router_profiles(conn: sqlite3.Connection,
                 0.05,
                 1.50,
             )
+        attr_plugin_weights = _parse_plugin_weights(attr)
+        pruned_plugins = {str(item) for item in list(attr.get("pruned_plugins", []))}
 
         top_plugins: list[str] = []
+        plugin_weights: dict[str, float] = {}
         for row in champions:
             plugin_name = str(row["plugin_name"])
             if plugin_name not in top_plugins:
                 top_plugins.append(plugin_name)
+            family_name = plugin_family_name(int(row.get("family_id", 11)))
+            status = str(row.get("status", "")).lower()
+            base = 0.78
+            if status == "champion":
+                base += 0.14
+            elif status == "challenger":
+                base += 0.06
+            base *= family_weights.get(family_name, 0.90)
+            plugin_weights[plugin_name] = _clamp(base, 0.05, 1.60)
         for row in bundle_rows:
             plugin_name = str(row["plugin_name"])
             if plugin_name not in top_plugins:
                 top_plugins.append(plugin_name)
+            payload = _safe_json(str(row["deployment_json"] or "{}"), {})
+            deployable = _clamp(float(payload.get("deployable_student_floor", 0.42)), 0.0, 1.0)
+            lifecycle = dict(payload.get("lifecycle_policy", {}))
+            lifecycle_quality = _clamp(
+                0.22 * _clamp(float(lifecycle.get("policy_hold_floor", 0.48)), 0.0, 1.0) +
+                0.18 * (1.0 - _clamp(float(lifecycle.get("policy_exit_floor", 0.58)), 0.0, 1.0)) +
+                0.18 * _clamp(float(lifecycle.get("policy_add_floor", 0.68)), 0.0, 1.0) +
+                0.16 * (1.0 - _clamp(float(lifecycle.get("policy_reduce_floor", 0.56)), 0.0, 1.0)) +
+                0.12 * (1.0 - _clamp(float(lifecycle.get("policy_timeout_floor", 0.72)), 0.0, 1.0)) +
+                0.14 * _clamp(float(lifecycle.get("max_add_fraction", 0.50)), 0.0, 1.0),
+                0.0,
+                1.0,
+            )
+            current = plugin_weights.get(plugin_name, 0.78)
+            plugin_weights[plugin_name] = _clamp(
+                0.62 * current + 0.22 * deployable + 0.16 * lifecycle_quality,
+                0.05,
+                1.60,
+            )
         top_plugins = top_plugins[:24]
+
+        for plugin_name, value in attr_plugin_weights.items():
+            current = plugin_weights.get(plugin_name, 0.78)
+            plugin_weights[plugin_name] = _clamp(0.55 * current + 0.45 * value, 0.02, 1.60)
+        for plugin_name in pruned_plugins:
+            plugin_weights[plugin_name] = min(plugin_weights.get(plugin_name, 0.05), 0.02)
 
         portfolio_div = _clamp(float(shadow.get("mean_portfolio_div", 0.0)), 0.0, 1.0)
         route_regret = _clamp(float(shadow.get("mean_route_regret", 0.0)), 0.0, 1.0)
@@ -154,6 +204,8 @@ def write_student_router_profiles(conn: sqlite3.Connection,
             "min_meta_weight": min_meta_weight,
             "allow_plugins_csv": ",".join(top_plugins),
             "family_weights": family_weights,
+            "plugin_weights": plugin_weights,
+            "pruned_plugins": sorted(pruned_plugins),
             "attribution": attr,
             "shadow_summary": shadow,
         }
@@ -165,6 +217,10 @@ def write_student_router_profiles(conn: sqlite3.Connection,
             ("max_active_models", str(int(max_active_models))),
             ("min_meta_weight", f"{min_meta_weight:.6f}"),
             ("allow_plugins_csv", ",".join(top_plugins)),
+            ("plugin_weights_csv", ",".join(
+                f"{name}={float(plugin_weights[name]):.6f}"
+                for name in sorted(plugin_weights)
+            )),
         ]
         for family_name in sorted(family_weights):
             lines.append((f"family_weight_{family_name}", f"{float(family_weights[family_name]):.6f}"))

@@ -20,15 +20,15 @@ FXAI stays MT5-native. There are no external inference services and no DLL depen
 - Test under realistic FX costs, skip logic, and execution stress instead of optimistic toy assumptions.
 - Use Audit Lab and release gates to reject weak models before cloud optimization or live deployment.
 - Keep live behavior closer to research with shared persistence, broker replay, macro-data guards, portfolio-aware control-plane signals, policy-driven lifecycle control, and promoted supervisor-service constraints.
-- Promote stronger parameter packs and live deployment profiles from the Offline Lab without manual copy and paste.
+- Promote stronger parameter packs, router-pruning profiles, supervisor-service budgets, and live deployment profiles from the Offline Lab without manual copy and paste.
 
 ### For Trade System Architects
 - One codebase for data, features, normalization, model plugins, routing, audit, and live execution.
 - Clear contracts for plugins, persistence, checkpoint depth, and promotion readiness.
 - Shared TensorCore, transfer backbone, contextual routing, policy-first gating, and portfolio-aware meta scoring reduce duplicated model infrastructure.
 - Runtime manifests, feature governance, and macro-data leakage guards make the framework auditable and reproducible.
-- SQLite experiment ledgers, teacher-factory artifacts, shadow-fleet telemetry, and deployment profiles provide a serious research OS around MT5 instead of ad hoc backtest folders.
-- Portfolio-supervisor artifacts, supervisor-service snapshots, world-simulator plans, and foundation or student payloads let the research OS steer live gating, peer-pressure handling, lifecycle actions, and future distillation without manual copy and paste.
+- SQLite experiment ledgers, teacher-factory artifacts, fitted deployment models, shadow-fleet telemetry, and deployment profiles provide a serious research OS around MT5 instead of ad hoc backtest folders.
+- Portfolio-supervisor artifacts, supervisor-service snapshots, causal attribution and pruning profiles, world-simulator plans, and foundation or student payloads let the research OS steer live gating, peer-pressure handling, lifecycle actions, and future distillation without manual copy and paste.
 
 ## Documentation
 

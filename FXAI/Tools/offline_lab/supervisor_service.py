@@ -144,7 +144,9 @@ def _supervisor_payload(symbol: str,
                         snapshots: list[dict],
                         shadow: dict,
                         deploy: dict | None,
-                        supervisor_row: dict | None) -> dict:
+                        supervisor_row: dict | None,
+                        previous_payload: dict | None = None,
+                        ttl_seconds: int = 180) -> dict:
     if symbol == "__GLOBAL__":
         relevant = list(snapshots)
     else:
@@ -165,8 +167,11 @@ def _supervisor_payload(symbol: str,
     add_pressure = 0.0
     reduce_pressure = 0.0
     timeout_pressure = 0.0
+    freshness_penalty = 0.0
     if relevant:
         symbol_intensity: dict[str, float] = defaultdict(float)
+        now = now_unix()
+        age_penalty_sum = 0.0
         for snap in relevant:
             corr_weight = float(snap.get("corr_weight", 1.0))
             intensity = _clamp(float(snap.get("signal_intensity", 0.0)), 0.0, 4.0) * corr_weight
@@ -180,12 +185,16 @@ def _supervisor_payload(symbol: str,
             add_pressure += intensity * _clamp(float(snap.get("policy_add_prob", 0.0)), 0.0, 1.0)
             reduce_pressure += intensity * _clamp(float(snap.get("policy_reduce_prob", 0.0)), 0.0, 1.0)
             timeout_pressure += intensity * _clamp(float(snap.get("policy_timeout_prob", 0.0)), 0.0, 1.0)
+            bar_time = int(snap.get("bar_time", 0) or 0)
+            if bar_time > 0 and now > bar_time:
+                age_penalty_sum += corr_weight * _clamp((now - bar_time) / float(max(ttl_seconds, 30)), 0.0, 1.0)
         if gross > 1e-9:
             concentration = max(symbol_intensity.values()) / gross
             macro_pressure /= gross
             add_pressure /= gross
             reduce_pressure /= gross
             timeout_pressure /= gross
+            freshness_penalty = _clamp(age_penalty_sum / float(len(relevant)), 0.0, 1.0)
 
     mean_pressure = _clamp(float(shadow.get("mean_portfolio_pressure", 0.0)) / 1.5, 0.0, 1.0)
     mean_div = _clamp(float(shadow.get("mean_portfolio_div", 0.0)), 0.0, 1.0)
@@ -214,23 +223,49 @@ def _supervisor_payload(symbol: str,
         3.0,
     )
     blend = _clamp(0.55 * supervisor_weight + 0.45 * deploy_blend, 0.0, 1.0)
+    prev_score = _safe_float((previous_payload or {}).get("supervisor_score", 0.0), 0.0)
+    prev_gross = _safe_float((previous_payload or {}).get("gross_pressure", 0.0), 0.0)
+    pressure_velocity = _clamp(score - prev_score, -1.0, 1.0)
+    gross_velocity = _clamp(gross_pressure - prev_gross, -1.0, 1.0)
+    generated_at = now_unix()
+    expires_at = generated_at + max(int(ttl_seconds), 60)
+    long_entry_budget_mult = _clamp(
+        (0.96 - 0.18 * long_pressure - 0.12 * macro_pressure - 0.08 * freshness_penalty + 0.06 * mean_div) *
+        (0.92 + 0.08 * max(-pressure_velocity, 0.0)),
+        0.10,
+        1.20,
+    )
+    short_entry_budget_mult = _clamp(
+        (0.96 - 0.18 * short_pressure - 0.12 * macro_pressure - 0.08 * freshness_penalty + 0.06 * mean_div) *
+        (0.92 + 0.08 * max(-pressure_velocity, 0.0)),
+        0.10,
+        1.20,
+    )
 
     return {
         "profile_name": profile_name,
         "symbol": symbol,
+        "generated_at": generated_at,
+        "expires_at": expires_at,
         "snapshot_count": len(relevant),
         "gross_pressure": gross_pressure,
         "directional_long_pressure": long_pressure,
         "directional_short_pressure": short_pressure,
         "macro_pressure": _clamp(macro_pressure, 0.0, 1.5),
         "concentration_pressure": _clamp(concentration, 0.0, 1.0),
+        "freshness_penalty": freshness_penalty,
+        "pressure_velocity": pressure_velocity,
+        "gross_velocity": gross_velocity,
+        "long_entry_budget_mult": long_entry_budget_mult,
+        "short_entry_budget_mult": short_entry_budget_mult,
         "budget_multiplier": _clamp(
             1.04 +
             0.12 * mean_div +
             0.08 * mean_enter -
             0.24 * gross_pressure -
             0.20 * mean_pressure -
-            0.10 * mean_corr,
+            0.10 * mean_corr -
+            0.08 * freshness_penalty,
             0.20,
             1.20,
         ),
@@ -299,6 +334,10 @@ def write_supervisor_service_artifacts(conn: sqlite3.Connection,
         "SELECT symbol, payload_json FROM live_deployment_profiles WHERE profile_name = ?",
         (args.profile,),
     ).fetchall()
+    prev_rows = conn.execute(
+        "SELECT symbol, payload_json FROM supervisor_service_states WHERE profile_name = ?",
+        (args.profile,),
+    ).fetchall()
     supervisor_row = row_to_dict(conn.execute(
         """
         SELECT *
@@ -313,6 +352,10 @@ def write_supervisor_service_artifacts(conn: sqlite3.Connection,
         str(row["symbol"]): json.loads(row["payload_json"] or "{}")
         for row in deploy_rows
     }
+    prev_map = {
+        str(row["symbol"]): _safe_json(str(row["payload_json"] or "{}"), {})
+        for row in prev_rows
+    }
     symbols = sorted({str(row["symbol"]) for row in deploy_rows} | {str(item["symbol"]) for item in snapshots})
     artifacts: list[dict] = []
     created_at = now_unix()
@@ -326,6 +369,7 @@ def write_supervisor_service_artifacts(conn: sqlite3.Connection,
          "mean_route_regret": 0.0},
         None,
         supervisor_row,
+        prev_map.get("__GLOBAL__"),
     )
     SUPERVISOR_GLOBAL_FILE.write_text(
         "".join(
@@ -333,12 +377,19 @@ def write_supervisor_service_artifacts(conn: sqlite3.Connection,
             for key, value in [
                 ("profile_name", args.profile),
                 ("symbol", "__GLOBAL__"),
+                ("generated_at", global_payload["generated_at"]),
+                ("expires_at", global_payload["expires_at"]),
                 ("snapshot_count", global_payload["snapshot_count"]),
                 ("gross_pressure", global_payload["gross_pressure"]),
                 ("directional_long_pressure", global_payload["directional_long_pressure"]),
                 ("directional_short_pressure", global_payload["directional_short_pressure"]),
                 ("macro_pressure", global_payload["macro_pressure"]),
                 ("concentration_pressure", global_payload["concentration_pressure"]),
+                ("freshness_penalty", global_payload["freshness_penalty"]),
+                ("pressure_velocity", global_payload["pressure_velocity"]),
+                ("gross_velocity", global_payload["gross_velocity"]),
+                ("long_entry_budget_mult", global_payload["long_entry_budget_mult"]),
+                ("short_entry_budget_mult", global_payload["short_entry_budget_mult"]),
                 ("budget_multiplier", global_payload["budget_multiplier"]),
                 ("add_multiplier", global_payload["add_multiplier"]),
                 ("reduce_bias", global_payload["reduce_bias"]),
@@ -354,7 +405,13 @@ def write_supervisor_service_artifacts(conn: sqlite3.Connection,
     active_symbols = set(symbols)
     for symbol in symbols:
         shadow = symbol_shadow_summary(conn, args.profile, symbol)
-        payload = _supervisor_payload(symbol, args.profile, snapshots, shadow, deploy_map.get(symbol), supervisor_row)
+        payload = _supervisor_payload(symbol,
+                                      args.profile,
+                                      snapshots,
+                                      shadow,
+                                      deploy_map.get(symbol),
+                                      supervisor_row,
+                                      prev_map.get(symbol))
         tsv_path = _snapshot_file(symbol)
         tsv_path.write_text(
             "".join(
@@ -362,12 +419,19 @@ def write_supervisor_service_artifacts(conn: sqlite3.Connection,
                 for key, value in [
                     ("profile_name", args.profile),
                     ("symbol", symbol),
+                    ("generated_at", payload["generated_at"]),
+                    ("expires_at", payload["expires_at"]),
                     ("snapshot_count", payload["snapshot_count"]),
                     ("gross_pressure", payload["gross_pressure"]),
                     ("directional_long_pressure", payload["directional_long_pressure"]),
                     ("directional_short_pressure", payload["directional_short_pressure"]),
                     ("macro_pressure", payload["macro_pressure"]),
                     ("concentration_pressure", payload["concentration_pressure"]),
+                    ("freshness_penalty", payload["freshness_penalty"]),
+                    ("pressure_velocity", payload["pressure_velocity"]),
+                    ("gross_velocity", payload["gross_velocity"]),
+                    ("long_entry_budget_mult", payload["long_entry_budget_mult"]),
+                    ("short_entry_budget_mult", payload["short_entry_budget_mult"]),
                     ("budget_multiplier", payload["budget_multiplier"]),
                     ("add_multiplier", payload["add_multiplier"]),
                     ("reduce_bias", payload["reduce_bias"]),
@@ -502,7 +566,11 @@ def write_supervisor_command_artifacts(conn: sqlite3.Connection,
     global_payload = {
         "profile_name": args.profile,
         "symbol": "__GLOBAL__",
+        "generated_at": created_at,
+        "expires_at": created_at + 180,
         "entry_budget_mult": 1.0,
+        "long_entry_budget_mult": 1.0,
+        "short_entry_budget_mult": 1.0,
         "hold_budget_mult": 1.0,
         "add_cap_mult": 1.0,
         "reduce_bias": 0.0,
@@ -536,12 +604,16 @@ def write_supervisor_command_artifacts(conn: sqlite3.Connection,
         payload = {
             "profile_name": args.profile,
             "symbol": symbol,
+            "generated_at": created_at,
+            "expires_at": created_at + 180,
             "entry_budget_mult": _clamp(
                 float(service.get("budget_multiplier", 1.0)) *
                 (0.96 - 0.18 * gross_pressure - 0.10 * concentration - 0.08 * route_regret),
                 0.10,
                 1.20,
             ),
+            "long_entry_budget_mult": _clamp(float(service.get("long_entry_budget_mult", 1.0)), 0.10, 1.20),
+            "short_entry_budget_mult": _clamp(float(service.get("short_entry_budget_mult", 1.0)), 0.10, 1.20),
             "hold_budget_mult": _clamp(
                 0.96 - 0.12 * gross_pressure - 0.08 * macro_pressure + 0.06 * max(shadow_score, 0.0),
                 0.20,

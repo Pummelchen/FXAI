@@ -666,20 +666,21 @@ int SpecialDirectionAI(const string symbol)
                                           samples[online_start].domain_hash,
                                           samples[online_start].horizon_minutes,
                                           online_a);
-      FXAI_GlobalFoundationUpdate(online_a,
-                                  online_window,
-                                  online_window_size,
-                                  samples[online_start].domain_hash,
-                                  samples[online_start].horizon_minutes,
-                                  FXAI_DeriveSessionBucket(samples[online_start].sample_time),
-                                  samples[online_start].masked_step_target,
-                                  samples[online_start].next_vol_target,
-                                  samples[online_start].regime_shift_target,
-                                  samples[online_start].context_lead_target,
-                                  samples[online_start].sample_weight,
-                                  0.012 * FXAI_Clamp(0.55 + deploy_profile.foundation_weight,
-                                                     0.35,
-                                                     1.45));
+   FXAI_GlobalFoundationUpdate(online_a,
+                               online_window,
+                               online_window_size,
+                               samples[online_start].domain_hash,
+                               samples[online_start].horizon_minutes,
+                               FXAI_DeriveSessionBucket(samples[online_start].sample_time),
+                               samples[online_start].masked_step_target,
+                               samples[online_start].next_vol_target,
+                               samples[online_start].regime_shift_target,
+                               samples[online_start].context_lead_target,
+                               samples[online_start].sample_weight,
+                               0.012 * FXAI_Clamp(0.55 + deploy_profile.foundation_weight,
+                                                    0.35,
+                                                    1.45) *
+                               FXAI_Clamp(deploy_profile.foundation_quality_gain, 0.40, 1.80));
    }
    int runtime_session_bucket = FXAI_DeriveSessionBucket(snapshot.bar_time);
    double current_transfer_a[];
@@ -705,6 +706,26 @@ int SpecialDirectionAI(const string symbol)
                              H,
                              runtime_session_bucket,
                              current_student_sig);
+   current_foundation_sig.trust = FXAI_Clamp(current_foundation_sig.trust *
+                                             FXAI_Clamp(deploy_profile.foundation_quality_gain, 0.40, 1.80),
+                                             0.0,
+                                             1.0);
+   current_foundation_sig.tradability = FXAI_Clamp(current_foundation_sig.tradability *
+                                                   FXAI_Clamp(0.85 + 0.15 * deploy_profile.foundation_quality_gain, 0.40, 1.80),
+                                                   0.0,
+                                                   1.0);
+   current_foundation_sig.move_ratio = FXAI_Clamp(current_foundation_sig.move_ratio *
+                                                  FXAI_Clamp(deploy_profile.teacher_signal_gain, 0.40, 1.80),
+                                                  0.0,
+                                                  4.0);
+   current_student_sig.trust = FXAI_Clamp(current_student_sig.trust *
+                                          FXAI_Clamp(deploy_profile.student_signal_gain, 0.40, 1.80),
+                                          0.0,
+                                          1.0);
+   current_student_sig.tradability = FXAI_Clamp(current_student_sig.tradability *
+                                                FXAI_Clamp(0.85 + 0.15 * deploy_profile.policy_lifecycle_gain, 0.40, 1.80),
+                                                0.0,
+                                                1.0);
    FXAIAnalogMemoryQuery current_analog_q;
    FXAI_QueryAnalogMemory(current_raw_x,
                           regime_id,
@@ -712,7 +733,10 @@ int SpecialDirectionAI(const string symbol)
                           H,
                           FXAI_SymbolHash01(snapshot.symbol),
                           current_analog_q);
-   g_ai_last_macro_state_quality = FXAI_Clamp(FXAI_GetInputFeature(current_raw_x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 19), 0.0, 1.0);
+   g_ai_last_macro_state_quality = FXAI_Clamp(FXAI_GetInputFeature(current_raw_x, FXAI_MACRO_EVENT_FEATURE_OFFSET + 19) *
+                                              FXAI_Clamp(deploy_profile.macro_state_gain, 0.40, 1.80),
+                                              0.0,
+                                              1.0);
    FXAIRegimeGraphQuery current_regime_q;
    FXAI_QueryRegimeGraph(regime_id,
                          g_ai_last_macro_state_quality,
@@ -1062,7 +1086,8 @@ int SpecialDirectionAI(const string symbol)
          }
          double base_meta_w = FXAI_GetModelMetaScore(ai_idx, regime_id, runtime_session_bucket, H, min_move_pred);
          double family_weight = FXAI_StudentRouterFamilyWeight(student_router, scan_manifest.family);
-         double routed_w = base_meta_w * family_weight;
+         double plugin_weight = FXAI_StudentRouterPluginWeight(student_router, scan_manifest.ai_name, scan_manifest.family);
+         double routed_w = base_meta_w * family_weight * plugin_weight;
          routed_meta_weight[ai_idx] = routed_w;
          if(routed_w + 1e-12 < student_router.min_meta_weight)
          {
@@ -1423,7 +1448,8 @@ int SpecialDirectionAI(const string symbol)
          if(meta_w < 0.0)
          {
             meta_w = FXAI_GetModelMetaScore(ai_idx, regime_id, runtime_session_bucket, H, min_move_pred);
-            meta_w *= FXAI_StudentRouterFamilyWeight(student_router, manifest.family);
+            meta_w *= FXAI_StudentRouterFamilyWeight(student_router, manifest.family) *
+                      FXAI_StudentRouterPluginWeight(student_router, manifest.ai_name, manifest.family);
          }
          if(meta_w <= 0.0) continue;
 
@@ -1643,7 +1669,8 @@ int SpecialDirectionAI(const string symbol)
                                   1.0,
                                   0.010 * FXAI_Clamp(0.55 + deploy_profile.student_weight,
                                                      0.35,
-                                                     1.45));
+                                                     1.45) *
+                                  FXAI_Clamp(deploy_profile.student_signal_gain, 0.40, 1.80));
          double trade_gate_prob = FXAI_TradeGatePredict(regime_id, H, stack_feat);
          double trade_gate_floor = FXAI_Clamp(0.34 +
                                               0.18 * avg_conf +

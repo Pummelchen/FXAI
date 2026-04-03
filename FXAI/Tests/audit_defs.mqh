@@ -230,8 +230,16 @@ struct FXAIAuditScenarioSpec
    double world_spread_shock_prob;
    double world_spread_shock_scale;
    double world_regime_transition_burst;
+   double world_transition_entropy;
    double world_mean_revert_bias;
    double world_vol_cluster_bias;
+   double world_shock_decay;
+   double world_asia_sigma_scale;
+   double world_london_sigma_scale;
+   double world_newyork_sigma_scale;
+   double world_asia_spread_scale;
+   double world_london_spread_scale;
+   double world_newyork_spread_scale;
 };
 
 struct FXAIAuditFoldMetrics
