@@ -725,7 +725,7 @@ void FXAI_ClearLastOrderRequestState()
    g_last_order_request_pending = false;
 }
 
-
+#include "Engine\Runtime\runtime_control_plane.mqh"
 #include "Engine\engine_all.mqh"
 
 int OnInit()
@@ -763,12 +763,14 @@ int OnInit()
    FXAI_ExtendContextSymbolsFromMarketWatch(_Symbol, g_context_symbols);
 
    ResetAIState(_Symbol);
+   FXAI_WriteControlPlaneLocalSnapshot(_Symbol, -1, 0.0);
    FXAI_RecoverManagedCycleState();
    return(INIT_SUCCEEDED);
 }
 
 void OnDeinit(const int reason)
 {
+   FXAI_RemoveControlPlaneLocalSnapshot(_Symbol);
    FXAI_SaveRuntimeArtifacts(_Symbol);
    FXAI_SaveMetaArtifacts(_Symbol);
    g_plugins.Release();

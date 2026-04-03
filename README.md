@@ -7,6 +7,7 @@ It is not a single strategy EA. It is a research and deployment framework with:
 - a shared `M1 OHLC + spread` data contract
 - an internal `TensorCore` runtime for stronger neural and sequence models
 - an Audit Lab for certification, regression checks, and release gating
+- a SQLite-backed Offline Lab for export, tuning, promotion, and champion-challenger control loops
 - one workflow for research, backtesting, audit, and live operation
 
 FXAI stays MT5-native. There are no external inference services and no DLL dependency in live trading.
@@ -17,13 +18,15 @@ FXAI stays MT5-native. There are no external inference services and no DLL depen
 - Compare many model families under one execution shell instead of running isolated EA experiments.
 - Test under realistic FX costs, skip logic, and execution stress instead of optimistic toy assumptions.
 - Use Audit Lab and release gates to reject weak models before cloud optimization or live deployment.
-- Keep live behavior closer to research with shared persistence, broker replay, macro-data guards, and execution controls.
+- Keep live behavior closer to research with shared persistence, broker replay, macro-data guards, portfolio-aware control-plane signals, and execution controls.
+- Promote stronger parameter packs and live deployment profiles from the Offline Lab without manual copy and paste.
 
 ### For Trade System Architects
 - One codebase for data, features, normalization, model plugins, routing, audit, and live execution.
 - Clear contracts for plugins, persistence, checkpoint depth, and promotion readiness.
-- Shared TensorCore, transfer backbone, contextual routing, and portfolio-aware meta scoring reduce duplicated model infrastructure.
+- Shared TensorCore, transfer backbone, contextual routing, policy-first gating, and portfolio-aware meta scoring reduce duplicated model infrastructure.
 - Runtime manifests, feature governance, and macro-data leakage guards make the framework auditable and reproducible.
+- SQLite experiment ledgers, teacher-factory artifacts, shadow-fleet telemetry, and deployment profiles provide a serious research OS around MT5 instead of ad hoc backtest folders.
 
 ## Documentation
 

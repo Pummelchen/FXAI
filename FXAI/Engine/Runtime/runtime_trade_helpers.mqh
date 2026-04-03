@@ -300,9 +300,14 @@ double FXAI_PortfolioPressureScore(const string symbol,
    double dir_ratio = (dir_cap > 1e-9 ? FXAI_ManagedDirectionalClusterLots(symbol, direction) / dir_cap : 0.0);
    double hierarchy_penalty = 1.0 - FXAI_Clamp(g_ai_last_hierarchy_score, 0.0, 1.0);
    double macro_penalty = (FXAI_MacroEventLeakageSafe() ? (1.0 - FXAI_Clamp(g_ai_last_macro_state_quality, 0.0, 1.0)) : 0.0);
+   FXAIControlPlaneAggregate cp;
+   FXAI_ReadControlPlaneAggregate(symbol, direction, cp);
+   g_control_plane_last_score = cp.score;
    return FXAI_Clamp(0.34 * FXAI_Clamp(gross_ratio, 0.0, 2.0) +
                      0.28 * FXAI_Clamp(corr_ratio, 0.0, 2.0) +
                      0.22 * FXAI_Clamp(dir_ratio, 0.0, 2.0) +
+                     0.12 * FXAI_Clamp(cp.score, 0.0, 1.5) +
+                     0.06 * FXAI_Clamp(cp.macro_overlap, 0.0, 1.0) +
                      0.10 * hierarchy_penalty +
                      0.06 * macro_penalty,
                      0.0,
@@ -354,6 +359,12 @@ bool FXAI_RegimeKillSwitchTriggered(string &reason)
       reason = "kill_fill_risk";
       return true;
    }
+   if(g_policy_last_hold_quality < 0.18 &&
+      (g_ai_last_trade_gate < 0.36 || g_ai_last_path_risk > 0.82))
+   {
+      reason = "kill_policy_hold";
+      return true;
+   }
    return false;
 }
 
@@ -367,6 +378,9 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       reason = "invalid_direction";
       return 0.0;
    }
+
+   FXAILiveDeploymentProfile deploy_profile;
+   FXAI_LoadLiveDeploymentProfile(symbol, deploy_profile, false);
 
    if(g_ai_last_confidence < FXAI_Clamp(RiskMinConfidence, 0.0, 1.0))
    {
@@ -414,7 +428,8 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       return 0.0;
    }
    if(FXAI_MacroEventLeakageSafe() &&
-      g_ai_last_macro_state_quality < FXAI_Clamp(RiskMinMacroStateQuality, 0.0, 1.0))
+      g_ai_last_macro_state_quality < MathMax(FXAI_Clamp(RiskMinMacroStateQuality, 0.0, 1.0),
+                                              FXAI_Clamp(deploy_profile.macro_quality_floor, 0.0, 1.0)))
    {
       reason = "risk_macro_state_floor";
       return 0.0;
@@ -436,6 +451,9 @@ double FXAI_CalcRiskAwareLot(const string symbol,
                                   0.10 * FXAI_Clamp(edge_scale / 2.0, 0.0, 1.0),
                                   0.20,
                                   1.60);
+   conviction *= FXAI_Clamp(g_policy_last_size_mult, 0.25, 1.60);
+   conviction *= FXAI_Clamp(deploy_profile.portfolio_budget_bias, 0.40, 1.60);
+   conviction = FXAI_Clamp(conviction, 0.20, 2.20);
 
    if(AI_PositionSizing == FXAI_SIZE_CONVICTION)
       requested_lot *= conviction;
@@ -490,7 +508,16 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       reason = "risk_portfolio_pressure";
       return 0.0;
    }
-   requested_lot *= FXAI_Clamp(1.08 - 0.60 * portfolio_pressure, 0.30, 1.05);
+   double control_plane_pressure = g_control_plane_last_score;
+   if(direction == 1)
+      control_plane_pressure = MathMax(control_plane_pressure, g_control_plane_last_buy_score);
+   else if(direction == 0)
+      control_plane_pressure = MathMax(control_plane_pressure, g_control_plane_last_sell_score);
+   requested_lot *= FXAI_Clamp((1.08 - 0.60 * portfolio_pressure) *
+                               (1.02 - 0.25 * FXAI_Clamp(control_plane_pressure, 0.0, 1.5)) *
+                               FXAI_Clamp(g_policy_last_size_mult, 0.25, 1.60),
+                               0.20,
+                               1.10);
 
    double portfolio_cap = MathMax(MaxPortfolioExposureLots, 0.0);
    if(portfolio_cap > 0.0)
@@ -872,4 +899,3 @@ int TradePossible(const string symbol, string &reason)
 
    return 1;
 }
-

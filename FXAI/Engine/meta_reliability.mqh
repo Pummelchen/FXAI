@@ -445,6 +445,16 @@ void FXAI_ProcessReliabilityBar(const string symbol)
    double commission_points = snapshot.commission_points;
    double evThresholdPoints = FXAI_Clamp(AI_EVThresholdPoints, 0.0, 100.0);
    int signal_seq = g_rel_clock_seq;
+   double spread_now = FXAI_GetSpreadAtIndex(0, rel_spread_arr, snapshot.spread_points);
+   double vol_now = FXAI_RollingReturnStd(rel_close_arr, 0, 10);
+   if(vol_now < 1e-6)
+      vol_now = FXAI_RollingAbsReturn(rel_close_arr, 0, 10);
+   if(vol_now < 1e-6)
+      vol_now = MathAbs(FXAI_SafeReturn(rel_close_arr, 0, 1));
+   int current_regime = FXAI_GetRegimeId(signal_bar, spread_now, vol_now);
+   FXAI_RecordRegimeGraphState(current_regime,
+                               signal_bar,
+                               g_ai_last_macro_state_quality);
 
    for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
    {
@@ -481,6 +491,17 @@ void FXAI_ProcessReliabilityBar(const string symbol)
                                commission_points,
                                cost_buffer_points,
                                evThresholdPoints);
+   FXAI_UpdatePolicyFromPending(signal_seq,
+                                current_regime,
+                                g_ai_last_macro_state_quality,
+                                snapshot,
+                                rel_spread_arr,
+                                rel_high_arr,
+                                rel_low_arr,
+                                rel_close_arr,
+                                commission_points,
+                                cost_buffer_points,
+                                evThresholdPoints);
    FXAI_UpdateHorizonPolicyFromPending(signal_seq,
                                        snapshot,
                                        rel_spread_arr,

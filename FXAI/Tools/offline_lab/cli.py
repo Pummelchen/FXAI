@@ -7,6 +7,8 @@ from pathlib import Path
 from .common import *
 from .exporter import *
 from .promotion import *
+from .shadow_fleet import *
+from .teacher_factory import *
 
 def serious_base_args(args, dataset: dict, output_path: Path) -> argparse.Namespace:
     bars = int(getattr(args, "bars", 0) or 0)
@@ -736,6 +738,9 @@ def cmd_best_params(args) -> int:
     champion_decisions = update_champion_registry(conn, args, promoted)
     family_scorecards = persist_family_scorecards(conn, args, rows, promoted)
     distill_artifacts = write_distillation_artifacts(conn, args, promoted)
+    shadow_ingest = ingest_shadow_fleet_ledgers(conn, args.profile)
+    teacher_factories = write_teacher_factory_artifacts(conn, args, promoted)
+    live_deployments = write_live_deployment_profiles(conn, args)
     print(json.dumps({
         "profile": args.profile,
         "promoted_count": len(promoted),
@@ -743,8 +748,27 @@ def cmd_best_params(args) -> int:
         "challenger_count": sum(1 for item in champion_decisions if item["status"] == "challenger"),
         "family_scorecards": len(family_scorecards),
         "distillation_artifacts": len(distill_artifacts),
+        "teacher_factories": len(teacher_factories),
+        "live_deployments": len(live_deployments),
+        "shadow_rows_ingested": int(shadow_ingest.get("rows_ingested", 0)),
     }, indent=2, sort_keys=True))
     conn.close()
+    return 0
+
+
+def cmd_shadow_sync(args) -> int:
+    conn = connect_db(Path(args.db))
+    payload = ingest_shadow_fleet_ledgers(conn, args.profile)
+    conn.close()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_deploy_profiles(args) -> int:
+    conn = connect_db(Path(args.db))
+    payload = write_live_deployment_profiles(conn, args)
+    conn.close()
+    print(json.dumps({"profile": args.profile, "deployments": payload}, indent=2, sort_keys=True))
     return 0
 
 
@@ -886,6 +910,14 @@ def build_parser() -> argparse.ArgumentParser:
     best.add_argument("--symbol-list", default="")
     best.add_argument("--symbol-pack", default="", choices=[""] + sorted(testlab.SYMBOL_PACKS.keys()))
     best.set_defaults(func=cmd_best_params)
+
+    shadow = sub.add_parser("shadow-sync", help="Ingest live shadow-fleet ledgers from FILE_COMMON into SQLite")
+    shadow.add_argument("--profile", default="continuous")
+    shadow.set_defaults(func=cmd_shadow_sync)
+
+    deploy = sub.add_parser("deploy-profiles", help="Build live deployment profiles for MT5 runtime control plane")
+    deploy.add_argument("--profile", default="continuous")
+    deploy.set_defaults(func=cmd_deploy_profiles)
 
     loop = sub.add_parser("control-loop", help="Run the full export -> tune -> promote cycle continuously")
     loop.add_argument("--profile", default="continuous")

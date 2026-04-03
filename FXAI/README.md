@@ -17,7 +17,7 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - `Tools/fxai_offline_lab.py`
   Stable CLI wrapper for the SQLite-backed offline export, tuning, promotion, and control-loop tool.
 - `Tools/offline_lab/`
-  Internal Python package for Offline Lab database, export, campaign, and promotion modules.
+  Internal Python package for Offline Lab database, export, campaign, promotion, shadow-fleet ingest, and teacher-factory modules.
 
 ## Key Runtime Areas
 
@@ -30,7 +30,7 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - `Engine/Warmup/`
   Warmup modules split by normalization search, scoring, transfer, portfolio diagnostics, and entrypoint orchestration.
 - `Engine/Runtime/`
-  Extracted live-trading helpers used by the EA entrypoint.
+  Extracted live-trading helpers used by the EA entrypoint, including the live control-plane snapshot and peer-pressure logic.
 - `TensorCore/`
   Internal neural runtime shared by the stronger sequence and tensor-heavy plugins.
 - `Plugins/`
@@ -45,6 +45,7 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - Canonical research data is `M1 OHLC + spread`.
 - The shared TensorCore path now includes a self-supervised foundation encoder, teacher-student transfer heads, hierarchical trade-quality signals, and persistent analog regime memory.
 - The live EA now uses portfolio-native sizing and gating with directional-cluster pressure, hierarchy floors, and macro-state quality controls instead of only scalar conviction scaling.
+- The live runtime now emits per-instance control-plane snapshots and consumes promoted symbol deployment profiles so research-side promotion decisions can steer trade floors, sizing bias, and peer-pressure handling.
 - Stateful plugins now persist deterministic replay-backed checkpoint metadata under the `native_model` promotion contract, including replay and hyperparameter integrity checks.
 - Stateful runtime manifests now expose checkpoint depth, native snapshot coverage, and deterministic replay flags for release gating.
 - Shared transfer warmup now uses a deeper temporal backbone over the rolling window instead of only static current-bar summary features, and runtime artifacts persist that backbone state.
@@ -55,7 +56,7 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - Audit scenarios build coherent `OHLC + spread` context bars rather than reconstructing them from close-only shortcuts.
 - Macro-event datasets now run under schema version 2 with revision-chain, source-trust, and currency-relevance manifests, and the feature pipeline derives a higher-level macro state for policy, inflation, labor, growth, carry, decay, and quality.
 - Offline Lab now exports exact-window `M1 OHLC + spread` datasets into SQLite, stores full tuning ledgers and scenario metrics, and promotes ready-to-use MT5 `.set` files under `Tools/OfflineLab/Profiles/`, `MQL5/Profiles/Tester/`, and `FILE_COMMON/FXAI/Offline/Promotions/`.
-- Offline Lab also maintains champion/challenger governance, parameter lineage, family scorecards, distillation artifacts, and learned red-team plans under `Tools/OfflineLab/ResearchOS/` and `Tools/OfflineLab/Distillation/`.
+- Offline Lab also maintains champion/challenger governance, parameter lineage, family scorecards, distillation artifacts, teacher-factory payloads, live deployment profiles, shadow-fleet telemetry, and learned red-team plans under `Tools/OfflineLab/ResearchOS/` and `Tools/OfflineLab/Distillation/`.
 - Offline Lab promotion is profile-wide by default in `best-params`, unless a symbol filter is passed, and exact-window audit runs now follow the effective exported first/last bar range.
 
 ## Source Of Truth

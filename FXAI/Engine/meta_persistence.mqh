@@ -2,7 +2,7 @@
 #define __FXAI_META_PERSISTENCE_MQH__
 
 #define FXAI_META_ARTIFACT_DIR "FXAI\\Meta"
-#define FXAI_META_ARTIFACT_VERSION 7
+#define FXAI_META_ARTIFACT_VERSION 8
 
 string FXAI_MetaArtifactFile(const string symbol)
 {
@@ -42,6 +42,8 @@ bool FXAI_SaveMetaArtifacts(const string symbol)
    FileWriteInteger(handle, FXAI_TRADE_GATE_HIDDEN);
    FileWriteInteger(handle, FXAI_HPOL_FEATS);
    FileWriteInteger(handle, FXAI_HPOL_HIDDEN);
+   FileWriteInteger(handle, FXAI_POLICY_FEATS);
+   FileWriteInteger(handle, FXAI_POLICY_HIDDEN);
    FileWriteInteger(handle, FXAI_AI_COUNT);
 
    for(int r=0; r<FXAI_REGIME_COUNT; r++)
@@ -96,6 +98,26 @@ bool FXAI_SaveMetaArtifacts(const string symbol)
       for(int h=0; h<FXAI_HPOL_HIDDEN; h++)
          FileWriteDouble(handle, g_hpolicy_w2[r][h]);
 
+      FileWriteInteger(handle, (g_policy_ready[r] ? 1 : 0));
+      FileWriteInteger(handle, g_policy_obs[r]);
+      for(int h=0; h<FXAI_POLICY_HIDDEN; h++)
+      {
+         FileWriteDouble(handle, g_policy_b1[r][h]);
+         for(int k=0; k<FXAI_POLICY_FEATS; k++)
+            FileWriteDouble(handle, g_policy_w1[r][h][k]);
+      }
+      FileWriteDouble(handle, g_policy_trade_b2[r]);
+      FileWriteDouble(handle, g_policy_dir_b2[r]);
+      FileWriteDouble(handle, g_policy_size_b2[r]);
+      FileWriteDouble(handle, g_policy_hold_b2[r]);
+      for(int h=0; h<FXAI_POLICY_HIDDEN; h++)
+      {
+         FileWriteDouble(handle, g_policy_trade_w2[r][h]);
+         FileWriteDouble(handle, g_policy_dir_w2[r][h]);
+         FileWriteDouble(handle, g_policy_size_w2[r][h]);
+         FileWriteDouble(handle, g_policy_hold_w2[r][h]);
+      }
+
       for(int slot=0; slot<FXAI_MAX_HORIZONS; slot++)
       {
          FileWriteInteger(handle, (g_meta_oof_ready[r][slot] ? 1 : 0));
@@ -104,6 +126,22 @@ bool FXAI_SaveMetaArtifacts(const string symbol)
          FileWriteDouble(handle, g_meta_oof_edge_ema[r][slot]);
          FileWriteDouble(handle, g_meta_oof_quality_ema[r][slot]);
          FileWriteDouble(handle, g_meta_oof_trade_rate_ema[r][slot]);
+      }
+   }
+
+   FileWriteInteger(handle, (g_regime_graph_ready ? 1 : 0));
+   FileWriteInteger(handle, g_regime_graph_last_regime);
+   FileWriteLong(handle, (long)g_regime_graph_last_time);
+   for(int r=0; r<FXAI_REGIME_COUNT; r++)
+   {
+      FileWriteDouble(handle, g_regime_graph_dwell_ema[r]);
+      FileWriteDouble(handle, g_regime_graph_outbound_mass[r]);
+      for(int n=0; n<FXAI_REGIME_COUNT; n++)
+      {
+         FileWriteDouble(handle, g_regime_graph_transition_obs[r][n]);
+         FileWriteDouble(handle, g_regime_graph_transition_edge[r][n]);
+         FileWriteDouble(handle, g_regime_graph_transition_quality[r][n]);
+         FileWriteDouble(handle, g_regime_graph_macro_alignment[r][n]);
       }
    }
 
@@ -176,6 +214,8 @@ bool FXAI_LoadMetaArtifacts(const string symbol)
    int gate_hidden = FileReadInteger(handle);
    int hpol_feats = FileReadInteger(handle);
    int hpol_hidden = FileReadInteger(handle);
+   int policy_feats = FileReadInteger(handle);
+   int policy_hidden = FileReadInteger(handle);
    int ai_count = FileReadInteger(handle);
    if(version != FXAI_META_ARTIFACT_VERSION ||
       regimes != FXAI_REGIME_COUNT ||
@@ -185,6 +225,8 @@ bool FXAI_LoadMetaArtifacts(const string symbol)
       gate_hidden != FXAI_TRADE_GATE_HIDDEN ||
       hpol_feats != FXAI_HPOL_FEATS ||
       hpol_hidden != FXAI_HPOL_HIDDEN ||
+      policy_feats != FXAI_POLICY_FEATS ||
+      policy_hidden != FXAI_POLICY_HIDDEN ||
       ai_count != FXAI_AI_COUNT)
    {
       ok = false;
@@ -247,6 +289,26 @@ bool FXAI_LoadMetaArtifacts(const string symbol)
          for(int h=0; h<FXAI_HPOL_HIDDEN; h++)
             g_hpolicy_w2[r][h] = FileReadDouble(handle);
 
+         g_policy_ready[r] = (FileReadInteger(handle) != 0);
+         g_policy_obs[r] = FileReadInteger(handle);
+         for(int h=0; h<FXAI_POLICY_HIDDEN && ok; h++)
+         {
+            g_policy_b1[r][h] = FileReadDouble(handle);
+            for(int k=0; k<FXAI_POLICY_FEATS; k++)
+               g_policy_w1[r][h][k] = FileReadDouble(handle);
+         }
+         g_policy_trade_b2[r] = FileReadDouble(handle);
+         g_policy_dir_b2[r] = FileReadDouble(handle);
+         g_policy_size_b2[r] = FileReadDouble(handle);
+         g_policy_hold_b2[r] = FileReadDouble(handle);
+         for(int h=0; h<FXAI_POLICY_HIDDEN; h++)
+         {
+            g_policy_trade_w2[r][h] = FileReadDouble(handle);
+            g_policy_dir_w2[r][h] = FileReadDouble(handle);
+            g_policy_size_w2[r][h] = FileReadDouble(handle);
+            g_policy_hold_w2[r][h] = FileReadDouble(handle);
+         }
+
          for(int slot=0; slot<FXAI_MAX_HORIZONS; slot++)
          {
             g_meta_oof_ready[r][slot] = (FileReadInteger(handle) != 0);
@@ -255,6 +317,22 @@ bool FXAI_LoadMetaArtifacts(const string symbol)
             g_meta_oof_edge_ema[r][slot] = FileReadDouble(handle);
             g_meta_oof_quality_ema[r][slot] = FileReadDouble(handle);
             g_meta_oof_trade_rate_ema[r][slot] = FileReadDouble(handle);
+         }
+      }
+
+      g_regime_graph_ready = (FileReadInteger(handle) != 0);
+      g_regime_graph_last_regime = FileReadInteger(handle);
+      g_regime_graph_last_time = (datetime)FileReadLong(handle);
+      for(int r=0; r<FXAI_REGIME_COUNT; r++)
+      {
+         g_regime_graph_dwell_ema[r] = FileReadDouble(handle);
+         g_regime_graph_outbound_mass[r] = FileReadDouble(handle);
+         for(int n=0; n<FXAI_REGIME_COUNT; n++)
+         {
+            g_regime_graph_transition_obs[r][n] = FileReadDouble(handle);
+            g_regime_graph_transition_edge[r][n] = FileReadDouble(handle);
+            g_regime_graph_transition_quality[r][n] = FileReadDouble(handle);
+            g_regime_graph_macro_alignment[r][n] = FileReadDouble(handle);
          }
       }
 

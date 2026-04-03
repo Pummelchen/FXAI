@@ -41,6 +41,11 @@ string FXAI_RuntimeMacroManifestFile(const string symbol)
    return FXAI_RUNTIME_ARTIFACT_DIR + "\\fxai_macro_" + FXAI_RuntimeArtifactSafeSymbol(symbol) + ".tsv";
 }
 
+string FXAI_RuntimeShadowLedgerFile(const string symbol)
+{
+   return FXAI_RUNTIME_ARTIFACT_DIR + "\\fxai_shadow_" + FXAI_RuntimeArtifactSafeSymbol(symbol) + ".tsv";
+}
+
 bool FXAI_IsStatefulCheckpointManifest(const FXAIAIManifestV4 &manifest)
 {
    return (FXAI_HasCapability(manifest.capability_mask, FXAI_CAP_ONLINE_LEARNING) ||
@@ -267,6 +272,87 @@ void FXAI_WriteMacroDatasetManifest(const string symbol)
                  DoubleToString(stats.leakage_guard_score, 6) + "\t" +
                  IntegerToString(FXAI_MacroEventLeakageSafe() ? 1 : 0) + "\r\n";
    FileWriteString(handle, line);
+   FileClose(handle);
+}
+
+void FXAI_WriteShadowFleetLedger(const string symbol)
+{
+   FolderCreate("FXAI", FILE_COMMON);
+   FolderCreate(FXAI_RUNTIME_ARTIFACT_DIR, FILE_COMMON);
+
+   int handle = FileOpen(FXAI_RuntimeShadowLedgerFile(symbol),
+                         FILE_WRITE | FILE_TXT | FILE_COMMON);
+   if(handle == INVALID_HANDLE)
+      return;
+
+   FileWriteString(handle, "symbol\tai_id\tai_name\tfamily_id\tmeta_weight\treliability\tglobal_edge\tcontext_edge\tcontext_regret\tportfolio_objective\tportfolio_stability\tportfolio_corr\tportfolio_div\troute_value\troute_regret\troute_counterfactual\tshadow_score\tregime_id\thorizon_minutes\tobs\r\n");
+   int r = g_ai_last_regime_id;
+   if(r < 0 || r >= FXAI_REGIME_COUNT)
+      r = 0;
+   int s = FXAI_DeriveSessionBucket(TimeCurrent());
+   int hslot = FXAI_GetHorizonSlot(g_ai_last_horizon_minutes);
+   if(hslot < 0 || hslot >= FXAI_MAX_HORIZONS)
+      hslot = 0;
+
+   for(int ai=0; ai<FXAI_AI_COUNT; ai++)
+   {
+      CFXAIAIPlugin *plugin = (g_plugins_ready ? g_plugins.Get(ai) : NULL);
+      if(plugin == NULL)
+         continue;
+
+      FXAIAIManifestV4 manifest;
+      FXAI_GetPluginManifest(*plugin, manifest);
+      double meta = FXAI_Clamp(g_model_meta_weight[ai], 0.20, 3.00);
+      double reliability = FXAI_Clamp(g_model_reliability[ai], 0.0, 1.0);
+      double mm = MathMax(g_ai_last_min_move_points, 0.50);
+      double global_edge = FXAI_Clamp(FXAI_GetModelRegimeEdge(ai, r) / mm, -4.0, 4.0) / 4.0;
+      double context_edge = FXAI_Clamp(FXAI_GetModelContextEdge(ai, r, g_ai_last_horizon_minutes) / mm, -4.0, 4.0) / 4.0;
+      double context_regret = FXAI_Clamp(FXAI_GetModelContextRegret(ai, r, g_ai_last_horizon_minutes), 0.0, 6.0) / 6.0;
+      double port_obj = FXAI_Clamp(g_model_portfolio_objective[ai], -1.0, 1.0);
+      double port_stab = FXAI_Clamp(g_model_portfolio_stability[ai], 0.0, 1.0);
+      double port_corr = FXAI_Clamp(g_model_portfolio_corr_penalty[ai], 0.0, 1.0);
+      double port_div = FXAI_Clamp(g_model_portfolio_diversification[ai], 0.0, 1.0);
+      double route_value = FXAI_Clamp(g_model_plugin_route_value[ai][r][s][hslot], -1.0, 1.0);
+      double route_regret = FXAI_Clamp(g_model_plugin_route_regret[ai][r][s][hslot], 0.0, 1.0);
+      double route_cf = FXAI_Clamp(g_model_plugin_route_counterfactual[ai][r][s][hslot], -1.0, 1.0);
+      int obs = g_model_plugin_route_obs[ai][r][s][hslot];
+      double shadow_score = FXAI_Clamp(0.22 * reliability +
+                                       0.16 * global_edge +
+                                       0.16 * context_edge -
+                                       0.14 * context_regret +
+                                       0.14 * port_obj +
+                                       0.12 * route_value +
+                                       0.10 * route_cf -
+                                       0.12 * route_regret +
+                                       0.08 * port_stab -
+                                       0.06 * port_corr +
+                                       0.06 * port_div +
+                                       0.05 * FXAI_Clamp((meta - 0.20) / 2.80, 0.0, 1.0),
+                                       -1.0,
+                                       1.0);
+      string line = FXAI_RuntimeArtifactSafeSymbol(symbol) + "\t" +
+                    IntegerToString(ai) + "\t" +
+                    plugin.AIName() + "\t" +
+                    IntegerToString(manifest.family) + "\t" +
+                    DoubleToString(meta, 6) + "\t" +
+                    DoubleToString(reliability, 6) + "\t" +
+                    DoubleToString(global_edge, 6) + "\t" +
+                    DoubleToString(context_edge, 6) + "\t" +
+                    DoubleToString(context_regret, 6) + "\t" +
+                    DoubleToString(port_obj, 6) + "\t" +
+                    DoubleToString(port_stab, 6) + "\t" +
+                    DoubleToString(port_corr, 6) + "\t" +
+                    DoubleToString(port_div, 6) + "\t" +
+                    DoubleToString(route_value, 6) + "\t" +
+                    DoubleToString(route_regret, 6) + "\t" +
+                    DoubleToString(route_cf, 6) + "\t" +
+                    DoubleToString(shadow_score, 6) + "\t" +
+                    IntegerToString(r) + "\t" +
+                    IntegerToString(g_ai_last_horizon_minutes) + "\t" +
+                    IntegerToString(obs) + "\r\n";
+      FileWriteString(handle, line);
+   }
+
    FileClose(handle);
 }
 
@@ -524,6 +610,7 @@ bool FXAI_SaveRuntimeArtifacts(const string symbol)
       FXAI_WritePersistenceCoverageManifest(symbol);
       FXAI_WriteFeatureRegistryManifest(symbol);
       FXAI_WriteMacroDatasetManifest(symbol);
+      FXAI_WriteShadowFleetLedger(symbol);
       g_runtime_artifacts_dirty = false;
       g_runtime_last_save_time = TimeCurrent();
    }

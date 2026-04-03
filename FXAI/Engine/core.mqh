@@ -448,6 +448,17 @@ struct FXAIHierarchicalSignals
    double score;
 };
 
+struct FXAIRegimeGraphQuery
+{
+   double persistence;
+   double transition_confidence;
+   double instability;
+   double edge_bias;
+   double quality_bias;
+   double macro_alignment;
+   int    predicted_regime;
+};
+
 bool   g_broker_execution_ready = false;
 double g_broker_execution_obs[FXAI_PLUGIN_SESSION_BUCKETS][FXAI_SHARED_TRANSFER_HORIZON_BUCKETS];
 double g_broker_execution_slippage_ema[FXAI_PLUGIN_SESSION_BUCKETS][FXAI_SHARED_TRANSFER_HORIZON_BUCKETS];
@@ -493,6 +504,18 @@ double   g_analog_memory_fill_risk[FXAI_ANALOG_MEMORY_CAP];
 double   g_analog_memory_weight[FXAI_ANALOG_MEMORY_CAP];
 
 #include "Core\core_analog_memory.mqh"
+
+bool     g_regime_graph_ready = false;
+int      g_regime_graph_last_regime = -1;
+datetime g_regime_graph_last_time = 0;
+double   g_regime_graph_transition_obs[FXAI_REGIME_COUNT][FXAI_REGIME_COUNT];
+double   g_regime_graph_transition_edge[FXAI_REGIME_COUNT][FXAI_REGIME_COUNT];
+double   g_regime_graph_transition_quality[FXAI_REGIME_COUNT][FXAI_REGIME_COUNT];
+double   g_regime_graph_macro_alignment[FXAI_REGIME_COUNT][FXAI_REGIME_COUNT];
+double   g_regime_graph_dwell_ema[FXAI_REGIME_COUNT];
+double   g_regime_graph_outbound_mass[FXAI_REGIME_COUNT];
+
+#include "Core\core_regime_graph.mqh"
 
 struct FXAIAIModelOutputV4
 {

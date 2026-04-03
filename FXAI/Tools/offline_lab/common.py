@@ -25,6 +25,7 @@ RESEARCH_DIR = OFFLINE_DIR / "ResearchOS"
 DISTILL_DIR = OFFLINE_DIR / "Distillation"
 COMMON_EXPORT_DIR = testlab.COMMON_FILES / "FXAI/Offline/Exports"
 COMMON_PROMOTION_DIR = testlab.COMMON_FILES / "FXAI/Offline/Promotions"
+SHADOW_LEDGER_DIR = testlab.RUNTIME_DIR
 
 SERIOUS_SCENARIOS = "{market_recent, market_trend, market_chop, market_session_edges, market_spread_shock, market_walkforward, market_macro_event, market_adversarial}"
 DEFAULT_MONTHS_LIST = [3, 6, 12]
@@ -232,6 +233,82 @@ CREATE TABLE IF NOT EXISTS redteam_cycles (
     UNIQUE(profile_name, group_key, symbol, plugin_name)
 );
 
+CREATE TABLE IF NOT EXISTS teacher_factories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    plugin_name TEXT NOT NULL,
+    family_id INTEGER NOT NULL DEFAULT 11,
+    champion_best_config_id INTEGER,
+    source_run_id INTEGER,
+    teacher_artifact_path TEXT NOT NULL DEFAULT '',
+    teacher_artifact_sha256 TEXT NOT NULL DEFAULT '',
+    student_artifact_path TEXT NOT NULL DEFAULT '',
+    student_artifact_sha256 TEXT NOT NULL DEFAULT '',
+    deployment_profile_path TEXT NOT NULL DEFAULT '',
+    deployment_profile_sha256 TEXT NOT NULL DEFAULT '',
+    teacher_score REAL NOT NULL DEFAULT 0.0,
+    student_score REAL NOT NULL DEFAULT 0.0,
+    live_shadow_score REAL NOT NULL DEFAULT 0.0,
+    portfolio_score REAL NOT NULL DEFAULT 0.0,
+    policy_score REAL NOT NULL DEFAULT 0.0,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'ready',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name, symbol, plugin_name)
+);
+
+CREATE TABLE IF NOT EXISTS live_deployment_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    deployment_scope TEXT NOT NULL DEFAULT 'symbol',
+    artifact_path TEXT NOT NULL,
+    artifact_sha256 TEXT NOT NULL DEFAULT '',
+    teacher_weight REAL NOT NULL DEFAULT 0.58,
+    student_weight REAL NOT NULL DEFAULT 0.42,
+    analog_weight REAL NOT NULL DEFAULT 0.18,
+    foundation_weight REAL NOT NULL DEFAULT 0.24,
+    policy_trade_floor REAL NOT NULL DEFAULT 0.52,
+    policy_size_bias REAL NOT NULL DEFAULT 1.0,
+    portfolio_budget_bias REAL NOT NULL DEFAULT 1.0,
+    challenger_promote_margin REAL NOT NULL DEFAULT 1.0,
+    regime_transition_weight REAL NOT NULL DEFAULT 0.35,
+    macro_quality_floor REAL NOT NULL DEFAULT 0.24,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name, symbol, deployment_scope)
+);
+
+CREATE TABLE IF NOT EXISTS shadow_fleet_observations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    plugin_name TEXT NOT NULL,
+    family_id INTEGER NOT NULL DEFAULT 11,
+    captured_at INTEGER NOT NULL,
+    source_path TEXT NOT NULL,
+    source_sha256 TEXT NOT NULL DEFAULT '',
+    meta_weight REAL NOT NULL DEFAULT 0.0,
+    reliability REAL NOT NULL DEFAULT 0.0,
+    global_edge REAL NOT NULL DEFAULT 0.0,
+    context_edge REAL NOT NULL DEFAULT 0.0,
+    context_regret REAL NOT NULL DEFAULT 0.0,
+    portfolio_objective REAL NOT NULL DEFAULT 0.0,
+    portfolio_stability REAL NOT NULL DEFAULT 0.0,
+    portfolio_corr REAL NOT NULL DEFAULT 0.0,
+    portfolio_div REAL NOT NULL DEFAULT 0.0,
+    route_value REAL NOT NULL DEFAULT 0.0,
+    route_regret REAL NOT NULL DEFAULT 0.0,
+    route_counterfactual REAL NOT NULL DEFAULT 0.0,
+    shadow_score REAL NOT NULL DEFAULT 0.0,
+    regime_id INTEGER NOT NULL DEFAULT 0,
+    horizon_minutes INTEGER NOT NULL DEFAULT 5,
+    obs_count INTEGER NOT NULL DEFAULT 0,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    UNIQUE(profile_name, symbol, plugin_name, captured_at, source_sha256)
+);
+
 CREATE INDEX IF NOT EXISTS idx_datasets_group ON datasets(group_key, symbol, months);
 CREATE INDEX IF NOT EXISTS idx_tuning_runs_lookup ON tuning_runs(profile_name, group_key, symbol, plugin_name, status);
 CREATE INDEX IF NOT EXISTS idx_tuning_runs_dataset ON tuning_runs(dataset_id, profile_name, plugin_name);
@@ -242,6 +319,9 @@ CREATE INDEX IF NOT EXISTS idx_family_scorecards_lookup ON family_scorecards(pro
 CREATE INDEX IF NOT EXISTS idx_champion_lookup ON champion_registry(profile_name, symbol, plugin_name, status);
 CREATE INDEX IF NOT EXISTS idx_distill_lookup ON distillation_artifacts(profile_name, symbol, plugin_name, dataset_scope);
 CREATE INDEX IF NOT EXISTS idx_redteam_lookup ON redteam_cycles(profile_name, group_key, symbol, plugin_name);
+CREATE INDEX IF NOT EXISTS idx_teacher_factories_lookup ON teacher_factories(profile_name, symbol, plugin_name, status);
+CREATE INDEX IF NOT EXISTS idx_live_deploy_lookup ON live_deployment_profiles(profile_name, symbol, deployment_scope);
+CREATE INDEX IF NOT EXISTS idx_shadow_fleet_lookup ON shadow_fleet_observations(profile_name, symbol, plugin_name, captured_at);
 """
 
 
@@ -352,6 +432,7 @@ def connect_db(db_path: Path) -> sqlite3.Connection:
             ensure_sqlite_column(conn, "tuning_runs", "group_key", "TEXT NOT NULL DEFAULT ''")
             ensure_sqlite_column(conn, "tuning_runs", "family_id", "INTEGER NOT NULL DEFAULT 11")
             ensure_sqlite_column(conn, "best_configs", "family_id", "INTEGER NOT NULL DEFAULT 11")
+            ensure_sqlite_column(conn, "champion_registry", "family_id", "INTEGER NOT NULL DEFAULT 11")
             conn.execute("DROP INDEX IF EXISTS idx_tuning_runs_lookup")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_tuning_runs_lookup "
@@ -364,6 +445,10 @@ def connect_db(db_path: Path) -> sqlite3.Connection:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_best_configs_family "
                 "ON best_configs(profile_name, family_id, symbol)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_shadow_fleet_symbol "
+                "ON shadow_fleet_observations(profile_name, symbol, captured_at)"
             )
             conn.execute(
                 """
@@ -497,4 +582,3 @@ def load_kv_tsv(path: Path) -> dict[str, str]:
             if key:
                 out[key] = value
     return out
-

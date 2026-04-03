@@ -1195,6 +1195,7 @@ void ResetAIState(const string symbol)
    FXAI_ResetReliabilityPending();
    FXAI_ResetHorizonPolicyPending();
    FXAI_ResetStackPending();
+   FXAI_ResetPolicyState();
    FXAI_ResetConformalState();
    FXAI_ResetAdaptiveRoutingState();
    FXAI_ResetRegimeCalibration();
@@ -1202,6 +1203,7 @@ void ResetAIState(const string symbol)
    FXAI_ResetFeatureDriftDiagnostics();
    FXAI_ResetGlobalSharedTransferBackbone();
    FXAI_ResetAnalogMemory();
+   FXAI_ResetRegimeGraph();
    FXAI_ResetBrokerExecutionReplayStats();
    FXAI_ResetMacroEventStore();
    if(g_plugins_ready)
