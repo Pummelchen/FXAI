@@ -36,8 +36,9 @@ python3 FXAI/Tools/fxai_testlab.py verify-all
 ```
 
 Notes:
-- `validate-env` checks Python, pytest, libSQL, the Turso CLI, MT5 path assumptions, `FILE_COMMON`, and local writeability before a long run starts.
-- Set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` to run the lab as a Turso embedded replica; without them the lab runs local-only via libSQL against the same on-disk lab file.
+- `validate-env` checks Python, pytest, libSQL, MT5 path assumptions, `FILE_COMMON`, and local writeability before a long run starts. The Turso CLI is reported when present, but it is not required for local-only or already-credentialed runs.
+- Set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` together to run the lab as a Turso embedded replica; without them the lab runs local-only via libSQL against the same on-disk lab file.
+- A partial Turso environment is treated as invalid on purpose. If only one of `TURSO_DATABASE_URL` or `TURSO_AUTH_TOKEN` is set, `validate-env` will fail and the lab will refuse to open until the configuration is complete or cleared.
 - `bootstrap --seed-demo` creates the full directory and Turso/libSQL layout, validates the environment, and emits a deterministic smoke profile with dashboard, lineage, supervisor, world-plan, and minimal-bundle artifacts.
 - `seed-demo` can rebuild the smoke profile later without recreating the whole lab.
 - `best-params` promotes all symbols under the selected profile by default; use `--symbol`, `--symbol-list`, or `--symbol-pack` only when you want to narrow the scope.

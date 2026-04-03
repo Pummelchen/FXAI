@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+from unittest.mock import Mock
 
-from offline_lab.common import connect_db
+from offline_lab.db_backend import LabConnection, TursoConfig
+from offline_lab.common import OfflineLabError, connect_db
 from offline_lab.environment import bootstrap_environment, validate_environment
 from offline_lab.fixtures import patched_paths
 
@@ -42,3 +44,29 @@ def test_environment_reports_turso_dependencies():
     assert report["dependencies"]["libsql"] is True
     assert report["dependencies"]["turso_cli"] is True
     assert str(report["database"]["backend"]).startswith("turso_")
+
+
+def test_embedded_replica_commit_triggers_sync():
+    raw = Mock()
+    conn = LabConnection(
+        raw,
+        TursoConfig(
+            database=Path("/tmp/fxai-test.db"),
+            sync_url="libsql://example.turso.io",
+            auth_token="token",
+        ),
+    )
+    conn.commit()
+    raw.commit.assert_called_once()
+    raw.sync.assert_called_once()
+
+
+def test_partial_turso_env_is_rejected(monkeypatch):
+    monkeypatch.setenv("TURSO_DATABASE_URL", "libsql://example.turso.io")
+    monkeypatch.delenv("TURSO_AUTH_TOKEN", raising=False)
+    try:
+        connect_db(Path("/tmp/fxai_partial_env.db"))
+    except OfflineLabError as exc:
+        assert "partial Turso configuration" in str(exc)
+    else:
+        raise AssertionError("expected partial Turso configuration to be rejected")

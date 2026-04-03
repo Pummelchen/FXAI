@@ -690,12 +690,14 @@ def resolve_turso_config(db_path: Path) -> TursoConfig:
 
 def turso_environment_status(db_path: Path = DEFAULT_DB) -> dict[str, object]:
     config = resolve_turso_config(Path(db_path))
+    partial_config = bool(config.sync_url) != bool(config.auth_token)
     return {
         "backend": config.backend_name,
         "database_path": str(config.database),
         "sync_enabled": config.sync_enabled,
         "sync_url_configured": bool(config.sync_url),
         "auth_token_configured": bool(config.auth_token),
+        "config_error": ("partial_sync_credentials" if partial_config else ""),
     }
 
 
@@ -707,6 +709,11 @@ def _is_retryable_db_error(exc: Exception) -> bool:
 def connect_db(db_path: Path) -> LabConnection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     config = resolve_turso_config(db_path)
+    if bool(config.sync_url) != bool(config.auth_token):
+        raise OfflineLabError(
+            "partial Turso configuration: set both "
+            f"{TURSO_DATABASE_URL_ENV} and {TURSO_AUTH_TOKEN_ENV}, or neither"
+        )
     last_error: Exception | None = None
     for attempt in range(6):
         conn: LabConnection | None = None

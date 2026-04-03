@@ -162,6 +162,8 @@ class LabConnection:
 
     def commit(self) -> None:
         self._raw.commit()
+        if self.sync_enabled:
+            self._raw.sync()
 
     def rollback(self) -> None:
         self._raw.rollback()

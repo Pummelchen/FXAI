@@ -45,6 +45,7 @@ def validate_environment() -> dict[str, object]:
     libsql_ok = bool(importlib.util.find_spec("libsql"))
     turso_cli = shutil.which("turso") or ""
     turso_status = turso_environment_status(DEFAULT_DB)
+    partial_sync_config = bool(turso_status.get("config_error"))
     report = {
         "python": {
             "version": sys.version.split()[0],
@@ -83,7 +84,7 @@ def validate_environment() -> dict[str, object]:
             "mt5_log_dir": _path_state(MT5_LOG_DIR),
         },
     }
-    ok = python_ok and pytest_ok and libsql_ok and bool(turso_cli)
+    ok = python_ok and pytest_ok and libsql_ok and not partial_sync_config
     for item in report["paths"].values():
         ok = ok and bool(item["parent_exists"])
     report["ok"] = bool(ok)
