@@ -22,8 +22,23 @@ class TursoConfig:
         return bool(self.sync_url and self.auth_token)
 
     @property
+    def partial_sync_config(self) -> bool:
+        return bool(self.sync_url) != bool(self.auth_token)
+
+    @property
+    def sync_mode(self) -> str:
+        return "embedded_replica" if self.sync_enabled else "local_only"
+
+    @property
     def backend_name(self) -> str:
         return "turso_embedded_replica" if self.sync_enabled else "turso_local_libsql"
+
+    def validate(self) -> None:
+        if self.partial_sync_config:
+            raise ValueError(
+                "partial Turso configuration: set both "
+                f"{TURSO_DATABASE_URL_ENV} and {TURSO_AUTH_TOKEN_ENV}, or neither"
+            )
 
 
 class LabRow(Mapping[str, object]):
@@ -72,7 +87,7 @@ class LabCursor:
     def _wrap_row(self, row):
         if row is None or isinstance(row, LabRow):
             return row
-        if isinstance(row, tuple):
+        if isinstance(row, Sequence) and not isinstance(row, (str, bytes, bytearray)):
             return LabRow(self._column_names(), row)
         return row
 
@@ -193,6 +208,7 @@ class LabConnection:
 
 
 def connect_backend(config: TursoConfig, timeout: float = 30.0) -> LabConnection:
+    config.validate()
     kwargs = {"timeout": float(timeout)}
     if config.sync_enabled:
         kwargs["sync_url"] = str(config.sync_url)

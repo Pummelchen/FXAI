@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import Mock
 
-from offline_lab.db_backend import LabConnection, TursoConfig
+from offline_lab.db_backend import LabConnection, TursoConfig, connect_backend
 from offline_lab.common import OfflineLabError, connect_db
 from offline_lab.environment import bootstrap_environment, validate_environment
 from offline_lab.fixtures import patched_paths
@@ -70,3 +70,18 @@ def test_partial_turso_env_is_rejected(monkeypatch):
         assert "partial Turso configuration" in str(exc)
     else:
         raise AssertionError("expected partial Turso configuration to be rejected")
+
+
+def test_connect_backend_rejects_partial_config():
+    try:
+        connect_backend(
+            TursoConfig(
+                database=Path("/tmp/fxai-partial.db"),
+                sync_url="libsql://example.turso.io",
+                auth_token="",
+            )
+        )
+    except ValueError as exc:
+        assert "partial Turso configuration" in str(exc)
+    else:
+        raise AssertionError("expected connect_backend to reject partial Turso config")
