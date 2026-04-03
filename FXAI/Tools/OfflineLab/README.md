@@ -1,10 +1,10 @@
 # FXAI Offline Lab
 
-`fxai_offline_lab.py` is the SQLite-backed offline control loop for FXAI.
+`fxai_offline_lab.py` is the Turso/libSQL-backed offline control loop for FXAI.
 
 It does not replace the MT5 model engine. MT5 and MQL5 still execute the real plugins. The offline lab adds:
 - exact-window `M1 OHLC + spread` export from MT5
-- SQLite storage for exported bars, tuning runs, scenario metrics, and promoted configs
+- Turso/libSQL storage for exported bars, tuning runs, scenario metrics, and promoted configs
 - repeated model-zoo tuning on 3/6/12-month windows
 - automatic promotion of best parameter packs per symbol and plugin
 - champion/challenger governance, parameter lineage, and family scorecards
@@ -36,8 +36,9 @@ python3 FXAI/Tools/fxai_testlab.py verify-all
 ```
 
 Notes:
-- `validate-env` checks Python, pytest, MT5 path assumptions, `FILE_COMMON`, and local writeability before a long run starts.
-- `bootstrap --seed-demo` creates the full directory and SQLite layout, validates the environment, and emits a deterministic smoke profile with dashboard, lineage, supervisor, world-plan, and minimal-bundle artifacts.
+- `validate-env` checks Python, pytest, libSQL, the Turso CLI, MT5 path assumptions, `FILE_COMMON`, and local writeability before a long run starts.
+- Set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` to run the lab as a Turso embedded replica; without them the lab runs local-only via libSQL against the same on-disk lab file.
+- `bootstrap --seed-demo` creates the full directory and Turso/libSQL layout, validates the environment, and emits a deterministic smoke profile with dashboard, lineage, supervisor, world-plan, and minimal-bundle artifacts.
 - `seed-demo` can rebuild the smoke profile later without recreating the whole lab.
 - `best-params` promotes all symbols under the selected profile by default; use `--symbol`, `--symbol-list`, or `--symbol-pack` only when you want to narrow the scope.
 - `attribution-prune` builds `FILE_COMMON` attribution and student-router artifacts without needing a full deployment refresh.
@@ -50,11 +51,11 @@ Notes:
 - `autonomous-governance` now also rebuilds causal attribution, plugin-pruning, and richer world plans with transition entropy, shock decay, and session-level stress scales.
 - `lineage-report` explains why each symbol is running its current promoted plugin and how the champion and challenger chain was formed.
 - `minimal-bundle` emits a deployment-only artifact set for a profile so operators can stage a lean live runtime without carrying the full research output tree.
-- `recover-artifacts` rebuilds generated runtime artifacts from SQLite state if `FILE_COMMON` or Offline Lab outputs go stale or are deleted.
+- `recover-artifacts` rebuilds generated runtime artifacts from Turso/libSQL state if `FILE_COMMON` or Offline Lab outputs go stale or are deleted.
 - `verify-deterministic` refreshes or checks the golden fixture outputs for the research OS artifact contract.
 - `fxai_testlab.py verify-all` is the one-command platform verification path: Python tests, deterministic fixture checks, and clean MT5 compiles.
 - Exact-window datasets store the effective exported first and last bar range, so later tuning and promotion stay aligned to the data that was actually ingested.
-- SQLite access is opened with a bounded retry and busy timeout so overlapping admin and control-loop calls do not fail on transient lock contention.
+- Turso/libSQL access is opened with a bounded retry and busy timeout so overlapping admin and control-loop calls do not fail on transient lock contention.
 
 Runtime modes:
 - `research`
@@ -63,9 +64,9 @@ Runtime modes:
   Leaner telemetry, lower runtime budget, fewer active models, and artifacts aimed at the minimal live bundle.
 
 Source of truth and recovery:
-- SQLite is the authoritative research and promotion state.
+- Turso/libSQL is the authoritative research and promotion state.
 - `FILE_COMMON/FXAI/Offline/Promotions/` is the authoritative MT5 runtime consumption layer.
-- Generated Offline Lab outputs must be rebuilt from SQLite or runtime artifacts, never edited by hand.
+- Generated Offline Lab outputs must be rebuilt from Turso/libSQL or runtime artifacts, never edited by hand.
 - If runtime artifacts drift or disappear, run `recover-artifacts`, then `deploy-profiles`, then `supervisor-sync`.
 
 Operator incident workflow:

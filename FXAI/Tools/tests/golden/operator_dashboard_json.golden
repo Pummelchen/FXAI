@@ -528,16 +528,18 @@
   "profile_name": "fixture",
   "source_of_truth": {
     "file_common_promotions": "authoritative MT5 runtime consumption layer",
-    "generated_outputs": "must be rebuilt from SQLite or runtime artifacts, not edited manually",
+    "generated_outputs": "must be rebuilt from Turso/libSQL state or runtime artifacts, not edited manually",
     "repo_source": "versioned source and tooling only",
-    "sqlite": "authoritative research and promotion state"
+    "turso_libsql": "authoritative research and promotion state"
   },
   "symbols": [
     "EURUSD"
   ],
   "versions": {
     "artifact_schema_version": "2",
+    "db_backend": "turso_local_libsql",
     "macro_schema_min": "2",
-    "offline_schema_version": "3"
+    "offline_schema_version": "3",
+    "turso_sync_mode": "local_only"
   }
 }

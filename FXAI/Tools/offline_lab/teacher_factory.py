@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import sqlite3
+from .db_backend import LabConnection
 from collections import defaultdict
 from pathlib import Path
 
@@ -81,7 +81,7 @@ DEPLOYMENT_MODEL_FEATURES = [
 ]
 
 
-def _symbol_shadow_training_rows(conn: sqlite3.Connection,
+def _symbol_shadow_training_rows(conn: LabConnection,
                                  profile_name: str,
                                  symbol: str,
                                  limit: int = 512) -> list[dict]:
@@ -144,7 +144,7 @@ def _fit_symbol_deployment_models(rows: list[dict]) -> dict[str, dict]:
     }
 
 
-def _latest_family_scorecards(conn: sqlite3.Connection,
+def _latest_family_scorecards(conn: LabConnection,
                               profile_name: str) -> dict[tuple[str, int], dict]:
     rows = conn.execute(
         """
@@ -170,7 +170,7 @@ def _latest_family_scorecards(conn: sqlite3.Connection,
     }
 
 
-def _latest_distill_artifacts(conn: sqlite3.Connection,
+def _latest_distill_artifacts(conn: LabConnection,
                               profile_name: str) -> dict[tuple[str, str], dict]:
     rows = conn.execute(
         """
@@ -189,7 +189,7 @@ def _latest_distill_artifacts(conn: sqlite3.Connection,
     return out
 
 
-def _latest_foundation_bundles(conn: sqlite3.Connection,
+def _latest_foundation_bundles(conn: LabConnection,
                                profile_name: str) -> dict[str, dict]:
     rows = conn.execute(
         """
@@ -214,7 +214,7 @@ def _latest_foundation_bundles(conn: sqlite3.Connection,
     return out
 
 
-def _latest_student_bundles(conn: sqlite3.Connection,
+def _latest_student_bundles(conn: LabConnection,
                             profile_name: str) -> dict[tuple[str, str], dict]:
     rows = conn.execute(
         """
@@ -239,7 +239,7 @@ def _latest_student_bundles(conn: sqlite3.Connection,
     return out
 
 
-def write_foundation_teacher_artifacts(conn: sqlite3.Connection,
+def write_foundation_teacher_artifacts(conn: LabConnection,
                                        args,
                                        promoted_rows: list[dict]) -> list[dict]:
     out_dir = DISTILL_DIR / safe_token(args.profile) / "Foundations"
@@ -372,7 +372,7 @@ def write_foundation_teacher_artifacts(conn: sqlite3.Connection,
     return artifacts
 
 
-def write_teacher_factory_artifacts(conn: sqlite3.Connection,
+def write_teacher_factory_artifacts(conn: LabConnection,
                                     args,
                                     promoted_rows: list[dict]) -> list[dict]:
     out_dir = DISTILL_DIR / safe_token(args.profile) / "TeacherFactory"
@@ -509,7 +509,7 @@ def write_teacher_factory_artifacts(conn: sqlite3.Connection,
     return artifacts
 
 
-def write_live_deployment_profiles(conn: sqlite3.Connection,
+def write_live_deployment_profiles(conn: LabConnection,
                                    args) -> list[dict]:
     ensure_dir(COMMON_PROMOTION_DIR)
     out_dir = RESEARCH_DIR / safe_token(args.profile)

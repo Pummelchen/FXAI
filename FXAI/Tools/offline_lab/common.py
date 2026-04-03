@@ -6,16 +6,25 @@ import csv
 import hashlib
 import json
 import math
+import os
 import shutil
-import sqlite3
 import sys
 import tempfile
 import time
 from collections import defaultdict
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 
 import fxai_testlab as testlab
+
+from .db_backend import (
+    TURSO_AUTH_TOKEN_ENV,
+    TURSO_DATABASE_URL_ENV,
+    LabConnection,
+    TursoConfig,
+    connect_backend,
+)
 
 OFFLINE_DIR = Path(__file__).resolve().parent.parent / "OfflineLab"
 DEFAULT_DB = OFFLINE_DIR / "fxai_offline_lab.sqlite"
@@ -631,13 +640,13 @@ def resolve_months_list(raw: str) -> list[int]:
     return out or list(DEFAULT_MONTHS_LIST)
 
 
-def ensure_sqlite_column(conn: sqlite3.Connection, table: str, column: str, spec: str) -> None:
+def ensure_table_column(conn: LabConnection, table: str, column: str, spec: str) -> None:
     columns = {str(row["name"]).lower() for row in conn.execute(f"PRAGMA table_info({table})")}
     if column.lower() not in columns:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {spec}")
 
 
-def set_metadata(conn: sqlite3.Connection, key: str, value: str) -> None:
+def set_metadata(conn: LabConnection, key: str, value: str) -> None:
     conn.execute(
         """
         INSERT INTO lab_metadata(meta_key, meta_value, updated_at)
@@ -650,7 +659,7 @@ def set_metadata(conn: sqlite3.Connection, key: str, value: str) -> None:
     )
 
 
-def get_metadata(conn: sqlite3.Connection, key: str, default: str = "") -> str:
+def get_metadata(conn: LabConnection, key: str, default: str = "") -> str:
     row = conn.execute(
         "SELECT meta_value FROM lab_metadata WHERE meta_key = ?",
         (str(key),),
@@ -663,61 +672,87 @@ def get_metadata(conn: sqlite3.Connection, key: str, default: str = "") -> str:
         return str(default)
 
 
-def current_lab_versions(conn: sqlite3.Connection) -> dict[str, str]:
+def current_lab_versions(conn: LabConnection) -> dict[str, str]:
     return {
         "offline_schema_version": get_metadata(conn, "offline_schema_version", str(OFFLINE_SCHEMA_VERSION)),
         "artifact_schema_version": get_metadata(conn, "artifact_schema_version", str(OFFLINE_ARTIFACT_SCHEMA_VERSION)),
         "macro_schema_min": get_metadata(conn, "macro_schema_min", str(OFFLINE_MACRO_SCHEMA_MIN)),
+        "db_backend": get_metadata(conn, "db_backend", "turso_local_libsql"),
+        "turso_sync_mode": get_metadata(conn, "turso_sync_mode", "local_only"),
     }
 
 
-def connect_db(db_path: Path) -> sqlite3.Connection:
+def resolve_turso_config(db_path: Path) -> TursoConfig:
+    sync_url = (os.getenv(TURSO_DATABASE_URL_ENV, "") or "").strip()
+    auth_token = (os.getenv(TURSO_AUTH_TOKEN_ENV, "") or "").strip()
+    return TursoConfig(database=Path(db_path), sync_url=sync_url, auth_token=auth_token)
+
+
+def turso_environment_status(db_path: Path = DEFAULT_DB) -> dict[str, object]:
+    config = resolve_turso_config(Path(db_path))
+    return {
+        "backend": config.backend_name,
+        "database_path": str(config.database),
+        "sync_enabled": config.sync_enabled,
+        "sync_url_configured": bool(config.sync_url),
+        "auth_token_configured": bool(config.auth_token),
+    }
+
+
+def _is_retryable_db_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "locked" in text or "busy" in text
+
+
+def connect_db(db_path: Path) -> LabConnection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
+    config = resolve_turso_config(db_path)
     last_error: Exception | None = None
     for attempt in range(6):
-        conn: sqlite3.Connection | None = None
+        conn: LabConnection | None = None
         try:
-            conn = sqlite3.connect(str(db_path), timeout=30.0)
-            conn.row_factory = sqlite3.Row
+            conn = connect_backend(config, timeout=30.0)
             conn.execute("PRAGMA busy_timeout=30000")
+            if conn.sync_enabled:
+                conn.sync()
             conn.executescript(SQL_SCHEMA)
-            ensure_sqlite_column(conn, "tuning_runs", "group_key", "TEXT NOT NULL DEFAULT ''")
-            ensure_sqlite_column(conn, "tuning_runs", "family_id", "INTEGER NOT NULL DEFAULT 11")
-            ensure_sqlite_column(conn, "best_configs", "family_id", "INTEGER NOT NULL DEFAULT 11")
-            ensure_sqlite_column(conn, "champion_registry", "family_id", "INTEGER NOT NULL DEFAULT 11")
-            ensure_sqlite_column(conn, "champion_registry", "promotion_tier", "TEXT NOT NULL DEFAULT 'experimental'")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "policy_no_trade_cap", "REAL NOT NULL DEFAULT 0.62")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "capital_efficiency_bias", "REAL NOT NULL DEFAULT 1.0")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "supervisor_blend", "REAL NOT NULL DEFAULT 0.45")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "policy_hold_floor", "REAL NOT NULL DEFAULT 0.48")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "policy_exit_floor", "REAL NOT NULL DEFAULT 0.58")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "policy_add_floor", "REAL NOT NULL DEFAULT 0.68")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "policy_reduce_floor", "REAL NOT NULL DEFAULT 0.56")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "policy_timeout_floor", "REAL NOT NULL DEFAULT 0.72")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "max_add_fraction", "REAL NOT NULL DEFAULT 0.50")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "reduce_fraction", "REAL NOT NULL DEFAULT 0.35")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "soft_timeout_bars", "INTEGER NOT NULL DEFAULT 8")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "hard_timeout_bars", "INTEGER NOT NULL DEFAULT 18")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "runtime_mode", "TEXT NOT NULL DEFAULT 'research'")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "telemetry_level", "TEXT NOT NULL DEFAULT 'full'")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "performance_budget_ms", "REAL NOT NULL DEFAULT 12.0")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "shadow_enabled", "INTEGER NOT NULL DEFAULT 1")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "snapshot_detail", "TEXT NOT NULL DEFAULT 'full'")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "max_runtime_models", "INTEGER NOT NULL DEFAULT 12")
-            ensure_sqlite_column(conn, "live_deployment_profiles", "promotion_tier", "TEXT NOT NULL DEFAULT 'experimental'")
-            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_enter_prob", "REAL NOT NULL DEFAULT 0.0")
-            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_no_trade_prob", "REAL NOT NULL DEFAULT 0.0")
-            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_exit_prob", "REAL NOT NULL DEFAULT 0.0")
-            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_add_prob", "REAL NOT NULL DEFAULT 0.0")
-            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_reduce_prob", "REAL NOT NULL DEFAULT 0.0")
-            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_timeout_prob", "REAL NOT NULL DEFAULT 0.0")
-            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_tighten_prob", "REAL NOT NULL DEFAULT 0.0")
-            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_portfolio_fit", "REAL NOT NULL DEFAULT 0.0")
-            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_capital_efficiency", "REAL NOT NULL DEFAULT 0.0")
-            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_lifecycle_action", "INTEGER NOT NULL DEFAULT 0")
-            ensure_sqlite_column(conn, "shadow_fleet_observations", "portfolio_pressure", "REAL NOT NULL DEFAULT 0.0")
-            ensure_sqlite_column(conn, "shadow_fleet_observations", "control_plane_score", "REAL NOT NULL DEFAULT 0.0")
-            ensure_sqlite_column(conn, "shadow_fleet_observations", "portfolio_supervisor_score", "REAL NOT NULL DEFAULT 0.0")
+            ensure_table_column(conn, "tuning_runs", "group_key", "TEXT NOT NULL DEFAULT ''")
+            ensure_table_column(conn, "tuning_runs", "family_id", "INTEGER NOT NULL DEFAULT 11")
+            ensure_table_column(conn, "best_configs", "family_id", "INTEGER NOT NULL DEFAULT 11")
+            ensure_table_column(conn, "champion_registry", "family_id", "INTEGER NOT NULL DEFAULT 11")
+            ensure_table_column(conn, "champion_registry", "promotion_tier", "TEXT NOT NULL DEFAULT 'experimental'")
+            ensure_table_column(conn, "live_deployment_profiles", "policy_no_trade_cap", "REAL NOT NULL DEFAULT 0.62")
+            ensure_table_column(conn, "live_deployment_profiles", "capital_efficiency_bias", "REAL NOT NULL DEFAULT 1.0")
+            ensure_table_column(conn, "live_deployment_profiles", "supervisor_blend", "REAL NOT NULL DEFAULT 0.45")
+            ensure_table_column(conn, "live_deployment_profiles", "policy_hold_floor", "REAL NOT NULL DEFAULT 0.48")
+            ensure_table_column(conn, "live_deployment_profiles", "policy_exit_floor", "REAL NOT NULL DEFAULT 0.58")
+            ensure_table_column(conn, "live_deployment_profiles", "policy_add_floor", "REAL NOT NULL DEFAULT 0.68")
+            ensure_table_column(conn, "live_deployment_profiles", "policy_reduce_floor", "REAL NOT NULL DEFAULT 0.56")
+            ensure_table_column(conn, "live_deployment_profiles", "policy_timeout_floor", "REAL NOT NULL DEFAULT 0.72")
+            ensure_table_column(conn, "live_deployment_profiles", "max_add_fraction", "REAL NOT NULL DEFAULT 0.50")
+            ensure_table_column(conn, "live_deployment_profiles", "reduce_fraction", "REAL NOT NULL DEFAULT 0.35")
+            ensure_table_column(conn, "live_deployment_profiles", "soft_timeout_bars", "INTEGER NOT NULL DEFAULT 8")
+            ensure_table_column(conn, "live_deployment_profiles", "hard_timeout_bars", "INTEGER NOT NULL DEFAULT 18")
+            ensure_table_column(conn, "live_deployment_profiles", "runtime_mode", "TEXT NOT NULL DEFAULT 'research'")
+            ensure_table_column(conn, "live_deployment_profiles", "telemetry_level", "TEXT NOT NULL DEFAULT 'full'")
+            ensure_table_column(conn, "live_deployment_profiles", "performance_budget_ms", "REAL NOT NULL DEFAULT 12.0")
+            ensure_table_column(conn, "live_deployment_profiles", "shadow_enabled", "INTEGER NOT NULL DEFAULT 1")
+            ensure_table_column(conn, "live_deployment_profiles", "snapshot_detail", "TEXT NOT NULL DEFAULT 'full'")
+            ensure_table_column(conn, "live_deployment_profiles", "max_runtime_models", "INTEGER NOT NULL DEFAULT 12")
+            ensure_table_column(conn, "live_deployment_profiles", "promotion_tier", "TEXT NOT NULL DEFAULT 'experimental'")
+            ensure_table_column(conn, "shadow_fleet_observations", "policy_enter_prob", "REAL NOT NULL DEFAULT 0.0")
+            ensure_table_column(conn, "shadow_fleet_observations", "policy_no_trade_prob", "REAL NOT NULL DEFAULT 0.0")
+            ensure_table_column(conn, "shadow_fleet_observations", "policy_exit_prob", "REAL NOT NULL DEFAULT 0.0")
+            ensure_table_column(conn, "shadow_fleet_observations", "policy_add_prob", "REAL NOT NULL DEFAULT 0.0")
+            ensure_table_column(conn, "shadow_fleet_observations", "policy_reduce_prob", "REAL NOT NULL DEFAULT 0.0")
+            ensure_table_column(conn, "shadow_fleet_observations", "policy_timeout_prob", "REAL NOT NULL DEFAULT 0.0")
+            ensure_table_column(conn, "shadow_fleet_observations", "policy_tighten_prob", "REAL NOT NULL DEFAULT 0.0")
+            ensure_table_column(conn, "shadow_fleet_observations", "policy_portfolio_fit", "REAL NOT NULL DEFAULT 0.0")
+            ensure_table_column(conn, "shadow_fleet_observations", "policy_capital_efficiency", "REAL NOT NULL DEFAULT 0.0")
+            ensure_table_column(conn, "shadow_fleet_observations", "policy_lifecycle_action", "INTEGER NOT NULL DEFAULT 0")
+            ensure_table_column(conn, "shadow_fleet_observations", "portfolio_pressure", "REAL NOT NULL DEFAULT 0.0")
+            ensure_table_column(conn, "shadow_fleet_observations", "control_plane_score", "REAL NOT NULL DEFAULT 0.0")
+            ensure_table_column(conn, "shadow_fleet_observations", "portfolio_supervisor_score", "REAL NOT NULL DEFAULT 0.0")
             conn.execute("DROP INDEX IF EXISTS idx_tuning_runs_lookup")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_tuning_runs_lookup "
@@ -749,22 +784,22 @@ def connect_db(db_path: Path) -> sqlite3.Connection:
             set_metadata(conn, "offline_schema_version", str(OFFLINE_SCHEMA_VERSION))
             set_metadata(conn, "artifact_schema_version", str(OFFLINE_ARTIFACT_SCHEMA_VERSION))
             set_metadata(conn, "macro_schema_min", str(OFFLINE_MACRO_SCHEMA_MIN))
+            set_metadata(conn, "db_backend", str(config.backend_name))
+            set_metadata(conn, "turso_sync_mode", "embedded_replica" if config.sync_enabled else "local_only")
             conn.commit()
+            if conn.sync_enabled:
+                conn.sync()
             return conn
-        except sqlite3.OperationalError as exc:
+        except Exception as exc:
             last_error = exc
             if conn is not None:
                 conn.close()
-            if "locked" not in str(exc).lower() or attempt >= 5:
+            if not _is_retryable_db_error(exc) or attempt >= 5:
                 raise
             time.sleep(0.25 * float(attempt + 1))
-        except Exception:
-            if conn is not None:
-                conn.close()
-            raise
     if last_error is not None:
         raise last_error
-    raise OfflineLabError(f"failed to open sqlite lab: {db_path}")
+    raise OfflineLabError(f"failed to open Turso libSQL lab: {db_path}")
 
 
 def plugin_family_name(family_id: int) -> str:
@@ -795,11 +830,11 @@ def mean_std(values: list[float]) -> tuple[float, float]:
     return mean_v, math.sqrt(max(var, 0.0))
 
 
-def row_float(row: dict | sqlite3.Row | None, key: str, default: float = 0.0) -> float:
+def row_float(row: Mapping[str, object] | None, key: str, default: float = 0.0) -> float:
     if row is None:
         return float(default)
     try:
-        raw = row[key] if isinstance(row, sqlite3.Row) else row.get(key, default)
+        raw = row.get(key, default) if hasattr(row, "get") else row[key]
     except Exception:
         raw = default
     try:
@@ -844,7 +879,7 @@ def solve_linear_system(matrix: list[list[float]], vector: list[float]) -> list[
     return b
 
 
-def fit_weighted_linear_model(rows: list[dict | sqlite3.Row],
+def fit_weighted_linear_model(rows: list[Mapping[str, object]],
                               feature_names: list[str],
                               target_name: str,
                               weight_name: str | None = None,
@@ -1004,7 +1039,7 @@ def family_distillation_profile(family_id: int) -> dict:
     }
 
 
-def row_to_dict(row: sqlite3.Row | None) -> dict | None:
+def row_to_dict(row: Mapping[str, object] | None) -> dict | None:
     return dict(row) if row is not None else None
 
 

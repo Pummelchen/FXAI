@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import time
-import sqlite3
+from .db_backend import LabConnection
 from collections import defaultdict
 from pathlib import Path
 
@@ -323,7 +323,7 @@ def _supervisor_payload(symbol: str,
     }
 
 
-def write_supervisor_service_artifacts(conn: sqlite3.Connection,
+def write_supervisor_service_artifacts(conn: LabConnection,
                                        args) -> list[dict]:
     ensure_dir(COMMON_PROMOTION_DIR)
     out_dir = RESEARCH_DIR / safe_token(args.profile)
@@ -529,7 +529,7 @@ def write_supervisor_service_artifacts(conn: sqlite3.Connection,
     return artifacts
 
 
-def write_supervisor_command_artifacts(conn: sqlite3.Connection,
+def write_supervisor_command_artifacts(conn: LabConnection,
                                        args) -> list[dict]:
     ensure_dir(COMMON_PROMOTION_DIR)
     out_dir = RESEARCH_DIR / safe_token(args.profile)
@@ -747,7 +747,7 @@ def write_supervisor_command_artifacts(conn: sqlite3.Connection,
     return artifacts
 
 
-def run_supervisor_daemon(conn: sqlite3.Connection,
+def run_supervisor_daemon(conn: LabConnection,
                           args) -> dict:
     interval = max(int(getattr(args, "interval_seconds", 30) or 0), 5)
     iterations = int(getattr(args, "iterations", 0) or 0)

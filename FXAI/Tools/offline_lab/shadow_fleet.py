@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
-import sqlite3
+from .db_backend import LabConnection
 from collections import defaultdict
 from pathlib import Path
 
@@ -29,7 +29,7 @@ def iter_shadow_ledger_files() -> list[Path]:
     return sorted(SHADOW_LEDGER_DIR.glob("fxai_shadow_*.tsv"))
 
 
-def ingest_shadow_fleet_ledgers(conn: sqlite3.Connection,
+def ingest_shadow_fleet_ledgers(conn: LabConnection,
                                 profile_name: str) -> dict:
     files = iter_shadow_ledger_files()
     rows_ingested = 0
@@ -205,7 +205,7 @@ def ingest_shadow_fleet_ledgers(conn: sqlite3.Connection,
     return summary_payload
 
 
-def latest_shadow_rows(conn: sqlite3.Connection,
+def latest_shadow_rows(conn: LabConnection,
                        profile_name: str) -> dict[tuple[str, str], dict]:
     sql = """
         SELECT s.*
@@ -230,7 +230,7 @@ def latest_shadow_rows(conn: sqlite3.Connection,
     }
 
 
-def symbol_shadow_summary(conn: sqlite3.Connection,
+def symbol_shadow_summary(conn: LabConnection,
                           profile_name: str,
                           symbol: str) -> dict:
     rows = list(latest_shadow_rows(conn, profile_name).values())

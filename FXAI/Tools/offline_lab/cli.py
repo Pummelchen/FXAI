@@ -153,7 +153,7 @@ def campaign_runs_extended(campaign: dict, limit_plugins: int = 0, limit_experim
     return runs
 
 
-def historical_scenario_weaknesses(conn: sqlite3.Connection,
+def historical_scenario_weaknesses(conn: LabConnection,
                                    profile_name: str,
                                    symbol: str,
                                    plugin_name: str,
@@ -292,7 +292,7 @@ def build_redteam_runs_for_plugin(plugin_name: str,
     return deduped, plan
 
 
-def persist_redteam_plan(conn: sqlite3.Connection,
+def persist_redteam_plan(conn: LabConnection,
                          profile_name: str,
                          group_key: str,
                          symbol: str,
@@ -354,7 +354,7 @@ def persist_redteam_plan(conn: sqlite3.Connection,
     conn.commit()
 
 
-def generate_redteam_runs(conn: sqlite3.Connection,
+def generate_redteam_runs(conn: LabConnection,
                           profile_name: str,
                           group_key: str,
                           dataset: dict,
@@ -417,7 +417,7 @@ def grouped_rows_by_plugin(report_tsv: Path) -> dict[str, list[dict]]:
     return out
 
 
-def upsert_tuning_run(conn: sqlite3.Connection,
+def upsert_tuning_run(conn: LabConnection,
                       dataset: dict,
                       profile_name: str,
                       group_key: str,
@@ -536,7 +536,7 @@ def upsert_tuning_run(conn: sqlite3.Connection,
     return run_id
 
 
-def store_baseline_run_bundle(conn: sqlite3.Connection,
+def store_baseline_run_bundle(conn: LabConnection,
                               dataset: dict,
                               profile_name: str,
                               group_key: str,
@@ -575,7 +575,7 @@ def store_baseline_run_bundle(conn: sqlite3.Connection,
         )
 
 
-def run_dataset_baseline(conn: sqlite3.Connection, dataset: dict, profile_name: str, args, out_dir: Path) -> dict:
+def run_dataset_baseline(conn: LabConnection, dataset: dict, profile_name: str, args, out_dir: Path) -> dict:
     baseline_path = out_dir / "baseline_all.md"
     base_args = testlab.build_effective_audit_args(serious_base_args(args, dataset, baseline_path))
     started_at = now_unix()
@@ -599,7 +599,7 @@ def run_dataset_baseline(conn: sqlite3.Connection, dataset: dict, profile_name: 
     }
 
 
-def run_dataset_campaign(conn: sqlite3.Connection, dataset: dict, profile_name: str, args, out_dir: Path, baseline_summary: dict, base_args) -> list[dict]:
+def run_dataset_campaign(conn: LabConnection, dataset: dict, profile_name: str, args, out_dir: Path, baseline_summary: dict, base_args) -> list[dict]:
     oracles = testlab.load_oracles()
     campaign = extend_campaign(testlab.build_optimization_campaign(baseline_summary, oracles), base_args)
     (out_dir / "campaign.json").write_text(json.dumps(campaign, indent=2, sort_keys=True), encoding="utf-8")
@@ -679,7 +679,7 @@ def run_dataset_campaign(conn: sqlite3.Connection, dataset: dict, profile_name: 
 def cmd_init_db(args) -> int:
     conn = connect_db(Path(args.db))
     conn.close()
-    print(f"initialized sqlite lab: {args.db}")
+    print(f"initialized Turso/libSQL lab: {args.db}")
     return 0
 
 
@@ -1114,17 +1114,17 @@ def cmd_control_loop(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(description="FXAI SQLite-backed offline tuning and control lab")
+    ap = argparse.ArgumentParser(description="FXAI Turso/libSQL-backed offline tuning and control lab")
     ap.add_argument("--db", default=str(DEFAULT_DB))
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    init_db = sub.add_parser("init-db", help="Initialize the SQLite offline lab schema")
+    init_db = sub.add_parser("init-db", help="Initialize the Turso/libSQL offline lab schema")
     init_db.set_defaults(func=cmd_init_db)
 
     val = sub.add_parser("validate-env", help="Validate Python, MT5, FILE_COMMON, and Offline Lab path assumptions")
     val.set_defaults(func=cmd_validate_env)
 
-    boot = sub.add_parser("bootstrap", help="Create required lab folders, validate the environment, and initialize SQLite")
+    boot = sub.add_parser("bootstrap", help="Create required lab folders, validate the environment, and initialize Turso/libSQL")
     boot.add_argument("--report", default="")
     boot.add_argument("--no-init-db", action="store_true")
     boot.add_argument("--seed-demo", action="store_true")
@@ -1133,7 +1133,7 @@ def build_parser() -> argparse.ArgumentParser:
     comp = sub.add_parser("compile-export", help="Compile the MT5 offline export runner")
     comp.set_defaults(func=cmd_compile_export)
 
-    exp = sub.add_parser("export-dataset", help="Export exact-window M1 OHLC+spread history from MT5 into SQLite")
+    exp = sub.add_parser("export-dataset", help="Export exact-window M1 OHLC+spread history from MT5 into Turso/libSQL")
     exp.add_argument("--symbol", default="EURUSD")
     exp.add_argument("--symbol-list", default="")
     exp.add_argument("--symbol-pack", default="", choices=[""] + sorted(testlab.SYMBOL_PACKS.keys()))
@@ -1201,7 +1201,7 @@ def build_parser() -> argparse.ArgumentParser:
     best.add_argument("--symbol-pack", default="", choices=[""] + sorted(testlab.SYMBOL_PACKS.keys()))
     best.set_defaults(func=cmd_best_params)
 
-    shadow = sub.add_parser("shadow-sync", help="Ingest live shadow-fleet ledgers from FILE_COMMON into SQLite")
+    shadow = sub.add_parser("shadow-sync", help="Ingest live shadow-fleet ledgers from FILE_COMMON into Turso/libSQL")
     shadow.add_argument("--profile", default="continuous")
     shadow.set_defaults(func=cmd_shadow_sync)
 
@@ -1260,7 +1260,7 @@ def build_parser() -> argparse.ArgumentParser:
     det.add_argument("--refresh-golden", action="store_true")
     det.set_defaults(func=cmd_verify_deterministic)
 
-    rec = sub.add_parser("recover-artifacts", help="Rebuild generated promotions, dashboards, and summaries from SQLite state")
+    rec = sub.add_parser("recover-artifacts", help="Rebuild generated promotions, dashboards, and summaries from Turso/libSQL state")
     rec.add_argument("--profile", default="continuous")
     rec.add_argument("--runtime-mode", default="research", choices=sorted(RUNTIME_MODES.keys()))
     rec.set_defaults(func=cmd_recover_artifacts)

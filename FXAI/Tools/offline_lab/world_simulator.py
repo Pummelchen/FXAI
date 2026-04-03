@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import math
-import sqlite3
+from .db_backend import LabConnection
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -55,7 +55,7 @@ def _session_bucket_from_hour(hour: int) -> str:
     return "asia"
 
 
-def build_symbol_world_model(conn: sqlite3.Connection,
+def build_symbol_world_model(conn: LabConnection,
                              profile_name: str,
                              symbol: str,
                              dataset_limit: int = 4) -> dict:
@@ -361,7 +361,7 @@ def build_symbol_world_model(conn: sqlite3.Connection,
     }
 
 
-def write_world_model_artifacts(conn: sqlite3.Connection,
+def write_world_model_artifacts(conn: LabConnection,
                                 args,
                                 symbols: list[str]) -> list[dict]:
     out_dir = RESEARCH_DIR / safe_token(args.profile) / "WorldModels"

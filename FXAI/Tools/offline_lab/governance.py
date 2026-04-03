@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import sqlite3
+from .db_backend import LabConnection
 from pathlib import Path
 
 from .common import *
@@ -29,7 +29,7 @@ def _unlink_if_exists(raw_path: str) -> None:
         pass
 
 
-def write_portfolio_supervisor_profile(conn: sqlite3.Connection,
+def write_portfolio_supervisor_profile(conn: LabConnection,
                                        args) -> dict:
     rows = conn.execute(
         """
@@ -183,7 +183,7 @@ def write_portfolio_supervisor_profile(conn: sqlite3.Connection,
     }
 
 
-def write_world_simulator_plans(conn: sqlite3.Connection,
+def write_world_simulator_plans(conn: LabConnection,
                                 args) -> list[dict]:
     symbols = [
         str(row["symbol"])
@@ -472,7 +472,7 @@ def write_world_simulator_plans(conn: sqlite3.Connection,
     return plans
 
 
-def run_autonomous_governance(conn: sqlite3.Connection,
+def run_autonomous_governance(conn: LabConnection,
                               args,
                               cycle_group_key: str = "") -> dict:
     champion_rows = conn.execute(

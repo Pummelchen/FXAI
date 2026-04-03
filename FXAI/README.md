@@ -15,7 +15,7 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - `Tools/fxai_testlab.py`
   External compile, audit, baseline, and release-gate tool.
 - `Tools/fxai_offline_lab.py`
-  Stable CLI wrapper for the SQLite-backed offline export, tuning, promotion, and control-loop tool.
+  Stable CLI wrapper for the Turso/libSQL-backed offline export, tuning, promotion, and control-loop tool.
 - `Tools/offline_lab/`
   Internal Python package for Offline Lab database, export, campaign, promotion, shadow-fleet ingest, foundation and student bundling, supervisor-service generation, teacher-factory modules, world simulation, and autonomous governance.
 
@@ -71,20 +71,21 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - Audit Lab now exercises scoped runtime-artifact persistence and conformal calibration state instead of stub no-op hooks.
 - Audit scenarios build coherent `OHLC + spread` context bars rather than reconstructing them from close-only shortcuts.
 - Macro-event datasets now run under schema version 2 with revision-chain, source-trust, and currency-relevance manifests, and the feature pipeline derives a higher-level macro state for policy, inflation, labor, growth, carry, decay, and quality.
-- Offline Lab now exports exact-window `M1 OHLC + spread` datasets into SQLite, stores full tuning ledgers and scenario metrics, and promotes ready-to-use MT5 `.set` files under `Tools/OfflineLab/Profiles/`, `MQL5/Profiles/Tester/`, and `FILE_COMMON/FXAI/Offline/Promotions/`.
+- Offline Lab now exports exact-window `M1 OHLC + spread` datasets into Turso/libSQL, stores full tuning ledgers and scenario metrics, and promotes ready-to-use MT5 `.set` files under `Tools/OfflineLab/Profiles/`, `MQL5/Profiles/Tester/`, and `FILE_COMMON/FXAI/Offline/Promotions/`.
 - Offline Lab also maintains champion/challenger governance, parameter lineage, family scorecards, distillation artifacts, teacher-factory payloads, live deployment profiles, shadow-fleet telemetry, and learned red-team plans under `Tools/OfflineLab/ResearchOS/` and `Tools/OfflineLab/Distillation/`.
 - Offline Lab now emits foundation-teacher artifacts, portfolio-supervisor profiles, and per-symbol world-simulator plans that are consumed by MT5 runtime control-plane logic and Audit Lab adversarial generation.
 - World-simulator plans now include transition entropy, shock decay, and session-specific sigma/spread scaling learned from exported market windows instead of only coarse global stress factors.
 - Offline Lab now also emits student deployment bundles and per-symbol or global supervisor-service artifacts so the promoted runtime can blend peer pressure, capital budget, add or reduce bias, and lifecycle floors without manual operator edits.
 - Offline Lab promotion is profile-wide by default in `best-params`, unless a symbol filter is passed, and exact-window audit runs now follow the effective exported first/last bar range.
-- Offline Lab now also emits operator dashboards, lineage reports, deterministic fixture artifacts, and minimal live bundles so operators can inspect or recover the promoted state without reading SQLite directly.
+- Offline Lab now also emits operator dashboards, lineage reports, deterministic fixture artifacts, and minimal live bundles so operators can inspect or recover the promoted state without reading Turso/libSQL directly.
+- Offline Lab can run local-only through libSQL or as a Turso embedded replica when `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are configured.
 - Runtime profiles now support explicit `research` and `production` modes so the same framework can run either as the full research OS or as a leaner live deployment surface.
 
 ## Source Of Truth
 
 - Runtime source of truth: the live MT5 Experts tree
 - Versioned mirror: the git repo copy that is synchronized into the MT5 tree after clean verification
-- Research source of truth: the Offline Lab SQLite database
+- Research source of truth: the Offline Lab Turso/libSQL database
 - MT5 runtime artifact source of truth: `FILE_COMMON/FXAI/Offline/Promotions/`
 
 For broader framework usage and workflow details, see the repo-root README and the GitHub wiki.

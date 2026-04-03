@@ -180,17 +180,17 @@ def build_dataset_key(symbol: str, start_unix: int, end_unix: int, months: int) 
     return safe_token(f"{symbol}_m1_{months_tag}_{start_unix}_{end_unix}")
 
 
-def load_dataset(conn: sqlite3.Connection, dataset_key: str) -> dict | None:
+def load_dataset(conn: LabConnection, dataset_key: str) -> dict | None:
     row = conn.execute("SELECT * FROM datasets WHERE dataset_key = ?", (dataset_key,)).fetchone()
     return row_to_dict(row)
 
 
-def load_dataset_by_id(conn: sqlite3.Connection, dataset_id: int) -> dict | None:
+def load_dataset_by_id(conn: LabConnection, dataset_id: int) -> dict | None:
     row = conn.execute("SELECT * FROM datasets WHERE id = ?", (dataset_id,)).fetchone()
     return row_to_dict(row)
 
 
-def insert_dataset_bars(conn: sqlite3.Connection, dataset_id: int, data_path: Path) -> int:
+def insert_dataset_bars(conn: LabConnection, dataset_id: int, data_path: Path) -> int:
     conn.execute("DELETE FROM dataset_bars WHERE dataset_id = ?", (dataset_id,))
     batch: list[tuple] = []
     inserted = 0
@@ -230,7 +230,7 @@ def insert_dataset_bars(conn: sqlite3.Connection, dataset_id: int, data_path: Pa
     return inserted
 
 
-def ingest_dataset(conn: sqlite3.Connection,
+def ingest_dataset(conn: LabConnection,
                    dataset_key: str,
                    group_key: str,
                    symbol: str,
@@ -279,7 +279,7 @@ def ingest_dataset(conn: sqlite3.Connection,
     return dataset
 
 
-def export_single_dataset(conn: sqlite3.Connection, args, symbol: str, months: int, group_key: str) -> dict:
+def export_single_dataset(conn: LabConnection, args, symbol: str, months: int, group_key: str) -> dict:
     start_unix, end_unix = resolve_window(months, getattr(args, "start_unix", 0), getattr(args, "end_unix", 0))
     dataset_key = build_dataset_key(symbol, start_unix, end_unix, months)
     existing = load_dataset(conn, dataset_key)
@@ -322,7 +322,7 @@ def export_single_dataset(conn: sqlite3.Connection, args, symbol: str, months: i
     return ingest_dataset(conn, dataset_key, group_key, symbol, months, data_path, meta_path, getattr(args, "notes", ""))
 
 
-def resolve_dataset_rows(conn: sqlite3.Connection, args, auto_export: bool, group_key: str) -> list[dict]:
+def resolve_dataset_rows(conn: LabConnection, args, auto_export: bool, group_key: str) -> list[dict]:
     rows: list[dict] = []
     dataset_keys = parse_csv_tokens(getattr(args, "dataset_keys", ""))
     for key in dataset_keys:
@@ -346,5 +346,4 @@ def resolve_dataset_rows(conn: sqlite3.Connection, args, auto_export: bool, grou
                 raise OfflineLabError(f"dataset not found and auto-export disabled: {dataset_key}")
             rows.append(dataset)
     return rows
-
 

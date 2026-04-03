@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import sqlite3
+from .db_backend import LabConnection
 from pathlib import Path
 
 from .common import *
@@ -20,7 +20,7 @@ def _safe_json(raw: str, default):
         return default
 
 
-def _latest_attribution_payload(conn: sqlite3.Connection,
+def _latest_attribution_payload(conn: LabConnection,
                                 profile_name: str) -> dict[str, dict]:
     rows = conn.execute(
         """
@@ -39,7 +39,7 @@ def _latest_attribution_payload(conn: sqlite3.Connection,
     return out
 
 
-def _family_strengths(conn: sqlite3.Connection,
+def _family_strengths(conn: LabConnection,
                       profile_name: str,
                       symbol: str) -> dict[str, float]:
     rows = conn.execute(
@@ -77,7 +77,7 @@ def _parse_plugin_weights(payload: dict) -> dict[str, float]:
     return out
 
 
-def write_student_router_profiles(conn: sqlite3.Connection,
+def write_student_router_profiles(conn: LabConnection,
                                   args) -> list[dict]:
     mode_cfg = resolve_runtime_mode(getattr(args, "runtime_mode", None))
     symbols = sorted({

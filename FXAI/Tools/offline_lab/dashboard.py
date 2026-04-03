@@ -109,10 +109,10 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
         "champions": champions,
         "deployments": deployments,
         "source_of_truth": {
-            "sqlite": "authoritative research and promotion state",
+            "turso_libsql": "authoritative research and promotion state",
             "file_common_promotions": "authoritative MT5 runtime consumption layer",
             "repo_source": "versioned source and tooling only",
-            "generated_outputs": "must be rebuilt from SQLite or runtime artifacts, not edited manually",
+            "generated_outputs": "must be rebuilt from Turso/libSQL state or runtime artifacts, not edited manually",
         },
     }
     return dashboard

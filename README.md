@@ -7,7 +7,7 @@ It is not a single strategy EA. It is a research and deployment framework with:
 - a shared `M1 OHLC + spread` data contract
 - an internal `TensorCore` runtime for stronger neural and sequence models
 - an Audit Lab for certification, regression checks, and release gating
-- a SQLite-backed Offline Lab for export, tuning, promotion, and champion-challenger control loops
+- a Turso/libSQL-backed Offline Lab for export, tuning, promotion, and champion-challenger control loops
 - foundation-teacher and student-deployment bundles, autonomous governance, supervisor-service artifacts, and live deployment profiles for promoted MT5 runtime behavior
 - one workflow for research, backtesting, audit, and live operation
 
@@ -27,8 +27,9 @@ FXAI stays MT5-native. There are no external inference services and no DLL depen
 - Clear contracts for plugins, persistence, checkpoint depth, and promotion readiness.
 - Shared TensorCore, transfer backbone, contextual routing, policy-first gating, and portfolio-aware meta scoring reduce duplicated model infrastructure.
 - Runtime manifests, feature governance, and macro-data leakage guards make the framework auditable and reproducible.
-- SQLite experiment ledgers, teacher-factory artifacts, fitted deployment models, shadow-fleet telemetry, and deployment profiles provide a serious research OS around MT5 instead of ad hoc backtest folders.
+- Turso/libSQL experiment ledgers, teacher-factory artifacts, fitted deployment models, shadow-fleet telemetry, and deployment profiles provide a serious research OS around MT5 instead of ad hoc backtest folders.
 - Portfolio-supervisor artifacts, supervisor-service snapshots, causal attribution and pruning profiles, world-simulator plans, and foundation or student payloads let the research OS steer live gating, peer-pressure handling, lifecycle actions, and future distillation without manual copy and paste.
+- The Offline Lab can run local-only through libSQL or as a Turso embedded replica when `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are configured.
 
 ## Documentation
 

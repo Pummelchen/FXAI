@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import sqlite3
+from .db_backend import LabConnection
 from pathlib import Path
 
 from .common import *
@@ -32,7 +32,7 @@ def _safe_json(raw: str, default):
         return default
 
 
-def _latest_family_rows(conn: sqlite3.Connection,
+def _latest_family_rows(conn: LabConnection,
                         profile_name: str,
                         symbol: str) -> dict[int, dict]:
     rows = conn.execute(
@@ -52,7 +52,7 @@ def _latest_family_rows(conn: sqlite3.Connection,
     return out
 
 
-def _champion_rows(conn: sqlite3.Connection,
+def _champion_rows(conn: LabConnection,
                    profile_name: str,
                    symbol: str) -> list[dict]:
     return [
@@ -73,7 +73,7 @@ def _champion_rows(conn: sqlite3.Connection,
     ]
 
 
-def _latest_plugin_shadow_rows(conn: sqlite3.Connection,
+def _latest_plugin_shadow_rows(conn: LabConnection,
                                profile_name: str,
                                symbol: str) -> dict[str, dict]:
     rows = latest_shadow_rows(conn, profile_name)
@@ -85,7 +85,7 @@ def _latest_plugin_shadow_rows(conn: sqlite3.Connection,
     return out
 
 
-def _feature_group_weights(conn: sqlite3.Connection,
+def _feature_group_weights(conn: LabConnection,
                            profile_name: str,
                            symbol: str,
                            shadow: dict) -> dict[str, float]:
@@ -181,7 +181,7 @@ def _family_weights(family_rows: dict[int, dict],
     return out
 
 
-def _plugin_weights(conn: sqlite3.Connection,
+def _plugin_weights(conn: LabConnection,
                     profile_name: str,
                     symbol: str,
                     champion_rows: list[dict],
@@ -242,7 +242,7 @@ def _plugin_weights(conn: sqlite3.Connection,
     return plugin_weights, prune_reasons, pruned_plugins
 
 
-def write_attribution_profiles(conn: sqlite3.Connection,
+def write_attribution_profiles(conn: LabConnection,
                                args) -> list[dict]:
     mode_cfg = resolve_runtime_mode(getattr(args, "runtime_mode", None))
     symbols = sorted({

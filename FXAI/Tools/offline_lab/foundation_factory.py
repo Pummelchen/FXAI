@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import sqlite3
+from .db_backend import LabConnection
 from collections import defaultdict
 from pathlib import Path
 
@@ -45,7 +45,7 @@ FOUNDATION_MODEL_FEATURES = [
 ]
 
 
-def _symbol_shadow_rows(conn: sqlite3.Connection,
+def _symbol_shadow_rows(conn: LabConnection,
                        profile_name: str,
                        symbol: str,
                        limit: int = 512) -> list[dict]:
@@ -71,7 +71,7 @@ def _shadow_feature_snapshot(rows: list[dict]) -> dict[str, float]:
     return out
 
 
-def _latest_family_cards(conn: sqlite3.Connection,
+def _latest_family_cards(conn: LabConnection,
                          profile_name: str) -> dict[tuple[str, int], dict]:
     rows = conn.execute(
         """
@@ -97,7 +97,7 @@ def _latest_family_cards(conn: sqlite3.Connection,
     }
 
 
-def _latest_distill_map(conn: sqlite3.Connection,
+def _latest_distill_map(conn: LabConnection,
                         profile_name: str) -> dict[tuple[str, str], dict]:
     rows = conn.execute(
         """
@@ -116,7 +116,7 @@ def _latest_distill_map(conn: sqlite3.Connection,
     return out
 
 
-def _latest_dataset_windows(conn: sqlite3.Connection,
+def _latest_dataset_windows(conn: LabConnection,
                             symbol: str,
                             limit: int = 8) -> list[dict]:
     rows = conn.execute(
@@ -132,7 +132,7 @@ def _latest_dataset_windows(conn: sqlite3.Connection,
     return [dict(row) for row in rows]
 
 
-def write_foundation_model_bundles(conn: sqlite3.Connection,
+def write_foundation_model_bundles(conn: LabConnection,
                                    args,
                                    promoted_rows: list[dict]) -> list[dict]:
     out_dir = DISTILL_DIR / safe_token(args.profile) / "FoundationFactory"
@@ -303,7 +303,7 @@ def write_foundation_model_bundles(conn: sqlite3.Connection,
     return artifacts
 
 
-def write_student_deployment_bundles(conn: sqlite3.Connection,
+def write_student_deployment_bundles(conn: LabConnection,
                                      args,
                                      promoted_rows: list[dict]) -> list[dict]:
     out_dir = DISTILL_DIR / safe_token(args.profile) / "StudentFactory"

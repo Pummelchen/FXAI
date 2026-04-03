@@ -4,7 +4,7 @@ import contextlib
 import importlib
 import json
 import shutil
-import sqlite3
+from .db_backend import LabConnection
 from pathlib import Path
 
 from .common import ensure_dir, json_compact, now_unix, safe_token, sha256_text
@@ -102,7 +102,7 @@ def _artifact_file(path: Path, text: str) -> tuple[str, str]:
     return str(path), sha256_text(text)
 
 
-def seed_profile_fixture(conn: sqlite3.Connection,
+def seed_profile_fixture(conn: LabConnection,
                          profile_name: str = "fixture",
                          symbol: str = "EURUSD",
                          plugin_name: str = "ai_mlp",
@@ -212,7 +212,7 @@ def seed_profile_fixture(conn: sqlite3.Connection,
     }
 
 
-def seed_completed_run_fixture(conn: sqlite3.Connection,
+def seed_completed_run_fixture(conn: LabConnection,
                                fixture: dict[str, object],
                                parameters: dict[str, object] | None = None,
                                score: float = 83.5) -> dict[str, object]:

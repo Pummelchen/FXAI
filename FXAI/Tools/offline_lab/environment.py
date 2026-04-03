@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import platform
+import shutil
 import sys
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from .common import (
     connect_db,
     current_lab_versions,
     ensure_dir,
+    turso_environment_status,
 )
 from testlab.shared import COMMON_FILES, METAEDITOR, MT5_LOG_DIR, ROOT, TERMINAL, TERMINAL_ROOT, TESTER_PRESET_DIR, WINE
 
@@ -40,6 +42,9 @@ def _path_state(path: Path) -> dict[str, object]:
 def validate_environment() -> dict[str, object]:
     python_ok = sys.version_info >= (3, 11)
     pytest_ok = bool(importlib.util.find_spec("pytest"))
+    libsql_ok = bool(importlib.util.find_spec("libsql"))
+    turso_cli = shutil.which("turso") or ""
+    turso_status = turso_environment_status(DEFAULT_DB)
     report = {
         "python": {
             "version": sys.version.split()[0],
@@ -48,7 +53,12 @@ def validate_environment() -> dict[str, object]:
         },
         "dependencies": {
             "pytest": pytest_ok,
-            "sqlite3": True,
+            "libsql": libsql_ok,
+            "turso_cli": bool(turso_cli),
+        },
+        "database": {
+            **turso_status,
+            "turso_cli_path": turso_cli,
         },
         "versions": {
             "expected_offline_schema_version": OFFLINE_SCHEMA_VERSION,
@@ -73,7 +83,7 @@ def validate_environment() -> dict[str, object]:
             "mt5_log_dir": _path_state(MT5_LOG_DIR),
         },
     }
-    ok = python_ok and pytest_ok
+    ok = python_ok and pytest_ok and libsql_ok and bool(turso_cli)
     for item in report["paths"].values():
         ok = ok and bool(item["parent_exists"])
     report["ok"] = bool(ok)

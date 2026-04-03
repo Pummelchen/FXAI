@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import sqlite3
+from .db_backend import LabConnection
 import shutil
 from collections import defaultdict
 from pathlib import Path
@@ -81,7 +81,7 @@ def write_audit_set_generic(path: Path, row: dict, params: dict) -> None:
     testlab.write_audit_set(path, ns)
 
 
-def load_completed_runs(conn: sqlite3.Connection, args) -> list[dict]:
+def load_completed_runs(conn: LabConnection, args) -> list[dict]:
     clauses = ["tr.status = 'ok'", "tr.profile_name = ?"]
     params: list[object] = [args.profile]
     dataset_keys = parse_csv_tokens(getattr(args, "dataset_keys", ""))
@@ -179,7 +179,7 @@ def aggregate_best_candidates(rows: list[dict]) -> tuple[list[dict], dict[str, i
     return winners, total_datasets_per_symbol
 
 
-def render_family_scorecards(conn: sqlite3.Connection,
+def render_family_scorecards(conn: LabConnection,
                              profile_name: str,
                              group_key: str,
                              rows: list[dict],
@@ -265,7 +265,7 @@ def render_family_scorecards(conn: sqlite3.Connection,
     return scorecards
 
 
-def persist_family_scorecards(conn: sqlite3.Connection,
+def persist_family_scorecards(conn: LabConnection,
                               args,
                               rows: list[dict],
                               promoted_rows: list[dict]) -> list[dict]:
@@ -355,7 +355,7 @@ def persist_family_scorecards(conn: sqlite3.Connection,
     return scorecards
 
 
-def persist_lineage_entry(conn: sqlite3.Connection,
+def persist_lineage_entry(conn: LabConnection,
                           profile_name: str,
                           symbol: str,
                           plugin_name: str,
@@ -387,7 +387,7 @@ def persist_lineage_entry(conn: sqlite3.Connection,
     )
 
 
-def update_champion_registry(conn: sqlite3.Connection,
+def update_champion_registry(conn: LabConnection,
                              args,
                              promoted_rows: list[dict]) -> list[dict]:
     profile_dir = PROFILES_DIR / safe_token(args.profile)
@@ -558,7 +558,7 @@ def update_champion_registry(conn: sqlite3.Connection,
     return decisions
 
 
-def write_distillation_artifacts(conn: sqlite3.Connection,
+def write_distillation_artifacts(conn: LabConnection,
                                  args,
                                  promoted_rows: list[dict]) -> list[dict]:
     out_dir = DISTILL_DIR / safe_token(args.profile)
@@ -649,7 +649,7 @@ def write_distillation_artifacts(conn: sqlite3.Connection,
     return artifacts
 
 
-def persist_best_configs(conn: sqlite3.Connection, args, winners: list[dict]) -> list[dict]:
+def persist_best_configs(conn: LabConnection, args, winners: list[dict]) -> list[dict]:
     profile_dir = PROFILES_DIR / safe_token(args.profile)
     ensure_dir(profile_dir)
     ensure_dir(COMMON_PROMOTION_DIR)
