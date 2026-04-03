@@ -215,6 +215,14 @@ struct FXAIAuditScenarioSpec
    double spike_scale;
    double spread_points;
    double macro_focus;
+   double world_sigma_scale;
+   double world_drift_bias;
+   double world_spread_scale;
+   double world_gap_prob;
+   double world_gap_scale;
+   double world_flip_prob;
+   double world_context_corr_bias;
+   double world_liquidity_stress;
 };
 
 struct FXAIAuditFoldMetrics

@@ -1,6 +1,77 @@
 #ifndef __FXAI_AUDIT_SCENARIOS_MQH__
 #define __FXAI_AUDIT_SCENARIOS_MQH__
 
+string FXAI_AuditWorldPlanFile(const string symbol)
+{
+   string clean = symbol;
+   if(StringLen(clean) <= 0)
+      clean = _Symbol;
+   StringReplace(clean, "\\", "_");
+   StringReplace(clean, "/", "_");
+   StringReplace(clean, ":", "_");
+   StringReplace(clean, "*", "_");
+   StringReplace(clean, "?", "_");
+   StringReplace(clean, "\"", "_");
+   StringReplace(clean, "<", "_");
+   StringReplace(clean, ">", "_");
+   StringReplace(clean, "|", "_");
+   StringReplace(clean, " ", "_");
+   return "FXAI\\Offline\\Promotions\\fxai_world_plan_" + clean + ".tsv";
+}
+
+void FXAI_AuditApplyWorldPlan(FXAIAuditScenarioSpec &spec,
+                              const string symbol)
+{
+   string file_name = FXAI_AuditWorldPlanFile(symbol);
+   int handle = FileOpen(file_name,
+                         FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON |
+                         FILE_SHARE_READ | FILE_SHARE_WRITE);
+   if(handle == INVALID_HANDLE)
+      return;
+
+   while(!FileIsEnding(handle))
+   {
+      string line = FileReadString(handle);
+      if(StringLen(line) <= 0)
+         continue;
+      string parts[];
+      int n = StringSplit(line, '\t', parts);
+      if(n < 2)
+         continue;
+      string key = parts[0];
+      string value = parts[1];
+      if(key == "sigma_scale")
+         spec.world_sigma_scale = StringToDouble(value);
+      else if(key == "drift_bias")
+         spec.world_drift_bias = StringToDouble(value);
+      else if(key == "spread_scale")
+         spec.world_spread_scale = StringToDouble(value);
+      else if(key == "gap_prob")
+         spec.world_gap_prob = StringToDouble(value);
+      else if(key == "gap_scale")
+         spec.world_gap_scale = StringToDouble(value);
+      else if(key == "flip_prob")
+         spec.world_flip_prob = StringToDouble(value);
+      else if(key == "context_corr_bias")
+         spec.world_context_corr_bias = StringToDouble(value);
+      else if(key == "liquidity_stress")
+         spec.world_liquidity_stress = StringToDouble(value);
+      else if(key == "macro_focus")
+         spec.macro_focus = StringToDouble(value);
+   }
+   FileClose(handle);
+
+   spec.world_sigma_scale = FXAI_Clamp(spec.world_sigma_scale, 0.50, 3.00);
+   spec.world_drift_bias = FXAI_Clamp(spec.world_drift_bias, -3.0 * spec.sigma_per_bar, 3.0 * spec.sigma_per_bar);
+   spec.world_spread_scale = FXAI_Clamp(spec.world_spread_scale, 0.50, 4.00);
+   spec.world_gap_prob = FXAI_Clamp(spec.world_gap_prob, 0.0, 0.30);
+   spec.world_gap_scale = FXAI_Clamp(spec.world_gap_scale, 0.0, 8.0);
+   spec.world_flip_prob = FXAI_Clamp(spec.world_flip_prob, 0.0, 0.50);
+   spec.world_context_corr_bias = FXAI_Clamp(spec.world_context_corr_bias, -1.0, 1.0);
+   spec.world_liquidity_stress = FXAI_Clamp(spec.world_liquidity_stress, 0.0, 3.0);
+   spec.macro_focus = FXAI_Clamp(spec.macro_focus, 0.0, 1.5);
+}
+
 void FXAI_AuditFillScenarioSpec(const int scenario_id,
                                 FXAIAuditScenarioSpec &spec)
 {
@@ -14,6 +85,14 @@ void FXAI_AuditFillScenarioSpec(const int scenario_id,
    spec.spike_scale = 0.0;
    spec.spread_points = 1.2;
    spec.macro_focus = 0.0;
+   spec.world_sigma_scale = 1.0;
+   spec.world_drift_bias = 0.0;
+   spec.world_spread_scale = 1.0;
+   spec.world_gap_prob = 0.0;
+   spec.world_gap_scale = 0.0;
+   spec.world_flip_prob = 0.0;
+   spec.world_context_corr_bias = 0.0;
+   spec.world_liquidity_stress = 0.0;
 
    switch(scenario_id)
    {
@@ -103,6 +182,9 @@ void FXAI_AuditFillScenarioSpec(const int scenario_id,
       default:
          break;
    }
+
+   if(spec.id >= 11)
+      FXAI_AuditApplyWorldPlan(spec, _Symbol);
 }
 
 void FXAI_AuditResetMetrics(FXAIAuditScenarioMetrics &m,
@@ -900,8 +982,9 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
          sigma = MathMax(1e-6, spec.vol_cluster * prev_sigma + (1.0 - spec.vol_cluster) * spec.sigma_per_bar * (0.5 + 1.5 * rng.NextUnit()));
          prev_sigma = sigma;
       }
+      sigma *= FXAI_Clamp(spec.world_sigma_scale, 0.50, 3.00);
 
-      double drift = spec.drift_per_bar;
+      double drift = spec.drift_per_bar + spec.world_drift_bias;
       if(spec.id == 7 && k > bars / 2)
       {
          drift = -spec.drift_per_bar * 1.25;
@@ -913,6 +996,10 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
          ret += spec.mean_revert_strength * ((anchor - prev) / MathMax(prev, point));
       if(spec.spike_prob > 0.0 && rng.NextUnit() < spec.spike_prob)
          ret += spec.spike_scale * sigma * rng.NextNormal();
+      if(spec.world_gap_prob > 0.0 && rng.NextUnit() < spec.world_gap_prob)
+         ret += spec.world_gap_scale * sigma * (rng.NextUnit() < 0.5 ? -1.0 : 1.0);
+      if(spec.world_flip_prob > 0.0 && rng.NextUnit() < spec.world_flip_prob)
+         ret *= -1.0;
 
       if(spec.id == 5)
          ret = MathAbs(drift) + 0.10 * sigma * MathAbs(rng.NextNormal());
@@ -932,14 +1019,19 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       chrono_high[k] = hi;
       chrono_low[k] = lo;
       chrono_close[k] = cl;
-      chrono_spread[k] = (int)MathMax(1.0, MathRound(spec.spread_points * (0.85 + 0.30 * rng.NextUnit())));
+      chrono_spread[k] = (int)MathMax(1.0,
+                                      MathRound(spec.spread_points *
+                                                FXAI_Clamp(spec.world_spread_scale, 0.50, 4.00) *
+                                                (0.85 + 0.30 * rng.NextUnit() +
+                                                 0.18 * FXAI_Clamp(spec.world_liquidity_stress, 0.0, 3.0))));
 
       double ctx_noise1 = 0.35 * sigma * rng.NextNormal();
       double ctx_noise2 = 0.45 * sigma * rng.NextNormal();
       double ctx_noise3 = 0.55 * sigma * rng.NextNormal();
-      double ctx_ret1 = 0.80 * ret + ctx_noise1;
-      double ctx_ret2 = -0.45 * ret + ctx_noise2;
-      double ctx_ret3 = 0.35 * ret + 0.50 * ctx_noise3;
+      double corr_bias = FXAI_Clamp(spec.world_context_corr_bias, -1.0, 1.0);
+      double ctx_ret1 = (0.80 + 0.15 * corr_bias) * ret + ctx_noise1;
+      double ctx_ret2 = (-0.45 + 0.20 * corr_bias) * ret + ctx_noise2;
+      double ctx_ret3 = (0.35 + 0.25 * corr_bias) * ret + 0.50 * ctx_noise3;
 
       double ctx_op1 = ctx_prev1;
       double ctx_op2 = ctx_prev2;
@@ -960,7 +1052,9 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       chrono_ctx1_low[k] = MathMax(point, MathMin(ctx_op1, ctx_cl1) - ctx_wick1);
       chrono_ctx1_close[k] = ctx_cl1;
       chrono_ctx1_spread[k] = (int)MathMax(1.0, MathRound(spec.spread_points *
+                                                           FXAI_Clamp(spec.world_spread_scale, 0.50, 4.00) *
                                                            (0.85 + 0.25 * rng.NextUnit() +
+                                                            0.10 * spec.world_liquidity_stress +
                                                             0.18 * FXAI_Clamp(MathAbs(ctx_ret1) / MathMax(sigma, 1e-6), 0.0, 2.0))));
 
       chrono_ctx2_open[k] = ctx_op2;
@@ -968,7 +1062,9 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       chrono_ctx2_low[k] = MathMax(point, MathMin(ctx_op2, ctx_cl2) - ctx_wick2);
       chrono_ctx2_close[k] = ctx_cl2;
       chrono_ctx2_spread[k] = (int)MathMax(1.0, MathRound(spec.spread_points *
+                                                           FXAI_Clamp(spec.world_spread_scale, 0.50, 4.00) *
                                                            (0.80 + 0.20 * rng.NextUnit() +
+                                                            0.08 * spec.world_liquidity_stress +
                                                             0.12 * FXAI_Clamp(MathAbs(ctx_ret2) / MathMax(sigma, 1e-6), 0.0, 2.0))));
 
       chrono_ctx3_open[k] = ctx_op3;
@@ -976,7 +1072,9 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
       chrono_ctx3_low[k] = MathMax(point, MathMin(ctx_op3, ctx_cl3) - ctx_wick3);
       chrono_ctx3_close[k] = ctx_cl3;
       chrono_ctx3_spread[k] = (int)MathMax(1.0, MathRound(spec.spread_points *
+                                                           FXAI_Clamp(spec.world_spread_scale, 0.50, 4.00) *
                                                            (0.90 + 0.25 * rng.NextUnit() +
+                                                            0.12 * spec.world_liquidity_stress +
                                                             0.16 * FXAI_Clamp(MathAbs(ctx_ret3) / MathMax(sigma, 1e-6), 0.0, 2.0))));
 
       ctx_prev1 = ctx_cl1;

@@ -70,6 +70,117 @@ def _latest_distill_artifacts(conn: sqlite3.Connection,
     return out
 
 
+def write_foundation_teacher_artifacts(conn: sqlite3.Connection,
+                                       args,
+                                       promoted_rows: list[dict]) -> list[dict]:
+    out_dir = DISTILL_DIR / safe_token(args.profile) / "Foundations"
+    ensure_dir(out_dir)
+    family_cards = _latest_family_scorecards(conn, args.profile)
+    distill_map = _latest_distill_artifacts(conn, args.profile)
+    shadow_map = latest_shadow_rows(conn, args.profile)
+    grouped: dict[tuple[str, int], list[dict]] = defaultdict(list)
+    for row in promoted_rows:
+        grouped[(str(row["symbol"]), int(row.get("family_id", 11)))].append(dict(row))
+
+    artifacts: list[dict] = []
+    created_at = now_unix()
+    for (symbol, family_id), items in sorted(grouped.items()):
+        weights = [max(float(item.get("ranking_score", 0.0)), 1.0) for item in items]
+        total_w = max(sum(weights), 1.0)
+        teacher_weight = 0.0
+        student_weight = 0.0
+        self_sup_weight = 0.0
+        analog_weight = 0.0
+        foundation_weight = 0.0
+        champions: list[dict] = []
+        for item, weight in zip(items, weights):
+            plugin_name = str(item["plugin_name"])
+            distill = distill_map.get((symbol, plugin_name), {})
+            student_target = family_distillation_profile(family_id)
+            if distill:
+                try:
+                    student_target.update(json.loads(distill.get("student_target_json", "{}") or "{}"))
+                except Exception:
+                    pass
+            shadow = shadow_map.get((symbol, plugin_name), {})
+            teacher_weight += float(student_target.get("teacher_weight", 0.58)) * weight
+            student_weight += float(student_target.get("student_weight", 0.42)) * weight
+            self_sup_weight += float(student_target.get("self_supervised_weight", 0.10)) * weight
+            analog_weight += float(student_target.get("analog_weight", 0.08)) * weight
+            foundation_weight += float(student_target.get("foundation_weight", 0.14)) * weight
+            champions.append({
+                "plugin_name": plugin_name,
+                "ai_id": int(item["ai_id"]),
+                "ranking_score": float(item["ranking_score"]),
+                "support_count": int(item["support_count"]),
+                "shadow_score": float(shadow.get("shadow_score", 0.0)),
+                "route_value": float(shadow.get("route_value", 0.0)),
+                "student_target": student_target,
+            })
+
+        family_card = family_cards.get((symbol, family_id), {})
+        payload = {
+            "profile_name": args.profile,
+            "symbol": symbol,
+            "scope": "symbol_family",
+            "family_id": family_id,
+            "family_name": plugin_family_name(family_id),
+            "teacher_weight": _clamp(teacher_weight / total_w, 0.05, 0.95),
+            "student_weight": _clamp(student_weight / total_w, 0.05, 0.95),
+            "self_supervised_weight": _clamp(self_sup_weight / total_w, 0.0, 1.0),
+            "analog_weight": _clamp(analog_weight / total_w, 0.0, 0.80),
+            "foundation_weight": _clamp(foundation_weight / total_w, 0.0, 0.90),
+            "family_scorecard": family_card,
+            "champions": champions,
+        }
+        symbol_dir = out_dir / safe_token(symbol)
+        ensure_dir(symbol_dir)
+        artifact_path = symbol_dir / f"foundation_family_{family_id}.json"
+        artifact_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        artifact_sha = testlab.sha256_path(artifact_path)
+        conn.execute(
+            """
+            INSERT INTO foundation_teacher_artifacts(profile_name, symbol, scope, family_id, artifact_path, artifact_sha256,
+                                                     teacher_payload_json, student_profile_json, status, created_at)
+            VALUES(?, ?, 'symbol_family', ?, ?, ?, ?, ?, 'ready', ?)
+            ON CONFLICT(profile_name, symbol, scope, family_id) DO UPDATE SET
+                artifact_path=excluded.artifact_path,
+                artifact_sha256=excluded.artifact_sha256,
+                teacher_payload_json=excluded.teacher_payload_json,
+                student_profile_json=excluded.student_profile_json,
+                status=excluded.status,
+                created_at=excluded.created_at
+            """,
+            (
+                args.profile,
+                symbol,
+                family_id,
+                str(artifact_path),
+                artifact_sha,
+                json.dumps(payload, indent=2, sort_keys=True),
+                json.dumps({
+                    "teacher_weight": payload["teacher_weight"],
+                    "student_weight": payload["student_weight"],
+                    "self_supervised_weight": payload["self_supervised_weight"],
+                    "analog_weight": payload["analog_weight"],
+                    "foundation_weight": payload["foundation_weight"],
+                }, indent=2, sort_keys=True),
+                created_at,
+            ),
+        )
+        artifacts.append({
+            "symbol": symbol,
+            "family_id": family_id,
+            "artifact_path": str(artifact_path),
+            "artifact_sha256": artifact_sha,
+        })
+
+    conn.commit()
+    summary_path = out_dir / "foundation_teachers.json"
+    summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
+    return artifacts
+
+
 def write_teacher_factory_artifacts(conn: sqlite3.Connection,
                                     args,
                                     promoted_rows: list[dict]) -> list[dict]:
@@ -226,11 +337,14 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
         analog_weights: list[tuple[float, float]] = []
         foundation_weights: list[tuple[float, float]] = []
         policy_trade_floor = 0.52
+        policy_no_trade_cap = 0.62
         policy_size_bias = 1.0
         portfolio_budget_bias = 1.0
         challenger_margin = 1.0
         regime_transition_weight = 0.35
         macro_quality_floor = 0.24
+        capital_efficiency_bias = 1.0
+        supervisor_blend = 0.45
 
         deployment_champions: list[dict] = []
         mean_macro_score = 0.0
@@ -289,6 +403,14 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             0.20,
             0.90,
         )
+        policy_no_trade_cap = _clamp(
+            0.72 -
+            0.10 * _clamp(shadow_summary.get("mean_policy_enter_prob", 0.0), 0.0, 1.0) +
+            0.12 * _clamp(shadow_summary.get("mean_policy_no_trade_prob", 0.0), 0.0, 1.0) +
+            0.08 * _clamp(shadow_summary.get("mean_portfolio_pressure", 0.0) / 1.5, 0.0, 1.0),
+            0.25,
+            0.95,
+        )
         policy_size_bias = _clamp(
             0.88 +
             0.16 * _clamp(shadow_summary.get("mean_portfolio_objective", 0.0), 0.0, 1.0) +
@@ -296,6 +418,14 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             0.08 * _clamp(mean_route_regret, 0.0, 1.0),
             0.40,
             1.60,
+        )
+        capital_efficiency_bias = _clamp(
+            0.86 +
+            0.20 * _clamp(shadow_summary.get("mean_policy_capital_efficiency", 0.0), 0.0, 1.0) +
+            0.08 * _clamp(shadow_summary.get("mean_route_value", 0.0), 0.0, 1.0) -
+            0.06 * _clamp(mean_route_regret, 0.0, 1.0),
+            0.40,
+            1.80,
         )
         portfolio_budget_bias = _clamp(
             0.86 +
@@ -328,6 +458,14 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             0.0,
             1.0,
         )
+        supervisor_blend = _clamp(
+            0.24 +
+            0.16 * _clamp(shadow_summary.get("mean_portfolio_pressure", 0.0) / 1.5, 0.0, 1.0) +
+            0.14 * _clamp(shadow_summary.get("mean_portfolio_supervisor_score", 0.0), 0.0, 1.0) +
+            0.12 * _clamp(shadow_summary.get("mean_policy_no_trade_prob", 0.0), 0.0, 1.0),
+            0.0,
+            1.0,
+        )
 
         payload = {
             "profile_name": args.profile,
@@ -337,11 +475,14 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             "analog_weight": analog_weight,
             "foundation_weight": foundation_weight,
             "policy_trade_floor": policy_trade_floor,
+            "policy_no_trade_cap": policy_no_trade_cap,
             "policy_size_bias": policy_size_bias,
             "portfolio_budget_bias": portfolio_budget_bias,
             "challenger_promote_margin": challenger_margin,
             "regime_transition_weight": regime_transition_weight,
             "macro_quality_floor": macro_quality_floor,
+            "capital_efficiency_bias": capital_efficiency_bias,
+            "supervisor_blend": supervisor_blend,
             "champions": deployment_champions,
             "shadow_summary": shadow_summary,
         }
@@ -355,11 +496,14 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             ("analog_weight", f"{analog_weight:.6f}"),
             ("foundation_weight", f"{foundation_weight:.6f}"),
             ("policy_trade_floor", f"{policy_trade_floor:.6f}"),
+            ("policy_no_trade_cap", f"{policy_no_trade_cap:.6f}"),
             ("policy_size_bias", f"{policy_size_bias:.6f}"),
             ("portfolio_budget_bias", f"{portfolio_budget_bias:.6f}"),
             ("challenger_promote_margin", f"{challenger_margin:.6f}"),
             ("regime_transition_weight", f"{regime_transition_weight:.6f}"),
             ("macro_quality_floor", f"{macro_quality_floor:.6f}"),
+            ("capital_efficiency_bias", f"{capital_efficiency_bias:.6f}"),
+            ("supervisor_blend", f"{supervisor_blend:.6f}"),
         ]
         tsv_path.write_text("".join(f"{key}\t{value}\n" for key, value in lines), encoding="utf-8")
         tsv_sha = testlab.sha256_path(tsv_path)
@@ -372,8 +516,9 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
                                                  teacher_weight, student_weight, analog_weight, foundation_weight,
                                                  policy_trade_floor, policy_size_bias, portfolio_budget_bias,
                                                  challenger_promote_margin, regime_transition_weight, macro_quality_floor,
+                                                 policy_no_trade_cap, capital_efficiency_bias, supervisor_blend,
                                                  payload_json, created_at)
-            VALUES(?, ?, 'symbol', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES(?, ?, 'symbol', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(profile_name, symbol, deployment_scope) DO UPDATE SET
                 artifact_path=excluded.artifact_path,
                 artifact_sha256=excluded.artifact_sha256,
@@ -387,6 +532,9 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
                 challenger_promote_margin=excluded.challenger_promote_margin,
                 regime_transition_weight=excluded.regime_transition_weight,
                 macro_quality_floor=excluded.macro_quality_floor,
+                policy_no_trade_cap=excluded.policy_no_trade_cap,
+                capital_efficiency_bias=excluded.capital_efficiency_bias,
+                supervisor_blend=excluded.supervisor_blend,
                 payload_json=excluded.payload_json,
                 created_at=excluded.created_at
             """,
@@ -405,6 +553,9 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
                 challenger_margin,
                 regime_transition_weight,
                 macro_quality_floor,
+                policy_no_trade_cap,
+                capital_efficiency_bias,
+                supervisor_blend,
                 json.dumps(payload, indent=2, sort_keys=True),
                 created_at,
             ),
@@ -426,6 +577,9 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             "student_weight": student_weight,
             "analog_weight": analog_weight,
             "foundation_weight": foundation_weight,
+            "policy_no_trade_cap": policy_no_trade_cap,
+            "capital_efficiency_bias": capital_efficiency_bias,
+            "supervisor_blend": supervisor_blend,
         })
 
     stale_symbols = sorted(set(existing_symbols) - set(by_symbol))

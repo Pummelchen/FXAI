@@ -292,6 +292,8 @@ double FXAI_ManagedDirectionalClusterLots(const string symbol,
 double FXAI_PortfolioPressureScore(const string symbol,
                                    const int direction)
 {
+   FXAILiveDeploymentProfile deploy_profile;
+   FXAI_LoadLiveDeploymentProfile(symbol, deploy_profile, false);
    double portfolio_cap = MathMax(MaxPortfolioExposureLots, 0.0);
    double corr_cap = MathMax(MaxCorrelatedExposureLots, 0.0);
    double dir_cap = MathMax(MaxDirectionalClusterLots, 0.0);
@@ -302,11 +304,21 @@ double FXAI_PortfolioPressureScore(const string symbol,
    double macro_penalty = (FXAI_MacroEventLeakageSafe() ? (1.0 - FXAI_Clamp(g_ai_last_macro_state_quality, 0.0, 1.0)) : 0.0);
    FXAIControlPlaneAggregate cp;
    FXAI_ReadControlPlaneAggregate(symbol, direction, cp);
-   g_control_plane_last_score = cp.score;
-   return FXAI_Clamp(0.34 * FXAI_Clamp(gross_ratio, 0.0, 2.0) +
+   FXAIPortfolioSupervisorProfile supervisor;
+   double supervisor_score = FXAI_PortfolioSupervisorScore(symbol, direction, cp, supervisor);
+   double supervisor_blend = FXAI_Clamp(0.55 * FXAI_Clamp(supervisor.supervisor_weight, 0.0, 1.0) +
+                                        0.45 * FXAI_Clamp(deploy_profile.supervisor_blend, 0.0, 1.0),
+                                        0.0,
+                                        1.0);
+   g_control_plane_last_score = FXAI_Clamp((1.0 - supervisor_blend) * cp.score +
+                                           supervisor_blend * supervisor_score,
+                                           0.0,
+                                           2.0);
+   return FXAI_Clamp(0.30 * FXAI_Clamp(gross_ratio / MathMax(supervisor.gross_budget_bias, 0.40), 0.0, 2.0) +
                      0.28 * FXAI_Clamp(corr_ratio, 0.0, 2.0) +
                      0.22 * FXAI_Clamp(dir_ratio, 0.0, 2.0) +
                      0.12 * FXAI_Clamp(cp.score, 0.0, 1.5) +
+                     0.10 * FXAI_Clamp(supervisor_score, 0.0, 1.5) +
                      0.06 * FXAI_Clamp(cp.macro_overlap, 0.0, 1.0) +
                      0.10 * hierarchy_penalty +
                      0.06 * macro_penalty,
@@ -347,6 +359,17 @@ bool FXAI_RegimeKillSwitchTriggered(string &reason)
    if(g_ai_last_trade_gate <= FXAI_Clamp(RiskKillTradeGate, 0.0, 1.0))
    {
       reason = "kill_trade_gate";
+      return true;
+   }
+   if(g_policy_last_no_trade_prob >= 0.92)
+   {
+      reason = "kill_policy_no_trade";
+      return true;
+   }
+   if(g_policy_last_action == FXAI_POLICY_ACTION_EXIT &&
+      g_policy_last_enter_prob < 0.25)
+   {
+      reason = "kill_policy_exit";
       return true;
    }
    if(g_ai_last_path_risk >= FXAI_Clamp(RiskKillPathRisk, 0.0, 1.0))
@@ -407,6 +430,16 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       reason = "risk_trade_gate_floor";
       return 0.0;
    }
+   if(g_policy_last_enter_prob < 0.05)
+   {
+      reason = "risk_policy_enter_floor";
+      return 0.0;
+   }
+   if(g_policy_last_no_trade_prob > FXAI_Clamp(deploy_profile.policy_no_trade_cap, 0.25, 0.95))
+   {
+      reason = "risk_policy_no_trade";
+      return 0.0;
+   }
    if(g_ai_last_hierarchy_score < FXAI_Clamp(RiskMinHierarchyScore, 0.0, 1.0))
    {
       reason = "risk_hierarchy_score_floor";
@@ -453,6 +486,9 @@ double FXAI_CalcRiskAwareLot(const string symbol,
                                   1.60);
    conviction *= FXAI_Clamp(g_policy_last_size_mult, 0.25, 1.60);
    conviction *= FXAI_Clamp(deploy_profile.portfolio_budget_bias, 0.40, 1.60);
+   conviction *= FXAI_Clamp(0.75 + 0.35 * g_policy_last_portfolio_fit, 0.25, 1.25);
+   conviction *= FXAI_Clamp(deploy_profile.capital_efficiency_bias, 0.40, 1.80) *
+                 FXAI_Clamp(0.70 + 0.45 * g_policy_last_capital_efficiency, 0.25, 1.40);
    conviction = FXAI_Clamp(conviction, 0.20, 2.20);
 
    if(AI_PositionSizing == FXAI_SIZE_CONVICTION)
@@ -508,6 +544,20 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       reason = "risk_portfolio_pressure";
       return 0.0;
    }
+   FXAIControlPlaneAggregate cp;
+   FXAI_ReadControlPlaneAggregate(symbol, direction, cp);
+   FXAIPortfolioSupervisorProfile supervisor;
+   double supervisor_score = FXAI_PortfolioSupervisorScore(symbol, direction, cp, supervisor);
+   if(cp.max_capital_risk_pct > FXAI_Clamp(supervisor.capital_risk_cap_pct, 0.10, 10.0))
+   {
+      reason = "risk_supervisor_capital";
+      return 0.0;
+   }
+   if(supervisor_score > FXAI_Clamp(supervisor.hard_block_score, 0.20, 3.0))
+   {
+      reason = "risk_supervisor_block";
+      return 0.0;
+   }
    double control_plane_pressure = g_control_plane_last_score;
    if(direction == 1)
       control_plane_pressure = MathMax(control_plane_pressure, g_control_plane_last_buy_score);
@@ -515,14 +565,17 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       control_plane_pressure = MathMax(control_plane_pressure, g_control_plane_last_sell_score);
    requested_lot *= FXAI_Clamp((1.08 - 0.60 * portfolio_pressure) *
                                (1.02 - 0.25 * FXAI_Clamp(control_plane_pressure, 0.0, 1.5)) *
-                               FXAI_Clamp(g_policy_last_size_mult, 0.25, 1.60),
+                               FXAI_Clamp(1.04 - 0.22 * supervisor_score, 0.25, 1.10) *
+                               FXAI_Clamp(g_policy_last_size_mult, 0.25, 1.60) *
+                               FXAI_Clamp(0.70 + 0.30 * g_policy_last_enter_prob, 0.20, 1.10) *
+                               FXAI_Clamp(0.72 + 0.28 * g_policy_last_capital_efficiency, 0.25, 1.15),
                                0.20,
                                1.10);
 
    double portfolio_cap = MathMax(MaxPortfolioExposureLots, 0.0);
    if(portfolio_cap > 0.0)
    {
-      double available = portfolio_cap - FXAI_ManagedExposureLots("");
+      double available = portfolio_cap * MathMax(supervisor.gross_budget_bias, 0.40) - FXAI_ManagedExposureLots("");
       if(available <= 0.0)
       {
          reason = "risk_portfolio_cap";
@@ -537,7 +590,7 @@ double FXAI_CalcRiskAwareLot(const string symbol,
    double corr_cap = MathMax(MaxCorrelatedExposureLots, 0.0);
    if(corr_cap > 0.0)
    {
-      double available = corr_cap - FXAI_ManagedCorrelatedExposureLots(symbol);
+      double available = corr_cap * MathMax(supervisor.correlated_budget_bias, 0.40) - FXAI_ManagedCorrelatedExposureLots(symbol);
       if(available <= 0.0)
       {
          reason = "risk_correlated_cap";
@@ -552,7 +605,7 @@ double FXAI_CalcRiskAwareLot(const string symbol,
     double dir_cap = MathMax(MaxDirectionalClusterLots, 0.0);
     if(dir_cap > 0.0)
     {
-       double available = dir_cap - FXAI_ManagedDirectionalClusterLots(symbol, direction);
+       double available = dir_cap * MathMax(supervisor.directional_budget_bias, 0.40) - FXAI_ManagedDirectionalClusterLots(symbol, direction);
        if(available <= 0.0)
        {
           reason = "risk_directional_cluster_cap";

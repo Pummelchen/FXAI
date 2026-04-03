@@ -31,11 +31,17 @@ int SpecialDirectionAI(const string symbol)
    int cached_horizon_minutes = g_ai_last_horizon_minutes;
    int cached_regime_id = g_ai_last_regime_id;
    double cached_policy_trade_prob = g_policy_last_trade_prob;
+   double cached_policy_no_trade_prob = g_policy_last_no_trade_prob;
+   double cached_policy_enter_prob = g_policy_last_enter_prob;
+   double cached_policy_exit_prob = g_policy_last_exit_prob;
    double cached_policy_direction_bias = g_policy_last_direction_bias;
    double cached_policy_size_mult = g_policy_last_size_mult;
    double cached_policy_hold_quality = g_policy_last_hold_quality;
    double cached_policy_expected_utility = g_policy_last_expected_utility;
    double cached_policy_confidence = g_policy_last_confidence;
+   double cached_policy_portfolio_fit = g_policy_last_portfolio_fit;
+   double cached_policy_capital_efficiency = g_policy_last_capital_efficiency;
+   int cached_policy_action = g_policy_last_action;
    double cached_control_plane_score = g_control_plane_last_score;
    double cached_control_plane_buy_score = g_control_plane_last_buy_score;
    double cached_control_plane_sell_score = g_control_plane_last_sell_score;
@@ -61,11 +67,17 @@ int SpecialDirectionAI(const string symbol)
    g_ai_last_horizon_minutes = 0;
    g_ai_last_regime_id = 0;
    g_policy_last_trade_prob = 0.0;
+   g_policy_last_no_trade_prob = 1.0;
+   g_policy_last_enter_prob = 0.0;
+   g_policy_last_exit_prob = 0.0;
    g_policy_last_direction_bias = 0.0;
    g_policy_last_size_mult = 1.0;
    g_policy_last_hold_quality = 0.0;
    g_policy_last_expected_utility = 0.0;
    g_policy_last_confidence = 0.0;
+   g_policy_last_portfolio_fit = 0.0;
+   g_policy_last_capital_efficiency = 0.0;
+   g_policy_last_action = FXAI_POLICY_ACTION_NO_TRADE;
    g_control_plane_last_score = 0.0;
    g_control_plane_last_buy_score = 0.0;
    g_control_plane_last_sell_score = 0.0;
@@ -157,11 +169,17 @@ int SpecialDirectionAI(const string symbol)
       g_ai_last_horizon_minutes = cached_horizon_minutes;
       g_ai_last_regime_id = cached_regime_id;
       g_policy_last_trade_prob = cached_policy_trade_prob;
+      g_policy_last_no_trade_prob = cached_policy_no_trade_prob;
+      g_policy_last_enter_prob = cached_policy_enter_prob;
+      g_policy_last_exit_prob = cached_policy_exit_prob;
       g_policy_last_direction_bias = cached_policy_direction_bias;
       g_policy_last_size_mult = cached_policy_size_mult;
       g_policy_last_hold_quality = cached_policy_hold_quality;
       g_policy_last_expected_utility = cached_policy_expected_utility;
       g_policy_last_confidence = cached_policy_confidence;
+      g_policy_last_portfolio_fit = cached_policy_portfolio_fit;
+      g_policy_last_capital_efficiency = cached_policy_capital_efficiency;
+      g_policy_last_action = cached_policy_action;
       g_control_plane_last_score = cached_control_plane_score;
       g_control_plane_last_buy_score = cached_control_plane_buy_score;
       g_control_plane_last_sell_score = cached_control_plane_sell_score;
@@ -1273,28 +1291,46 @@ int SpecialDirectionAI(const string symbol)
          FXAIPolicyDecision single_policy;
          FXAI_PolicyPredict(regime_id, single_policy_feat, deploy_profile, single_policy);
          g_policy_last_trade_prob = single_policy.trade_prob;
+         g_policy_last_no_trade_prob = single_policy.no_trade_prob;
+         g_policy_last_enter_prob = single_policy.enter_prob;
+         g_policy_last_exit_prob = single_policy.exit_prob;
          g_policy_last_direction_bias = single_policy.direction_bias;
          g_policy_last_size_mult = single_policy.size_mult;
          g_policy_last_hold_quality = single_policy.hold_quality;
          g_policy_last_expected_utility = single_policy.expected_utility;
          g_policy_last_confidence = single_policy.confidence;
+         g_policy_last_portfolio_fit = single_policy.portfolio_fit;
+         g_policy_last_capital_efficiency = single_policy.capital_efficiency;
+         g_policy_last_action = single_policy.action_code;
          double single_transition_guard = FXAI_Clamp(1.0 - 0.35 * regime_transition_penalty -
                                                      0.40 * macro_profile_shortfall,
                                                      0.20,
                                                      1.0);
-         g_ai_last_trade_gate = FXAI_Clamp((0.55 * single_trade_gate + 0.45 * single_policy.trade_prob) *
+         g_ai_last_trade_gate = FXAI_Clamp((0.40 * single_trade_gate +
+                                            0.34 * single_policy.trade_prob +
+                                            0.14 * single_policy.enter_prob +
+                                            0.12 * single_policy.portfolio_fit) *
                                            single_transition_guard,
                                            0.0,
                                            1.0);
-         if(single_policy.trade_prob < MathMax(FXAI_Clamp(deploy_profile.policy_trade_floor, 0.20, 0.90), 0.50))
+         if(single_policy.action_code == FXAI_POLICY_ACTION_NO_TRADE ||
+            single_policy.no_trade_prob > FXAI_Clamp(deploy_profile.policy_no_trade_cap, 0.25, 0.95))
             signal = -1;
          else if(FXAI_MacroEventLeakageSafe() &&
                  g_ai_last_macro_state_quality < FXAI_Clamp(deploy_profile.macro_quality_floor, 0.0, 1.0))
             signal = -1;
-         else if(single_policy.direction_bias > 0.12 && buy_ev >= sell_ev && buy_ev >= evThresholdPoints)
-            signal = 1;
-         else if(single_policy.direction_bias < -0.12 && sell_ev >= buy_ev && sell_ev >= evThresholdPoints)
-            signal = 0;
+         else
+         {
+            double single_enter_floor = MathMax(FXAI_Clamp(deploy_profile.policy_trade_floor, 0.20, 0.90),
+                                                single_policy.no_trade_prob);
+            single_enter_floor = MathMax(single_enter_floor, 0.42);
+            if(single_policy.enter_prob < single_enter_floor)
+               signal = -1;
+            else if(single_policy.direction_bias > 0.12 && buy_ev >= sell_ev && buy_ev >= evThresholdPoints)
+               signal = 1;
+            else if(single_policy.direction_bias < -0.12 && sell_ev >= buy_ev && sell_ev >= evThresholdPoints)
+               signal = 0;
+         }
          FXAI_EnqueuePolicyPending(signal_seq, regime_id, H, min_move_pred, single_policy_feat);
          singleSignal = signal;
       }
@@ -1583,21 +1619,36 @@ int SpecialDirectionAI(const string symbol)
          FXAIPolicyDecision policy_decision;
          FXAI_PolicyPredict(regime_id, policy_feat, deploy_profile, policy_decision);
          g_policy_last_trade_prob = policy_decision.trade_prob;
+         g_policy_last_no_trade_prob = policy_decision.no_trade_prob;
+         g_policy_last_enter_prob = policy_decision.enter_prob;
+         g_policy_last_exit_prob = policy_decision.exit_prob;
          g_policy_last_direction_bias = policy_decision.direction_bias;
          g_policy_last_size_mult = policy_decision.size_mult;
          g_policy_last_hold_quality = policy_decision.hold_quality;
          g_policy_last_expected_utility = policy_decision.expected_utility;
          g_policy_last_confidence = policy_decision.confidence;
-         double policy_gate = FXAI_Clamp(0.58 * policy_decision.trade_prob + 0.42 * trade_gate, 0.0, 1.0);
+         g_policy_last_portfolio_fit = policy_decision.portfolio_fit;
+         g_policy_last_capital_efficiency = policy_decision.capital_efficiency;
+         g_policy_last_action = policy_decision.action_code;
+         double policy_gate = FXAI_Clamp(0.40 * policy_decision.trade_prob +
+                                         0.24 * policy_decision.enter_prob +
+                                         0.18 * policy_decision.portfolio_fit +
+                                         0.18 * trade_gate,
+                                         0.0,
+                                         1.0);
          double buy_policy_score = FXAI_Clamp(ensemble_probs[(int)FXAI_LABEL_BUY] +
                                               0.18 * MathMax(policy_decision.direction_bias, 0.0) +
-                                              0.08 * policy_decision.expected_utility -
+                                              0.08 * policy_decision.expected_utility +
+                                              0.10 * policy_decision.capital_efficiency +
+                                              0.08 * policy_decision.portfolio_fit -
                                               0.10 * cp_buy.score,
                                               0.0,
                                               1.25);
          double sell_policy_score = FXAI_Clamp(ensemble_probs[(int)FXAI_LABEL_SELL] +
                                                0.18 * MathMax(-policy_decision.direction_bias, 0.0) +
-                                               0.08 * policy_decision.expected_utility -
+                                               0.08 * policy_decision.expected_utility +
+                                               0.10 * policy_decision.capital_efficiency +
+                                               0.08 * policy_decision.portfolio_fit -
                                                0.10 * cp_sell.score,
                                                0.0,
                                                1.25);
@@ -1629,30 +1680,39 @@ int SpecialDirectionAI(const string symbol)
 
          if(current_hierarchy_sig.consistency < 0.38 || current_hierarchy_sig.execution_viability < 0.32)
             decision = -1;
+         else if(policy_decision.action_code == FXAI_POLICY_ACTION_NO_TRADE ||
+                 policy_decision.no_trade_prob > FXAI_Clamp(deploy_profile.policy_no_trade_cap, 0.25, 0.95))
+            decision = -1;
          else if(FXAI_MacroEventLeakageSafe() &&
                  g_ai_last_macro_state_quality < FXAI_Clamp(deploy_profile.macro_quality_floor, 0.0, 1.0))
             decision = -1;
-         else if(policy_gate < MathMax(trade_gate_thr, FXAI_Clamp(deploy_profile.policy_trade_floor, 0.20, 0.90)))
-            decision = -1;
          else if(ensemble_probs[(int)FXAI_LABEL_SKIP] >= 0.58 || skipPct >= 75.0)
             decision = -1;
-         else if(buy_policy_score >= sell_policy_score &&
-                 buyPct >= agreePct &&
-                 stack_buy_ev >= evThresholdPoints &&
-                 avg_buy_ev > avg_sell_ev)
-            decision = 1;
-         else if(sell_policy_score > buy_policy_score &&
-                 sellPct >= agreePct &&
-                 stack_sell_ev >= evThresholdPoints &&
-                 avg_sell_ev > avg_buy_ev)
-            decision = 0;
          else
          {
-            // Conservative fallback if stack is uncertain.
-            if(buyPct >= agreePct && avg_buy_ev >= evThresholdPoints && avg_buy_ev > avg_sell_ev)
+            double policy_gate_floor = MathMax(trade_gate_thr,
+                                               FXAI_Clamp(deploy_profile.policy_trade_floor, 0.20, 0.90));
+            policy_gate_floor = MathMax(policy_gate_floor, policy_decision.enter_prob);
+            if(policy_gate < policy_gate_floor)
+               decision = -1;
+            else if(buy_policy_score >= sell_policy_score &&
+                    buyPct >= agreePct &&
+                    stack_buy_ev >= evThresholdPoints &&
+                    avg_buy_ev > avg_sell_ev)
                decision = 1;
-            else if(sellPct >= agreePct && avg_sell_ev >= evThresholdPoints && avg_sell_ev > avg_buy_ev)
+            else if(sell_policy_score > buy_policy_score &&
+                    sellPct >= agreePct &&
+                    stack_sell_ev >= evThresholdPoints &&
+                    avg_sell_ev > avg_buy_ev)
                decision = 0;
+            else
+            {
+               // Conservative fallback if stack is uncertain.
+               if(buyPct >= agreePct && avg_buy_ev >= evThresholdPoints && avg_buy_ev > avg_sell_ev)
+                  decision = 1;
+               else if(sellPct >= agreePct && avg_sell_ev >= evThresholdPoints && avg_sell_ev > avg_buy_ev)
+                  decision = 0;
+            }
          }
          FXAI_EnqueuePolicyPending(signal_seq, regime_id, H, min_move_pred, policy_feat);
 

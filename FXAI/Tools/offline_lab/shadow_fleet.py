@@ -73,6 +73,14 @@ def ingest_shadow_fleet_ledgers(conn: sqlite3.Connection,
                     "regime_id": _shadow_int(raw, "regime_id", 0),
                     "horizon_minutes": _shadow_int(raw, "horizon_minutes", 5),
                     "obs_count": _shadow_int(raw, "obs", 0),
+                    "policy_enter_prob": _shadow_float(raw, "policy_enter_prob"),
+                    "policy_no_trade_prob": _shadow_float(raw, "policy_no_trade_prob"),
+                    "policy_exit_prob": _shadow_float(raw, "policy_exit_prob"),
+                    "policy_portfolio_fit": _shadow_float(raw, "policy_portfolio_fit"),
+                    "policy_capital_efficiency": _shadow_float(raw, "policy_capital_efficiency"),
+                    "portfolio_pressure": _shadow_float(raw, "portfolio_pressure"),
+                    "control_plane_score": _shadow_float(raw, "control_plane_score"),
+                    "portfolio_supervisor_score": _shadow_float(raw, "portfolio_supervisor_score"),
                     "payload_json": json.dumps(raw, indent=2, sort_keys=True),
                 }
                 conn.execute(
@@ -82,13 +90,19 @@ def ingest_shadow_fleet_ledgers(conn: sqlite3.Connection,
                                                           global_edge, context_edge, context_regret, portfolio_objective,
                                                           portfolio_stability, portfolio_corr, portfolio_div, route_value,
                                                           route_regret, route_counterfactual, shadow_score, regime_id,
-                                                          horizon_minutes, obs_count, payload_json)
+                                                          horizon_minutes, obs_count, policy_enter_prob, policy_no_trade_prob,
+                                                          policy_exit_prob, policy_portfolio_fit, policy_capital_efficiency,
+                                                          portfolio_pressure, control_plane_score, portfolio_supervisor_score,
+                                                          payload_json)
                     VALUES(:profile_name, :symbol, :plugin_name, :family_id, :captured_at,
                            :source_path, :source_sha256, :meta_weight, :reliability,
                            :global_edge, :context_edge, :context_regret, :portfolio_objective,
                            :portfolio_stability, :portfolio_corr, :portfolio_div, :route_value,
                            :route_regret, :route_counterfactual, :shadow_score, :regime_id,
-                           :horizon_minutes, :obs_count, :payload_json)
+                           :horizon_minutes, :obs_count, :policy_enter_prob, :policy_no_trade_prob,
+                           :policy_exit_prob, :policy_portfolio_fit, :policy_capital_efficiency,
+                           :portfolio_pressure, :control_plane_score, :portfolio_supervisor_score,
+                           :payload_json)
                     ON CONFLICT(profile_name, symbol, plugin_name, captured_at, source_sha256) DO UPDATE SET
                         family_id=excluded.family_id,
                         source_path=excluded.source_path,
@@ -108,6 +122,14 @@ def ingest_shadow_fleet_ledgers(conn: sqlite3.Connection,
                         regime_id=excluded.regime_id,
                         horizon_minutes=excluded.horizon_minutes,
                         obs_count=excluded.obs_count,
+                        policy_enter_prob=excluded.policy_enter_prob,
+                        policy_no_trade_prob=excluded.policy_no_trade_prob,
+                        policy_exit_prob=excluded.policy_exit_prob,
+                        policy_portfolio_fit=excluded.policy_portfolio_fit,
+                        policy_capital_efficiency=excluded.policy_capital_efficiency,
+                        portfolio_pressure=excluded.portfolio_pressure,
+                        control_plane_score=excluded.control_plane_score,
+                        portfolio_supervisor_score=excluded.portfolio_supervisor_score,
                         payload_json=excluded.payload_json
                     """,
                     row,
@@ -123,6 +145,9 @@ def ingest_shadow_fleet_ledgers(conn: sqlite3.Connection,
                     "route_regret": row["route_regret"],
                     "portfolio_objective": row["portfolio_objective"],
                     "portfolio_stability": row["portfolio_stability"],
+                    "policy_enter_prob": row["policy_enter_prob"],
+                    "policy_no_trade_prob": row["policy_no_trade_prob"],
+                    "portfolio_pressure": row["portfolio_pressure"],
                     "captured_at": captured_at,
                 })
     conn.commit()
@@ -152,7 +177,8 @@ def ingest_shadow_fleet_ledgers(conn: sqlite3.Connection,
         md_lines.append(
             f"- {item['symbol']} | {item['plugin_name']} | shadow {float(item['shadow_score']):.4f} | "
             f"route {float(item['route_value']):.4f} | regret {float(item['route_regret']):.4f} | "
-            f"portfolio {float(item['portfolio_objective']):.4f} | stability {float(item['portfolio_stability']):.4f}"
+            f"portfolio {float(item['portfolio_objective']):.4f} | stability {float(item['portfolio_stability']):.4f} | "
+            f"enter {float(item['policy_enter_prob']):.4f} | no-trade {float(item['policy_no_trade_prob']):.4f}"
         )
     summary_md.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
     return summary_payload
@@ -199,6 +225,14 @@ def symbol_shadow_summary(conn: sqlite3.Connection,
             "mean_portfolio_stability": 0.0,
             "mean_portfolio_corr": 0.0,
             "mean_portfolio_div": 0.0,
+            "mean_policy_enter_prob": 0.0,
+            "mean_policy_no_trade_prob": 0.0,
+            "mean_policy_exit_prob": 0.0,
+            "mean_policy_portfolio_fit": 0.0,
+            "mean_policy_capital_efficiency": 0.0,
+            "mean_portfolio_pressure": 0.0,
+            "mean_control_plane_score": 0.0,
+            "mean_portfolio_supervisor_score": 0.0,
         }
     n = float(len(rows))
     return {
@@ -211,4 +245,12 @@ def symbol_shadow_summary(conn: sqlite3.Connection,
         "mean_portfolio_stability": sum(float(row["portfolio_stability"]) for row in rows) / n,
         "mean_portfolio_corr": sum(float(row["portfolio_corr"]) for row in rows) / n,
         "mean_portfolio_div": sum(float(row["portfolio_div"]) for row in rows) / n,
+        "mean_policy_enter_prob": sum(float(row["policy_enter_prob"]) for row in rows) / n,
+        "mean_policy_no_trade_prob": sum(float(row["policy_no_trade_prob"]) for row in rows) / n,
+        "mean_policy_exit_prob": sum(float(row["policy_exit_prob"]) for row in rows) / n,
+        "mean_policy_portfolio_fit": sum(float(row["policy_portfolio_fit"]) for row in rows) / n,
+        "mean_policy_capital_efficiency": sum(float(row["policy_capital_efficiency"]) for row in rows) / n,
+        "mean_portfolio_pressure": sum(float(row["portfolio_pressure"]) for row in rows) / n,
+        "mean_control_plane_score": sum(float(row["control_plane_score"]) for row in rows) / n,
+        "mean_portfolio_supervisor_score": sum(float(row["portfolio_supervisor_score"]) for row in rows) / n,
     }

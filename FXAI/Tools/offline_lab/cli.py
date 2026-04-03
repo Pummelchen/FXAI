@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .common import *
 from .exporter import *
+from .governance import *
 from .promotion import *
 from .shadow_fleet import *
 from .teacher_factory import *
@@ -740,7 +741,9 @@ def cmd_best_params(args) -> int:
     distill_artifacts = write_distillation_artifacts(conn, args, promoted)
     shadow_ingest = ingest_shadow_fleet_ledgers(conn, args.profile)
     teacher_factories = write_teacher_factory_artifacts(conn, args, promoted)
+    foundation_teachers = write_foundation_teacher_artifacts(conn, args, promoted)
     live_deployments = write_live_deployment_profiles(conn, args)
+    governance_payload = run_autonomous_governance(conn, args, str(getattr(args, "group_key", "") or ""))
     print(json.dumps({
         "profile": args.profile,
         "promoted_count": len(promoted),
@@ -749,8 +752,12 @@ def cmd_best_params(args) -> int:
         "family_scorecards": len(family_scorecards),
         "distillation_artifacts": len(distill_artifacts),
         "teacher_factories": len(teacher_factories),
+        "foundation_teachers": len(foundation_teachers),
         "live_deployments": len(live_deployments),
         "shadow_rows_ingested": int(shadow_ingest.get("rows_ingested", 0)),
+        "governance_decisions": len(governance_payload.get("decisions", [])),
+        "world_plans": len(governance_payload.get("world_plans", [])),
+        "portfolio_supervisor_artifact": str(governance_payload.get("portfolio_supervisor", {}).get("artifact_path", "")),
     }, indent=2, sort_keys=True))
     conn.close()
     return 0
@@ -769,6 +776,21 @@ def cmd_deploy_profiles(args) -> int:
     payload = write_live_deployment_profiles(conn, args)
     conn.close()
     print(json.dumps({"profile": args.profile, "deployments": payload}, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_autonomous_governance(args) -> int:
+    conn = connect_db(Path(args.db))
+    shadow_ingest = ingest_shadow_fleet_ledgers(conn, args.profile)
+    payload = run_autonomous_governance(conn, args, str(getattr(args, "group_key", "") or ""))
+    conn.close()
+    print(json.dumps({
+        "profile": args.profile,
+        "shadow_rows_ingested": int(shadow_ingest.get("rows_ingested", 0)),
+        "governance_decisions": len(payload.get("decisions", [])),
+        "world_plans": len(payload.get("world_plans", [])),
+        "portfolio_supervisor_artifact": str(payload.get("portfolio_supervisor", {}).get("artifact_path", "")),
+    }, indent=2, sort_keys=True))
     return 0
 
 
@@ -918,6 +940,11 @@ def build_parser() -> argparse.ArgumentParser:
     deploy = sub.add_parser("deploy-profiles", help="Build live deployment profiles for MT5 runtime control plane")
     deploy.add_argument("--profile", default="continuous")
     deploy.set_defaults(func=cmd_deploy_profiles)
+
+    gov = sub.add_parser("autonomous-governance", help="Build portfolio supervisor and world-plan artifacts from live research telemetry")
+    gov.add_argument("--profile", default="continuous")
+    gov.add_argument("--group-key", default="")
+    gov.set_defaults(func=cmd_autonomous_governance)
 
     loop = sub.add_parser("control-loop", help="Run the full export -> tune -> promote cycle continuously")
     loop.add_argument("--profile", default="continuous")

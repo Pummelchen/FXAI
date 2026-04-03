@@ -218,6 +218,21 @@ CREATE TABLE IF NOT EXISTS distillation_artifacts (
     UNIQUE(profile_name, symbol, plugin_name, dataset_scope)
 );
 
+CREATE TABLE IF NOT EXISTS foundation_teacher_artifacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    scope TEXT NOT NULL DEFAULT 'symbol_family',
+    family_id INTEGER NOT NULL DEFAULT 11,
+    artifact_path TEXT NOT NULL DEFAULT '',
+    artifact_sha256 TEXT NOT NULL DEFAULT '',
+    teacher_payload_json TEXT NOT NULL DEFAULT '{}',
+    student_profile_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'ready',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name, symbol, scope, family_id)
+);
+
 CREATE TABLE IF NOT EXISTS redteam_cycles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     profile_name TEXT NOT NULL,
@@ -275,9 +290,32 @@ CREATE TABLE IF NOT EXISTS live_deployment_profiles (
     challenger_promote_margin REAL NOT NULL DEFAULT 1.0,
     regime_transition_weight REAL NOT NULL DEFAULT 0.35,
     macro_quality_floor REAL NOT NULL DEFAULT 0.24,
+    policy_no_trade_cap REAL NOT NULL DEFAULT 0.62,
+    capital_efficiency_bias REAL NOT NULL DEFAULT 1.0,
+    supervisor_blend REAL NOT NULL DEFAULT 0.45,
     payload_json TEXT NOT NULL DEFAULT '{}',
     created_at INTEGER NOT NULL,
     UNIQUE(profile_name, symbol, deployment_scope)
+);
+
+CREATE TABLE IF NOT EXISTS portfolio_supervisor_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    artifact_path TEXT NOT NULL DEFAULT '',
+    artifact_sha256 TEXT NOT NULL DEFAULT '',
+    gross_budget_bias REAL NOT NULL DEFAULT 1.0,
+    correlated_budget_bias REAL NOT NULL DEFAULT 1.0,
+    directional_budget_bias REAL NOT NULL DEFAULT 1.0,
+    capital_risk_cap_pct REAL NOT NULL DEFAULT 1.2,
+    macro_overlap_cap REAL NOT NULL DEFAULT 0.92,
+    concentration_cap REAL NOT NULL DEFAULT 0.82,
+    supervisor_weight REAL NOT NULL DEFAULT 0.45,
+    hard_block_score REAL NOT NULL DEFAULT 1.08,
+    policy_enter_floor REAL NOT NULL DEFAULT 0.42,
+    policy_no_trade_ceiling REAL NOT NULL DEFAULT 0.74,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name)
 );
 
 CREATE TABLE IF NOT EXISTS shadow_fleet_observations (
@@ -305,8 +343,50 @@ CREATE TABLE IF NOT EXISTS shadow_fleet_observations (
     regime_id INTEGER NOT NULL DEFAULT 0,
     horizon_minutes INTEGER NOT NULL DEFAULT 5,
     obs_count INTEGER NOT NULL DEFAULT 0,
+    policy_enter_prob REAL NOT NULL DEFAULT 0.0,
+    policy_no_trade_prob REAL NOT NULL DEFAULT 0.0,
+    policy_exit_prob REAL NOT NULL DEFAULT 0.0,
+    policy_portfolio_fit REAL NOT NULL DEFAULT 0.0,
+    policy_capital_efficiency REAL NOT NULL DEFAULT 0.0,
+    portfolio_pressure REAL NOT NULL DEFAULT 0.0,
+    control_plane_score REAL NOT NULL DEFAULT 0.0,
+    portfolio_supervisor_score REAL NOT NULL DEFAULT 0.0,
     payload_json TEXT NOT NULL DEFAULT '{}',
     UNIQUE(profile_name, symbol, plugin_name, captured_at, source_sha256)
+);
+
+CREATE TABLE IF NOT EXISTS world_simulator_plans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    artifact_path TEXT NOT NULL DEFAULT '',
+    artifact_sha256 TEXT NOT NULL DEFAULT '',
+    sigma_scale REAL NOT NULL DEFAULT 1.0,
+    drift_bias REAL NOT NULL DEFAULT 0.0,
+    spread_scale REAL NOT NULL DEFAULT 1.0,
+    gap_prob REAL NOT NULL DEFAULT 0.0,
+    gap_scale REAL NOT NULL DEFAULT 0.0,
+    flip_prob REAL NOT NULL DEFAULT 0.0,
+    context_corr_bias REAL NOT NULL DEFAULT 0.0,
+    liquidity_stress REAL NOT NULL DEFAULT 0.0,
+    macro_focus REAL NOT NULL DEFAULT 0.0,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name, symbol)
+);
+
+CREATE TABLE IF NOT EXISTS autonomous_governance_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    cycle_group_key TEXT NOT NULL DEFAULT '',
+    governance_status TEXT NOT NULL DEFAULT 'ready',
+    promoted_count INTEGER NOT NULL DEFAULT 0,
+    challenger_count INTEGER NOT NULL DEFAULT 0,
+    review_count INTEGER NOT NULL DEFAULT 0,
+    rollback_count INTEGER NOT NULL DEFAULT 0,
+    artifact_dir TEXT NOT NULL DEFAULT '',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_datasets_group ON datasets(group_key, symbol, months);
@@ -318,10 +398,14 @@ CREATE INDEX IF NOT EXISTS idx_lineage_lookup ON config_lineage(profile_name, sy
 CREATE INDEX IF NOT EXISTS idx_family_scorecards_lookup ON family_scorecards(profile_name, group_key, symbol, family_id);
 CREATE INDEX IF NOT EXISTS idx_champion_lookup ON champion_registry(profile_name, symbol, plugin_name, status);
 CREATE INDEX IF NOT EXISTS idx_distill_lookup ON distillation_artifacts(profile_name, symbol, plugin_name, dataset_scope);
+CREATE INDEX IF NOT EXISTS idx_foundation_teacher_lookup ON foundation_teacher_artifacts(profile_name, symbol, scope, family_id);
 CREATE INDEX IF NOT EXISTS idx_redteam_lookup ON redteam_cycles(profile_name, group_key, symbol, plugin_name);
 CREATE INDEX IF NOT EXISTS idx_teacher_factories_lookup ON teacher_factories(profile_name, symbol, plugin_name, status);
 CREATE INDEX IF NOT EXISTS idx_live_deploy_lookup ON live_deployment_profiles(profile_name, symbol, deployment_scope);
+CREATE INDEX IF NOT EXISTS idx_portfolio_supervisor_lookup ON portfolio_supervisor_profiles(profile_name, created_at);
 CREATE INDEX IF NOT EXISTS idx_shadow_fleet_lookup ON shadow_fleet_observations(profile_name, symbol, plugin_name, captured_at);
+CREATE INDEX IF NOT EXISTS idx_world_sim_lookup ON world_simulator_plans(profile_name, symbol, created_at);
+CREATE INDEX IF NOT EXISTS idx_governance_runs_lookup ON autonomous_governance_runs(profile_name, created_at);
 """
 
 
@@ -433,6 +517,17 @@ def connect_db(db_path: Path) -> sqlite3.Connection:
             ensure_sqlite_column(conn, "tuning_runs", "family_id", "INTEGER NOT NULL DEFAULT 11")
             ensure_sqlite_column(conn, "best_configs", "family_id", "INTEGER NOT NULL DEFAULT 11")
             ensure_sqlite_column(conn, "champion_registry", "family_id", "INTEGER NOT NULL DEFAULT 11")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "policy_no_trade_cap", "REAL NOT NULL DEFAULT 0.62")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "capital_efficiency_bias", "REAL NOT NULL DEFAULT 1.0")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "supervisor_blend", "REAL NOT NULL DEFAULT 0.45")
+            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_enter_prob", "REAL NOT NULL DEFAULT 0.0")
+            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_no_trade_prob", "REAL NOT NULL DEFAULT 0.0")
+            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_exit_prob", "REAL NOT NULL DEFAULT 0.0")
+            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_portfolio_fit", "REAL NOT NULL DEFAULT 0.0")
+            ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_capital_efficiency", "REAL NOT NULL DEFAULT 0.0")
+            ensure_sqlite_column(conn, "shadow_fleet_observations", "portfolio_pressure", "REAL NOT NULL DEFAULT 0.0")
+            ensure_sqlite_column(conn, "shadow_fleet_observations", "control_plane_score", "REAL NOT NULL DEFAULT 0.0")
+            ensure_sqlite_column(conn, "shadow_fleet_observations", "portfolio_supervisor_score", "REAL NOT NULL DEFAULT 0.0")
             conn.execute("DROP INDEX IF EXISTS idx_tuning_runs_lookup")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_tuning_runs_lookup "

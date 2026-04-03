@@ -17,7 +17,7 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - `Tools/fxai_offline_lab.py`
   Stable CLI wrapper for the SQLite-backed offline export, tuning, promotion, and control-loop tool.
 - `Tools/offline_lab/`
-  Internal Python package for Offline Lab database, export, campaign, promotion, shadow-fleet ingest, and teacher-factory modules.
+  Internal Python package for Offline Lab database, export, campaign, promotion, shadow-fleet ingest, teacher-factory modules, and autonomous governance.
 
 ## Key Runtime Areas
 
@@ -67,6 +67,7 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - Macro-event datasets now run under schema version 2 with revision-chain, source-trust, and currency-relevance manifests, and the feature pipeline derives a higher-level macro state for policy, inflation, labor, growth, carry, decay, and quality.
 - Offline Lab now exports exact-window `M1 OHLC + spread` datasets into SQLite, stores full tuning ledgers and scenario metrics, and promotes ready-to-use MT5 `.set` files under `Tools/OfflineLab/Profiles/`, `MQL5/Profiles/Tester/`, and `FILE_COMMON/FXAI/Offline/Promotions/`.
 - Offline Lab also maintains champion/challenger governance, parameter lineage, family scorecards, distillation artifacts, teacher-factory payloads, live deployment profiles, shadow-fleet telemetry, and learned red-team plans under `Tools/OfflineLab/ResearchOS/` and `Tools/OfflineLab/Distillation/`.
+- Offline Lab now emits foundation-teacher artifacts, portfolio-supervisor profiles, and per-symbol world-simulator plans that are consumed by MT5 runtime control-plane logic and Audit Lab adversarial generation.
 - Offline Lab promotion is profile-wide by default in `best-params`, unless a symbol filter is passed, and exact-window audit runs now follow the effective exported first/last bar range.
 
 ## Source Of Truth
