@@ -1,0 +1,20 @@
+{
+  "bundle_root": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/OfflineLab/ResearchOS/fixture/minimal_live_bundle",
+  "profile_name": "fixture",
+  "symbols": [
+    {
+      "artifact_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Offline/Promotions/fxai_live_deploy_EURUSD.tsv",
+      "artifact_sha256": "0828b3ca6378f61b90d43a5a4aaa1ac3b45f5a579b2fe69d3a4e87d86b6f8ba1",
+      "copied_files": [
+        "fxai_live_deploy_EURUSD.tsv",
+        "fxai_student_router_EURUSD.tsv",
+        "fxai_attribution_EURUSD.tsv",
+        "fxai_world_plan_EURUSD.tsv",
+        "fxai_supervisor_service_EURUSD.tsv",
+        "fxai_supervisor_command_EURUSD.tsv"
+      ],
+      "created_at": 1700000000,
+      "symbol": "EURUSD"
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 
 from .common import *
+from .mode import resolve_runtime_mode
 from .shadow_fleet import symbol_shadow_summary
 
 
@@ -78,6 +79,7 @@ def _parse_plugin_weights(payload: dict) -> dict[str, float]:
 
 def write_student_router_profiles(conn: sqlite3.Connection,
                                   args) -> list[dict]:
+    mode_cfg = resolve_runtime_mode(getattr(args, "runtime_mode", None))
     symbols = sorted({
         str(row["symbol"])
         for row in conn.execute(
@@ -194,7 +196,11 @@ def write_student_router_profiles(conn: sqlite3.Connection,
         max_active_models = int(attr.get("max_active_models", 0) or 0)
         if max_active_models <= 0:
             max_active_models = int(round(_clamp(5.0 + 10.0 * portfolio_div - 4.0 * route_regret, 4.0, 18.0)))
+        max_active_models = min(max_active_models, int(mode_cfg["max_runtime_models"]))
         min_meta_weight = _clamp(float(attr.get("min_meta_weight", 0.0) or 0.0), 0.0, 0.25)
+        if str(mode_cfg["runtime_mode"]) == "production":
+            champion_only = True
+            min_meta_weight = _clamp(min_meta_weight + 0.03, 0.0, 0.25)
 
         payload = {
             "profile_name": args.profile,

@@ -41,6 +41,11 @@ string FXAI_RuntimeMacroManifestFile(const string symbol)
    return FXAI_RUNTIME_ARTIFACT_DIR + "\\fxai_macro_" + FXAI_RuntimeArtifactSafeSymbol(symbol) + ".tsv";
 }
 
+string FXAI_RuntimePerformanceManifestFile(const string symbol)
+{
+   return FXAI_RUNTIME_ARTIFACT_DIR + "\\fxai_perf_" + FXAI_RuntimeArtifactSafeSymbol(symbol) + ".tsv";
+}
+
 string FXAI_RuntimeShadowLedgerFile(const string symbol)
 {
    return FXAI_RUNTIME_ARTIFACT_DIR + "\\fxai_shadow_" + FXAI_RuntimeArtifactSafeSymbol(symbol) + ".tsv";
@@ -272,6 +277,52 @@ void FXAI_WriteMacroDatasetManifest(const string symbol)
                  DoubleToString(stats.leakage_guard_score, 6) + "\t" +
                  IntegerToString(FXAI_MacroEventLeakageSafe() ? 1 : 0) + "\r\n";
    FileWriteString(handle, line);
+   FileClose(handle);
+}
+
+void FXAI_WriteRuntimePerformanceManifest(const string symbol)
+{
+   FolderCreate("FXAI", FILE_COMMON);
+   FolderCreate(FXAI_RUNTIME_ARTIFACT_DIR, FILE_COMMON);
+
+   int handle = FileOpen(FXAI_RuntimePerformanceManifestFile(symbol), FILE_WRITE | FILE_TXT | FILE_COMMON);
+   if(handle == INVALID_HANDLE)
+      return;
+
+   FileWriteString(handle, "row_type\tstage_name\tai_id\tai_name\tmean_ms\tmax_ms\tobs\tpredict_mean_ms\tpredict_max_ms\tpredict_obs\tupdate_mean_ms\tupdate_max_ms\tupdate_obs\tworking_set_kb\tactive_models\r\n");
+   for(int stage=0; stage<FXAI_RUNTIME_STAGE_COUNT; stage++)
+   {
+      string line = "stage\t" +
+                    FXAI_RuntimeStageName(stage) + "\t\t\t" +
+                    DoubleToString(g_runtime_stage_mean_ms[stage], 6) + "\t" +
+                    DoubleToString(g_runtime_stage_max_ms[stage], 6) + "\t" +
+                    IntegerToString(g_runtime_stage_obs[stage]) + "\t\t\t\t\t\t\t" +
+                    IntegerToString(g_runtime_last_active_models) + "\r\n";
+      FileWriteString(handle, line);
+   }
+
+   if(g_plugins_ready)
+   {
+      for(int ai=0; ai<FXAI_AI_COUNT; ai++)
+      {
+         CFXAIAIPlugin *plugin = g_plugins.Get(ai);
+         if(plugin == NULL)
+            continue;
+         string line = "plugin\t\t" +
+                       IntegerToString(ai) + "\t" +
+                       plugin.AIName() + "\t\t\t\t" +
+                       DoubleToString(g_runtime_plugin_predict_mean_ms[ai], 6) + "\t" +
+                       DoubleToString(g_runtime_plugin_predict_max_ms[ai], 6) + "\t" +
+                       IntegerToString(g_runtime_plugin_predict_obs[ai]) + "\t" +
+                       DoubleToString(g_runtime_plugin_update_mean_ms[ai], 6) + "\t" +
+                       DoubleToString(g_runtime_plugin_update_max_ms[ai], 6) + "\t" +
+                       IntegerToString(g_runtime_plugin_update_obs[ai]) + "\t" +
+                       DoubleToString(g_runtime_plugin_working_set_kb[ai], 3) + "\t" +
+                       IntegerToString(g_runtime_last_active_models) + "\r\n";
+         FileWriteString(handle, line);
+      }
+   }
+
    FileClose(handle);
 }
 
@@ -623,6 +674,7 @@ bool FXAI_SaveRuntimeArtifacts(const string symbol)
       FXAI_WritePersistenceCoverageManifest(symbol);
       FXAI_WriteFeatureRegistryManifest(symbol);
       FXAI_WriteMacroDatasetManifest(symbol);
+      FXAI_WriteRuntimePerformanceManifest(symbol);
       FXAI_WriteShadowFleetLedger(symbol);
       g_runtime_artifacts_dirty = false;
       g_runtime_last_save_time = TimeCurrent();

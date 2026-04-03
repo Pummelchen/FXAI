@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+from .common import connect_db, safe_token
+from .dashboard import live_state_snapshot, write_profile_dashboard
+from .environment import bootstrap_environment
+from .fixtures import clear_generated_outputs, patched_paths, seed_profile_fixture
+from .governance import run_autonomous_governance
+from .lineage import write_lineage_report
+from .bundle import write_minimal_live_bundle
+from .performance import write_performance_reports
+from .student_router import write_student_router_profiles
+from .attribution import write_attribution_profiles
+from .supervisor_service import write_supervisor_command_artifacts, write_supervisor_service_artifacts
+from .teacher_factory import write_live_deployment_profiles
+
+
+def _load_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def _golden_dir() -> Path:
+    return Path(__file__).resolve().parents[1] / "tests" / "golden"
+
+
+def _write_golden(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def _sanitize_fixture_text(text: str) -> str:
+    sanitized = str(text)
+    sanitized = re.sub(r"fxai_fixture_[A-Za-z0-9_]+", "fxai_fixture_FIXED", sanitized)
+    sanitized = re.sub(r"\"(generated_at|expires_at|reviewed_at|created_at|promoted_at|started_at|finished_at)\":\s*\d+", r'"\1": 1700000000', sanitized)
+    sanitized = re.sub(r"\"(generated_at|expires_at|reviewed_at|created_at|promoted_at|started_at|finished_at)\":\s*\"\d+\"", r'"\1": "1700000000"', sanitized)
+    sanitized = re.sub(r"(\t(?:generated_at|expires_at|promoted_at|started_at|finished_at))\t\d+", r"\1\t1700000000", sanitized)
+    return sanitized
+
+
+def verify_deterministic_outputs(refresh_golden: bool = False) -> dict[str, object]:
+    with tempfile.TemporaryDirectory(prefix="fxai_fixture_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)) as paths:
+            bootstrap_environment(paths["default_db"], init_db=True)
+            conn = connect_db(paths["default_db"])
+            fixture = seed_profile_fixture(conn)
+            profile_name = str(fixture["profile_name"])
+            clear_generated_outputs(paths, profile_name)
+            args = type("Args", (), {"profile": profile_name, "db": str(paths["default_db"]), "runtime_mode": "research"})()
+            write_attribution_profiles(conn, args)
+            write_student_router_profiles(conn, args)
+            write_live_deployment_profiles(conn, args)
+            write_supervisor_service_artifacts(conn, args)
+            write_supervisor_command_artifacts(conn, args)
+            run_autonomous_governance(conn, args, "fixture_cycle")
+            write_performance_reports(["EURUSD"], profile_name)
+            dashboard = write_profile_dashboard(conn, profile_name)
+            lineage = write_lineage_report(conn, profile_name, "EURUSD")
+            bundle = write_minimal_live_bundle(conn, profile_name)
+            conn.close()
+
+            live = live_state_snapshot(profile_name, "EURUSD")
+            checks = {
+                "live_deploy_tsv": paths["common_promotion_dir"] / "fxai_live_deploy_EURUSD.tsv",
+                "student_router_tsv": paths["common_promotion_dir"] / "fxai_student_router_EURUSD.tsv",
+                "world_plan_tsv": paths["common_promotion_dir"] / "fxai_world_plan_EURUSD.tsv",
+                "operator_dashboard_json": Path(dashboard["json_path"]),
+                "lineage_json": Path(lineage["json_path"]),
+                "bundle_manifest_json": Path(bundle["manifest_path"]),
+                "live_state_json": paths["research_dir"] / safe_token(profile_name) / "live_state_EURUSD.json",
+            }
+            checks["live_state_json"].write_text(json.dumps(live, indent=2, sort_keys=True), encoding="utf-8")
+            golden_dir = _golden_dir()
+            mismatches = []
+            for name, path in checks.items():
+                current = _sanitize_fixture_text(_load_text(path))
+                golden = golden_dir / f"{name}.golden"
+                if refresh_golden or not golden.exists():
+                    _write_golden(golden, current)
+                expected = _sanitize_fixture_text(_load_text(golden))
+                if current != expected:
+                    mismatches.append(name)
+            return {
+                "ok": len(mismatches) == 0,
+                "mismatches": mismatches,
+                "fixture_profile": profile_name,
+                "golden_dir": str(golden_dir),
+            }
+
+
+def run_pytest_suite(repo_root: Path) -> dict[str, object]:
+    cmd = [sys.executable, "-m", "pytest", str(repo_root / "FXAI/Tools/tests"), "-q"]
+    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    return {"ok": proc.returncode == 0, "returncode": proc.returncode, "output": proc.stdout}

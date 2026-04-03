@@ -33,11 +33,20 @@ DEFAULT_HORIZON_CANDIDATES = [3, 5, 8, 13, 21, 34]
 DEFAULT_M1SYNC_CANDIDATES = [2, 3, 5, 8]
 DEFAULT_EXECUTION_PROFILES = ["default", "tight-fx", "prime-ecn", "retail-fx", "stress"]
 EXPORT_EXPERT = r"FXAI\Tests\FXAI_OfflineExportRunner.ex5"
+OFFLINE_SCHEMA_VERSION = 3
+OFFLINE_ARTIFACT_SCHEMA_VERSION = 2
+OFFLINE_MACRO_SCHEMA_MIN = 2
 
 SQL_SCHEMA = """
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
 PRAGMA foreign_keys=ON;
+
+CREATE TABLE IF NOT EXISTS lab_metadata (
+    meta_key TEXT PRIMARY KEY,
+    meta_value TEXT NOT NULL DEFAULT '',
+    updated_at INTEGER NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS datasets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -157,6 +166,7 @@ CREATE TABLE IF NOT EXISTS champion_registry (
     champion_score REAL NOT NULL DEFAULT 0.0,
     challenger_score REAL NOT NULL DEFAULT 0.0,
     portfolio_score REAL NOT NULL DEFAULT 0.0,
+    promotion_tier TEXT NOT NULL DEFAULT 'experimental',
     promoted_at INTEGER NOT NULL DEFAULT 0,
     reviewed_at INTEGER NOT NULL DEFAULT 0,
     champion_set_path TEXT NOT NULL DEFAULT '',
@@ -327,6 +337,13 @@ CREATE TABLE IF NOT EXISTS live_deployment_profiles (
     reduce_fraction REAL NOT NULL DEFAULT 0.35,
     soft_timeout_bars INTEGER NOT NULL DEFAULT 8,
     hard_timeout_bars INTEGER NOT NULL DEFAULT 18,
+    runtime_mode TEXT NOT NULL DEFAULT 'research',
+    telemetry_level TEXT NOT NULL DEFAULT 'full',
+    performance_budget_ms REAL NOT NULL DEFAULT 12.0,
+    shadow_enabled INTEGER NOT NULL DEFAULT 1,
+    snapshot_detail TEXT NOT NULL DEFAULT 'full',
+    max_runtime_models INTEGER NOT NULL DEFAULT 12,
+    promotion_tier TEXT NOT NULL DEFAULT 'experimental',
     payload_json TEXT NOT NULL DEFAULT '{}',
     created_at INTEGER NOT NULL,
     UNIQUE(profile_name, symbol, deployment_scope)
@@ -620,6 +637,40 @@ def ensure_sqlite_column(conn: sqlite3.Connection, table: str, column: str, spec
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {spec}")
 
 
+def set_metadata(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO lab_metadata(meta_key, meta_value, updated_at)
+        VALUES(?, ?, ?)
+        ON CONFLICT(meta_key) DO UPDATE SET
+            meta_value=excluded.meta_value,
+            updated_at=excluded.updated_at
+        """,
+        (str(key), str(value), now_unix()),
+    )
+
+
+def get_metadata(conn: sqlite3.Connection, key: str, default: str = "") -> str:
+    row = conn.execute(
+        "SELECT meta_value FROM lab_metadata WHERE meta_key = ?",
+        (str(key),),
+    ).fetchone()
+    if row is None:
+        return str(default)
+    try:
+        return str(row["meta_value"])
+    except Exception:
+        return str(default)
+
+
+def current_lab_versions(conn: sqlite3.Connection) -> dict[str, str]:
+    return {
+        "offline_schema_version": get_metadata(conn, "offline_schema_version", str(OFFLINE_SCHEMA_VERSION)),
+        "artifact_schema_version": get_metadata(conn, "artifact_schema_version", str(OFFLINE_ARTIFACT_SCHEMA_VERSION)),
+        "macro_schema_min": get_metadata(conn, "macro_schema_min", str(OFFLINE_MACRO_SCHEMA_MIN)),
+    }
+
+
 def connect_db(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     last_error: Exception | None = None
@@ -634,6 +685,7 @@ def connect_db(db_path: Path) -> sqlite3.Connection:
             ensure_sqlite_column(conn, "tuning_runs", "family_id", "INTEGER NOT NULL DEFAULT 11")
             ensure_sqlite_column(conn, "best_configs", "family_id", "INTEGER NOT NULL DEFAULT 11")
             ensure_sqlite_column(conn, "champion_registry", "family_id", "INTEGER NOT NULL DEFAULT 11")
+            ensure_sqlite_column(conn, "champion_registry", "promotion_tier", "TEXT NOT NULL DEFAULT 'experimental'")
             ensure_sqlite_column(conn, "live_deployment_profiles", "policy_no_trade_cap", "REAL NOT NULL DEFAULT 0.62")
             ensure_sqlite_column(conn, "live_deployment_profiles", "capital_efficiency_bias", "REAL NOT NULL DEFAULT 1.0")
             ensure_sqlite_column(conn, "live_deployment_profiles", "supervisor_blend", "REAL NOT NULL DEFAULT 0.45")
@@ -646,6 +698,13 @@ def connect_db(db_path: Path) -> sqlite3.Connection:
             ensure_sqlite_column(conn, "live_deployment_profiles", "reduce_fraction", "REAL NOT NULL DEFAULT 0.35")
             ensure_sqlite_column(conn, "live_deployment_profiles", "soft_timeout_bars", "INTEGER NOT NULL DEFAULT 8")
             ensure_sqlite_column(conn, "live_deployment_profiles", "hard_timeout_bars", "INTEGER NOT NULL DEFAULT 18")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "runtime_mode", "TEXT NOT NULL DEFAULT 'research'")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "telemetry_level", "TEXT NOT NULL DEFAULT 'full'")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "performance_budget_ms", "REAL NOT NULL DEFAULT 12.0")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "shadow_enabled", "INTEGER NOT NULL DEFAULT 1")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "snapshot_detail", "TEXT NOT NULL DEFAULT 'full'")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "max_runtime_models", "INTEGER NOT NULL DEFAULT 12")
+            ensure_sqlite_column(conn, "live_deployment_profiles", "promotion_tier", "TEXT NOT NULL DEFAULT 'experimental'")
             ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_enter_prob", "REAL NOT NULL DEFAULT 0.0")
             ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_no_trade_prob", "REAL NOT NULL DEFAULT 0.0")
             ensure_sqlite_column(conn, "shadow_fleet_observations", "policy_exit_prob", "REAL NOT NULL DEFAULT 0.0")
@@ -687,6 +746,9 @@ def connect_db(db_path: Path) -> sqlite3.Connection:
                  WHERE COALESCE(group_key, '') = ''
                 """
             )
+            set_metadata(conn, "offline_schema_version", str(OFFLINE_SCHEMA_VERSION))
+            set_metadata(conn, "artifact_schema_version", str(OFFLINE_ARTIFACT_SCHEMA_VERSION))
+            set_metadata(conn, "macro_schema_min", str(OFFLINE_MACRO_SCHEMA_MIN))
             conn.commit()
             return conn
         except sqlite3.OperationalError as exc:

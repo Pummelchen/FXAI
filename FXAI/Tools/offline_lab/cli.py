@@ -5,15 +5,23 @@ import json
 from pathlib import Path
 
 from .attribution import *
+from .bundle import *
 from .common import *
+from .dashboard import live_state_snapshot, write_profile_dashboard
+from .environment import bootstrap_environment, validate_environment, write_environment_report
 from .exporter import *
+from .fixtures import seed_profile_fixture
 from .foundation_factory import *
 from .governance import *
+from .lineage import *
+from .mode import RUNTIME_MODES, resolve_runtime_mode
+from .performance import write_performance_reports
 from .promotion import *
 from .shadow_fleet import *
 from .student_router import *
 from .supervisor_service import *
 from .teacher_factory import *
+from .verification import verify_deterministic_outputs
 
 def serious_base_args(args, dataset: dict, output_path: Path) -> argparse.Namespace:
     bars = int(getattr(args, "bars", 0) or 0)
@@ -675,6 +683,52 @@ def cmd_init_db(args) -> int:
     return 0
 
 
+def cmd_validate_env(_args) -> int:
+    payload = validate_environment()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if bool(payload.get("ok")) else 1
+
+
+def cmd_bootstrap(args) -> int:
+    payload = bootstrap_environment(Path(args.db), init_db=(not getattr(args, "no_init_db", False)))
+    if getattr(args, "seed_demo", False):
+        conn = connect_db(Path(args.db))
+        try:
+            fixture = seed_profile_fixture(conn, profile_name="smoke")
+            demo_args = argparse.Namespace(profile="smoke", runtime_mode="research")
+            attribution_payload = write_attribution_profiles(conn, demo_args)
+            router_payload = write_student_router_profiles(conn, demo_args)
+            deployment_payload = write_live_deployment_profiles(conn, demo_args)
+            supervisor_payload = write_portfolio_supervisor_profile(conn, demo_args)
+            supervisor_service = write_supervisor_service_artifacts(conn, demo_args)
+            supervisor_commands = write_supervisor_command_artifacts(conn, demo_args)
+            world_plans = write_world_simulator_plans(conn, demo_args)
+            dashboard = write_profile_dashboard(conn, "smoke")
+            lineage = write_lineage_report(conn, "smoke")
+            bundle = write_minimal_live_bundle(conn, "smoke")
+            payload["demo_fixture"] = {
+                "fixture": fixture,
+                "attribution_profiles": len(attribution_payload),
+                "student_router_profiles": len(router_payload),
+                "deployments": len(deployment_payload),
+                "portfolio_supervisor_artifact": str(supervisor_payload.get("artifact_path", "")),
+                "supervisor_service_artifacts": len(supervisor_service),
+                "supervisor_command_artifacts": len(supervisor_commands),
+                "world_plan_artifacts": len(world_plans),
+                "dashboard": dashboard,
+                "lineage": lineage,
+                "minimal_bundle": bundle,
+            }
+        finally:
+            conn.close()
+    if getattr(args, "report", ""):
+        report_path = Path(args.report)
+        write_environment_report(report_path)
+        payload["report_path"] = str(report_path)
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if bool(payload.get("validated_environment", {}).get("ok")) else 1
+
+
 def cmd_compile_export(_args) -> int:
     return compile_export_runner()
 
@@ -785,40 +839,150 @@ def cmd_shadow_sync(args) -> int:
     return 0
 
 
+def cmd_dashboard(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        payload = write_profile_dashboard(conn, args.profile)
+        write_performance_reports(list(payload.get("symbols", [])), args.profile)
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_live_state(args) -> int:
+    payload = live_state_snapshot(args.profile, args.symbol)
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_lineage_report(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        payload = write_lineage_report(conn, args.profile, getattr(args, "symbol", ""))
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_minimal_bundle(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        output_dir = Path(args.output_dir) if getattr(args, "output_dir", "") else None
+        payload = write_minimal_live_bundle(conn, args.profile, output_dir)
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_seed_demo(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        fixture = seed_profile_fixture(conn, profile_name=args.profile, symbol=args.symbol)
+        demo_args = argparse.Namespace(
+            profile=args.profile,
+            runtime_mode=str(resolve_runtime_mode(getattr(args, "runtime_mode", None))["runtime_mode"]),
+        )
+        attribution_payload = write_attribution_profiles(conn, demo_args)
+        router_payload = write_student_router_profiles(conn, demo_args)
+        deployment_payload = write_live_deployment_profiles(conn, demo_args)
+        supervisor_payload = write_portfolio_supervisor_profile(conn, demo_args)
+        supervisor_service = write_supervisor_service_artifacts(conn, demo_args)
+        supervisor_commands = write_supervisor_command_artifacts(conn, demo_args)
+        world_plans = write_world_simulator_plans(conn, demo_args)
+        write_performance_reports([args.symbol], args.profile)
+        dashboard = write_profile_dashboard(conn, args.profile)
+        lineage = write_lineage_report(conn, args.profile, args.symbol)
+        bundle = write_minimal_live_bundle(conn, args.profile)
+        print(
+            json.dumps(
+                {
+                    "profile": args.profile,
+                    "runtime_mode": demo_args.runtime_mode,
+                    "fixture": fixture,
+                    "attribution_profiles": len(attribution_payload),
+                    "student_router_profiles": len(router_payload),
+                    "deployments": len(deployment_payload),
+                    "portfolio_supervisor_artifact": str(supervisor_payload.get("artifact_path", "")),
+                    "supervisor_service_artifacts": len(supervisor_service),
+                    "supervisor_command_artifacts": len(supervisor_commands),
+                    "world_plan_artifacts": len(world_plans),
+                    "dashboard": dashboard,
+                    "lineage": lineage,
+                    "minimal_bundle": bundle,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_verify_deterministic(args) -> int:
+    payload = verify_deterministic_outputs(refresh_golden=bool(getattr(args, "refresh_golden", False)))
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if bool(payload.get("ok")) else 1
+
+
 def cmd_deploy_profiles(args) -> int:
     conn = connect_db(Path(args.db))
-    attribution_payload = write_attribution_profiles(conn, args)
-    router_payload = write_student_router_profiles(conn, args)
-    payload = write_live_deployment_profiles(conn, args)
-    conn.close()
-    print(json.dumps({
-        "profile": args.profile,
-        "attribution_profiles": attribution_payload,
-        "student_router_profiles": router_payload,
-        "deployments": payload,
-    }, indent=2, sort_keys=True))
-    return 0
+    try:
+        attribution_payload = write_attribution_profiles(conn, args)
+        router_payload = write_student_router_profiles(conn, args)
+        payload = write_live_deployment_profiles(conn, args)
+        symbols = [str(item["symbol"]) for item in payload]
+        write_performance_reports(symbols, args.profile)
+        dashboard = write_profile_dashboard(conn, args.profile)
+        lineage = write_lineage_report(conn, args.profile)
+        bundle = write_minimal_live_bundle(conn, args.profile)
+        print(json.dumps({
+            "profile": args.profile,
+            "runtime_mode": resolve_runtime_mode(getattr(args, "runtime_mode", None)),
+            "attribution_profiles": attribution_payload,
+            "student_router_profiles": router_payload,
+            "deployments": payload,
+            "dashboard": dashboard,
+            "lineage": lineage,
+            "minimal_bundle": bundle,
+        }, indent=2, sort_keys=True))
+        return 0
+    finally:
+        conn.close()
 
 
 def cmd_autonomous_governance(args) -> int:
     conn = connect_db(Path(args.db))
-    shadow_ingest = ingest_shadow_fleet_ledgers(conn, args.profile)
-    attribution_payload = write_attribution_profiles(conn, args)
-    router_payload = write_student_router_profiles(conn, args)
-    payload = run_autonomous_governance(conn, args, str(getattr(args, "group_key", "") or ""))
-    conn.close()
-    print(json.dumps({
-        "profile": args.profile,
-        "shadow_rows_ingested": int(shadow_ingest.get("rows_ingested", 0)),
-        "attribution_profiles": len(attribution_payload),
-        "student_router_profiles": len(router_payload),
-        "governance_decisions": len(payload.get("decisions", [])),
-        "world_plans": len(payload.get("world_plans", [])),
-        "portfolio_supervisor_artifact": str(payload.get("portfolio_supervisor", {}).get("artifact_path", "")),
-        "supervisor_service_artifacts": len(payload.get("supervisor_service", [])),
-        "supervisor_command_artifacts": len(payload.get("supervisor_commands", [])),
-    }, indent=2, sort_keys=True))
-    return 0
+    try:
+        shadow_ingest = ingest_shadow_fleet_ledgers(conn, args.profile)
+        attribution_payload = write_attribution_profiles(conn, args)
+        router_payload = write_student_router_profiles(conn, args)
+        payload = run_autonomous_governance(conn, args, str(getattr(args, "group_key", "") or ""))
+        write_performance_reports(sorted({str(item["symbol"]) for item in payload.get("decisions", [])}), args.profile)
+        dashboard = write_profile_dashboard(conn, args.profile)
+        lineage = write_lineage_report(conn, args.profile)
+        bundle = write_minimal_live_bundle(conn, args.profile)
+        print(json.dumps({
+            "profile": args.profile,
+            "runtime_mode": resolve_runtime_mode(getattr(args, "runtime_mode", None)),
+            "shadow_rows_ingested": int(shadow_ingest.get("rows_ingested", 0)),
+            "attribution_profiles": len(attribution_payload),
+            "student_router_profiles": len(router_payload),
+            "governance_decisions": len(payload.get("decisions", [])),
+            "world_plans": len(payload.get("world_plans", [])),
+            "portfolio_supervisor_artifact": str(payload.get("portfolio_supervisor", {}).get("artifact_path", "")),
+            "supervisor_service_artifacts": len(payload.get("supervisor_service", [])),
+            "supervisor_command_artifacts": len(payload.get("supervisor_commands", [])),
+            "dashboard": dashboard,
+            "lineage": lineage,
+            "minimal_bundle": bundle,
+        }, indent=2, sort_keys=True))
+        return 0
+    finally:
+        conn.close()
 
 
 def cmd_supervisor_sync(args) -> int:
@@ -832,15 +996,53 @@ def cmd_supervisor_sync(args) -> int:
 
 def cmd_attribution_prune(args) -> int:
     conn = connect_db(Path(args.db))
-    attribution_payload = write_attribution_profiles(conn, args)
-    router_payload = write_student_router_profiles(conn, args)
-    conn.close()
-    print(json.dumps({
-        "profile": args.profile,
-        "attribution_profiles": attribution_payload,
-        "student_router_profiles": router_payload,
-    }, indent=2, sort_keys=True))
-    return 0
+    try:
+        attribution_payload = write_attribution_profiles(conn, args)
+        router_payload = write_student_router_profiles(conn, args)
+        print(json.dumps({
+            "profile": args.profile,
+            "runtime_mode": resolve_runtime_mode(getattr(args, "runtime_mode", None)),
+            "attribution_profiles": attribution_payload,
+            "student_router_profiles": router_payload,
+        }, indent=2, sort_keys=True))
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_recover_artifacts(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        attribution_payload = write_attribution_profiles(conn, args)
+        router_payload = write_student_router_profiles(conn, args)
+        deploy_payload = write_live_deployment_profiles(conn, args)
+        supervisor_payload = write_portfolio_supervisor_profile(conn, args)
+        supervisor_service = write_supervisor_service_artifacts(conn, args)
+        supervisor_commands = write_supervisor_command_artifacts(conn, args)
+        world_payload = write_world_simulator_plans(conn, args)
+        symbols = sorted({str(item["symbol"]) for item in deploy_payload})
+        performance_payload = write_performance_reports(symbols, args.profile)
+        dashboard = write_profile_dashboard(conn, args.profile)
+        lineage = write_lineage_report(conn, args.profile)
+        bundle = write_minimal_live_bundle(conn, args.profile)
+        print(json.dumps({
+            "profile": args.profile,
+            "runtime_mode": resolve_runtime_mode(getattr(args, "runtime_mode", None)),
+            "attribution_profiles": len(attribution_payload),
+            "student_router_profiles": len(router_payload),
+            "deployments": len(deploy_payload),
+            "portfolio_supervisor_artifact": str(supervisor_payload.get("artifact_path", "")),
+            "supervisor_service_artifacts": len(supervisor_service),
+            "supervisor_command_artifacts": len(supervisor_commands),
+            "world_plan_artifacts": len(world_payload),
+            "performance_reports": len(performance_payload),
+            "dashboard": dashboard,
+            "lineage": lineage,
+            "minimal_bundle": bundle,
+        }, indent=2, sort_keys=True))
+        return 0
+    finally:
+        conn.close()
 
 
 def cmd_supervisor_daemon(args) -> int:
@@ -919,6 +1121,15 @@ def build_parser() -> argparse.ArgumentParser:
     init_db = sub.add_parser("init-db", help="Initialize the SQLite offline lab schema")
     init_db.set_defaults(func=cmd_init_db)
 
+    val = sub.add_parser("validate-env", help="Validate Python, MT5, FILE_COMMON, and Offline Lab path assumptions")
+    val.set_defaults(func=cmd_validate_env)
+
+    boot = sub.add_parser("bootstrap", help="Create required lab folders, validate the environment, and initialize SQLite")
+    boot.add_argument("--report", default="")
+    boot.add_argument("--no-init-db", action="store_true")
+    boot.add_argument("--seed-demo", action="store_true")
+    boot.set_defaults(func=cmd_bootstrap)
+
     comp = sub.add_parser("compile-export", help="Compile the MT5 offline export runner")
     comp.set_defaults(func=cmd_compile_export)
 
@@ -994,13 +1205,21 @@ def build_parser() -> argparse.ArgumentParser:
     shadow.add_argument("--profile", default="continuous")
     shadow.set_defaults(func=cmd_shadow_sync)
 
+    demo = sub.add_parser("seed-demo", help="Seed a deterministic smoke profile and emit MT5 runtime artifacts without broker data")
+    demo.add_argument("--profile", default="smoke")
+    demo.add_argument("--symbol", default="EURUSD")
+    demo.add_argument("--runtime-mode", default="research", choices=sorted(RUNTIME_MODES.keys()))
+    demo.set_defaults(func=cmd_seed_demo)
+
     deploy = sub.add_parser("deploy-profiles", help="Build live deployment profiles for MT5 runtime control plane")
     deploy.add_argument("--profile", default="continuous")
+    deploy.add_argument("--runtime-mode", default="research", choices=sorted(RUNTIME_MODES.keys()))
     deploy.set_defaults(func=cmd_deploy_profiles)
 
     gov = sub.add_parser("autonomous-governance", help="Build portfolio supervisor and world-plan artifacts from live research telemetry")
     gov.add_argument("--profile", default="continuous")
     gov.add_argument("--group-key", default="")
+    gov.add_argument("--runtime-mode", default="research", choices=sorted(RUNTIME_MODES.keys()))
     gov.set_defaults(func=cmd_autonomous_governance)
 
     sup = sub.add_parser("supervisor-sync", help="Build central supervisor-service artifacts from live control-plane snapshots")
@@ -1015,7 +1234,36 @@ def build_parser() -> argparse.ArgumentParser:
 
     attr = sub.add_parser("attribution-prune", help="Build attribution and live student-router pruning profiles")
     attr.add_argument("--profile", default="continuous")
+    attr.add_argument("--runtime-mode", default="research", choices=sorted(RUNTIME_MODES.keys()))
     attr.set_defaults(func=cmd_attribution_prune)
+
+    dash = sub.add_parser("dashboard", help="Render the operator dashboard for a profile")
+    dash.add_argument("--profile", default="continuous")
+    dash.set_defaults(func=cmd_dashboard)
+
+    live = sub.add_parser("live-state", help="Show the current file-backed runtime state for one symbol")
+    live.add_argument("--profile", default="continuous")
+    live.add_argument("--symbol", default="EURUSD")
+    live.set_defaults(func=cmd_live_state)
+
+    lineage = sub.add_parser("lineage-report", help="Render config lineage and live deployment provenance for a profile")
+    lineage.add_argument("--profile", default="continuous")
+    lineage.add_argument("--symbol", default="")
+    lineage.set_defaults(func=cmd_lineage_report)
+
+    bundle = sub.add_parser("minimal-bundle", help="Build a minimal live artifact bundle for promoted symbols")
+    bundle.add_argument("--profile", default="continuous")
+    bundle.add_argument("--output-dir", default="")
+    bundle.set_defaults(func=cmd_minimal_bundle)
+
+    det = sub.add_parser("verify-deterministic", help="Run seeded deterministic artifact checks against golden fixtures")
+    det.add_argument("--refresh-golden", action="store_true")
+    det.set_defaults(func=cmd_verify_deterministic)
+
+    rec = sub.add_parser("recover-artifacts", help="Rebuild generated promotions, dashboards, and summaries from SQLite state")
+    rec.add_argument("--profile", default="continuous")
+    rec.add_argument("--runtime-mode", default="research", choices=sorted(RUNTIME_MODES.keys()))
+    rec.set_defaults(func=cmd_recover_artifacts)
 
     loop = sub.add_parser("control-loop", help="Run the full export -> tune -> promote cycle continuously")
     loop.add_argument("--profile", default="continuous")
@@ -1051,6 +1299,7 @@ def build_parser() -> argparse.ArgumentParser:
     loop.add_argument("--execution-profile", default="default", choices=sorted(testlab.EXECUTION_PROFILES.keys()))
     loop.add_argument("--cycles", type=int, default=1, help="0 means run forever")
     loop.add_argument("--sleep-seconds", type=int, default=0)
+    loop.add_argument("--runtime-mode", default="research", choices=sorted(RUNTIME_MODES.keys()))
     loop.add_argument("--login")
     loop.add_argument("--server")
     loop.add_argument("--password")

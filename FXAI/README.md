@@ -53,6 +53,8 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 ## Operating Notes
 
 - Canonical research data is `M1 OHLC + spread`.
+- The preferred platform verification path is `python3 FXAI/Tools/fxai_testlab.py verify-all`.
+- The preferred Offline Lab bootstrap path is `python3 FXAI/Tools/fxai_offline_lab.py bootstrap --seed-demo`.
 - The shared TensorCore path now includes a self-supervised foundation encoder, teacher-student transfer heads, hierarchical trade-quality signals, and persistent analog regime memory.
 - The live EA now uses portfolio-native sizing and gating with directional-cluster pressure, hierarchy floors, and macro-state quality controls instead of only scalar conviction scaling.
 - The live runtime now emits per-instance control-plane snapshots and consumes promoted symbol deployment profiles so research-side promotion decisions can steer trade floors, sizing bias, and peer-pressure handling.
@@ -75,10 +77,14 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - World-simulator plans now include transition entropy, shock decay, and session-specific sigma/spread scaling learned from exported market windows instead of only coarse global stress factors.
 - Offline Lab now also emits student deployment bundles and per-symbol or global supervisor-service artifacts so the promoted runtime can blend peer pressure, capital budget, add or reduce bias, and lifecycle floors without manual operator edits.
 - Offline Lab promotion is profile-wide by default in `best-params`, unless a symbol filter is passed, and exact-window audit runs now follow the effective exported first/last bar range.
+- Offline Lab now also emits operator dashboards, lineage reports, deterministic fixture artifacts, and minimal live bundles so operators can inspect or recover the promoted state without reading SQLite directly.
+- Runtime profiles now support explicit `research` and `production` modes so the same framework can run either as the full research OS or as a leaner live deployment surface.
 
 ## Source Of Truth
 
 - Runtime source of truth: the live MT5 Experts tree
 - Versioned mirror: the git repo copy that is synchronized into the MT5 tree after clean verification
+- Research source of truth: the Offline Lab SQLite database
+- MT5 runtime artifact source of truth: `FILE_COMMON/FXAI/Offline/Promotions/`
 
 For broader framework usage and workflow details, see the repo-root README and the GitHub wiki.

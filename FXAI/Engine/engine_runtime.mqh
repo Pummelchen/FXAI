@@ -1,96 +1,18 @@
 #ifndef __FXAI_ENGINE_RUNTIME_MQH__
 #define __FXAI_ENGINE_RUNTIME_MQH__
 
-void FXAI_RuntimePublishIdleSnapshot(const string symbol)
-{
-   if(StringLen(symbol) <= 0)
-      return;
-   FXAI_WriteControlPlaneLocalSnapshot(symbol, -1, 0.0);
-}
+#include "Runtime\\runtime_signal_state.mqh"
+#include "Runtime\\runtime_router_stage.mqh"
+#include "Runtime\\runtime_signal_finalize.mqh"
 
 int SpecialDirectionAI(const string symbol)
 {
+   ulong runtime_total_t0 = GetMicrosecondCount();
+   ulong feature_stage_t0 = runtime_total_t0;
    g_ai_last_reason = "start";
-   double cached_expected_move_points = g_ai_last_expected_move_points;
-   double cached_trade_edge_points = g_ai_last_trade_edge_points;
-   double cached_confidence = g_ai_last_confidence;
-   double cached_reliability = g_ai_last_reliability;
-   double cached_path_risk = g_ai_last_path_risk;
-   double cached_fill_risk = g_ai_last_fill_risk;
-   double cached_trade_gate = g_ai_last_trade_gate;
-   double cached_hierarchy_score = g_ai_last_hierarchy_score;
-   double cached_hierarchy_consistency = g_ai_last_hierarchy_consistency;
-   double cached_hierarchy_tradability = g_ai_last_hierarchy_tradability;
-   double cached_hierarchy_execution = g_ai_last_hierarchy_execution;
-   double cached_hierarchy_horizon_fit = g_ai_last_hierarchy_horizon_fit;
-   double cached_macro_state_quality = g_ai_last_macro_state_quality;
-   double cached_portfolio_pressure = g_ai_last_portfolio_pressure;
-   double cached_context_quality = g_ai_last_context_quality;
-   double cached_context_strength = g_ai_last_context_strength;
-   double cached_min_move_points = g_ai_last_min_move_points;
-   int cached_horizon_minutes = g_ai_last_horizon_minutes;
-   int cached_regime_id = g_ai_last_regime_id;
-   double cached_policy_trade_prob = g_policy_last_trade_prob;
-   double cached_policy_no_trade_prob = g_policy_last_no_trade_prob;
-   double cached_policy_enter_prob = g_policy_last_enter_prob;
-   double cached_policy_exit_prob = g_policy_last_exit_prob;
-   double cached_policy_direction_bias = g_policy_last_direction_bias;
-   double cached_policy_size_mult = g_policy_last_size_mult;
-   double cached_policy_hold_quality = g_policy_last_hold_quality;
-   double cached_policy_expected_utility = g_policy_last_expected_utility;
-   double cached_policy_confidence = g_policy_last_confidence;
-   double cached_policy_portfolio_fit = g_policy_last_portfolio_fit;
-   double cached_policy_capital_efficiency = g_policy_last_capital_efficiency;
-   double cached_policy_add_prob = g_policy_last_add_prob;
-   double cached_policy_reduce_prob = g_policy_last_reduce_prob;
-   double cached_policy_tighten_prob = g_policy_last_tighten_prob;
-   double cached_policy_timeout_prob = g_policy_last_timeout_prob;
-   int cached_policy_action = g_policy_last_action;
-   double cached_control_plane_score = g_control_plane_last_score;
-   double cached_control_plane_buy_score = g_control_plane_last_buy_score;
-   double cached_control_plane_sell_score = g_control_plane_last_sell_score;
-   string cached_control_plane_symbol = g_control_plane_last_symbol;
-   datetime cached_control_plane_bar_time = g_control_plane_last_bar_time;
-   g_ai_last_expected_move_points = 0.0;
-   g_ai_last_trade_edge_points = 0.0;
-   g_ai_last_confidence = 0.0;
-   g_ai_last_reliability = 0.0;
-   g_ai_last_path_risk = 1.0;
-   g_ai_last_fill_risk = 1.0;
-   g_ai_last_trade_gate = 0.0;
-   g_ai_last_hierarchy_score = 0.0;
-   g_ai_last_hierarchy_consistency = 0.0;
-   g_ai_last_hierarchy_tradability = 0.0;
-   g_ai_last_hierarchy_execution = 0.0;
-   g_ai_last_hierarchy_horizon_fit = 0.0;
-   g_ai_last_macro_state_quality = 0.0;
-   g_ai_last_portfolio_pressure = 0.0;
-   g_ai_last_context_quality = 0.0;
-   g_ai_last_context_strength = 0.0;
-   g_ai_last_min_move_points = 0.0;
-   g_ai_last_horizon_minutes = 0;
-   g_ai_last_regime_id = 0;
-   g_policy_last_trade_prob = 0.0;
-   g_policy_last_no_trade_prob = 1.0;
-   g_policy_last_enter_prob = 0.0;
-   g_policy_last_exit_prob = 0.0;
-   g_policy_last_direction_bias = 0.0;
-   g_policy_last_size_mult = 1.0;
-   g_policy_last_hold_quality = 0.0;
-   g_policy_last_expected_utility = 0.0;
-   g_policy_last_confidence = 0.0;
-   g_policy_last_portfolio_fit = 0.0;
-   g_policy_last_capital_efficiency = 0.0;
-   g_policy_last_add_prob = 0.0;
-   g_policy_last_reduce_prob = 0.0;
-   g_policy_last_tighten_prob = 0.0;
-   g_policy_last_timeout_prob = 0.0;
-   g_policy_last_action = FXAI_POLICY_ACTION_NO_TRADE;
-   g_control_plane_last_score = 0.0;
-   g_control_plane_last_buy_score = 0.0;
-   g_control_plane_last_sell_score = 0.0;
-   g_control_plane_last_symbol = "";
-   g_control_plane_last_bar_time = 0;
+   FXAIRuntimeSignalCache signal_cache;
+   FXAI_RuntimeCaptureSignalCache(signal_cache);
+   FXAI_RuntimeResetSignalState();
    if(!g_plugins_ready)
    {
       g_ai_last_reason = "plugins_not_ready";
@@ -157,46 +79,7 @@ int SpecialDirectionAI(const string symbol)
    int decisionKey = (ensembleMode == 1 ? (100000 + pctKey) : aiType);
    if(g_ai_last_signal_bar == signal_bar && g_ai_last_signal_key == decisionKey)
    {
-      g_ai_last_expected_move_points = cached_expected_move_points;
-      g_ai_last_trade_edge_points = cached_trade_edge_points;
-      g_ai_last_confidence = cached_confidence;
-      g_ai_last_reliability = cached_reliability;
-      g_ai_last_path_risk = cached_path_risk;
-      g_ai_last_fill_risk = cached_fill_risk;
-      g_ai_last_trade_gate = cached_trade_gate;
-      g_ai_last_hierarchy_score = cached_hierarchy_score;
-      g_ai_last_hierarchy_consistency = cached_hierarchy_consistency;
-      g_ai_last_hierarchy_tradability = cached_hierarchy_tradability;
-      g_ai_last_hierarchy_execution = cached_hierarchy_execution;
-      g_ai_last_hierarchy_horizon_fit = cached_hierarchy_horizon_fit;
-      g_ai_last_macro_state_quality = cached_macro_state_quality;
-      g_ai_last_portfolio_pressure = cached_portfolio_pressure;
-      g_ai_last_context_quality = cached_context_quality;
-      g_ai_last_context_strength = cached_context_strength;
-      g_ai_last_min_move_points = cached_min_move_points;
-      g_ai_last_horizon_minutes = cached_horizon_minutes;
-      g_ai_last_regime_id = cached_regime_id;
-      g_policy_last_trade_prob = cached_policy_trade_prob;
-      g_policy_last_no_trade_prob = cached_policy_no_trade_prob;
-      g_policy_last_enter_prob = cached_policy_enter_prob;
-      g_policy_last_exit_prob = cached_policy_exit_prob;
-      g_policy_last_direction_bias = cached_policy_direction_bias;
-      g_policy_last_size_mult = cached_policy_size_mult;
-      g_policy_last_hold_quality = cached_policy_hold_quality;
-      g_policy_last_expected_utility = cached_policy_expected_utility;
-      g_policy_last_confidence = cached_policy_confidence;
-      g_policy_last_portfolio_fit = cached_policy_portfolio_fit;
-      g_policy_last_capital_efficiency = cached_policy_capital_efficiency;
-      g_policy_last_add_prob = cached_policy_add_prob;
-      g_policy_last_reduce_prob = cached_policy_reduce_prob;
-      g_policy_last_tighten_prob = cached_policy_tighten_prob;
-      g_policy_last_timeout_prob = cached_policy_timeout_prob;
-      g_policy_last_action = cached_policy_action;
-      g_control_plane_last_score = cached_control_plane_score;
-      g_control_plane_last_buy_score = cached_control_plane_buy_score;
-      g_control_plane_last_sell_score = cached_control_plane_sell_score;
-      g_control_plane_last_symbol = cached_control_plane_symbol;
-      g_control_plane_last_bar_time = cached_control_plane_bar_time;
+      FXAI_RuntimeRestoreSignalCache(signal_cache);
       g_ai_last_reason = "signal_cache_hit";
       return g_ai_last_signal;
    }
@@ -504,7 +387,8 @@ int SpecialDirectionAI(const string symbol)
    if(shadow_epochs > 3) shadow_epochs = 3;
    int shadow_every = Ensemble_ShadowEveryBars;
    if(shadow_every < 1) shadow_every = 1;
-   bool run_shadow = (ensembleMode && FXAI_IsShadowBar(shadow_every, signal_seq));
+   bool shadow_allowed = deploy_profile.shadow_enabled;
+   bool run_shadow = (ensembleMode && shadow_allowed && FXAI_IsShadowBar(shadow_every, signal_seq));
    int shadow_start = H;
    int shadow_end = H + shadow_samples - 1;
 
@@ -630,6 +514,8 @@ int SpecialDirectionAI(const string symbol)
                                     -1,
                                     samples);
    }
+   FXAI_RecordRuntimeStageMs(FXAI_RUNTIME_STAGE_FEATURE_PIPELINE,
+                             (double)(GetMicrosecondCount() - feature_stage_t0) / 1000.0);
 
    if(have_online_window && online_start >= 0 && online_start < ArraySize(samples))
       FXAI_AddReplaySample(samples[online_start]);
@@ -683,6 +569,7 @@ int SpecialDirectionAI(const string symbol)
                                FXAI_Clamp(deploy_profile.foundation_quality_gain, 0.40, 1.80));
    }
    int runtime_session_bucket = FXAI_DeriveSessionBucket(snapshot.bar_time);
+   ulong transfer_stage_t0 = GetMicrosecondCount();
    double current_transfer_a[];
    FXAI_BuildSharedTransferInputGlobal(current_raw_x,
                                        current_shared_window,
@@ -741,6 +628,8 @@ int SpecialDirectionAI(const string symbol)
    FXAI_QueryRegimeGraph(regime_id,
                          g_ai_last_macro_state_quality,
                          current_regime_q);
+   FXAI_RecordRuntimeStageMs(FXAI_RUNTIME_STAGE_TRANSFER,
+                             (double)(GetMicrosecondCount() - transfer_stage_t0) / 1000.0);
    double macro_profile_shortfall = (FXAI_MacroEventLeakageSafe()
                                      ? FXAI_Clamp(deploy_profile.macro_quality_floor -
                                                   g_ai_last_macro_state_quality,
@@ -756,6 +645,7 @@ int SpecialDirectionAI(const string symbol)
    g_control_plane_last_buy_score = cp_buy.score;
    g_control_plane_last_sell_score = cp_sell.score;
 
+   ulong router_stage_t0 = GetMicrosecondCount();
    int active_ai_ids[];
    ArrayResize(active_ai_ids, 0);
    if(ensembleMode == 0)
@@ -876,6 +766,10 @@ int SpecialDirectionAI(const string symbol)
       }
    }
 
+   FXAI_RuntimeApplyPerformanceModelCap(active_ai_ids, deploy_profile);
+   FXAI_RecordRuntimeStageMs(FXAI_RUNTIME_STAGE_ROUTER,
+                             (double)(GetMicrosecondCount() - router_stage_t0) / 1000.0);
+
    if(ArraySize(active_ai_ids) <= 0)
    {
       g_ai_last_signal_bar = signal_bar;
@@ -968,6 +862,7 @@ int SpecialDirectionAI(const string symbol)
       }
    }
 
+   ulong shadow_stage_t0 = GetMicrosecondCount();
    if(run_shadow && have_shadow_window)
    {
       int warm_epochs = trainEpochs;
@@ -1013,6 +908,9 @@ int SpecialDirectionAI(const string symbol)
          }
       }
    }
+   if(run_shadow && have_shadow_window)
+      FXAI_RecordRuntimeStageMs(FXAI_RUNTIME_STAGE_SHADOW,
+                                (double)(GetMicrosecondCount() - shadow_stage_t0) / 1000.0);
 
    int singleSignal = -1;
    string singleNoTradeReason = "";
@@ -1514,6 +1412,7 @@ int SpecialDirectionAI(const string symbol)
       }
    }
 
+   ulong policy_stage_t0 = GetMicrosecondCount();
    int decision = -1;
    if(ensembleMode == 0)
    {
@@ -1854,31 +1753,20 @@ int SpecialDirectionAI(const string symbol)
                                ensemble_probs,
                                stack_feat);
    }
+   FXAI_RecordRuntimeStageMs(FXAI_RUNTIME_STAGE_POLICY,
+                             (double)(GetMicrosecondCount() - policy_stage_t0) / 1000.0);
 
-   g_ai_last_signal_bar = signal_bar;
-   g_ai_last_signal_key = decisionKey;
-   g_ai_last_signal = decision;
-   if(decision == 1) g_ai_last_reason = "buy";
-   else if(decision == 0) g_ai_last_reason = "sell";
-   else if(ensembleMode == 0 && aiType == (int)AI_M1SYNC && StringLen(singleNoTradeReason) > 0) g_ai_last_reason = singleNoTradeReason;
-   else if(ensembleMode != 0 && ensemble_meta_total <= 0.0) g_ai_last_reason = "no_meta_weight";
-   else g_ai_last_reason = "no_consensus_or_ev";
-
-   double signal_intensity = FXAI_Clamp((0.55 * g_ai_last_trade_gate +
-                                         0.25 * g_policy_last_trade_prob +
-                                         0.20 * g_policy_last_confidence) *
-                                        FXAI_Clamp(g_policy_last_size_mult, 0.25, 1.60) *
-                                        FXAI_Clamp(1.0 - 0.35 * macro_profile_shortfall -
-                                                   0.20 * regime_transition_penalty,
-                                                   0.20,
-                                                   1.0),
-                                        0.0,
-                                        4.0);
-   if(decision < 0)
-      signal_intensity = 0.0;
-   FXAI_WriteControlPlaneLocalSnapshot(symbol, decision, signal_intensity);
-
-   return decision;
+   return FXAI_RuntimeFinalizeDecision(symbol,
+                                       decision,
+                                       signal_bar,
+                                       decisionKey,
+                                       (ensembleMode != 0),
+                                       aiType,
+                                       singleNoTradeReason,
+                                       ensemble_meta_total,
+                                       macro_profile_shortfall,
+                                       regime_transition_penalty,
+                                       runtime_total_t0);
 }
 
 

@@ -1,7 +1,13 @@
 FXAI/Tools/OfflineLab/fxai_offline_lab.sqlite
+FXAI/Tools/OfflineLab/fxai_offline_lab.sqlite-shm
+FXAI/Tools/OfflineLab/fxai_offline_lab.sqlite-wal
 FXAI/Tools/OfflineLab/Profiles/
 FXAI/Tools/OfflineLab/ResearchOS/
 FXAI/Tools/OfflineLab/Distillation/
+FXAI/Tools/OfflineLab/Runs/
+FXAI/Tools/tests/.pytest_cache/
+FXAI/.pytest_cache/
 FXAI/Tools/__pycache__/
 FXAI/Tools/offline_lab/__pycache__/
 FXAI/Tools/testlab/__pycache__/
+FXAI/Tools/tests/__pycache__/

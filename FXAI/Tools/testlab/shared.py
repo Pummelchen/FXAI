@@ -156,6 +156,10 @@ def runtime_macro_manifest_path(symbol: str) -> Path:
     return RUNTIME_DIR / f"fxai_macro_{runtime_artifact_safe_symbol(symbol)}.tsv"
 
 
+def runtime_performance_manifest_path(symbol: str) -> Path:
+    return RUNTIME_DIR / f"fxai_perf_{runtime_artifact_safe_symbol(symbol)}.tsv"
+
+
 def mean_std_ci(values: list[float]) -> tuple[float, float, float]:
     if not values:
         return 0.0, 0.0, 0.0
@@ -272,5 +276,4 @@ def get_oracle(plugin_name: str, family: int, oracles: dict) -> dict:
     fam = oracles.get("family_defaults", {}).get(str(family), {})
     plug = oracles.get("plugins", {}).get(plugin_name, {})
     return deep_merge(deep_merge(base, fam), plug)
-
 

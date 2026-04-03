@@ -5,7 +5,36 @@ from pathlib import Path
 
 from .baseline import compare_summaries, compare_summary_data, load_baseline_summary, resolve_baseline_path
 from .reporting import load_current_summary, load_tsv_rows, manifest_path, summary_has_market_replay, fnum, inum
-from .shared import DEFAULT_REPORT, load_json, load_oracles
+from .shared import COMMON_FILES, DEFAULT_REPORT, load_json, load_oracles, runtime_artifact_safe_symbol, runtime_performance_manifest_path
+
+
+def _build_symbol_artifact_report(symbol: str) -> dict[str, object]:
+    token = runtime_artifact_safe_symbol(symbol)
+    budgets = {
+        "fxai_live_deploy": 24 * 1024,
+        "fxai_student_router": 24 * 1024,
+        "fxai_attribution": 32 * 1024,
+        "fxai_world_plan": 32 * 1024,
+        "fxai_supervisor_service": 24 * 1024,
+        "fxai_supervisor_command": 16 * 1024,
+        "fxai_perf": 128 * 1024,
+    }
+    files = {
+        "fxai_live_deploy": COMMON_FILES / f"FXAI/Offline/Promotions/fxai_live_deploy_{token}.tsv",
+        "fxai_student_router": COMMON_FILES / f"FXAI/Offline/Promotions/fxai_student_router_{token}.tsv",
+        "fxai_attribution": COMMON_FILES / f"FXAI/Offline/Promotions/fxai_attribution_{token}.tsv",
+        "fxai_world_plan": COMMON_FILES / f"FXAI/Offline/Promotions/fxai_world_plan_{token}.tsv",
+        "fxai_supervisor_service": COMMON_FILES / f"FXAI/Offline/Promotions/fxai_supervisor_service_{token}.tsv",
+        "fxai_supervisor_command": COMMON_FILES / f"FXAI/Offline/Promotions/fxai_supervisor_command_{token}.tsv",
+        "fxai_perf": runtime_performance_manifest_path(symbol),
+    }
+    failures = []
+    for key, path in files.items():
+        size_bytes = int(path.stat().st_size) if path.exists() and path.is_file() else 0
+        budget = int(budgets[key])
+        if size_bytes > budget:
+            failures.append(f"{key} {size_bytes} > {budget}")
+    return {"budget_failures": failures}
 
 def cmd_release_gate(args):
     report = Path(args.report) if args.report else DEFAULT_REPORT
@@ -54,6 +83,7 @@ def cmd_release_gate(args):
 
     macro_dataset_present = False
     seen_macro = set()
+    seen_perf = set()
     for item in per_symbol:
         m_path = manifest_path(item.get("runtime_macro_manifest", ""))
         if m_path is None or m_path in seen_macro:
@@ -82,6 +112,40 @@ def cmd_release_gate(args):
             gate_failures.append(
                 f"{item.get('symbol', 'unknown')}: macro dataset has no revision-chain coverage"
             )
+        p_path = manifest_path(item.get("runtime_performance_manifest", "")) or runtime_performance_manifest_path(str(item.get("symbol", "")))
+        if p_path is None or p_path in seen_perf:
+            continue
+        seen_perf.add(p_path)
+        perf_rows = load_tsv_rows(p_path)
+        if not perf_rows:
+            continue
+        runtime_total = 0.0
+        for row_perf in perf_rows:
+            if row_perf.get("row_type") == "stage":
+                runtime_total += fnum(row_perf, "mean_ms")
+            elif row_perf.get("row_type") == "plugin":
+                predict_ms = fnum(row_perf, "predict_mean_ms")
+                update_ms = fnum(row_perf, "update_mean_ms")
+                working_set = fnum(row_perf, "working_set_kb")
+                if predict_ms > 1.60:
+                    gate_failures.append(
+                        f"{row_perf.get('ai_name', 'unknown')}: predict mean {predict_ms:.3f}ms above maximum 1.600ms"
+                    )
+                if update_ms > 1.25:
+                    gate_failures.append(
+                        f"{row_perf.get('ai_name', 'unknown')}: update mean {update_ms:.3f}ms above maximum 1.250ms"
+                    )
+                if working_set > 4096.0:
+                    gate_failures.append(
+                        f"{row_perf.get('ai_name', 'unknown')}: working set {working_set:.1f}KB above maximum 4096.0KB"
+                    )
+        if runtime_total > 12.0:
+            gate_failures.append(
+                f"{item.get('symbol', 'unknown')}: runtime total mean {runtime_total:.3f}ms above maximum 12.000ms"
+            )
+        artifact_report = _build_symbol_artifact_report(str(item.get("symbol", "")))
+        for failure in artifact_report.get("budget_failures", []):
+            gate_failures.append(f"{item.get('symbol', 'unknown')}: artifact size gate failed ({failure})")
 
     for name, info in sorted(current_summary.get("plugins", {}).items()):
         score = float(info.get("score", 0.0))
@@ -151,4 +215,3 @@ def cmd_release_gate(args):
 
     print("\n# FXAI Release Gate: PASS")
     return 0
-

@@ -6,6 +6,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from .common import *
+from .mode import resolve_runtime_mode
 from .shadow_fleet import latest_shadow_rows, symbol_shadow_summary
 
 
@@ -35,6 +36,24 @@ def _weighted_mean(items: list[tuple[float, float]], default: float) -> float:
     if total_w <= 1e-9:
         return float(default)
     return total_v / total_w
+
+
+def _promotion_tier(mean_stability: float,
+                    mean_macro_score: float,
+                    shadow_summary: dict,
+                    runtime_mode: str) -> str:
+    shadow_score = _clamp(float(shadow_summary.get("mean_shadow_score", 0.0)), -1.0, 1.0)
+    route_regret = _clamp(float(shadow_summary.get("mean_route_regret", 0.0)), 0.0, 1.0)
+    supervisor_score = _clamp(float(shadow_summary.get("mean_portfolio_supervisor_score", 0.0)), 0.0, 2.0)
+    macro_norm = _clamp(mean_macro_score / 100.0, 0.0, 1.0)
+    stability = _clamp(mean_stability, 0.0, 1.0)
+    if runtime_mode == "production" and shadow_score >= 0.10 and stability >= 0.72 and route_regret <= 0.28 and supervisor_score <= 0.95:
+        return "production-approved"
+    if shadow_score >= 0.02 and stability >= 0.60 and route_regret <= 0.38:
+        return "audit-approved"
+    if shadow_score >= -0.04 and (stability >= 0.45 or macro_norm >= 0.55):
+        return "research-approved"
+    return "experimental"
 
 
 DEPLOYMENT_MODEL_FEATURES = [
@@ -527,6 +546,7 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
 
     deployments: list[dict] = []
     created_at = now_unix()
+    mode_cfg = resolve_runtime_mode(getattr(args, "runtime_mode", None))
     for symbol, items in sorted(by_symbol.items()):
         shadow_summary = symbol_shadow_summary(conn, args.profile, symbol)
         shadow_training_rows = _symbol_shadow_training_rows(conn, args.profile, symbol)
@@ -757,6 +777,42 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
         if hard_timeout_bars <= soft_timeout_bars:
             hard_timeout_bars = soft_timeout_bars + 4
 
+        runtime_mode = str(mode_cfg["runtime_mode"])
+        telemetry_level = str(mode_cfg["telemetry_level"])
+        shadow_enabled = int(mode_cfg["shadow_enabled"])
+        snapshot_detail = str(mode_cfg["snapshot_detail"])
+        max_runtime_models = int(mode_cfg["max_runtime_models"])
+        performance_budget_ms = float(mode_cfg["performance_budget_ms"])
+        if runtime_mode == "research":
+            max_runtime_models = int(round(_clamp(
+                float(max_runtime_models) +
+                4.0 * _clamp(shadow_summary.get("mean_portfolio_div", 0.0), 0.0, 1.0) -
+                3.0 * _clamp(shadow_summary.get("mean_route_regret", 0.0), 0.0, 1.0),
+                6.0,
+                18.0,
+            )))
+            performance_budget_ms = _clamp(
+                performance_budget_ms +
+                2.5 * _clamp(shadow_summary.get("mean_portfolio_div", 0.0), 0.0, 1.0),
+                8.0,
+                16.0,
+            )
+        else:
+            max_runtime_models = int(round(_clamp(
+                min(float(max_runtime_models), 8.0) +
+                1.5 * _clamp(shadow_summary.get("mean_portfolio_div", 0.0), 0.0, 1.0) -
+                2.0 * _clamp(shadow_summary.get("mean_route_regret", 0.0), 0.0, 1.0),
+                3.0,
+                8.0,
+            )))
+            performance_budget_ms = _clamp(
+                performance_budget_ms -
+                0.8 * _clamp(shadow_summary.get("mean_portfolio_pressure", 0.0) / 1.5, 0.0, 1.0),
+                4.0,
+                8.0,
+            )
+        promotion_tier = _promotion_tier(mean_stability, mean_macro_score, shadow_summary, runtime_mode)
+
         teacher_signal_gain = _clamp(
             0.94 + 0.34 * predict_linear_model(deployment_models["teacher"], deployment_features, 0.0),
             0.40,
@@ -819,6 +875,13 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             "reduce_fraction": reduce_fraction,
             "soft_timeout_bars": soft_timeout_bars,
             "hard_timeout_bars": hard_timeout_bars,
+            "runtime_mode": runtime_mode,
+            "telemetry_level": telemetry_level,
+            "performance_budget_ms": performance_budget_ms,
+            "shadow_enabled": shadow_enabled,
+            "snapshot_detail": snapshot_detail,
+            "max_runtime_models": max_runtime_models,
+            "promotion_tier": promotion_tier,
             "foundation_bundle": foundation_bundle,
             "champions": deployment_champions,
             "shadow_summary": shadow_summary,
@@ -857,6 +920,13 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             ("reduce_fraction", f"{reduce_fraction:.6f}"),
             ("soft_timeout_bars", str(int(soft_timeout_bars))),
             ("hard_timeout_bars", str(int(hard_timeout_bars))),
+            ("runtime_mode", runtime_mode),
+            ("telemetry_level", telemetry_level),
+            ("performance_budget_ms", f"{performance_budget_ms:.6f}"),
+            ("shadow_enabled", str(int(shadow_enabled))),
+            ("snapshot_detail", snapshot_detail),
+            ("max_runtime_models", str(int(max_runtime_models))),
+            ("promotion_tier", promotion_tier),
         ]
         tsv_path.write_text("".join(f"{key}\t{value}\n" for key, value in lines), encoding="utf-8")
         tsv_sha = testlab.sha256_path(tsv_path)
@@ -873,8 +943,10 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
                                                  policy_hold_floor, policy_exit_floor, policy_add_floor, policy_reduce_floor,
                                                  policy_timeout_floor, max_add_fraction, reduce_fraction,
                                                  soft_timeout_bars, hard_timeout_bars,
+                                                 runtime_mode, telemetry_level, performance_budget_ms, shadow_enabled,
+                                                 snapshot_detail, max_runtime_models, promotion_tier,
                                                  payload_json, created_at)
-            VALUES(?, ?, 'symbol', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES(?, ?, 'symbol', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(profile_name, symbol, deployment_scope) DO UPDATE SET
                 artifact_path=excluded.artifact_path,
                 artifact_sha256=excluded.artifact_sha256,
@@ -900,6 +972,13 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
                 reduce_fraction=excluded.reduce_fraction,
                 soft_timeout_bars=excluded.soft_timeout_bars,
                 hard_timeout_bars=excluded.hard_timeout_bars,
+                runtime_mode=excluded.runtime_mode,
+                telemetry_level=excluded.telemetry_level,
+                performance_budget_ms=excluded.performance_budget_ms,
+                shadow_enabled=excluded.shadow_enabled,
+                snapshot_detail=excluded.snapshot_detail,
+                max_runtime_models=excluded.max_runtime_models,
+                promotion_tier=excluded.promotion_tier,
                 payload_json=excluded.payload_json,
                 created_at=excluded.created_at
             """,
@@ -930,6 +1009,13 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
                 reduce_fraction,
                 soft_timeout_bars,
                 hard_timeout_bars,
+                runtime_mode,
+                telemetry_level,
+                performance_budget_ms,
+                shadow_enabled,
+                snapshot_detail,
+                max_runtime_models,
+                promotion_tier,
                 json.dumps(payload, indent=2, sort_keys=True),
                 created_at,
             ),
@@ -968,6 +1054,13 @@ def write_live_deployment_profiles(conn: sqlite3.Connection,
             "reduce_fraction": reduce_fraction,
             "soft_timeout_bars": soft_timeout_bars,
             "hard_timeout_bars": hard_timeout_bars,
+            "runtime_mode": runtime_mode,
+            "telemetry_level": telemetry_level,
+            "performance_budget_ms": performance_budget_ms,
+            "shadow_enabled": shadow_enabled,
+            "snapshot_detail": snapshot_detail,
+            "max_runtime_models": max_runtime_models,
+            "promotion_tier": promotion_tier,
         })
 
     stale_symbols = sorted(set(existing_symbols) - set(by_symbol))

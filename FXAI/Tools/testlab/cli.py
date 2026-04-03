@@ -32,10 +32,12 @@ from .shared import (
     resolve_symbol_list,
     runtime_feature_manifest_path,
     runtime_macro_manifest_path,
+    runtime_performance_manifest_path,
     runtime_persistence_manifest_path,
     sha256_path,
     write_json,
 )
+from .verify import run_verify_all
 
 def cmd_compile(_args):
     return compile_target(Path("Tests/FXAI_AuditRunner.mq5"), "audit_runner")
@@ -43,6 +45,12 @@ def cmd_compile(_args):
 
 def cmd_compile_main(_args):
     return compile_target(Path("FXAI.mq5"), "main_ea")
+
+
+def cmd_verify_all(args):
+    payload = run_verify_all(refresh_golden=bool(getattr(args, "refresh_golden", False)))
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if bool(payload.get("ok")) else 1
 
 
 def cmd_run_audit(args):
@@ -132,6 +140,7 @@ def cmd_run_audit(args):
                 "runtime_persistence_manifest": str(runtime_persistence_manifest_path(run["symbol"])),
                 "runtime_feature_manifest": str(runtime_feature_manifest_path(run["symbol"])),
                 "runtime_macro_manifest": str(runtime_macro_manifest_path(run["symbol"])),
+                "runtime_performance_manifest": str(runtime_performance_manifest_path(run["symbol"])),
             }
             for run in symbol_runs
         ],
@@ -241,6 +250,10 @@ def main():
 
     cm = sub.add_parser("compile-main", help="Compile the main FXAI EA")
     cm.set_defaults(func=cmd_compile_main)
+
+    va = sub.add_parser("verify-all", help="Run Python tests, deterministic fixture checks, and clean MT5 compiles")
+    va.add_argument("--refresh-golden", action="store_true")
+    va.set_defaults(func=cmd_verify_all)
 
     ra = sub.add_parser("run-audit", help="Compile and attempt to run the MT5 audit runner, then analyze the report")
     ra.add_argument("--all-plugins", action="store_true")

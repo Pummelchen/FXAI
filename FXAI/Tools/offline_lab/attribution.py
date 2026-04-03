@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 
 from .common import *
+from .mode import resolve_runtime_mode
 from .shadow_fleet import latest_shadow_rows, symbol_shadow_summary
 
 
@@ -243,6 +244,7 @@ def _plugin_weights(conn: sqlite3.Connection,
 
 def write_attribution_profiles(conn: sqlite3.Connection,
                                args) -> list[dict]:
+    mode_cfg = resolve_runtime_mode(getattr(args, "runtime_mode", None))
     symbols = sorted({
         str(row["symbol"])
         for row in conn.execute(
@@ -288,6 +290,8 @@ def write_attribution_profiles(conn: sqlite3.Connection,
             _clamp(float(shadow.get("mean_shadow_score", 0.0)), -1.0, 1.0) < -0.04 or
             _clamp(float(shadow.get("mean_route_regret", 0.0)), 0.0, 1.0) > 0.48
         )
+        if str(mode_cfg["runtime_mode"]) == "production":
+            champion_only = True
         max_active_models = int(round(_clamp(
             6.0 +
             8.0 * _clamp(float(shadow.get("mean_portfolio_div", 0.0)), 0.0, 1.0) +
@@ -296,6 +300,7 @@ def write_attribution_profiles(conn: sqlite3.Connection,
             4.0,
             20.0,
         )))
+        max_active_models = min(max_active_models, int(mode_cfg["max_runtime_models"]))
         min_meta_weight = _clamp(
             0.02 +
             0.08 * _clamp(float(shadow.get("mean_route_regret", 0.0)), 0.0, 1.0) +
@@ -304,6 +309,8 @@ def write_attribution_profiles(conn: sqlite3.Connection,
             0.0,
             0.25,
         )
+        if str(mode_cfg["runtime_mode"]) == "production":
+            min_meta_weight = _clamp(min_meta_weight + 0.03, 0.0, 0.25)
         payload = {
             "profile_name": args.profile,
             "symbol": symbol,

@@ -716,6 +716,8 @@ double FXAI_SymbolHash01(const string symbol)
 
 #include "Core\core_feature_schema.mqh"
 
+#include "Core\core_runtime_perf.mqh"
+
 #include "Core\core_requests.mqh"
 
 #endif // __FXAI_CORE_MQH__

@@ -208,7 +208,15 @@ void FXAI_TrainViaV4(CFXAIAIPlugin &plugin,
    string reason = "";
    if(!FXAI_ValidateTrainRequestV4(req, reason))
       return;
+   FXAIAIManifestV4 manifest;
+   plugin.DescribeResolved(manifest);
+   FXAI_SetPluginWorkingSetKB(plugin.AIId(),
+                              FXAI_EstimatePluginWorkingSetKB(manifest,
+                                                              MathMax(req.window_size + 1, req.ctx.sequence_bars)));
+   ulong t0 = GetMicrosecondCount();
    plugin.Train(req, hp);
+   FXAI_RecordPluginUpdateMs(plugin.AIId(),
+                             (double)(GetMicrosecondCount() - t0) / 1000.0);
 }
 
 bool FXAI_PredictViaV4(CFXAIAIPlugin &plugin,
@@ -219,7 +227,16 @@ bool FXAI_PredictViaV4(CFXAIAIPlugin &plugin,
    string reason = "";
    if(!FXAI_ValidatePredictRequestV4(req, reason))
       return false;
-   return plugin.Predict(req, hp, out);
+   FXAIAIManifestV4 manifest;
+   plugin.DescribeResolved(manifest);
+   FXAI_SetPluginWorkingSetKB(plugin.AIId(),
+                              FXAI_EstimatePluginWorkingSetKB(manifest,
+                                                              MathMax(req.window_size + 1, req.ctx.sequence_bars)));
+   ulong t0 = GetMicrosecondCount();
+   bool ok = plugin.Predict(req, hp, out);
+   FXAI_RecordPluginPredictMs(plugin.AIId(),
+                              (double)(GetMicrosecondCount() - t0) / 1000.0);
+   return ok;
 }
 
 #include "..\Plugins\Linear\lin_sgd.mqh"
