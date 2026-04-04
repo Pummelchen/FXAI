@@ -8,6 +8,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
     case offlineLab
     case runtimeMonitor
     case promotionCenter
+    case researchControl
     case plugins
     case reports
     case commands
@@ -24,6 +25,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .offlineLab: "Offline Lab Builder"
         case .runtimeMonitor: "Runtime Monitor"
         case .promotionCenter: "Promotion Center"
+        case .researchControl: "Research OS Control"
         case .plugins: "Plugin Zoo"
         case .reports: "Reports Explorer"
         case .commands: "Command Center"
@@ -40,6 +42,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .offlineLab: "gearshape.2.fill"
         case .runtimeMonitor: "waveform.path.ecg.rectangle.fill"
         case .promotionCenter: "rosette"
+        case .researchControl: "server.rack"
         case .plugins: "shippingbox.fill"
         case .reports: "doc.text.image.fill"
         case .commands: "terminal.fill"

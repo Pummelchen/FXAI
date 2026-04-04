@@ -6,7 +6,7 @@ The terminal remains first-class. The GUI exists to make the framework easier to
 
 ## Current Scope
 
-Phase 1, Phase 2, and Phase 3 are implemented here:
+Phase 1 through Phase 4 are implemented here:
 - polished dark macOS dashboard
 - role-based workspaces
 - plugin-zoo explorer
@@ -18,6 +18,7 @@ Phase 1, Phase 2, and Phase 3 are implemented here:
 - Offline Lab workflow builder
 - runtime monitor for deployed symbol state
 - promotion center for champions, tiers, and set paths
+- Research OS control for Turso environment diagnostics, branch and PITR flows, audit-log visibility, analog vector browsing, and recovery command generation
 
 The phased implementation reference is stored in:
 - [Docs/FXAI_GUI_IMPLEMENTATION_PLAN.md](/Users/andreborchert/FXAI-main2/FXAI/GUI/Docs/FXAI_GUI_IMPLEMENTATION_PLAN.md)

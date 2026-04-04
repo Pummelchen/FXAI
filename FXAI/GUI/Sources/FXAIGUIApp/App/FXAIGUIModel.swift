@@ -7,20 +7,27 @@ final class FXAIGUIModel: ObservableObject {
     @Published var projectRoot: URL?
     @Published var snapshot: FXAIProjectSnapshot?
     @Published var runtimeSnapshot: RuntimeOperationsSnapshot?
+    @Published var researchSnapshot: ResearchOSControlSnapshot?
     @Published var selection: SidebarDestination? = .overview
     @Published var selectedRole: WorkspaceRole = .liveTrader
     @Published var selectedRuntimeSymbol = ""
+    @Published var selectedResearchSymbol = ""
     @Published var pluginSearchText = ""
     @Published var selectedPluginFamily = "All"
     @Published var reportCategoryFilter = "All"
     @Published var auditDraft = AuditLabDraft()
     @Published var backtestDraft = BacktestBuilderDraft()
     @Published var offlineDraft = OfflineLabDraft()
+    @Published var researchBranchDraft = ResearchOSBranchDraft()
+    @Published var researchAuditDraft = ResearchOSAuditDraft()
+    @Published var researchVectorDraft = ResearchOSVectorDraft()
+    @Published var researchRecoveryDraft = ResearchOSRecoveryDraft()
     @Published var lastErrorMessage: String?
     @Published var isRefreshing = false
 
     private let scanner = ProjectScanner()
     private let runtimeReader = RuntimeArtifactReader()
+    private let researchReader = ResearchOSArtifactReader()
 
     init() {
         self.projectRoot = ProjectPathResolver.defaultProjectRoot()
@@ -52,9 +59,18 @@ final class FXAIGUIModel: ObservableObject {
         return runtimeSnapshot.deployments.first
     }
 
+    var selectedResearchSymbolDetail: ResearchOSSymbolControl? {
+        guard let researchSnapshot else { return nil }
+        if let selected = researchSnapshot.symbols.first(where: { $0.symbol == selectedResearchSymbol }) {
+            return selected
+        }
+        return researchSnapshot.symbols.first
+    }
+
     func refresh() async {
         guard let projectRoot else {
             snapshot = nil
+            researchSnapshot = nil
             lastErrorMessage = "Select an FXAI project root to load the dashboard."
             return
         }
@@ -65,12 +81,15 @@ final class FXAIGUIModel: ObservableObject {
         do {
             snapshot = try scanner.scan(projectRoot: projectRoot)
             runtimeSnapshot = runtimeReader.read(projectRoot: projectRoot)
+            researchSnapshot = researchReader.read(projectRoot: projectRoot)
             syncBuilderDefaults()
             syncRuntimeSelection()
+            syncResearchSelection()
             lastErrorMessage = nil
         } catch {
             snapshot = nil
             runtimeSnapshot = nil
+            researchSnapshot = nil
             lastErrorMessage = error.localizedDescription
         }
     }
@@ -150,6 +169,43 @@ final class FXAIGUIModel: ObservableObject {
 
         if !symbols.contains(selectedRuntimeSymbol) {
             selectedRuntimeSymbol = first
+        }
+    }
+
+    private func syncResearchSelection() {
+        guard let researchSnapshot else {
+            selectedResearchSymbol = ""
+            return
+        }
+
+        let symbols = researchSnapshot.symbols.map(\.symbol)
+        if let first = symbols.first {
+            if !symbols.contains(selectedResearchSymbol) {
+                selectedResearchSymbol = first
+            }
+            if researchVectorDraft.symbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !symbols.contains(researchVectorDraft.symbol) {
+                researchVectorDraft.symbol = first
+            }
+        } else {
+            selectedResearchSymbol = ""
+        }
+
+        if let profileName = researchSnapshot.profileName, !profileName.isEmpty {
+            researchBranchDraft.profileName = profileName
+            researchVectorDraft.profileName = profileName
+            researchRecoveryDraft.profileName = profileName
+        }
+
+        if let environment = researchSnapshot.environment {
+            if researchBranchDraft.sourceDatabase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                researchBranchDraft.sourceDatabase = environment.databaseName
+            }
+            if researchBranchDraft.groupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                researchBranchDraft.groupName = environment.groupName
+            }
+            if researchBranchDraft.locationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                researchBranchDraft.locationName = environment.locationName
+            }
         }
     }
 }

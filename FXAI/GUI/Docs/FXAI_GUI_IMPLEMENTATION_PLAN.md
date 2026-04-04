@@ -188,6 +188,8 @@ Implemented in the current package as:
 
 ### Phase 4: Turso / Research OS Control
 
+Status: Implemented
+
 Scope:
 - Turso environment diagnostics
 - branch workflows
@@ -198,6 +200,12 @@ Scope:
 
 Exit criteria:
 - system architect can operate the research OS from one coherent surface
+
+Implemented in the current package as:
+- `Features/ResearchOS/ResearchOSControlView.swift`
+- `FXAIGUICore/Services/ResearchOSArtifactReader.swift`
+- `FXAIGUICore/Services/ResearchOSCommandFactory.swift`
+- `FXAIGUICore/Models/ResearchOSControlModels.swift`
 
 ### Phase 5: Advanced Visualization And Metal Surfaces
 
