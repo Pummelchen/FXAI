@@ -1,8 +1,11 @@
 FXAI/Tools/OfflineLab/fxai_offline_lab.turso.db
+FXAI/Tools/OfflineLab/offline_lab.sqlite
 FXAI/Tools/OfflineLab/Profiles/
 FXAI/Tools/OfflineLab/ResearchOS/
 FXAI/Tools/OfflineLab/Distillation/
 FXAI/Tools/OfflineLab/Runs/
+FXAI/GUI/.build/
+FXAI/GUI/.swiftpm/
 FXAI/Tools/tests/.pytest_cache/
 FXAI/.pytest_cache/
 FXAI/Tools/__pycache__/

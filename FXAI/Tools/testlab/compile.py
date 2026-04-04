@@ -71,7 +71,20 @@ def compile_target(relative_target: Path, stage_name: str) -> int:
         shutil.rmtree(stage_dir)
     stage_dir.mkdir(parents=True, exist_ok=True)
 
-    subprocess.run(["rsync", "-a", "--delete", f"{ROOT}/", f"{stage_dir}/"], check=True)
+    rsync_cmd = [
+        "rsync",
+        "-a",
+        "--delete",
+        "--exclude",
+        "GUI/.build/",
+        "--exclude",
+        "GUI/.swiftpm/",
+        "--exclude",
+        "GUI/Package.resolved",
+        f"{ROOT}/",
+        f"{stage_dir}/",
+    ]
+    subprocess.run(rsync_cmd, check=True)
 
     stage_target = stage_dir / relative_target
     stage_log = stage_dir / f"compile_{relative_target.stem}.log"
@@ -127,4 +140,3 @@ def compile_target(relative_target: Path, stage_name: str) -> int:
         if lines:
             print(lines[-1])
     return 124
-

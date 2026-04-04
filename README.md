@@ -13,6 +13,8 @@ It is not a single strategy EA. It is a research and deployment framework with:
 
 FXAI stays MT5-native. There are no external inference services and no DLL dependency in live trading.
 
+An optional macOS 26 operator GUI now lives under [FXAI/GUI](/Users/andreborchert/FXAI-main2/FXAI/GUI). It is a SwiftUI-based helper surface for dashboards, plugin-zoo browsing, report discovery, and terminal-first workflow guidance. The terminal remains the primary control path.
+
 ## Why It Matters
 
 ### For Traders
@@ -39,6 +41,7 @@ Detailed documentation is kept in the wiki:
 - [FXAI Framework](https://github.com/Pummelchen/FXAI/wiki/FXAI-Framework)
 - [Audit Lab](https://github.com/Pummelchen/FXAI/wiki/Audit-Lab)
 - [Offline Lab](https://github.com/Pummelchen/FXAI/wiki/Offline-Lab)
+- [GUI](https://github.com/Pummelchen/FXAI/wiki/GUI)
 - [Project Structure](https://github.com/Pummelchen/FXAI/wiki/Project-Structure)
 - [Data Policy](https://github.com/Pummelchen/FXAI/wiki/Data-Policy)
 

@@ -18,6 +18,8 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
   Stable CLI wrapper for the Turso/libSQL-backed offline export, tuning, promotion, and control-loop tool.
 - `Tools/offline_lab/`
   Internal Python package for Offline Lab database, export, campaign, promotion, shadow-fleet ingest, foundation and student bundling, supervisor-service generation, teacher-factory modules, world simulation, and autonomous governance.
+- `GUI/`
+  Optional macOS 26 SwiftUI operator app for role-based dashboards, plugin-zoo browsing, report exploration, and terminal-first command guidance.
 
 ## Key Runtime Areas
 
@@ -49,11 +51,14 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
   Split Audit Lab scoring internals for core helpers, adversarial packs, metrics, and scenario execution.
 - `Tools/testlab/`
   Internal Python package behind `fxai_testlab.py`, split into compile, audit-run, reporting, baseline, optimization, release-gate, and CLI modules.
+- `GUI/Sources/FXAIGUICore`, `GUI/Sources/FXAIGUIApp`
+  Swift package targets for the GUI’s project scanner, design system, navigation shell, and Phase 1 dashboard surfaces.
 
 ## Operating Notes
 
 - Canonical research data is `M1 OHLC + spread`.
 - The preferred platform verification path is `python3 FXAI/Tools/fxai_testlab.py verify-all`.
+- The preferred GUI verification path is `cd FXAI/GUI && swift test && swift build`.
 - The preferred Offline Lab bootstrap path is `python3 FXAI/Tools/fxai_offline_lab.py bootstrap --seed-demo`.
 - The shared TensorCore path now includes a self-supervised foundation encoder, teacher-student transfer heads, hierarchical trade-quality signals, and persistent analog regime memory.
 - The live EA now uses portfolio-native sizing and gating with directional-cluster pressure, hierarchy floors, and macro-state quality controls instead of only scalar conviction scaling.
@@ -88,5 +93,6 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - Versioned mirror: the git repo copy that is synchronized into the MT5 tree after clean verification
 - Research source of truth: the Offline Lab Turso/libSQL database
 - MT5 runtime artifact source of truth: `FILE_COMMON/FXAI/Offline/Promotions/`
+- GUI source of truth: `FXAI/GUI/` inside the versioned repo and synced MT5 subtree
 
 For broader framework usage and workflow details, see the repo-root README and the GitHub wiki.
