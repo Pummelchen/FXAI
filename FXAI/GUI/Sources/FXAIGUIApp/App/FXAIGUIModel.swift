@@ -11,6 +11,9 @@ final class FXAIGUIModel: ObservableObject {
     @Published var pluginSearchText = ""
     @Published var selectedPluginFamily = "All"
     @Published var reportCategoryFilter = "All"
+    @Published var auditDraft = AuditLabDraft()
+    @Published var backtestDraft = BacktestBuilderDraft()
+    @Published var offlineDraft = OfflineLabDraft()
     @Published var lastErrorMessage: String?
     @Published var isRefreshing = false
 
@@ -29,6 +32,11 @@ final class FXAIGUIModel: ObservableObject {
         return CommandFactory.recipes(projectRoot: projectRoot)
     }
 
+    var pluginNames: [String] {
+        guard let snapshot else { return [] }
+        return snapshot.plugins.map(\.name)
+    }
+
     var projectPathLabel: String {
         projectRoot?.path ?? "No FXAI project selected"
     }
@@ -45,6 +53,7 @@ final class FXAIGUIModel: ObservableObject {
 
         do {
             snapshot = try scanner.scan(projectRoot: projectRoot)
+            syncBuilderDefaults()
             lastErrorMessage = nil
         } catch {
             snapshot = nil
@@ -88,5 +97,28 @@ final class FXAIGUIModel: ObservableObject {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(value, forType: .string)
+    }
+
+    func handoffCommandToTerminal(_ command: String) {
+        copyToPasteboard(command)
+
+        guard let projectRoot else { return }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-a", "Terminal", projectRoot.path]
+        try? process.run()
+    }
+
+    private func syncBuilderDefaults() {
+        let names = pluginNames
+        guard let firstPlugin = names.first else { return }
+
+        if auditDraft.pluginName.isEmpty || !names.contains(auditDraft.pluginName) {
+            auditDraft.pluginName = firstPlugin
+        }
+        if backtestDraft.pluginName.isEmpty || !names.contains(backtestDraft.pluginName) {
+            backtestDraft.pluginName = firstPlugin
+        }
     }
 }

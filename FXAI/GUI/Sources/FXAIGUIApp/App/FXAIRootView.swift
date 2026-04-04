@@ -65,6 +65,12 @@ struct FXAIRootView: View {
             OverviewDashboardView()
         case .roles:
             RoleWorkspacesView()
+        case .auditLab:
+            AuditLabBuilderView()
+        case .backtestBuilder:
+            BacktestBuilderView()
+        case .offlineLab:
+            OfflineLabBuilderView()
         case .plugins:
             PluginZooView()
         case .reports:

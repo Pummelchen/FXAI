@@ -6,13 +6,16 @@ The terminal remains first-class. The GUI exists to make the framework easier to
 
 ## Current Scope
 
-Phase 1 is implemented here:
+Phase 1 and Phase 2 are implemented here:
 - polished dark macOS dashboard
 - role-based workspaces
 - plugin-zoo explorer
 - report explorer over current FXAI artifact surfaces
 - command center with terminal-first command previews
 - settings and project-root detection
+- Audit Lab run builder
+- backtest prep builder
+- Offline Lab workflow builder
 
 The phased implementation reference is stored in:
 - [Docs/FXAI_GUI_IMPLEMENTATION_PLAN.md](/Users/andreborchert/FXAI-main2/FXAI/GUI/Docs/FXAI_GUI_IMPLEMENTATION_PLAN.md)

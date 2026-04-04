@@ -118,6 +118,8 @@ Exit criteria:
 
 ### Phase 1: Read-Only Operator Dashboard
 
+Status: Implemented
+
 Scope:
 - project root discovery
 - sidebar navigation
@@ -144,6 +146,8 @@ Exit criteria:
 
 ### Phase 2: Run Builders
 
+Status: Implemented
+
 Scope:
 - Audit Lab runner UI
 - Backtest builder
@@ -154,6 +158,12 @@ Scope:
 Exit criteria:
 - users can configure common runs without reading raw docs
 - every form maps cleanly to terminal commands
+
+Implemented in the current package as:
+- `Features/AuditLab/AuditLabBuilderView.swift`
+- `Features/Backtest/BacktestBuilderView.swift`
+- `Features/OfflineLab/OfflineLabBuilderView.swift`
+- `FXAIGUICore/Services/RunBuilderCommandFactory.swift`
 
 ### Phase 3: Runtime And Promotion Operations
 
