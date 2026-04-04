@@ -57,9 +57,16 @@ struct RoleWorkspacesView: View {
                             .foregroundStyle(FXAITheme.textSecondary)
                     }
                     Spacer()
-                    Image(systemName: role.symbolName)
-                        .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(FXAITheme.accent)
+                    VStack(alignment: .trailing, spacing: 10) {
+                        Image(systemName: role.symbolName)
+                            .font(.system(size: 28, weight: .semibold))
+                            .foregroundStyle(FXAITheme.accent)
+                        StatusBadge(
+                            title: "Onboarding",
+                            value: model.hasCompletedOnboarding(for: role) ? "Done" : "Open",
+                            tint: model.hasCompletedOnboarding(for: role) ? FXAITheme.success : FXAITheme.warning
+                        )
+                    }
                 }
 
                 HStack(alignment: .top, spacing: 18) {
@@ -114,6 +121,24 @@ struct RoleWorkspacesView: View {
                                 .fill(FXAITheme.backgroundSecondary.opacity(0.5))
                         )
                     }
+                }
+
+                HStack {
+                    Button("Open Role Guide") {
+                        model.selectedRole = role
+                        model.navigate(to: .onboarding)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(FXAITheme.accent)
+
+                    Button(model.hasCompletedOnboarding(for: role) ? "Reset Onboarding" : "Mark Onboarding Complete") {
+                        if model.hasCompletedOnboarding(for: role) {
+                            model.resetOnboarding(for: role)
+                        } else {
+                            model.markOnboardingCompleted(for: role)
+                        }
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
         }

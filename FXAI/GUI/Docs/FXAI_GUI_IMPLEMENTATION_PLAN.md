@@ -234,6 +234,8 @@ Implemented in the current package as:
 
 ### Phase 6: Production-Grade UX Completion
 
+Status: Implemented
+
 Scope:
 - saved views
 - role-specific onboarding
@@ -245,6 +247,15 @@ Scope:
 Exit criteria:
 - the GUI is practical for daily operator use
 - terminal users still feel respected, not replaced
+
+Implemented in the current package as:
+- `Features/Onboarding/OnboardingGuideView.swift`
+- `Features/Incidents/IncidentCenterView.swift`
+- `FXAIGUICore/Services/SavedWorkspaceStore.swift`
+- `FXAIGUICore/Services/IncidentBuilder.swift`
+- `FXAIGUICore/Services/OnboardingGuideFactory.swift`
+- `GUI/Tools/package_gui_release.sh`
+- `GUI/Docs/FXAI_GUI_RELEASE_CHECKLIST.md`
 
 ## Screen Plan
 

@@ -95,7 +95,7 @@ public enum OfflineWorkflowPreset: String, CaseIterable, Codable, Identifiable, 
     }
 }
 
-public struct AuditLabDraft: Hashable, Sendable {
+public struct AuditLabDraft: Codable, Hashable, Sendable {
     public var pluginName: String
     public var allPlugins: Bool
     public var scenarioPreset: AuditScenarioPreset
@@ -138,7 +138,7 @@ public struct AuditLabDraft: Hashable, Sendable {
     }
 }
 
-public struct BacktestBuilderDraft: Hashable, Sendable {
+public struct BacktestBuilderDraft: Codable, Hashable, Sendable {
     public var pluginName: String
     public var symbol: String
     public var scenarioPreset: AuditScenarioPreset
@@ -166,7 +166,7 @@ public struct BacktestBuilderDraft: Hashable, Sendable {
     }
 }
 
-public struct OfflineLabDraft: Hashable, Sendable {
+public struct OfflineLabDraft: Codable, Hashable, Sendable {
     public var workflowPreset: OfflineWorkflowPreset
     public var profileName: String
     public var symbol: String

@@ -27,6 +27,20 @@ struct FXAIRootView: View {
                     Label("Choose Project", systemImage: "folder")
                 }
                 .help("Choose a different FXAI project root")
+
+                Button {
+                    model.saveCurrentView()
+                } label: {
+                    Label("Save View", systemImage: "bookmark.fill")
+                }
+                .help("Save the current GUI state as a reusable workspace view")
+
+                Button {
+                    model.navigate(to: .incidents)
+                } label: {
+                    Label("Incidents", systemImage: "exclamationmark.triangle.fill")
+                }
+                .help("Open the incident and recovery surface")
             }
         }
     }
@@ -35,8 +49,42 @@ struct FXAIRootView: View {
         List(selection: $model.selection) {
             Section("Workspace") {
                 ForEach(SidebarDestination.allCases) { destination in
-                    Label(destination.title, systemImage: destination.symbolName)
+                    sidebarLabel(for: destination)
                         .tag(Optional(destination))
+                }
+            }
+
+            if !model.savedViews.isEmpty {
+                Section("Saved Views") {
+                    ForEach(model.savedViews.prefix(8)) { savedView in
+                        HStack(spacing: 8) {
+                            Button {
+                                model.applySavedView(savedView)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(savedView.name)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(FXAITheme.textPrimary)
+                                    Text(savedView.titleSummary)
+                                        .font(.caption)
+                                        .foregroundStyle(FXAITheme.textMuted)
+                                        .lineLimit(1)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+
+                            Button {
+                                model.deleteSavedView(savedView)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(FXAITheme.textMuted)
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Delete saved view")
+                        }
+                        .padding(.vertical, 3)
+                    }
                 }
             }
 
@@ -63,8 +111,12 @@ struct FXAIRootView: View {
         switch model.selection ?? .overview {
         case .overview:
             OverviewDashboardView()
+        case .onboarding:
+            OnboardingGuideView()
         case .roles:
             RoleWorkspacesView()
+        case .incidents:
+            IncidentCenterView()
         case .auditLab:
             AuditLabBuilderView()
         case .backtestBuilder:
@@ -87,6 +139,25 @@ struct FXAIRootView: View {
             CommandCenterView()
         case .settings:
             SettingsView()
+        }
+    }
+
+    @ViewBuilder
+    private func sidebarLabel(for destination: SidebarDestination) -> some View {
+        HStack {
+            Label(destination.title, systemImage: destination.symbolName)
+            if destination == .incidents, let incidentSnapshot = model.incidentSnapshot, !incidentSnapshot.incidents.isEmpty {
+                Spacer()
+                Text("\(incidentSnapshot.incidents.count)")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(FXAITheme.warning)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(FXAITheme.warning.opacity(0.14))
+                    )
+            }
         }
     }
 }

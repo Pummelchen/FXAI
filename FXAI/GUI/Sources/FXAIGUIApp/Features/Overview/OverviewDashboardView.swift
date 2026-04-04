@@ -53,6 +53,20 @@ struct OverviewDashboardView: View {
                             symbolName: "waveform.path.ecg",
                             tint: FXAITheme.success
                         )
+                        MetricCard(
+                            title: "Incidents",
+                            value: "\(model.incidentSnapshot?.incidents.count ?? 0)",
+                            footnote: "Generated operator issues with guided recovery steps.",
+                            symbolName: "exclamationmark.triangle.fill",
+                            tint: (model.incidentSnapshot?.incidents.isEmpty == false) ? FXAITheme.warning : FXAITheme.success
+                        )
+                        MetricCard(
+                            title: "Saved Views",
+                            value: "\(model.savedViews.count)",
+                            footnote: "Reusable GUI workspace states for repeatable operator flows.",
+                            symbolName: "bookmark.fill",
+                            tint: FXAITheme.accentSoft
+                        )
                     }
 
                     HStack(alignment: .top, spacing: 16) {
@@ -63,6 +77,10 @@ struct OverviewDashboardView: View {
                     HStack(alignment: .top, spacing: 16) {
                         recentArtifacts(snapshot: snapshot)
                         runtimeProfiles(snapshot: snapshot)
+                    }
+
+                    if let guide = model.currentOnboardingGuide, !model.hasCompletedOnboarding(for: guide.role) {
+                        onboardingPrompt(guide: guide)
                     }
                 } else {
                     EmptyStateView(
@@ -82,11 +100,11 @@ struct OverviewDashboardView: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .top, spacing: 18) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Phase 1 Dashboard")
+                        Text("FXAI Operator GUI")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(FXAITheme.textSecondary)
 
-                        Text("Terminal-first visibility for the full FXAI stack.")
+                        Text("Terminal-first control and visibility for the full FXAI stack.")
                             .font(.system(size: 30, weight: .semibold, design: .rounded))
                             .foregroundStyle(FXAITheme.textPrimary)
 
@@ -259,5 +277,27 @@ struct OverviewDashboardView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private func onboardingPrompt(guide: RoleOnboardingGuide) -> some View {
+        FXAIVisualEffectSurface {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Next Best Step For \(guide.role.title)")
+                            .font(.headline)
+                            .foregroundStyle(FXAITheme.textPrimary)
+                        Text(guide.headline)
+                            .foregroundStyle(FXAITheme.textSecondary)
+                    }
+                    Spacer()
+                    Button("Open Guide") {
+                        model.navigate(to: .onboarding)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(FXAITheme.accent)
+                }
+            }
+        }
     }
 }

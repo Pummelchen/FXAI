@@ -191,7 +191,7 @@ public enum ResearchOSBranchAction: String, CaseIterable, Codable, Identifiable,
     }
 }
 
-public struct ResearchOSBranchDraft: Hashable, Sendable {
+public struct ResearchOSBranchDraft: Codable, Hashable, Sendable {
     public var action: ResearchOSBranchAction
     public var profileName: String
     public var sourceDatabase: String
@@ -225,7 +225,7 @@ public struct ResearchOSBranchDraft: Hashable, Sendable {
     }
 }
 
-public struct ResearchOSAuditDraft: Hashable, Sendable {
+public struct ResearchOSAuditDraft: Codable, Hashable, Sendable {
     public var limit: Int
     public var pages: Int
 
@@ -235,7 +235,7 @@ public struct ResearchOSAuditDraft: Hashable, Sendable {
     }
 }
 
-public struct ResearchOSVectorDraft: Hashable, Sendable {
+public struct ResearchOSVectorDraft: Codable, Hashable, Sendable {
     public var profileName: String
     public var symbol: String
     public var limit: Int
@@ -247,7 +247,7 @@ public struct ResearchOSVectorDraft: Hashable, Sendable {
     }
 }
 
-public struct ResearchOSRecoveryDraft: Hashable, Sendable {
+public struct ResearchOSRecoveryDraft: Codable, Hashable, Sendable {
     public var profileName: String
     public var runtimeMode: String
 

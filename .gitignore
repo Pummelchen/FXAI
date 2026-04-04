@@ -6,6 +6,7 @@ FXAI/Tools/OfflineLab/Distillation/
 FXAI/Tools/OfflineLab/Runs/
 FXAI/GUI/.build/
 FXAI/GUI/.swiftpm/
+FXAI/GUI/Artifacts/
 FXAI/Tools/tests/.pytest_cache/
 FXAI/.pytest_cache/
 FXAI/Tools/__pycache__/
