@@ -3,6 +3,7 @@ import SwiftUI
 
 struct FXAIRootView: View {
     @EnvironmentObject private var model: FXAIGUIModel
+    @EnvironmentObject private var themeEnvironment: ThemeEnvironment
 
     var body: some View {
         NavigationSplitView {
@@ -51,6 +52,17 @@ struct FXAIRootView: View {
                     Label("Save View", systemImage: "bookmark.fill")
                 }
                 .help("Save the current GUI state as a reusable workspace view")
+
+                Menu {
+                    ForEach(themeEnvironment.allThemes, id: \.themeID) { theme in
+                        Button(theme.displayName) {
+                            themeEnvironment.activateTheme(theme.themeID)
+                        }
+                    }
+                } label: {
+                    Label("Theme", systemImage: "paintpalette.fill")
+                }
+                .help("Switch the active GUI theme")
 
                 Button {
                     model.navigate(to: .incidents)

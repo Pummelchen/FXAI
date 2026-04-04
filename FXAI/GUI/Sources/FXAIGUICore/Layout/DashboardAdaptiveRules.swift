@@ -1,6 +1,17 @@
 import CoreGraphics
 
 public enum DashboardAdaptiveRules {
+    public static let defaultContentPriorities: [DashboardZone: DashboardContentPriority] = [
+        .header: .critical,
+        .sidebar: .high,
+        .kpis: .critical,
+        .invoices: .high,
+        .chart: .high,
+        .footer: .medium,
+        .amountOwedOverlay: .high,
+        .ambientDecorations: .decorative
+    ]
+
     public static func classify(containerSize: CGSize) -> DashboardLayoutClass {
         if containerSize.width < 1400 || containerSize.height < 920 {
             return .compactDesktop
@@ -49,5 +60,13 @@ public enum DashboardAdaptiveRules {
                 metalOverlayEnabled: true
             )
         }
+    }
+
+    public static func typographyScale(for baseScale: CGFloat, policy: DashboardScalePolicy) -> CGFloat {
+        min(policy.maximumTypographyScale, max(policy.minimumTypographyScale, baseScale))
+    }
+
+    public static func spacingScale(for baseScale: CGFloat, policy: DashboardScalePolicy) -> CGFloat {
+        min(policy.maximumSpacingScale, max(policy.minimumSpacingScale, baseScale))
     }
 }

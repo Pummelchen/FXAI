@@ -1,15 +1,28 @@
+import AppKit
 import FXAIGUICore
 import SwiftUI
 
 struct DashboardRootView: View {
     @EnvironmentObject private var model: FXAIGUIModel
-    @ObservedObject private var themeManager = ThemeManager.shared
+    @EnvironmentObject private var themeEnvironment: ThemeEnvironment
     @State private var debugState = DashboardDebugState()
 
     var body: some View {
         GeometryReader { geometry in
-            let theme = themeManager.currentTheme
-            let frameModel = DashboardLayoutEngine.makeFrameModel(containerSize: geometry.size, theme: theme)
+            let theme = themeEnvironment.currentTheme
+            let layoutOutput = DashboardLayoutEngine.makeLayout(
+                input: DashboardLayoutInput(
+                    windowSize: geometry.size,
+                    effectiveContentSize: geometry.size,
+                    backingScaleFactor: NSScreen.main?.backingScaleFactor ?? 2,
+                    theme: theme,
+                    contentPriorities: DashboardAdaptiveRules.defaultContentPriorities,
+                    overlapPolicy: .preserveFloatingCard,
+                    scalePolicy: .themeDefault(for: theme),
+                    reducedEffects: debugState.reducedEffects
+                )
+            )
+            let frameModel = layoutOutput.frameModel
 
             ZStack(alignment: .topLeading) {
                 theme.gradients.canvas
@@ -26,13 +39,13 @@ struct DashboardRootView: View {
                 )
                 .ignoresSafeArea()
 
-                dashboardStage(frameModel: frameModel, theme: theme)
+                dashboardStage(layoutOutput: layoutOutput, theme: theme)
                     .frame(width: frameModel.stageFrame.width, height: frameModel.stageFrame.height)
                     .position(x: frameModel.stageFrame.midX, y: frameModel.stageFrame.midY)
 
-                DebugOverlayControls(
+                CalibrationPanel(
                     debugState: $debugState,
-                    frameModel: frameModel,
+                    layoutOutput: layoutOutput,
                     theme: theme,
                     connectionStatus: model.connectionStatusLabel
                 )
@@ -44,7 +57,9 @@ struct DashboardRootView: View {
     }
 
     @ViewBuilder
-    private func dashboardStage(frameModel: DashboardFrameModel, theme: any AppTheme) -> some View {
+    private func dashboardStage(layoutOutput: DashboardLayoutOutput, theme: any AppTheme) -> some View {
+        let frameModel = layoutOutput.frameModel
+
         ZStack(alignment: .topLeading) {
             DashboardRenderer(frameModel: frameModel, theme: theme, reducedEffects: debugState.reducedEffects)
 
@@ -99,7 +114,7 @@ struct DashboardRootView: View {
             BarChartView(frameModel: frameModel, theme: theme)
             FooterStripView(frameModel: frameModel, theme: theme)
 
-            CalibrationView(frameModel: frameModel, theme: theme, debugState: debugState)
+            CalibrationView(frameModel: frameModel, layoutOutput: layoutOutput, theme: theme, debugState: debugState)
         }
     }
 }

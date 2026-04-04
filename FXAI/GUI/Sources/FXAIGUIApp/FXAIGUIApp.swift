@@ -2,12 +2,13 @@ import SwiftUI
 
 @main
 struct FXAIGUIApp: App {
-    @StateObject private var model = FXAIGUIModel()
+    @StateObject private var appState = FinanceAppState()
 
     var body: some Scene {
         WindowGroup("FXAI GUI") {
             DashboardRootView()
-                .environmentObject(model)
+                .environmentObject(appState.model)
+                .environmentObject(appState.themeEnvironment)
                 .background(Color.clear)
                 .overlay(WindowConfigurator().allowsHitTesting(false))
         }
@@ -16,31 +17,40 @@ struct FXAIGUIApp: App {
         .commands {
             CommandMenu("FXAI") {
                 Button("Refresh State") {
-                    Task { await model.refresh() }
+                    Task { await appState.model.refresh() }
                 }
                 .keyboardShortcut("r", modifiers: [.command])
 
                 Button("Save Current View") {
-                    model.saveCurrentView()
+                    appState.model.saveCurrentView()
                 }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
 
                 Divider()
 
                 Button("Connect Project") {
-                    model.chooseProjectRoot()
+                    appState.model.chooseProjectRoot()
                 }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
 
                 Button("Reconnect Project") {
-                    model.reconnectProject()
+                    appState.model.reconnectProject()
                 }
                 .keyboardShortcut("i", modifiers: [.command, .shift])
 
                 Button("Disconnect Project") {
-                    model.disconnectProject()
+                    appState.model.disconnectProject()
                 }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
+            }
+
+            CommandMenu("Theme") {
+                ForEach(appState.themeEnvironment.allThemes, id: \.themeID) { theme in
+                    Button(theme.displayName) {
+                        appState.themeEnvironment.activateTheme(theme.themeID)
+                    }
+                    .keyboardShortcut(theme.themeID == .financialDashboardV1 ? "1" : "0", modifiers: [.command, .option])
+                }
             }
         }
     }

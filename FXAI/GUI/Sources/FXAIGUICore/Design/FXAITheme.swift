@@ -2,7 +2,7 @@ import SwiftUI
 
 @MainActor
 public enum FXAITheme {
-    private static var current: any AppTheme { ThemeManager.shared.currentTheme }
+    private static var current: any AppTheme { ThemeEnvironment.shared.currentTheme }
 
     public static var background: Color { current.colors.outerBackground }
     public static var backgroundSecondary: Color { current.colors.mainPanel.opacity(0.92) }

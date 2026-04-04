@@ -7,13 +7,14 @@ struct GaugeCardView: View {
     let scale: CGFloat
 
     var body: some View {
+        let style = theme.components.gaugeCard
         let cornerRadius = theme.cornerRadii.standardCard * scale
 
         ZStack(alignment: .topLeading) {
-            ShadowStackRenderer(size: frame.size, cornerRadius: cornerRadius, shadow: theme.shadows.gaugeCard, scale: scale)
+            ShadowStackRenderer(size: frame.size, cornerRadius: cornerRadius, shadow: style.shadow, scale: scale)
 
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(theme.gradients.standardCard)
+                .fill(style.backgroundGradient)
                 .overlay(
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .stroke(theme.colors.cardStroke, lineWidth: 0.75 * scale)
@@ -33,8 +34,8 @@ struct GaugeCardView: View {
 
                 Spacer()
             }
-            .padding(.horizontal, 20 * scale)
-            .padding(.top, 24 * scale)
+            .padding(.horizontal, theme.spacing.cardPadding * scale - 2 * scale)
+            .padding(.top, theme.spacing.stackGap * scale)
         }
         .frame(width: frame.width, height: frame.height)
         .position(x: frame.midX, y: frame.midY)

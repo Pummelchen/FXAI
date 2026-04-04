@@ -23,6 +23,8 @@ public struct ChartRenderer: View {
     }
 
     public var body: some View {
+        let style = theme.components.barChart
+
         ZStack(alignment: .topLeading) {
             ForEach(descriptors) { descriptor in
                 ZStack {
@@ -30,14 +32,14 @@ public struct ChartRenderer: View {
                         ShadowStackRenderer(
                             size: descriptor.frame.size,
                             cornerRadius: descriptor.month == .aug ? 11.125 * frameModel.scale : theme.cornerRadii.bar * frameModel.scale,
-                            shadow: theme.shadows.chartBarPrimary,
+                            shadow: style.primaryShadow,
                             scale: frameModel.scale
                         )
                     } else {
                         ShadowStackRenderer(
                             size: descriptor.frame.size,
                             cornerRadius: theme.cornerRadii.bar * frameModel.scale,
-                            shadow: theme.shadows.chartBarDefault,
+                            shadow: style.defaultShadow,
                             scale: frameModel.scale
                         )
                     }
@@ -50,7 +52,7 @@ public struct ChartRenderer: View {
 
                 Text(descriptor.month.rawValue)
                     .font(theme.typography.caption.font(scaledBy: frameModel.scale))
-                    .foregroundStyle(theme.colors.textSecondary.opacity(theme.chartStyle.monthLabelOpacity))
+                    .foregroundStyle(theme.colors.textSecondary.opacity(style.monthOpacity))
                     .position(
                         x: descriptor.frame.midX,
                         y: frameModel.chartPlotFrame.maxY + theme.layoutMetrics.chartLabelOffset * frameModel.scale
@@ -75,9 +77,10 @@ public struct ChartRenderer: View {
 
     private var tooltip: some View {
         let tooltipFrame = frameModel.tooltipFrame
+        let tooltipStyle = theme.components.tooltip
         return ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: theme.cornerRadii.tooltip * frameModel.scale, style: .continuous)
-                .fill(theme.gradients.chartTooltip)
+                .fill(tooltipStyle.background)
                 .frame(width: tooltipFrame.width, height: tooltipFrame.height)
 
             Text(SVGMetrics.tooltipText)
@@ -88,12 +91,12 @@ public struct ChartRenderer: View {
             TriangleShape()
                 .fill(theme.colors.tooltipBackground)
                 .frame(
-                    width: theme.chartStyle.tooltipPointerWidth * frameModel.scale,
-                    height: theme.chartStyle.tooltipPointerHeight * frameModel.scale
+                    width: tooltipStyle.pointerWidth * frameModel.scale,
+                    height: tooltipStyle.pointerHeight * frameModel.scale
                 )
                 .position(
                     x: tooltipFrame.midX,
-                    y: tooltipFrame.maxY + (theme.chartStyle.tooltipPointerHeight * frameModel.scale / 2)
+                    y: tooltipFrame.maxY + (tooltipStyle.pointerHeight * frameModel.scale / 2)
                 )
         }
     }

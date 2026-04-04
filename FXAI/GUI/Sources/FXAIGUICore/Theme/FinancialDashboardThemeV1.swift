@@ -1,9 +1,7 @@
 import SwiftUI
 
 public struct FinancialDashboardThemeV1: AppTheme {
-    public static let themeID = "FinancialDashboardThemeV1"
-
-    public let id = FinancialDashboardThemeV1.themeID
+    public let themeID: ThemeID = .financialDashboardV1
     public let displayName = "Financial Dashboard Theme V1"
     public let colors: ThemeColors
     public let gradients: ThemeGradients
@@ -11,9 +9,12 @@ public struct FinancialDashboardThemeV1: AppTheme {
     public let glows: ThemeGlows
     public let cornerRadii: ThemeCornerRadii
     public let typography: ThemeTypography
+    public let spacing: ThemeSpacing
     public let layoutMetrics: ThemeLayoutMetrics
     public let materials: ThemeMaterials
     public let chartStyle: ThemeChartStyle
+    public let components: ThemeComponentStyles
+    public let renderingPolicy: ThemeRenderingPolicy
 
     public init() {
         let colors = ThemeColors(
@@ -180,6 +181,16 @@ public struct FinancialDashboardThemeV1: AppTheme {
             tooltip: ThemeFontToken(size: 9.8, weight: .semibold, tracking: -0.08, opacity: 1)
         )
 
+        spacing = ThemeSpacing(
+            shellInset: 26,
+            cardPadding: 22,
+            compactCardPadding: 18,
+            stackGap: 24,
+            compactVerticalGap: 26,
+            footerHorizontalInset: 32,
+            ultraWideMaxContentWidth: 5400
+        )
+
         layoutMetrics = ThemeLayoutMetrics(
             referenceCanvasSize: SVGMetrics.canvasSize,
             minimumScale: 0.64,
@@ -210,6 +221,150 @@ public struct FinancialDashboardThemeV1: AppTheme {
             tooltipPointerHeight: 8,
             tooltipPointerWidth: 10,
             baselineOpacity: 0.0
+        )
+
+        components = ThemeComponentStyles(
+            stage: DashboardStageStyle(
+                panelCornerRadius: cornerRadii.panel,
+                canvasGradient: gradients.canvas,
+                outerGlowOpacity: 0.56
+            ),
+            sidebar: SidebarComponentStyle(
+                iconOpacity: 0.62,
+                activeIconOpacity: 0.96,
+                iconSize: 21
+            ),
+            header: HeaderComponentStyle(
+                titleFont: typography.headerTitle,
+                subtitleFont: typography.headerSubtitle,
+                titleSpacing: 8
+            ),
+            divider: DividerComponentStyle(
+                color: colors.divider,
+                lineWidth: 2
+            ),
+            kpiCard: KPICardComponentStyle(
+                gradient: gradients.standardCard,
+                pendingGradient: gradients.pendingCard,
+                shadow: shadows.kpiCard,
+                pendingShadow: shadows.pendingCard,
+                ringSize: 54
+            ),
+            gaugeCard: GaugeCardComponentStyle(
+                backgroundGradient: gradients.standardCard,
+                shadow: shadows.gaugeCard
+            ),
+            invoiceMetricCard: InvoiceMetricCardComponentStyle(
+                backgroundGradient: gradients.standardCard,
+                shadow: shadows.smallCard
+            ),
+            amountOwed: AmountOwedOverlayStyle(
+                shadow: shadows.amountOwed,
+                glow: glows.amountOwed,
+                glassOpacity: materials.glassOpacity
+            ),
+            trendRing: TrendRingComponentStyle(
+                lineWidth: 5.4,
+                endpointSize: 6
+            ),
+            tooltip: TooltipComponentStyle(
+                background: gradients.chartTooltip,
+                pointerWidth: chartStyle.tooltipPointerWidth,
+                pointerHeight: chartStyle.tooltipPointerHeight
+            ),
+            barChart: BarChartComponentStyle(
+                monthOpacity: chartStyle.monthLabelOpacity,
+                primaryShadow: shadows.chartBarPrimary,
+                defaultShadow: shadows.chartBarDefault
+            ),
+            footerStrip: FooterStripComponentStyle(
+                gradient: gradients.footer,
+                shadow: shadows.footer
+            ),
+            iconBadge: IconBadgeComponentStyle(
+                foreground: colors.textPrimary,
+                opacity: 0.88
+            )
+        )
+
+        renderingPolicy = ThemeRenderingPolicy(
+            policies: [
+                .stage: ComponentRenderingPolicy(
+                    component: .stage,
+                    preferredTier: .swiftUI,
+                    fallbackTier: .coreGraphics,
+                    capabilities: [.realtimeResizing]
+                ),
+                .sidebar: ComponentRenderingPolicy(
+                    component: .sidebar,
+                    preferredTier: .coreGraphics,
+                    fallbackTier: .swiftUI,
+                    capabilities: [.vectorOverlay, .realtimeResizing]
+                ),
+                .header: ComponentRenderingPolicy(
+                    component: .header,
+                    preferredTier: .swiftUI,
+                    fallbackTier: .swiftUI,
+                    capabilities: [.realtimeResizing]
+                ),
+                .kpiCard: ComponentRenderingPolicy(
+                    component: .kpiCard,
+                    preferredTier: .coreGraphics,
+                    fallbackTier: .swiftUI,
+                    capabilities: [.shadowStacks, .bloomGlow, .realtimeResizing]
+                ),
+                .invoiceMetricCard: ComponentRenderingPolicy(
+                    component: .invoiceMetricCard,
+                    preferredTier: .coreGraphics,
+                    fallbackTier: .swiftUI,
+                    capabilities: [.shadowStacks, .realtimeResizing]
+                ),
+                .gaugeCard: ComponentRenderingPolicy(
+                    component: .gaugeCard,
+                    preferredTier: .coreGraphics,
+                    fallbackTier: .swiftUI,
+                    capabilities: [.gaugePrecision, .shadowStacks, .realtimeResizing]
+                ),
+                .amountOwedGlassCard: ComponentRenderingPolicy(
+                    component: .amountOwedGlassCard,
+                    preferredTier: .coreAnimation,
+                    fallbackTier: .coreGraphics,
+                    capabilities: [.glassComposite, .bloomGlow, .shadowStacks, .realtimeResizing]
+                ),
+                .trendRing: ComponentRenderingPolicy(
+                    component: .trendRing,
+                    preferredTier: .coreGraphics,
+                    fallbackTier: .swiftUI,
+                    capabilities: [.chartPrecision, .realtimeResizing]
+                ),
+                .barChart: ComponentRenderingPolicy(
+                    component: .barChart,
+                    preferredTier: .coreGraphics,
+                    fallbackTier: .swiftUI,
+                    capabilities: [.chartPrecision, .shadowStacks, .realtimeResizing]
+                ),
+                .footerStrip: ComponentRenderingPolicy(
+                    component: .footerStrip,
+                    preferredTier: .swiftUI,
+                    fallbackTier: .coreGraphics,
+                    capabilities: [.shadowStacks]
+                ),
+                .tooltip: ComponentRenderingPolicy(
+                    component: .tooltip,
+                    preferredTier: .coreGraphics,
+                    fallbackTier: .swiftUI,
+                    capabilities: [.chartPrecision]
+                ),
+                .calibrationOverlay: ComponentRenderingPolicy(
+                    component: .calibrationOverlay,
+                    preferredTier: .metal,
+                    fallbackTier: .coreAnimation,
+                    capabilities: [.vectorOverlay, .metalCompositing, .realtimeResizing]
+                )
+            ],
+            compactGlowReductionThreshold: 0.86,
+            chartMinimumReadableHeight: 240,
+            chartMinimumReadableWidth: 420
         )
     }
 }

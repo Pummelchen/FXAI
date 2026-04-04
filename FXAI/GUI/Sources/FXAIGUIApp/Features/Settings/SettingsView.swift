@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var model: FXAIGUIModel
+    @EnvironmentObject private var themeEnvironment: ThemeEnvironment
 
     var body: some View {
         ScrollView {
@@ -11,6 +12,21 @@ struct SettingsView: View {
                     title: "Settings",
                     subtitle: "Project-root selection, persistent workspace management, onboarding status, environment awareness, and packaging entry points."
                 )
+
+                FXAIVisualEffectSurface {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Theme System")
+                            .font(.headline)
+                            .foregroundStyle(FXAITheme.textPrimary)
+
+                        ThemeInspectorView(layoutOutput: nil)
+                            .environmentObject(themeEnvironment)
+
+                        Text("The finance app is now theme-aware at the app-shell level. Theme V1 is registered through the shared registry and injected into the full GUI tree, with future themes added through `ThemeBootstrap` and `ThemeRegistry`.")
+                            .font(.callout)
+                            .foregroundStyle(FXAITheme.textSecondary)
+                    }
+                }
 
                 FXAIVisualEffectSurface {
                     VStack(alignment: .leading, spacing: 14) {

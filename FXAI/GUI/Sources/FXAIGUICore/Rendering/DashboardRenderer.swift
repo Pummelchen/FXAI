@@ -37,6 +37,9 @@ public struct DashboardRenderer: View {
     }
 
     public var body: some View {
+        let stageStyle = theme.components.stage
+        let footerStyle = theme.components.footerStrip
+        let dividerStyle = theme.components.divider
         let panel = frameModel.mainPanelFrame
         let scale = frameModel.scale
 
@@ -49,7 +52,7 @@ public struct DashboardRenderer: View {
             .opacity(reducedEffects ? 0.34 : 1)
             .offset(x: panel.minX + panel.width * 0.36, y: panel.height * 0.38)
 
-            RoundedRectangle(cornerRadius: theme.cornerRadii.panel * scale, style: .continuous)
+            RoundedRectangle(cornerRadius: stageStyle.panelCornerRadius * scale, style: .continuous)
                 .fill(theme.colors.mainPanel)
                 .frame(width: panel.width, height: panel.height)
                 .offset(x: panel.minX, y: panel.minY)
@@ -60,13 +63,13 @@ public struct DashboardRenderer: View {
                 .offset(x: 0, y: 220.38 * scale)
 
             Rectangle()
-                .fill(theme.gradients.footer)
+                .fill(footerStyle.gradient)
                 .frame(width: frameModel.footerFrame.width, height: frameModel.footerFrame.height)
                 .offset(x: frameModel.footerFrame.minX, y: frameModel.footerFrame.minY)
 
             Rectangle()
-                .fill(theme.colors.divider.opacity(theme.materials.dividerOpacity))
-                .frame(width: frameModel.headerDividerFrame.width, height: frameModel.headerDividerFrame.height)
+                .fill(dividerStyle.color.opacity(theme.materials.dividerOpacity))
+                .frame(width: frameModel.headerDividerFrame.width, height: dividerStyle.lineWidth * scale)
                 .offset(x: frameModel.headerDividerFrame.minX, y: frameModel.headerDividerFrame.minY)
         }
         .frame(width: frameModel.stageFrame.width, height: frameModel.stageFrame.height)

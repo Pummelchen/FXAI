@@ -4,6 +4,7 @@ import SwiftUI
 
 struct OverviewDashboardView: View {
     @EnvironmentObject private var model: FXAIGUIModel
+    @EnvironmentObject private var themeEnvironment: ThemeEnvironment
 
     var body: some View {
         ScrollView {
@@ -122,12 +123,17 @@ struct OverviewDashboardView: View {
                             value: snapshot.tursoSummary.embeddedReplicaConfigured ? "Embedded Replica" : "Local Turso",
                             tint: snapshot.tursoSummary.embeddedReplicaConfigured ? FXAITheme.accent : FXAITheme.accentSoft
                         )
-                        StatusBadge(
-                            title: "Updated",
-                            value: FXAIFormatting.dateTimeString(for: snapshot.generatedAt),
-                            tint: FXAITheme.warning
-                        )
-                    }
+                    StatusBadge(
+                        title: "Updated",
+                        value: FXAIFormatting.dateTimeString(for: snapshot.generatedAt),
+                        tint: FXAITheme.warning
+                    )
+                    StatusBadge(
+                        title: "Theme",
+                        value: themeEnvironment.currentTheme.displayName,
+                        tint: FXAITheme.accentSoft
+                    )
+                }
                 }
 
                 Rectangle()

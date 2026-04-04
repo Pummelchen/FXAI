@@ -9,14 +9,15 @@ struct AmountOwedGlassCardView: View {
     let reducedEffects: Bool
 
     var body: some View {
+        let style = theme.components.amountOwed
         let cornerRadius = theme.cornerRadii.glassCard * scale
 
         ZStack(alignment: .topLeading) {
-            GlowRenderer(glow: theme.glows.amountOwed, scale: scale, intensity: intensity)
+            GlowRenderer(glow: style.glow, scale: scale, intensity: intensity)
                 .offset(x: frame.width * 0.2, y: frame.height * 0.14)
                 .opacity(reducedEffects ? 0.42 : 1)
 
-            ShadowStackRenderer(size: frame.size, cornerRadius: cornerRadius, shadow: theme.shadows.amountOwed, scale: scale)
+            ShadowStackRenderer(size: frame.size, cornerRadius: cornerRadius, shadow: style.shadow, scale: scale)
 
             GlassRenderer(size: frame.size, cornerRadius: cornerRadius, theme: theme, scale: scale)
 
@@ -34,8 +35,8 @@ struct AmountOwedGlassCardView: View {
                     .tracking(-0.38 * scale)
                     .foregroundStyle(theme.colors.textPrimary.opacity(0.92))
             }
-            .padding(.horizontal, 24 * scale)
-            .padding(.vertical, 24 * scale)
+            .padding(.horizontal, (theme.spacing.cardPadding + 2) * scale)
+            .padding(.vertical, theme.spacing.stackGap * scale)
         }
         .frame(width: frame.width, height: frame.height)
         .position(x: frame.midX, y: frame.midY)

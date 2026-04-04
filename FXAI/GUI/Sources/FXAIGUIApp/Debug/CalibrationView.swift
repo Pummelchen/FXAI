@@ -3,6 +3,7 @@ import SwiftUI
 
 struct CalibrationView: View {
     let frameModel: DashboardFrameModel
+    let layoutOutput: DashboardLayoutOutput
     let theme: any AppTheme
     let debugState: DashboardDebugState
 
@@ -20,6 +21,7 @@ struct CalibrationView: View {
 
             if debugState.showLayoutGuides || debugState.showFrameOutlines {
                 LayoutGuideOverlay(frameModel: frameModel, theme: theme)
+                LayoutDebugOverlay(frameModel: frameModel, layoutOutput: layoutOutput, theme: theme)
             }
         }
     }

@@ -43,6 +43,7 @@ This is not a generic dashboard skin. It is an SVG-driven theme and rendering sy
 
 Theme V1 includes:
 - reusable theme tokens for colors, gradients, glows, shadow stacks, typography, radii, materials, layout metrics, and chart style
+- semantic component styles, render-tier policy, and a shared theme registry/environment
 - an adaptive dashboard layout engine with compact, standard, wide, and ultra-wide classes
 - a custom finance dashboard renderer using SwiftUI plus AppKit/WebKit and Metal where useful
 - debug calibration mode with SVG overlay, PNG compare mode, layout guides, frame outlines, live scale display, and effect toggles
@@ -51,6 +52,8 @@ Theme V1 includes:
 The phased implementation reference is stored in:
 - [Docs/FXAI_GUI_IMPLEMENTATION_PLAN.md](/Users/andreborchert/FXAI-main2/FXAI/GUI/Docs/FXAI_GUI_IMPLEMENTATION_PLAN.md)
 - [Docs/FXAI_GUI_RELEASE_CHECKLIST.md](/Users/andreborchert/FXAI-main2/FXAI/GUI/Docs/FXAI_GUI_RELEASE_CHECKLIST.md)
+- [Docs/FINANCE_APP_THEME_MIGRATION.md](/Users/andreborchert/FXAI-main2/FXAI/GUI/Docs/FINANCE_APP_THEME_MIGRATION.md)
+- [Docs/ADDING_THEME_V2.md](/Users/andreborchert/FXAI-main2/FXAI/GUI/Docs/ADDING_THEME_V2.md)
 
 ## Build
 

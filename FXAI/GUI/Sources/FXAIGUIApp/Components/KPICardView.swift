@@ -11,7 +11,8 @@ struct KPICardView: View {
     let decorativeIntensity: CGFloat
 
     var body: some View {
-        let shadow = content.highlightStyle == .pending ? theme.shadows.pendingCard : theme.shadows.kpiCard
+        let style = theme.components.kpiCard
+        let shadow = content.highlightStyle == .pending ? style.pendingShadow : style.shadow
         let cornerRadius = theme.cornerRadii.standardCard * scale
 
         ZStack(alignment: .topLeading) {
@@ -23,7 +24,7 @@ struct KPICardView: View {
             ShadowStackRenderer(size: frame.size, cornerRadius: cornerRadius, shadow: shadow, scale: scale)
 
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(content.highlightStyle == .pending ? AnyShapeStyle(theme.gradients.pendingCard) : AnyShapeStyle(theme.gradients.standardCard))
+                .fill(content.highlightStyle == .pending ? AnyShapeStyle(style.pendingGradient) : AnyShapeStyle(style.gradient))
                 .overlay(
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .stroke(theme.colors.cardStroke, lineWidth: showShadowDebug ? 1.0 * scale : 0.75 * scale)
@@ -44,7 +45,7 @@ struct KPICardView: View {
                         theme: theme,
                         tint: content.highlightStyle == .pending ? theme.colors.warningGreen : theme.colors.textSecondary
                     )
-                    .frame(width: 54 * scale, height: 54 * scale)
+                    .frame(width: style.ringSize * scale, height: style.ringSize * scale)
                 }
 
                 Spacer(minLength: 0)
@@ -76,8 +77,8 @@ struct KPICardView: View {
                         .lineSpacing(theme.typography.caption.lineSpacing * scale)
                 }
             }
-            .padding(.horizontal, 22 * scale)
-            .padding(.vertical, 18 * scale)
+            .padding(.horizontal, theme.spacing.cardPadding * scale)
+            .padding(.vertical, theme.spacing.compactCardPadding * scale)
         }
         .frame(width: frame.width, height: frame.height)
         .position(x: frame.midX, y: frame.midY)

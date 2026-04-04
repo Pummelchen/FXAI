@@ -30,8 +30,10 @@ public struct TrendRingRenderer: View {
     }
 
     public var body: some View {
+        let style = theme.components.trendRing
+
         GeometryReader { geometry in
-            let lineWidth = 5.4 * scale
+            let lineWidth = style.lineWidth * scale
             ZStack {
                 Circle()
                     .stroke(theme.colors.textMuted.opacity(0.35), lineWidth: lineWidth)
@@ -41,7 +43,7 @@ public struct TrendRingRenderer: View {
 
                 Circle()
                     .fill(Color.white.opacity(0.9))
-                    .frame(width: 6 * scale, height: 6 * scale)
+                    .frame(width: style.endpointSize * scale, height: style.endpointSize * scale)
                     .offset(x: geometry.size.width * 0.32, y: geometry.size.height * 0.22)
 
                 Text(text)

@@ -6,11 +6,13 @@ struct HeaderView: View {
     let theme: any AppTheme
 
     var body: some View {
+        let headerStyle = theme.components.header
+
         ZStack(alignment: .topLeading) {
-            HStack(spacing: 8 * frameModel.scale) {
+            HStack(spacing: headerStyle.titleSpacing * frameModel.scale) {
                 Text("Dashboard")
-                    .font(theme.typography.headerTitle.font(scaledBy: frameModel.scale))
-                    .tracking(theme.typography.headerTitle.tracking * frameModel.scale)
+                    .font(headerStyle.titleFont.font(scaledBy: frameModel.scale))
+                    .tracking(headerStyle.titleFont.tracking * frameModel.scale)
                     .foregroundStyle(theme.colors.textPrimary)
 
                 Circle()
@@ -26,9 +28,9 @@ struct HeaderView: View {
 
             HStack(spacing: 4 * frameModel.scale) {
                 Text("Financial")
-                    .font(theme.typography.headerSubtitle.font(scaledBy: frameModel.scale))
-                    .tracking(theme.typography.headerSubtitle.tracking * frameModel.scale)
-                    .foregroundStyle(theme.colors.textSecondary.opacity(theme.typography.headerSubtitle.opacity))
+                    .font(headerStyle.subtitleFont.font(scaledBy: frameModel.scale))
+                    .tracking(headerStyle.subtitleFont.tracking * frameModel.scale)
+                    .foregroundStyle(theme.colors.textSecondary.opacity(headerStyle.subtitleFont.opacity))
 
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10 * frameModel.scale, weight: .semibold, design: .rounded))

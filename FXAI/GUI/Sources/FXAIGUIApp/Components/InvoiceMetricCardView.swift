@@ -9,14 +9,15 @@ struct InvoiceMetricCardView: View {
     let scale: CGFloat
 
     var body: some View {
+        let style = theme.components.invoiceMetricCard
         let cornerRadius = theme.cornerRadii.smallCard * scale
         let ringTint = content.ringTintHex.map { Color(hex: $0) } ?? theme.colors.textSecondary
 
         ZStack(alignment: .topLeading) {
-            ShadowStackRenderer(size: frame.size, cornerRadius: cornerRadius, shadow: theme.shadows.smallCard, scale: scale)
+            ShadowStackRenderer(size: frame.size, cornerRadius: cornerRadius, shadow: style.shadow, scale: scale)
 
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(theme.gradients.standardCard)
+                .fill(style.backgroundGradient)
                 .overlay(
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .stroke(theme.colors.cardStroke, lineWidth: 0.72 * scale)
@@ -59,8 +60,8 @@ struct InvoiceMetricCardView: View {
                         .foregroundStyle(theme.colors.textMuted)
                 }
             }
-            .padding(.horizontal, 18 * scale)
-            .padding(.vertical, 16 * scale)
+            .padding(.horizontal, theme.spacing.compactCardPadding * scale)
+            .padding(.vertical, (theme.spacing.compactCardPadding - 2) * scale)
         }
         .frame(width: frame.width, height: frame.height)
         .position(x: frame.midX, y: frame.midY)

@@ -1,23 +1,116 @@
 import CoreGraphics
 
 public enum DashboardLayoutEngine {
+    public static func makeLayout(input: DashboardLayoutInput) -> DashboardLayoutOutput {
+        let metrics = input.theme.layoutMetrics
+        let layoutClass = DashboardAdaptiveRules.classify(containerSize: input.effectiveContentSize)
+        let baseScale = fittedScale(
+            contentSize: input.effectiveContentSize,
+            scalePolicy: input.scalePolicy,
+            metrics: metrics
+        )
+        let typographyScale = DashboardAdaptiveRules.typographyScale(for: baseScale, policy: input.scalePolicy)
+        let spacingScale = DashboardAdaptiveRules.spacingScale(for: baseScale, policy: input.scalePolicy)
+
+        let minimumChartHeight = input.theme.renderingPolicy.chartMinimumReadableHeight * spacingScale
+        let minimumChartWidth = input.theme.renderingPolicy.chartMinimumReadableWidth * spacingScale
+        let shouldCompactChart = layoutClass == .compactDesktop || input.effectiveContentSize.width < minimumChartWidth * 2.18
+        let chartPlacement: DashboardChartPlacement = shouldCompactChart ? .belowInvoices : .anchoredRight
+        let kpiArrangement: DashboardKPIArrangement = layoutClass == .compactDesktop ? .gridTwoByTwo : .singleRow
+        let decorativePriority = input.contentPriorities[.ambientDecorations] ?? .decorative
+        let reducedDecorativeGlow =
+            input.reducedEffects ||
+            baseScale < input.theme.renderingPolicy.compactGlowReductionThreshold ||
+            input.effectiveContentSize.height < minimumChartHeight * 2.5
+
+        let hiddenZones: Set<DashboardZone> =
+            reducedDecorativeGlow && decorativePriority <= .decorative ? [.ambientDecorations] : []
+
+        var frameModel = makeFrameModel(
+            containerSize: input.windowSize,
+            contentSize: input.effectiveContentSize,
+            theme: input.theme,
+            overrideLayoutClass: shouldCompactChart ? .compactDesktop : layoutClass,
+            overrideScale: baseScale
+        )
+
+        if reducedDecorativeGlow {
+            let visibility = frameModel.decorativeVisibility
+            frameModel = DashboardFrameModel(
+                containerSize: frameModel.containerSize,
+                stageFrame: frameModel.stageFrame,
+                layoutClass: frameModel.layoutClass,
+                scale: frameModel.scale,
+                mainPanelFrame: frameModel.mainPanelFrame,
+                footerFrame: frameModel.footerFrame,
+                headerDividerFrame: frameModel.headerDividerFrame,
+                headerTitleOrigin: frameModel.headerTitleOrigin,
+                headerSubtitleOrigin: frameModel.headerSubtitleOrigin,
+                billsOrigin: frameModel.billsOrigin,
+                invoicesOrigin: frameModel.invoicesOrigin,
+                topCardFrames: frameModel.topCardFrames,
+                gaugeFrame: frameModel.gaugeFrame,
+                invoiceMetricFrames: frameModel.invoiceMetricFrames,
+                amountOwedFrame: frameModel.amountOwedFrame,
+                chartPlotFrame: frameModel.chartPlotFrame,
+                chartBars: frameModel.chartBars,
+                tooltipFrame: frameModel.tooltipFrame,
+                footerDateCenter: frameModel.footerDateCenter,
+                footerTimeCenter: frameModel.footerTimeCenter,
+                footerDayCenter: frameModel.footerDayCenter,
+                decorativeVisibility: DashboardDecorativeVisibility(
+                    glowIntensity: max(0.24, visibility.glowIntensity * (input.reducedEffects ? 0.42 : 0.72)),
+                    ambientOpacity: max(0.12, visibility.ambientOpacity * 0.6),
+                    hideSecondaryDecorations: true,
+                    metalOverlayEnabled: !input.reducedEffects && visibility.metalOverlayEnabled
+                )
+            )
+        }
+
+        return DashboardLayoutOutput(
+            frameModel: frameModel,
+            typographyScale: typographyScale,
+            spacingScale: spacingScale,
+            chartPlacement: chartPlacement,
+            kpiArrangement: kpiArrangement,
+            reducedDecorativeGlow: reducedDecorativeGlow,
+            hiddenZones: hiddenZones
+        )
+    }
+
     public static func makeFrameModel(
         containerSize: CGSize,
         theme: any AppTheme
     ) -> DashboardFrameModel {
+        makeFrameModel(
+            containerSize: containerSize,
+            contentSize: containerSize,
+            theme: theme,
+            overrideLayoutClass: nil,
+            overrideScale: nil
+        )
+    }
+
+    public static func makeFrameModel(
+        containerSize: CGSize,
+        contentSize: CGSize,
+        theme: any AppTheme,
+        overrideLayoutClass: DashboardLayoutClass?,
+        overrideScale: CGFloat?
+    ) -> DashboardFrameModel {
         let metrics = theme.layoutMetrics
-        let layoutClass = DashboardAdaptiveRules.classify(containerSize: containerSize)
-        let outerPadding = max(metrics.outerPadding, min(containerSize.width, containerSize.height) * 0.025)
+        let layoutClass = overrideLayoutClass ?? DashboardAdaptiveRules.classify(containerSize: contentSize)
+        let outerPadding = max(metrics.outerPadding, min(contentSize.width, contentSize.height) * 0.025)
         let aspect = metrics.referenceCanvasSize.width / metrics.referenceCanvasSize.height
-        let maxStageWidth = min(containerSize.width - outerPadding * 2, metrics.wideMaxWidth > 0 ? metrics.wideMaxWidth : .greatestFiniteMagnitude)
-        let fittedWidth = min(maxStageWidth, (containerSize.height - outerPadding * 2) * aspect)
+        let maxStageWidth = min(contentSize.width - outerPadding * 2, metrics.wideMaxWidth > 0 ? metrics.wideMaxWidth : .greatestFiniteMagnitude)
+        let fittedWidth = min(maxStageWidth, (contentSize.height - outerPadding * 2) * aspect)
         let fittedHeight = fittedWidth / aspect
         let stageOrigin = CGPoint(
             x: (containerSize.width - fittedWidth) / 2,
             y: (containerSize.height - fittedHeight) / 2
         )
         let stageFrame = CGRect(origin: stageOrigin, size: CGSize(width: fittedWidth, height: fittedHeight))
-        let scale = max(metrics.minimumScale, min(metrics.maximumScale, fittedWidth / metrics.referenceCanvasSize.width))
+        let scale = overrideScale ?? max(metrics.minimumScale, min(metrics.maximumScale, fittedWidth / metrics.referenceCanvasSize.width))
 
         switch layoutClass {
         case .compactDesktop:
@@ -25,6 +118,19 @@ public enum DashboardLayoutEngine {
         case .standardDesktop, .wideDesktop, .ultraWideDesktop:
             return referenceFrameModel(containerSize: containerSize, stageFrame: stageFrame, scale: scale, layoutClass: layoutClass, theme: theme)
         }
+    }
+
+    private static func fittedScale(
+        contentSize: CGSize,
+        scalePolicy: DashboardScalePolicy,
+        metrics: ThemeLayoutMetrics
+    ) -> CGFloat {
+        let outerPadding = max(metrics.outerPadding, min(contentSize.width, contentSize.height) * 0.025)
+        let aspect = metrics.referenceCanvasSize.width / metrics.referenceCanvasSize.height
+        let maxStageWidth = min(contentSize.width - outerPadding * 2, metrics.wideMaxWidth > 0 ? metrics.wideMaxWidth : .greatestFiniteMagnitude)
+        let fittedWidth = min(maxStageWidth, (contentSize.height - outerPadding * 2) * aspect)
+        let rawScale = fittedWidth / metrics.referenceCanvasSize.width
+        return min(scalePolicy.maximumScale, max(scalePolicy.minimumScale, rawScale))
     }
 
     private static func referenceFrameModel(
