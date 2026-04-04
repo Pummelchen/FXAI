@@ -20,6 +20,7 @@ struct ThemeRegistryTests {
 
         #expect(environment.selectedThemeID == .financialDashboardV1)
         #expect(environment.currentTheme.themeID == .financialDashboardV1)
+        #expect(environment === ThemeEnvironment.shared)
 
         environment.activateTheme(.financialDashboardV1)
         #expect(environment.currentTheme.displayName == "Financial Dashboard Theme V1")

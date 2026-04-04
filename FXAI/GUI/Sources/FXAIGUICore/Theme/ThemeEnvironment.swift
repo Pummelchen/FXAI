@@ -49,6 +49,11 @@ public final class ThemeEnvironment: ObservableObject {
     }
 
     public static func preview(themeID: ThemeID = .financialDashboardV1) -> ThemeEnvironment {
-        ThemeEnvironment(initialThemeID: themeID)
+        let environment = ThemeEnvironment.shared
+        environment.configure(
+            registry: ThemeRegistry(themes: [FinancialDashboardThemeV1()]),
+            initialThemeID: themeID
+        )
+        return environment
     }
 }

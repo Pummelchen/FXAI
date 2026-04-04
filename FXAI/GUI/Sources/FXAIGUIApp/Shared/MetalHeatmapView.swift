@@ -16,6 +16,7 @@ struct MetalHeatmapPanel: View {
     private let cellWidth: CGFloat = 84
     private let cellHeight: CGFloat = 34
     private let rowLabelWidth: CGFloat = 120
+    private let metalAvailable = MTLCreateSystemDefaultDevice() != nil
 
     var body: some View {
         FXAIVisualEffectSurface {
@@ -56,12 +57,18 @@ struct MetalHeatmapPanel: View {
                                 }
                             }
 
-                            MetalHeatmapGridView(heatmap: heatmap)
-                                .frame(
-                                    width: max(CGFloat(heatmap.columnLabels.count) * cellWidth, 200),
-                                    height: max(CGFloat(heatmap.rowLabels.count) * cellHeight, 100)
-                                )
-                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            Group {
+                                if metalAvailable {
+                                    MetalHeatmapGridView(heatmap: heatmap)
+                                } else {
+                                    FallbackHeatmapGridView(heatmap: heatmap)
+                                }
+                            }
+                            .frame(
+                                width: max(CGFloat(heatmap.columnLabels.count) * cellWidth, 200),
+                                height: max(CGFloat(heatmap.rowLabels.count) * cellHeight, 100)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                         }
                     }
                 }
@@ -88,6 +95,81 @@ struct MetalHeatmapPanel: View {
                 .font(.caption2)
                 .foregroundStyle(FXAITheme.textMuted)
         }
+    }
+}
+
+private struct FallbackHeatmapGridView: View {
+    let heatmap: VisualizationHeatmap
+
+    var body: some View {
+        ScrollView([.horizontal, .vertical]) {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(heatmap.values.enumerated()), id: \.offset) { rowIndex, row in
+                    HStack(spacing: 6) {
+                        ForEach(Array(row.enumerated()), id: \.offset) { columnIndex, value in
+                            cell(rowIndex: rowIndex, columnIndex: columnIndex, value: value)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func cell(rowIndex: Int, columnIndex: Int, value: Double) -> some View {
+        let range = heatmap.valueRange
+        let cellColor = colorForValue(value, range: range)
+        let cellLabel = "\(label(at: rowIndex, in: heatmap.rowLabels, fallback: "row")) \(label(at: columnIndex, in: heatmap.columnLabels, fallback: "column")) \(value)"
+
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(cellColor)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(FXAITheme.stroke.opacity(0.18), lineWidth: 1)
+            )
+            .frame(width: 84, height: 34)
+            .overlay(cellValueLabel(value))
+            .accessibilityLabel(cellLabel)
+    }
+
+    private func cellValueLabel(_ value: Double) -> some View {
+        Text(String(format: "%.2f", value))
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(FXAITheme.textPrimary.opacity(0.9))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+    }
+
+    private func colorForValue(_ value: Double, range: ClosedRange<Double>) -> Color {
+        if value.isNaN {
+            return Color(nsColor: NSColor(srgbRed: 0.12, green: 0.13, blue: 0.16, alpha: 1))
+        }
+
+        let minValue = range.lowerBound
+        let maxValue = range.upperBound
+        let normalized: Double
+        if maxValue == minValue {
+            normalized = 0.5
+        } else {
+            normalized = min(max((value - minValue) / (maxValue - minValue), 0), 1)
+        }
+
+        let cool = NSColor(srgbRed: 0.10, green: 0.28, blue: 0.56, alpha: 1)
+        let mid = NSColor(srgbRed: 0.18, green: 0.53, blue: 0.63, alpha: 1)
+        let warm = NSColor(srgbRed: 0.90, green: 0.46, blue: 0.24, alpha: 1)
+
+        let color: NSColor
+        if normalized < 0.5 {
+            color = cool.blended(withFraction: normalized / 0.5, of: mid) ?? mid
+        } else {
+            color = mid.blended(withFraction: (normalized - 0.5) / 0.5, of: warm) ?? warm
+        }
+        return Color(nsColor: color)
+    }
+
+    private func label(at index: Int, in labels: [String], fallback: String) -> String {
+        guard labels.indices.contains(index) else { return fallback }
+        return labels[index]
     }
 }
 
@@ -134,9 +216,10 @@ private final class MetalHeatmapRenderer: NSObject, MTKViewDelegate {
 
     init(heatmap: VisualizationHeatmap) {
         self.heatmap = heatmap
-        self.device = MTLCreateSystemDefaultDevice() ?? {
-            fatalError("Metal is required for Phase 5 heatmaps.")
-        }()
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            preconditionFailure("MetalHeatmapRenderer requires Metal support and should not be created without availability checks.")
+        }
+        self.device = device
         super.init()
         self.commandQueue = device.makeCommandQueue()
         self.pipelineState = makePipelineState()
