@@ -71,6 +71,10 @@ struct FXAIRootView: View {
             BacktestBuilderView()
         case .offlineLab:
             OfflineLabBuilderView()
+        case .runtimeMonitor:
+            RuntimeMonitorView()
+        case .promotionCenter:
+            PromotionCenterView()
         case .plugins:
             PluginZooView()
         case .reports:

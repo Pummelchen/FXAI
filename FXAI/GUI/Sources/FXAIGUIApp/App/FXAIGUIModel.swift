@@ -6,8 +6,10 @@ import Foundation
 final class FXAIGUIModel: ObservableObject {
     @Published var projectRoot: URL?
     @Published var snapshot: FXAIProjectSnapshot?
+    @Published var runtimeSnapshot: RuntimeOperationsSnapshot?
     @Published var selection: SidebarDestination? = .overview
     @Published var selectedRole: WorkspaceRole = .liveTrader
+    @Published var selectedRuntimeSymbol = ""
     @Published var pluginSearchText = ""
     @Published var selectedPluginFamily = "All"
     @Published var reportCategoryFilter = "All"
@@ -18,6 +20,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var isRefreshing = false
 
     private let scanner = ProjectScanner()
+    private let runtimeReader = RuntimeArtifactReader()
 
     init() {
         self.projectRoot = ProjectPathResolver.defaultProjectRoot()
@@ -41,6 +44,14 @@ final class FXAIGUIModel: ObservableObject {
         projectRoot?.path ?? "No FXAI project selected"
     }
 
+    var selectedRuntimeDetail: RuntimeDeploymentDetail? {
+        guard let runtimeSnapshot else { return nil }
+        if let selected = runtimeSnapshot.deployments.first(where: { $0.symbol == selectedRuntimeSymbol }) {
+            return selected
+        }
+        return runtimeSnapshot.deployments.first
+    }
+
     func refresh() async {
         guard let projectRoot else {
             snapshot = nil
@@ -53,10 +64,13 @@ final class FXAIGUIModel: ObservableObject {
 
         do {
             snapshot = try scanner.scan(projectRoot: projectRoot)
+            runtimeSnapshot = runtimeReader.read(projectRoot: projectRoot)
             syncBuilderDefaults()
+            syncRuntimeSelection()
             lastErrorMessage = nil
         } catch {
             snapshot = nil
+            runtimeSnapshot = nil
             lastErrorMessage = error.localizedDescription
         }
     }
@@ -119,6 +133,23 @@ final class FXAIGUIModel: ObservableObject {
         }
         if backtestDraft.pluginName.isEmpty || !names.contains(backtestDraft.pluginName) {
             backtestDraft.pluginName = firstPlugin
+        }
+    }
+
+    private func syncRuntimeSelection() {
+        guard let runtimeSnapshot else {
+            selectedRuntimeSymbol = ""
+            return
+        }
+
+        let symbols = runtimeSnapshot.symbols
+        guard let first = symbols.first else {
+            selectedRuntimeSymbol = ""
+            return
+        }
+
+        if !symbols.contains(selectedRuntimeSymbol) {
+            selectedRuntimeSymbol = first
         }
     }
 }

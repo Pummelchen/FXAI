@@ -19,7 +19,7 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - `Tools/offline_lab/`
   Internal Python package for Offline Lab database, export, campaign, promotion, shadow-fleet ingest, foundation and student bundling, supervisor-service generation, teacher-factory modules, world simulation, and autonomous governance.
 - `GUI/`
-  Optional macOS 26 SwiftUI operator app for role-based dashboards, plugin-zoo browsing, report exploration, run builders for Audit/Offline/backtest workflows, and terminal-first command guidance.
+  Optional macOS 26 SwiftUI operator app for role-based dashboards, plugin-zoo browsing, report exploration, run builders for Audit/Offline/backtest workflows, runtime inspection, promotion review, and terminal-first command guidance.
 
 ## Key Runtime Areas
 
@@ -52,7 +52,7 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - `Tools/testlab/`
   Internal Python package behind `fxai_testlab.py`, split into compile, audit-run, reporting, baseline, optimization, release-gate, and CLI modules.
 - `GUI/Sources/FXAIGUICore`, `GUI/Sources/FXAIGUIApp`
-  Swift package targets for the GUI’s project scanner, design system, navigation shell, Phase 1 dashboard surfaces, and Phase 2 run builders.
+  Swift package targets for the GUI’s project scanner, runtime artifact readers, design system, navigation shell, Phase 1 dashboard surfaces, Phase 2 run builders, and Phase 3 runtime/promotion views.
 
 ## Operating Notes
 

@@ -167,6 +167,8 @@ Implemented in the current package as:
 
 ### Phase 3: Runtime And Promotion Operations
 
+Status: Implemented
+
 Scope:
 - live runtime monitor
 - deployment profile viewer
@@ -177,6 +179,12 @@ Scope:
 
 Exit criteria:
 - live traders and operators can inspect actual deployed state without reading TSV manually
+
+Implemented in the current package as:
+- `Features/Runtime/RuntimeMonitorView.swift`
+- `Features/Promotion/PromotionCenterView.swift`
+- `FXAIGUICore/Services/RuntimeArtifactReader.swift`
+- `FXAIGUICore/Models/RuntimeArtifactModels.swift`
 
 ### Phase 4: Turso / Research OS Control
 
