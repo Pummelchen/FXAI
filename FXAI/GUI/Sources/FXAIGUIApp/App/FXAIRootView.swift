@@ -77,6 +77,8 @@ struct FXAIRootView: View {
             PromotionCenterView()
         case .researchControl:
             ResearchOSControlView()
+        case .advancedVisuals:
+            AdvancedVisualizationView()
         case .plugins:
             PluginZooView()
         case .reports:

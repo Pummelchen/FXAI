@@ -9,6 +9,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
     case runtimeMonitor
     case promotionCenter
     case researchControl
+    case advancedVisuals
     case plugins
     case reports
     case commands
@@ -26,6 +27,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .runtimeMonitor: "Runtime Monitor"
         case .promotionCenter: "Promotion Center"
         case .researchControl: "Research OS Control"
+        case .advancedVisuals: "Advanced Visuals"
         case .plugins: "Plugin Zoo"
         case .reports: "Reports Explorer"
         case .commands: "Command Center"
@@ -43,6 +45,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .runtimeMonitor: "waveform.path.ecg.rectangle.fill"
         case .promotionCenter: "rosette"
         case .researchControl: "server.rack"
+        case .advancedVisuals: "sparkles.tv"
         case .plugins: "shippingbox.fill"
         case .reports: "doc.text.image.fill"
         case .commands: "terminal.fill"

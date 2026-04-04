@@ -8,10 +8,12 @@ final class FXAIGUIModel: ObservableObject {
     @Published var snapshot: FXAIProjectSnapshot?
     @Published var runtimeSnapshot: RuntimeOperationsSnapshot?
     @Published var researchSnapshot: ResearchOSControlSnapshot?
+    @Published var visualizationSnapshot: AdvancedVisualizationSnapshot?
     @Published var selection: SidebarDestination? = .overview
     @Published var selectedRole: WorkspaceRole = .liveTrader
     @Published var selectedRuntimeSymbol = ""
     @Published var selectedResearchSymbol = ""
+    @Published var selectedVisualizationSymbol = ""
     @Published var pluginSearchText = ""
     @Published var selectedPluginFamily = "All"
     @Published var reportCategoryFilter = "All"
@@ -28,6 +30,7 @@ final class FXAIGUIModel: ObservableObject {
     private let scanner = ProjectScanner()
     private let runtimeReader = RuntimeArtifactReader()
     private let researchReader = ResearchOSArtifactReader()
+    private let visualizationBuilder = AdvancedVisualizationBuilder()
 
     init() {
         self.projectRoot = ProjectPathResolver.defaultProjectRoot()
@@ -67,6 +70,14 @@ final class FXAIGUIModel: ObservableObject {
         return researchSnapshot.symbols.first
     }
 
+    var selectedVisualizationDetail: SymbolVisualizationDetail? {
+        guard let visualizationSnapshot else { return nil }
+        if let selected = visualizationSnapshot.symbolDetails.first(where: { $0.symbol == selectedVisualizationSymbol }) {
+            return selected
+        }
+        return visualizationSnapshot.symbolDetails.first
+    }
+
     func refresh() async {
         guard let projectRoot else {
             snapshot = nil
@@ -82,14 +93,21 @@ final class FXAIGUIModel: ObservableObject {
             snapshot = try scanner.scan(projectRoot: projectRoot)
             runtimeSnapshot = runtimeReader.read(projectRoot: projectRoot)
             researchSnapshot = researchReader.read(projectRoot: projectRoot)
+            visualizationSnapshot = visualizationBuilder.build(
+                projectRoot: projectRoot,
+                runtimeSnapshot: runtimeSnapshot,
+                researchSnapshot: researchSnapshot
+            )
             syncBuilderDefaults()
             syncRuntimeSelection()
             syncResearchSelection()
+            syncVisualizationSelection()
             lastErrorMessage = nil
         } catch {
             snapshot = nil
             runtimeSnapshot = nil
             researchSnapshot = nil
+            visualizationSnapshot = nil
             lastErrorMessage = error.localizedDescription
         }
     }
@@ -205,6 +223,26 @@ final class FXAIGUIModel: ObservableObject {
             }
             if researchBranchDraft.locationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 researchBranchDraft.locationName = environment.locationName
+            }
+        }
+    }
+
+    private func syncVisualizationSelection() {
+        guard let visualizationSnapshot else {
+            selectedVisualizationSymbol = ""
+            return
+        }
+
+        let symbols = visualizationSnapshot.symbols
+        guard let first = symbols.first else {
+            selectedVisualizationSymbol = ""
+            return
+        }
+
+        if !symbols.contains(selectedVisualizationSymbol) {
+            selectedVisualizationSymbol = selectedRuntimeSymbol.isEmpty ? first : selectedRuntimeSymbol
+            if !symbols.contains(selectedVisualizationSymbol) {
+                selectedVisualizationSymbol = first
             }
         }
     }

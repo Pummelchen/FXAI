@@ -209,6 +209,8 @@ Implemented in the current package as:
 
 ### Phase 5: Advanced Visualization And Metal Surfaces
 
+Status: Implemented
+
 Scope:
 - Metal-backed dense heatmaps where SwiftUI/Charts are not sufficient
 - world-plan visualizer
@@ -223,6 +225,12 @@ Use Metal only where:
 
 Exit criteria:
 - advanced visualization is materially better than plain SwiftUI alternatives
+
+Implemented in the current package as:
+- `Features/Visualizations/AdvancedVisualizationView.swift`
+- `Shared/MetalHeatmapView.swift`
+- `FXAIGUICore/Services/AdvancedVisualizationBuilder.swift`
+- `FXAIGUICore/Models/AdvancedVisualizationModels.swift`
 
 ### Phase 6: Production-Grade UX Completion
 
