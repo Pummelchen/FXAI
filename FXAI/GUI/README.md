@@ -23,8 +23,30 @@ Phase 1 through Phase 6 are implemented here:
 - persistent saved views for repeatable operator workflows
 - role-specific onboarding and keyboard-first navigation
 - incident detection with generated recovery playbooks
-- explicit connect/disconnect handling with detached startup and soft auto reconnect every 10 seconds
+- detached startup with explicit connect/disconnect handling and soft auto reconnect every 10 seconds
 - release packaging support for a polished macOS app bundle
+
+## Theme V1
+
+The app now also ships a production finance theme under:
+
+- `FinancialDashboardThemeV1`
+
+This is not a generic dashboard skin. It is an SVG-driven theme and rendering system built from the canonical `GUI.svg` asset and exposed through:
+
+- `Sources/FXAIGUICore/Theme/`
+- `Sources/FXAIGUICore/Layout/`
+- `Sources/FXAIGUICore/SVG/`
+- `Sources/FXAIGUICore/Rendering/`
+- `Sources/FXAIGUIApp/Components/`
+- `Sources/FXAIGUIApp/Debug/`
+
+Theme V1 includes:
+- reusable theme tokens for colors, gradients, glows, shadow stacks, typography, radii, materials, layout metrics, and chart style
+- an adaptive dashboard layout engine with compact, standard, wide, and ultra-wide classes
+- a custom finance dashboard renderer using SwiftUI plus AppKit/WebKit and Metal where useful
+- debug calibration mode with SVG overlay, PNG compare mode, layout guides, frame outlines, live scale display, and effect toggles
+- a detached-safe startup path so the GUI can launch even before FXAI or MT5 is fully ready
 
 The phased implementation reference is stored in:
 - [Docs/FXAI_GUI_IMPLEMENTATION_PLAN.md](/Users/andreborchert/FXAI-main2/FXAI/GUI/Docs/FXAI_GUI_IMPLEMENTATION_PLAN.md)
@@ -34,10 +56,16 @@ The phased implementation reference is stored in:
 
 ```bash
 cd /Users/andreborchert/FXAI-main2/FXAI/GUI
+swift test
 swift build
 swift run FXAIGUI
 ./Tools/package_gui_release.sh
 ```
+
+The canonical reference assets are bundled from:
+
+- `Sources/FXAIGUICore/Resources/Reference/GUI.svg`
+- `Sources/FXAIGUICore/Resources/Reference/GUI-reference.png`
 
 ## Connection Behavior
 
@@ -54,5 +82,8 @@ The GUI can start cleanly even when MT5 or the FXAI project tree is not ready ye
 - read-only by default for sensitive runtime workflows
 - role-oriented information architecture
 - minimalistic dark visual language
+- SVG is the source of truth for Theme V1 geometry and styling
+- adaptive, not fixed-canvas
+- premium shadow/glow/material rendering over generic stock controls
 - real FXAI artifact awareness instead of placeholder-only UI
 - phased delivery so the GUI can grow without being rewritten

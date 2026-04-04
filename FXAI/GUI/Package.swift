@@ -20,7 +20,10 @@ let package = Package(
     targets: [
         .target(
             name: "FXAIGUICore",
-            path: "Sources/FXAIGUICore"
+            path: "Sources/FXAIGUICore",
+            resources: [
+                .process("Resources")
+            ]
         ),
         .executableTarget(
             name: "FXAIGUIApp",

@@ -11,6 +11,9 @@ struct WindowConfigurator: NSViewRepresentable {
             window.isOpaque = false
             window.backgroundColor = .clear
             window.toolbarStyle = .unifiedCompact
+            window.styleMask.insert(.fullSizeContentView)
+            window.isMovableByWindowBackground = true
+            window.title = ""
             window.standardWindowButton(.zoomButton)?.isHidden = false
         }
         return view

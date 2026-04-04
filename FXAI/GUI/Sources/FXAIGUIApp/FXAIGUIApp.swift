@@ -6,13 +6,13 @@ struct FXAIGUIApp: App {
 
     var body: some Scene {
         WindowGroup("FXAI GUI") {
-            FXAIRootView()
+            DashboardRootView()
                 .environmentObject(model)
-                .background(FXAIBackgroundView())
+                .background(Color.clear)
                 .overlay(WindowConfigurator().allowsHitTesting(false))
         }
-        .defaultSize(width: 1520, height: 980)
-        .windowResizability(.contentSize)
+        .defaultSize(width: 1728, height: 1117)
+        .windowResizability(.automatic)
         .commands {
             CommandMenu("FXAI") {
                 Button("Refresh State") {
@@ -27,52 +27,20 @@ struct FXAIGUIApp: App {
 
                 Divider()
 
-                Button("Open Onboarding") {
-                    model.navigate(to: .onboarding)
+                Button("Connect Project") {
+                    model.chooseProjectRoot()
                 }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
 
-                Button("Open Incident Center") {
-                    model.navigate(to: .incidents)
+                Button("Reconnect Project") {
+                    model.reconnectProject()
                 }
                 .keyboardShortcut("i", modifiers: [.command, .shift])
 
-                Button("Open Command Center") {
-                    model.navigate(to: .commands)
+                Button("Disconnect Project") {
+                    model.disconnectProject()
                 }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
-            }
-
-            CommandMenu("Navigate") {
-                Button("Overview") {
-                    model.navigate(to: .overview)
-                }
-                .keyboardShortcut("1", modifiers: [.command])
-
-                Button("Role Workspaces") {
-                    model.navigate(to: .roles)
-                }
-                .keyboardShortcut("2", modifiers: [.command])
-
-                Button("Runtime Monitor") {
-                    model.navigate(to: .runtimeMonitor)
-                }
-                .keyboardShortcut("3", modifiers: [.command])
-
-                Button("Research OS Control") {
-                    model.navigate(to: .researchControl)
-                }
-                .keyboardShortcut("4", modifiers: [.command])
-
-                Button("Advanced Visuals") {
-                    model.navigate(to: .advancedVisuals)
-                }
-                .keyboardShortcut("5", modifiers: [.command])
-
-                Button("Command Center") {
-                    model.navigate(to: .commands)
-                }
-                .keyboardShortcut("6", modifiers: [.command])
             }
         }
     }
