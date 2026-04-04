@@ -158,3 +158,58 @@ def test_vector_refresh_and_neighbors_smoke():
             assert payload["shadow_vectors"] >= 2
             assert neighbors
             assert str(neighbors[0]["symbol"]) == "GBPUSD"
+
+
+def test_vector_refresh_replaces_stale_shadow_vectors():
+    with tempfile.TemporaryDirectory(prefix="fxai_vec_stale_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)) as paths:
+            bootstrap_environment(paths["default_db"], init_db=True)
+            conn = connect_db(paths["default_db"])
+            profile = "vec-stale"
+            conn.execute(
+                """
+                INSERT INTO shadow_fleet_observations(profile_name, symbol, plugin_name, family_id, captured_at, source_path,
+                                                      source_sha256, meta_weight, reliability, global_edge, context_edge,
+                                                      context_regret, portfolio_objective, portfolio_stability, portfolio_corr,
+                                                      portfolio_div, route_value, route_regret, route_counterfactual,
+                                                      shadow_score, regime_id, horizon_minutes, obs_count,
+                                                      policy_capital_efficiency, portfolio_pressure,
+                                                      control_plane_score, portfolio_supervisor_score, payload_json)
+                VALUES(?, 'EURUSD', 'AI_A', 2, 1700000000, 'fixture.tsv', '', 0.6, 0.7, 0.2, 0.15, 0.05, 0.5, 0.55, 0.2,
+                       0.45, 0.3, 0.1, 0.1, 0.4, 1, 5, 1, 0.6, 0.2, 0.25, 0.22, '{}')
+                """,
+                (profile,),
+            )
+            first = refresh_research_vectors(conn, profile, "EURUSD")
+            assert first["shadow_vectors"] == 1
+            count = query_one(
+                conn,
+                "SELECT COUNT(*) AS n FROM research_vectors WHERE profile_name = ? AND symbol = ? AND vector_scope = 'analog_shadow'",
+                (profile, "EURUSD"),
+            )
+            assert count is not None
+            assert int(count["n"]) == 1
+            conn.execute(
+                """
+                INSERT INTO shadow_fleet_observations(profile_name, symbol, plugin_name, family_id, captured_at, source_path,
+                                                      source_sha256, meta_weight, reliability, global_edge, context_edge,
+                                                      context_regret, portfolio_objective, portfolio_stability, portfolio_corr,
+                                                      portfolio_div, route_value, route_regret, route_counterfactual,
+                                                      shadow_score, regime_id, horizon_minutes, obs_count,
+                                                      policy_capital_efficiency, portfolio_pressure,
+                                                      control_plane_score, portfolio_supervisor_score, payload_json)
+                VALUES(?, 'EURUSD', 'AI_A', 2, 1700000100, 'fixture.tsv', '', 0.61, 0.71, 0.22, 0.17, 0.04, 0.51, 0.57, 0.19,
+                       0.47, 0.32, 0.09, 0.12, 0.42, 1, 5, 1, 0.61, 0.21, 0.27, 0.24, '{}')
+                """,
+                (profile,),
+            )
+            second = refresh_research_vectors(conn, profile, "EURUSD")
+            assert second["shadow_vectors"] == 1
+            count = query_one(
+                conn,
+                "SELECT COUNT(*) AS n FROM research_vectors WHERE profile_name = ? AND symbol = ? AND vector_scope = 'analog_shadow'",
+                (profile, "EURUSD"),
+            )
+            close_db(conn)
+            assert count is not None
+            assert int(count["n"]) == 1

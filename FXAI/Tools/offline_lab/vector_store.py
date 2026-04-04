@@ -109,6 +109,13 @@ def _upsert_vector(conn: libsql.Connection,
 def refresh_research_vectors(conn: libsql.Connection,
                              profile_name: str,
                              symbol: str = "") -> dict[str, Any]:
+    delete_params: list[object] = [profile_name]
+    delete_sql = "DELETE FROM research_vectors WHERE profile_name = ?"
+    if symbol:
+        delete_sql += " AND symbol = ?"
+        delete_params.append(symbol)
+    conn.execute(delete_sql, tuple(delete_params))
+
     params: list[object] = [profile_name]
     symbol_sql = ""
     if symbol:
@@ -132,7 +139,7 @@ def refresh_research_vectors(conn: libsql.Connection,
     shadow_count = 0
     for row in latest_shadow.values():
         embedding = shadow_observation_embedding(row)
-        source_key = f"{row['plugin_name']}:{row['captured_at']}"
+        source_key = f"plugin:{row['plugin_name']}"
         _upsert_vector(
             conn,
             profile_name,
@@ -226,13 +233,13 @@ def latest_symbol_shadow_neighbors(conn: libsql.Connection,
               FROM research_vectors rv
               JOIN vector_top_k('idx_research_vectors_ann', vector32(?), ?) topk
                 ON topk.id = rv.id
-             WHERE rv.profile_name = ?
+            WHERE rv.profile_name = ?
                AND rv.vector_scope = 'analog_shadow'
-               AND NOT (rv.symbol = ? AND rv.source_type = 'shadow_observation')
+               AND NOT (rv.symbol = ? AND rv.source_key = ?)
              ORDER BY cosine_distance ASC, rv.score DESC
              LIMIT ?
             """,
-            (query_vector, query_vector, max(limit_value * 4, 16), profile_name, symbol, limit_value),
+            (query_vector, query_vector, max(limit_value * 4, 16), profile_name, symbol, f"plugin:{latest[0]['plugin_name']}", limit_value),
         )
     except Exception:
         rows = query_all(
@@ -245,14 +252,14 @@ def latest_symbol_shadow_neighbors(conn: libsql.Connection,
                    rv.score,
                    rv.payload_json,
                    vector_distance_cos(rv.vector_blob, vector32(?)) AS cosine_distance
-              FROM research_vectors rv
+             FROM research_vectors rv
              WHERE rv.profile_name = ?
                AND rv.vector_scope = 'analog_shadow'
-               AND NOT (rv.symbol = ? AND rv.source_type = 'shadow_observation')
+               AND NOT (rv.symbol = ? AND rv.source_key = ?)
              ORDER BY cosine_distance ASC, rv.score DESC
              LIMIT ?
             """,
-            (query_vector, profile_name, symbol, limit_value),
+            (query_vector, profile_name, symbol, f"plugin:{latest[0]['plugin_name']}", limit_value),
         )
     for row in rows:
         try:
