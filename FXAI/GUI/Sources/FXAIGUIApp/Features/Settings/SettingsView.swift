@@ -14,9 +14,27 @@ struct SettingsView: View {
 
                 FXAIVisualEffectSurface {
                     VStack(alignment: .leading, spacing: 14) {
-                        Text("Project Root")
+                        Text("Project Connection")
                             .font(.headline)
                             .foregroundStyle(FXAITheme.textPrimary)
+
+                        HStack(spacing: 18) {
+                            StatusBadge(
+                                title: "State",
+                                value: model.connectionStatusLabel,
+                                tint: connectionTint
+                            )
+                            StatusBadge(
+                                title: "Auto Reconnect",
+                                value: model.autoReconnectEnabled ? "On" : "Off",
+                                tint: model.autoReconnectEnabled ? FXAITheme.success : FXAITheme.textMuted
+                            )
+                            StatusBadge(
+                                title: "Last Check",
+                                value: model.lastConnectionCheckAt.map(FXAIFormatting.dateTimeString(for:)) ?? "Pending",
+                                tint: FXAITheme.accentSoft
+                            )
+                        }
 
                         Text(model.projectPathLabel)
                             .font(.callout)
@@ -24,17 +42,33 @@ struct SettingsView: View {
                             .textSelection(.enabled)
 
                         HStack {
-                            Button("Choose Project") {
-                                model.chooseProjectRoot()
+                            Button(model.projectRoot == nil ? "Connect" : "Choose Project") {
+                                if model.projectRoot == nil {
+                                    model.reconnectProject()
+                                } else {
+                                    model.chooseProjectRoot()
+                                }
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(FXAITheme.accent)
+
+                            Button(model.projectRoot == nil ? "Pick Project" : "Disconnect") {
+                                if model.projectRoot == nil {
+                                    model.chooseProjectRoot()
+                                } else {
+                                    model.disconnectProject()
+                                }
+                            }
+                            .buttonStyle(.bordered)
 
                             Button("Reveal in Finder") {
                                 model.openProjectRootInFinder()
                             }
                             .buttonStyle(.bordered)
+                            .disabled(model.projectRoot == nil)
                         }
+
+                        Toggle("Enable soft auto reconnect every 10 seconds", isOn: $model.autoReconnectEnabled)
                     }
                 }
 
@@ -70,6 +104,17 @@ struct SettingsView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var connectionTint: Color {
+        switch model.connectionState {
+        case .connected:
+            FXAITheme.success
+        case .waitingForProject:
+            FXAITheme.warning
+        case .disconnectedByUser:
+            FXAITheme.textMuted
         }
     }
 

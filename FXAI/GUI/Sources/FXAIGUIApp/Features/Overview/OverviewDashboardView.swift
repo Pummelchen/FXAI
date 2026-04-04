@@ -84,9 +84,9 @@ struct OverviewDashboardView: View {
                     }
                 } else {
                     EmptyStateView(
-                        title: "No FXAI project loaded",
-                        message: model.lastErrorMessage ?? "Choose a project root to load plugin, report, and runtime inventory.",
-                        symbolName: "folder.badge.questionmark"
+                        title: emptyStateTitle,
+                        message: emptyStateMessage,
+                        symbolName: emptyStateSymbol
                     )
                 }
             }
@@ -134,7 +134,12 @@ struct OverviewDashboardView: View {
                     .fill(FXAITheme.stroke)
                     .frame(height: 1)
 
-                HStack(spacing: 18) {
+                    HStack(spacing: 18) {
+                    StatusBadge(
+                        title: "Connection",
+                        value: model.connectionStatusLabel,
+                        tint: connectionTint
+                    )
                     StatusBadge(
                         title: "Champions",
                         value: "\(snapshot.operatorSummary.championCount)",
@@ -298,6 +303,50 @@ struct OverviewDashboardView: View {
                     .tint(FXAITheme.accent)
                 }
             }
+        }
+    }
+
+    private var emptyStateTitle: String {
+        switch model.connectionState {
+        case .connected:
+            "No FXAI project loaded"
+        case .waitingForProject:
+            "Waiting for FXAI"
+        case .disconnectedByUser:
+            "FXAI is disconnected"
+        }
+    }
+
+    private var emptyStateMessage: String {
+        switch model.connectionState {
+        case .connected:
+            model.lastErrorMessage ?? "Choose a project root to load plugin, report, and runtime inventory."
+        case .waitingForProject:
+            "The GUI is running in detached mode and will softly try to reconnect every 10 seconds. You can also pick a project root manually at any time."
+        case .disconnectedByUser:
+            "The GUI was intentionally disconnected from the framework. Use Connect or Choose Project when you want to attach it again."
+        }
+    }
+
+    private var emptyStateSymbol: String {
+        switch model.connectionState {
+        case .connected:
+            "folder.badge.questionmark"
+        case .waitingForProject:
+            "link.badge.plus"
+        case .disconnectedByUser:
+            "eject.circle"
+        }
+    }
+
+    private var connectionTint: Color {
+        switch model.connectionState {
+        case .connected:
+            FXAITheme.success
+        case .waitingForProject:
+            FXAITheme.warning
+        case .disconnectedByUser:
+            FXAITheme.textMuted
         }
     }
 }

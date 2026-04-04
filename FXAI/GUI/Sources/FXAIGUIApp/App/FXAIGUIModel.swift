@@ -6,6 +6,9 @@ import Foundation
 @MainActor
 final class FXAIGUIModel: ObservableObject {
     @Published var projectRoot: URL?
+    @Published var connectionState: ProjectConnectionState = .waitingForProject
+    @Published var autoReconnectEnabled = true
+    @Published var lastConnectionCheckAt: Date?
     @Published var snapshot: FXAIProjectSnapshot?
     @Published var runtimeSnapshot: RuntimeOperationsSnapshot?
     @Published var researchSnapshot: ResearchOSControlSnapshot?
@@ -34,6 +37,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var isRefreshing = false
 
     private let scanner = ProjectScanner()
+    private let connectionCoordinator = ProjectConnectionCoordinator()
     private let runtimeReader = RuntimeArtifactReader()
     private let researchReader = ResearchOSArtifactReader()
     private let visualizationBuilder = AdvancedVisualizationBuilder()
@@ -41,16 +45,15 @@ final class FXAIGUIModel: ObservableObject {
     private let workspaceStore = SavedWorkspaceStore()
     private var cancellables: Set<AnyCancellable> = []
     private var isRestoringPersistedState = false
+    private var preferredProjectRoot: URL?
 
     init() {
         loadPersistedState()
-        if projectRoot == nil {
-            projectRoot = ProjectPathResolver.defaultProjectRoot()
-        }
         bindPersistence()
+        bindSoftConnectionChecks()
 
         Task {
-            await refresh()
+            await performSoftConnectionCheck(forceRefresh: true)
         }
     }
 
@@ -65,7 +68,11 @@ final class FXAIGUIModel: ObservableObject {
     }
 
     var projectPathLabel: String {
-        projectRoot?.path ?? "No FXAI project selected"
+        projectRoot?.path ?? preferredProjectRoot?.path ?? "No FXAI project connected"
+    }
+
+    var connectionStatusLabel: String {
+        connectionState.title
     }
 
     var selectedRuntimeDetail: RuntimeDeploymentDetail? {
@@ -115,11 +122,12 @@ final class FXAIGUIModel: ObservableObject {
     }
 
     func refresh() async {
-        guard let projectRoot else {
-            snapshot = nil
-            researchSnapshot = nil
-            incidentSnapshot = nil
-            lastErrorMessage = "Select an FXAI project root to load the dashboard."
+        guard let projectRoot, ProjectPathResolver.isProjectRoot(projectRoot) else {
+            clearSnapshots()
+            connectionState = autoReconnectEnabled ? .waitingForProject : .disconnectedByUser
+            if autoReconnectEnabled {
+                lastErrorMessage = nil
+            }
             return
         }
 
@@ -146,13 +154,12 @@ final class FXAIGUIModel: ObservableObject {
             syncResearchSelection()
             syncVisualizationSelection()
             syncIncidentSelection()
+            connectionState = .connected
+            preferredProjectRoot = projectRoot
             lastErrorMessage = nil
         } catch {
-            snapshot = nil
-            runtimeSnapshot = nil
-            researchSnapshot = nil
-            visualizationSnapshot = nil
-            incidentSnapshot = nil
+            clearSnapshots()
+            connectionState = autoReconnectEnabled ? .waitingForProject : .disconnectedByUser
             lastErrorMessage = error.localizedDescription
         }
     }
@@ -170,9 +177,26 @@ final class FXAIGUIModel: ObservableObject {
             return
         }
 
-        projectRoot = url
+        preferredProjectRoot = url
+        autoReconnectEnabled = true
         Task {
-            await refresh()
+            await performSoftConnectionCheck(forceRefresh: true)
+        }
+    }
+
+    func disconnectProject() {
+        preferredProjectRoot = projectRoot ?? preferredProjectRoot
+        projectRoot = nil
+        autoReconnectEnabled = false
+        connectionState = .disconnectedByUser
+        clearSnapshots()
+        lastErrorMessage = nil
+    }
+
+    func reconnectProject() {
+        autoReconnectEnabled = true
+        Task {
+            await performSoftConnectionCheck(forceRefresh: true)
         }
     }
 
@@ -395,6 +419,8 @@ final class FXAIGUIModel: ObservableObject {
     private func bindPersistence() {
         let publishers: [AnyPublisher<Void, Never>] = [
             $projectRoot.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $connectionState.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $autoReconnectEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selection.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedRole.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedRuntimeSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
@@ -422,13 +448,58 @@ final class FXAIGUIModel: ObservableObject {
             .store(in: &cancellables)
     }
 
+    private func bindSoftConnectionChecks() {
+        Timer.publish(every: 10, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task {
+                    await self.performSoftConnectionCheck(forceRefresh: false)
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    private func performSoftConnectionCheck(forceRefresh: Bool) async {
+        lastConnectionCheckAt = Date()
+
+        let resolution = connectionCoordinator.resolve(
+            currentProjectRoot: projectRoot,
+            preferredProjectRoot: preferredProjectRoot,
+            autoReconnectEnabled: autoReconnectEnabled
+        )
+
+        preferredProjectRoot = resolution.preferredProjectRoot
+        connectionState = resolution.state
+
+        guard let resolvedRoot = resolution.activeProjectRoot else {
+            if projectRoot != nil {
+                projectRoot = nil
+            }
+            clearSnapshots()
+            lastErrorMessage = nil
+            return
+        }
+
+        let rootChanged = projectRoot?.standardizedFileURL != resolvedRoot.standardizedFileURL
+        if rootChanged {
+            projectRoot = resolvedRoot
+        }
+
+        if forceRefresh || rootChanged || snapshot == nil {
+            await refresh()
+        }
+    }
+
     private func persistState() {
         guard !isRestoringPersistedState else { return }
 
         let state = FXAIGUIPersistenceState(
             savedViews: savedViews,
             lastWorkspace: currentWorkspaceSnapshot(name: "Last Session"),
-            completedOnboardingRoles: completedOnboardingRoles.sorted { $0.rawValue < $1.rawValue }
+            completedOnboardingRoles: completedOnboardingRoles.sorted { $0.rawValue < $1.rawValue },
+            preferredProjectRootPath: preferredProjectRoot?.path,
+            autoReconnectEnabled: autoReconnectEnabled
         )
 
         do {
@@ -450,10 +521,19 @@ final class FXAIGUIModel: ObservableObject {
             return lhs.updatedAt > rhs.updatedAt
         }
         completedOnboardingRoles = Set(state.completedOnboardingRoles)
+        autoReconnectEnabled = state.autoReconnectEnabled
+        if let preferredProjectRootPath = state.preferredProjectRootPath, !preferredProjectRootPath.isEmpty {
+            preferredProjectRoot = URL(fileURLWithPath: preferredProjectRootPath, isDirectory: true)
+        }
 
         if let workspace = state.lastWorkspace {
-            if let path = workspace.projectRootPath, !path.isEmpty {
-                projectRoot = URL(fileURLWithPath: path, isDirectory: true)
+            if autoReconnectEnabled {
+                if let path = workspace.projectRootPath, !path.isEmpty {
+                    projectRoot = URL(fileURLWithPath: path, isDirectory: true)
+                    preferredProjectRoot = projectRoot
+                }
+            } else {
+                projectRoot = nil
             }
             selection = SidebarDestination(rawValue: workspace.selection) ?? .overview
             selectedRole = workspace.selectedRole
@@ -471,6 +551,15 @@ final class FXAIGUIModel: ObservableObject {
             researchVectorDraft = workspace.researchVectorDraft
             researchRecoveryDraft = workspace.researchRecoveryDraft
         }
+    }
+
+    private func clearSnapshots() {
+        snapshot = nil
+        runtimeSnapshot = nil
+        researchSnapshot = nil
+        visualizationSnapshot = nil
+        incidentSnapshot = nil
+        selectedIncidentID = nil
     }
 
     private func currentWorkspaceSnapshot(

@@ -22,11 +22,28 @@ struct FXAIRootView: View {
                 .help("Refresh FXAI project state")
 
                 Button {
-                    model.chooseProjectRoot()
+                    if model.projectRoot == nil {
+                        model.reconnectProject()
+                    } else {
+                        model.chooseProjectRoot()
+                    }
                 } label: {
-                    Label("Choose Project", systemImage: "folder")
+                    Label(model.projectRoot == nil ? "Connect" : "Choose Project", systemImage: model.projectRoot == nil ? "link.circle.fill" : "folder")
                 }
-                .help("Choose a different FXAI project root")
+                .help(model.projectRoot == nil ? "Reconnect or connect to an FXAI project" : "Choose a different FXAI project root")
+
+                if model.projectRoot != nil || model.connectionState == .disconnectedByUser {
+                    Button {
+                        if model.projectRoot != nil {
+                            model.disconnectProject()
+                        } else {
+                            model.reconnectProject()
+                        }
+                    } label: {
+                        Label(model.projectRoot != nil ? "Disconnect" : "Reconnect", systemImage: model.projectRoot != nil ? "eject.circle.fill" : "arrow.triangle.2.circlepath.circle.fill")
+                    }
+                    .help(model.projectRoot != nil ? "Disconnect the GUI from the current FXAI project" : "Reconnect the GUI to the preferred FXAI project")
+                }
 
                 Button {
                     model.saveCurrentView()
@@ -90,9 +107,17 @@ struct FXAIRootView: View {
 
             Section("Project") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Active Root")
+                    Text("Connection")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(FXAITheme.textSecondary)
+                    HStack {
+                        Circle()
+                            .fill(connectionColor)
+                            .frame(width: 8, height: 8)
+                        Text(model.connectionStatusLabel)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(FXAITheme.textPrimary)
+                    }
                     Text(model.projectPathLabel)
                         .font(.caption)
                         .foregroundStyle(FXAITheme.textMuted)
@@ -158,6 +183,17 @@ struct FXAIRootView: View {
                             .fill(FXAITheme.warning.opacity(0.14))
                     )
             }
+        }
+    }
+
+    private var connectionColor: Color {
+        switch model.connectionState {
+        case .connected:
+            FXAITheme.success
+        case .waitingForProject:
+            FXAITheme.warning
+        case .disconnectedByUser:
+            FXAITheme.textMuted
         }
     }
 }

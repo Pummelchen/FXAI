@@ -23,6 +23,7 @@ Phase 1 through Phase 6 are implemented here:
 - persistent saved views for repeatable operator workflows
 - role-specific onboarding and keyboard-first navigation
 - incident detection with generated recovery playbooks
+- explicit connect/disconnect handling with detached startup and soft auto reconnect every 10 seconds
 - release packaging support for a polished macOS app bundle
 
 The phased implementation reference is stored in:
@@ -37,6 +38,15 @@ swift build
 swift run FXAIGUI
 ./Tools/package_gui_release.sh
 ```
+
+## Connection Behavior
+
+The GUI can start cleanly even when MT5 or the FXAI project tree is not ready yet.
+
+- if a valid FXAI project root is available, it connects automatically
+- if not, it starts in a detached shell mode without failing
+- it can softly retry connection every 10 seconds when auto reconnect is enabled
+- operators can explicitly disconnect and reconnect from the toolbar or settings
 
 ## Design Principles
 

@@ -33,7 +33,9 @@ struct Phase6WorkflowTests {
         let state = FXAIGUIPersistenceState(
             savedViews: [savedView],
             lastWorkspace: savedView,
-            completedOnboardingRoles: [.liveTrader, .architect]
+            completedOnboardingRoles: [.liveTrader, .architect],
+            preferredProjectRootPath: "/tmp/fxai",
+            autoReconnectEnabled: false
         )
 
         try store.save(state)
@@ -43,6 +45,8 @@ struct Phase6WorkflowTests {
         #expect(loaded.savedViews.first?.name == "Live EURUSD")
         #expect(loaded.lastWorkspace?.selection == "runtimeMonitor")
         #expect(Set(loaded.completedOnboardingRoles) == Set([.liveTrader, .architect]))
+        #expect(loaded.preferredProjectRootPath == "/tmp/fxai")
+        #expect(loaded.autoReconnectEnabled == false)
     }
 
     @Test
@@ -160,5 +164,44 @@ struct Phase6WorkflowTests {
         #expect(guide.steps.count >= 3)
         #expect(guide.recommendedDestinations.contains(where: { $0.selection == "researchControl" }))
         #expect(guide.recommendedCommands.contains(where: { $0.command.contains("autonomous-governance") }))
+    }
+
+    @Test
+    func projectConnectionCoordinatorSupportsDetachedAndReconnectStates() throws {
+        let projectRoot = try makeProjectRootFixture()
+        let coordinator = ProjectConnectionCoordinator(defaultProjectRootProvider: { nil })
+
+        let waiting = coordinator.resolve(
+            currentProjectRoot: nil,
+            preferredProjectRoot: nil,
+            autoReconnectEnabled: true
+        )
+        #expect(waiting.state == .waitingForProject)
+        #expect(waiting.activeProjectRoot == nil)
+
+        let connected = coordinator.resolve(
+            currentProjectRoot: nil,
+            preferredProjectRoot: projectRoot,
+            autoReconnectEnabled: true
+        )
+        #expect(connected.state == .connected)
+        #expect(connected.activeProjectRoot == projectRoot)
+
+        let disconnected = coordinator.resolve(
+            currentProjectRoot: nil,
+            preferredProjectRoot: projectRoot,
+            autoReconnectEnabled: false
+        )
+        #expect(disconnected.state == .disconnectedByUser)
+        #expect(disconnected.activeProjectRoot == nil)
+    }
+
+    private func makeProjectRootFixture() throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("Plugins", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("Tools", isDirectory: true), withIntermediateDirectories: true)
+        try Data().write(to: root.appendingPathComponent("FXAI.mq5"))
+        return root
     }
 }

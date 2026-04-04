@@ -89,14 +89,37 @@ public struct FXAIGUIPersistenceState: Codable, Hashable, Sendable {
     public var savedViews: [SavedWorkspaceView]
     public var lastWorkspace: SavedWorkspaceView?
     public var completedOnboardingRoles: [WorkspaceRole]
+    public var preferredProjectRootPath: String?
+    public var autoReconnectEnabled: Bool
 
     public init(
         savedViews: [SavedWorkspaceView] = [],
         lastWorkspace: SavedWorkspaceView? = nil,
-        completedOnboardingRoles: [WorkspaceRole] = []
+        completedOnboardingRoles: [WorkspaceRole] = [],
+        preferredProjectRootPath: String? = nil,
+        autoReconnectEnabled: Bool = true
     ) {
         self.savedViews = savedViews
         self.lastWorkspace = lastWorkspace
         self.completedOnboardingRoles = completedOnboardingRoles
+        self.preferredProjectRootPath = preferredProjectRootPath
+        self.autoReconnectEnabled = autoReconnectEnabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case savedViews
+        case lastWorkspace
+        case completedOnboardingRoles
+        case preferredProjectRootPath
+        case autoReconnectEnabled
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        savedViews = try container.decodeIfPresent([SavedWorkspaceView].self, forKey: .savedViews) ?? []
+        lastWorkspace = try container.decodeIfPresent(SavedWorkspaceView.self, forKey: .lastWorkspace)
+        completedOnboardingRoles = try container.decodeIfPresent([WorkspaceRole].self, forKey: .completedOnboardingRoles) ?? []
+        preferredProjectRootPath = try container.decodeIfPresent(String.self, forKey: .preferredProjectRootPath)
+        autoReconnectEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoReconnectEnabled) ?? true
     }
 }
