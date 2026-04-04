@@ -25,6 +25,8 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 
 - `API/`
   Plugin contracts, runtime context helpers, and TensorCore bridges.
+- `API/Contract/`
+  Split plugin-contract internals for support types, public API surface, and persistence wiring behind `plugin_contract.mqh`.
 - `API/Context/`
   Split plugin-context internals for state, payload, transfer, quality, replay, and runtime projection helpers.
 - `Engine/`
@@ -37,12 +39,22 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
   Warmup modules split by normalization search, scoring, transfer, portfolio diagnostics, and entrypoint orchestration.
 - `Engine/Runtime/`
   Extracted live-trading helpers used by the EA entrypoint, including the live control-plane snapshot and peer-pressure logic.
+- `Engine/Runtime/runtime_*_block.mqh`
+  Split feature, transfer, model, and policy stages behind `engine_runtime.mqh` so the main runtime entrypoint stays readable.
 - `TensorCore/`
   Internal neural runtime shared by the stronger sequence and tensor-heavy plugins.
+- `TensorCore/Transfer/`
+  Split shared transfer-backbone internals for globals, temporal pooling, feature encoding, and model heads behind `tensor_transfer.mqh`.
 - `Plugins/`
   Model families and plugin implementations.
 - `Plugins/Sequence/ai_*/`
   Internal split state and public sections for the largest sequence-model plugins, including `ai_tcn/`, `ai_s4/`, and `ai_stmn/`.
+- `Plugins/Sequence/ai_tft/Forward/`
+  Split TFT forward-pass helpers into utility, sequence, and head-specific modules.
+- `Plugins/Sequence/ai_patchtst/`
+  Split PatchTST private, public, and training sections behind `ai_patchtst.mqh`.
+- `Plugins/Linear/lin_pa/`
+  Split passive-aggressive plugin internals into private, public, and training sections.
 - `Plugins/Tree/tree_catboost/`, `Plugins/Tree/tree_lgbm/`
   Internal split class sections for the largest tree-model plugins.
 - `Tests/`
@@ -51,6 +63,10 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
   Split Audit Lab scoring internals for core helpers, adversarial packs, metrics, and scenario execution.
 - `Tools/testlab/`
   Internal Python package behind `fxai_testlab.py`, split into compile, audit-run, reporting, baseline, optimization, release-gate, and CLI modules.
+- `Tools/offline_lab/cli_*.py`
+  Split Offline Lab command routing into campaign, command, and parser modules behind `cli.py`.
+- `Tools/offline_lab/common_*.py`
+  Split shared Offline Lab helpers into schema, utilities, DB, statistics, and path modules behind `common.py`.
 - `GUI/Sources/FXAIGUICore`, `GUI/Sources/FXAIGUIApp`
   Swift package targets for the GUI’s project scanner, runtime and Research OS artifact readers, advanced visualization builders, saved-workspace persistence, onboarding guides, incident builders, design system, navigation shell, Theme V1 token/layout/rendering stack, SVG asset parsing, calibration overlays, adaptive finance dashboard components, Phase 2 run builders, Phase 3 runtime/promotion views, Phase 4 Turso/Research OS control surfaces, Phase 5 Metal-backed visualization surfaces, and Phase 6 operator-polish features.
 
