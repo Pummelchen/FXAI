@@ -4,7 +4,10 @@ import argparse
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from offline_lab import cli as offline_cli
+from offline_lab import cli_commands, cli_parser
 from offline_lab.common import close_db, connect_db, query_one
 from offline_lab.environment import bootstrap_environment
 from offline_lab.fixtures import patched_paths, seed_completed_run_fixture, seed_profile_fixture
@@ -132,3 +135,48 @@ def test_seed_demo_respects_runtime_mode():
             close_db(conn)
             assert row is not None
             assert str(row["runtime_mode"]) == "production"
+
+
+def test_export_dataset_closes_connection_on_compile_failure():
+    sentinel = object()
+    closed = {"count": 0}
+    saved = {
+        "connect_db": cli_commands.connect_db,
+        "close_db": cli_commands.close_db,
+        "compile_export_runner": cli_commands.compile_export_runner,
+    }
+    cli_commands.connect_db = lambda _path: sentinel
+    cli_commands.close_db = lambda conn: closed.__setitem__("count", closed["count"] + (1 if conn is sentinel else 0))
+    cli_commands.compile_export_runner = lambda: 1
+    try:
+        args = argparse.Namespace(
+            db="/tmp/fxai-test.db",
+            group_key="",
+            symbol="EURUSD",
+            symbol_list="",
+            symbol_pack="",
+            months_list="3",
+            skip_compile=False,
+        )
+        with pytest.raises(cli_commands.OfflineLabError):
+            cli_commands.cmd_export_dataset(args)
+        assert closed["count"] == 1
+    finally:
+        cli_commands.connect_db = saved["connect_db"]
+        cli_commands.close_db = saved["close_db"]
+        cli_commands.compile_export_runner = saved["compile_export_runner"]
+
+
+def test_cli_parser_main_handles_offline_lab_error():
+    class DummyParser:
+        def parse_args(self):
+            return argparse.Namespace(
+                func=lambda _args: (_ for _ in ()).throw(cli_parser.OfflineLabError("boom"))
+            )
+
+    saved = cli_parser.build_parser
+    cli_parser.build_parser = lambda: DummyParser()
+    try:
+        assert cli_parser.main() == 1
+    finally:
+        cli_parser.build_parser = saved

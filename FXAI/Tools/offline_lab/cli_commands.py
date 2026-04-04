@@ -38,9 +38,11 @@ from .cli_campaigns import *
 
 def cmd_init_db(args) -> int:
     conn = connect_db(Path(args.db))
-    close_db(conn)
-    print(f"initialized Turso/libSQL lab: {args.db}")
-    return 0
+    try:
+        print(f"initialized Turso/libSQL lab: {args.db}")
+        return 0
+    finally:
+        close_db(conn)
 
 
 def cmd_validate_env(_args) -> int:
@@ -264,108 +266,116 @@ def cmd_compile_export(_args) -> int:
 
 def cmd_export_dataset(args) -> int:
     conn = connect_db(Path(args.db))
-    group_key = getattr(args, "group_key", "") or safe_token(f"manual_export_{now_unix()}")
-    symbols = resolve_symbols(args)
-    months_list = resolve_months_list(args.months_list)
-    if not getattr(args, "skip_compile", False):
-        if compile_export_runner() != 0:
-            raise OfflineLabError("failed to compile FXAI_OfflineExportRunner.mq5")
-        args = argparse.Namespace(**vars(args))
-        args.skip_compile = True
-    datasets = []
-    for symbol in symbols:
-        for months in months_list:
-            datasets.append(export_single_dataset(conn, args, symbol, months, group_key))
-    print(json.dumps({"group_key": group_key, "datasets": datasets}, indent=2, sort_keys=True))
-    close_db(conn)
-    return 0
+    try:
+        group_key = getattr(args, "group_key", "") or safe_token(f"manual_export_{now_unix()}")
+        symbols = resolve_symbols(args)
+        months_list = resolve_months_list(args.months_list)
+        if not getattr(args, "skip_compile", False):
+            if compile_export_runner() != 0:
+                raise OfflineLabError("failed to compile FXAI_OfflineExportRunner.mq5")
+            args = argparse.Namespace(**vars(args))
+            args.skip_compile = True
+        datasets = []
+        for symbol in symbols:
+            for months in months_list:
+                datasets.append(export_single_dataset(conn, args, symbol, months, group_key))
+        print(json.dumps({"group_key": group_key, "datasets": datasets}, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
 
 
 def cmd_tune_zoo(args) -> int:
     conn = connect_db(Path(args.db))
-    group_key = getattr(args, "group_key", "") or safe_token(f"{args.profile}_{now_unix()}")
-    resolve_args = args
-    if getattr(args, "auto_export", False) and not getattr(args, "skip_compile", False):
-        if compile_export_runner() != 0:
-            raise OfflineLabError("failed to compile FXAI_OfflineExportRunner.mq5")
-        resolve_args = argparse.Namespace(**vars(args))
-        resolve_args.skip_compile = True
-    datasets = resolve_dataset_rows(conn, resolve_args, getattr(args, "auto_export", False), group_key)
-    if not datasets:
-        raise OfflineLabError("no datasets resolved for tune-zoo")
+    try:
+        group_key = getattr(args, "group_key", "") or safe_token(f"{args.profile}_{now_unix()}")
+        resolve_args = args
+        if getattr(args, "auto_export", False) and not getattr(args, "skip_compile", False):
+            if compile_export_runner() != 0:
+                raise OfflineLabError("failed to compile FXAI_OfflineExportRunner.mq5")
+            resolve_args = argparse.Namespace(**vars(args))
+            resolve_args.skip_compile = True
+        datasets = resolve_dataset_rows(conn, resolve_args, getattr(args, "auto_export", False), group_key)
+        if not datasets:
+            raise OfflineLabError("no datasets resolved for tune-zoo")
 
-    if not getattr(args, "skip_compile", False):
-        rc = compile_audit_runner()
-        if rc != 0:
-            raise OfflineLabError("failed to compile FXAI_AuditRunner.mq5")
+        if not getattr(args, "skip_compile", False):
+            rc = compile_audit_runner()
+            if rc != 0:
+                raise OfflineLabError("failed to compile FXAI_AuditRunner.mq5")
 
-    all_results = []
-    for dataset in datasets:
-        dataset_out_dir = RUNS_DIR / safe_token(args.profile) / safe_token(dataset["dataset_key"])
-        ensure_dir(dataset_out_dir)
-        baseline = run_dataset_baseline(conn, dataset, args.profile, args, dataset_out_dir)
-        results = run_dataset_campaign(conn, dataset, args.profile, args, dataset_out_dir, baseline["summary"], baseline["base_args"])
-        all_results.append({
-            "dataset_key": dataset["dataset_key"],
-            "symbol": dataset["symbol"],
-            "baseline_report": str(baseline["report_path"]),
-            "run_count": len(results),
-        })
-    print(json.dumps({"profile": args.profile, "datasets": all_results}, indent=2, sort_keys=True))
-    close_db(conn)
-    return 0
+        all_results = []
+        for dataset in datasets:
+            dataset_out_dir = RUNS_DIR / safe_token(args.profile) / safe_token(dataset["dataset_key"])
+            ensure_dir(dataset_out_dir)
+            baseline = run_dataset_baseline(conn, dataset, args.profile, args, dataset_out_dir)
+            results = run_dataset_campaign(conn, dataset, args.profile, args, dataset_out_dir, baseline["summary"], baseline["base_args"])
+            all_results.append({
+                "dataset_key": dataset["dataset_key"],
+                "symbol": dataset["symbol"],
+                "baseline_report": str(baseline["report_path"]),
+                "run_count": len(results),
+            })
+        print(json.dumps({"profile": args.profile, "datasets": all_results}, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
 
 
 def cmd_best_params(args) -> int:
     conn = connect_db(Path(args.db))
-    rows = load_completed_runs(conn, args)
-    if not rows:
-        raise OfflineLabError("no completed tuning runs found for best-params")
-    winners, _dataset_counts = aggregate_best_candidates(rows)
-    promoted = persist_best_configs(conn, args, winners)
-    champion_decisions = update_champion_registry(conn, args, promoted)
-    family_scorecards = persist_family_scorecards(conn, args, rows, promoted)
-    distill_artifacts = write_distillation_artifacts(conn, args, promoted)
-    shadow_ingest = ingest_shadow_fleet_ledgers(conn, args.profile)
-    teacher_factories = write_teacher_factory_artifacts(conn, args, promoted)
-    foundation_teachers = write_foundation_teacher_artifacts(conn, args, promoted)
-    foundation_bundles = write_foundation_model_bundles(conn, args, promoted)
-    student_bundles = write_student_deployment_bundles(conn, args, promoted)
-    attribution_profiles = write_attribution_profiles(conn, args)
-    student_router_profiles = write_student_router_profiles(conn, args)
-    live_deployments = write_live_deployment_profiles(conn, args)
-    governance_payload = run_autonomous_governance(conn, args, str(getattr(args, "group_key", "") or ""))
-    print(json.dumps({
-        "profile": args.profile,
-        "promoted_count": len(promoted),
-        "champion_count": sum(1 for item in champion_decisions if item["status"] == "champion"),
-        "challenger_count": sum(1 for item in champion_decisions if item["status"] == "challenger"),
-        "family_scorecards": len(family_scorecards),
-        "distillation_artifacts": len(distill_artifacts),
-        "teacher_factories": len(teacher_factories),
-        "foundation_teachers": len(foundation_teachers),
-        "foundation_bundles": len(foundation_bundles),
-        "student_bundles": len(student_bundles),
-        "attribution_profiles": len(attribution_profiles),
-        "student_router_profiles": len(student_router_profiles),
-        "live_deployments": len(live_deployments),
-        "shadow_rows_ingested": int(shadow_ingest.get("rows_ingested", 0)),
-        "governance_decisions": len(governance_payload.get("decisions", [])),
-        "world_plans": len(governance_payload.get("world_plans", [])),
-        "portfolio_supervisor_artifact": str(governance_payload.get("portfolio_supervisor", {}).get("artifact_path", "")),
-        "supervisor_service_artifacts": len(governance_payload.get("supervisor_service", [])),
-        "supervisor_command_artifacts": len(governance_payload.get("supervisor_commands", [])),
-    }, indent=2, sort_keys=True))
-    close_db(conn)
-    return 0
+    try:
+        rows = load_completed_runs(conn, args)
+        if not rows:
+            raise OfflineLabError("no completed tuning runs found for best-params")
+        winners, _dataset_counts = aggregate_best_candidates(rows)
+        promoted = persist_best_configs(conn, args, winners)
+        champion_decisions = update_champion_registry(conn, args, promoted)
+        family_scorecards = persist_family_scorecards(conn, args, rows, promoted)
+        distill_artifacts = write_distillation_artifacts(conn, args, promoted)
+        shadow_ingest = ingest_shadow_fleet_ledgers(conn, args.profile)
+        teacher_factories = write_teacher_factory_artifacts(conn, args, promoted)
+        foundation_teachers = write_foundation_teacher_artifacts(conn, args, promoted)
+        foundation_bundles = write_foundation_model_bundles(conn, args, promoted)
+        student_bundles = write_student_deployment_bundles(conn, args, promoted)
+        attribution_profiles = write_attribution_profiles(conn, args)
+        student_router_profiles = write_student_router_profiles(conn, args)
+        live_deployments = write_live_deployment_profiles(conn, args)
+        governance_payload = run_autonomous_governance(conn, args, str(getattr(args, "group_key", "") or ""))
+        print(json.dumps({
+            "profile": args.profile,
+            "promoted_count": len(promoted),
+            "champion_count": sum(1 for item in champion_decisions if item["status"] == "champion"),
+            "challenger_count": sum(1 for item in champion_decisions if item["status"] == "challenger"),
+            "family_scorecards": len(family_scorecards),
+            "distillation_artifacts": len(distill_artifacts),
+            "teacher_factories": len(teacher_factories),
+            "foundation_teachers": len(foundation_teachers),
+            "foundation_bundles": len(foundation_bundles),
+            "student_bundles": len(student_bundles),
+            "attribution_profiles": len(attribution_profiles),
+            "student_router_profiles": len(student_router_profiles),
+            "live_deployments": len(live_deployments),
+            "shadow_rows_ingested": int(shadow_ingest.get("rows_ingested", 0)),
+            "governance_decisions": len(governance_payload.get("decisions", [])),
+            "world_plans": len(governance_payload.get("world_plans", [])),
+            "portfolio_supervisor_artifact": str(governance_payload.get("portfolio_supervisor", {}).get("artifact_path", "")),
+            "supervisor_service_artifacts": len(governance_payload.get("supervisor_service", [])),
+            "supervisor_command_artifacts": len(governance_payload.get("supervisor_commands", [])),
+        }, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
 
 
 def cmd_shadow_sync(args) -> int:
     conn = connect_db(Path(args.db))
-    payload = ingest_shadow_fleet_ledgers(conn, args.profile)
-    close_db(conn)
-    print(json.dumps(payload, indent=2, sort_keys=True))
-    return 0
+    try:
+        payload = ingest_shadow_fleet_ledgers(conn, args.profile)
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
 
 
 def cmd_dashboard(args) -> int:
@@ -523,11 +533,13 @@ def cmd_autonomous_governance(args) -> int:
 
 def cmd_supervisor_sync(args) -> int:
     conn = connect_db(Path(args.db))
-    payload = write_supervisor_service_artifacts(conn, args)
-    commands = write_supervisor_command_artifacts(conn, args)
-    close_db(conn)
-    print(json.dumps({"profile": args.profile, "artifacts": payload, "commands": commands}, indent=2, sort_keys=True))
-    return 0
+    try:
+        payload = write_supervisor_service_artifacts(conn, args)
+        commands = write_supervisor_command_artifacts(conn, args)
+        print(json.dumps({"profile": args.profile, "artifacts": payload, "commands": commands}, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
 
 
 def cmd_attribution_prune(args) -> int:
@@ -585,10 +597,12 @@ def cmd_recover_artifacts(args) -> int:
 
 def cmd_supervisor_daemon(args) -> int:
     conn = connect_db(Path(args.db))
-    payload = run_supervisor_daemon(conn, args)
-    close_db(conn)
-    print(json.dumps(payload, indent=2, sort_keys=True))
-    return 0
+    try:
+        payload = run_supervisor_daemon(conn, args)
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
 
 
 def cmd_control_loop(args) -> int:
@@ -649,5 +663,4 @@ def cmd_control_loop(args) -> int:
             time.sleep(sleep_seconds)
     close_db(conn)
     return 0
-
 
