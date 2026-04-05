@@ -2,11 +2,11 @@ import Foundation
 
 public enum SVGAssetCatalog {
     public static func referenceSVGURL() -> URL? {
-        Bundle.module.url(forResource: "GUI", withExtension: "svg")
+        Bundle.module.url(forResource: "FXAI-theme-reference", withExtension: "svg")
     }
 
     public static func referencePNGURL() -> URL? {
-        Bundle.module.url(forResource: "GUI-reference", withExtension: "png")
+        Bundle.module.url(forResource: "FXAI-theme-reference", withExtension: "png")
     }
 
     public static func referenceSVGData() -> Data? {

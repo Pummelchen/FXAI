@@ -1,6 +1,6 @@
-# Finance App Theme Migration
+# FXAI Operator Theme Migration
 
-This note describes how to integrate the FXAI GUI theme architecture into an existing finance macOS app without rewriting business logic.
+This note describes how to integrate the FXAI GUI theme architecture into an existing macOS operator app without rewriting business logic.
 
 ## 1. Make the app shell theme-aware
 
@@ -14,7 +14,7 @@ This note describes how to integrate the FXAI GUI theme architecture into an exi
 Recommended order:
 
 1. App shell and navigation surfaces
-2. Core finance dashboard surfaces
+2. Core dashboard and operator surfaces
 3. Shared cards, badges, charts, and footer strips
 4. Secondary reports and operator tools
 5. Legacy views last

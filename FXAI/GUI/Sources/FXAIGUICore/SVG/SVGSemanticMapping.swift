@@ -9,7 +9,7 @@ public struct SVGSemanticZoneMapping: Sendable {
 public enum SVGSemanticMapping {
     public static let baselineMappings: [SVGSemanticZoneMapping] = [
         .init(zone: .header, frame: CGRect(x: 80, y: 0, width: 1648, height: 180), description: "Header title, subtitle, and divider."),
-        .init(zone: .sidebar, frame: CGRect(x: 0, y: 220.38, width: 98.5, height: 675.309), description: "Left navigation slab with muted finance icons."),
+        .init(zone: .sidebar, frame: CGRect(x: 0, y: 220.38, width: 98.5, height: 675.309), description: "Left navigation slab with muted sidebar icons."),
         .init(zone: .kpis, frame: CGRect(x: 186, y: 229, width: 1404, height: 212), description: "Top KPI row that reflows under constrained widths."),
         .init(zone: .invoices, frame: CGRect(x: 129, y: 548, width: 696, height: 513), description: "Gauge, invoice metric cards, and floating amount owed overlay."),
         .init(zone: .chart, frame: CGRect(x: 958, y: 524, width: 571, height: 330), description: "Bar chart block with tooltip and month labels."),

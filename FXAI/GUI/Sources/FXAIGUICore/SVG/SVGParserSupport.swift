@@ -26,7 +26,7 @@ public enum SVGParserSupport {
 
     public static func validateReferenceAsset() -> [String] {
         guard let parsed = parseReferenceAsset() else {
-            return ["Missing GUI.svg reference asset in bundle."]
+            return ["Missing theme reference asset in bundle."]
         }
 
         var issues: [String] = []

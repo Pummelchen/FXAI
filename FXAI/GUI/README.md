@@ -4,7 +4,7 @@ FXAI GUI is an optional macOS 26 operator surface for the FXAI framework.
 
 The terminal remains first-class. The GUI exists to make the framework easier to inspect, faster to operate, and less error-prone for humans. Every major GUI workflow is designed to map back to an explicit FXAI command, artifact, or report.
 
-The primary app surface is the FXAI operator shell, not the SVG-derived theme showcase. The `GUI.svg` work remains in the codebase as the first production theme and calibration reference, but the shipped app opens into the FXAI workspaces, builders, reports, runtime monitor, and Research OS views.
+The primary app surface is the FXAI operator shell, not the old visual reference showcase. The shipped app opens into the FXAI workspaces, builders, reports, runtime monitor, and Research OS views.
 
 ## Current Scope
 
@@ -30,11 +30,11 @@ Phase 1 through Phase 6 are implemented here:
 
 ## Theme Support
 
-The app also ships a production finance theme under:
+The app also ships a shared operator theme under:
 
 - `FinancialDashboardThemeV1`
 
-This is an SVG-driven theme and rendering system built from the canonical `GUI.svg` asset and exposed through:
+This is a reference-driven theme and rendering system exposed through:
 
 - `Sources/FXAIGUICore/Theme/`
 - `Sources/FXAIGUICore/Layout/`
@@ -43,12 +43,12 @@ This is an SVG-driven theme and rendering system built from the canonical `GUI.s
 - `Sources/FXAIGUIApp/Components/`
 - `Sources/FXAIGUIApp/Debug/`
 
-Theme V1 includes:
+The theme system includes:
 - reusable theme tokens for colors, gradients, glows, shadow stacks, typography, radii, materials, layout metrics, and chart style
 - semantic component styles, render-tier policy, and a shared theme registry/environment
 - an adaptive dashboard layout engine with compact, standard, wide, and ultra-wide classes
-- a custom finance dashboard renderer using SwiftUI plus AppKit/WebKit and Metal where useful
-- debug calibration mode with SVG overlay, PNG compare mode, layout guides, frame outlines, live scale display, and effect toggles
+- a custom operator-theme renderer stack using SwiftUI plus AppKit/WebKit and Metal where useful
+- debug calibration mode with reference overlay, compare mode, layout guides, frame outlines, live scale display, and effect toggles
 - a detached-safe startup path so the GUI can launch even before FXAI or MT5 is fully ready
 
 The phased implementation reference is stored in:
@@ -67,10 +67,10 @@ swift run FXAIGUI
 ./Tools/package_gui_release.sh
 ```
 
-The canonical reference assets are bundled from:
+The internal reference assets are bundled from:
 
-- `Sources/FXAIGUICore/Resources/Reference/GUI.svg`
-- `Sources/FXAIGUICore/Resources/Reference/GUI-reference.png`
+- `Sources/FXAIGUICore/Resources/Reference/FXAI-theme-reference.svg`
+- `Sources/FXAIGUICore/Resources/Reference/FXAI-theme-reference.png`
 
 ## Connection Behavior
 
@@ -87,7 +87,6 @@ The GUI can start cleanly even when MT5 or the FXAI project tree is not ready ye
 - read-only by default for sensitive runtime workflows
 - role-oriented information architecture
 - minimalistic dark visual language
-- SVG is the source of truth for Theme V1 geometry and styling
 - adaptive, not fixed-canvas
 - premium shadow/glow/material rendering over generic stock controls
 - real FXAI artifact awareness instead of placeholder-only UI

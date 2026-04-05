@@ -9,7 +9,7 @@ struct ThemeRegistryTests {
 
         let resolved = try #require(registry.theme(for: .financialDashboardV1))
         #expect(resolved.themeID == .financialDashboardV1)
-        #expect(resolved.displayName == "Financial Dashboard Theme V1")
+        #expect(resolved.displayName == "FXAI Operator Theme")
         #expect(registry.contains(.financialDashboardV1))
     }
 
@@ -23,6 +23,6 @@ struct ThemeRegistryTests {
         #expect(environment === ThemeEnvironment.shared)
 
         environment.activateTheme(.financialDashboardV1)
-        #expect(environment.currentTheme.displayName == "Financial Dashboard Theme V1")
+        #expect(environment.currentTheme.displayName == "FXAI Operator Theme")
     }
 }

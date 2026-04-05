@@ -2,7 +2,7 @@ import SwiftUI
 
 public struct FinancialDashboardThemeV1: AppTheme {
     public let themeID: ThemeID = .financialDashboardV1
-    public let displayName = "Financial Dashboard Theme V1"
+    public let displayName = "FXAI Operator Theme"
     public let colors: ThemeColors
     public let gradients: ThemeGradients
     public let shadows: ThemeShadows

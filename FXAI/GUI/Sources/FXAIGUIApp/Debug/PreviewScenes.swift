@@ -6,7 +6,7 @@ private struct PreviewDashboardHarness: View {
     @StateObject private var themeEnvironment = ThemeEnvironment.preview()
 
     var body: some View {
-        DashboardRootView()
+        FXAIRootView()
             .environmentObject(model)
             .environmentObject(themeEnvironment)
     }

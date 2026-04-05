@@ -22,7 +22,7 @@ struct SettingsView: View {
                         ThemeInspectorView(layoutOutput: nil)
                             .environmentObject(themeEnvironment)
 
-                        Text("The finance app is now theme-aware at the app-shell level. Theme V1 is registered through the shared registry and injected into the full GUI tree, with future themes added through `ThemeBootstrap` and `ThemeRegistry`.")
+                        Text("The FXAI operator app is now theme-aware at the app-shell level. The shared theme is registered through the common registry and injected into the full GUI tree, with future themes added through `ThemeBootstrap` and `ThemeRegistry`.")
                             .font(.callout)
                             .foregroundStyle(FXAITheme.textSecondary)
                     }
