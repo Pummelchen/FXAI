@@ -33,14 +33,16 @@ public struct ChartRenderer: View {
                             size: descriptor.frame.size,
                             cornerRadius: descriptor.month == .aug ? 11.125 * frameModel.scale : theme.cornerRadii.bar * frameModel.scale,
                             shadow: style.primaryShadow,
-                            scale: frameModel.scale
+                            scale: frameModel.scale,
+                            context: ShadowProjectionContext(frame: descriptor.frame, stageSize: frameModel.stageFrame.size, lightSource: theme.shadows.lightSource)
                         )
                     } else {
                         ShadowStackRenderer(
                             size: descriptor.frame.size,
                             cornerRadius: theme.cornerRadii.bar * frameModel.scale,
                             shadow: style.defaultShadow,
-                            scale: frameModel.scale
+                            scale: frameModel.scale,
+                            context: ShadowProjectionContext(frame: descriptor.frame, stageSize: frameModel.stageFrame.size, lightSource: theme.shadows.lightSource)
                         )
                     }
 

@@ -4,6 +4,7 @@ import SwiftUI
 struct KPICardView: View {
     let kind: SVGKPIKind
     let frame: CGRect
+    let stageSize: CGSize
     let content: DashboardKPIContent
     let theme: any AppTheme
     let scale: CGFloat
@@ -21,7 +22,13 @@ struct KPICardView: View {
                     .offset(x: frame.width * 0.18, y: frame.height * 0.18)
             }
 
-            ShadowStackRenderer(size: frame.size, cornerRadius: cornerRadius, shadow: shadow, scale: scale)
+            ShadowStackRenderer(
+                size: frame.size,
+                cornerRadius: cornerRadius,
+                shadow: shadow,
+                scale: scale,
+                context: ShadowProjectionContext(frame: frame, stageSize: stageSize, lightSource: theme.shadows.lightSource)
+            )
 
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(content.highlightStyle == .pending ? AnyShapeStyle(style.pendingGradient) : AnyShapeStyle(style.gradient))

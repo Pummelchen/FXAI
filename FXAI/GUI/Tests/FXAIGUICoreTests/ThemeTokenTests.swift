@@ -14,6 +14,8 @@ struct ThemeTokenTests {
         #expect(theme.renderingPolicy.policy(for: .amountOwedGlassCard).preferredTier == .coreAnimation)
         #expect(theme.renderingPolicy.chartMinimumReadableWidth == 420)
         #expect(theme.renderingPolicy.compactGlowReductionThreshold == 0.86)
+        #expect(theme.shadows.lightSource.normalizedPosition.x == 0.92)
+        #expect(theme.shadows.lightSource.normalizedPosition.y == 0.08)
     }
 
     @Test

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct GaugeCardView: View {
     let frame: CGRect
+    let stageSize: CGSize
     let theme: any AppTheme
     let scale: CGFloat
 
@@ -11,7 +12,13 @@ struct GaugeCardView: View {
         let cornerRadius = theme.cornerRadii.standardCard * scale
 
         ZStack(alignment: .topLeading) {
-            ShadowStackRenderer(size: frame.size, cornerRadius: cornerRadius, shadow: style.shadow, scale: scale)
+            ShadowStackRenderer(
+                size: frame.size,
+                cornerRadius: cornerRadius,
+                shadow: style.shadow,
+                scale: scale,
+                context: ShadowProjectionContext(frame: frame, stageSize: stageSize, lightSource: theme.shadows.lightSource)
+            )
 
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(style.backgroundGradient)

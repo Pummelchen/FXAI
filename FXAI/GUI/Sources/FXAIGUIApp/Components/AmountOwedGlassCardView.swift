@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AmountOwedGlassCardView: View {
     let frame: CGRect
+    let stageSize: CGSize
     let theme: any AppTheme
     let scale: CGFloat
     let intensity: CGFloat
@@ -17,7 +18,13 @@ struct AmountOwedGlassCardView: View {
                 .offset(x: frame.width * 0.2, y: frame.height * 0.14)
                 .opacity(reducedEffects ? 0.42 : 1)
 
-            ShadowStackRenderer(size: frame.size, cornerRadius: cornerRadius, shadow: style.shadow, scale: scale)
+            ShadowStackRenderer(
+                size: frame.size,
+                cornerRadius: cornerRadius,
+                shadow: style.shadow,
+                scale: scale,
+                context: ShadowProjectionContext(frame: frame, stageSize: stageSize, lightSource: theme.shadows.lightSource)
+            )
 
             GlassRenderer(size: frame.size, cornerRadius: cornerRadius, theme: theme, scale: scale)
 

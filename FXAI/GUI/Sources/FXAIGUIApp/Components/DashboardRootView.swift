@@ -86,6 +86,7 @@ struct DashboardRootView: View {
                     KPICardView(
                         kind: kind,
                         frame: frame,
+                        stageSize: frameModel.stageFrame.size,
                         content: content,
                         theme: theme,
                         scale: frameModel.scale,
@@ -95,16 +96,24 @@ struct DashboardRootView: View {
                 }
             }
 
-            GaugeCardView(frame: frameModel.gaugeFrame, theme: theme, scale: frameModel.scale)
+            GaugeCardView(frame: frameModel.gaugeFrame, stageSize: frameModel.stageFrame.size, theme: theme, scale: frameModel.scale)
 
             ForEach(SVGInvoiceCardKind.allCases, id: \.self) { kind in
                 if let frame = frameModel.invoiceMetricFrames[kind], let content = SVGMetrics.invoiceCards[kind] {
-                    InvoiceMetricCardView(kind: kind, frame: frame, content: content, theme: theme, scale: frameModel.scale)
+                    InvoiceMetricCardView(
+                        kind: kind,
+                        frame: frame,
+                        stageSize: frameModel.stageFrame.size,
+                        content: content,
+                        theme: theme,
+                        scale: frameModel.scale
+                    )
                 }
             }
 
             AmountOwedGlassCardView(
                 frame: frameModel.amountOwedFrame,
+                stageSize: frameModel.stageFrame.size,
                 theme: theme,
                 scale: frameModel.scale,
                 intensity: frameModel.decorativeVisibility.glowIntensity,

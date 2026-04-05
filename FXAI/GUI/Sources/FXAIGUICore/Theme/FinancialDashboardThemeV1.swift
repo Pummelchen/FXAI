@@ -101,43 +101,50 @@ public struct FinancialDashboardThemeV1: AppTheme {
         )
 
         shadows = ThemeShadows(
+            lightSource: ShadowLightSource(
+                normalizedPosition: CGPoint(x: 0.92, y: 0.08),
+                referenceDirection: CGVector(dx: -0.88, dy: 0.47),
+                lateralResponse: 0.68,
+                verticalResponse: 0.58,
+                poolingResponse: 1.18
+            ),
             kpiCard: ShadowStack([
                 ShadowLayer(radius: 24, x: -25, y: 16, opacity: 0.28),
                 ShadowLayer(radius: 34, x: -35, y: 24, opacity: 0.25),
                 ShadowLayer(radius: 48, x: -26, y: 38, opacity: 0.22),
-                ShadowLayer(radius: 74, x: -34, y: 63, opacity: 0.18)
+                ShadowLayer(radius: 74, x: -34, y: 63, opacity: 0.18, lightInfluence: 0.94, lateralResponse: 0.54, verticalResponse: 0.52, poolingBias: 0.28)
             ]),
             pendingCard: ShadowStack([
                 ShadowLayer(radius: 28, x: -18, y: 14, opacity: 0.32),
                 ShadowLayer(radius: 46, x: -28, y: 32, opacity: 0.26),
-                ShadowLayer(radius: 82, x: 10, y: 54, opacity: 0.18)
+                ShadowLayer(radius: 82, x: 10, y: 54, opacity: 0.18, lightInfluence: 0.72, lateralResponse: 0.28, verticalResponse: 0.46, poolingBias: 0.24)
             ]),
             smallCard: ShadowStack([
-                ShadowLayer(radius: 22, x: -20, y: 12, opacity: 0.22),
-                ShadowLayer(radius: 32, x: -16, y: 24, opacity: 0.18),
-                ShadowLayer(radius: 46, x: -8, y: 34, opacity: 0.16),
-                ShadowLayer(radius: 56, x: 0, y: 46, opacity: 0.12)
+                ShadowLayer(radius: 22, x: -20, y: 12, opacity: 0.22, poolingBias: 0.18),
+                ShadowLayer(radius: 32, x: -16, y: 24, opacity: 0.18, poolingBias: 0.18),
+                ShadowLayer(radius: 46, x: -8, y: 34, opacity: 0.16, lightInfluence: 0.80, lateralResponse: 0.44, verticalResponse: 0.42, poolingBias: 0.18),
+                ShadowLayer(radius: 56, x: 0, y: 46, opacity: 0.12, lightInfluence: 0.76, lateralResponse: 0.0, verticalResponse: 0.44, poolingBias: 0.22)
             ]),
             gaugeCard: ShadowStack([
-                ShadowLayer(radius: 28, x: -24, y: 22, opacity: 0.26),
-                ShadowLayer(radius: 40, x: -22, y: 36, opacity: 0.22),
-                ShadowLayer(radius: 62, x: -18, y: 52, opacity: 0.18),
-                ShadowLayer(radius: 88, x: -14, y: 78, opacity: 0.14)
+                ShadowLayer(radius: 28, x: -24, y: 22, opacity: 0.26, poolingBias: 0.22),
+                ShadowLayer(radius: 40, x: -22, y: 36, opacity: 0.22, poolingBias: 0.24),
+                ShadowLayer(radius: 62, x: -18, y: 52, opacity: 0.18, lightInfluence: 0.92, lateralResponse: 0.56, verticalResponse: 0.56, poolingBias: 0.28),
+                ShadowLayer(radius: 88, x: -14, y: 78, opacity: 0.14, lightInfluence: 0.96, lateralResponse: 0.42, verticalResponse: 0.60, poolingBias: 0.32)
             ]),
             amountOwed: ShadowStack([
-                ShadowLayer(radius: 32, x: -22, y: 20, opacity: 0.26),
-                ShadowLayer(radius: 54, x: -28, y: 36, opacity: 0.22),
-                ShadowLayer(radius: 88, x: -8, y: 68, opacity: 0.18)
+                ShadowLayer(radius: 32, x: -22, y: 20, opacity: 0.26, poolingBias: 0.24),
+                ShadowLayer(radius: 54, x: -28, y: 36, opacity: 0.22, poolingBias: 0.26),
+                ShadowLayer(radius: 88, x: -8, y: 68, opacity: 0.18, lightInfluence: 0.94, lateralResponse: 0.38, verticalResponse: 0.58, poolingBias: 0.34)
             ]),
             chartBarPrimary: ShadowStack([
-                ShadowLayer(radius: 20, x: 0, y: 10, opacity: 0.34),
-                ShadowLayer(radius: 32, x: 0, y: 18, opacity: 0.24)
+                ShadowLayer(radius: 20, x: 0, y: 10, opacity: 0.34, lightInfluence: 0.44, lateralResponse: 0.0, verticalResponse: 0.82, poolingBias: 0.12),
+                ShadowLayer(radius: 32, x: 0, y: 18, opacity: 0.24, lightInfluence: 0.48, lateralResponse: 0.0, verticalResponse: 0.84, poolingBias: 0.14)
             ]),
             chartBarDefault: ShadowStack([
-                ShadowLayer(radius: 12, x: 0, y: 6, opacity: 0.16)
+                ShadowLayer(radius: 12, x: 0, y: 6, opacity: 0.16, lightInfluence: 0.30, lateralResponse: 0.0, verticalResponse: 0.78, poolingBias: 0.10)
             ]),
             footer: ShadowStack([
-                ShadowLayer(radius: 26, x: 0, y: 6, opacity: 0.14)
+                ShadowLayer(radius: 26, x: 0, y: 6, opacity: 0.14, lightInfluence: 0.18, lateralResponse: 0.0, verticalResponse: 0.52, poolingBias: 0.08)
             ])
         )
 

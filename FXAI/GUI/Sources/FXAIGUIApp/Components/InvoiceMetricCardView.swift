@@ -4,6 +4,7 @@ import SwiftUI
 struct InvoiceMetricCardView: View {
     let kind: SVGInvoiceCardKind
     let frame: CGRect
+    let stageSize: CGSize
     let content: InvoiceMetricContent
     let theme: any AppTheme
     let scale: CGFloat
@@ -14,7 +15,13 @@ struct InvoiceMetricCardView: View {
         let ringTint = content.ringTintHex.map { Color(hex: $0) } ?? theme.colors.textSecondary
 
         ZStack(alignment: .topLeading) {
-            ShadowStackRenderer(size: frame.size, cornerRadius: cornerRadius, shadow: style.shadow, scale: scale)
+            ShadowStackRenderer(
+                size: frame.size,
+                cornerRadius: cornerRadius,
+                shadow: style.shadow,
+                scale: scale,
+                context: ShadowProjectionContext(frame: frame, stageSize: stageSize, lightSource: theme.shadows.lightSource)
+            )
 
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(style.backgroundGradient)
