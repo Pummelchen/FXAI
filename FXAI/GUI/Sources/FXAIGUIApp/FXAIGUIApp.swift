@@ -6,7 +6,7 @@ struct FXAIGUIApp: App {
 
     var body: some Scene {
         WindowGroup("FXAI GUI") {
-            DashboardRootView()
+            FXAIRootView()
                 .environmentObject(appState.model)
                 .environmentObject(appState.themeEnvironment)
                 .background(Color.clear)

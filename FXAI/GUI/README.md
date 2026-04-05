@@ -4,6 +4,8 @@ FXAI GUI is an optional macOS 26 operator surface for the FXAI framework.
 
 The terminal remains first-class. The GUI exists to make the framework easier to inspect, faster to operate, and less error-prone for humans. Every major GUI workflow is designed to map back to an explicit FXAI command, artifact, or report.
 
+The primary app surface is the FXAI operator shell, not the SVG-derived theme showcase. The `GUI.svg` work remains in the codebase as the first production theme and calibration reference, but the shipped app opens into the FXAI workspaces, builders, reports, runtime monitor, and Research OS views.
+
 ## Current Scope
 
 Phase 1 through Phase 6 are implemented here:
@@ -26,13 +28,13 @@ Phase 1 through Phase 6 are implemented here:
 - detached startup with explicit connect/disconnect handling and soft auto reconnect every 10 seconds
 - release packaging support for a polished macOS app bundle
 
-## Theme V1
+## Theme Support
 
-The app now also ships a production finance theme under:
+The app also ships a production finance theme under:
 
 - `FinancialDashboardThemeV1`
 
-This is not a generic dashboard skin. It is an SVG-driven theme and rendering system built from the canonical `GUI.svg` asset and exposed through:
+This is an SVG-driven theme and rendering system built from the canonical `GUI.svg` asset and exposed through:
 
 - `Sources/FXAIGUICore/Theme/`
 - `Sources/FXAIGUICore/Layout/`

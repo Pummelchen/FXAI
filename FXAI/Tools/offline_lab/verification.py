@@ -94,6 +94,13 @@ def verify_deterministic_outputs(refresh_golden: bool = False) -> dict[str, obje
 
 
 def run_pytest_suite(repo_root: Path) -> dict[str, object]:
-    cmd = [sys.executable, "-m", "pytest", str(repo_root / "FXAI/Tools/tests"), "-q"]
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    fxai_root = repo_root / "FXAI"
+    cmd = [sys.executable, "-m", "pytest", "Tools/tests", "-q"]
+    proc = subprocess.run(
+        cmd,
+        cwd=fxai_root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
     return {"ok": proc.returncode == 0, "returncode": proc.returncode, "output": proc.stdout}
