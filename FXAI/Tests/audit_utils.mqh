@@ -147,6 +147,10 @@ void FXAI_AuditDefaultHyperParams(const int ai_idx,
       case (int)AI_STMN:
       case (int)AI_S4:
       case (int)AI_GEODESICATTENTION:
+      case (int)AI_QCEW:
+      case (int)AI_FEWC:
+      case (int)AI_GHA:
+      case (int)AI_TESSERACT:
          hp.lr = 0.006;
          hp.l2 = 0.002;
          break;

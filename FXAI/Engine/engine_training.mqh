@@ -32,6 +32,10 @@ bool FXAI_IsSeriousNativeAI(const int ai_idx)
       case AI_PATCHTST:
       case AI_CHRONOS:
       case AI_TIMESFM:
+      case AI_QCEW:
+      case AI_FEWC:
+      case AI_GHA:
+      case AI_TESSERACT:
       case AI_GRAPHWM:
       case AI_LIGHTGBM:
       case AI_XGB_FAST:
@@ -1274,6 +1278,26 @@ void FXAI_GetModelHyperParams(const int ai_idx, FXAIAIHyperParams &hp)
       hp.lr = 0.0060;
       hp.l2 = 0.0030;
    }
+   if(ai_idx == (int)AI_QCEW)
+   {
+      hp.lr = 0.0045;
+      hp.l2 = 0.0035;
+   }
+   if(ai_idx == (int)AI_FEWC)
+   {
+      hp.lr = 0.0060;
+      hp.l2 = 0.0020;
+   }
+   if(ai_idx == (int)AI_GHA)
+   {
+      hp.lr = 0.0040;
+      hp.l2 = 0.0035;
+   }
+   if(ai_idx == (int)AI_TESSERACT)
+   {
+      hp.lr = 0.0045;
+      hp.l2 = 0.0030;
+   }
    // Recommended LSTM starting defaults.
    if(ai_idx == (int)AI_LSTM)
    {
@@ -1465,6 +1489,18 @@ void FXAI_SampleModelHyperParams(const int ai_idx,
       case (int)AI_GEODESICATTENTION:
          hp.lr = FXAI_RandRange(0.0030, 0.0150);
          hp.l2 = FXAI_RandRange(0.0010, 0.0080);
+         break;
+
+      case (int)AI_QCEW:
+      case (int)AI_GHA:
+      case (int)AI_TESSERACT:
+         hp.lr = FXAI_RandRange(0.0025, 0.0140);
+         hp.l2 = FXAI_RandRange(0.0010, 0.0100);
+         break;
+
+      case (int)AI_FEWC:
+         hp.lr = FXAI_RandRange(0.0030, 0.0280);
+         hp.l2 = FXAI_RandRange(0.0005, 0.0120);
          break;
 
       case (int)AI_TCN:

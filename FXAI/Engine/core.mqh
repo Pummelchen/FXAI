@@ -12,7 +12,7 @@
 #define FXAI_AI_FEATURES (FXAI_MACRO_EVENT_FEATURE_OFFSET + FXAI_MACRO_EVENT_FEATURES)
 #define FXAI_AI_WEIGHTS (FXAI_AI_FEATURES + 1)
 #define FXAI_AI_MLP_HIDDEN 12
-#define FXAI_AI_COUNT 32
+#define FXAI_AI_COUNT 36
 #define FXAI_CONFORMAL_DEPTH 96
 #define FXAI_NORM_METHOD_COUNT 15
 #define FXAI_ENHASH_BUCKETS 128
@@ -101,7 +101,11 @@ enum ENUM_AI_TYPE
    AI_M1SYNC,
    AI_BUY_ONLY,
    AI_SELL_ONLY,
-   AI_RANDOM_NOSKIP
+   AI_RANDOM_NOSKIP,
+   AI_QCEW,
+   AI_FEWC,
+   AI_GHA,
+   AI_TESSERACT
 };
 
 
@@ -621,6 +625,10 @@ int FXAI_DefaultReferenceTierForAI(const int ai_id)
       case AI_AUTOFORMER:
       case AI_PATCHTST:
       case AI_GEODESICATTENTION:
+      case AI_QCEW:
+      case AI_FEWC:
+      case AI_GHA:
+      case AI_TESSERACT:
       case AI_CATBOOST:
       case AI_LIGHTGBM:
       case AI_XGB_FAST:

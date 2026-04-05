@@ -254,6 +254,10 @@ bool FXAI_PredictViaV4(CFXAIAIPlugin &plugin,
 #include "..\Plugins\Sequence\ai_stmn.mqh"
 #include "..\Plugins\Sequence\ai_tst.mqh"
 #include "..\Plugins\Sequence\ai_geodesic.mqh"
+#include "..\Plugins\Sequence\ai_qcew.mqh"
+#include "..\Plugins\Sequence\ai_fewc.mqh"
+#include "..\Plugins\Sequence\ai_gha.mqh"
+#include "..\Plugins\Sequence\ai_tesseract.mqh"
 #include "..\Plugins\Tree\tree_xgb.mqh"
 #include "..\Plugins\Distribution\dist_quantile.mqh"
 #include "..\Plugins\Linear\lin_enhash.mqh"
@@ -369,6 +373,10 @@ public:
          case (int)AI_BUY_ONLY: return new CFXAIAIRuleBuyOnly();
          case (int)AI_SELL_ONLY: return new CFXAIAIRuleSellOnly();
          case (int)AI_RANDOM_NOSKIP: return new CFXAIAIRuleRandom();
+         case (int)AI_QCEW: return new CFXAIAIQCEW();
+         case (int)AI_FEWC: return new CFXAIAIFEWC();
+         case (int)AI_GHA: return new CFXAIAIGHA();
+         case (int)AI_TESSERACT: return new CFXAIAITesseract();
          default: return NULL;
       }
    }

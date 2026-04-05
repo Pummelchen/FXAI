@@ -48,7 +48,7 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - `Plugins/`
   Model families and plugin implementations.
 - `Plugins/Sequence/ai_*/`
-  Internal split state and public sections for the largest sequence-model plugins, including `ai_tcn/`, `ai_s4/`, and `ai_stmn/`.
+  Internal split state and public sections for the largest sequence-model plugins, including `ai_tcn/`, `ai_s4/`, and `ai_stmn/`. The sequence zoo also now includes the new native research plugins `ai_qcew`, `ai_fewc`, `ai_gha`, and `ai_tesseract`.
 - `Plugins/Sequence/ai_tft/Forward/`
   Split TFT forward-pass helpers into utility, sequence, and head-specific modules.
 - `Plugins/Sequence/ai_patchtst/`

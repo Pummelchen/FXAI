@@ -82,7 +82,9 @@ void FXAI_BuildNormMethodCandidateList(const int ai_idx, int &methods[])
                       ai_idx == (int)AI_TST || ai_idx == (int)AI_AUTOFORMER ||
                       ai_idx == (int)AI_PATCHTST || ai_idx == (int)AI_STMN ||
                       ai_idx == (int)AI_S4 || ai_idx == (int)AI_CHRONOS ||
-                      ai_idx == (int)AI_TIMESFM || ai_idx == (int)AI_GEODESICATTENTION);
+                      ai_idx == (int)AI_TIMESFM || ai_idx == (int)AI_GEODESICATTENTION ||
+                      ai_idx == (int)AI_QCEW || ai_idx == (int)AI_FEWC ||
+                      ai_idx == (int)AI_GHA || ai_idx == (int)AI_TESSERACT);
 
    if(deep_model)
    {
