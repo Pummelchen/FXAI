@@ -50,7 +50,8 @@ extension FXAIGUIModel {
                 researchBranchDraft: model.researchBranchDraft,
                 researchAuditDraft: model.researchAuditDraft,
                 researchVectorDraft: model.researchVectorDraft,
-                researchRecoveryDraft: model.researchRecoveryDraft
+                researchRecoveryDraft: model.researchRecoveryDraft,
+                overviewLayout: model.overviewLayout
             )
         ]
         model.completedOnboardingRoles = [.liveTrader]

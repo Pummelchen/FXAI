@@ -18,6 +18,7 @@ struct FXAIRootView: View {
         } detail: {
             detailView
                 .padding(20)
+                .background(FXAIBackgroundView().opacity(0.92))
         }
         .navigationSplitViewStyle(.balanced)
         .toolbar {
@@ -59,6 +60,15 @@ struct FXAIRootView: View {
                     Label("Save View", systemImage: "bookmark.fill")
                 }
                 .help("Save the current GUI state as a reusable workspace view")
+
+                if model.selection == .overview {
+                    Button {
+                        model.resetOverviewLayout()
+                    } label: {
+                        Label("Reset Dashboard", systemImage: "rectangle.3.group.bubble.left.fill")
+                    }
+                    .help("Reset the overview dashboard layout to the shipped default")
+                }
 
                 Menu {
                     ForEach(themeEnvironment.allThemes, id: \.themeID) { theme in
@@ -148,7 +158,12 @@ struct FXAIRootView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(FXAITheme.backgroundSecondary.opacity(0.6))
+        .background(
+            FXAIGlassRoundedBackground(cornerRadius: 24, style: .sidebar, tint: FXAITheme.accentSoft.opacity(0.10))
+                .padding(.vertical, 8)
+                .padding(.leading, 8)
+                .padding(.trailing, 6)
+        )
         .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 280)
     }
 

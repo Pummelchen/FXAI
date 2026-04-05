@@ -31,12 +31,11 @@ struct RoleWorkspacesView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(16)
                             .background(
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .fill(model.selectedRole == role ? FXAITheme.panelStrong : FXAITheme.panel.opacity(0.72))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .strokeBorder(model.selectedRole == role ? FXAITheme.accent.opacity(0.35) : FXAITheme.stroke, lineWidth: 1)
+                                FXAIGlassRoundedBackground(
+                                    cornerRadius: 18,
+                                    style: .card,
+                                    tint: model.selectedRole == role ? FXAITheme.accent.opacity(0.14) : FXAITheme.accentSoft.opacity(0.05)
+                                )
                             )
                         }
                         .buttonStyle(.plain)
@@ -130,8 +129,7 @@ struct RoleWorkspacesView: View {
                         }
                         .padding(12)
                         .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(FXAITheme.backgroundSecondary.opacity(0.5))
+                            FXAIGlassRoundedBackground(cornerRadius: 16, style: .card, tint: FXAITheme.accent.opacity(0.05))
                         )
                     }
                 }

@@ -21,6 +21,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
     public var researchAuditDraft: ResearchOSAuditDraft
     public var researchVectorDraft: ResearchOSVectorDraft
     public var researchRecoveryDraft: ResearchOSRecoveryDraft
+    public var overviewLayout: OverviewDashboardLayoutState
 
     public init(
         id: UUID = UUID(),
@@ -42,7 +43,8 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         researchBranchDraft: ResearchOSBranchDraft,
         researchAuditDraft: ResearchOSAuditDraft,
         researchVectorDraft: ResearchOSVectorDraft,
-        researchRecoveryDraft: ResearchOSRecoveryDraft
+        researchRecoveryDraft: ResearchOSRecoveryDraft,
+        overviewLayout: OverviewDashboardLayoutState = .default()
     ) {
         self.id = id
         self.name = name
@@ -64,6 +66,81 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         self.researchAuditDraft = researchAuditDraft
         self.researchVectorDraft = researchVectorDraft
         self.researchRecoveryDraft = researchRecoveryDraft
+        self.overviewLayout = overviewLayout
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case projectRootPath
+        case createdAt
+        case updatedAt
+        case selection
+        case selectedRole
+        case selectedRuntimeSymbol
+        case selectedResearchSymbol
+        case selectedVisualizationSymbol
+        case pluginSearchText
+        case selectedPluginFamily
+        case reportCategoryFilter
+        case auditDraft
+        case backtestDraft
+        case offlineDraft
+        case researchBranchDraft
+        case researchAuditDraft
+        case researchVectorDraft
+        case researchRecoveryDraft
+        case overviewLayout
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try container.decode(String.self, forKey: .name)
+        projectRootPath = try container.decodeIfPresent(String.self, forKey: .projectRootPath)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        selection = try container.decode(String.self, forKey: .selection)
+        selectedRole = try container.decode(WorkspaceRole.self, forKey: .selectedRole)
+        selectedRuntimeSymbol = try container.decodeIfPresent(String.self, forKey: .selectedRuntimeSymbol) ?? ""
+        selectedResearchSymbol = try container.decodeIfPresent(String.self, forKey: .selectedResearchSymbol) ?? ""
+        selectedVisualizationSymbol = try container.decodeIfPresent(String.self, forKey: .selectedVisualizationSymbol) ?? ""
+        pluginSearchText = try container.decodeIfPresent(String.self, forKey: .pluginSearchText) ?? ""
+        selectedPluginFamily = try container.decodeIfPresent(String.self, forKey: .selectedPluginFamily) ?? "All"
+        reportCategoryFilter = try container.decodeIfPresent(String.self, forKey: .reportCategoryFilter) ?? "All"
+        auditDraft = try container.decodeIfPresent(AuditLabDraft.self, forKey: .auditDraft) ?? AuditLabDraft()
+        backtestDraft = try container.decodeIfPresent(BacktestBuilderDraft.self, forKey: .backtestDraft) ?? BacktestBuilderDraft()
+        offlineDraft = try container.decodeIfPresent(OfflineLabDraft.self, forKey: .offlineDraft) ?? OfflineLabDraft()
+        researchBranchDraft = try container.decodeIfPresent(ResearchOSBranchDraft.self, forKey: .researchBranchDraft) ?? ResearchOSBranchDraft()
+        researchAuditDraft = try container.decodeIfPresent(ResearchOSAuditDraft.self, forKey: .researchAuditDraft) ?? ResearchOSAuditDraft()
+        researchVectorDraft = try container.decodeIfPresent(ResearchOSVectorDraft.self, forKey: .researchVectorDraft) ?? ResearchOSVectorDraft()
+        researchRecoveryDraft = try container.decodeIfPresent(ResearchOSRecoveryDraft.self, forKey: .researchRecoveryDraft) ?? ResearchOSRecoveryDraft()
+        overviewLayout = try container.decodeIfPresent(OverviewDashboardLayoutState.self, forKey: .overviewLayout)?.normalized() ?? .default()
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encodeIfPresent(projectRootPath, forKey: .projectRootPath)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(selection, forKey: .selection)
+        try container.encode(selectedRole, forKey: .selectedRole)
+        try container.encode(selectedRuntimeSymbol, forKey: .selectedRuntimeSymbol)
+        try container.encode(selectedResearchSymbol, forKey: .selectedResearchSymbol)
+        try container.encode(selectedVisualizationSymbol, forKey: .selectedVisualizationSymbol)
+        try container.encode(pluginSearchText, forKey: .pluginSearchText)
+        try container.encode(selectedPluginFamily, forKey: .selectedPluginFamily)
+        try container.encode(reportCategoryFilter, forKey: .reportCategoryFilter)
+        try container.encode(auditDraft, forKey: .auditDraft)
+        try container.encode(backtestDraft, forKey: .backtestDraft)
+        try container.encode(offlineDraft, forKey: .offlineDraft)
+        try container.encode(researchBranchDraft, forKey: .researchBranchDraft)
+        try container.encode(researchAuditDraft, forKey: .researchAuditDraft)
+        try container.encode(researchVectorDraft, forKey: .researchVectorDraft)
+        try container.encode(researchRecoveryDraft, forKey: .researchRecoveryDraft)
+        try container.encode(overviewLayout.normalized(), forKey: .overviewLayout)
     }
 
     public var titleSummary: String {

@@ -27,7 +27,8 @@ struct Phase6WorkflowTests {
             researchBranchDraft: ResearchOSBranchDraft(profileName: "continuous"),
             researchAuditDraft: ResearchOSAuditDraft(limit: 50, pages: 2),
             researchVectorDraft: ResearchOSVectorDraft(profileName: "continuous", symbol: "EURUSD", limit: 6),
-            researchRecoveryDraft: ResearchOSRecoveryDraft(profileName: "continuous", runtimeMode: "production")
+            researchRecoveryDraft: ResearchOSRecoveryDraft(profileName: "continuous", runtimeMode: "production"),
+            overviewLayout: .default()
         )
 
         let state = FXAIGUIPersistenceState(
@@ -44,6 +45,7 @@ struct Phase6WorkflowTests {
         #expect(loaded.savedViews.count == 1)
         #expect(loaded.savedViews.first?.name == "Live EURUSD")
         #expect(loaded.lastWorkspace?.selection == "runtimeMonitor")
+        #expect(loaded.savedViews.first?.overviewLayout.sections.count == OverviewDashboardSectionKind.allCases.count)
         #expect(Set(loaded.completedOnboardingRoles) == Set([.liveTrader, .architect]))
         #expect(loaded.preferredProjectRootPath == "/tmp/fxai")
         #expect(loaded.autoReconnectEnabled == false)

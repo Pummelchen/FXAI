@@ -20,6 +20,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var selectedResearchSymbol = ""
     @Published var selectedVisualizationSymbol = ""
     @Published var selectedIncidentID: String?
+    @Published var overviewLayout = OverviewDashboardLayoutState.default()
     @Published var pluginSearchText = ""
     @Published var selectedPluginFamily = "All"
     @Published var reportCategoryFilter = "All"
@@ -269,6 +270,7 @@ final class FXAIGUIModel: ObservableObject {
             self.selectedRuntimeSymbol = savedView.selectedRuntimeSymbol
             self.selectedResearchSymbol = savedView.selectedResearchSymbol
             self.selectedVisualizationSymbol = savedView.selectedVisualizationSymbol
+            self.overviewLayout = savedView.overviewLayout.normalized()
             self.pluginSearchText = savedView.pluginSearchText
             self.selectedPluginFamily = savedView.selectedPluginFamily
             self.reportCategoryFilter = savedView.reportCategoryFilter
@@ -298,6 +300,85 @@ final class FXAIGUIModel: ObservableObject {
 
     func deleteSavedView(_ savedView: SavedWorkspaceView) {
         savedViews.removeAll { $0.id == savedView.id }
+    }
+
+    func resetOverviewLayout() {
+        overviewLayout = .default()
+    }
+
+    func moveOverviewSection(_ sectionID: UUID, by delta: Int) {
+        updateOverviewLayout { layout in
+            guard let index = layout.sections.firstIndex(where: { $0.id == sectionID }) else { return }
+            let targetIndex = min(max(0, index + delta), layout.sections.count - 1)
+            guard targetIndex != index else { return }
+            let section = layout.sections.remove(at: index)
+            layout.sections.insert(section, at: targetIndex)
+        }
+    }
+
+    func reorderOverviewSection(draggedSectionID: UUID, before targetSectionID: UUID) {
+        updateOverviewLayout { layout in
+            guard
+                let sourceIndex = layout.sections.firstIndex(where: { $0.id == draggedSectionID }),
+                let targetIndex = layout.sections.firstIndex(where: { $0.id == targetSectionID }),
+                sourceIndex != targetIndex
+            else { return }
+
+            let section = layout.sections.remove(at: sourceIndex)
+            let insertionIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex
+            layout.sections.insert(section, at: insertionIndex)
+        }
+    }
+
+    func moveOverviewWidget(sectionID: UUID, widgetID: UUID, by delta: Int) {
+        updateOverviewLayout { layout in
+            guard let sectionIndex = layout.sections.firstIndex(where: { $0.id == sectionID }) else { return }
+            guard let widgetIndex = layout.sections[sectionIndex].widgets.firstIndex(where: { $0.id == widgetID }) else { return }
+            let targetIndex = min(max(0, widgetIndex + delta), layout.sections[sectionIndex].widgets.count - 1)
+            guard targetIndex != widgetIndex else { return }
+            let widget = layout.sections[sectionIndex].widgets.remove(at: widgetIndex)
+            layout.sections[sectionIndex].widgets.insert(widget, at: targetIndex)
+        }
+    }
+
+    func reorderOverviewWidget(
+        draggedWidgetID: UUID,
+        from sourceSectionID: UUID,
+        to targetSectionID: UUID,
+        before targetWidgetID: UUID? = nil
+    ) {
+        updateOverviewLayout { layout in
+            guard let sourceSectionIndex = layout.sections.firstIndex(where: { $0.id == sourceSectionID }) else { return }
+            guard let draggedWidgetIndex = layout.sections[sourceSectionIndex].widgets.firstIndex(where: { $0.id == draggedWidgetID }) else { return }
+
+            let widget = layout.sections[sourceSectionIndex].widgets.remove(at: draggedWidgetIndex)
+            guard let targetSectionIndex = layout.sections.firstIndex(where: { $0.id == targetSectionID }) else { return }
+
+            if let targetWidgetID,
+               let targetIndex = layout.sections[targetSectionIndex].widgets.firstIndex(where: { $0.id == targetWidgetID }) {
+                let adjustedIndex: Int
+                if sourceSectionIndex == targetSectionIndex && draggedWidgetIndex < targetIndex {
+                    adjustedIndex = max(0, targetIndex - 1)
+                } else {
+                    adjustedIndex = targetIndex
+                }
+                layout.sections[targetSectionIndex].widgets.insert(widget, at: adjustedIndex)
+            } else {
+                layout.sections[targetSectionIndex].widgets.append(widget)
+            }
+        }
+    }
+
+    func resizeOverviewWidget(sectionID: UUID, widgetID: UUID, widthDelta: Int = 0, heightDelta: Int = 0) {
+        updateOverviewLayout { layout in
+            guard let sectionIndex = layout.sections.firstIndex(where: { $0.id == sectionID }) else { return }
+            guard let widgetIndex = layout.sections[sectionIndex].widgets.firstIndex(where: { $0.id == widgetID }) else { return }
+            var widget = layout.sections[sectionIndex].widgets[widgetIndex]
+            let spec = OverviewDashboardLayoutState.spec(for: widget.kind)
+            widget.widthUnits = min(max(widget.widthUnits + widthDelta, spec.minimumWidthUnits), spec.maximumWidthUnits)
+            widget.heightUnits = min(max(widget.heightUnits + heightDelta, spec.minimumHeightUnits), spec.maximumHeightUnits)
+            layout.sections[sectionIndex].widgets[widgetIndex] = widget
+        }
     }
 
     func markOnboardingCompleted(for role: WorkspaceRole) {
@@ -428,6 +509,7 @@ final class FXAIGUIModel: ObservableObject {
             $selectedRuntimeSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedResearchSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedVisualizationSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $overviewLayout.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $pluginSearchText.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedPluginFamily.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $reportCategoryFilter.dropFirst().map { _ in () }.eraseToAnyPublisher(),
@@ -542,6 +624,7 @@ final class FXAIGUIModel: ObservableObject {
             selectedRuntimeSymbol = workspace.selectedRuntimeSymbol
             selectedResearchSymbol = workspace.selectedResearchSymbol
             selectedVisualizationSymbol = workspace.selectedVisualizationSymbol
+            overviewLayout = workspace.overviewLayout.normalized()
             pluginSearchText = workspace.pluginSearchText
             selectedPluginFamily = workspace.selectedPluginFamily
             reportCategoryFilter = workspace.reportCategoryFilter
@@ -590,7 +673,14 @@ final class FXAIGUIModel: ObservableObject {
             researchBranchDraft: researchBranchDraft,
             researchAuditDraft: researchAuditDraft,
             researchVectorDraft: researchVectorDraft,
-            researchRecoveryDraft: researchRecoveryDraft
+            researchRecoveryDraft: researchRecoveryDraft,
+            overviewLayout: overviewLayout.normalized()
         )
+    }
+
+    private func updateOverviewLayout(_ mutate: (inout OverviewDashboardLayoutState) -> Void) {
+        var updated = overviewLayout
+        mutate(&updated)
+        overviewLayout = updated.normalized()
     }
 }

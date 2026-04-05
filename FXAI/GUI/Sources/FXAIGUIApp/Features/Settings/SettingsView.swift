@@ -139,8 +139,7 @@ struct SettingsView: View {
                         }
                         .padding(12)
                         .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(FXAITheme.backgroundSecondary.opacity(0.56))
+                            FXAIGlassRoundedBackground(cornerRadius: 16, style: .card, tint: FXAITheme.accentSoft.opacity(0.06))
                         )
                     }
                 }

@@ -5,99 +5,96 @@ import SwiftUI
 struct OverviewDashboardView: View {
     @EnvironmentObject private var model: FXAIGUIModel
     @EnvironmentObject private var themeEnvironment: ThemeEnvironment
+    @State private var customizationEnabled = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                SectionHeader(
-                    title: "FXAI Overview",
-                    subtitle: "See project health, promoted runtime state, research outputs, and the next operator action at a glance."
-                )
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    SectionHeader(
+                        title: "FXAI Overview",
+                        subtitle: "See project health, promoted runtime state, research outputs, and the next operator action at a glance."
+                    )
 
-                if let snapshot = model.snapshot {
-                    hero(snapshot: snapshot)
+                    overviewControls
 
-                    LazyVGrid(
-                        columns: [
-                            GridItem(.flexible(minimum: 220), spacing: 16),
-                            GridItem(.flexible(minimum: 220), spacing: 16),
-                            GridItem(.flexible(minimum: 220), spacing: 16),
-                            GridItem(.flexible(minimum: 220), spacing: 16)
-                        ],
-                        spacing: 16
-                    ) {
-                        MetricCard(
-                            title: "Build Targets",
-                            value: "\(snapshot.cleanBuildTargetCount)/\(snapshot.buildTargets.count)",
-                            footnote: "MT5 outputs currently present in the project tree.",
-                            symbolName: "hammer.fill",
-                            tint: FXAITheme.warning
-                        )
-                        MetricCard(
-                            title: "Plugins",
-                            value: "\(snapshot.totalPluginCount)",
-                            footnote: "Discovered across \(snapshot.pluginFamilies.count) families.",
-                            symbolName: "shippingbox.fill",
-                            tint: FXAITheme.accent
-                        )
-                        MetricCard(
-                            title: "Artifacts",
-                            value: "\(snapshot.totalReportCount)",
-                            footnote: "Baselines, ResearchOS, profiles, and distillation outputs.",
-                            symbolName: "tray.full.fill",
-                            tint: FXAITheme.accentSoft
-                        )
-                        MetricCard(
-                            title: "Runtime Profiles",
-                            value: "\(snapshot.runtimeProfiles.count)",
-                            footnote: "Current deployment payloads discovered under ResearchOS.",
-                            symbolName: "waveform.path.ecg",
-                            tint: FXAITheme.success
-                        )
-                        MetricCard(
-                            title: "Incidents",
-                            value: "\(model.incidentSnapshot?.incidents.count ?? 0)",
-                            footnote: "Generated operator issues with guided recovery steps.",
-                            symbolName: "exclamationmark.triangle.fill",
-                            tint: (model.incidentSnapshot?.incidents.isEmpty == false) ? FXAITheme.warning : FXAITheme.success
-                        )
-                        MetricCard(
-                            title: "Saved Views",
-                            value: "\(model.savedViews.count)",
-                            footnote: "Reusable GUI workspace states for repeatable operator flows.",
-                            symbolName: "bookmark.fill",
-                            tint: FXAITheme.accentSoft
+                    if let snapshot = model.snapshot {
+                        let sectionWidth = max(360, geometry.size.width - 8)
+                        ForEach(model.overviewLayout.sections) { section in
+                            let widgets = visibleWidgets(in: section, snapshot: snapshot)
+                            if customizationEnabled || !widgets.isEmpty {
+                                OverviewDashboardSectionView(
+                                    section: section,
+                                    availableWidth: sectionWidth,
+                                    customizationEnabled: customizationEnabled,
+                                    widgets: widgets
+                                ) { widget in
+                                    AnyView(widgetContent(for: widget.kind, snapshot: snapshot))
+                                }
+                            }
+                        }
+                    } else {
+                        EmptyStateView(
+                            title: emptyStateTitle,
+                            message: emptyStateMessage,
+                            symbolName: emptyStateSymbol
                         )
                     }
-
-                    splitSection(
-                        leading: { pluginChart(snapshot: snapshot) },
-                        trailing: { reportChart(snapshot: snapshot) }
-                    )
-
-                    splitSection(
-                        leading: { recentArtifacts(snapshot: snapshot) },
-                        trailing: { runtimeProfiles(snapshot: snapshot) }
-                    )
-
-                    if let guide = model.currentOnboardingGuide, !model.hasCompletedOnboarding(for: guide.role) {
-                        onboardingPrompt(guide: guide)
-                    }
-                } else {
-                    EmptyStateView(
-                        title: emptyStateTitle,
-                        message: emptyStateMessage,
-                        symbolName: emptyStateSymbol
-                    )
                 }
+                .padding(.bottom, 22)
             }
-            .padding(.bottom, 22)
         }
         .scrollContentBackground(.hidden)
     }
 
+    private var overviewControls: some View {
+        FXAIVisualEffectSurface(style: .card, cornerRadius: 20, contentPadding: 14, tint: FXAITheme.accent.opacity(0.08)) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 16) {
+                    controlSummary
+                    Spacer(minLength: 12)
+                    controlButtons
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    controlSummary
+                    controlButtons
+                }
+            }
+        }
+    }
+
+    private var controlSummary: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Dynamic Dashboard")
+                .font(.headline)
+                .foregroundStyle(FXAITheme.textPrimary)
+            Text("Resize widgets on a 1 cm grid, drag categories or widgets to reorder them, and the GUI saves every change automatically.")
+                .font(.subheadline)
+                .foregroundStyle(FXAITheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Grid unit: \(Int(model.overviewLayout.gridUnitPoints.rounded())) pt minimum • Sidebar stays pinned • Reset restores the shipped layout")
+                .font(.caption)
+                .foregroundStyle(FXAITheme.textMuted)
+        }
+    }
+
+    private var controlButtons: some View {
+        Group {
+            Button(customizationEnabled ? "Done Customizing" : "Customize Dashboard") {
+                customizationEnabled.toggle()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(FXAITheme.accent)
+
+            Button("Reset Layout") {
+                model.resetOverviewLayout()
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
     private func hero(snapshot: FXAIProjectSnapshot) -> some View {
-        FXAIVisualEffectSurface {
+        FXAIVisualEffectSurface(style: .hero, cornerRadius: 26, contentPadding: 18, tint: FXAITheme.accent.opacity(0.10)) {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .top, spacing: 18) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -154,6 +151,62 @@ struct OverviewDashboardView: View {
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
                     .fill(FXAITheme.heroGradient.opacity(0.55))
             )
+        }
+    }
+
+    @ViewBuilder
+    private func metricCard(for kind: OverviewDashboardWidgetKind, snapshot: FXAIProjectSnapshot) -> some View {
+        switch kind {
+        case .buildTargetsMetric:
+            MetricCard(
+                title: "Build Targets",
+                value: "\(snapshot.cleanBuildTargetCount)/\(snapshot.buildTargets.count)",
+                footnote: "MT5 outputs currently present in the project tree.",
+                symbolName: "hammer.fill",
+                tint: FXAITheme.warning
+            )
+        case .pluginsMetric:
+            MetricCard(
+                title: "Plugins",
+                value: "\(snapshot.totalPluginCount)",
+                footnote: "Discovered across \(snapshot.pluginFamilies.count) families.",
+                symbolName: "shippingbox.fill",
+                tint: FXAITheme.accent
+            )
+        case .artifactsMetric:
+            MetricCard(
+                title: "Artifacts",
+                value: "\(snapshot.totalReportCount)",
+                footnote: "Baselines, ResearchOS, profiles, and distillation outputs.",
+                symbolName: "tray.full.fill",
+                tint: FXAITheme.accentSoft
+            )
+        case .runtimeProfilesMetric:
+            MetricCard(
+                title: "Runtime Profiles",
+                value: "\(snapshot.runtimeProfiles.count)",
+                footnote: "Current deployment payloads discovered under ResearchOS.",
+                symbolName: "waveform.path.ecg",
+                tint: FXAITheme.success
+            )
+        case .incidentsMetric:
+            MetricCard(
+                title: "Incidents",
+                value: "\(model.incidentSnapshot?.incidents.count ?? 0)",
+                footnote: "Generated operator issues with guided recovery steps.",
+                symbolName: "exclamationmark.triangle.fill",
+                tint: (model.incidentSnapshot?.incidents.isEmpty == false) ? FXAITheme.warning : FXAITheme.success
+            )
+        case .savedViewsMetric:
+            MetricCard(
+                title: "Saved Views",
+                value: "\(model.savedViews.count)",
+                footnote: "Reusable GUI workspace states for repeatable operator flows.",
+                symbolName: "bookmark.fill",
+                tint: FXAITheme.accentSoft
+            )
+        default:
+            EmptyView()
         }
     }
 
@@ -309,6 +362,44 @@ struct OverviewDashboardView: View {
         }
     }
 
+    @ViewBuilder
+    private func widgetContent(for kind: OverviewDashboardWidgetKind, snapshot: FXAIProjectSnapshot) -> some View {
+        switch kind {
+        case .heroSummary:
+            hero(snapshot: snapshot)
+        case .buildTargetsMetric, .pluginsMetric, .artifactsMetric, .runtimeProfilesMetric, .incidentsMetric, .savedViewsMetric:
+            metricCard(for: kind, snapshot: snapshot)
+        case .pluginChart:
+            pluginChart(snapshot: snapshot)
+        case .reportChart:
+            reportChart(snapshot: snapshot)
+        case .recentArtifacts:
+            recentArtifacts(snapshot: snapshot)
+        case .deploymentProfiles:
+            runtimeProfiles(snapshot: snapshot)
+        case .onboardingPrompt:
+            if let guide = model.currentOnboardingGuide, !model.hasCompletedOnboarding(for: guide.role) {
+                onboardingPrompt(guide: guide)
+            } else {
+                EmptyView()
+            }
+        }
+    }
+
+    private func visibleWidgets(in section: OverviewDashboardSectionLayout, snapshot: FXAIProjectSnapshot) -> [OverviewDashboardWidgetLayout] {
+        section.widgets.filter { widget in
+            switch widget.kind {
+            case .onboardingPrompt:
+                if let guide = model.currentOnboardingGuide {
+                    return !model.hasCompletedOnboarding(for: guide.role)
+                }
+                return false
+            case .heroSummary, .buildTargetsMetric, .pluginsMetric, .artifactsMetric, .runtimeProfilesMetric, .incidentsMetric, .savedViewsMetric, .pluginChart, .reportChart, .recentArtifacts, .deploymentProfiles:
+                return true
+            }
+        }
+    }
+
     private func heroStatusBadges(snapshot: FXAIProjectSnapshot) -> some View {
         Group {
             StatusBadge(
@@ -336,22 +427,6 @@ struct OverviewDashboardView: View {
                 value: snapshot.tursoSummary.encryptionConfigured ? "Configured" : "Off",
                 tint: snapshot.tursoSummary.encryptionConfigured ? FXAITheme.success : FXAITheme.warning
             )
-        }
-    }
-
-    private func splitSection<Leading: View, Trailing: View>(
-        @ViewBuilder leading: @escaping () -> Leading,
-        @ViewBuilder trailing: @escaping () -> Trailing
-    ) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 16) {
-                leading()
-                trailing()
-            }
-            VStack(alignment: .leading, spacing: 16) {
-                leading()
-                trailing()
-            }
         }
     }
 

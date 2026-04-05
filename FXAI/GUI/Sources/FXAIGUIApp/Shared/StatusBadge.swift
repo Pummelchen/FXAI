@@ -17,12 +17,7 @@ struct StatusBadge: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
                 .background(
-                    Capsule(style: .continuous)
-                        .fill(tint.opacity(0.16))
-                )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .strokeBorder(tint.opacity(0.24), lineWidth: 1)
+                    FXAIGlassCapsuleBackground(tint: tint)
                 )
         }
     }

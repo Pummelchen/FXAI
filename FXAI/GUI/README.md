@@ -26,6 +26,7 @@ Phase 1 through Phase 6 are implemented here:
 - role-specific onboarding and keyboard-first navigation
 - incident detection with generated recovery playbooks
 - detached startup with explicit connect/disconnect handling and soft auto reconnect every 10 seconds
+- customizable overview dashboard with draggable categories, movable widgets, 1 cm grid-based resizing, automatic layout persistence, and reset-to-default controls
 - release packaging support for a polished macOS app bundle
 
 ## Theme Support
