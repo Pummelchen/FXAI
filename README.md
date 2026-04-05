@@ -13,7 +13,7 @@ It is not a single strategy EA. It is a research and deployment framework with:
 
 FXAI stays MT5-native. There are no external inference services and no DLL dependency in live trading.
 
-An optional macOS 26 operator GUI now lives under [FXAI/GUI](/Users/andreborchert/FXAI-main2/FXAI/GUI). It is a SwiftUI-based helper surface for dashboards, plugin-zoo browsing, report discovery, Audit/Offline/backtest run building, runtime inspection, promotion review, Turso and Research OS control, advanced Metal-backed visual analysis, saved operator views, role onboarding, incident recovery, detached startup with soft reconnect, and terminal-first workflow guidance. It uses a shared FXAI operator theme system across the GUI shell. The terminal remains the primary control path.
+An optional macOS 26 operator GUI now lives under [FXAI/GUI](/Users/andreborchert/FXAI-main2/FXAI/GUI). It is an FXAI-focused helper app for operators who want a visual control and reporting surface, while the terminal remains the primary control path.
 
 ## Why It Matters
 
