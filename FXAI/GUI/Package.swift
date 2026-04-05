@@ -34,6 +34,11 @@ let package = Package(
             name: "FXAIGUICoreTests",
             dependencies: ["FXAIGUICore"],
             path: "Tests/FXAIGUICoreTests"
+        ),
+        .testTarget(
+            name: "FXAIGUIAppTests",
+            dependencies: ["FXAIGUICore", "FXAIGUIApp"],
+            path: "Tests/FXAIGUIAppTests"
         )
     ]
 )

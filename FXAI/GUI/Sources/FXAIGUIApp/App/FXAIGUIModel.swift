@@ -47,13 +47,15 @@ final class FXAIGUIModel: ObservableObject {
     private var isRestoringPersistedState = false
     private var preferredProjectRoot: URL?
 
-    init() {
+    init(performInitialConnectionCheck: Bool = true) {
         loadPersistedState()
         bindPersistence()
         bindSoftConnectionChecks()
 
-        Task {
-            await performSoftConnectionCheck(forceRefresh: true)
+        if performInitialConnectionCheck {
+            Task {
+                await performSoftConnectionCheck(forceRefresh: true)
+            }
         }
     }
 

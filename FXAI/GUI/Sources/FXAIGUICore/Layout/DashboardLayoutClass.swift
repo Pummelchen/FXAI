@@ -1,6 +1,6 @@
 import Foundation
 
-public enum DashboardLayoutClass: String, CaseIterable {
+public enum DashboardLayoutClass: String, CaseIterable, Sendable {
     case compactDesktop
     case standardDesktop
     case wideDesktop

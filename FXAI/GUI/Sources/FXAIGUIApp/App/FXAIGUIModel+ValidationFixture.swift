@@ -1,0 +1,59 @@
+import FXAIGUICore
+import Foundation
+
+extension FXAIGUIModel {
+    static func validationFixture(
+        projectRoot: URL = URL(fileURLWithPath: "/tmp/FXAI"),
+        selection: SidebarDestination = .overview
+    ) -> FXAIGUIModel {
+        let model = FXAIGUIModel(performInitialConnectionCheck: false)
+        let snapshot = GUIValidationFixtures.projectSnapshot(projectRoot: projectRoot)
+        let runtimeSnapshot = GUIValidationFixtures.runtimeSnapshot(projectRoot: projectRoot)
+        let researchSnapshot = GUIValidationFixtures.researchSnapshot(projectRoot: projectRoot)
+        let visualizationSnapshot = GUIValidationFixtures.visualizationSnapshot(projectRoot: projectRoot)
+        let incidentSnapshot = GUIValidationFixtures.incidentSnapshot(projectRoot: projectRoot)
+
+        model.projectRoot = projectRoot
+        model.connectionState = .connected
+        model.snapshot = snapshot
+        model.runtimeSnapshot = runtimeSnapshot
+        model.researchSnapshot = researchSnapshot
+        model.visualizationSnapshot = visualizationSnapshot
+        model.incidentSnapshot = incidentSnapshot
+        model.selection = selection
+        model.lastConnectionCheckAt = Date()
+        model.selectedRole = .liveTrader
+        model.selectedRuntimeSymbol = runtimeSnapshot.symbols.first ?? ""
+        model.selectedResearchSymbol = researchSnapshot.symbols.first?.symbol ?? ""
+        model.selectedVisualizationSymbol = visualizationSnapshot.symbols.first ?? ""
+        model.selectedIncidentID = incidentSnapshot.incidents.first?.id
+        model.selectedPluginFamily = "All"
+        model.reportCategoryFilter = "All"
+        model.savedViews = [
+            SavedWorkspaceView(
+                id: UUID(),
+                name: "Live Runtime Review",
+                projectRootPath: projectRoot.path,
+                createdAt: Date(),
+                updatedAt: Date(),
+                selection: SidebarDestination.runtimeMonitor.rawValue,
+                selectedRole: .liveTrader,
+                selectedRuntimeSymbol: runtimeSnapshot.symbols.first ?? "EURUSD",
+                selectedResearchSymbol: researchSnapshot.symbols.first?.symbol ?? "EURUSD",
+                selectedVisualizationSymbol: visualizationSnapshot.symbols.first ?? "EURUSD",
+                pluginSearchText: "",
+                selectedPluginFamily: "All",
+                reportCategoryFilter: "All",
+                auditDraft: model.auditDraft,
+                backtestDraft: model.backtestDraft,
+                offlineDraft: model.offlineDraft,
+                researchBranchDraft: model.researchBranchDraft,
+                researchAuditDraft: model.researchAuditDraft,
+                researchVectorDraft: model.researchVectorDraft,
+                researchRecoveryDraft: model.researchRecoveryDraft
+            )
+        ]
+        model.completedOnboardingRoles = [.liveTrader]
+        return model
+    }
+}
