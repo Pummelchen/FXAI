@@ -14,6 +14,7 @@ struct WindowConfigurator: NSViewRepresentable {
             window.styleMask.insert(.fullSizeContentView)
             window.isMovableByWindowBackground = true
             window.title = ""
+            window.minSize = NSSize(width: 1180, height: 820)
             window.standardWindowButton(.zoomButton)?.isHidden = false
         }
         return view

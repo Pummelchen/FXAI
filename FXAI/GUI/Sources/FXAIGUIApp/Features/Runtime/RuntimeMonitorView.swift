@@ -10,19 +10,30 @@ struct RuntimeMonitorView: View {
             VStack(alignment: .leading, spacing: 18) {
                 SectionHeader(
                     title: "Runtime Monitor",
-                    subtitle: "Inspect the deployed FXAI symbol state from ResearchOS JSON and promoted TSV artifacts without opening them manually."
+                    subtitle: "Inspect deployed symbol state, promoted profiles, and runtime health without opening raw artifacts manually."
                 )
 
                 if let runtimeSnapshot = model.runtimeSnapshot, !runtimeSnapshot.deployments.isEmpty {
-                    HStack {
-                        Picker("Symbol", selection: $model.selectedRuntimeSymbol) {
-                            ForEach(runtimeSnapshot.symbols, id: \.self) { symbol in
-                                Text(symbol).tag(symbol)
+                    ViewThatFits(in: .horizontal) {
+                        HStack {
+                            Picker("Symbol", selection: $model.selectedRuntimeSymbol) {
+                                ForEach(runtimeSnapshot.symbols, id: \.self) { symbol in
+                                    Text(symbol).tag(symbol)
+                                }
                             }
-                        }
-                        .pickerStyle(.segmented)
+                            .pickerStyle(.segmented)
 
-                        Spacer()
+                            Spacer()
+                        }
+                        HStack {
+                            Picker("Symbol", selection: $model.selectedRuntimeSymbol) {
+                                ForEach(runtimeSnapshot.symbols, id: \.self) { symbol in
+                                    Text(symbol).tag(symbol)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            Spacer()
+                        }
                     }
 
                     if let detail = model.selectedRuntimeDetail {
@@ -68,65 +79,55 @@ struct RuntimeMonitorView: View {
     }
 
     private func summary(detail: RuntimeDeploymentDetail) -> some View {
-        LazyVGrid(
-            columns: [
-                GridItem(.flexible(minimum: 220), spacing: 16),
-                GridItem(.flexible(minimum: 220), spacing: 16),
-                GridItem(.flexible(minimum: 220), spacing: 16),
-                GridItem(.flexible(minimum: 220), spacing: 16)
-            ],
-            spacing: 16
-        ) {
-            MetricCard(
-                title: "Plugin",
-                value: detail.pluginName,
-                footnote: "Champion currently associated with this deployment.",
-                symbolName: "brain.head.profile",
-                tint: FXAITheme.accent
-            )
-            MetricCard(
-                title: "Tier",
-                value: detail.promotionTier,
-                footnote: "Promotion level emitted by the research OS.",
-                symbolName: "rosette",
-                tint: FXAITheme.warning
-            )
-            MetricCard(
-                title: "Mode",
-                value: detail.runtimeMode,
-                footnote: "Current runtime mode loaded by the deployment profile.",
-                symbolName: "dial.low.fill",
-                tint: FXAITheme.accentSoft
-            )
-            MetricCard(
-                title: "Artifact Age",
-                value: "\(detail.artifactHealth.artifactAgeSeconds)s",
-                footnote: detail.artifactHealth.staleArtifact ? "Marked stale" : "Fresh according to dashboard health.",
-                symbolName: "clock.fill",
-                tint: detail.artifactHealth.staleArtifact ? FXAITheme.warning : FXAITheme.success
-            )
-        }
-        .overlay(alignment: .topTrailing) {
-            HStack(spacing: 12) {
-                StatusBadge(
-                    title: "Deployment",
-                    value: detail.artifactHealth.missingDeployment ? "Missing" : "Ready",
-                    tint: detail.artifactHealth.missingDeployment ? FXAITheme.warning : FXAITheme.success
+        VStack(alignment: .leading, spacing: 14) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    runtimeHealthBadges(detail: detail)
+                }
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 180), spacing: 12, alignment: .leading)],
+                    spacing: 12
+                ) {
+                    runtimeHealthBadges(detail: detail)
+                }
+            }
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(minimum: 220), spacing: 16),
+                    GridItem(.flexible(minimum: 220), spacing: 16),
+                    GridItem(.flexible(minimum: 220), spacing: 16),
+                    GridItem(.flexible(minimum: 220), spacing: 16)
+                ],
+                spacing: 16
+            ) {
+                MetricCard(
+                    title: "Plugin",
+                    value: detail.pluginName,
+                    footnote: "Champion currently associated with this deployment.",
+                    symbolName: "brain.head.profile",
+                    tint: FXAITheme.accent
                 )
-                StatusBadge(
-                    title: "Router",
-                    value: detail.artifactHealth.missingRouter ? "Missing" : "Ready",
-                    tint: detail.artifactHealth.missingRouter ? FXAITheme.warning : FXAITheme.success
+                MetricCard(
+                    title: "Tier",
+                    value: detail.promotionTier,
+                    footnote: "Promotion level emitted by the research OS.",
+                    symbolName: "rosette",
+                    tint: FXAITheme.warning
                 )
-                StatusBadge(
-                    title: "Supervisor",
-                    value: detail.artifactHealth.missingSupervisorService ? "Missing" : "Ready",
-                    tint: detail.artifactHealth.missingSupervisorService ? FXAITheme.warning : FXAITheme.success
+                MetricCard(
+                    title: "Mode",
+                    value: detail.runtimeMode,
+                    footnote: "Current runtime mode loaded by the deployment profile.",
+                    symbolName: "dial.low.fill",
+                    tint: FXAITheme.accentSoft
                 )
-                StatusBadge(
-                    title: "World Plan",
-                    value: detail.artifactHealth.missingWorldPlan ? "Missing" : "Ready",
-                    tint: detail.artifactHealth.missingWorldPlan ? FXAITheme.warning : FXAITheme.success
+                MetricCard(
+                    title: "Artifact Age",
+                    value: "\(detail.artifactHealth.artifactAgeSeconds)s",
+                    footnote: detail.artifactHealth.staleArtifact ? "Marked stale" : "Fresh according to dashboard health.",
+                    symbolName: "clock.fill",
+                    tint: detail.artifactHealth.staleArtifact ? FXAITheme.warning : FXAITheme.success
                 )
             }
         }
@@ -159,6 +160,31 @@ struct RuntimeMonitorView: View {
                     .frame(height: 240)
                 }
             }
+        }
+    }
+
+    private func runtimeHealthBadges(detail: RuntimeDeploymentDetail) -> some View {
+        Group {
+            StatusBadge(
+                title: "Deployment",
+                value: detail.artifactHealth.missingDeployment ? "Missing" : "Ready",
+                tint: detail.artifactHealth.missingDeployment ? FXAITheme.warning : FXAITheme.success
+            )
+            StatusBadge(
+                title: "Router",
+                value: detail.artifactHealth.missingRouter ? "Missing" : "Ready",
+                tint: detail.artifactHealth.missingRouter ? FXAITheme.warning : FXAITheme.success
+            )
+            StatusBadge(
+                title: "Supervisor",
+                value: detail.artifactHealth.missingSupervisorService ? "Missing" : "Ready",
+                tint: detail.artifactHealth.missingSupervisorService ? FXAITheme.warning : FXAITheme.success
+            )
+            StatusBadge(
+                title: "World Plan",
+                value: detail.artifactHealth.missingWorldPlan ? "Missing" : "Ready",
+                tint: detail.artifactHealth.missingWorldPlan ? FXAITheme.warning : FXAITheme.success
+            )
         }
     }
 }

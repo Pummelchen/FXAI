@@ -11,7 +11,7 @@ struct OverviewDashboardView: View {
             VStack(alignment: .leading, spacing: 18) {
                 SectionHeader(
                     title: "FXAI Overview",
-                    subtitle: "A project-aware dark dashboard for the current MT5 tree, research outputs, and operator workflows."
+                    subtitle: "See project health, promoted runtime state, research outputs, and the next operator action at a glance."
                 )
 
                 if let snapshot = model.snapshot {
@@ -70,15 +70,15 @@ struct OverviewDashboardView: View {
                         )
                     }
 
-                    HStack(alignment: .top, spacing: 16) {
-                        pluginChart(snapshot: snapshot)
-                        reportChart(snapshot: snapshot)
-                    }
+                    splitSection(
+                        leading: { pluginChart(snapshot: snapshot) },
+                        trailing: { reportChart(snapshot: snapshot) }
+                    )
 
-                    HStack(alignment: .top, spacing: 16) {
-                        recentArtifacts(snapshot: snapshot)
-                        runtimeProfiles(snapshot: snapshot)
-                    }
+                    splitSection(
+                        leading: { recentArtifacts(snapshot: snapshot) },
+                        trailing: { runtimeProfiles(snapshot: snapshot) }
+                    )
 
                     if let guide = model.currentOnboardingGuide, !model.hasCompletedOnboarding(for: guide.role) {
                         onboardingPrompt(guide: guide)
@@ -140,32 +140,13 @@ struct OverviewDashboardView: View {
                     .fill(FXAITheme.stroke)
                     .frame(height: 1)
 
+                ViewThatFits(in: .horizontal) {
                     HStack(spacing: 18) {
-                    StatusBadge(
-                        title: "Connection",
-                        value: model.connectionStatusLabel,
-                        tint: connectionTint
-                    )
-                    StatusBadge(
-                        title: "Champions",
-                        value: "\(snapshot.operatorSummary.championCount)",
-                        tint: FXAITheme.success
-                    )
-                    StatusBadge(
-                        title: "Deployments",
-                        value: "\(snapshot.operatorSummary.deploymentCount)",
-                        tint: FXAITheme.accent
-                    )
-                    StatusBadge(
-                        title: "Turso",
-                        value: snapshot.tursoSummary.localDatabasePresent ? "Present" : "Missing",
-                        tint: snapshot.tursoSummary.localDatabasePresent ? FXAITheme.success : FXAITheme.warning
-                    )
-                    StatusBadge(
-                        title: "Encryption",
-                        value: snapshot.tursoSummary.encryptionConfigured ? "Configured" : "Off",
-                        tint: snapshot.tursoSummary.encryptionConfigured ? FXAITheme.success : FXAITheme.warning
-                    )
+                        heroStatusBadges(snapshot: snapshot)
+                    }
+                    VStack(alignment: .leading, spacing: 12) {
+                        heroStatusBadges(snapshot: snapshot)
+                    }
                 }
             }
             .padding(8)
@@ -293,21 +274,83 @@ struct OverviewDashboardView: View {
     private func onboardingPrompt(guide: RoleOnboardingGuide) -> some View {
         FXAIVisualEffectSurface {
             VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Next Best Step For \(guide.role.title)")
-                            .font(.headline)
-                            .foregroundStyle(FXAITheme.textPrimary)
-                        Text(guide.headline)
-                            .foregroundStyle(FXAITheme.textSecondary)
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Next Best Step For \(guide.role.title)")
+                                .font(.headline)
+                                .foregroundStyle(FXAITheme.textPrimary)
+                            Text(guide.headline)
+                                .foregroundStyle(FXAITheme.textSecondary)
+                        }
+                        Spacer()
+                        Button("Open Guide") {
+                            model.navigate(to: .onboarding)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(FXAITheme.accent)
                     }
-                    Spacer()
-                    Button("Open Guide") {
-                        model.navigate(to: .onboarding)
+                    VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Next Best Step For \(guide.role.title)")
+                                .font(.headline)
+                                .foregroundStyle(FXAITheme.textPrimary)
+                            Text(guide.headline)
+                                .foregroundStyle(FXAITheme.textSecondary)
+                        }
+                        Button("Open Guide") {
+                            model.navigate(to: .onboarding)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(FXAITheme.accent)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(FXAITheme.accent)
                 }
+            }
+        }
+    }
+
+    private func heroStatusBadges(snapshot: FXAIProjectSnapshot) -> some View {
+        Group {
+            StatusBadge(
+                title: "Connection",
+                value: model.connectionStatusLabel,
+                tint: connectionTint
+            )
+            StatusBadge(
+                title: "Champions",
+                value: "\(snapshot.operatorSummary.championCount)",
+                tint: FXAITheme.success
+            )
+            StatusBadge(
+                title: "Deployments",
+                value: "\(snapshot.operatorSummary.deploymentCount)",
+                tint: FXAITheme.accent
+            )
+            StatusBadge(
+                title: "Turso",
+                value: snapshot.tursoSummary.localDatabasePresent ? "Present" : "Missing",
+                tint: snapshot.tursoSummary.localDatabasePresent ? FXAITheme.success : FXAITheme.warning
+            )
+            StatusBadge(
+                title: "Encryption",
+                value: snapshot.tursoSummary.encryptionConfigured ? "Configured" : "Off",
+                tint: snapshot.tursoSummary.encryptionConfigured ? FXAITheme.success : FXAITheme.warning
+            )
+        }
+    }
+
+    private func splitSection<Leading: View, Trailing: View>(
+        @ViewBuilder leading: @escaping () -> Leading,
+        @ViewBuilder trailing: @escaping () -> Trailing
+    ) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 16) {
+                leading()
+                trailing()
+            }
+            VStack(alignment: .leading, spacing: 16) {
+                leading()
+                trailing()
             }
         }
     }

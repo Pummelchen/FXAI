@@ -12,7 +12,10 @@ struct RoleWorkspacesView: View {
                     subtitle: "Different users need different default surfaces. FXAI GUI starts from the role, not from raw internals."
                 )
 
-                HStack(spacing: 12) {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 220), spacing: 12, alignment: .top)],
+                    spacing: 12
+                ) {
                     ForEach(WorkspaceRole.allCases) { role in
                         Button {
                             model.selectedRole = role
@@ -48,47 +51,57 @@ struct RoleWorkspacesView: View {
     private func roleDetail(role: WorkspaceRole) -> some View {
         FXAIVisualEffectSurface {
             VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(role.title)
-                            .font(.system(size: 28, weight: .semibold, design: .rounded))
-                            .foregroundStyle(FXAITheme.textPrimary)
-                        Text(role.subtitle)
-                            .foregroundStyle(FXAITheme.textSecondary)
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(role.title)
+                                .font(.system(size: 28, weight: .semibold, design: .rounded))
+                                .foregroundStyle(FXAITheme.textPrimary)
+                            Text(role.subtitle)
+                                .foregroundStyle(FXAITheme.textSecondary)
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 10) {
+                            Image(systemName: role.symbolName)
+                                .font(.system(size: 28, weight: .semibold))
+                                .foregroundStyle(FXAITheme.accent)
+                            StatusBadge(
+                                title: "Onboarding",
+                                value: model.hasCompletedOnboarding(for: role) ? "Done" : "Open",
+                                tint: model.hasCompletedOnboarding(for: role) ? FXAITheme.success : FXAITheme.warning
+                            )
+                        }
                     }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 10) {
-                        Image(systemName: role.symbolName)
-                            .font(.system(size: 28, weight: .semibold))
-                            .foregroundStyle(FXAITheme.accent)
-                        StatusBadge(
-                            title: "Onboarding",
-                            value: model.hasCompletedOnboarding(for: role) ? "Done" : "Open",
-                            tint: model.hasCompletedOnboarding(for: role) ? FXAITheme.success : FXAITheme.warning
-                        )
+                    VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(role.title)
+                                .font(.system(size: 28, weight: .semibold, design: .rounded))
+                                .foregroundStyle(FXAITheme.textPrimary)
+                            Text(role.subtitle)
+                                .foregroundStyle(FXAITheme.textSecondary)
+                        }
+                        HStack(spacing: 12) {
+                            Image(systemName: role.symbolName)
+                                .font(.system(size: 28, weight: .semibold))
+                                .foregroundStyle(FXAITheme.accent)
+                            StatusBadge(
+                                title: "Onboarding",
+                                value: model.hasCompletedOnboarding(for: role) ? "Done" : "Open",
+                                tint: model.hasCompletedOnboarding(for: role) ? FXAITheme.success : FXAITheme.warning
+                            )
+                        }
                     }
                 }
 
-                HStack(alignment: .top, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Focus Areas")
-                            .font(.headline)
-                            .foregroundStyle(FXAITheme.textPrimary)
-                        ForEach(role.focusAreas, id: \.self) { item in
-                            Label(item, systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(FXAITheme.textSecondary)
-                        }
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 18) {
+                        roleFocusAreas(role: role)
+                        roleIgnoreAtFirst(role: role)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Ignore At First")
-                            .font(.headline)
-                            .foregroundStyle(FXAITheme.textPrimary)
-                        Text(role.ignoreAtFirst)
-                            .foregroundStyle(FXAITheme.textSecondary)
+                    VStack(alignment: .leading, spacing: 18) {
+                        roleFocusAreas(role: role)
+                        roleIgnoreAtFirst(role: role)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
@@ -123,24 +136,59 @@ struct RoleWorkspacesView: View {
                     }
                 }
 
-                HStack {
-                    Button("Open Role Guide") {
-                        model.selectedRole = role
-                        model.navigate(to: .onboarding)
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        roleActions(role: role)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(FXAITheme.accent)
-
-                    Button(model.hasCompletedOnboarding(for: role) ? "Reset Onboarding" : "Mark Onboarding Complete") {
-                        if model.hasCompletedOnboarding(for: role) {
-                            model.resetOnboarding(for: role)
-                        } else {
-                            model.markOnboardingCompleted(for: role)
-                        }
+                    VStack(alignment: .leading, spacing: 12) {
+                        roleActions(role: role)
                     }
-                    .buttonStyle(.bordered)
                 }
             }
+        }
+    }
+
+    private func roleFocusAreas(role: WorkspaceRole) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Focus Areas")
+                .font(.headline)
+                .foregroundStyle(FXAITheme.textPrimary)
+            ForEach(role.focusAreas, id: \.self) { item in
+                Label(item, systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(FXAITheme.textSecondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func roleIgnoreAtFirst(role: WorkspaceRole) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Ignore At First")
+                .font(.headline)
+                .foregroundStyle(FXAITheme.textPrimary)
+            Text(role.ignoreAtFirst)
+                .foregroundStyle(FXAITheme.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func roleActions(role: WorkspaceRole) -> some View {
+        Group {
+            Button("Open Role Guide") {
+                model.selectedRole = role
+                model.navigate(to: .onboarding)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(FXAITheme.accent)
+
+            Button(model.hasCompletedOnboarding(for: role) ? "Reset Onboarding" : "Mark Onboarding Complete") {
+                if model.hasCompletedOnboarding(for: role) {
+                    model.resetOnboarding(for: role)
+                } else {
+                    model.markOnboardingCompleted(for: role)
+                }
+            }
+            .buttonStyle(.bordered)
         }
     }
 }

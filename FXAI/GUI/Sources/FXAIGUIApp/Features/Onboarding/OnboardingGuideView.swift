@@ -12,12 +12,21 @@ struct OnboardingGuideView: View {
                     subtitle: "A clean first path for each FXAI user type. Learn the right screens, commands, and workflow order before diving into internals."
                 )
 
-                Picker("Role", selection: $model.selectedRole) {
-                    ForEach(WorkspaceRole.allCases) { role in
-                        Text(role.title).tag(role)
+                ViewThatFits(in: .horizontal) {
+                    Picker("Role", selection: $model.selectedRole) {
+                        ForEach(WorkspaceRole.allCases) { role in
+                            Text(role.title).tag(role)
+                        }
                     }
+                    .pickerStyle(.segmented)
+
+                    Picker("Role", selection: $model.selectedRole) {
+                        ForEach(WorkspaceRole.allCases) { role in
+                            Text(role.title).tag(role)
+                        }
+                    }
+                    .pickerStyle(.menu)
                 }
-                .pickerStyle(.segmented)
 
                 if let guide = model.currentOnboardingGuide {
                     hero(guide: guide)
@@ -40,30 +49,57 @@ struct OnboardingGuideView: View {
     private func hero(guide: RoleOnboardingGuide) -> some View {
         FXAIVisualEffectSurface {
             VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(guide.headline)
-                            .font(.system(size: 30, weight: .semibold, design: .rounded))
-                            .foregroundStyle(FXAITheme.textPrimary)
-                        Text(guide.summary)
-                            .foregroundStyle(FXAITheme.textSecondary)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 10) {
-                        StatusBadge(
-                            title: guide.role.title,
-                            value: model.hasCompletedOnboarding(for: guide.role) ? "Completed" : "Open",
-                            tint: model.hasCompletedOnboarding(for: guide.role) ? FXAITheme.success : FXAITheme.warning
-                        )
-                        Button(model.hasCompletedOnboarding(for: guide.role) ? "Reset" : "Mark Completed") {
-                            if model.hasCompletedOnboarding(for: guide.role) {
-                                model.resetOnboarding(for: guide.role)
-                            } else {
-                                model.markOnboardingCompleted(for: guide.role)
-                            }
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(guide.headline)
+                                .font(.system(size: 30, weight: .semibold, design: .rounded))
+                                .foregroundStyle(FXAITheme.textPrimary)
+                            Text(guide.summary)
+                                .foregroundStyle(FXAITheme.textSecondary)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(model.hasCompletedOnboarding(for: guide.role) ? FXAITheme.warning : FXAITheme.accent)
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 10) {
+                            StatusBadge(
+                                title: guide.role.title,
+                                value: model.hasCompletedOnboarding(for: guide.role) ? "Completed" : "Open",
+                                tint: model.hasCompletedOnboarding(for: guide.role) ? FXAITheme.success : FXAITheme.warning
+                            )
+                            Button(model.hasCompletedOnboarding(for: guide.role) ? "Reset" : "Mark Completed") {
+                                if model.hasCompletedOnboarding(for: guide.role) {
+                                    model.resetOnboarding(for: guide.role)
+                                } else {
+                                    model.markOnboardingCompleted(for: guide.role)
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(model.hasCompletedOnboarding(for: guide.role) ? FXAITheme.warning : FXAITheme.accent)
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(guide.headline)
+                                .font(.system(size: 30, weight: .semibold, design: .rounded))
+                                .foregroundStyle(FXAITheme.textPrimary)
+                            Text(guide.summary)
+                                .foregroundStyle(FXAITheme.textSecondary)
+                        }
+                        HStack(spacing: 12) {
+                            StatusBadge(
+                                title: guide.role.title,
+                                value: model.hasCompletedOnboarding(for: guide.role) ? "Completed" : "Open",
+                                tint: model.hasCompletedOnboarding(for: guide.role) ? FXAITheme.success : FXAITheme.warning
+                            )
+                            Button(model.hasCompletedOnboarding(for: guide.role) ? "Reset" : "Mark Completed") {
+                                if model.hasCompletedOnboarding(for: guide.role) {
+                                    model.resetOnboarding(for: guide.role)
+                                } else {
+                                    model.markOnboardingCompleted(for: guide.role)
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(model.hasCompletedOnboarding(for: guide.role) ? FXAITheme.warning : FXAITheme.accent)
+                        }
                     }
                 }
             }
@@ -120,7 +156,10 @@ struct OnboardingGuideView: View {
                     .font(.headline)
                     .foregroundStyle(FXAITheme.textPrimary)
 
-                HStack(spacing: 12) {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 180), spacing: 12, alignment: .leading)],
+                    spacing: 12
+                ) {
                     ForEach(guide.recommendedDestinations) { destination in
                         Button {
                             if let sidebarDestination = SidebarDestination(rawValue: destination.selection) {
@@ -205,5 +244,5 @@ struct OnboardingGuideView: View {
             Spacer()
         }
     }
-}
 
+}

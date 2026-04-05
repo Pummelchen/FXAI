@@ -31,7 +31,8 @@ struct MetricCard: View {
                 Text(footnote)
                     .font(.footnote)
                     .foregroundStyle(FXAITheme.textMuted)
-                    .lineLimit(2)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

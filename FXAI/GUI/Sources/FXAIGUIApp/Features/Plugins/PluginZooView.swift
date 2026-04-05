@@ -25,7 +25,7 @@ struct PluginZooView: View {
         VStack(alignment: .leading, spacing: 18) {
             SectionHeader(
                 title: "Plugin Zoo",
-                subtitle: "Filter the model inventory by family and discover what FXAI can currently run."
+                subtitle: "Search the model inventory by family and quickly see what FXAI can run today."
             )
 
             controls
@@ -67,17 +67,32 @@ struct PluginZooView: View {
     }
 
     private var controls: some View {
-        HStack(spacing: 12) {
-            TextField("Search plugins or families", text: $model.pluginSearchText)
-                .textFieldStyle(.roundedBorder)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                TextField("Search plugins or families", text: $model.pluginSearchText)
+                    .textFieldStyle(.roundedBorder)
 
-            Picker("Family", selection: $model.selectedPluginFamily) {
-                ForEach(families, id: \.self) { family in
-                    Text(family).tag(family)
+                Picker("Family", selection: $model.selectedPluginFamily) {
+                    ForEach(families, id: \.self) { family in
+                        Text(family).tag(family)
+                    }
                 }
+                .pickerStyle(.menu)
+                .frame(width: 220)
             }
-            .pickerStyle(.menu)
-            .frame(width: 220)
+
+            VStack(alignment: .leading, spacing: 12) {
+                TextField("Search plugins or families", text: $model.pluginSearchText)
+                    .textFieldStyle(.roundedBorder)
+
+                Picker("Family", selection: $model.selectedPluginFamily) {
+                    ForEach(families, id: \.self) { family in
+                        Text(family).tag(family)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: 280, alignment: .leading)
+            }
         }
     }
 }

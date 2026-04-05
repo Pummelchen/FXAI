@@ -4,6 +4,13 @@ import SwiftUI
 struct FXAIRootView: View {
     @EnvironmentObject private var model: FXAIGUIModel
     @EnvironmentObject private var themeEnvironment: ThemeEnvironment
+    private let sidebarSections: [(title: String, destinations: [SidebarDestination])] = [
+        ("Start", [.overview, .roles, .onboarding, .incidents]),
+        ("Build", [.auditLab, .backtestBuilder, .offlineLab]),
+        ("Operate", [.runtimeMonitor, .promotionCenter, .researchControl]),
+        ("Inspect", [.plugins, .reports, .commands, .advancedVisuals]),
+        ("System", [.settings])
+    ]
 
     var body: some View {
         NavigationSplitView {
@@ -76,10 +83,12 @@ struct FXAIRootView: View {
 
     private var sidebar: some View {
         List(selection: $model.selection) {
-            Section("Workspace") {
-                ForEach(SidebarDestination.allCases) { destination in
-                    sidebarLabel(for: destination)
-                        .tag(Optional(destination))
+            ForEach(sidebarSections, id: \.title) { section in
+                Section(section.title) {
+                    ForEach(section.destinations) { destination in
+                        sidebarLabel(for: destination)
+                            .tag(Optional(destination))
+                    }
                 }
             }
 

@@ -10,7 +10,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 SectionHeader(
                     title: "Settings",
-                    subtitle: "Project-root selection, persistent workspace management, onboarding status, environment awareness, and packaging entry points."
+                    subtitle: "Manage project connection, saved workspaces, onboarding state, environment checks, and release packaging."
                 )
 
                 FXAIVisualEffectSurface {
@@ -22,7 +22,7 @@ struct SettingsView: View {
                         ThemeInspectorView(layoutOutput: nil)
                             .environmentObject(themeEnvironment)
 
-                        Text("The FXAI operator app is now theme-aware at the app-shell level. The shared theme is registered through the common registry and injected into the full GUI tree, with future themes added through `ThemeBootstrap` and `ThemeRegistry`.")
+                        Text("The GUI presentation is driven by the shared FXAI theme registry, so future themes can be introduced without rewriting the operator shell.")
                             .font(.callout)
                             .foregroundStyle(FXAITheme.textSecondary)
                     }
@@ -34,22 +34,16 @@ struct SettingsView: View {
                             .font(.headline)
                             .foregroundStyle(FXAITheme.textPrimary)
 
-                        HStack(spacing: 18) {
-                            StatusBadge(
-                                title: "State",
-                                value: model.connectionStatusLabel,
-                                tint: connectionTint
-                            )
-                            StatusBadge(
-                                title: "Auto Reconnect",
-                                value: model.autoReconnectEnabled ? "On" : "Off",
-                                tint: model.autoReconnectEnabled ? FXAITheme.success : FXAITheme.textMuted
-                            )
-                            StatusBadge(
-                                title: "Last Check",
-                                value: model.lastConnectionCheckAt.map(FXAIFormatting.dateTimeString(for:)) ?? "Pending",
-                                tint: FXAITheme.accentSoft
-                            )
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 18) {
+                                connectionBadges
+                            }
+                            LazyVGrid(
+                                columns: [GridItem(.adaptive(minimum: 180), spacing: 12, alignment: .leading)],
+                                spacing: 12
+                            ) {
+                                connectionBadges
+                            }
                         }
 
                         Text(model.projectPathLabel)
@@ -57,31 +51,13 @@ struct SettingsView: View {
                             .foregroundStyle(FXAITheme.textSecondary)
                             .textSelection(.enabled)
 
-                        HStack {
-                            Button(model.projectRoot == nil ? "Connect" : "Choose Project") {
-                                if model.projectRoot == nil {
-                                    model.reconnectProject()
-                                } else {
-                                    model.chooseProjectRoot()
-                                }
+                        ViewThatFits(in: .horizontal) {
+                            HStack {
+                                connectionButtons
                             }
-                            .buttonStyle(.borderedProminent)
-                            .tint(FXAITheme.accent)
-
-                            Button(model.projectRoot == nil ? "Pick Project" : "Disconnect") {
-                                if model.projectRoot == nil {
-                                    model.chooseProjectRoot()
-                                } else {
-                                    model.disconnectProject()
-                                }
+                            VStack(alignment: .leading, spacing: 10) {
+                                connectionButtons
                             }
-                            .buttonStyle(.bordered)
-
-                            Button("Reveal in Finder") {
-                                model.openProjectRootInFinder()
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(model.projectRoot == nil)
                         }
 
                         Toggle("Enable soft auto reconnect every 10 seconds", isOn: $model.autoReconnectEnabled)
@@ -99,22 +75,16 @@ struct SettingsView: View {
                                 .font(.headline)
                                 .foregroundStyle(FXAITheme.textPrimary)
 
-                            HStack(spacing: 18) {
-                                StatusBadge(
-                                    title: "Database",
-                                    value: snapshot.tursoSummary.localDatabasePresent ? "Ready" : "Missing",
-                                    tint: snapshot.tursoSummary.localDatabasePresent ? FXAITheme.success : FXAITheme.warning
-                                )
-                                StatusBadge(
-                                    title: "Embedded Replica",
-                                    value: snapshot.tursoSummary.embeddedReplicaConfigured ? "Configured" : "Local Only",
-                                    tint: snapshot.tursoSummary.embeddedReplicaConfigured ? FXAITheme.accent : FXAITheme.accentSoft
-                                )
-                                StatusBadge(
-                                    title: "Encryption",
-                                    value: snapshot.tursoSummary.encryptionConfigured ? "On" : "Off",
-                                    tint: snapshot.tursoSummary.encryptionConfigured ? FXAITheme.success : FXAITheme.warning
-                                )
+                            ViewThatFits(in: .horizontal) {
+                                HStack(spacing: 18) {
+                                    environmentBadges(snapshot: snapshot)
+                                }
+                                LazyVGrid(
+                                    columns: [GridItem(.adaptive(minimum: 180), spacing: 12, alignment: .leading)],
+                                    spacing: 12
+                                ) {
+                                    environmentBadges(snapshot: snapshot)
+                                }
                             }
                         }
                     }
@@ -156,29 +126,15 @@ struct SettingsView: View {
                         .foregroundStyle(FXAITheme.textSecondary)
                 } else {
                     ForEach(model.savedViews) { savedView in
-                        HStack(alignment: .top, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(savedView.name)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(FXAITheme.textPrimary)
-                                Text(savedView.titleSummary)
-                                    .font(.caption)
-                                    .foregroundStyle(FXAITheme.textSecondary)
-                                Text(savedView.projectRootPath ?? "")
-                                    .font(.caption2)
-                                    .foregroundStyle(FXAITheme.textMuted)
-                                    .lineLimit(2)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .top, spacing: 12) {
+                                savedViewSummary(savedView)
+                                Spacer()
+                                savedViewActions(savedView)
                             }
-                            Spacer()
-                            HStack {
-                                Button("Open") {
-                                    model.applySavedView(savedView)
-                                }
-                                .buttonStyle(.bordered)
-                                Button("Delete") {
-                                    model.deleteSavedView(savedView)
-                                }
-                                .buttonStyle(.bordered)
+                            VStack(alignment: .leading, spacing: 12) {
+                                savedViewSummary(savedView)
+                                savedViewActions(savedView)
                             }
                         }
                         .padding(12)
@@ -200,28 +156,54 @@ struct SettingsView: View {
                     .foregroundStyle(FXAITheme.textPrimary)
 
                 ForEach(WorkspaceRole.allCases) { role in
-                    HStack {
-                        Label(role.title, systemImage: role.symbolName)
-                            .foregroundStyle(FXAITheme.textPrimary)
-                        Spacer()
-                        StatusBadge(
-                            title: "Status",
-                            value: model.hasCompletedOnboarding(for: role) ? "Completed" : "Open",
-                            tint: model.hasCompletedOnboarding(for: role) ? FXAITheme.success : FXAITheme.warning
-                        )
-                        Button("Guide") {
-                            model.selectedRole = role
-                            model.navigate(to: .onboarding)
-                        }
-                        .buttonStyle(.bordered)
-                        Button(model.hasCompletedOnboarding(for: role) ? "Reset" : "Complete") {
-                            if model.hasCompletedOnboarding(for: role) {
-                                model.resetOnboarding(for: role)
-                            } else {
-                                model.markOnboardingCompleted(for: role)
+                    ViewThatFits(in: .horizontal) {
+                        HStack {
+                            Label(role.title, systemImage: role.symbolName)
+                                .foregroundStyle(FXAITheme.textPrimary)
+                            Spacer()
+                            StatusBadge(
+                                title: "Status",
+                                value: model.hasCompletedOnboarding(for: role) ? "Completed" : "Open",
+                                tint: model.hasCompletedOnboarding(for: role) ? FXAITheme.success : FXAITheme.warning
+                            )
+                            Button("Guide") {
+                                model.selectedRole = role
+                                model.navigate(to: .onboarding)
                             }
+                            .buttonStyle(.bordered)
+                            Button(model.hasCompletedOnboarding(for: role) ? "Reset" : "Complete") {
+                                if model.hasCompletedOnboarding(for: role) {
+                                    model.resetOnboarding(for: role)
+                                } else {
+                                    model.markOnboardingCompleted(for: role)
+                                }
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.bordered)
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label(role.title, systemImage: role.symbolName)
+                                .foregroundStyle(FXAITheme.textPrimary)
+                            HStack(spacing: 12) {
+                                StatusBadge(
+                                    title: "Status",
+                                    value: model.hasCompletedOnboarding(for: role) ? "Completed" : "Open",
+                                    tint: model.hasCompletedOnboarding(for: role) ? FXAITheme.success : FXAITheme.warning
+                                )
+                                Button("Guide") {
+                                    model.selectedRole = role
+                                    model.navigate(to: .onboarding)
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                            Button(model.hasCompletedOnboarding(for: role) ? "Reset" : "Complete") {
+                                if model.hasCompletedOnboarding(for: role) {
+                                    model.resetOnboarding(for: role)
+                                } else {
+                                    model.markOnboardingCompleted(for: role)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     }
                 }
             }
@@ -255,4 +237,102 @@ struct SettingsView: View {
             }
         }
     }
+
+    private var connectionBadges: some View {
+        Group {
+            StatusBadge(
+                title: "State",
+                value: model.connectionStatusLabel,
+                tint: connectionTint
+            )
+            StatusBadge(
+                title: "Auto Reconnect",
+                value: model.autoReconnectEnabled ? "On" : "Off",
+                tint: model.autoReconnectEnabled ? FXAITheme.success : FXAITheme.textMuted
+            )
+            StatusBadge(
+                title: "Last Check",
+                value: model.lastConnectionCheckAt.map(FXAIFormatting.dateTimeString(for:)) ?? "Pending",
+                tint: FXAITheme.accentSoft
+            )
+        }
+    }
+
+    private var connectionButtons: some View {
+        Group {
+            Button(model.projectRoot == nil ? "Connect" : "Choose Project") {
+                if model.projectRoot == nil {
+                    model.reconnectProject()
+                } else {
+                    model.chooseProjectRoot()
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(FXAITheme.accent)
+
+            Button(model.projectRoot == nil ? "Pick Project" : "Disconnect") {
+                if model.projectRoot == nil {
+                    model.chooseProjectRoot()
+                } else {
+                    model.disconnectProject()
+                }
+            }
+            .buttonStyle(.bordered)
+
+            Button("Reveal in Finder") {
+                model.openProjectRootInFinder()
+            }
+            .buttonStyle(.bordered)
+            .disabled(model.projectRoot == nil)
+        }
+    }
+
+    private func environmentBadges(snapshot: FXAIProjectSnapshot) -> some View {
+        Group {
+            StatusBadge(
+                title: "Database",
+                value: snapshot.tursoSummary.localDatabasePresent ? "Ready" : "Missing",
+                tint: snapshot.tursoSummary.localDatabasePresent ? FXAITheme.success : FXAITheme.warning
+            )
+            StatusBadge(
+                title: "Embedded Replica",
+                value: snapshot.tursoSummary.embeddedReplicaConfigured ? "Configured" : "Local Only",
+                tint: snapshot.tursoSummary.embeddedReplicaConfigured ? FXAITheme.accent : FXAITheme.accentSoft
+            )
+            StatusBadge(
+                title: "Encryption",
+                value: snapshot.tursoSummary.encryptionConfigured ? "On" : "Off",
+                tint: snapshot.tursoSummary.encryptionConfigured ? FXAITheme.success : FXAITheme.warning
+            )
+        }
+    }
+
+    private func savedViewSummary(_ savedView: SavedWorkspaceView) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(savedView.name)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(FXAITheme.textPrimary)
+            Text(savedView.titleSummary)
+                .font(.caption)
+                .foregroundStyle(FXAITheme.textSecondary)
+            Text(savedView.projectRootPath ?? "")
+                .font(.caption2)
+                .foregroundStyle(FXAITheme.textMuted)
+                .lineLimit(2)
+        }
+    }
+
+    private func savedViewActions(_ savedView: SavedWorkspaceView) -> some View {
+        HStack {
+            Button("Open") {
+                model.applySavedView(savedView)
+            }
+            .buttonStyle(.bordered)
+            Button("Delete") {
+                model.deleteSavedView(savedView)
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
 }
