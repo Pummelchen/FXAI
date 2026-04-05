@@ -4,9 +4,10 @@ import Foundation
 extension FXAIGUIModel {
     static func validationFixture(
         projectRoot: URL = URL(fileURLWithPath: "/tmp/FXAI"),
-        selection: SidebarDestination = .overview
+        selection: SidebarDestination = .overview,
+        resourceMonitor: GUIResourceMonitor = GUIResourceMonitor(initialProfile: .default)
     ) -> FXAIGUIModel {
-        let model = FXAIGUIModel(performInitialConnectionCheck: false)
+        let model = FXAIGUIModel(resourceMonitor: resourceMonitor, performInitialConnectionCheck: false)
         let snapshot = GUIValidationFixtures.projectSnapshot(projectRoot: projectRoot)
         let runtimeSnapshot = GUIValidationFixtures.runtimeSnapshot(projectRoot: projectRoot)
         let researchSnapshot = GUIValidationFixtures.researchSnapshot(projectRoot: projectRoot)

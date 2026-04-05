@@ -36,6 +36,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var completedOnboardingRoles: Set<WorkspaceRole> = []
     @Published var lastErrorMessage: String?
     @Published var isRefreshing = false
+    @Published private(set) var renderingProfile: GUIRenderingProfile
 
     private let scanner = ProjectScanner()
     private let connectionCoordinator = ProjectConnectionCoordinator()
@@ -44,14 +45,21 @@ final class FXAIGUIModel: ObservableObject {
     private let visualizationBuilder = AdvancedVisualizationBuilder()
     private let incidentBuilder = IncidentBuilder()
     private let workspaceStore = SavedWorkspaceStore()
+    private let resourceMonitor: GUIResourceMonitor
     private var cancellables: Set<AnyCancellable> = []
+    private var connectionTimerCancellable: AnyCancellable?
     private var isRestoringPersistedState = false
     private var preferredProjectRoot: URL?
 
-    init(performInitialConnectionCheck: Bool = true) {
+    init(
+        resourceMonitor: GUIResourceMonitor = .shared,
+        performInitialConnectionCheck: Bool = true
+    ) {
+        self.resourceMonitor = resourceMonitor
+        self.renderingProfile = resourceMonitor.profile
         loadPersistedState()
         bindPersistence()
-        bindSoftConnectionChecks()
+        bindResourceManagement()
 
         if performInitialConnectionCheck {
             Task {
@@ -532,19 +540,51 @@ final class FXAIGUIModel: ObservableObject {
             .store(in: &cancellables)
     }
 
-    private func bindSoftConnectionChecks() {
-        Timer.publish(every: 10, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
+    private func bindResourceManagement() {
+        resourceMonitor.$profile
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] profile in
                 guard let self else { return }
-                Task {
-                    await self.performSoftConnectionCheck(forceRefresh: false)
-                }
+                self.renderingProfile = profile
+                self.configureConnectionTimer()
             }
             .store(in: &cancellables)
+
+        $autoReconnectEnabled
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.configureConnectionTimer()
+            }
+            .store(in: &cancellables)
+
+        configureConnectionTimer()
+    }
+
+    private func configureConnectionTimer() {
+        connectionTimerCancellable?.cancel()
+        connectionTimerCancellable = nil
+
+        guard autoReconnectEnabled else { return }
+
+        connectionTimerCancellable = Timer.publish(
+            every: renderingProfile.softReconnectInterval,
+            on: .main,
+            in: .common
+        )
+        .autoconnect()
+        .sink { [weak self] _ in
+            guard let self else { return }
+            Task {
+                await self.performSoftConnectionCheck(forceRefresh: false)
+            }
+        }
     }
 
     private func performSoftConnectionCheck(forceRefresh: Bool) async {
+        guard forceRefresh || renderingProfile.allowsPeriodicReconnectChecks else {
+            return
+        }
+
         lastConnectionCheckAt = Date()
 
         let resolution = connectionCoordinator.resolve(

@@ -126,6 +126,8 @@ public enum FXAIGlassSurfaceStyle: Sendable {
 }
 
 public struct FXAIGlassRoundedBackground: View {
+    @Environment(\.guiRenderingProfile) private var renderingProfile
+
     public let cornerRadius: CGFloat
     public let style: FXAIGlassSurfaceStyle
     public let tint: Color
@@ -142,30 +144,37 @@ public struct FXAIGlassRoundedBackground: View {
 
     public var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let baseOpacity = style.baseOpacity * renderingProfile.glassOpacityScale
+        let topHighlightOpacity = style.topHighlightOpacity * renderingProfile.glassOpacityScale
+        let bottomShadeOpacity = style.bottomShadeOpacity * renderingProfile.glassOpacityScale
+        let borderOpacity = style.borderOpacity * renderingProfile.glassOpacityScale
+        let highlightOpacity = style.highlightStrokeOpacity * renderingProfile.glassOpacityScale
+        let shadowOpacity = style.shadowOpacity * renderingProfile.shadowOpacityScale
         ZStack {
-            FXAIGlassBackdrop(material: style.material)
-                .clipShape(shape)
+            if renderingProfile.allowsGlassBackdrop {
+                FXAIGlassBackdrop(material: style.material)
+                    .clipShape(shape)
+            }
 
             shape
                 .fill(
                     LinearGradient(
                         colors: [
-                            FXAITheme.panelStrong.opacity(style.baseOpacity),
-                            FXAITheme.panel.opacity(style.baseOpacity * 0.88)
+                            FXAITheme.panelStrong.opacity(baseOpacity),
+                            FXAITheme.panel.opacity(baseOpacity * 0.88)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
 
-            shape
-                .fill(tint.opacity(0.12))
+            shape.fill(tint.opacity(0.12 * renderingProfile.decorativeOpacityScale))
 
             shape
                 .fill(
                     LinearGradient(
                         colors: [
-                            .white.opacity(style.topHighlightOpacity),
+                            .white.opacity(topHighlightOpacity),
                             .white.opacity(0.03),
                             .clear
                         ],
@@ -179,18 +188,17 @@ public struct FXAIGlassRoundedBackground: View {
                     LinearGradient(
                         colors: [
                             .clear,
-                            .black.opacity(style.bottomShadeOpacity)
+                            .black.opacity(bottomShadeOpacity)
                         ],
                         startPoint: .center,
                         endPoint: .bottom
                     )
                 )
 
-            shape
-                .strokeBorder(FXAITheme.stroke.opacity(style.borderOpacity), lineWidth: 1)
+            shape.strokeBorder(FXAITheme.stroke.opacity(borderOpacity), lineWidth: 1)
 
             shape
-                .strokeBorder(.white.opacity(style.highlightStrokeOpacity), lineWidth: 0.5)
+                .strokeBorder(.white.opacity(highlightOpacity), lineWidth: 0.5)
                 .blur(radius: 0.4)
                 .blendMode(.screen)
 
@@ -199,7 +207,7 @@ public struct FXAIGlassRoundedBackground: View {
                 .strokeBorder(
                     LinearGradient(
                         colors: [
-                            .white.opacity(style.highlightStrokeOpacity * 0.72),
+                            .white.opacity(highlightOpacity * 0.72),
                             .clear,
                             .black.opacity(0.10)
                         ],
@@ -209,11 +217,18 @@ public struct FXAIGlassRoundedBackground: View {
                     lineWidth: 0.8
                 )
         }
-        .shadow(color: .black.opacity(style.shadowOpacity), radius: style.shadowRadius, x: style.shadowOffset.width, y: style.shadowOffset.height)
+        .shadow(
+            color: .black.opacity(shadowOpacity),
+            radius: style.shadowRadius * CGFloat(renderingProfile.backgroundBlurScale),
+            x: style.shadowOffset.width,
+            y: style.shadowOffset.height
+        )
     }
 }
 
 public struct FXAIGlassCapsuleBackground: View {
+    @Environment(\.guiRenderingProfile) private var renderingProfile
+
     public let style: FXAIGlassSurfaceStyle
     public let tint: Color
 
@@ -224,29 +239,40 @@ public struct FXAIGlassCapsuleBackground: View {
 
     public var body: some View {
         let shape = Capsule(style: .continuous)
+        let baseOpacity = style.baseOpacity * renderingProfile.glassOpacityScale
+        let highlightOpacity = style.highlightStrokeOpacity * renderingProfile.glassOpacityScale
+        let borderOpacity = style.borderOpacity * renderingProfile.glassOpacityScale
+        let shadowOpacity = style.shadowOpacity * renderingProfile.shadowOpacityScale
         ZStack {
-            FXAIGlassBackdrop(material: style.material)
-                .clipShape(shape)
+            if renderingProfile.allowsGlassBackdrop {
+                FXAIGlassBackdrop(material: style.material)
+                    .clipShape(shape)
+            }
 
             shape
                 .fill(
                     LinearGradient(
                         colors: [
-                            FXAITheme.panelStrong.opacity(style.baseOpacity * 0.92),
-                            FXAITheme.panel.opacity(style.baseOpacity * 0.72)
+                            FXAITheme.panelStrong.opacity(baseOpacity * 0.92),
+                            FXAITheme.panel.opacity(baseOpacity * 0.72)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
-            shape.fill(tint.opacity(0.14))
+            shape.fill(tint.opacity(0.14 * renderingProfile.decorativeOpacityScale))
             shape
-                .strokeBorder(.white.opacity(style.highlightStrokeOpacity), lineWidth: 0.6)
+                .strokeBorder(.white.opacity(highlightOpacity), lineWidth: 0.6)
                 .blendMode(.screen)
             shape
-                .strokeBorder(FXAITheme.stroke.opacity(style.borderOpacity), lineWidth: 0.8)
+                .strokeBorder(FXAITheme.stroke.opacity(borderOpacity), lineWidth: 0.8)
         }
-        .shadow(color: .black.opacity(style.shadowOpacity), radius: style.shadowRadius, x: style.shadowOffset.width, y: style.shadowOffset.height)
+        .shadow(
+            color: .black.opacity(shadowOpacity),
+            radius: style.shadowRadius * CGFloat(renderingProfile.backgroundBlurScale),
+            x: style.shadowOffset.width,
+            y: style.shadowOffset.height
+        )
     }
 }
 

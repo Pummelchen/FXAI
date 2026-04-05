@@ -2,13 +2,22 @@ import FXAIGUICore
 import SwiftUI
 
 private struct PreviewDashboardHarness: View {
-    @StateObject private var model = FXAIGUIModel()
+    @StateObject private var resourceMonitor: GUIResourceMonitor
+    @StateObject private var model: FXAIGUIModel
     @StateObject private var themeEnvironment = ThemeEnvironment.preview()
+
+    @MainActor
+    init() {
+        let resourceMonitor = GUIResourceMonitor(initialProfile: .default)
+        _resourceMonitor = StateObject(wrappedValue: resourceMonitor)
+        _model = StateObject(wrappedValue: FXAIGUIModel(resourceMonitor: resourceMonitor))
+    }
 
     var body: some View {
         FXAIRootView()
             .environmentObject(model)
             .environmentObject(themeEnvironment)
+            .environment(\.guiRenderingProfile, resourceMonitor.profile)
     }
 }
 

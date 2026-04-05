@@ -22,11 +22,13 @@ enum GUISnapshotRenderer {
             registry: ThemeRegistry(themes: [FinancialDashboardThemeV1()]),
             initialThemeID: .financialDashboardV1
         )
-        let model = FXAIGUIModel.validationFixture(selection: selection)
+        let resourceMonitor = GUIResourceMonitor(initialProfile: .default)
+        let model = FXAIGUIModel.validationFixture(selection: selection, resourceMonitor: resourceMonitor)
 
         let rootView = FXAIRootView()
             .environmentObject(model)
             .environmentObject(themeEnvironment)
+            .environment(\.guiRenderingProfile, resourceMonitor.profile)
             .frame(width: scenario.windowSize.width, height: scenario.windowSize.height)
 
         let renderer = ImageRenderer(content: rootView)

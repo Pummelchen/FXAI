@@ -1,8 +1,11 @@
+import FXAIGUICore
 import Metal
 import MetalKit
 import SwiftUI
 
 struct MetalEffectRenderer: NSViewRepresentable {
+    @Environment(\.guiRenderingProfile) private var renderingProfile
+
     let intensity: Double
 
     func makeCoordinator() -> Coordinator {
@@ -22,27 +25,38 @@ struct MetalEffectRenderer: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: MTKView, context: Context) {
-        context.coordinator.intensity = intensity
+        context.coordinator.intensity = renderingProfile.allowsMetalEffects ? intensity : 0
         context.coordinator.configureIfNeeded(view: nsView)
-        nsView.needsDisplay = true
+        nsView.isHidden = !renderingProfile.allowsMetalEffects || intensity <= 0.01
+        if !nsView.isHidden {
+            nsView.needsDisplay = true
+        }
     }
 
-    @MainActor
+    static func dismantleNSView(_ nsView: MTKView, coordinator: Coordinator) {
+        nsView.delegate = nil
+        coordinator.releaseResources()
+    }
+
     final class Coordinator: NSObject, MTKViewDelegate {
         private var commandQueue: MTLCommandQueue?
         private var pipeline: MTLRenderPipelineState?
-        private var device: MTLDevice?
         var intensity: Double
 
         init(intensity: Double) {
             self.intensity = intensity
         }
 
+        func releaseResources() {
+            commandQueue = nil
+            pipeline = nil
+        }
+
+        @MainActor
         func configureIfNeeded(view: MTKView) {
             guard pipeline == nil, let device = view.device else {
                 return
             }
-            self.device = device
             commandQueue = device.makeCommandQueue()
 
             let source = """
@@ -95,29 +109,28 @@ struct MetalEffectRenderer: NSViewRepresentable {
             }
         }
 
-        nonisolated func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+        func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
-        nonisolated func draw(in view: MTKView) {
-            Task { @MainActor in
-                guard
-                    let pipeline,
-                    let drawable = view.currentDrawable,
-                    let descriptor = view.currentRenderPassDescriptor,
-                    let commandQueue
-                else {
-                    return
-                }
-
-                let commandBuffer = commandQueue.makeCommandBuffer()
-                let encoder = commandBuffer?.makeRenderCommandEncoder(descriptor: descriptor)
-                var intensityValue = Float(intensity)
-                encoder?.setRenderPipelineState(pipeline)
-                encoder?.setFragmentBytes(&intensityValue, length: MemoryLayout<Float>.size, index: 0)
-                encoder?.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
-                encoder?.endEncoding()
-                commandBuffer?.present(drawable)
-                commandBuffer?.commit()
+        func draw(in view: MTKView) {
+            guard
+                intensity > 0.01,
+                let pipeline,
+                let drawable = view.currentDrawable,
+                let descriptor = view.currentRenderPassDescriptor,
+                let commandQueue
+            else {
+                return
             }
+
+            let commandBuffer = commandQueue.makeCommandBuffer()
+            let encoder = commandBuffer?.makeRenderCommandEncoder(descriptor: descriptor)
+            var intensityValue = Float(intensity)
+            encoder?.setRenderPipelineState(pipeline)
+            encoder?.setFragmentBytes(&intensityValue, length: MemoryLayout<Float>.size, index: 0)
+            encoder?.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
+            encoder?.endEncoding()
+            commandBuffer?.present(drawable)
+            commandBuffer?.commit()
         }
     }
 }

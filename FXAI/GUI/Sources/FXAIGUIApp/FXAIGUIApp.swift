@@ -1,4 +1,15 @@
+import FXAIGUICore
 import SwiftUI
+
+private struct FXAIRenderingProfileScope<Content: View>: View {
+    @ObservedObject var resourceMonitor: GUIResourceMonitor
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content()
+            .environment(\.guiRenderingProfile, resourceMonitor.profile)
+    }
+}
 
 @main
 struct FXAIGUIApp: App {
@@ -6,11 +17,13 @@ struct FXAIGUIApp: App {
 
     var body: some Scene {
         WindowGroup("FXAI GUI") {
-            FXAIRootView()
-                .environmentObject(appState.model)
-                .environmentObject(appState.themeEnvironment)
-                .background(Color.clear)
-                .overlay(WindowConfigurator().allowsHitTesting(false))
+            FXAIRenderingProfileScope(resourceMonitor: appState.resourceMonitor) {
+                FXAIRootView()
+                    .environmentObject(appState.model)
+                    .environmentObject(appState.themeEnvironment)
+                    .background(Color.clear)
+                    .overlay(WindowConfigurator().allowsHitTesting(false))
+            }
         }
         .defaultSize(width: 1728, height: 1117)
         .windowResizability(.automatic)

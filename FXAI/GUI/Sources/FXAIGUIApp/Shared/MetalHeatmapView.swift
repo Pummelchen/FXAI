@@ -10,13 +10,24 @@ private struct HeatmapVertex {
     var color: SIMD4<Float>
 }
 
+private enum MetalSupport {
+    static let defaultDevice = MTLCreateSystemDefaultDevice()
+}
+
 struct MetalHeatmapPanel: View {
+    @Environment(\.guiRenderingProfile) private var renderingProfile
+
     let heatmap: VisualizationHeatmap
 
     private let cellWidth: CGFloat = 84
     private let cellHeight: CGFloat = 34
     private let rowLabelWidth: CGFloat = 120
-    private let metalAvailable = MTLCreateSystemDefaultDevice() != nil
+
+    private var shouldUseMetal: Bool {
+        MetalSupport.defaultDevice != nil &&
+        renderingProfile.allowsHeatmapMetal &&
+        (heatmap.rowLabels.count * heatmap.columnLabels.count) <= renderingProfile.maximumHeatmapCellCountForMetal
+    }
 
     var body: some View {
         FXAIVisualEffectSurface {
@@ -58,7 +69,7 @@ struct MetalHeatmapPanel: View {
                             }
 
                             Group {
-                                if metalAvailable {
+                                if shouldUseMetal {
                                     MetalHeatmapGridView(heatmap: heatmap)
                                 } else {
                                     FallbackHeatmapGridView(heatmap: heatmap)
@@ -102,13 +113,11 @@ private struct FallbackHeatmapGridView: View {
     let heatmap: VisualizationHeatmap
 
     var body: some View {
-        ScrollView([.horizontal, .vertical]) {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(Array(heatmap.values.enumerated()), id: \.offset) { rowIndex, row in
-                    HStack(spacing: 6) {
-                        ForEach(Array(row.enumerated()), id: \.offset) { columnIndex, value in
-                            cell(rowIndex: rowIndex, columnIndex: columnIndex, value: value)
-                        }
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(heatmap.values.enumerated()), id: \.offset) { rowIndex, row in
+                HStack(spacing: 6) {
+                    ForEach(Array(row.enumerated()), id: \.offset) { columnIndex, value in
+                        cell(rowIndex: rowIndex, columnIndex: columnIndex, value: value)
                     }
                 }
             }
@@ -197,6 +206,11 @@ private struct MetalHeatmapGridView: NSViewRepresentable {
         nsView.setNeedsDisplay(nsView.bounds)
     }
 
+    static func dismantleNSView(_ nsView: MTKView, coordinator: Coordinator) {
+        nsView.delegate = nil
+        coordinator.renderer.detach()
+    }
+
     final class Coordinator {
         let renderer: MetalHeatmapRenderer
 
@@ -212,25 +226,34 @@ private final class MetalHeatmapRenderer: NSObject, MTKViewDelegate {
     private var heatmap: VisualizationHeatmap
     private var commandQueue: MTLCommandQueue?
     private var pipelineState: MTLRenderPipelineState?
+    private var vertexBuffer: MTLBuffer?
+    private var vertexCount = 0
     private weak var view: MTKView?
 
     init(heatmap: VisualizationHeatmap) {
         self.heatmap = heatmap
-        guard let device = MTLCreateSystemDefaultDevice() else {
+        guard let device = MetalSupport.defaultDevice else {
             preconditionFailure("MetalHeatmapRenderer requires Metal support and should not be created without availability checks.")
         }
         self.device = device
         super.init()
-        self.commandQueue = device.makeCommandQueue()
-        self.pipelineState = makePipelineState()
+        commandQueue = device.makeCommandQueue()
+        pipelineState = makePipelineState()
+        rebuildVertexBuffer()
     }
 
     func attach(view: MTKView) {
         self.view = view
     }
 
+    func detach() {
+        view = nil
+        vertexBuffer = nil
+    }
+
     func update(heatmap: VisualizationHeatmap) {
         self.heatmap = heatmap
+        rebuildVertexBuffer()
     }
 
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
@@ -240,18 +263,10 @@ private final class MetalHeatmapRenderer: NSObject, MTKViewDelegate {
             let descriptor = view.currentRenderPassDescriptor,
             let drawable = view.currentDrawable,
             let commandQueue,
-            let pipelineState
+            let pipelineState,
+            let vertexBuffer,
+            vertexCount > 0
         else {
-            return
-        }
-
-        let vertices = buildVertices(for: heatmap)
-        guard !vertices.isEmpty else { return }
-
-        guard let vertexBuffer = device.makeBuffer(
-            bytes: vertices,
-            length: MemoryLayout<HeatmapVertex>.stride * vertices.count
-        ) else {
             return
         }
 
@@ -263,11 +278,25 @@ private final class MetalHeatmapRenderer: NSObject, MTKViewDelegate {
 
         encoder.setRenderPipelineState(pipelineState)
         encoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
-        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: vertices.count)
+        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: vertexCount)
         encoder.endEncoding()
 
         commandBuffer.present(drawable)
         commandBuffer.commit()
+    }
+
+    private func rebuildVertexBuffer() {
+        let vertices = buildVertices(for: heatmap)
+        vertexCount = vertices.count
+        guard !vertices.isEmpty else {
+            vertexBuffer = nil
+            return
+        }
+
+        vertexBuffer = device.makeBuffer(
+            bytes: vertices,
+            length: MemoryLayout<HeatmapVertex>.stride * vertices.count
+        )
     }
 
     private func makePipelineState() -> MTLRenderPipelineState? {

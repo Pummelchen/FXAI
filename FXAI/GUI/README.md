@@ -27,6 +27,7 @@ Phase 1 through Phase 6 are implemented here:
 - incident detection with generated recovery playbooks
 - detached startup with explicit connect/disconnect handling and soft auto reconnect every 10 seconds
 - customizable overview dashboard with draggable categories, movable widgets, 1 cm grid-based resizing, automatic layout persistence, and reset-to-default controls
+- automatic resource guards that back off glass, Metal, blur, and background polling under memory, thermal, or inactive-app pressure
 - release packaging support for a polished macOS app bundle
 
 ## Theme Support
@@ -95,7 +96,7 @@ The GUI can start cleanly even when MT5 or the FXAI project tree is not ready ye
 
 - if a valid FXAI project root is available, it connects automatically
 - if not, it starts in a detached shell mode without failing
-- it can softly retry connection every 10 seconds when auto reconnect is enabled
+- it can softly retry connection every 10 seconds in the normal case, and automatically backs off the retry cadence when the app is inactive or under resource pressure
 - operators can explicitly disconnect and reconnect from the toolbar or settings
 
 ## Design Principles
