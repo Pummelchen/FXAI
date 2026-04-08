@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 from pathlib import Path
 
@@ -30,3 +31,26 @@ def test_dashboard_and_live_state_render():
             assert Path(payload["html_path"]).exists()
             assert live["deployment"]
             assert live["router"]
+
+
+def test_dashboard_treats_empty_artifact_path_as_missing():
+    with tempfile.TemporaryDirectory(prefix="fxai_dash_missing_artifact_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)) as paths:
+            bootstrap_environment(paths["default_db"], init_db=True)
+            conn = connect_db(paths["default_db"])
+            fixture = seed_profile_fixture(conn)
+            args = type("Args", (), {"profile": fixture["profile_name"], "db": str(paths["default_db"]), "runtime_mode": "research"})()
+            write_attribution_profiles(conn, args)
+            write_student_router_profiles(conn, args)
+            write_live_deployment_profiles(conn, args)
+            conn.execute(
+                "UPDATE live_deployment_profiles SET artifact_path = '' WHERE profile_name = ? AND symbol = ?",
+                (fixture["profile_name"], fixture["symbol"]),
+            )
+            paths_payload = write_profile_dashboard(conn, fixture["profile_name"])
+            close_db(conn)
+
+            payload = json.loads(Path(paths_payload["json_path"]).read_text(encoding="utf-8"))
+            deployment = next(item for item in payload["deployments"] if item["symbol"] == fixture["symbol"])
+            assert deployment["artifact_path"] == ""
+            assert deployment["artifact_health"]["artifact_exists"] is False

@@ -11,9 +11,12 @@ struct NewsPulseView: View {
 
     private var activePairs: Set<String> {
         guard let snapshot = model.newsPulseSnapshot else {
-            return Set((model.runtimeSnapshot?.deployments ?? []).compactMap { pairID(for: $0.symbol) })
+            return Set((model.runtimeSnapshot?.deployments ?? []).compactMap {
+                FXSymbolPairResolver.pairID(from: $0.symbol)
+            })
         }
         var out: Set<String> = []
+        let preferredPairs = snapshot.pairs.map(\.pair)
         for pair in snapshot.pairs {
             if runtimeSymbols.contains(pair.pair.uppercased()) {
                 out.insert(pair.pair)
@@ -24,7 +27,9 @@ struct NewsPulseView: View {
                 out.insert(pair.pair)
                 continue
             }
-            if (model.runtimeSnapshot?.deployments.contains { pairID(for: $0.symbol) == pair.pair } ?? false) {
+            if (model.runtimeSnapshot?.deployments.contains {
+                FXSymbolPairResolver.pairID(from: $0.symbol, preferredPairs: preferredPairs) == pair.pair
+            } ?? false) {
                 out.insert(pair.pair)
             }
         }
@@ -704,22 +709,6 @@ struct NewsPulseView: View {
 
     private func percentString(_ value: Double) -> String {
         String(format: "%.0f%%", max(0, min(value, 1)) * 100.0)
-    }
-
-    private func pairID(for symbol: String) -> String? {
-        let clean = symbol.uppercased()
-        let letters = clean.filter(\.isLetter)
-        guard letters.count >= 6 else { return nil }
-        let text = String(letters)
-        for offset in 0...(text.count - 6) {
-            let start = text.index(text.startIndex, offsetBy: offset)
-            let end = text.index(start, offsetBy: 6)
-            let candidate = String(text[start..<end])
-            if candidate.count == 6 {
-                return candidate
-            }
-        }
-        return nil
     }
 
     private func syncSelection() {

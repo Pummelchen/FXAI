@@ -433,6 +433,56 @@ def test_newspulse_official_feed_queries_respect_whitelist_and_keywords():
             assert any("policy statement" in item["title"].lower() for item in items)
 
 
+def test_newspulse_official_feed_skips_invalid_dates():
+    with tempfile.TemporaryDirectory(prefix="fxai_newspulse_official_invalid_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)):
+            config, sources = load_config()
+
+            def fake_fetch(_feed_spec, _timeout):
+                return [
+                    {
+                        "title": "Federal Reserve issues monetary policy statement",
+                        "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260408a.htm",
+                        "published_at": "",
+                        "identifier": "fed-invalid-date",
+                    }
+                ]
+
+            import offline_lab.newspulse_official as official
+
+            saved = official.fetch_official_feed
+            official.fetch_official_feed = fake_fetch
+            try:
+                items, meta = query_official_feeds(config, sources, "2026-04-08T09:30:00Z")
+            finally:
+                official.fetch_official_feed = saved
+
+            assert meta["query_count"] >= 1
+            assert items == []
+
+
+def test_newspulse_official_feed_parses_dc_date_entries():
+    import offline_lab.newspulse_official as official
+
+    entries = official._feed_entries(
+        """
+        <rss xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <channel>
+            <item>
+              <title>ECB policy remarks</title>
+              <link>https://www.ecb.europa.eu/press/example</link>
+              <dc:date>2026-04-08T09:18:00Z</dc:date>
+              <guid>ecb-1</guid>
+            </item>
+          </channel>
+        </rss>
+        """
+    )
+
+    assert len(entries) == 1
+    assert entries[0]["published_at"] == "2026-04-08T09:18:00Z"
+
+
 def test_newspulse_story_clusters_track_evolving_story():
     now = datetime(2026, 4, 8, 10, 0, tzinfo=timezone.utc)
     items = [
@@ -516,6 +566,31 @@ def test_newspulse_replay_report_rebuilds_from_history():
             assert "EURUSD" in report["pair_timelines"]
             assert report["top_pairs"][0]["pair"] == "EURUSD"
             assert contracts.NEWSPULSE_REPLAY_REPORT_PATH.exists()
+
+
+def test_newspulse_health_snapshot_uses_state_fallback():
+    with tempfile.TemporaryDirectory(prefix="fxai_newspulse_health_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)):
+            contracts.NEWSPULSE_STATE_PATH.write_text(
+                json.dumps(
+                    {
+                        "daemon_health": {
+                            "mode": "daemon",
+                            "heartbeat_at": "2026-04-08T10:00:00Z",
+                            "cycles_completed": 7,
+                            "consecutive_failures": 1,
+                            "degraded": True,
+                            "degraded_reasons": ["cycle_exception"],
+                        }
+                    },
+                    sort_keys=True,
+                ),
+                encoding="utf-8",
+            )
+
+            health = newspulse_health_snapshot()
+            assert health["daemon"]["mode"] == "daemon"
+            assert health["daemon"]["cycles_completed"] == 7
 
 
 def test_newspulse_daemon_health_captures_failures_and_exits():

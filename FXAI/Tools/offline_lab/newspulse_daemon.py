@@ -63,11 +63,15 @@ def _write_daemon_health(payload: dict[str, Any]) -> None:
 
 def newspulse_health_snapshot() -> dict[str, Any]:
     status = _load_json(NEWSPULSE_STATUS_PATH)
+    state = _load_json(NEWSPULSE_STATE_PATH)
+    daemon = status.get("daemon", {})
+    if not isinstance(daemon, dict) or not daemon:
+        daemon = state.get("daemon_health", {})
     return {
         "status_path": str(NEWSPULSE_STATUS_PATH),
         "state_path": str(NEWSPULSE_STATE_PATH),
         "generated_at": status.get("generated_at", ""),
-        "daemon": status.get("daemon", {}),
+        "daemon": daemon if isinstance(daemon, dict) else {},
         "source_status": status.get("source_status", {}),
         "health": status.get("health", {}),
     }

@@ -11,7 +11,10 @@ from urllib.parse import urlparse
 
 from .newspulse_config import domain_weight, source_spec
 
-_ATOM_NS = {"atom": "http://www.w3.org/2005/Atom"}
+_XML_NS = {
+    "atom": "http://www.w3.org/2005/Atom",
+    "dc": "http://purl.org/dc/elements/1.1/",
+}
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -40,7 +43,7 @@ def _normalize_title(value: str) -> str:
 def _parse_feed_datetime(value: str) -> str:
     text = str(value or "").strip()
     if not text:
-        return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        return ""
     try:
         return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     except ValueError:
@@ -48,14 +51,17 @@ def _parse_feed_datetime(value: str) -> str:
     try:
         return parsedate_to_datetime(text).astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     except (TypeError, ValueError):
-        return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        return ""
 
 
 def _entry_text(node: ET.Element | None, names: list[str]) -> str:
     if node is None:
         return ""
     for name in names:
-        found = node.find(name, _ATOM_NS)
+        try:
+            found = node.find(name, _XML_NS)
+        except SyntaxError:
+            continue
         if found is not None and found.text:
             return found.text.strip()
     return ""
@@ -71,7 +77,7 @@ def _entry_link(node: ET.Element | None) -> str:
             return href.strip()
         if link.text:
             return link.text.strip()
-    atom_link = node.find("atom:link", _ATOM_NS)
+    atom_link = node.find("atom:link", _XML_NS)
     if atom_link is not None:
         href = atom_link.get("href")
         if href:
@@ -100,7 +106,7 @@ def _feed_entries(xml_text: str) -> list[dict[str, str]]:
     if out:
         return out
 
-    for entry in root.findall(".//atom:entry", _ATOM_NS):
+    for entry in root.findall(".//atom:entry", _XML_NS):
         out.append(
             {
                 "title": _entry_text(entry, ["atom:title", "title"]),
@@ -179,10 +185,12 @@ def query_official_feeds(config: dict[str, Any],
             if keywords and not any(keyword in normalized_title for keyword in keywords):
                 continue
             published_at = _parse_feed_datetime(entry.get("published_at", ""))
+            if not published_at:
+                continue
             try:
                 published_dt = datetime.fromisoformat(published_at.replace("Z", "+00:00")).astimezone(timezone.utc)
             except ValueError:
-                published_dt = now_dt
+                continue
             if published_dt < cutoff:
                 continue
             stable_id = hashlib.sha256(

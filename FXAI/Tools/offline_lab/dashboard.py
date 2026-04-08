@@ -105,7 +105,8 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
         payload = json.loads(row["payload_json"] or "{}")
         symbol = str(row["symbol"])
         perf = build_symbol_performance_report(symbol)
-        artifact_path = Path(str(row["artifact_path"]))
+        artifact_path_text = str(row["artifact_path"] or "").strip()
+        artifact_path = Path(artifact_path_text) if artifact_path_text else None
         live_state = {
             "deployment_tsv": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_live_deploy_{safe_token(symbol)}.tsv"),
             "router_tsv": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_student_router_{safe_token(symbol)}.tsv"),
@@ -118,16 +119,16 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
         deployments.append(
             {
                 "symbol": symbol,
-                "artifact_path": str(artifact_path),
+                "artifact_path": artifact_path_text,
                 "created_at": int(row["created_at"]),
                 "payload": payload,
                 "performance": perf,
                 "live_state": live_state,
                 "analog_neighbors": analog_neighbors,
                 "artifact_health": {
-                    "artifact_exists": artifact_path.exists(),
+                    "artifact_exists": bool(artifact_path and artifact_path.exists()),
                     "artifact_age_sec": artifact_age_sec,
-                    "stale_artifact": artifact_age_sec > 86400,
+                    "stale_artifact": bool(artifact_path_text) and artifact_age_sec > 86400,
                     "missing_deployment": not bool(live_state["deployment_tsv"]),
                     "missing_router": not bool(live_state["router_tsv"]),
                     "missing_world_plan": not bool(live_state["world_tsv"]),

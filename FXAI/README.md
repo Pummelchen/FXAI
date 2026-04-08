@@ -6,6 +6,11 @@ This directory is the MT5 project subtree that gets synchronized into:
 
 It is kept self-describing so the live MT5 tree can be inspected without opening the full git repo root.
 
+If you are approaching FXAI as an operator rather than as a framework engineer, start with the role-based quick start in the wiki:
+- `Quick Start By Role`
+- then `Getting Started`
+- then the subsystem page you actually need first, such as `Audit Lab`, `Offline Lab`, `NewsPulse`, or `GUI`
+
 ## Main Entry Points
 
 - `FXAI.mq5`

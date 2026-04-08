@@ -36,8 +36,12 @@ An optional macOS 26 operator GUI now lives under [FXAI/GUI](/Users/andreborcher
 
 ## Documentation
 
+If you are new to FXAI, start with the role-based matrix first:
+- [Quick Start By Role](https://github.com/Pummelchen/FXAI/wiki/Quick-Start-By-Role)
+
 Detailed documentation is kept in the wiki:
 - [Home](https://github.com/Pummelchen/FXAI/wiki)
+- [Quick Start By Role](https://github.com/Pummelchen/FXAI/wiki/Quick-Start-By-Role)
 - [Getting Started](https://github.com/Pummelchen/FXAI/wiki/Getting-Started)
 - [FXAI Framework](https://github.com/Pummelchen/FXAI/wiki/FXAI-Framework)
 - [Audit Lab](https://github.com/Pummelchen/FXAI/wiki/Audit-Lab)
