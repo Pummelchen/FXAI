@@ -161,6 +161,7 @@ public struct ProjectScanner {
     private func scanArtifacts(projectRoot: URL) -> [ReportArtifact] {
         let roots: [(String, URL)] = [
             ("Baselines", projectRoot.appendingPathComponent("Tools/Baselines", isDirectory: true)),
+            ("NewsPulse", projectRoot.appendingPathComponent("Tools/OfflineLab/NewsPulse", isDirectory: true)),
             ("ResearchOS", projectRoot.appendingPathComponent("Tools/OfflineLab/ResearchOS", isDirectory: true)),
             ("Profiles", projectRoot.appendingPathComponent("Tools/OfflineLab/Profiles", isDirectory: true)),
             ("Distillation", projectRoot.appendingPathComponent("Tools/OfflineLab/Distillation", isDirectory: true))

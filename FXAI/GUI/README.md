@@ -19,6 +19,7 @@ Phase 1 through Phase 6 are implemented here:
 - backtest prep builder
 - Offline Lab workflow builder
 - runtime monitor for deployed symbol state
+- NewsPulse surface for source health, currency heatmap, pair risk, and recent event tape
 - promotion center for champions, tiers, and set paths
 - Research OS control for Turso environment diagnostics, branch and PITR flows, audit-log visibility, analog vector browsing, and recovery command generation
 - advanced visualization surfaces with Metal-backed heatmaps, world-plan charts, family stress maps, artifact diff surfaces, and promotion/attribution timelines

@@ -12,6 +12,7 @@ It does not replace the MT5 model engine. MT5 and MQL5 still execute the real pl
 - student-router profiles that bound live model breadth and family weighting per symbol
 - supervisor-service and supervisor-command artifacts for live portfolio-pressure and lifecycle control
 - distillation artifacts for lighter student targets and learned red-team plans for future hostile-market runs
+- NewsPulse shared-news infrastructure for MT5 calendar export, GDELT fusion, runtime gating, and operator visibility
 - ready-to-use MT5 `.set` files so no parameter copy/paste is needed
 
 Main commands from the repo root:
@@ -29,6 +30,10 @@ python3 FXAI/Tools/fxai_offline_lab.py turso-audit-sync --limit 50 --pages 1
 python3 FXAI/Tools/fxai_offline_lab.py attribution-prune --profile continuous
 python3 FXAI/Tools/fxai_offline_lab.py turso-vector-reindex --profile continuous
 python3 FXAI/Tools/fxai_offline_lab.py turso-vector-neighbors --profile continuous --symbol EURUSD
+python3 FXAI/Tools/fxai_offline_lab.py newspulse-validate
+python3 FXAI/Tools/fxai_offline_lab.py newspulse-install-service
+python3 FXAI/Tools/fxai_offline_lab.py newspulse-once
+python3 FXAI/Tools/fxai_offline_lab.py newspulse-daemon --interval-seconds 60
 python3 FXAI/Tools/fxai_offline_lab.py deploy-profiles --profile continuous
 python3 FXAI/Tools/fxai_offline_lab.py supervisor-sync --profile continuous
 python3 FXAI/Tools/fxai_offline_lab.py autonomous-governance --profile continuous
@@ -68,6 +73,9 @@ Notes:
 - `minimal-bundle` emits a deployment-only artifact set for a profile so operators can stage a lean live runtime without carrying the full research output tree.
 - `recover-artifacts` rebuilds generated runtime artifacts from Turso/libSQL state if `FILE_COMMON` or Offline Lab outputs go stale or are deleted.
 - `verify-deterministic` refreshes or checks the golden fixture outputs for the research OS artifact contract.
+- `newspulse-install-service` copies and compiles the MT5 Economic Calendar service into `MQL5/Services/`.
+- `newspulse-once` runs one bounded GDELT+calendar fusion cycle and writes the shared snapshot into `FILE_COMMON/FXAI/Runtime/`.
+- `newspulse-daemon` keeps that snapshot refreshed continuously for runtime and GUI consumers.
 - `fxai_testlab.py verify-all` is the one-command platform verification path: Python tests, deterministic fixture checks, and clean MT5 compiles.
 - Exact-window datasets store the effective exported first and last bar range, so later tuning and promotion stay aligned to the data that was actually ingested.
 - Turso access uses bounded open retry so overlapping admin and control-loop calls fail cleanly instead of drifting silently.

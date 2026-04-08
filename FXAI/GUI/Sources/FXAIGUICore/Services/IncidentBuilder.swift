@@ -7,7 +7,8 @@ public struct IncidentBuilder {
         projectRoot: URL,
         snapshot: FXAIProjectSnapshot?,
         runtimeSnapshot: RuntimeOperationsSnapshot?,
-        researchSnapshot: ResearchOSControlSnapshot?
+        researchSnapshot: ResearchOSControlSnapshot?,
+        newsPulseSnapshot: NewsPulseSnapshot?
     ) -> IncidentCenterSnapshot {
         var incidents: [FXAIIncident] = []
         let effectiveProfile = runtimeSnapshot?.profileName ?? researchSnapshot?.profileName ?? "continuous"
@@ -354,6 +355,99 @@ public struct IncidentBuilder {
             }
         }
 
+        if let newsPulseSnapshot {
+            let staleSources = newsPulseSnapshot.sourceStatuses.filter { !$0.ok || $0.stale }
+            if !staleSources.isEmpty {
+                incidents.append(
+                    FXAIIncident(
+                        id: "newspulse::stale-sources",
+                        severity: .warning,
+                        category: .runtime,
+                        title: "NewsPulse source freshness is degraded",
+                        summary: "The shared NewsPulse surface is stale or failing. Runtime gates should treat missing news context as unknown until the collector path is healthy again.",
+                        detailLines: staleSources.map { "\($0.id.uppercased()): \($0.lastError ?? "stale or missing updates")" },
+                        actions: [
+                            IncidentAction(
+                                title: "Open NewsPulse",
+                                summary: "Inspect current source state, pair risk, and recent tape in the operator shell.",
+                                command: newspulseOnceCommand(projectRoot: projectRoot),
+                                destinationSelection: "newsPulse"
+                            ),
+                            IncidentAction(
+                                title: "Run NewsPulse refresh",
+                                summary: "Force one local fusion cycle from the current calendar export and GDELT state.",
+                                command: newspulseOnceCommand(projectRoot: projectRoot),
+                                destinationSelection: "commands"
+                            )
+                        ],
+                        playbook: RecoveryPlaybook(
+                            title: "Recover NewsPulse freshness",
+                            summary: "Restore the calendar and GDELT collectors before you trust any news-aware runtime gate again.",
+                            steps: [
+                                RecoveryStep(
+                                    title: "Validate NewsPulse config",
+                                    summary: "Check whitelist, query scaffolding, and local artifact paths first.",
+                                    command: newspulseValidateCommand(projectRoot: projectRoot),
+                                    destinationSelection: "newsPulse"
+                                ),
+                                RecoveryStep(
+                                    title: "Refresh one fusion cycle",
+                                    summary: "Generate a fresh merged snapshot from the latest collector state.",
+                                    command: newspulseOnceCommand(projectRoot: projectRoot),
+                                    destinationSelection: "commands"
+                                )
+                            ]
+                        )
+                    )
+                )
+            }
+
+            let runtimePairs = Set((runtimeSnapshot?.deployments ?? []).compactMap { activePairID(for: $0.symbol) })
+            let activeBlockedPairs = newsPulseSnapshot.pairs.filter {
+                runtimePairs.contains($0.pair) && ($0.tradeGate.uppercased() == "BLOCK" || $0.tradeGate.uppercased() == "CAUTION")
+            }
+            for pair in activeBlockedPairs.prefix(4) {
+                let severity: IncidentSeverity = pair.tradeGate.uppercased() == "BLOCK" ? .critical : .warning
+                incidents.append(
+                    FXAIIncident(
+                        id: "newspulse::\(pair.pair)",
+                        severity: severity,
+                        category: .runtime,
+                        title: "NewsPulse gate is active for \(pair.pair)",
+                        summary: "The shared NewsPulse subsystem is currently flagging \(pair.pair) as \(pair.tradeGate). Treat new entries as risk-sensitive until the scheduled or breaking-news window clears.",
+                        affectedSymbol: pair.pair,
+                        detailLines: pair.reasons + [pair.eventETAMin.map { "Next event ETA: \($0) minutes" } ?? "No scheduled ETA available"],
+                        actions: [
+                            IncidentAction(
+                                title: "Inspect NewsPulse",
+                                summary: "Open pair-level reasons, currency heatmap, and recent tape for the active gate.",
+                                command: newspulseOnceCommand(projectRoot: projectRoot),
+                                destinationSelection: "newsPulse"
+                            )
+                        ],
+                        playbook: RecoveryPlaybook(
+                            title: "Work through the active NewsPulse gate",
+                            summary: "Use the shared news surface to decide whether to wait, reduce risk, or keep the pair blocked through the event window.",
+                            steps: [
+                                RecoveryStep(
+                                    title: "Inspect the pair gate",
+                                    summary: "Review pair reasons, source health, and current event timing.",
+                                    command: newspulseOnceCommand(projectRoot: projectRoot),
+                                    destinationSelection: "newsPulse"
+                                ),
+                                RecoveryStep(
+                                    title: "Refresh the snapshot",
+                                    summary: "Re-run one fusion cycle to confirm whether the gate is still active.",
+                                    command: newspulseOnceCommand(projectRoot: projectRoot),
+                                    destinationSelection: "commands"
+                                )
+                            ]
+                        )
+                    )
+                )
+            }
+        }
+
         let sorted = incidents.sorted { lhs, rhs in
             if lhs.severity == rhs.severity {
                 return lhs.title < rhs.title
@@ -407,6 +501,28 @@ public struct IncidentBuilder {
             "cd \(shellQuoted(projectRoot.path))",
             "python3 Tools/fxai_offline_lab.py bootstrap --seed-demo"
         ].joined(separator: "\n")
+    }
+
+    private func newspulseValidateCommand(projectRoot: URL) -> String {
+        [
+            "cd \(shellQuoted(projectRoot.path))",
+            "python3 Tools/fxai_offline_lab.py newspulse-validate"
+        ].joined(separator: "\n")
+    }
+
+    private func newspulseOnceCommand(projectRoot: URL) -> String {
+        [
+            "cd \(shellQuoted(projectRoot.path))",
+            "python3 Tools/fxai_offline_lab.py newspulse-once"
+        ].joined(separator: "\n")
+    }
+
+    private func activePairID(for symbol: String) -> String? {
+        let upper = symbol.uppercased()
+        guard upper.count >= 6 else { return nil }
+        let start = upper.startIndex
+        let end = upper.index(start, offsetBy: 6)
+        return String(upper[start..<end])
     }
 
     private func nonEmpty(_ value: String?) -> String? {

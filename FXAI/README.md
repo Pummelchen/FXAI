@@ -16,8 +16,12 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
   External compile, audit, baseline, and release-gate tool.
 - `Tools/fxai_offline_lab.py`
   Stable CLI wrapper for the Turso/libSQL-backed offline export, tuning, promotion, and control-loop tool.
+- `Services/FXAI_NewsPulseCalendar.mq5`
+  MT5 Service that exports Economic Calendar state for the NewsPulse shared news-risk subsystem.
 - `Tools/offline_lab/`
   Internal Python package for Offline Lab database, export, campaign, promotion, shadow-fleet ingest, foundation and student bundling, supervisor-service generation, teacher-factory modules, world simulation, and autonomous governance.
+- `Tools/OfflineLab/NewsPulse/`
+  NewsPulse operator config, local status mirrors, and subsystem documentation.
 - `GUI/`
   Optional macOS 26 SwiftUI operator app for role-based dashboards, plugin-zoo browsing, report exploration, run builders for Audit/Offline/backtest workflows, runtime inspection, promotion review, Research OS control, advanced Metal-backed visual analysis, saved workspace views, onboarding, incident recovery, detached startup, soft reconnect, terminal-first command guidance, and the shared FXAI operator theme system.
 
@@ -39,6 +43,8 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
   Warmup modules split by normalization search, scoring, transfer, portfolio diagnostics, and entrypoint orchestration.
 - `Engine/Runtime/`
   Extracted live-trading helpers used by the EA entrypoint, including the live control-plane snapshot and peer-pressure logic.
+- `Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
+  NewsPulse runtime adapter that consumes the merged flat snapshot and applies pair-level news gating without changing the canonical model input.
 - `Engine/Runtime/runtime_*_block.mqh`
   Split feature, transfer, model, and policy stages behind `engine_runtime.mqh` so the main runtime entrypoint stays readable.
 - `TensorCore/`
@@ -67,8 +73,11 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
   Split Offline Lab command routing into campaign, command, and parser modules behind `cli.py`.
 - `Tools/offline_lab/common_*.py`
   Split shared Offline Lab helpers into schema, utilities, DB, statistics, and path modules behind `common.py`.
+- `Tools/offline_lab/newspulse_*.py`
+  NewsPulse contracts, config, MT5 calendar parsing, GDELT polling, fusion, daemon loop, and service-install helpers.
 - `GUI/Sources/FXAIGUICore`, `GUI/Sources/FXAIGUIApp`
   Swift package targets for the GUI’s project scanner, runtime and Research OS artifact readers, advanced visualization builders, saved-workspace persistence, onboarding guides, incident builders, design system, navigation shell, operator-theme token/layout/rendering stack, reference-asset parsing, adaptive dashboard components, Phase 2 run builders, Phase 3 runtime/promotion views, Phase 4 Turso/Research OS control surfaces, Phase 5 Metal-backed visualization surfaces, and Phase 6 operator-polish features.
+  The GUI also includes an integrated NewsPulse surface for source health, currency heatmap, pair risk, and recent tape visibility.
 
 ## Operating Notes
 
@@ -77,6 +86,8 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - The preferred GUI verification path is `cd FXAI/GUI && swift test && swift build`.
 - GUI release packaging is `cd FXAI/GUI && ./Tools/package_gui_release.sh`.
 - The preferred Offline Lab bootstrap path is `python3 FXAI/Tools/fxai_offline_lab.py bootstrap --seed-demo`.
+- The preferred NewsPulse service install path is `python3 FXAI/Tools/fxai_offline_lab.py newspulse-install-service`.
+- The preferred NewsPulse smoke path is `python3 FXAI/Tools/fxai_offline_lab.py newspulse-once`.
 - The shared TensorCore path now includes a self-supervised foundation encoder, teacher-student transfer heads, hierarchical trade-quality signals, and persistent analog regime memory.
 - The live EA now uses portfolio-native sizing and gating with directional-cluster pressure, hierarchy floors, and macro-state quality controls instead of only scalar conviction scaling.
 - The live runtime now emits per-instance control-plane snapshots and consumes promoted symbol deployment profiles so research-side promotion decisions can steer trade floors, sizing bias, and peer-pressure handling.
@@ -103,6 +114,7 @@ It is kept self-describing so the live MT5 tree can be inspected without opening
 - Offline Lab can run local-only through libSQL or as a Turso embedded replica when `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are configured.
 - Offline Lab now also supports local Turso file encryption, bounded sync intervals for embedded replicas, branch and point-in-time restore env artifacts, Turso audit-log ingestion, and native vector-backed analog-state retrieval in the research OS.
 - Runtime profiles now support explicit `research` and `production` modes so the same framework can run either as the full research OS or as a leaner live deployment surface.
+- NewsPulse is phase-1 safe by design: it adds shared news-risk gating and operator visibility without forcing model retraining or changing the canonical model-input contract by default.
 
 ## Source Of Truth
 

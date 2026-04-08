@@ -1,0 +1,154 @@
+{
+  "domains": {
+    "bankofcanada.ca": {
+      "currencies": [
+        "CAD"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "bankofengland.co.uk": {
+      "currencies": [
+        "GBP"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "bea.gov": {
+      "currencies": [
+        "USD"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "bls.gov": {
+      "currencies": [
+        "USD"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "bloomberg.com": {
+      "enabled": true,
+      "tier": "top_tier_macro_financial"
+    },
+    "boj.or.jp": {
+      "currencies": [
+        "JPY"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "bfs.admin.ch": {
+      "currencies": [
+        "CHF"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "cnbc.com": {
+      "enabled": true,
+      "tier": "secondary"
+    },
+    "destatis.de": {
+      "currencies": [
+        "EUR"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "ecb.europa.eu": {
+      "currencies": [
+        "EUR"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "federalreserve.gov": {
+      "currencies": [
+        "USD"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "ft.com": {
+      "enabled": true,
+      "tier": "top_tier_macro_financial"
+    },
+    "marketwatch.com": {
+      "enabled": true,
+      "tier": "secondary"
+    },
+    "norges-bank.no": {
+      "currencies": [
+        "NOK"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "ons.gov.uk": {
+      "currencies": [
+        "GBP"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "rba.gov.au": {
+      "currencies": [
+        "AUD"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "rbnz.govt.nz": {
+      "currencies": [
+        "NZD"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "reuters.com": {
+      "enabled": true,
+      "tier": "top_tier_macro_financial"
+    },
+    "riksbank.se": {
+      "currencies": [
+        "SEK"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "snb.ch": {
+      "currencies": [
+        "CHF"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "statcan.gc.ca": {
+      "currencies": [
+        "CAD"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "statistics.govt.nz": {
+      "currencies": [
+        "NZD"
+      ],
+      "enabled": true,
+      "tier": "official"
+    },
+    "wsj.com": {
+      "enabled": true,
+      "tier": "secondary"
+    }
+  },
+  "schema_version": 1,
+  "tier_weights": {
+    "disabled": 0.0,
+    "official": 1.25,
+    "secondary": 0.72,
+    "top_tier_macro_financial": 1.0
+  }
+}

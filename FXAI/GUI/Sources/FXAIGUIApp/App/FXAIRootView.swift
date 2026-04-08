@@ -7,7 +7,7 @@ struct FXAIRootView: View {
     private let sidebarSections: [(title: String, destinations: [SidebarDestination])] = [
         ("Start", [.overview, .roles, .onboarding, .incidents]),
         ("Build", [.auditLab, .backtestBuilder, .offlineLab]),
-        ("Operate", [.runtimeMonitor, .promotionCenter, .researchControl]),
+        ("Operate", [.newsPulse, .runtimeMonitor, .promotionCenter, .researchControl]),
         ("Inspect", [.plugins, .reports, .commands, .advancedVisuals]),
         ("System", [.settings])
     ]
@@ -184,6 +184,8 @@ struct FXAIRootView: View {
             BacktestBuilderView()
         case .offlineLab:
             OfflineLabBuilderView()
+        case .newsPulse:
+            NewsPulseView()
         case .runtimeMonitor:
             RuntimeMonitorView()
         case .promotionCenter:

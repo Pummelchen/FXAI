@@ -21,6 +21,21 @@ def build_parser() -> argparse.ArgumentParser:
     val = sub.add_parser("validate-env", help="Validate Python, MT5, FILE_COMMON, and Offline Lab path assumptions")
     val.set_defaults(func=cmd_validate_env)
 
+    npv = sub.add_parser("newspulse-validate", help="Validate NewsPulse config, whitelist, and query scaffolding")
+    npv.set_defaults(func=cmd_newspulse_validate)
+
+    npi = sub.add_parser("newspulse-install-service", help="Install the MT5 NewsPulse calendar service into MQL5/Services")
+    npi.add_argument("--skip-compile", action="store_true")
+    npi.set_defaults(func=cmd_newspulse_install_service)
+
+    npo = sub.add_parser("newspulse-once", help="Run one NewsPulse fusion cycle and refresh the shared snapshot")
+    npo.set_defaults(func=cmd_newspulse_once)
+
+    npd = sub.add_parser("newspulse-daemon", help="Continuously refresh NewsPulse from MT5 calendar exports and GDELT")
+    npd.add_argument("--interval-seconds", type=int, default=0)
+    npd.add_argument("--iterations", type=int, default=0, help="0 means run forever")
+    npd.set_defaults(func=cmd_newspulse_daemon)
+
     boot = sub.add_parser("bootstrap", help="Create required lab folders, validate the environment, and initialize Turso")
     boot.add_argument("--report", default="")
     boot.add_argument("--no-init-db", action="store_true")

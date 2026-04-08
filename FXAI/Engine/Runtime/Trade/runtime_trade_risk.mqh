@@ -115,6 +115,55 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       return 0.0;
    }
 
+   FXAINewsPulsePairState news_state;
+   FXAI_ResetNewsPulsePairState(news_state);
+   bool news_caution = false;
+   if(NewsPulseEnabled)
+   {
+      bool news_available = FXAI_ReadNewsPulsePairState(symbol, news_state);
+      if(!news_available || !news_state.ready)
+      {
+         if(NewsPulseBlockOnUnknown)
+         {
+            reason = "risk_newspulse_unknown";
+            return 0.0;
+         }
+      }
+      else
+      {
+         if(news_state.stale)
+         {
+            if(NewsPulseBlockOnUnknown)
+            {
+               reason = "risk_newspulse_stale";
+               return 0.0;
+            }
+         }
+         else if(news_state.trade_gate == "BLOCK")
+         {
+            reason = "risk_newspulse_block";
+            return 0.0;
+         }
+         else if(news_state.trade_gate == "CAUTION")
+         {
+            news_caution = true;
+            double caution_enter_floor = FXAI_Clamp(0.05 +
+                                                    FXAI_Clamp(NewsPulseCautionEnterProbBuffer, 0.0, 0.25),
+                                                    0.05,
+                                                    0.95);
+            if(g_policy_last_enter_prob < caution_enter_floor)
+            {
+               reason = "risk_newspulse_caution_floor";
+               return 0.0;
+            }
+         }
+      }
+   }
+   else
+   {
+      FXAI_ResetNewsPulseGlobals();
+   }
+
    double requested_lot = Lot;
    double hard_cap_lot = 1000000.0;
    double edge_scale = FXAI_Clamp(g_ai_last_trade_edge_points / MathMax(g_ai_last_min_move_points, 0.25), -1.0, 4.0);
@@ -287,7 +336,7 @@ double FXAI_CalcRiskAwareLot(const string symbol,
    }
 
     double dir_cap = MathMax(MaxDirectionalClusterLots, 0.0);
-    if(dir_cap > 0.0)
+   if(dir_cap > 0.0)
     {
        double available = dir_cap * MathMax(supervisor.directional_budget_bias, 0.40) - FXAI_ManagedDirectionalClusterLots(symbol, direction);
        if(available <= 0.0)
@@ -300,6 +349,9 @@ double FXAI_CalcRiskAwareLot(const string symbol,
        if(available < hard_cap_lot)
           hard_cap_lot = available;
     }
+
+   if(NewsPulseEnabled && news_caution)
+      requested_lot *= FXAI_Clamp(NewsPulseCautionLotScale, 0.10, 1.00);
 
    requested_lot = FXAI_NormalizeLot(symbol, requested_lot);
    if(requested_lot > hard_cap_lot + 1e-9)

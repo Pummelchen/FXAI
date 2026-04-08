@@ -11,6 +11,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var lastConnectionCheckAt: Date?
     @Published var snapshot: FXAIProjectSnapshot?
     @Published var runtimeSnapshot: RuntimeOperationsSnapshot?
+    @Published var newsPulseSnapshot: NewsPulseSnapshot?
     @Published var researchSnapshot: ResearchOSControlSnapshot?
     @Published var visualizationSnapshot: AdvancedVisualizationSnapshot?
     @Published var incidentSnapshot: IncidentCenterSnapshot?
@@ -41,6 +42,7 @@ final class FXAIGUIModel: ObservableObject {
     private let scanner = ProjectScanner()
     private let connectionCoordinator = ProjectConnectionCoordinator()
     private let runtimeReader = RuntimeArtifactReader()
+    private let newsPulseReader = NewsPulseArtifactReader()
     private let researchReader = ResearchOSArtifactReader()
     private let visualizationBuilder = AdvancedVisualizationBuilder()
     private let incidentBuilder = IncidentBuilder()
@@ -148,6 +150,7 @@ final class FXAIGUIModel: ObservableObject {
         do {
             snapshot = try scanner.scan(projectRoot: projectRoot)
             runtimeSnapshot = runtimeReader.read(projectRoot: projectRoot)
+            newsPulseSnapshot = newsPulseReader.read(projectRoot: projectRoot)
             researchSnapshot = researchReader.read(projectRoot: projectRoot)
             visualizationSnapshot = visualizationBuilder.build(
                 projectRoot: projectRoot,
@@ -158,7 +161,8 @@ final class FXAIGUIModel: ObservableObject {
                 projectRoot: projectRoot,
                 snapshot: snapshot,
                 runtimeSnapshot: runtimeSnapshot,
-                researchSnapshot: researchSnapshot
+                researchSnapshot: researchSnapshot,
+                newsPulseSnapshot: newsPulseSnapshot
             )
             syncBuilderDefaults()
             syncRuntimeSelection()
@@ -681,6 +685,7 @@ final class FXAIGUIModel: ObservableObject {
     private func clearSnapshots() {
         snapshot = nil
         runtimeSnapshot = nil
+        newsPulseSnapshot = nil
         researchSnapshot = nil
         visualizationSnapshot = nil
         incidentSnapshot = nil

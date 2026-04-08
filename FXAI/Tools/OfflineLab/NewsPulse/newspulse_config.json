@@ -1,0 +1,308 @@
+{
+  "calendar": {
+    "bootstrap_lookback_hours": 36,
+    "high_impact_min": 2,
+    "lookahead_days": 7,
+    "post_window_min_by_importance": {
+      "1": 10,
+      "2": 25,
+      "3": 45
+    },
+    "pre_window_min_by_importance": {
+      "1": 10,
+      "2": 25,
+      "3": 45
+    }
+  },
+  "currencies": {
+    "AUD": {
+      "aliases": [
+        "AUD",
+        "aussie",
+        "Reserve Bank of Australia",
+        "RBA",
+        "Australia"
+      ],
+      "source_countries": [
+        "au"
+      ],
+      "topic_groups": [
+        "monetary_policy",
+        "inflation",
+        "employment_growth",
+        "commodity_energy_shock"
+      ]
+    },
+    "CAD": {
+      "aliases": [
+        "CAD",
+        "loonie",
+        "Bank of Canada",
+        "BoC",
+        "Canada"
+      ],
+      "source_countries": [
+        "ca"
+      ],
+      "topic_groups": [
+        "monetary_policy",
+        "inflation",
+        "employment_growth",
+        "commodity_energy_shock"
+      ]
+    },
+    "CHF": {
+      "aliases": [
+        "CHF",
+        "franc",
+        "Swiss National Bank",
+        "SNB",
+        "Switzerland"
+      ],
+      "source_countries": [
+        "ch"
+      ],
+      "topic_groups": [
+        "monetary_policy",
+        "inflation",
+        "banking_stress",
+        "geopolitical_risk"
+      ]
+    },
+    "EUR": {
+      "aliases": [
+        "EUR",
+        "euro",
+        "ECB",
+        "Eurozone",
+        "European Central Bank"
+      ],
+      "source_countries": [
+        "eu",
+        "de",
+        "fr",
+        "it"
+      ],
+      "topic_groups": [
+        "monetary_policy",
+        "inflation",
+        "employment_growth",
+        "banking_stress",
+        "geopolitical_risk"
+      ]
+    },
+    "GBP": {
+      "aliases": [
+        "GBP",
+        "sterling",
+        "pound",
+        "Bank of England",
+        "BoE"
+      ],
+      "source_countries": [
+        "gb",
+        "uk"
+      ],
+      "topic_groups": [
+        "monetary_policy",
+        "inflation",
+        "employment_growth",
+        "banking_stress",
+        "geopolitical_risk"
+      ]
+    },
+    "JPY": {
+      "aliases": [
+        "JPY",
+        "yen",
+        "Bank of Japan",
+        "BoJ",
+        "Japan"
+      ],
+      "source_countries": [
+        "jp"
+      ],
+      "topic_groups": [
+        "monetary_policy",
+        "inflation",
+        "employment_growth",
+        "banking_stress",
+        "geopolitical_risk"
+      ]
+    },
+    "NOK": {
+      "aliases": [
+        "NOK",
+        "krone",
+        "Norges Bank",
+        "Norway"
+      ],
+      "source_countries": [
+        "no"
+      ],
+      "topic_groups": [
+        "monetary_policy",
+        "inflation",
+        "employment_growth",
+        "commodity_energy_shock"
+      ]
+    },
+    "NZD": {
+      "aliases": [
+        "NZD",
+        "kiwi",
+        "Reserve Bank of New Zealand",
+        "RBNZ",
+        "New Zealand"
+      ],
+      "source_countries": [
+        "nz"
+      ],
+      "topic_groups": [
+        "monetary_policy",
+        "inflation",
+        "employment_growth",
+        "commodity_energy_shock"
+      ]
+    },
+    "SEK": {
+      "aliases": [
+        "SEK",
+        "krona",
+        "Riksbank",
+        "Sweden"
+      ],
+      "source_countries": [
+        "se"
+      ],
+      "topic_groups": [
+        "monetary_policy",
+        "inflation",
+        "employment_growth"
+      ]
+    },
+    "USD": {
+      "aliases": [
+        "USD",
+        "dollar",
+        "Federal Reserve",
+        "Fed",
+        "Treasury",
+        "FOMC"
+      ],
+      "source_countries": [
+        "us"
+      ],
+      "topic_groups": [
+        "monetary_policy",
+        "inflation",
+        "employment_growth",
+        "banking_stress",
+        "geopolitical_risk"
+      ]
+    }
+  },
+  "enabled": true,
+  "gdelt": {
+    "allow_insecure_tls_fallback": false,
+    "max_cycle_runtime_sec": 12,
+    "max_query_sets_per_cycle": 8,
+    "maxrecords": 25,
+    "rate_limit_backoff_sec": 300,
+    "request_timeout_sec": 6,
+    "sort": "datedesc",
+    "timespan": "30min",
+    "tone_abs_floor": 0.0
+  },
+  "gdelt_stale_after_sec": 360,
+  "history_recent_limit": 80,
+  "pairs": {
+    "currencies": [
+      "USD",
+      "EUR",
+      "GBP",
+      "JPY",
+      "CHF",
+      "CAD",
+      "AUD",
+      "NZD",
+      "SEK",
+      "NOK"
+    ],
+    "include_permutations": true
+  },
+  "poll_interval_sec": 60,
+  "schema_version": 1,
+  "scoring": {
+    "baseline_alpha": 0.18,
+    "block_risk_threshold": 0.78,
+    "burst_block_threshold": 1.8,
+    "caution_risk_threshold": 0.45,
+    "intensity_half_life_min": 12.0,
+    "post_release_hot_minutes": 8,
+    "stale_risk_score": 0.92
+  },
+  "snapshot_stale_after_sec": 360,
+  "topic_groups": {
+    "banking_stress": {
+      "query_terms": [
+        "\"banking stress\"",
+        "\"bank failure\"",
+        "\"financial stability\"",
+        "\"liquidity crisis\"",
+        "\"credit stress\""
+      ],
+      "weight": 1.0
+    },
+    "commodity_energy_shock": {
+      "query_terms": [
+        "oil",
+        "gas",
+        "energy",
+        "commodity",
+        "crude"
+      ],
+      "weight": 0.74
+    },
+    "employment_growth": {
+      "query_terms": [
+        "employment",
+        "\"labor market\"",
+        "\"jobs report\"",
+        "GDP",
+        "growth"
+      ],
+      "weight": 0.82
+    },
+    "geopolitical_risk": {
+      "query_terms": [
+        "sanctions",
+        "\"trade war\"",
+        "geopolitical",
+        "conflict",
+        "tariff"
+      ],
+      "weight": 0.78
+    },
+    "inflation": {
+      "query_terms": [
+        "inflation",
+        "\"consumer prices\"",
+        "CPI",
+        "PPI"
+      ],
+      "weight": 0.9
+    },
+    "monetary_policy": {
+      "query_terms": [
+        "\"central bank\"",
+        "\"interest rate\"",
+        "\"rate decision\"",
+        "\"policy rate\"",
+        "\"monetary policy\""
+      ],
+      "weight": 1.0
+    }
+  },
+  "unknown_blocks": true
+}

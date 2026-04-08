@@ -8,6 +8,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
     case auditLab
     case backtestBuilder
     case offlineLab
+    case newsPulse
     case runtimeMonitor
     case promotionCenter
     case researchControl
@@ -28,6 +29,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .auditLab: "Audit Lab"
         case .backtestBuilder: "Backtests"
         case .offlineLab: "Offline Lab"
+        case .newsPulse: "NewsPulse"
         case .runtimeMonitor: "Runtime Monitor"
         case .promotionCenter: "Promotion Center"
         case .researchControl: "Research OS"
@@ -48,6 +50,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .auditLab: "checklist.checked"
         case .backtestBuilder: "gauge.with.needle.fill"
         case .offlineLab: "gearshape.2.fill"
+        case .newsPulse: "dot.radiowaves.left.and.right"
         case .runtimeMonitor: "waveform.path.ecg.rectangle.fill"
         case .promotionCenter: "rosette"
         case .researchControl: "server.rack"

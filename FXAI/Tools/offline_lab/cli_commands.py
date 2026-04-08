@@ -16,6 +16,8 @@ from .foundation_factory import *
 from .governance import *
 from .lineage import *
 from .mode import RUNTIME_MODES, resolve_runtime_mode
+from .newspulse_daemon import run_newspulse_daemon, run_newspulse_once, validate_newspulse_config
+from .newspulse_service import install_calendar_service
 from .performance import write_performance_reports
 from .promotion import *
 from .shadow_fleet import *
@@ -49,6 +51,33 @@ def cmd_validate_env(_args) -> int:
     payload = validate_environment()
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0 if bool(payload.get("ok")) else 1
+
+
+def cmd_newspulse_validate(_args) -> int:
+    payload = validate_newspulse_config()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if bool(payload.get("ok")) else 1
+
+
+def cmd_newspulse_once(_args) -> int:
+    payload = run_newspulse_once()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_newspulse_daemon(args) -> int:
+    payload = run_newspulse_daemon(
+        iterations=int(getattr(args, "iterations", 0) or 0),
+        interval_seconds=int(getattr(args, "interval_seconds", 0) or 0),
+    )
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_newspulse_install_service(args) -> int:
+    payload = install_calendar_service(compile_service=not bool(getattr(args, "skip_compile", False)))
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
 
 
 def _default_turso_branch_name(profile_name: str, branch_kind: str) -> str:
@@ -663,4 +692,3 @@ def cmd_control_loop(args) -> int:
             time.sleep(sleep_seconds)
     close_db(conn)
     return 0
-

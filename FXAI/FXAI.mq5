@@ -168,6 +168,26 @@ input double RiskMaxPortfolioPressure = 0.78;
 // Models: all (portfolio-native runtime).
 // Purpose: blocks entries when gross, correlated, and directional cluster pressure are too high.
 // Importance/Range: 0..1; lower is stricter.
+input bool   NewsPulseEnabled = true;
+// Models: all (execution/news-risk overlay, no retraining required).
+// Purpose: enables the shared NewsPulse runtime gate driven by scheduled macro events and breaking-news burst state.
+// Importance/Range: false/true; true is recommended for live and demo deployment.
+input bool   NewsPulseBlockOnUnknown = true;
+// Models: all (execution/news-risk overlay).
+// Purpose: blocks new entries when the shared NewsPulse snapshot is missing or stale instead of treating unknown as safe.
+// Importance/Range: false/true; true is the safer live default.
+input int    NewsPulseFreshnessMaxSec = 360;
+// Models: all (execution/news-risk overlay).
+// Purpose: maximum allowed age of the merged NewsPulse snapshot before it is treated as stale.
+// Importance/Range: practical 120..900 seconds.
+input double NewsPulseCautionLotScale = 0.65;
+// Models: all (execution/news-risk overlay).
+// Purpose: scales requested lot size down during NewsPulse caution windows while preserving normal model contracts.
+// Importance/Range: practical 0.25..1.00; lower is more defensive.
+input double NewsPulseCautionEnterProbBuffer = 0.05;
+// Models: all (execution/news-risk overlay).
+// Purpose: requires a slightly stronger policy enter probability during NewsPulse caution windows.
+// Importance/Range: practical 0.00..0.20; 0 disables the extra floor.
 input double RiskKillTradeGate = 0.24;
 // Models: all (open-position safety layer).
 // Purpose: forces exit when the live gate collapses under the post-entry kill threshold.

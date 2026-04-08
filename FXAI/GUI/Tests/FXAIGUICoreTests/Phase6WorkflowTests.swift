@@ -149,13 +149,27 @@ struct Phase6WorkflowTests {
             projectRoot: projectRoot,
             snapshot: snapshot,
             runtimeSnapshot: runtimeSnapshot,
-            researchSnapshot: researchSnapshot
+            researchSnapshot: researchSnapshot,
+            newsPulseSnapshot: nil
         )
 
-        #expect(incidents.incidents.contains(where: { $0.category == .build && $0.severity == .critical }))
-        #expect(incidents.incidents.contains(where: { $0.category == .runtime && $0.affectedSymbol == "EURUSD" }))
-        #expect(incidents.incidents.contains(where: { $0.category == .researchOS && $0.severity == .critical }))
-        #expect(incidents.incidents.contains(where: { $0.category == .performance }))
+        let hasCriticalBuild = incidents.incidents.contains { incident in
+            incident.category == IncidentCategory.build && incident.severity == .critical
+        }
+        let hasRuntimeSymbol = incidents.incidents.contains { incident in
+            incident.category == IncidentCategory.runtime && incident.affectedSymbol == "EURUSD"
+        }
+        let hasCriticalResearch = incidents.incidents.contains { incident in
+            incident.category == IncidentCategory.researchOS && incident.severity == .critical
+        }
+        let hasPerformance = incidents.incidents.contains { incident in
+            incident.category == IncidentCategory.performance
+        }
+
+        #expect(hasCriticalBuild)
+        #expect(hasRuntimeSymbol)
+        #expect(hasCriticalResearch)
+        #expect(hasPerformance)
     }
 
     @Test
