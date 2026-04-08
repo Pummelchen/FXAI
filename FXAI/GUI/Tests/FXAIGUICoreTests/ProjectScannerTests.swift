@@ -24,6 +24,8 @@ struct ProjectScannerTests {
         #expect(snapshot.reportCategories.contains(where: { $0.category == "ResearchOS" && $0.fileCount == 2 }))
         #expect(snapshot.runtimeProfiles.count == 1)
         #expect(snapshot.operatorSummary.championCount == 1)
+        #expect(snapshot.plugins.contains(where: { $0.name == "ai_mlp" && $0.sourceKind == .file }))
+        #expect(snapshot.pluginFamilies.contains(where: { $0.family == "Sequence" && $0.pluginCount == 1 }))
     }
 
     private func makeProjectFixture() throws -> URL {
@@ -39,6 +41,7 @@ struct ProjectScannerTests {
 
         try Data().write(to: root.appendingPathComponent("FXAI.mq5"))
         try Data().write(to: root.appendingPathComponent("Plugins/Linear/lin_sgd.mqh"))
+        try Data().write(to: root.appendingPathComponent("Plugins/Sequence/ai_mlp.mqh"))
         try Data().write(to: root.appendingPathComponent("FXAI.ex5"))
         try Data().write(to: root.appendingPathComponent("Tests/FXAI_AuditRunner.ex5"))
         try Data("{\"plugins\":{}}".utf8).write(to: root.appendingPathComponent("Tools/Baselines/example.summary.json"))

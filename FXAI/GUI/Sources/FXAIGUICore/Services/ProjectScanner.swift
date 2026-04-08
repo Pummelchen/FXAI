@@ -86,7 +86,7 @@ public struct ProjectScanner {
             return []
         }
 
-        var results: [PluginDescriptor] = []
+        var resultsByID: [String: PluginDescriptor] = [:]
 
         for familyURL in familyURLs.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
             guard isDirectory(familyURL) else { continue }
@@ -101,32 +101,41 @@ public struct ProjectScanner {
             }
 
             for child in children.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+                let descriptor: PluginDescriptor
                 if isDirectory(child) {
-                    results.append(
-                        PluginDescriptor(
-                            name: child.lastPathComponent,
-                            family: family,
-                            sourcePath: child,
-                            sourceKind: .folder
-                        )
+                    descriptor = PluginDescriptor(
+                        name: child.lastPathComponent,
+                        family: family,
+                        sourcePath: child,
+                        sourceKind: .folder
                     )
-                    continue
-                }
-
-                let ext = child.pathExtension.lowercased()
-                guard ext == "mqh" || ext == "mq5" else { continue }
-                results.append(
-                    PluginDescriptor(
+                } else {
+                    let ext = child.pathExtension.lowercased()
+                    guard ext == "mqh" || ext == "mq5" else { continue }
+                    descriptor = PluginDescriptor(
                         name: child.deletingPathExtension().lastPathComponent,
                         family: family,
                         sourcePath: child,
                         sourceKind: .file
                     )
-                )
+                }
+
+                if let existing = resultsByID[descriptor.id] {
+                    resultsByID[descriptor.id] = preferredPluginDescriptor(existing: existing, candidate: descriptor)
+                } else {
+                    resultsByID[descriptor.id] = descriptor
+                }
             }
         }
 
-        return Array(Set(results))
+        return Array(resultsByID.values)
+    }
+
+    private func preferredPluginDescriptor(existing: PluginDescriptor, candidate: PluginDescriptor) -> PluginDescriptor {
+        if existing.sourceKind == candidate.sourceKind {
+            return existing.sourcePath.path <= candidate.sourcePath.path ? existing : candidate
+        }
+        return candidate.sourceKind == .file ? candidate : existing
     }
 
     private func scanBuildTargets(projectRoot: URL) -> [BuildTargetStatus] {

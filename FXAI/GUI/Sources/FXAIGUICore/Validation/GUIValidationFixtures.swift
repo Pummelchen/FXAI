@@ -6,11 +6,23 @@ public enum GUIValidationFixtures {
         let plugins = [
             PluginDescriptor(name: "ai_tft", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("Plugins/Sequence/ai_tft"), sourceKind: .folder),
             PluginDescriptor(name: "ai_patchtst", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("Plugins/Sequence/ai_patchtst"), sourceKind: .folder),
+            PluginDescriptor(name: "ai_gha", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("Plugins/Sequence/ai_gha.mqh"), sourceKind: .file),
+            PluginDescriptor(name: "ai_qcew", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("Plugins/Sequence/ai_qcew.mqh"), sourceKind: .file),
             PluginDescriptor(name: "tree_catboost", family: "Tree", sourcePath: projectRoot.appendingPathComponent("Plugins/Tree/tree_catboost"), sourceKind: .folder),
             PluginDescriptor(name: "tree_lgbm", family: "Tree", sourcePath: projectRoot.appendingPathComponent("Plugins/Tree/tree_lgbm"), sourceKind: .folder),
             PluginDescriptor(name: "lin_pa", family: "Linear", sourcePath: projectRoot.appendingPathComponent("Plugins/Linear/lin_pa"), sourceKind: .folder),
             PluginDescriptor(name: "native_transformer", family: "TensorCore", sourcePath: projectRoot.appendingPathComponent("TensorCore"), sourceKind: .folder)
         ]
+        let pluginFamilies = Dictionary(grouping: plugins, by: \.family)
+            .map { family, familyPlugins in
+                PluginFamilySummary(id: family, family: family, pluginCount: familyPlugins.count)
+            }
+            .sorted { lhs, rhs in
+                if lhs.pluginCount == rhs.pluginCount {
+                    return lhs.family < rhs.family
+                }
+                return lhs.pluginCount > rhs.pluginCount
+            }
 
         return FXAIProjectSnapshot(
             projectRoot: projectRoot,
@@ -20,12 +32,7 @@ public enum GUIValidationFixtures {
                 BuildTargetStatus(name: "FXAI_AuditRunner.ex5", relativePath: "Tests/FXAI_AuditRunner.ex5", exists: true, modifiedAt: now),
                 BuildTargetStatus(name: "FXAI_OfflineExportRunner.ex5", relativePath: "Tests/FXAI_OfflineExportRunner.ex5", exists: true, modifiedAt: now)
             ],
-            pluginFamilies: [
-                PluginFamilySummary(id: "Sequence", family: "Sequence", pluginCount: 14),
-                PluginFamilySummary(id: "Tree", family: "Tree", pluginCount: 6),
-                PluginFamilySummary(id: "Linear", family: "Linear", pluginCount: 5),
-                PluginFamilySummary(id: "TensorCore", family: "TensorCore", pluginCount: 4)
-            ],
+            pluginFamilies: pluginFamilies,
             plugins: plugins,
             reportCategories: [
                 ReportCategorySummary(id: "audit", category: "Audit", fileCount: 16, latestModifiedAt: now),
