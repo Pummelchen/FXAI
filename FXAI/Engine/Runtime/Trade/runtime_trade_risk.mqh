@@ -147,8 +147,11 @@ double FXAI_CalcRiskAwareLot(const string symbol,
          else if(news_state.trade_gate == "CAUTION")
          {
             news_caution = true;
+            double caution_buffer = (news_state.caution_enter_prob_buffer >= 0.0 ?
+                                     news_state.caution_enter_prob_buffer :
+                                     FXAI_Clamp(NewsPulseCautionEnterProbBuffer, 0.0, 0.25));
             double caution_enter_floor = FXAI_Clamp(0.05 +
-                                                    FXAI_Clamp(NewsPulseCautionEnterProbBuffer, 0.0, 0.25),
+                                                    caution_buffer,
                                                     0.05,
                                                     0.95);
             if(g_policy_last_enter_prob < caution_enter_floor)
@@ -351,7 +354,12 @@ double FXAI_CalcRiskAwareLot(const string symbol,
     }
 
    if(NewsPulseEnabled && news_caution)
-      requested_lot *= FXAI_Clamp(NewsPulseCautionLotScale, 0.10, 1.00);
+   {
+      double caution_lot_scale = (news_state.caution_lot_scale >= 0.0 ?
+                                  news_state.caution_lot_scale :
+                                  FXAI_Clamp(NewsPulseCautionLotScale, 0.10, 1.00));
+      requested_lot *= FXAI_Clamp(caution_lot_scale, 0.10, 1.00);
+   }
 
    requested_lot = FXAI_NormalizeLot(symbol, requested_lot);
    if(requested_lot > hard_cap_lot + 1e-9)

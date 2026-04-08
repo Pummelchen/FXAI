@@ -8,8 +8,9 @@ import fxai_testlab as testlab
 
 from .common_schema import OFFLINE_DIR, RESEARCH_DIR
 
-NEWSPULSE_SCHEMA_VERSION = 1
+NEWSPULSE_SCHEMA_VERSION = 2
 NEWSPULSE_CONFIG_VERSION = 1
+NEWSPULSE_POLICY_VERSION = 1
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NEWSPULSE_DIR = OFFLINE_DIR / "NewsPulse"
@@ -17,9 +18,11 @@ NEWSPULSE_STATE_DIR = NEWSPULSE_DIR / "State"
 NEWSPULSE_REPORT_DIR = NEWSPULSE_DIR / "Reports"
 NEWSPULSE_CONFIG_PATH = NEWSPULSE_DIR / "newspulse_config.json"
 NEWSPULSE_SOURCES_PATH = NEWSPULSE_DIR / "newspulse_sources.json"
+NEWSPULSE_POLICY_PATH = NEWSPULSE_DIR / "newspulse_policy.json"
 NEWSPULSE_STATUS_PATH = NEWSPULSE_DIR / "newspulse_status.json"
 NEWSPULSE_LOCAL_HISTORY_PATH = NEWSPULSE_DIR / "news_history.ndjson"
 NEWSPULSE_STATE_PATH = NEWSPULSE_STATE_DIR / "newspulse_state.json"
+NEWSPULSE_REPLAY_REPORT_PATH = NEWSPULSE_REPORT_DIR / "newspulse_replay_report.json"
 NEWSPULSE_SERVICE_SOURCE = REPO_ROOT / "Services/FXAI_NewsPulseCalendar.mq5"
 TERMINAL_SERVICE_SOURCE = testlab.TERMINAL_ROOT / "MQL5/Services/FXAI_NewsPulseCalendar.mq5"
 TERMINAL_SERVICE_BINARY = TERMINAL_SERVICE_SOURCE.with_suffix(".ex5")
@@ -27,6 +30,8 @@ TERMINAL_SERVICE_BINARY = TERMINAL_SERVICE_SOURCE.with_suffix(".ex5")
 COMMON_NEWSPULSE_JSON = testlab.RUNTIME_DIR / "news_snapshot.json"
 COMMON_NEWSPULSE_FLAT = testlab.RUNTIME_DIR / "news_snapshot_flat.tsv"
 COMMON_NEWSPULSE_HISTORY = testlab.RUNTIME_DIR / "news_history.ndjson"
+COMMON_NEWSPULSE_REPLAY_FLAT = testlab.RUNTIME_DIR / "news_replay_timeline.tsv"
+COMMON_NEWSPULSE_SYMBOL_MAP = testlab.RUNTIME_DIR / "news_symbol_map.tsv"
 COMMON_NEWSPULSE_CALENDAR_FEED = testlab.RUNTIME_DIR / "news_calendar_feed.tsv"
 COMMON_NEWSPULSE_CALENDAR_STATE = testlab.RUNTIME_DIR / "news_calendar_state.tsv"
 COMMON_NEWSPULSE_CALENDAR_HISTORY = testlab.RUNTIME_DIR / "news_calendar_history.ndjson"
@@ -35,6 +40,8 @@ COMMON_NEWSPULSE_ARTIFACTS = {
     "snapshot_json": COMMON_NEWSPULSE_JSON,
     "snapshot_flat": COMMON_NEWSPULSE_FLAT,
     "history_ndjson": COMMON_NEWSPULSE_HISTORY,
+    "replay_timeline_tsv": COMMON_NEWSPULSE_REPLAY_FLAT,
+    "symbol_map_tsv": COMMON_NEWSPULSE_SYMBOL_MAP,
     "calendar_feed_tsv": COMMON_NEWSPULSE_CALENDAR_FEED,
     "calendar_state_tsv": COMMON_NEWSPULSE_CALENDAR_STATE,
     "calendar_history_ndjson": COMMON_NEWSPULSE_CALENDAR_HISTORY,

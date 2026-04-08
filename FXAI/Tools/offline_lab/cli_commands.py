@@ -16,7 +16,13 @@ from .foundation_factory import *
 from .governance import *
 from .lineage import *
 from .mode import RUNTIME_MODES, resolve_runtime_mode
-from .newspulse_daemon import run_newspulse_daemon, run_newspulse_once, validate_newspulse_config
+from .newspulse_daemon import (
+    newspulse_health_snapshot,
+    run_newspulse_daemon,
+    run_newspulse_once,
+    validate_newspulse_config,
+)
+from .newspulse_replay import rebuild_replay_report_from_history
 from .newspulse_service import install_calendar_service
 from .performance import write_performance_reports
 from .promotion import *
@@ -69,6 +75,21 @@ def cmd_newspulse_daemon(args) -> int:
     payload = run_newspulse_daemon(
         iterations=int(getattr(args, "iterations", 0) or 0),
         interval_seconds=int(getattr(args, "interval_seconds", 0) or 0),
+    )
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_newspulse_health(_args) -> int:
+    payload = newspulse_health_snapshot()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_newspulse_replay_report(args) -> int:
+    payload = rebuild_replay_report_from_history(
+        pair_filter=str(getattr(args, "pair", "") or ""),
+        hours_back=int(getattr(args, "hours_back", 48) or 48),
     )
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0

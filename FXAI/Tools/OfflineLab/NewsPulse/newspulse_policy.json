@@ -1,0 +1,221 @@
+{
+  "broker_symbol_map": {},
+  "default_pair_policy": {
+    "block_threshold_mult": 1.0,
+    "burst_risk_mult": 1.0,
+    "caution_lot_scale": 0.65,
+    "caution_threshold_mult": 1.0,
+    "enter_prob_buffer": 0.05,
+    "event_block_eta_min": 8,
+    "event_caution_eta_min": 28,
+    "post_block_min": 6,
+    "post_caution_min": 24,
+    "post_window_mult": 1.0,
+    "pre_window_mult": 1.0
+  },
+  "heuristic_symbol_scan": true,
+  "pair_groups": {
+    "commodity_cycle": {
+      "block_threshold_mult": 1.03,
+      "burst_risk_mult": 0.94,
+      "caution_lot_scale": 0.72,
+      "caution_threshold_mult": 1.05,
+      "enter_prob_buffer": 0.04,
+      "pairs": [
+        "AUDUSD",
+        "NZDUSD",
+        "USDCAD",
+        "AUDCAD",
+        "NZDCAD",
+        "AUDNZD",
+        "CADJPY"
+      ],
+      "post_window_mult": 0.98,
+      "pre_window_mult": 0.94
+    },
+    "dollar_core": {
+      "block_threshold_mult": 0.94,
+      "burst_risk_mult": 1.08,
+      "caution_threshold_mult": 0.96,
+      "pairs": [
+        "EURUSD",
+        "GBPUSD",
+        "USDJPY",
+        "USDCHF",
+        "USDCAD",
+        "AUDUSD",
+        "NZDUSD"
+      ],
+      "post_window_mult": 1.1,
+      "pre_window_mult": 1.12
+    },
+    "europe_rates": {
+      "block_threshold_mult": 0.95,
+      "burst_risk_mult": 1.03,
+      "caution_threshold_mult": 0.97,
+      "pairs": [
+        "EURUSD",
+        "EURGBP",
+        "EURJPY",
+        "GBPUSD",
+        "GBPJPY",
+        "EURCHF"
+      ],
+      "post_window_mult": 1.05,
+      "pre_window_mult": 1.08
+    },
+    "yen_cross": {
+      "block_threshold_mult": 0.9,
+      "burst_risk_mult": 1.1,
+      "caution_lot_scale": 0.58,
+      "caution_threshold_mult": 0.93,
+      "enter_prob_buffer": 0.07,
+      "pairs": [
+        "USDJPY",
+        "EURJPY",
+        "GBPJPY",
+        "AUDJPY",
+        "NZDJPY",
+        "CADJPY",
+        "CHFJPY"
+      ],
+      "post_window_mult": 1.15,
+      "pre_window_mult": 1.15
+    }
+  },
+  "pair_overrides": {
+    "AUDCAD": {
+      "block_threshold_mult": 1.04,
+      "caution_lot_scale": 0.74,
+      "caution_threshold_mult": 1.06,
+      "post_window_mult": 0.96,
+      "pre_window_mult": 0.92
+    },
+    "EURUSD": {
+      "event_block_eta_min": 12,
+      "event_caution_eta_min": 35,
+      "post_window_mult": 1.12,
+      "pre_window_mult": 1.15
+    },
+    "GBPJPY": {
+      "block_threshold_mult": 0.86,
+      "burst_risk_mult": 1.16,
+      "caution_lot_scale": 0.52,
+      "caution_threshold_mult": 0.88,
+      "enter_prob_buffer": 0.08,
+      "post_block_min": 9,
+      "post_caution_min": 28
+    }
+  },
+  "schema_version": 1,
+  "session_profiles": {
+    "asia": {
+      "block_threshold_mult": 1.04,
+      "burst_risk_mult": 0.96,
+      "caution_lot_scale": 0.7,
+      "caution_threshold_mult": 1.03,
+      "enter_prob_buffer": 0.04,
+      "hours_utc": [
+        0,
+        6
+      ],
+      "post_window_mult": 1.08,
+      "pre_window_mult": 1.06
+    },
+    "london": {
+      "block_threshold_mult": 0.95,
+      "burst_risk_mult": 1.06,
+      "caution_lot_scale": 0.64,
+      "caution_threshold_mult": 0.97,
+      "enter_prob_buffer": 0.05,
+      "hours_utc": [
+        7,
+        11
+      ],
+      "post_window_mult": 1.04,
+      "pre_window_mult": 1.05
+    },
+    "newyork": {
+      "block_threshold_mult": 0.93,
+      "burst_risk_mult": 1.08,
+      "caution_lot_scale": 0.62,
+      "caution_threshold_mult": 0.95,
+      "enter_prob_buffer": 0.06,
+      "hours_utc": [
+        12,
+        16
+      ],
+      "post_window_mult": 1.08,
+      "pre_window_mult": 1.1
+    },
+    "overlap": {
+      "block_threshold_mult": 0.9,
+      "burst_risk_mult": 1.12,
+      "caution_lot_scale": 0.56,
+      "caution_threshold_mult": 0.92,
+      "enter_prob_buffer": 0.07,
+      "hours_utc": [
+        12,
+        14
+      ],
+      "post_window_mult": 1.12,
+      "pre_window_mult": 1.15
+    },
+    "rollover": {
+      "block_threshold_mult": 0.96,
+      "burst_risk_mult": 1.02,
+      "caution_lot_scale": 0.6,
+      "caution_threshold_mult": 0.98,
+      "enter_prob_buffer": 0.05,
+      "hours_utc": [
+        21,
+        23
+      ],
+      "post_window_mult": 1.1,
+      "pre_window_mult": 1.04
+    }
+  },
+  "watchlists": {
+    "active": [
+      "EURUSD",
+      "GBPUSD",
+      "USDJPY",
+      "USDCHF",
+      "USDCAD",
+      "AUDUSD",
+      "NZDUSD",
+      "EURGBP",
+      "EURJPY",
+      "GBPJPY",
+      "AUDJPY",
+      "AUDCAD",
+      "NZDCAD"
+    ],
+    "commodity_cycle": [
+      "AUDUSD",
+      "NZDUSD",
+      "USDCAD",
+      "AUDCAD",
+      "NZDCAD",
+      "AUDNZD"
+    ],
+    "macro_sensitive": [
+      "EURUSD",
+      "GBPUSD",
+      "USDJPY",
+      "USDCHF",
+      "USDCAD",
+      "EURJPY",
+      "GBPJPY"
+    ],
+    "yen_crosses": [
+      "USDJPY",
+      "EURJPY",
+      "GBPJPY",
+      "AUDJPY",
+      "NZDJPY",
+      "CADJPY",
+      "CHFJPY"
+    ]
+  }
+}

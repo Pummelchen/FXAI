@@ -2,6 +2,7 @@
 #define __FXAI_RUNTIME_TRADE_NEWSPULSE_MQH__
 
 #define FXAI_NEWSPULSE_FLAT_FILE "FXAI\\Runtime\\news_snapshot_flat.tsv"
+#define FXAI_NEWSPULSE_SYMBOL_MAP_FILE "FXAI\\Runtime\\news_symbol_map.tsv"
 #define FXAI_NEWSPULSE_MAX_REASONS 6
 
 struct FXAINewsPulsePairState
@@ -14,8 +15,19 @@ struct FXAINewsPulsePairState
    double news_risk_score;
    double news_pressure;
    string trade_gate;
+   string session_profile;
+   string calibration_profile;
+   string watchlist_tags_csv;
+   double caution_lot_scale;
+   double caution_enter_prob_buffer;
    int reason_count;
    string reasons[FXAI_NEWSPULSE_MAX_REASONS];
+};
+
+struct FXAINewsPulseSymbolMapEntry
+{
+   string symbol;
+   string pair_id;
 };
 
 double g_newspulse_last_risk_score = 0.0;
@@ -25,6 +37,8 @@ bool g_newspulse_last_stale = true;
 datetime g_newspulse_last_generated_at = 0;
 string g_newspulse_last_trade_gate = "UNKNOWN";
 string g_newspulse_last_reasons_csv = "";
+FXAINewsPulseSymbolMapEntry g_newspulse_symbol_map[];
+datetime g_newspulse_symbol_map_last_load = 0;
 
 void FXAI_ResetNewsPulsePairState(FXAINewsPulsePairState &out)
 {
@@ -36,6 +50,11 @@ void FXAI_ResetNewsPulsePairState(FXAINewsPulsePairState &out)
    out.news_risk_score = 0.0;
    out.news_pressure = 0.0;
    out.trade_gate = "UNKNOWN";
+   out.session_profile = "default";
+   out.calibration_profile = "default";
+   out.watchlist_tags_csv = "";
+   out.caution_lot_scale = -1.0;
+   out.caution_enter_prob_buffer = -1.0;
    out.reason_count = 0;
    for(int i = 0; i < FXAI_NEWSPULSE_MAX_REASONS; i++)
       out.reasons[i] = "";
@@ -52,13 +71,108 @@ void FXAI_ResetNewsPulseGlobals(void)
    g_newspulse_last_reasons_csv = "";
 }
 
+bool FXAI_NewsPulseSupportedCurrency(const string code)
+{
+   return (code == "USD" || code == "EUR" || code == "GBP" || code == "JPY" ||
+           code == "CHF" || code == "CAD" || code == "AUD" || code == "NZD" ||
+           code == "SEK" || code == "NOK");
+}
+
+string FXAI_NewsPulseAlphaOnly(const string raw_symbol)
+{
+   string symbol = raw_symbol;
+   StringToUpper(symbol);
+   string out = "";
+   int len = StringLen(symbol);
+   for(int i = 0; i < len; i++)
+   {
+      string token = StringSubstr(symbol, i, 1);
+      if(token >= "A" && token <= "Z")
+         out += token;
+   }
+   return out;
+}
+
+void FXAI_NewsPulseLoadSymbolMap(void)
+{
+   datetime now_time = TimeCurrent();
+   if(now_time <= 0)
+      now_time = TimeTradeServer();
+   if(now_time > 0 && g_newspulse_symbol_map_last_load > 0 && (now_time - g_newspulse_symbol_map_last_load) < 60)
+      return;
+
+   ArrayResize(g_newspulse_symbol_map, 0);
+   g_newspulse_symbol_map_last_load = now_time;
+
+   int handle = FileOpen(FXAI_NEWSPULSE_SYMBOL_MAP_FILE,
+                         FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON |
+                         FILE_SHARE_READ | FILE_SHARE_WRITE);
+   if(handle == INVALID_HANDLE)
+      return;
+
+   while(!FileIsEnding(handle))
+   {
+      string line = FileReadString(handle);
+      if(StringLen(line) <= 0)
+         continue;
+      string parts[];
+      int n = StringSplit(line, '\t', parts);
+      if(n < 3)
+         continue;
+      if(parts[0] != "symbol")
+         continue;
+      string raw_symbol = parts[1];
+      string pair_id = parts[2];
+      StringToUpper(raw_symbol);
+      StringToUpper(pair_id);
+      if(StringLen(raw_symbol) <= 0 || StringLen(pair_id) != 6)
+         continue;
+      int idx = ArraySize(g_newspulse_symbol_map);
+      ArrayResize(g_newspulse_symbol_map, idx + 1);
+      g_newspulse_symbol_map[idx].symbol = raw_symbol;
+      g_newspulse_symbol_map[idx].pair_id = pair_id;
+   }
+   FileClose(handle);
+}
+
+string FXAI_NewsPulseMappedPairId(const string raw_symbol)
+{
+   string symbol = raw_symbol;
+   StringToUpper(symbol);
+   for(int i = 0; i < ArraySize(g_newspulse_symbol_map); i++)
+   {
+      if(g_newspulse_symbol_map[i].symbol == symbol)
+         return g_newspulse_symbol_map[i].pair_id;
+   }
+   return "";
+}
+
+string FXAI_NewsPulseHeuristicPairId(const string raw_symbol)
+{
+   string alpha = FXAI_NewsPulseAlphaOnly(raw_symbol);
+   int len = StringLen(alpha);
+   if(len < 6)
+      return "";
+   for(int i = 0; i <= len - 6; i++)
+   {
+      string candidate = StringSubstr(alpha, i, 6);
+      string base = StringSubstr(candidate, 0, 3);
+      string quote = StringSubstr(candidate, 3, 3);
+      if(base == quote)
+         continue;
+      if(FXAI_NewsPulseSupportedCurrency(base) && FXAI_NewsPulseSupportedCurrency(quote))
+         return candidate;
+   }
+   return "";
+}
+
 string FXAI_NewsPulsePairId(const string symbol)
 {
-   string base = FXAI_RuntimeBaseCurrency(symbol);
-   string quote = FXAI_RuntimeQuoteCurrency(symbol);
-   if(StringLen(base) != 3 || StringLen(quote) != 3)
-      return "";
-   return base + quote;
+   FXAI_NewsPulseLoadSymbolMap();
+   string mapped = FXAI_NewsPulseMappedPairId(symbol);
+   if(StringLen(mapped) == 6)
+      return mapped;
+   return FXAI_NewsPulseHeuristicPairId(symbol);
 }
 
 void FXAI_NewsPulseAppendReason(FXAINewsPulsePairState &state,
@@ -154,6 +268,16 @@ bool FXAI_ReadNewsPulsePairState(const string symbol,
             out.news_pressure = StringToDouble(value);
          else if(key == "stale")
             out.stale = (StringToInteger(value) != 0);
+         else if(key == "session_profile")
+            out.session_profile = value;
+         else if(key == "calibration_profile")
+            out.calibration_profile = value;
+         else if(key == "watchlist_tags")
+            out.watchlist_tags_csv = value;
+         else if(key == "caution_lot_scale")
+            out.caution_lot_scale = StringToDouble(value);
+         else if(key == "caution_enter_prob_buffer")
+            out.caution_enter_prob_buffer = StringToDouble(value);
          continue;
       }
 
@@ -174,8 +298,16 @@ bool FXAI_ReadNewsPulsePairState(const string symbol,
       }
       if(StringLen(out.trade_gate) <= 0)
          out.trade_gate = "UNKNOWN";
+      if(StringLen(out.session_profile) <= 0)
+         out.session_profile = "default";
+      if(StringLen(out.calibration_profile) <= 0)
+         out.calibration_profile = out.session_profile;
       out.news_risk_score = FXAI_Clamp(out.news_risk_score, 0.0, 1.0);
       out.news_pressure = FXAI_Clamp(out.news_pressure, -1.0, 1.0);
+      if(out.caution_lot_scale >= 0.0)
+         out.caution_lot_scale = FXAI_Clamp(out.caution_lot_scale, 0.10, 1.0);
+      if(out.caution_enter_prob_buffer >= 0.0)
+         out.caution_enter_prob_buffer = FXAI_Clamp(out.caution_enter_prob_buffer, 0.0, 0.25);
    }
 
    FXAI_ApplyNewsPulsePairState(out);

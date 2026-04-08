@@ -15,6 +15,7 @@ from .common import (
     safe_token,
     turso_environment_status,
 )
+from .newspulse_contracts import NEWSPULSE_REPLAY_REPORT_PATH, NEWSPULSE_STATUS_PATH
 from .performance import build_symbol_performance_report
 from .vector_store import latest_symbol_shadow_neighbors
 
@@ -148,6 +149,10 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
         "symbols": symbols,
         "champions": champions,
         "deployments": deployments,
+        "newspulse": {
+            "status": _load_json(NEWSPULSE_STATUS_PATH),
+            "replay_report": _load_json(NEWSPULSE_REPLAY_REPORT_PATH),
+        },
         "source_of_truth": {
             "turso_libsql": "authoritative research and promotion state",
             "file_common_promotions": "authoritative MT5 runtime consumption layer",

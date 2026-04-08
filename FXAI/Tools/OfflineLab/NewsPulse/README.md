@@ -23,13 +23,17 @@ NewsPulse has four parts:
    MT5 Service that exports Economic Calendar changes into `FILE_COMMON`.
 
 2. `Tools/offline_lab/newspulse_*.py`
-   Python collector, GDELT query layer, fusion logic, daemon loop, and service install helpers.
+   Python collector, GDELT query layer, optional official-feed rail, fusion logic, daemon loop, replay helpers, and service install helpers.
 
 3. `Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
    MT5 runtime adapter that reads the flat snapshot and applies pair-level gates.
 
 4. `GUI/Sources/.../NewsPulse*.swift`
-   macOS GUI surface for source health, currency heatmap, pair risk, and recent tape.
+   macOS GUI surface for source health, currency heatmap, pair risk, watchlists, broker-symbol mappings, gate timelines, and recent tape.
+
+Implementation mapping note:
+
+- `IMPLEMENTATION_NOTE.md`
 
 ## Canonical Artifacts
 
@@ -52,10 +56,12 @@ Local operator mirrors and config live under:
 Tracked operator-editable files:
 - `newspulse_config.json`
 - `newspulse_sources.json`
+- `newspulse_policy.json`
 
 Generated local state:
 - `newspulse_status.json`
 - `news_history.ndjson`
+- `Reports/newspulse_replay_report.json`
 - `State/newspulse_state.json`
 
 ## Time Semantics
@@ -101,6 +107,18 @@ Run the daemon continuously:
 python3 FXAI/Tools/fxai_offline_lab.py newspulse-daemon --interval-seconds 60
 ```
 
+Show current daemon and source health:
+
+```bash
+python3 FXAI/Tools/fxai_offline_lab.py newspulse-health
+```
+
+Rebuild the replay report from append-only history:
+
+```bash
+python3 FXAI/Tools/fxai_offline_lab.py newspulse-replay-report --hours-back 72
+```
+
 ## Config
 
 Main config:
@@ -131,6 +149,17 @@ Controls:
 
 Only whitelisted sources enter scoring.
 
+Operator pair and symbol policy:
+
+`FXAI/Tools/OfflineLab/NewsPulse/newspulse_policy.json`
+
+Controls:
+- active pair watchlists
+- broker symbol to canonical pair mapping
+- session-aware calibration
+- pair-group calibration
+- pair overrides for caution or block windows and runtime caution posture
+
 ## Runtime Behavior
 
 The phase-1 MT5 runtime integration is gating-first.
@@ -144,12 +173,23 @@ NewsPulse can:
 
 It does not alter model weights or the canonical feature vector by default.
 
+NewsPulse now also exposes per-pair calibration posture in the snapshot:
+- `session_profile`
+- `calibration_profile`
+- `caution_lot_scale`
+- `caution_enter_prob_buffer`
+
 ## GUI Behavior
 
 The macOS GUI NewsPulse surface shows:
 - source health and staleness
 - currency heatmap
 - pair risk table
+- why-blocked or why-caution drill-down
+- pair gate timelines
+- watchlist and broker-symbol mapping visibility
+- daemon degradation state
+- evolving story clusters
 - upcoming event countdowns
 - recent event tape
 - active pair gates and reasons where runtime state is present
@@ -170,7 +210,12 @@ If the calendar collector is not running, GDELT is stale, or the merged snapshot
 It records:
 - merged snapshot states
 - newly seen GDELT items
+- evolving story snapshots
 - enough timestamp and source metadata to replay what NewsPulse knew at a given time
+
+Additional replay outputs:
+- `FILE_COMMON/FXAI/Runtime/news_replay_timeline.tsv`
+- `FXAI/Tools/OfflineLab/NewsPulse/Reports/newspulse_replay_report.json`
 
 ## Phase 1 vs Deferred
 
@@ -180,6 +225,14 @@ Phase 1 includes:
 - runtime trade gating
 - GUI observability
 - append-only audit history
+
+This upgraded phase-1.5 surface now also includes:
+- optional first-party official-feed rail for a small set of central banks
+- evolving story clustering over repeated headlines
+- operator-editable watchlists and broker symbol mapping policy
+- replay-native pair timeline artifacts for Audit Lab and Offline Lab
+- daemon health and degradation reporting
+- GUI pair drill-down and gate timeline views
 
 Deferred:
 - broad institutional feed expansion

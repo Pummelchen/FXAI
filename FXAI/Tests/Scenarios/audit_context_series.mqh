@@ -613,9 +613,11 @@ bool FXAI_AuditGenerateScenarioSeries(const FXAIAuditScenarioSpec &spec,
          else if(spec.id == 14)
          {
             double macro_score = FXAI_MacroEventWindowScoreRates(_Symbol, rates_m1, start, bars);
-            score = 0.80 * macro_score +
-                    0.12 * trendiness +
-                    0.08 * FXAI_Clamp(avg_range / MathMax(point, 1e-6), 0.0, 8.0);
+            double news_score = FXAI_NewsPulseReplayWindowScoreRates(_Symbol, rates_m1, start, bars);
+            score = 0.68 * macro_score +
+                    0.22 * news_score +
+                    0.06 * trendiness +
+                    0.04 * FXAI_Clamp(avg_range / MathMax(point, 1e-6), 0.0, 8.0);
          }
          else
          {

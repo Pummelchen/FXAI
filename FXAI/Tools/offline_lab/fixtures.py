@@ -27,7 +27,11 @@ PATCH_MODULES = [
     "offline_lab.newspulse_contracts",
     "offline_lab.newspulse_config",
     "offline_lab.newspulse_calendar",
+    "offline_lab.newspulse_policy",
+    "offline_lab.newspulse_official",
+    "offline_lab.newspulse_story",
     "offline_lab.newspulse_fusion",
+    "offline_lab.newspulse_replay",
     "offline_lab.newspulse_service",
     "offline_lab.newspulse_daemon",
     "offline_lab.verification",
@@ -41,6 +45,9 @@ PATCH_MODULES = [
 def patched_paths(base_dir: Path):
     base_dir = base_dir.resolve()
     offline_dir = base_dir / "OfflineLab"
+    newspulse_dir = offline_dir / "NewsPulse"
+    newspulse_state_dir = newspulse_dir / "State"
+    newspulse_report_dir = newspulse_dir / "Reports"
     common_dir = base_dir / "FILE_COMMON"
     common_promotion_dir = common_dir / "FXAI/Offline/Promotions"
     common_export_dir = common_dir / "FXAI/Offline/Exports"
@@ -51,7 +58,20 @@ def patched_paths(base_dir: Path):
     profiles_dir = offline_dir / "Profiles"
     runs_dir = offline_dir / "Runs"
     default_db = offline_dir / "fxai_offline_lab.turso.db"
-    for path in [offline_dir, common_promotion_dir, common_export_dir, runtime_dir, tester_dir, research_dir, distill_dir, profiles_dir, runs_dir]:
+    for path in [
+        offline_dir,
+        newspulse_dir,
+        newspulse_state_dir,
+        newspulse_report_dir,
+        common_promotion_dir,
+        common_export_dir,
+        runtime_dir,
+        tester_dir,
+        research_dir,
+        distill_dir,
+        profiles_dir,
+        runs_dir,
+    ]:
         ensure_dir(path)
 
     patched = {}
@@ -75,6 +95,24 @@ def patched_paths(base_dir: Path):
             "TESTER_PRESET_DIR": tester_dir,
             "ROOT": base_dir,
             "REPO_ROOT": base_dir.parent,
+            "NEWSPULSE_DIR": newspulse_dir,
+            "NEWSPULSE_STATE_DIR": newspulse_state_dir,
+            "NEWSPULSE_REPORT_DIR": newspulse_report_dir,
+            "NEWSPULSE_CONFIG_PATH": newspulse_dir / "newspulse_config.json",
+            "NEWSPULSE_SOURCES_PATH": newspulse_dir / "newspulse_sources.json",
+            "NEWSPULSE_POLICY_PATH": offline_dir / "NewsPulse/newspulse_policy.json",
+            "NEWSPULSE_STATUS_PATH": newspulse_dir / "newspulse_status.json",
+            "NEWSPULSE_LOCAL_HISTORY_PATH": newspulse_dir / "news_history.ndjson",
+            "NEWSPULSE_STATE_PATH": newspulse_state_dir / "newspulse_state.json",
+            "NEWSPULSE_REPLAY_REPORT_PATH": offline_dir / "NewsPulse/Reports/newspulse_replay_report.json",
+            "COMMON_NEWSPULSE_JSON": runtime_dir / "news_snapshot.json",
+            "COMMON_NEWSPULSE_FLAT": runtime_dir / "news_snapshot_flat.tsv",
+            "COMMON_NEWSPULSE_HISTORY": runtime_dir / "news_history.ndjson",
+            "COMMON_NEWSPULSE_REPLAY_FLAT": runtime_dir / "news_replay_timeline.tsv",
+            "COMMON_NEWSPULSE_SYMBOL_MAP": runtime_dir / "news_symbol_map.tsv",
+            "COMMON_NEWSPULSE_CALENDAR_FEED": runtime_dir / "news_calendar_feed.tsv",
+            "COMMON_NEWSPULSE_CALENDAR_STATE": runtime_dir / "news_calendar_state.tsv",
+            "COMMON_NEWSPULSE_CALENDAR_HISTORY": runtime_dir / "news_calendar_history.ndjson",
         }.items():
             if hasattr(mod, attr):
                 patched[mod_name][attr] = getattr(mod, attr)

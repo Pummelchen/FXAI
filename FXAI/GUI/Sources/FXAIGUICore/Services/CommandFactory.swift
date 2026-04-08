@@ -16,6 +16,17 @@ public enum CommandFactory {
                 commandKind: "Verification"
             ),
             CommandRecipe(
+                role: .liveTrader,
+                title: "Refresh NewsPulse",
+                summary: "Rebuild the shared news-risk snapshot before reviewing active trade gates.",
+                command: """
+                cd \(shellQuoted(root))
+                python3 Tools/fxai_offline_lab.py newspulse-once
+                python3 Tools/fxai_offline_lab.py newspulse-health
+                """,
+                commandKind: "NewsPulse"
+            ),
+            CommandRecipe(
                 role: .demoTrader,
                 title: "Run Focused Audit",
                 summary: "Validate one candidate setup before watching it on a demo chart.",
@@ -67,6 +78,17 @@ public enum CommandFactory {
                 python3 Tools/fxai_offline_lab.py bootstrap --seed-demo
                 """,
                 commandKind: "Bootstrap"
+            ),
+            CommandRecipe(
+                role: .architect,
+                title: "Validate NewsPulse",
+                summary: "Check NewsPulse config, the operator policy, and current daemon/source health.",
+                command: """
+                cd \(shellQuoted(root))
+                python3 Tools/fxai_offline_lab.py newspulse-validate
+                python3 Tools/fxai_offline_lab.py newspulse-health
+                """,
+                commandKind: "NewsPulse"
             ),
             CommandRecipe(
                 role: .architect,

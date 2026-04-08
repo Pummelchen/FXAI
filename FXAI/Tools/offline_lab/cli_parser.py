@@ -36,6 +36,14 @@ def build_parser() -> argparse.ArgumentParser:
     npd.add_argument("--iterations", type=int, default=0, help="0 means run forever")
     npd.set_defaults(func=cmd_newspulse_daemon)
 
+    nph = sub.add_parser("newspulse-health", help="Show current NewsPulse daemon health, source state, and status artifacts")
+    nph.set_defaults(func=cmd_newspulse_health)
+
+    npr = sub.add_parser("newspulse-replay-report", help="Rebuild a NewsPulse replay report from append-only history")
+    npr.add_argument("--pair", default="")
+    npr.add_argument("--hours-back", type=int, default=48)
+    npr.set_defaults(func=cmd_newspulse_replay_report)
+
     boot = sub.add_parser("bootstrap", help="Create required lab folders, validate the environment, and initialize Turso")
     boot.add_argument("--report", default="")
     boot.add_argument("--no-init-db", action="store_true")

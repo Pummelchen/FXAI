@@ -3,14 +3,17 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 from pathlib import Path
+from typing import Any
 
 from .common import OfflineLabError
 from .newspulse_contracts import (
     NEWSPULSE_CONFIG_PATH,
     NEWSPULSE_CONFIG_VERSION,
+    NEWSPULSE_POLICY_PATH,
     NEWSPULSE_SOURCES_PATH,
     ensure_newspulse_dirs,
 )
+from .newspulse_policy import default_policy
 
 SUPPORTED_CURRENCIES = ["USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "NZD", "SEK", "NOK"]
 
@@ -171,18 +174,91 @@ def default_sources() -> dict[str, object]:
             "destatis.de": {"tier": "official", "enabled": True, "currencies": ["EUR"]},
             "bfs.admin.ch": {"tier": "official", "enabled": True, "currencies": ["CHF"]},
         },
+        "official_feeds": [
+            {
+                "id": "fed_press_monetary",
+                "enabled": True,
+                "currency": "USD",
+                "topic": "monetary_policy",
+                "url": "https://www.federalreserve.gov/feeds/press_monetary.xml",
+                "format": "rss",
+                "domain": "federalreserve.gov",
+                "lookback_hours": 72,
+                "max_items": 16,
+                "title_keywords": ["fomc", "rate", "statement", "minutes", "policy"],
+            },
+            {
+                "id": "ecb_press",
+                "enabled": True,
+                "currency": "EUR",
+                "topic": "monetary_policy",
+                "url": "https://www.ecb.europa.eu/rss/press.html",
+                "format": "rss",
+                "domain": "ecb.europa.eu",
+                "lookback_hours": 72,
+                "max_items": 16,
+                "title_keywords": ["interest rate", "monetary policy", "governing council", "statement"],
+            },
+            {
+                "id": "boe_news",
+                "enabled": True,
+                "currency": "GBP",
+                "topic": "monetary_policy",
+                "url": "https://www.bankofengland.co.uk/rss/news",
+                "format": "rss",
+                "domain": "bankofengland.co.uk",
+                "lookback_hours": 72,
+                "max_items": 16,
+                "title_keywords": ["bank rate", "monetary policy", "financial stability", "minutes"],
+            },
+            {
+                "id": "boc_press",
+                "enabled": True,
+                "currency": "CAD",
+                "topic": "monetary_policy",
+                "url": "https://www.bankofcanada.ca/feed/?post_type=post",
+                "format": "rss",
+                "domain": "bankofcanada.ca",
+                "lookback_hours": 72,
+                "max_items": 16,
+                "title_keywords": ["interest rate", "policy", "monetary policy", "financial system"],
+            },
+        ],
     }
+
+
+def _merge_defaults(default_value: Any, payload_value: Any) -> Any:
+    if isinstance(default_value, dict):
+        payload_dict = payload_value if isinstance(payload_value, dict) else {}
+        merged = {key: _merge_defaults(default_value[key], payload_dict.get(key)) for key in default_value}
+        for key, value in payload_dict.items():
+            if key not in merged:
+                merged[key] = deepcopy(value)
+        return merged
+    if isinstance(default_value, list):
+        if isinstance(payload_value, list):
+            return deepcopy(payload_value)
+        return deepcopy(default_value)
+    if payload_value is None:
+        return deepcopy(default_value)
+    return deepcopy(payload_value)
 
 
 def ensure_default_files() -> dict[str, Path]:
     ensure_newspulse_dirs()
+    NEWSPULSE_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    NEWSPULSE_SOURCES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    NEWSPULSE_POLICY_PATH.parent.mkdir(parents=True, exist_ok=True)
     if not NEWSPULSE_CONFIG_PATH.exists():
         NEWSPULSE_CONFIG_PATH.write_text(json.dumps(default_config(), indent=2, sort_keys=True), encoding="utf-8")
     if not NEWSPULSE_SOURCES_PATH.exists():
         NEWSPULSE_SOURCES_PATH.write_text(json.dumps(default_sources(), indent=2, sort_keys=True), encoding="utf-8")
+    if not NEWSPULSE_POLICY_PATH.exists():
+        NEWSPULSE_POLICY_PATH.write_text(json.dumps(default_policy(), indent=2, sort_keys=True), encoding="utf-8")
     return {
         "config_path": NEWSPULSE_CONFIG_PATH,
         "sources_path": NEWSPULSE_SOURCES_PATH,
+        "policy_path": NEWSPULSE_POLICY_PATH,
     }
 
 
@@ -262,14 +338,33 @@ def validate_config_payload(payload: dict[str, object], sources: dict[str, objec
             tier = str(spec.get("tier", "") or "")
             if tier not in tier_weights:
                 raise OfflineLabError(f"NewsPulse source tier is unknown for {domain}: {tier}")
+        official_feeds = sources.get("official_feeds", [])
+        if official_feeds is not None and not isinstance(official_feeds, list):
+            raise OfflineLabError("NewsPulse official_feeds must be an array when configured")
+        for feed in official_feeds or []:
+            if not isinstance(feed, dict):
+                raise OfflineLabError("NewsPulse official feed entry must be an object")
+            if not bool(feed.get("enabled", False)):
+                continue
+            currency = str(feed.get("currency", "") or "").upper()
+            topic = str(feed.get("topic", "") or "")
+            domain = str(feed.get("domain", "") or "").lower()
+            if currency not in currencies:
+                raise OfflineLabError(f"NewsPulse official feed currency is not configured: {currency}")
+            if topic not in topic_groups:
+                raise OfflineLabError(f"NewsPulse official feed topic is unknown: {topic}")
+            if domain not in domains:
+                raise OfflineLabError(f"NewsPulse official feed domain is not whitelisted: {domain}")
+            if not str(feed.get("url", "") or "").strip():
+                raise OfflineLabError(f"NewsPulse official feed URL is missing for {feed.get('id', 'unknown')}")
 
     return payload
 
 
 def load_config() -> tuple[dict[str, object], dict[str, object]]:
     ensure_default_files()
-    config = load_json_file(NEWSPULSE_CONFIG_PATH)
-    sources = load_json_file(NEWSPULSE_SOURCES_PATH)
+    config = _merge_defaults(default_config(), load_json_file(NEWSPULSE_CONFIG_PATH))
+    sources = _merge_defaults(default_sources(), load_json_file(NEWSPULSE_SOURCES_PATH))
     validate_config_payload(config, sources)
     return config, sources
 
