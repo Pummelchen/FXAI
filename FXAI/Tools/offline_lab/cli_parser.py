@@ -30,6 +30,21 @@ def build_parser() -> argparse.ArgumentParser:
     arv = sub.add_parser("adaptive-router-validate", help="Validate the adaptive router config and regime/plugin routing priors")
     arv.set_defaults(func=cmd_adaptive_router_validate)
 
+    miv = sub.add_parser("microstructure-validate", help="Validate the microstructure proxy config, runtime contract, and service scaffolding")
+    miv.set_defaults(func=cmd_microstructure_validate)
+
+    mis = sub.add_parser("microstructure-install-service", help="Install the MT5 microstructure probe service into MQL5/Services")
+    mis.add_argument("--skip-compile", action="store_true")
+    mis.set_defaults(func=cmd_microstructure_install_service)
+
+    mih = sub.add_parser("microstructure-health", help="Show current microstructure runtime health and the latest shared snapshot status")
+    mih.set_defaults(func=cmd_microstructure_health)
+
+    mir = sub.add_parser("microstructure-replay-report", help="Rebuild a microstructure replay report from append-only runtime history")
+    mir.add_argument("--symbol", default="")
+    mir.add_argument("--hours-back", type=int, default=24)
+    mir.set_defaults(func=cmd_microstructure_replay_report)
+
     npi = sub.add_parser("newspulse-install-service", help="Install the MT5 NewsPulse calendar service into MQL5/Services")
     npi.add_argument("--skip-compile", action="store_true")
     npi.set_defaults(func=cmd_newspulse_install_service)

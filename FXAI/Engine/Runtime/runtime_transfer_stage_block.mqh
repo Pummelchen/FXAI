@@ -119,6 +119,7 @@
                                  context_quality,
                                  current_regime_q,
                                  adaptive_news_state,
+                                 adaptive_micro_state,
                                  adaptive_regime_state);
    FXAI_RecordRuntimeStageMs(FXAI_RUNTIME_STAGE_TRANSFER,
                              (double)(GetMicrosecondCount() - transfer_stage_t0) / 1000.0);

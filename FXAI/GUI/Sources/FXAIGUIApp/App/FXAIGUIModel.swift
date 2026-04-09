@@ -13,6 +13,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var runtimeSnapshot: RuntimeOperationsSnapshot?
     @Published var newsPulseSnapshot: NewsPulseSnapshot?
     @Published var ratesEngineSnapshot: RatesEngineSnapshot?
+    @Published var microstructureSnapshot: MicrostructureSnapshot?
     @Published var adaptiveRouterSnapshot: AdaptiveRouterSnapshot?
     @Published var researchSnapshot: ResearchOSControlSnapshot?
     @Published var visualizationSnapshot: AdvancedVisualizationSnapshot?
@@ -21,6 +22,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var selectedRole: WorkspaceRole = .liveTrader
     @Published var selectedRuntimeSymbol = ""
     @Published var selectedRatesSymbol = ""
+    @Published var selectedMicrostructureSymbol = ""
     @Published var selectedAdaptiveSymbol = ""
     @Published var selectedResearchSymbol = ""
     @Published var selectedVisualizationSymbol = ""
@@ -48,6 +50,7 @@ final class FXAIGUIModel: ObservableObject {
     private let runtimeReader = RuntimeArtifactReader()
     private let newsPulseReader = NewsPulseArtifactReader()
     private let ratesEngineReader = RatesEngineArtifactReader()
+    private let microstructureReader = MicrostructureArtifactReader()
     private let adaptiveRouterReader = AdaptiveRouterArtifactReader()
     private let researchReader = ResearchOSArtifactReader()
     private let visualizationBuilder = AdvancedVisualizationBuilder()
@@ -118,6 +121,14 @@ final class FXAIGUIModel: ObservableObject {
         return adaptiveRouterSnapshot.symbols.first
     }
 
+    var selectedMicrostructureDetail: MicrostructureSymbolState? {
+        guard let microstructureSnapshot else { return nil }
+        if let selected = microstructureSnapshot.symbols.first(where: { $0.symbol == selectedMicrostructureSymbol }) {
+            return selected
+        }
+        return microstructureSnapshot.symbols.first
+    }
+
     var selectedRatesEngineDetail: RatesEnginePairState? {
         guard let ratesEngineSnapshot else { return nil }
         if let selected = ratesEngineSnapshot.pairs.first(where: { $0.pair == selectedRatesSymbol }) {
@@ -174,6 +185,7 @@ final class FXAIGUIModel: ObservableObject {
             runtimeSnapshot = runtimeReader.read(projectRoot: projectRoot)
             newsPulseSnapshot = newsPulseReader.read(projectRoot: projectRoot)
             ratesEngineSnapshot = ratesEngineReader.read(projectRoot: projectRoot)
+            microstructureSnapshot = microstructureReader.read(projectRoot: projectRoot)
             adaptiveRouterSnapshot = adaptiveRouterReader.read(projectRoot: projectRoot)
             researchSnapshot = researchReader.read(projectRoot: projectRoot)
             visualizationSnapshot = visualizationBuilder.build(
@@ -191,6 +203,7 @@ final class FXAIGUIModel: ObservableObject {
             syncBuilderDefaults()
             syncRuntimeSelection()
             syncRatesSelection()
+            syncMicrostructureSelection()
             syncAdaptiveSelection()
             syncResearchSelection()
             syncVisualizationSelection()
@@ -307,6 +320,7 @@ final class FXAIGUIModel: ObservableObject {
             self.selectedRole = savedView.selectedRole
             self.selectedRuntimeSymbol = savedView.selectedRuntimeSymbol
             self.selectedRatesSymbol = savedView.selectedRatesSymbol
+            self.selectedMicrostructureSymbol = savedView.selectedMicrostructureSymbol
             self.selectedAdaptiveSymbol = savedView.selectedAdaptiveSymbol
             self.selectedResearchSymbol = savedView.selectedResearchSymbol
             self.selectedVisualizationSymbol = savedView.selectedVisualizationSymbol
@@ -484,6 +498,26 @@ final class FXAIGUIModel: ObservableObject {
         }
     }
 
+    private func syncMicrostructureSelection() {
+        guard let microstructureSnapshot else {
+            selectedMicrostructureSymbol = ""
+            return
+        }
+
+        let symbols = microstructureSnapshot.symbols.map(\.symbol)
+        guard let first = symbols.first else {
+            selectedMicrostructureSymbol = ""
+            return
+        }
+
+        if !symbols.contains(selectedMicrostructureSymbol) {
+            selectedMicrostructureSymbol = selectedRuntimeSymbol.isEmpty ? first : selectedRuntimeSymbol
+            if !symbols.contains(selectedMicrostructureSymbol) {
+                selectedMicrostructureSymbol = first
+            }
+        }
+    }
+
     private func syncAdaptiveSelection() {
         guard let adaptiveRouterSnapshot else {
             selectedAdaptiveSymbol = ""
@@ -590,6 +624,7 @@ final class FXAIGUIModel: ObservableObject {
             $selectedRole.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedRuntimeSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedRatesSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $selectedMicrostructureSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedAdaptiveSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedResearchSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedVisualizationSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
@@ -739,6 +774,7 @@ final class FXAIGUIModel: ObservableObject {
             selectedRole = workspace.selectedRole
             selectedRuntimeSymbol = workspace.selectedRuntimeSymbol
             selectedRatesSymbol = workspace.selectedRatesSymbol
+            selectedMicrostructureSymbol = workspace.selectedMicrostructureSymbol
             selectedAdaptiveSymbol = workspace.selectedAdaptiveSymbol
             selectedResearchSymbol = workspace.selectedResearchSymbol
             selectedVisualizationSymbol = workspace.selectedVisualizationSymbol
@@ -761,6 +797,7 @@ final class FXAIGUIModel: ObservableObject {
         runtimeSnapshot = nil
         newsPulseSnapshot = nil
         ratesEngineSnapshot = nil
+        microstructureSnapshot = nil
         adaptiveRouterSnapshot = nil
         researchSnapshot = nil
         visualizationSnapshot = nil
@@ -784,6 +821,7 @@ final class FXAIGUIModel: ObservableObject {
             selectedRole: selectedRole,
             selectedRuntimeSymbol: selectedRuntimeSymbol,
             selectedRatesSymbol: selectedRatesSymbol,
+            selectedMicrostructureSymbol: selectedMicrostructureSymbol,
             selectedAdaptiveSymbol: selectedAdaptiveSymbol,
             selectedResearchSymbol: selectedResearchSymbol,
             selectedVisualizationSymbol: selectedVisualizationSymbol,

@@ -212,6 +212,26 @@ input double RatesEngineCautionEnterProbBuffer = 0.04;
 // Models: all (rates / term-structure / policy-path overlay).
 // Purpose: requires a slightly stronger policy enter probability when the rates engine marks a pair as caution.
 // Importance/Range: practical 0.00..0.20; 0 disables the extra floor.
+input bool   MicrostructureEnabled = true;
+// Models: all (execution microstructure / order-flow proxy overlay).
+// Purpose: enables the shared MT5-side microstructure proxy layer for short-horizon liquidity, burst, and hostile-execution gating.
+// Importance/Range: false/true; true is recommended once the microstructure service is running.
+input bool   MicrostructureBlockOnUnknown = false;
+// Models: all (execution microstructure / order-flow proxy overlay).
+// Purpose: blocks new entries when the shared microstructure snapshot is missing or stale instead of treating unknown as cautionary.
+// Importance/Range: false/true; false is the safer phase-1 rollout default.
+input int    MicrostructureFreshnessMaxSec = 45;
+// Models: all (execution microstructure / order-flow proxy overlay).
+// Purpose: maximum allowed age of the shared microstructure snapshot before it is treated as stale.
+// Importance/Range: practical 15..180 seconds depending on service cadence.
+input double MicrostructureCautionLotScale = 0.72;
+// Models: all (execution microstructure / order-flow proxy overlay).
+// Purpose: scales requested lot size down during hostile or fragile microstructure conditions.
+// Importance/Range: practical 0.25..1.00; lower is more defensive.
+input double MicrostructureCautionEnterProbBuffer = 0.04;
+// Models: all (execution microstructure / order-flow proxy overlay).
+// Purpose: requires a slightly stronger policy enter probability when microstructure conditions are cautionary.
+// Importance/Range: practical 0.00..0.20; 0 disables the extra floor.
 input double RiskKillTradeGate = 0.24;
 // Models: all (open-position safety layer).
 // Purpose: forces exit when the live gate collapses under the post-entry kill threshold.

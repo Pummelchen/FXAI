@@ -11,6 +11,7 @@ extension FXAIGUIModel {
         let snapshot = GUIValidationFixtures.projectSnapshot(projectRoot: projectRoot)
         let runtimeSnapshot = GUIValidationFixtures.runtimeSnapshot(projectRoot: projectRoot)
         let ratesEngineSnapshot = GUIValidationFixtures.ratesEngineSnapshot(projectRoot: projectRoot)
+        let microstructureSnapshot = GUIValidationFixtures.microstructureSnapshot(projectRoot: projectRoot)
         let adaptiveRouterSnapshot = GUIValidationFixtures.adaptiveRouterSnapshot(projectRoot: projectRoot)
         let researchSnapshot = GUIValidationFixtures.researchSnapshot(projectRoot: projectRoot)
         let visualizationSnapshot = GUIValidationFixtures.visualizationSnapshot(projectRoot: projectRoot)
@@ -21,6 +22,7 @@ extension FXAIGUIModel {
         model.snapshot = snapshot
         model.runtimeSnapshot = runtimeSnapshot
         model.ratesEngineSnapshot = ratesEngineSnapshot
+        model.microstructureSnapshot = microstructureSnapshot
         model.adaptiveRouterSnapshot = adaptiveRouterSnapshot
         model.researchSnapshot = researchSnapshot
         model.visualizationSnapshot = visualizationSnapshot
@@ -30,6 +32,7 @@ extension FXAIGUIModel {
         model.selectedRole = .liveTrader
         model.selectedRuntimeSymbol = runtimeSnapshot.symbols.first ?? ""
         model.selectedRatesSymbol = ratesEngineSnapshot.pairs.first?.pair ?? ""
+        model.selectedMicrostructureSymbol = microstructureSnapshot.symbols.first?.symbol ?? ""
         model.selectedAdaptiveSymbol = adaptiveRouterSnapshot.symbols.first?.symbol ?? ""
         model.selectedResearchSymbol = researchSnapshot.symbols.first?.symbol ?? ""
         model.selectedVisualizationSymbol = visualizationSnapshot.symbols.first ?? ""
@@ -47,6 +50,7 @@ extension FXAIGUIModel {
                 selectedRole: .liveTrader,
                 selectedRuntimeSymbol: runtimeSnapshot.symbols.first ?? "EURUSD",
                 selectedRatesSymbol: ratesEngineSnapshot.pairs.first?.pair ?? "EURUSD",
+                selectedMicrostructureSymbol: microstructureSnapshot.symbols.first?.symbol ?? "EURUSD",
                 selectedAdaptiveSymbol: adaptiveRouterSnapshot.symbols.first?.symbol ?? "EURUSD",
                 selectedResearchSymbol: researchSnapshot.symbols.first?.symbol ?? "EURUSD",
                 selectedVisualizationSymbol: visualizationSnapshot.symbols.first ?? "EURUSD",

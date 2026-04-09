@@ -26,6 +26,14 @@ from .market_universe import (
     reset_market_universe_config,
     summarize_market_universe_config,
 )
+from .microstructure_config import load_config as load_microstructure_config
+from .microstructure_contracts import MICROSTRUCTURE_CONFIG_PATH
+from .microstructure_replay import build_microstructure_replay_report
+from .microstructure_service import (
+    install_microstructure_service,
+    microstructure_health_snapshot,
+    validate_microstructure_config,
+)
 from .mode import RUNTIME_MODES, resolve_runtime_mode
 from .newspulse_daemon import (
     newspulse_health_snapshot,
@@ -126,6 +134,33 @@ def cmd_adaptive_router_validate(_args) -> int:
         "config_path": str(ADAPTIVE_ROUTER_CONFIG_PATH),
         "config": payload,
     }, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_microstructure_validate(_args) -> int:
+    payload = validate_microstructure_config()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if bool(payload.get("ok")) else 1
+
+
+def cmd_microstructure_install_service(args) -> int:
+    payload = install_microstructure_service(compile_service=not bool(getattr(args, "skip_compile", False)))
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_microstructure_health(_args) -> int:
+    payload = microstructure_health_snapshot()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_microstructure_replay_report(args) -> int:
+    payload = build_microstructure_replay_report(
+        symbol=str(getattr(args, "symbol", "") or ""),
+        hours_back=int(getattr(args, "hours_back", 24) or 24),
+    )
+    print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
 

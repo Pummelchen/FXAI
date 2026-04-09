@@ -1,0 +1,125 @@
+{
+  "collector_mode": "mt5_service",
+  "enabled": true,
+  "max_history_window_sec": 960,
+  "poll_interval_ms": 5000,
+  "runtime_policy": {
+    "block_on_unknown": false,
+    "caution_enter_prob_buffer": 0.04,
+    "caution_lot_scale": 0.72
+  },
+  "schema_version": 1,
+  "session_model": {
+    "handoff_minutes": 20,
+    "sessions": {
+      "ASIA": {
+        "end_hour": 7,
+        "start_hour": 0
+      },
+      "LONDON": {
+        "end_hour": 12,
+        "start_hour": 7
+      },
+      "LONDON_NEWYORK_OVERLAP": {
+        "end_hour": 16,
+        "start_hour": 12
+      },
+      "NEWYORK": {
+        "end_hour": 21,
+        "start_hour": 16
+      },
+      "ROLLOVER": {
+        "end_hour": 24,
+        "start_hour": 21
+      }
+    },
+    "timezone": "UTC"
+  },
+  "snapshot_stale_after_sec": 45,
+  "symbol_refresh_sec": 300,
+  "symbol_universe": {
+    "canonical_pairs": [
+      "AUDCAD",
+      "AUDCHF",
+      "AUDJPY",
+      "AUDNZD",
+      "AUDSGD",
+      "AUDUSD",
+      "CADCHF",
+      "CADJPY",
+      "CHFJPY",
+      "CHFSGD",
+      "EURAUD",
+      "EURCAD",
+      "EURCHF",
+      "EURGBP",
+      "EURHKD",
+      "EURNOK",
+      "EURPLN",
+      "EURSEK",
+      "EURSGD",
+      "EURUSD",
+      "EURZAR",
+      "GBPAUD",
+      "GBPCAD",
+      "GBPCHF",
+      "GBPDKK",
+      "GBPJPY",
+      "GBPNOK",
+      "GBPNZD",
+      "GBPSEK",
+      "GBPSGD",
+      "GBPUSD",
+      "NOKJPY",
+      "NOKSEK",
+      "NZDCAD",
+      "NZDCHF",
+      "NZDJPY",
+      "NZDUSD",
+      "SEKJPY",
+      "SGDJPY",
+      "USDCAD",
+      "USDCHF",
+      "USDCNH",
+      "USDCZK",
+      "USDDKK",
+      "USDHKD",
+      "USDHUF",
+      "USDJPY",
+      "USDMXN",
+      "USDNOK",
+      "USDPLN",
+      "USDSEK",
+      "USDSGD",
+      "USDTHB",
+      "USDZAR"
+    ],
+    "trading_scope": "FX_ONLY"
+  },
+  "thresholds": {
+    "clean_trend_efficiency_floor": 0.62,
+    "clean_trend_imbalance_floor": 0.22,
+    "hostile_execution_block": 0.84,
+    "hostile_execution_caution": 0.56,
+    "liquidity_stress_block": 0.86,
+    "liquidity_stress_caution": 0.58,
+    "shock_move_points_factor": 1.8,
+    "spread_instability_block": 0.82,
+    "spread_instability_caution": 0.56,
+    "stop_run_rejection_score_flag": 0.58,
+    "stop_run_reversal_fraction": 0.45,
+    "tick_burst_ratio_block": 1.85,
+    "tick_burst_ratio_caution": 1.35,
+    "vol_burst_ratio_block": 1.9,
+    "vol_burst_ratio_caution": 1.4,
+    "wide_spread_absolute_points_floor": 2.0,
+    "wide_spread_zscore": 1.45
+  },
+  "windows_sec": [
+    10,
+    30,
+    60,
+    300,
+    900
+  ]
+}

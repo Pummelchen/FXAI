@@ -262,6 +262,10 @@
    FXAI_ResetNewsPulsePairState(adaptive_news_state);
    if(NewsPulseEnabled)
       FXAI_ReadNewsPulsePairState(symbol, adaptive_news_state);
+   FXAIMicrostructurePairState adaptive_micro_state;
+   FXAI_ResetMicrostructurePairState(adaptive_micro_state);
+   if(MicrostructureEnabled)
+      FXAI_ReadMicrostructurePairState(symbol, adaptive_micro_state);
    double vol_hint = MathAbs(FXAI_SafeReturn(close_arr, 0, 1));
    int regime_hint = FXAI_GetRegimeId(snapshot.bar_time, spread_pred, vol_hint);
    int ai_hint = (ensembleMode ? -1 : aiType);

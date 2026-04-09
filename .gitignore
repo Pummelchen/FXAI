@@ -7,6 +7,9 @@ FXAI/Tools/OfflineLab/Runs/
 FXAI/Tools/OfflineLab/NewsPulse/State/
 FXAI/Tools/OfflineLab/NewsPulse/newspulse_status.json
 FXAI/Tools/OfflineLab/NewsPulse/news_history.ndjson
+FXAI/Tools/OfflineLab/Microstructure/State/
+FXAI/Tools/OfflineLab/Microstructure/Reports/
+FXAI/Tools/OfflineLab/Microstructure/microstructure_status.json
 FXAI/GUI/.build/
 FXAI/GUI/.swiftpm/
 FXAI/GUI/Artifacts/

@@ -215,6 +215,61 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       FXAI_ResetRatesEngineGlobals();
    }
 
+   FXAIMicrostructurePairState micro_state;
+   FXAI_ResetMicrostructurePairState(micro_state);
+   bool micro_caution = false;
+   if(MicrostructureEnabled)
+   {
+      bool micro_available = FXAI_ReadMicrostructurePairState(symbol, micro_state);
+      if(!micro_available || !micro_state.ready)
+      {
+         if(MicrostructureBlockOnUnknown)
+         {
+            reason = "risk_microstructure_unknown";
+            return 0.0;
+         }
+         micro_caution = true;
+      }
+      else
+      {
+         if(micro_state.stale)
+         {
+            if(MicrostructureBlockOnUnknown)
+            {
+               reason = "risk_microstructure_stale";
+               return 0.0;
+            }
+            micro_caution = true;
+         }
+         else if(micro_state.trade_gate == "BLOCK")
+         {
+            reason = "risk_microstructure_block";
+            return 0.0;
+         }
+         else if(micro_state.trade_gate == "CAUTION")
+         {
+            micro_caution = true;
+         }
+
+         if(micro_caution)
+         {
+            double caution_buffer = (micro_state.caution_enter_prob_buffer >= 0.0 ?
+                                     micro_state.caution_enter_prob_buffer :
+                                     FXAI_Clamp(MicrostructureCautionEnterProbBuffer, 0.0, 0.25));
+            double caution_enter_floor = FXAI_Clamp(0.05 + caution_buffer, 0.05, 0.95);
+            if(g_policy_last_enter_prob < caution_enter_floor)
+            {
+               reason = "risk_microstructure_caution_floor";
+               return 0.0;
+            }
+         }
+      }
+   }
+   else
+   {
+      FXAI_ResetMicrostructureGlobals();
+   }
+
    double requested_lot = Lot;
    double hard_cap_lot = 1000000.0;
    double edge_scale = FXAI_Clamp(g_ai_last_trade_edge_points / MathMax(g_ai_last_min_move_points, 0.25), -1.0, 4.0);
@@ -411,6 +466,13 @@ double FXAI_CalcRiskAwareLot(const string symbol,
    if(RatesEngineEnabled && rates_caution)
    {
       requested_lot *= FXAI_Clamp(RatesEngineCautionLotScale, 0.10, 1.00);
+   }
+   if(MicrostructureEnabled && micro_caution)
+   {
+      double caution_lot_scale = (micro_state.caution_lot_scale >= 0.0 ?
+                                  micro_state.caution_lot_scale :
+                                  FXAI_Clamp(MicrostructureCautionLotScale, 0.10, 1.00));
+      requested_lot *= FXAI_Clamp(caution_lot_scale, 0.10, 1.00);
    }
 
    requested_lot = FXAI_NormalizeLot(symbol, requested_lot);

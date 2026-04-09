@@ -783,4 +783,95 @@ public enum GUIValidationFixtures {
             ]
         )
     }
+
+    public static func microstructureSnapshot(projectRoot: URL) -> MicrostructureSnapshot {
+        let now = Date()
+        return MicrostructureSnapshot(
+            generatedAt: now,
+            serviceStatus: MicrostructureServiceStatus(
+                ok: true,
+                stale: false,
+                enabled: true,
+                pollIntervalMS: 5000,
+                symbolRefreshSec: 300,
+                snapshotStaleAfterSec: 45,
+                lastPollAt: now.addingTimeInterval(-5),
+                lastSuccessAt: now.addingTimeInterval(-5),
+                lastSymbolRefreshAt: now.addingTimeInterval(-120),
+                lastError: nil
+            ),
+            symbols: [
+                MicrostructureSymbolState(
+                    symbol: "EURUSD",
+                    brokerSymbol: "EURUSD",
+                    available: true,
+                    stale: false,
+                    generatedAt: now,
+                    spreadCurrent: 0.8,
+                    silentGapSecondsCurrent: 0.3,
+                    sessionTag: "LONDON_NEWYORK_OVERLAP",
+                    handoffFlag: false,
+                    minutesSinceSessionOpen: 74,
+                    minutesToSessionClose: 166,
+                    sessionOpenBurstScore: 0.24,
+                    sessionSpreadBehaviorScore: 0.18,
+                    liquidityStressScore: 0.32,
+                    hostileExecutionScore: 0.28,
+                    microstructureRegime: "TRENDING_CLEAN",
+                    tradeGate: "ALLOW",
+                    tickImbalance30s: 0.34,
+                    directionalEfficiency60s: 0.72,
+                    spreadZScore60s: 0.44,
+                    tickRate60s: 126,
+                    tickRateZScore60s: 1.18,
+                    realizedVol5m: 0.61,
+                    volBurstScore5m: 1.12,
+                    localExtremaBreachScore60s: 0.21,
+                    sweepAndRejectFlag60s: false,
+                    breakoutReversalScore60s: 0.18,
+                    exhaustionProxy60s: 0.22,
+                    reasons: ["Tick imbalance supports a clean short-horizon trend"]
+                ),
+                MicrostructureSymbolState(
+                    symbol: "GBPJPY",
+                    brokerSymbol: "GBPJPY",
+                    available: true,
+                    stale: false,
+                    generatedAt: now,
+                    spreadCurrent: 2.6,
+                    silentGapSecondsCurrent: 1.6,
+                    sessionTag: "LONDON_NEWYORK_OVERLAP",
+                    handoffFlag: true,
+                    minutesSinceSessionOpen: 12,
+                    minutesToSessionClose: 18,
+                    sessionOpenBurstScore: 0.74,
+                    sessionSpreadBehaviorScore: 0.66,
+                    liquidityStressScore: 0.79,
+                    hostileExecutionScore: 0.72,
+                    microstructureRegime: "STOP_RUN_RISK",
+                    tradeGate: "CAUTION",
+                    tickImbalance30s: -0.11,
+                    directionalEfficiency60s: 0.37,
+                    spreadZScore60s: 2.24,
+                    tickRate60s: 188,
+                    tickRateZScore60s: 2.11,
+                    realizedVol5m: 1.42,
+                    volBurstScore5m: 1.91,
+                    localExtremaBreachScore60s: 0.76,
+                    sweepAndRejectFlag60s: true,
+                    breakoutReversalScore60s: 0.81,
+                    exhaustionProxy60s: 0.73,
+                    reasons: ["Recent breakout rejection detected", "Spread instability elevated"]
+                ),
+            ],
+            healthSummary: [
+                KeyValueRecord(key: "active_symbol_count", value: "2"),
+                KeyValueRecord(key: "snapshot_stale_after_sec", value: "45"),
+            ],
+            artifactPaths: [
+                KeyValueRecord(key: "snapshot_json", value: projectRoot.appendingPathComponent("FILE_COMMON/FXAI/Runtime/microstructure_snapshot.json").path),
+                KeyValueRecord(key: "history_ndjson", value: projectRoot.appendingPathComponent("FILE_COMMON/FXAI/Runtime/microstructure_history.ndjson").path),
+            ]
+        )
+    }
 }

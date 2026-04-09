@@ -41,6 +41,10 @@ PATCH_MODULES = [
     "offline_lab.rates_engine_replay",
     "offline_lab.rates_engine",
     "offline_lab.rates_engine_daemon",
+    "offline_lab.microstructure_contracts",
+    "offline_lab.microstructure_config",
+    "offline_lab.microstructure_service",
+    "offline_lab.microstructure_replay",
     "offline_lab.adaptive_router_contracts",
     "offline_lab.adaptive_router_config",
     "offline_lab.adaptive_router",
@@ -65,6 +69,9 @@ def patched_paths(base_dir: Path):
     rates_engine_dir = offline_dir / "RatesEngine"
     rates_engine_state_dir = rates_engine_dir / "State"
     rates_engine_report_dir = rates_engine_dir / "Reports"
+    microstructure_dir = offline_dir / "Microstructure"
+    microstructure_state_dir = microstructure_dir / "State"
+    microstructure_report_dir = microstructure_dir / "Reports"
     common_dir = base_dir / "FILE_COMMON"
     common_promotion_dir = common_dir / "FXAI/Offline/Promotions"
     common_export_dir = common_dir / "FXAI/Offline/Exports"
@@ -85,6 +92,9 @@ def patched_paths(base_dir: Path):
         rates_engine_dir,
         rates_engine_state_dir,
         rates_engine_report_dir,
+        microstructure_dir,
+        microstructure_state_dir,
+        microstructure_report_dir,
         common_promotion_dir,
         common_export_dir,
         runtime_dir,
@@ -140,6 +150,14 @@ def patched_paths(base_dir: Path):
             "RATES_ENGINE_STATE_PATH": rates_engine_state_dir / "rates_engine_state.json",
             "RATES_ENGINE_REPLAY_REPORT_PATH": rates_engine_report_dir / "rates_replay_report.json",
             "RATES_ENGINE_LOCAL_HISTORY_PATH": rates_engine_dir / "rates_history.ndjson",
+            "MICROSTRUCTURE_DIR": microstructure_dir,
+            "MICROSTRUCTURE_STATE_DIR": microstructure_state_dir,
+            "MICROSTRUCTURE_REPORT_DIR": microstructure_report_dir,
+            "MICROSTRUCTURE_CONFIG_PATH": microstructure_dir / "microstructure_config.json",
+            "MICROSTRUCTURE_STATUS_PATH": microstructure_dir / "microstructure_status.json",
+            "MICROSTRUCTURE_STATE_PATH": microstructure_state_dir / "microstructure_state.json",
+            "MICROSTRUCTURE_REPLAY_REPORT_PATH": microstructure_report_dir / "microstructure_replay_report.json",
+            "MICROSTRUCTURE_LOCAL_HISTORY_PATH": microstructure_dir / "microstructure_history.ndjson",
             "COMMON_NEWSPULSE_JSON": runtime_dir / "news_snapshot.json",
             "COMMON_NEWSPULSE_FLAT": runtime_dir / "news_snapshot_flat.tsv",
             "COMMON_NEWSPULSE_HISTORY": runtime_dir / "news_history.ndjson",
@@ -152,6 +170,12 @@ def patched_paths(base_dir: Path):
             "COMMON_RATES_FLAT": runtime_dir / "rates_snapshot_flat.tsv",
             "COMMON_RATES_HISTORY": runtime_dir / "rates_history.ndjson",
             "COMMON_RATES_SYMBOL_MAP": runtime_dir / "rates_symbol_map.tsv",
+            "COMMON_MICROSTRUCTURE_JSON": runtime_dir / "microstructure_snapshot.json",
+            "COMMON_MICROSTRUCTURE_FLAT": runtime_dir / "microstructure_snapshot_flat.tsv",
+            "COMMON_MICROSTRUCTURE_HISTORY": runtime_dir / "microstructure_history.ndjson",
+            "COMMON_MICROSTRUCTURE_STATUS": runtime_dir / "microstructure_status.json",
+            "COMMON_MICROSTRUCTURE_SYMBOL_MAP": runtime_dir / "microstructure_symbol_map.tsv",
+            "COMMON_MICROSTRUCTURE_CONFIG": runtime_dir / "microstructure_service_config.tsv",
         }.items():
             if hasattr(mod, attr):
                 patched[mod_name][attr] = getattr(mod, attr)
@@ -170,6 +194,7 @@ def patched_paths(base_dir: Path):
             "tester_dir": tester_dir,
             "adaptive_router_dir": adaptive_router_dir,
             "rates_engine_dir": rates_engine_dir,
+            "microstructure_dir": microstructure_dir,
         }
     finally:
         for mod_name, attrs in patched.items():

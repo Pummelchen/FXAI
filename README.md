@@ -10,6 +10,7 @@ It is not a single strategy EA. It is a research and deployment framework with:
 - a Turso-backed Offline Lab for export, tuning, promotion, champion-challenger control loops, branch/PITR workflows, audit-log ingestion, and vector-backed analog retrieval
 - a NewsPulse subsystem for MT5-calendar, official-feed, and GDELT-based news-risk gating, replay timelines, append-only history, and operator visibility
 - a Rates / Term-Structure / Policy-Path Engine for rates-aware macro state, NewsPulse enrichment, runtime trade filtering, GUI visibility, and replayable policy-path context
+- a Market Microstructure and Order-Flow Proxy Layer for MT5 tick-flow, liquidity-stress, spread-dynamics, stop-run proxy detection, runtime trade gating, GUI visibility, and replayable short-horizon execution context
 - an Adaptive Regime Classifier + Plugin Router that classifies live regime state, weights or suppresses plugin-zoo members dynamically, and adds auditable abstention posture without forcing immediate retraining
 - an FX-only tradable universe policy with MT5 cross-asset symbols stored separately as indicator-only context configuration inside the Offline Lab database
 - foundation-teacher and student-deployment bundles, autonomous governance, supervisor-service artifacts, and live deployment profiles for promoted MT5 runtime behavior
@@ -51,6 +52,7 @@ Detailed documentation is kept in the wiki:
 - [Offline Lab](https://github.com/Pummelchen/FXAI/wiki/Offline-Lab)
 - [NewsPulse](https://github.com/Pummelchen/FXAI/wiki/NewsPulse)
 - [Rates Engine](https://github.com/Pummelchen/FXAI/wiki/Rates-Engine)
+- [Microstructure](https://github.com/Pummelchen/FXAI/wiki/Microstructure)
 - [Adaptive Router](https://github.com/Pummelchen/FXAI/wiki/Adaptive-Router)
 - [GUI](https://github.com/Pummelchen/FXAI/wiki/GUI)
 - [Project Structure](https://github.com/Pummelchen/FXAI/wiki/Project-Structure)

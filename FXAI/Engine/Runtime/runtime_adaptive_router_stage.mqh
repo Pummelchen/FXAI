@@ -2,6 +2,7 @@
 #define __FXAI_RUNTIME_ADAPTIVE_ROUTER_STAGE_MQH__
 
 #include "Trade\\runtime_trade_newspulse.mqh"
+#include "Trade\\runtime_trade_microstructure.mqh"
 
 #define FXAI_ADAPTIVE_ROUTER_STATUS_SUPPRESSED 0
 #define FXAI_ADAPTIVE_ROUTER_STATUS_DOWNWEIGHTED 1
@@ -260,6 +261,7 @@ void FXAI_BuildAdaptiveRegimeState(const string symbol,
                                    const double context_quality,
                                    const FXAIRegimeGraphQuery &regime_graph,
                                    const FXAINewsPulsePairState &news_state,
+                                   const FXAIMicrostructurePairState &micro_state,
                                    FXAIAdaptiveRegimeState &out)
 {
    FXAI_ResetAdaptiveRegimeState(out);
@@ -271,12 +273,34 @@ void FXAI_BuildAdaptiveRegimeState(const string symbol,
    out.news_pressure = FXAI_Clamp((news_state.ready ? news_state.news_pressure : 0.0), -1.0, 1.0);
    out.event_eta_min = (news_state.ready ? news_state.event_eta_min : -1);
    out.stale_news = (!news_state.ready || news_state.stale);
+   bool micro_ready = (micro_state.ready && !micro_state.stale);
+   double micro_liquidity = (micro_ready ? FXAI_Clamp(micro_state.liquidity_stress_score, 0.0, 1.0) : 0.0);
+   double micro_hostile = (micro_ready ? FXAI_Clamp(micro_state.hostile_execution_score, 0.0, 1.0) : 0.0);
+   double micro_breakout = (micro_ready ? FXAI_Clamp(micro_state.local_extrema_breach_score_60s, 0.0, 1.0) : 0.0);
+   double micro_tick_pressure = (micro_ready ? FXAI_Clamp(MathAbs(micro_state.tick_imbalance_30s), 0.0, 1.0) : 0.0);
+   double micro_directional_eff = (micro_ready ? FXAI_Clamp(micro_state.directional_efficiency_60s, 0.0, 1.0) : 0.0);
+   double micro_sweep_risk = (micro_ready ? FXAI_Clamp(MathMax(micro_state.breakout_reversal_score_60s,
+                                                               micro_state.exhaustion_proxy_60s),
+                                                       0.0,
+                                                       1.0) : 0.0);
+   bool micro_handoff = (micro_ready && micro_state.handoff_flag);
+   double micro_session_burst = (micro_ready ? FXAI_Clamp(MathMax(micro_state.session_open_burst_score,
+                                                                  micro_state.session_spread_behavior_score),
+                                                          0.0,
+                                                          1.0) : 0.0);
 
    double point_value = (snapshot.point > 0.0 ? snapshot.point : (_Point > 0.0 ? _Point : 0.0001));
    double spread_ref = (g_regime_ema_ready ? MathMax(g_regime_spread_ema, 0.10) : MathMax(spread_points, 0.10));
    double vol_ref = (g_regime_ema_ready ? MathMax(g_regime_vol_ema, 1e-6) : MathMax(MathAbs(vol_proxy_abs), 1e-6));
    double spread_ratio = FXAI_Clamp(spread_points / spread_ref, 0.25, 4.0);
    double vol_ratio = FXAI_Clamp(MathAbs(vol_proxy_abs) / vol_ref, 0.25, 4.0);
+   if(micro_ready)
+   {
+      double micro_spread_ratio = FXAI_Clamp(1.0 + MathMax(micro_state.spread_zscore_60s, 0.0) / 2.0, 0.60, 4.0);
+      double micro_vol_ratio = FXAI_Clamp(1.0 + MathMax(micro_state.vol_burst_score_5m - 1.0, 0.0), 0.60, 4.0);
+      spread_ratio = FXAI_Clamp(0.72 * spread_ratio + 0.28 * micro_spread_ratio, 0.25, 4.0);
+      vol_ratio = FXAI_Clamp(0.70 * vol_ratio + 0.30 * micro_vol_ratio, 0.25, 4.0);
+   }
    out.spread_regime = (spread_ratio >= 1.45 ? "ELEVATED" : (spread_ratio <= 0.85 ? "CALM" : "NORMAL"));
    out.volatility_regime = (vol_ratio >= 1.35 ? "HIGH" : (vol_ratio <= 0.82 ? "LOW" : "NORMAL"));
 
@@ -288,22 +312,27 @@ void FXAI_BuildAdaptiveRegimeState(const string symbol,
    double range_points = FXAI_AdaptiveRouterRangePoints(high_arr, low_arr, 12, point_value);
    double range_tightness = 1.0 - FXAI_Clamp(range_points / MathMax(4.0 * move_floor, 1.0), 0.0, 1.0);
    double reversal_pressure = FXAI_Clamp(0.55 * flip_ratio + 0.45 * range_tightness, 0.0, 1.0);
-   double breakout_pressure = FXAI_Clamp(0.38 * FXAI_Clamp(vol_ratio - 1.0, 0.0, 1.5) +
-                                         0.22 * FXAI_Clamp(MathAbs(regime_graph.edge_bias), 0.0, 1.0) +
-                                         0.20 * FXAI_Clamp(regime_graph.transition_confidence, 0.0, 1.0) +
-                                         0.20 * (1.0 - range_tightness),
+   double breakout_pressure = FXAI_Clamp(0.34 * FXAI_Clamp(vol_ratio - 1.0, 0.0, 1.5) +
+                                         0.20 * FXAI_Clamp(MathAbs(regime_graph.edge_bias), 0.0, 1.0) +
+                                         0.18 * FXAI_Clamp(regime_graph.transition_confidence, 0.0, 1.0) +
+                                         0.14 * (1.0 - range_tightness) +
+                                         0.14 * micro_breakout,
                                          0.0,
                                          1.0);
-   double trend_strength = FXAI_Clamp(0.38 * FXAI_Clamp(regime_graph.persistence, 0.0, 1.0) +
-                                      0.34 * slope_norm +
-                                      0.18 * (1.0 - reversal_pressure) +
-                                      0.10 * FXAI_Clamp(context_strength / 2.0, 0.0, 1.0),
+   double trend_strength = FXAI_Clamp(0.30 * FXAI_Clamp(regime_graph.persistence, 0.0, 1.0) +
+                                      0.26 * slope_norm +
+                                      0.14 * (1.0 - reversal_pressure) +
+                                      0.10 * FXAI_Clamp(context_strength / 2.0, 0.0, 1.0) +
+                                      0.10 * micro_tick_pressure +
+                                      0.10 * micro_directional_eff,
                                       0.0,
                                       1.0);
-   double range_pressure = FXAI_Clamp(0.35 * reversal_pressure +
-                                      0.28 * range_tightness +
-                                      0.20 * (1.0 - slope_norm) +
-                                      0.17 * (1.0 - breakout_pressure),
+   double range_pressure = FXAI_Clamp(0.31 * reversal_pressure +
+                                      0.24 * range_tightness +
+                                      0.18 * (1.0 - slope_norm) +
+                                      0.13 * (1.0 - breakout_pressure) +
+                                      0.08 * (micro_ready && micro_state.microstructure_regime == "CHOPPY_HIGH_ACTIVITY" ? 1.0 : 0.0) +
+                                      0.06 * (1.0 - micro_directional_eff),
                                       0.0,
                                       1.0);
    double pair_macro_sensitivity = FXAI_AdaptiveRouterMacroPairSensitivity(symbol);
@@ -313,11 +342,13 @@ void FXAI_BuildAdaptiveRegimeState(const string symbol,
                                       0.20 * FXAI_Clamp(context_strength / 2.0, 0.0, 1.0),
                                       0.0,
                                       1.0);
-   double liquidity_stress = FXAI_Clamp(0.42 * FXAI_Clamp(spread_ratio - 1.0, 0.0, 2.0) +
-                                        0.18 * FXAI_Clamp(regime_graph.instability, 0.0, 1.0) +
-                                        0.16 * (out.session_label == "ROLLOVER" ? 1.0 : 0.0) +
-                                        0.12 * FXAI_Clamp(vol_ratio - 1.0, 0.0, 2.0) +
-                                        0.12 * (out.stale_news ? 1.0 : 0.0),
+   double liquidity_stress = FXAI_Clamp(0.28 * FXAI_Clamp(spread_ratio - 1.0, 0.0, 2.0) +
+                                        0.14 * FXAI_Clamp(regime_graph.instability, 0.0, 1.0) +
+                                        0.12 * (out.session_label == "ROLLOVER" ? 1.0 : 0.0) +
+                                        0.10 * FXAI_Clamp(vol_ratio - 1.0, 0.0, 2.0) +
+                                        0.10 * (out.stale_news ? 1.0 : 0.0) +
+                                        0.16 * micro_liquidity +
+                                        0.10 * micro_hostile,
                                         0.0,
                                         1.0);
    out.breakout_pressure = breakout_pressure;
@@ -328,15 +359,15 @@ void FXAI_BuildAdaptiveRegimeState(const string symbol,
 
    double session_flow_score = 0.12;
    if(out.session_label == "ASIA")
-      session_flow_score += 0.20 * range_pressure + 0.12 * (1.0 - out.news_risk_score);
+      session_flow_score += 0.20 * range_pressure + 0.12 * (1.0 - out.news_risk_score) + 0.08 * micro_session_burst;
    else if(out.session_label == "LONDON")
-      session_flow_score += 0.22 * breakout_pressure + 0.10 * trend_strength;
+      session_flow_score += 0.22 * breakout_pressure + 0.10 * trend_strength + 0.08 * micro_session_burst;
    else if(out.session_label == "LONDON_NY_OVERLAP")
-      session_flow_score += 0.18 * macro_pressure + 0.16 * breakout_pressure;
+      session_flow_score += 0.18 * macro_pressure + 0.16 * breakout_pressure + 0.08 * micro_session_burst;
    else if(out.session_label == "NEWYORK")
-      session_flow_score += 0.18 * trend_strength + 0.12 * macro_pressure;
+      session_flow_score += 0.18 * trend_strength + 0.12 * macro_pressure + 0.08 * micro_session_burst;
    else
-      session_flow_score += 0.20 * liquidity_stress;
+      session_flow_score += 0.20 * liquidity_stress + 0.08 * micro_session_burst;
    session_flow_score = FXAI_Clamp(session_flow_score, 0.0, 1.0);
 
    bool event_window = (news_state.ready && !news_state.stale &&
@@ -347,11 +378,11 @@ void FXAI_BuildAdaptiveRegimeState(const string symbol,
    double raw[FXAI_ADAPTIVE_ROUTER_REGIME_COUNT];
    raw[0] = 0.14 + 0.46 * trend_strength + 0.16 * FXAI_Clamp(regime_graph.persistence, 0.0, 1.0) + 0.10 * (1.0 - liquidity_stress) + 0.14 * (1.0 - out.news_risk_score);
    raw[1] = 0.12 + 0.44 * range_pressure + 0.12 * (1.0 - breakout_pressure) + 0.16 * (1.0 - out.news_risk_score) + 0.16 * (1.0 - liquidity_stress);
-   raw[2] = 0.12 + 0.48 * breakout_pressure + 0.16 * trend_strength + 0.12 * FXAI_Clamp(regime_graph.transition_confidence, 0.0, 1.0) + 0.12 * FXAI_Clamp(vol_ratio - 1.0, 0.0, 2.0);
+   raw[2] = 0.12 + 0.42 * breakout_pressure + 0.14 * trend_strength + 0.10 * FXAI_Clamp(regime_graph.transition_confidence, 0.0, 1.0) + 0.10 * FXAI_Clamp(vol_ratio - 1.0, 0.0, 2.0) + 0.12 * micro_sweep_risk;
    raw[3] = 0.08 + 0.52 * out.news_risk_score + 0.18 * (event_window ? 1.0 : 0.0) + 0.10 * FXAI_Clamp(vol_ratio - 1.0, 0.0, 2.0) + 0.12 * MathAbs(out.news_pressure);
    raw[4] = 0.08 + 0.42 * macro_pressure + 0.16 * MathAbs(out.news_pressure) + 0.18 * pair_macro_sensitivity + 0.16 * FXAI_Clamp(context_quality, 0.0, 1.0);
-   raw[5] = 0.08 + 0.58 * liquidity_stress + 0.12 * FXAI_Clamp(regime_graph.instability, 0.0, 1.0) + 0.10 * (out.session_label == "ROLLOVER" ? 1.0 : 0.0) + 0.12 * (out.stale_news ? 1.0 : 0.0);
-   raw[6] = 0.12 + 0.52 * session_flow_score + 0.16 * (1.0 - out.news_risk_score) + 0.10 * FXAI_Clamp(context_strength / 2.0, 0.0, 1.0) + 0.10 * (1.0 - liquidity_stress);
+   raw[5] = 0.08 + 0.48 * liquidity_stress + 0.10 * FXAI_Clamp(regime_graph.instability, 0.0, 1.0) + 0.08 * (out.session_label == "ROLLOVER" ? 1.0 : 0.0) + 0.10 * (out.stale_news ? 1.0 : 0.0) + 0.16 * micro_hostile;
+   raw[6] = 0.12 + 0.48 * session_flow_score + 0.14 * (1.0 - out.news_risk_score) + 0.08 * FXAI_Clamp(context_strength / 2.0, 0.0, 1.0) + 0.08 * (1.0 - liquidity_stress) + 0.10 * (micro_handoff ? 1.0 : 0.0);
 
    double total = 0.0;
    int top_index = 0;
@@ -396,6 +427,12 @@ void FXAI_BuildAdaptiveRegimeState(const string symbol,
       FXAI_AdaptiveRouterAppendReason(out, "Macro repricing pressure elevated");
    if(liquidity_stress >= 0.58)
       FXAI_AdaptiveRouterAppendReason(out, "Liquidity stress elevated");
+   if(micro_ready && micro_hostile >= 0.58)
+      FXAI_AdaptiveRouterAppendReason(out, "Microstructure hostile execution elevated");
+   if(micro_ready && micro_sweep_risk >= 0.58)
+      FXAI_AdaptiveRouterAppendReason(out, "Microstructure sweep rejection risk elevated");
+   if(micro_handoff && micro_session_burst >= 0.50)
+      FXAI_AdaptiveRouterAppendReason(out, "Session handoff burst active");
    if(session_flow_score >= 0.58)
       FXAI_AdaptiveRouterAppendReason(out, out.session_label + " session flow dominant");
 }

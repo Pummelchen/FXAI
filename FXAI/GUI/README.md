@@ -21,6 +21,7 @@ Phase 1 through Phase 6 are implemented here:
 - runtime monitor for deployed symbol state
 - NewsPulse surface for source health, currency heatmap, pair risk, and recent event tape
 - Rates Engine surface for provider health, currency policy state, pair divergence, rates-aware gates, and policy-event tape
+- Microstructure surface for per-symbol execution regime, liquidity stress, hostile execution, stop-run proxy flags, session handoff state, and runtime gating reasons
 - Adaptive Router surface for live regime state, plugin routing weights, suppressed plugins, posture reasons, and replay transitions
 - promotion center for champions, tiers, and set paths
 - Research OS control for Turso environment diagnostics, branch and PITR flows, audit-log visibility, analog vector browsing, and recovery command generation
