@@ -12,6 +12,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var snapshot: FXAIProjectSnapshot?
     @Published var runtimeSnapshot: RuntimeOperationsSnapshot?
     @Published var newsPulseSnapshot: NewsPulseSnapshot?
+    @Published var ratesEngineSnapshot: RatesEngineSnapshot?
     @Published var adaptiveRouterSnapshot: AdaptiveRouterSnapshot?
     @Published var researchSnapshot: ResearchOSControlSnapshot?
     @Published var visualizationSnapshot: AdvancedVisualizationSnapshot?
@@ -19,6 +20,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var selection: SidebarDestination? = .overview
     @Published var selectedRole: WorkspaceRole = .liveTrader
     @Published var selectedRuntimeSymbol = ""
+    @Published var selectedRatesSymbol = ""
     @Published var selectedAdaptiveSymbol = ""
     @Published var selectedResearchSymbol = ""
     @Published var selectedVisualizationSymbol = ""
@@ -45,6 +47,7 @@ final class FXAIGUIModel: ObservableObject {
     private let connectionCoordinator = ProjectConnectionCoordinator()
     private let runtimeReader = RuntimeArtifactReader()
     private let newsPulseReader = NewsPulseArtifactReader()
+    private let ratesEngineReader = RatesEngineArtifactReader()
     private let adaptiveRouterReader = AdaptiveRouterArtifactReader()
     private let researchReader = ResearchOSArtifactReader()
     private let visualizationBuilder = AdvancedVisualizationBuilder()
@@ -115,6 +118,14 @@ final class FXAIGUIModel: ObservableObject {
         return adaptiveRouterSnapshot.symbols.first
     }
 
+    var selectedRatesEngineDetail: RatesEnginePairState? {
+        guard let ratesEngineSnapshot else { return nil }
+        if let selected = ratesEngineSnapshot.pairs.first(where: { $0.pair == selectedRatesSymbol }) {
+            return selected
+        }
+        return ratesEngineSnapshot.pairs.first
+    }
+
     var selectedVisualizationDetail: SymbolVisualizationDetail? {
         guard let visualizationSnapshot else { return nil }
         if let selected = visualizationSnapshot.symbolDetails.first(where: { $0.symbol == selectedVisualizationSymbol }) {
@@ -162,6 +173,7 @@ final class FXAIGUIModel: ObservableObject {
             snapshot = try scanner.scan(projectRoot: projectRoot)
             runtimeSnapshot = runtimeReader.read(projectRoot: projectRoot)
             newsPulseSnapshot = newsPulseReader.read(projectRoot: projectRoot)
+            ratesEngineSnapshot = ratesEngineReader.read(projectRoot: projectRoot)
             adaptiveRouterSnapshot = adaptiveRouterReader.read(projectRoot: projectRoot)
             researchSnapshot = researchReader.read(projectRoot: projectRoot)
             visualizationSnapshot = visualizationBuilder.build(
@@ -178,6 +190,7 @@ final class FXAIGUIModel: ObservableObject {
             )
             syncBuilderDefaults()
             syncRuntimeSelection()
+            syncRatesSelection()
             syncAdaptiveSelection()
             syncResearchSelection()
             syncVisualizationSelection()
@@ -293,6 +306,7 @@ final class FXAIGUIModel: ObservableObject {
             self.selection = SidebarDestination(rawValue: savedView.selection) ?? .overview
             self.selectedRole = savedView.selectedRole
             self.selectedRuntimeSymbol = savedView.selectedRuntimeSymbol
+            self.selectedRatesSymbol = savedView.selectedRatesSymbol
             self.selectedAdaptiveSymbol = savedView.selectedAdaptiveSymbol
             self.selectedResearchSymbol = savedView.selectedResearchSymbol
             self.selectedVisualizationSymbol = savedView.selectedVisualizationSymbol
@@ -309,6 +323,7 @@ final class FXAIGUIModel: ObservableObject {
             self.researchRecoveryDraft = savedView.researchRecoveryDraft
             self.syncBuilderDefaults()
             self.syncRuntimeSelection()
+            self.syncRatesSelection()
             self.syncAdaptiveSelection()
             self.syncResearchSelection()
             self.syncVisualizationSelection()
@@ -449,6 +464,26 @@ final class FXAIGUIModel: ObservableObject {
         }
     }
 
+    private func syncRatesSelection() {
+        guard let ratesEngineSnapshot else {
+            selectedRatesSymbol = ""
+            return
+        }
+
+        let symbols = ratesEngineSnapshot.pairs.map(\.pair)
+        guard let first = symbols.first else {
+            selectedRatesSymbol = ""
+            return
+        }
+
+        if !symbols.contains(selectedRatesSymbol) {
+            selectedRatesSymbol = selectedRuntimeSymbol.isEmpty ? first : selectedRuntimeSymbol
+            if !symbols.contains(selectedRatesSymbol) {
+                selectedRatesSymbol = first
+            }
+        }
+    }
+
     private func syncAdaptiveSelection() {
         guard let adaptiveRouterSnapshot else {
             selectedAdaptiveSymbol = ""
@@ -554,6 +589,7 @@ final class FXAIGUIModel: ObservableObject {
             $selection.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedRole.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedRuntimeSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $selectedRatesSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedAdaptiveSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedResearchSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedVisualizationSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
@@ -702,6 +738,7 @@ final class FXAIGUIModel: ObservableObject {
             selection = SidebarDestination(rawValue: workspace.selection) ?? .overview
             selectedRole = workspace.selectedRole
             selectedRuntimeSymbol = workspace.selectedRuntimeSymbol
+            selectedRatesSymbol = workspace.selectedRatesSymbol
             selectedAdaptiveSymbol = workspace.selectedAdaptiveSymbol
             selectedResearchSymbol = workspace.selectedResearchSymbol
             selectedVisualizationSymbol = workspace.selectedVisualizationSymbol
@@ -723,6 +760,7 @@ final class FXAIGUIModel: ObservableObject {
         snapshot = nil
         runtimeSnapshot = nil
         newsPulseSnapshot = nil
+        ratesEngineSnapshot = nil
         adaptiveRouterSnapshot = nil
         researchSnapshot = nil
         visualizationSnapshot = nil
@@ -745,6 +783,7 @@ final class FXAIGUIModel: ObservableObject {
             selection: selection?.rawValue ?? SidebarDestination.overview.rawValue,
             selectedRole: selectedRole,
             selectedRuntimeSymbol: selectedRuntimeSymbol,
+            selectedRatesSymbol: selectedRatesSymbol,
             selectedAdaptiveSymbol: selectedAdaptiveSymbol,
             selectedResearchSymbol: selectedResearchSymbol,
             selectedVisualizationSymbol: selectedVisualizationSymbol,

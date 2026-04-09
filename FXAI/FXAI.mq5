@@ -192,6 +192,26 @@ input double NewsPulseCautionEnterProbBuffer = 0.05;
 // Models: all (execution/news-risk overlay).
 // Purpose: requires a slightly stronger policy enter probability during NewsPulse caution windows.
 // Importance/Range: practical 0.00..0.20; 0 disables the extra floor.
+input bool   RatesEngineEnabled = true;
+// Models: all (rates / term-structure / policy-path overlay).
+// Purpose: enables the shared rates engine runtime gate driven by policy repricing, divergence, and rates-risk state.
+// Importance/Range: false/true; true is recommended once the rates engine daemon is running.
+input bool   RatesEngineBlockOnUnknown = false;
+// Models: all (rates / term-structure / policy-path overlay).
+// Purpose: blocks new entries when the shared rates snapshot is missing or stale instead of treating unknown as neutral.
+// Importance/Range: false/true; false is safer for phase-1 rollout because proxy mode is optional.
+input int    RatesEngineFreshnessMaxSec = 900;
+// Models: all (rates / term-structure / policy-path overlay).
+// Purpose: maximum allowed age of the shared rates snapshot before it is treated as stale.
+// Importance/Range: practical 300..3600 seconds depending on daemon cadence.
+input double RatesEngineCautionLotScale = 0.75;
+// Models: all (rates / term-structure / policy-path overlay).
+// Purpose: scales requested lot size down during rates caution windows while preserving existing model contracts.
+// Importance/Range: practical 0.25..1.00; lower is more defensive.
+input double RatesEngineCautionEnterProbBuffer = 0.04;
+// Models: all (rates / term-structure / policy-path overlay).
+// Purpose: requires a slightly stronger policy enter probability when the rates engine marks a pair as caution.
+// Importance/Range: practical 0.00..0.20; 0 disables the extra floor.
 input double RiskKillTradeGate = 0.24;
 // Models: all (open-position safety layer).
 // Purpose: forces exit when the live gate collapses under the post-entry kill threshold.

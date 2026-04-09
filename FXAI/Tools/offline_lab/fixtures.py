@@ -34,6 +34,13 @@ PATCH_MODULES = [
     "offline_lab.newspulse_replay",
     "offline_lab.newspulse_service",
     "offline_lab.newspulse_daemon",
+    "offline_lab.rates_engine_contracts",
+    "offline_lab.rates_engine_config",
+    "offline_lab.rates_engine_inputs",
+    "offline_lab.rates_engine_newspulse",
+    "offline_lab.rates_engine_replay",
+    "offline_lab.rates_engine",
+    "offline_lab.rates_engine_daemon",
     "offline_lab.adaptive_router_contracts",
     "offline_lab.adaptive_router_config",
     "offline_lab.adaptive_router",
@@ -55,6 +62,9 @@ def patched_paths(base_dir: Path):
     newspulse_report_dir = newspulse_dir / "Reports"
     adaptive_router_dir = offline_dir / "AdaptiveRouter"
     adaptive_router_report_dir = adaptive_router_dir / "Reports"
+    rates_engine_dir = offline_dir / "RatesEngine"
+    rates_engine_state_dir = rates_engine_dir / "State"
+    rates_engine_report_dir = rates_engine_dir / "Reports"
     common_dir = base_dir / "FILE_COMMON"
     common_promotion_dir = common_dir / "FXAI/Offline/Promotions"
     common_export_dir = common_dir / "FXAI/Offline/Exports"
@@ -72,6 +82,9 @@ def patched_paths(base_dir: Path):
         newspulse_report_dir,
         adaptive_router_dir,
         adaptive_router_report_dir,
+        rates_engine_dir,
+        rates_engine_state_dir,
+        rates_engine_report_dir,
         common_promotion_dir,
         common_export_dir,
         runtime_dir,
@@ -118,6 +131,15 @@ def patched_paths(base_dir: Path):
             "ADAPTIVE_ROUTER_REPORT_DIR": adaptive_router_report_dir,
             "ADAPTIVE_ROUTER_CONFIG_PATH": adaptive_router_dir / "adaptive_router_config.json",
             "ADAPTIVE_ROUTER_REPLAY_REPORT_PATH": adaptive_router_report_dir / "adaptive_router_replay_report.json",
+            "RATES_ENGINE_DIR": rates_engine_dir,
+            "RATES_ENGINE_STATE_DIR": rates_engine_state_dir,
+            "RATES_ENGINE_REPORT_DIR": rates_engine_report_dir,
+            "RATES_ENGINE_CONFIG_PATH": rates_engine_dir / "rates_engine_config.json",
+            "RATES_ENGINE_INPUTS_PATH": rates_engine_dir / "rates_provider_inputs.json",
+            "RATES_ENGINE_STATUS_PATH": rates_engine_dir / "rates_engine_status.json",
+            "RATES_ENGINE_STATE_PATH": rates_engine_state_dir / "rates_engine_state.json",
+            "RATES_ENGINE_REPLAY_REPORT_PATH": rates_engine_report_dir / "rates_replay_report.json",
+            "RATES_ENGINE_LOCAL_HISTORY_PATH": rates_engine_dir / "rates_history.ndjson",
             "COMMON_NEWSPULSE_JSON": runtime_dir / "news_snapshot.json",
             "COMMON_NEWSPULSE_FLAT": runtime_dir / "news_snapshot_flat.tsv",
             "COMMON_NEWSPULSE_HISTORY": runtime_dir / "news_history.ndjson",
@@ -126,6 +148,10 @@ def patched_paths(base_dir: Path):
             "COMMON_NEWSPULSE_CALENDAR_FEED": runtime_dir / "news_calendar_feed.tsv",
             "COMMON_NEWSPULSE_CALENDAR_STATE": runtime_dir / "news_calendar_state.tsv",
             "COMMON_NEWSPULSE_CALENDAR_HISTORY": runtime_dir / "news_calendar_history.ndjson",
+            "COMMON_RATES_JSON": runtime_dir / "rates_snapshot.json",
+            "COMMON_RATES_FLAT": runtime_dir / "rates_snapshot_flat.tsv",
+            "COMMON_RATES_HISTORY": runtime_dir / "rates_history.ndjson",
+            "COMMON_RATES_SYMBOL_MAP": runtime_dir / "rates_symbol_map.tsv",
         }.items():
             if hasattr(mod, attr):
                 patched[mod_name][attr] = getattr(mod, attr)
@@ -143,6 +169,7 @@ def patched_paths(base_dir: Path):
             "profiles_dir": profiles_dir,
             "tester_dir": tester_dir,
             "adaptive_router_dir": adaptive_router_dir,
+            "rates_engine_dir": rates_engine_dir,
         }
     finally:
         for mod_name, attrs in patched.items():

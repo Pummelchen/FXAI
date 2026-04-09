@@ -642,4 +642,145 @@ public enum GUIValidationFixtures {
             ]
         )
     }
+
+    public static func ratesEngineSnapshot(projectRoot: URL) -> RatesEngineSnapshot {
+        let now = Date()
+        return RatesEngineSnapshot(
+            generatedAt: now,
+            sourceStatuses: [
+                RatesEngineSourceStatus(id: "manual_inputs", ok: true, stale: false, enabled: true, required: false, lastUpdateAt: now.addingTimeInterval(-1800), mode: "manual_market_input", coverageRatio: 0.3, updatedCurrencies: 3),
+                RatesEngineSourceStatus(id: "proxy_engine", ok: true, stale: false, enabled: true, required: false, lastUpdateAt: now.addingTimeInterval(-120), mode: "newspulse_policy_proxy", coverageRatio: nil, updatedCurrencies: nil),
+                RatesEngineSourceStatus(id: "newspulse", ok: true, stale: false, enabled: true, required: false, lastUpdateAt: now.addingTimeInterval(-120), mode: "shared_context", coverageRatio: nil, updatedCurrencies: nil),
+            ],
+            currencies: [
+                RatesEngineCurrencyState(
+                    currency: "USD",
+                    frontEndLevel: 0.84,
+                    frontEndBasis: "policy_proxy_index",
+                    frontEndChange1d: 0.16,
+                    frontEndChange5d: 0.42,
+                    expectedPathLevel: 1.08,
+                    expectedPathBasis: "policy_proxy_index",
+                    expectedPathChange1d: 0.24,
+                    expectedPathChange5d: 0.56,
+                    curveSlope2s10s: nil,
+                    curveBasis: "unavailable",
+                    curveShapeRegime: "UNAVAILABLE",
+                    policyRepricingScore: 0.81,
+                    policySurpriseScore: 0.62,
+                    policyUncertaintyScore: 0.44,
+                    policyDirectionScore: 0.55,
+                    policyRelevanceScore: 0.78,
+                    preCBEventWindow: false,
+                    postCBEventWindow: true,
+                    preMacroPolicyWindow: false,
+                    postMacroPolicyWindow: true,
+                    meetingPathRepriceNow: true,
+                    macroToRatesTransmissionScore: 0.69,
+                    stale: false,
+                    reasons: ["USD central-bank repricing window active"]
+                ),
+                RatesEngineCurrencyState(
+                    currency: "EUR",
+                    frontEndLevel: 0.22,
+                    frontEndBasis: "manual_market_input",
+                    frontEndChange1d: -0.08,
+                    frontEndChange5d: -0.14,
+                    expectedPathLevel: 0.18,
+                    expectedPathBasis: "manual_market_input",
+                    expectedPathChange1d: -0.05,
+                    expectedPathChange5d: -0.12,
+                    curveSlope2s10s: -0.34,
+                    curveBasis: "manual_market_input",
+                    curveShapeRegime: "INVERSION_LIKE",
+                    policyRepricingScore: 0.36,
+                    policySurpriseScore: 0.18,
+                    policyUncertaintyScore: 0.24,
+                    policyDirectionScore: -0.14,
+                    policyRelevanceScore: 0.33,
+                    preCBEventWindow: false,
+                    postCBEventWindow: false,
+                    preMacroPolicyWindow: false,
+                    postMacroPolicyWindow: false,
+                    meetingPathRepriceNow: false,
+                    macroToRatesTransmissionScore: 0.22,
+                    stale: false,
+                    reasons: ["EUR manual front-end and curve inputs available"]
+                ),
+            ],
+            pairs: [
+                RatesEnginePairState(
+                    pair: "EURUSD",
+                    baseCurrency: "EUR",
+                    quoteCurrency: "USD",
+                    frontEndDiff: -0.62,
+                    expectedPathDiff: -0.90,
+                    curveDivergenceScore: 0.21,
+                    policyDivergenceScore: 0.74,
+                    ratesRegime: "UNSTABLE",
+                    ratesRiskScore: 0.79,
+                    tradeGate: "BLOCK",
+                    policyAlignment: "quote_hawkish",
+                    meetingPathRepriceNow: true,
+                    macroToRatesTransmissionScore: 0.69,
+                    stale: false,
+                    brokerSymbols: ["EURUSD"],
+                    reasons: ["meeting path repricing active", "policy divergence meaningful"]
+                ),
+                RatesEnginePairState(
+                    pair: "USDJPY",
+                    baseCurrency: "USD",
+                    quoteCurrency: "JPY",
+                    frontEndDiff: 0.48,
+                    expectedPathDiff: 0.54,
+                    curveDivergenceScore: 0.11,
+                    policyDivergenceScore: 0.58,
+                    ratesRegime: "SUPPORTIVE",
+                    ratesRiskScore: 0.38,
+                    tradeGate: "ALLOW",
+                    policyAlignment: "base_hawkish",
+                    meetingPathRepriceNow: false,
+                    macroToRatesTransmissionScore: 0.47,
+                    stale: false,
+                    brokerSymbols: ["USDJPY"],
+                    reasons: ["policy divergence meaningful"]
+                ),
+            ],
+            recentPolicyEvents: [
+                RatesEnginePolicyEvent(
+                    id: "evt-usd-fed",
+                    currency: "USD",
+                    source: "official",
+                    domain: "federalreserve.gov",
+                    publishedAt: now.addingTimeInterval(-600),
+                    title: "Federal Reserve policy statement",
+                    url: URL(string: "https://example.test/fed"),
+                    policyRelevanceScore: 0.91,
+                    direction: 0.56,
+                    centralBankEvent: true,
+                    macroPolicyEvent: false
+                ),
+                RatesEnginePolicyEvent(
+                    id: "evt-eur-cpi",
+                    currency: "EUR",
+                    source: "calendar",
+                    domain: "mt5-calendar",
+                    publishedAt: now.addingTimeInterval(-1800),
+                    title: "Euro Area CPI",
+                    url: nil,
+                    policyRelevanceScore: 0.62,
+                    direction: -0.18,
+                    centralBankEvent: false,
+                    macroPolicyEvent: true
+                ),
+            ],
+            healthSummary: [
+                KeyValueRecord(key: "pair_count", value: "2"),
+                KeyValueRecord(key: "currency_count", value: "2"),
+            ],
+            artifactPaths: [
+                KeyValueRecord(key: "snapshot_json", value: projectRoot.appendingPathComponent("Tools/OfflineLab/RatesEngine/rates_engine_status.json").path),
+            ]
+        )
+    }
 }

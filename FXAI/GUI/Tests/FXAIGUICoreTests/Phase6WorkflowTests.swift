@@ -16,6 +16,7 @@ struct Phase6WorkflowTests {
             selection: "runtimeMonitor",
             selectedRole: .liveTrader,
             selectedRuntimeSymbol: "EURUSD",
+            selectedRatesSymbol: "EURUSD",
             selectedAdaptiveSymbol: "EURUSD",
             selectedResearchSymbol: "EURUSD",
             selectedVisualizationSymbol: "EURUSD",

@@ -13,6 +13,7 @@ It does not replace the MT5 model engine. MT5 and MQL5 still execute the real pl
 - supervisor-service and supervisor-command artifacts for live portfolio-pressure and lifecycle control
 - distillation artifacts for lighter student targets and learned red-team plans for future hostile-market runs
 - NewsPulse shared-news infrastructure for MT5 calendar export, GDELT fusion, runtime gating, and operator visibility
+- Rates Engine shared macro infrastructure for front-end differentials, policy-path proxies, curve state, NewsPulse enrichment, and runtime rates-aware gating
 - ready-to-use MT5 `.set` files so no parameter copy/paste is needed
 
 Main commands from the repo root:
@@ -34,6 +35,10 @@ python3 FXAI/Tools/fxai_offline_lab.py newspulse-validate
 python3 FXAI/Tools/fxai_offline_lab.py newspulse-install-service
 python3 FXAI/Tools/fxai_offline_lab.py newspulse-once
 python3 FXAI/Tools/fxai_offline_lab.py newspulse-daemon --interval-seconds 60
+python3 FXAI/Tools/fxai_offline_lab.py rates-engine-validate
+python3 FXAI/Tools/fxai_offline_lab.py rates-engine-once
+python3 FXAI/Tools/fxai_offline_lab.py rates-engine-daemon --interval-seconds 120
+python3 FXAI/Tools/fxai_offline_lab.py rates-engine-replay-report --symbol EURUSD --hours-back 72
 python3 FXAI/Tools/fxai_offline_lab.py deploy-profiles --profile continuous
 python3 FXAI/Tools/fxai_offline_lab.py supervisor-sync --profile continuous
 python3 FXAI/Tools/fxai_offline_lab.py autonomous-governance --profile continuous
@@ -76,6 +81,10 @@ Notes:
 - `newspulse-install-service` copies and compiles the MT5 Economic Calendar service into `MQL5/Services/`.
 - `newspulse-once` runs one bounded GDELT+calendar fusion cycle and writes the shared snapshot into `FILE_COMMON/FXAI/Runtime/`.
 - `newspulse-daemon` keeps that snapshot refreshed continuously for runtime and GUI consumers.
+- `rates-engine-validate` writes default config and numeric-input templates, validates thresholds, and confirms the rates subsystem can boot cleanly.
+- `rates-engine-once` builds one shared rates snapshot from current operator numeric inputs and NewsPulse context.
+- `rates-engine-daemon` keeps the rates snapshot refreshed continuously for runtime, NewsPulse enrichment, Adaptive Router context, and GUI consumers.
+- `rates-engine-replay-report` summarizes recent pair gates, regime transitions, and policy-path behavior from append-only rates history.
 - `fxai_testlab.py verify-all` is the one-command platform verification path: Python tests, deterministic fixture checks, and clean MT5 compiles.
 - Exact-window datasets store the effective exported first and last bar range, so later tuning and promotion stay aligned to the data that was actually ingested.
 - Turso access uses bounded open retry so overlapping admin and control-loop calls fail cleanly instead of drifting silently.

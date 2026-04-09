@@ -38,6 +38,7 @@ from .newspulse_replay import (
     write_replay_artifacts,
 )
 from .newspulse_story import build_story_clusters
+from .rates_engine_newspulse import apply_rates_enrichment
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -826,6 +827,7 @@ def run_newspulse_cycle(daemon_context: dict[str, Any] | None = None) -> dict[st
         "stories": stories[:32],
         "recent_items": recent_items,
     }
+    snapshot = apply_rates_enrichment(snapshot)
     json_dump(COMMON_NEWSPULSE_JSON, snapshot)
     replay_report = write_replay_artifacts(snapshot, pair_history, source_health_history)
     _write_flat_snapshot(snapshot)

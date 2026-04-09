@@ -1,0 +1,192 @@
+{
+  "currencies": {
+    "AUD": {
+      "central_bank_aliases": [
+        "reserve bank of australia",
+        "rba",
+        "aussie"
+      ]
+    },
+    "CAD": {
+      "central_bank_aliases": [
+        "bank of canada",
+        "boc",
+        "loonie"
+      ]
+    },
+    "CHF": {
+      "central_bank_aliases": [
+        "snb",
+        "swiss national bank",
+        "franc"
+      ]
+    },
+    "EUR": {
+      "central_bank_aliases": [
+        "ecb",
+        "european central bank",
+        "euro area"
+      ]
+    },
+    "GBP": {
+      "central_bank_aliases": [
+        "bank of england",
+        "boe",
+        "sterling"
+      ]
+    },
+    "JPY": {
+      "central_bank_aliases": [
+        "bank of japan",
+        "boj",
+        "yen"
+      ]
+    },
+    "NOK": {
+      "central_bank_aliases": [
+        "norges bank",
+        "norway",
+        "krone"
+      ]
+    },
+    "NZD": {
+      "central_bank_aliases": [
+        "reserve bank of new zealand",
+        "rbnz",
+        "kiwi"
+      ]
+    },
+    "SEK": {
+      "central_bank_aliases": [
+        "riksbank",
+        "sweden",
+        "krona"
+      ]
+    },
+    "USD": {
+      "central_bank_aliases": [
+        "federal reserve",
+        "fed",
+        "fomc",
+        "us treasury"
+      ]
+    }
+  },
+  "curve_regime_thresholds": {
+    "flattening_change": -0.18,
+    "inversion_level": -0.15,
+    "steepening_change": 0.18
+  },
+  "enabled": true,
+  "event_windows": {
+    "post_cb_event_min": 120,
+    "post_macro_policy_min": 90,
+    "pre_cb_event_min": 90,
+    "pre_macro_policy_min": 45
+  },
+  "history_recent_limit": 120,
+  "pair_thresholds": {
+    "conflicting_caution_floor": 0.34,
+    "divergence_weight": 0.24,
+    "event_block_window_min": 10,
+    "event_caution_window_min": 35,
+    "event_weight": 0.16,
+    "repricing_weight": 0.22,
+    "stale_block": true,
+    "uncertainty_weight": 0.38
+  },
+  "poll_interval_sec": 120,
+  "providers": {
+    "manual_inputs_enabled": true,
+    "manual_stale_after_hours": 48,
+    "policy_proxy_enabled": true,
+    "proxy_decay": 0.92
+  },
+  "proxy_model": {
+    "base_topic_relevance": {
+      "banking_stress": 0.6,
+      "commodity_energy_shock": 0.34,
+      "employment_growth": 0.72,
+      "geopolitical_risk": 0.38,
+      "inflation": 0.85,
+      "monetary_policy": 1.0,
+      "scheduled_macro": 0.55
+    },
+    "cb_event_keywords": [
+      "rate decision",
+      "policy statement",
+      "minutes",
+      "meeting",
+      "forward guidance",
+      "press conference",
+      "speech"
+    ],
+    "dovish_keywords": [
+      "dovish",
+      "rate cut",
+      "easing",
+      "disinflation",
+      "weak payrolls",
+      "growth slowdown",
+      "lower for longer",
+      "downside surprise",
+      "soft inflation",
+      "recession risk"
+    ],
+    "event_impulse_gain": 0.4,
+    "expected_path_proxy_gain": 0.52,
+    "front_end_proxy_gain": 0.35,
+    "hawkish_keywords": [
+      "hawkish",
+      "higher for longer",
+      "rate hike",
+      "tightening",
+      "inflation persistent",
+      "restrictive",
+      "hot inflation",
+      "sticky inflation",
+      "strong payrolls",
+      "upside surprise"
+    ],
+    "macro_policy_keywords": [
+      "inflation",
+      "cpi",
+      "pce",
+      "employment",
+      "payroll",
+      "wages",
+      "gdp",
+      "retail sales"
+    ],
+    "surprise_scalars": {
+      "employment_growth": 0.75,
+      "inflation": 0.9,
+      "monetary_policy": 1.0,
+      "scheduled_macro": 0.65
+    },
+    "topic_direction_bias": {
+      "banking_stress": -0.55,
+      "commodity_energy_shock": 0.2,
+      "employment_growth": 0.65,
+      "geopolitical_risk": -0.35,
+      "inflation": 0.8,
+      "monetary_policy": 1.0,
+      "scheduled_macro": 0.0
+    },
+    "uncertainty_conflict_gain": 0.3
+  },
+  "schema_version": 1,
+  "snapshot_stale_after_sec": 900,
+  "thresholds": {
+    "curve_divergence_meaningful": 0.35,
+    "macro_to_rates_transmission": 0.5,
+    "meeting_path_reprice_now": 0.6,
+    "policy_divergence_meaningful": 0.42,
+    "policy_repricing_high": 0.65,
+    "policy_surprise_high": 0.55,
+    "policy_uncertainty_block": 0.78,
+    "policy_uncertainty_caution": 0.48,
+    "rates_risk_block": 0.78,
+    "rates_risk_caution": 0.44
+  }
+}

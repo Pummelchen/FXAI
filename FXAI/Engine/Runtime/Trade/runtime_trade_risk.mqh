@@ -167,6 +167,54 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       FXAI_ResetNewsPulseGlobals();
    }
 
+   FXAIRatesEnginePairState rates_state;
+   FXAI_ResetRatesEnginePairState(rates_state);
+   bool rates_caution = false;
+   if(RatesEngineEnabled)
+   {
+      bool rates_available = FXAI_ReadRatesEnginePairState(symbol, rates_state);
+      if(!rates_available || !rates_state.ready)
+      {
+         if(RatesEngineBlockOnUnknown)
+         {
+            reason = "risk_rates_unknown";
+            return 0.0;
+         }
+      }
+      else
+      {
+         if(rates_state.stale)
+         {
+            if(RatesEngineBlockOnUnknown)
+            {
+               reason = "risk_rates_stale";
+               return 0.0;
+            }
+            rates_caution = true;
+         }
+         else if(rates_state.trade_gate == "BLOCK")
+         {
+            reason = "risk_rates_block";
+            return 0.0;
+         }
+         else if(rates_state.trade_gate == "CAUTION")
+         {
+            rates_caution = true;
+            double caution_buffer = FXAI_Clamp(RatesEngineCautionEnterProbBuffer, 0.0, 0.25);
+            double caution_enter_floor = FXAI_Clamp(0.05 + caution_buffer, 0.05, 0.95);
+            if(g_policy_last_enter_prob < caution_enter_floor)
+            {
+               reason = "risk_rates_caution_floor";
+               return 0.0;
+            }
+         }
+      }
+   }
+   else
+   {
+      FXAI_ResetRatesEngineGlobals();
+   }
+
    double requested_lot = Lot;
    double hard_cap_lot = 1000000.0;
    double edge_scale = FXAI_Clamp(g_ai_last_trade_edge_points / MathMax(g_ai_last_min_move_points, 0.25), -1.0, 4.0);
@@ -359,6 +407,10 @@ double FXAI_CalcRiskAwareLot(const string symbol,
                                   news_state.caution_lot_scale :
                                   FXAI_Clamp(NewsPulseCautionLotScale, 0.10, 1.00));
       requested_lot *= FXAI_Clamp(caution_lot_scale, 0.10, 1.00);
+   }
+   if(RatesEngineEnabled && rates_caution)
+   {
+      requested_lot *= FXAI_Clamp(RatesEngineCautionLotScale, 0.10, 1.00);
    }
 
    requested_lot = FXAI_NormalizeLot(symbol, requested_lot);

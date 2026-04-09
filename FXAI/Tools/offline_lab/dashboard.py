@@ -21,6 +21,7 @@ from .adaptive_router_contracts import (
     adaptive_router_runtime_state_path,
 )
 from .newspulse_contracts import NEWSPULSE_REPLAY_REPORT_PATH, NEWSPULSE_STATUS_PATH
+from .rates_engine_contracts import RATES_ENGINE_REPLAY_REPORT_PATH, RATES_ENGINE_STATUS_PATH
 from .performance import build_symbol_performance_report
 from .vector_store import latest_symbol_shadow_neighbors
 
@@ -162,6 +163,10 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
         "newspulse": {
             "status": _load_json(NEWSPULSE_STATUS_PATH),
             "replay_report": _load_json(NEWSPULSE_REPLAY_REPORT_PATH),
+        },
+        "rates_engine": {
+            "status": _load_json(RATES_ENGINE_STATUS_PATH),
+            "replay_report": _load_json(RATES_ENGINE_REPLAY_REPORT_PATH),
         },
         "adaptive_router": {
             "replay_report": _load_json(ADAPTIVE_ROUTER_REPLAY_REPORT_PATH),

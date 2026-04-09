@@ -1,7 +1,7 @@
 {
   "adaptive_router": {
     "replay_report": {
-      "generated_at": "2026-04-09T13:19:00Z",
+      "generated_at": "2026-01-01T00:00:00Z",
       "hours_back": 72,
       "schema_version": 1,
       "symbol_count": 1,
@@ -9,7 +9,7 @@
       "symbols": [
         {
           "latest": {
-            "generated_at": "2026-04-09T08:30:00Z",
+            "generated_at": "2026-01-01T00:00:00Z",
             "plugins": [
               {
                 "name": "ai_gha",
@@ -835,6 +835,10 @@
     "status": {}
   },
   "profile_name": "fixture",
+  "rates_engine": {
+    "replay_report": {},
+    "status": {}
+  },
   "source_of_truth": {
     "file_common_promotions": "authoritative MT5 runtime consumption layer",
     "generated_outputs": "must be rebuilt from Turso/libSQL state or runtime artifacts, not edited manually",

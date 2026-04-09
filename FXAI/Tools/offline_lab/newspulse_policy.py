@@ -184,15 +184,17 @@ def _merge_defaults(default_value: Any, payload_value: Any) -> Any:
     return deepcopy(payload_value)
 
 
-def ensure_default_policy_file() -> Path:
-    NEWSPULSE_POLICY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if not NEWSPULSE_POLICY_PATH.exists():
-        NEWSPULSE_POLICY_PATH.write_text(json.dumps(default_policy(), indent=2, sort_keys=True), encoding="utf-8")
-    return NEWSPULSE_POLICY_PATH
+def ensure_default_policy_file(path: Path | None = None) -> Path:
+    path = path or NEWSPULSE_POLICY_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text(json.dumps(default_policy(), indent=2, sort_keys=True), encoding="utf-8")
+    return path
 
 
-def load_policy(path: Path = NEWSPULSE_POLICY_PATH) -> dict[str, Any]:
-    ensure_default_policy_file()
+def load_policy(path: Path | None = None) -> dict[str, Any]:
+    path = path or NEWSPULSE_POLICY_PATH
+    ensure_default_policy_file(path)
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:

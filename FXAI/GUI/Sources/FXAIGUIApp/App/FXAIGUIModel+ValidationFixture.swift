@@ -10,6 +10,7 @@ extension FXAIGUIModel {
         let model = FXAIGUIModel(resourceMonitor: resourceMonitor, performInitialConnectionCheck: false)
         let snapshot = GUIValidationFixtures.projectSnapshot(projectRoot: projectRoot)
         let runtimeSnapshot = GUIValidationFixtures.runtimeSnapshot(projectRoot: projectRoot)
+        let ratesEngineSnapshot = GUIValidationFixtures.ratesEngineSnapshot(projectRoot: projectRoot)
         let adaptiveRouterSnapshot = GUIValidationFixtures.adaptiveRouterSnapshot(projectRoot: projectRoot)
         let researchSnapshot = GUIValidationFixtures.researchSnapshot(projectRoot: projectRoot)
         let visualizationSnapshot = GUIValidationFixtures.visualizationSnapshot(projectRoot: projectRoot)
@@ -19,6 +20,7 @@ extension FXAIGUIModel {
         model.connectionState = .connected
         model.snapshot = snapshot
         model.runtimeSnapshot = runtimeSnapshot
+        model.ratesEngineSnapshot = ratesEngineSnapshot
         model.adaptiveRouterSnapshot = adaptiveRouterSnapshot
         model.researchSnapshot = researchSnapshot
         model.visualizationSnapshot = visualizationSnapshot
@@ -27,6 +29,7 @@ extension FXAIGUIModel {
         model.lastConnectionCheckAt = Date()
         model.selectedRole = .liveTrader
         model.selectedRuntimeSymbol = runtimeSnapshot.symbols.first ?? ""
+        model.selectedRatesSymbol = ratesEngineSnapshot.pairs.first?.pair ?? ""
         model.selectedAdaptiveSymbol = adaptiveRouterSnapshot.symbols.first?.symbol ?? ""
         model.selectedResearchSymbol = researchSnapshot.symbols.first?.symbol ?? ""
         model.selectedVisualizationSymbol = visualizationSnapshot.symbols.first ?? ""
@@ -43,6 +46,7 @@ extension FXAIGUIModel {
                 selection: SidebarDestination.runtimeMonitor.rawValue,
                 selectedRole: .liveTrader,
                 selectedRuntimeSymbol: runtimeSnapshot.symbols.first ?? "EURUSD",
+                selectedRatesSymbol: ratesEngineSnapshot.pairs.first?.pair ?? "EURUSD",
                 selectedAdaptiveSymbol: adaptiveRouterSnapshot.symbols.first?.symbol ?? "EURUSD",
                 selectedResearchSymbol: researchSnapshot.symbols.first?.symbol ?? "EURUSD",
                 selectedVisualizationSymbol: visualizationSnapshot.symbols.first ?? "EURUSD",

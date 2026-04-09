@@ -24,6 +24,9 @@ def build_parser() -> argparse.ArgumentParser:
     npv = sub.add_parser("newspulse-validate", help="Validate NewsPulse config, whitelist, and query scaffolding")
     npv.set_defaults(func=cmd_newspulse_validate)
 
+    rev = sub.add_parser("rates-engine-validate", help="Validate the rates engine config, provider inputs, and proxy scaffolding")
+    rev.set_defaults(func=cmd_rates_engine_validate)
+
     arv = sub.add_parser("adaptive-router-validate", help="Validate the adaptive router config and regime/plugin routing priors")
     arv.set_defaults(func=cmd_adaptive_router_validate)
 
@@ -61,6 +64,22 @@ def build_parser() -> argparse.ArgumentParser:
     npr.add_argument("--pair", default="")
     npr.add_argument("--hours-back", type=int, default=48)
     npr.set_defaults(func=cmd_newspulse_replay_report)
+
+    reo = sub.add_parser("rates-engine-once", help="Run one rates-engine cycle and refresh the shared rates snapshot")
+    reo.set_defaults(func=cmd_rates_engine_once)
+
+    red = sub.add_parser("rates-engine-daemon", help="Continuously refresh the rates-engine shared snapshot")
+    red.add_argument("--interval-seconds", type=int, default=0)
+    red.add_argument("--iterations", type=int, default=0, help="0 means run forever")
+    red.set_defaults(func=cmd_rates_engine_daemon)
+
+    reh = sub.add_parser("rates-engine-health", help="Show current rates-engine daemon health, source state, and status artifacts")
+    reh.set_defaults(func=cmd_rates_engine_health)
+
+    rer = sub.add_parser("rates-engine-replay-report", help="Rebuild a rates-engine replay report from append-only history")
+    rer.add_argument("--symbol", default="")
+    rer.add_argument("--hours-back", type=int, default=72)
+    rer.set_defaults(func=cmd_rates_engine_replay_report)
 
     boot = sub.add_parser("bootstrap", help="Create required lab folders, validate the environment, and initialize Turso")
     boot.add_argument("--report", default="")

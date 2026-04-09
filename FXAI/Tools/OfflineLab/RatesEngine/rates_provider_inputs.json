@@ -1,0 +1,116 @@
+{
+  "currencies": {
+    "AUD": {
+      "basis": "proxy_only",
+      "curve_10y_level": null,
+      "curve_2y_level": null,
+      "curve_slope_2s10s": null,
+      "enabled": true,
+      "expected_path_level": null,
+      "front_end_level": null,
+      "last_update_at": "",
+      "notes": "Leave numeric fields null to use the policy-proxy path only. Fill them with trusted rates inputs to upgrade this currency to true-market mode."
+    },
+    "CAD": {
+      "basis": "proxy_only",
+      "curve_10y_level": null,
+      "curve_2y_level": null,
+      "curve_slope_2s10s": null,
+      "enabled": true,
+      "expected_path_level": null,
+      "front_end_level": null,
+      "last_update_at": "",
+      "notes": "Leave numeric fields null to use the policy-proxy path only. Fill them with trusted rates inputs to upgrade this currency to true-market mode."
+    },
+    "CHF": {
+      "basis": "proxy_only",
+      "curve_10y_level": null,
+      "curve_2y_level": null,
+      "curve_slope_2s10s": null,
+      "enabled": true,
+      "expected_path_level": null,
+      "front_end_level": null,
+      "last_update_at": "",
+      "notes": "Leave numeric fields null to use the policy-proxy path only. Fill them with trusted rates inputs to upgrade this currency to true-market mode."
+    },
+    "EUR": {
+      "basis": "proxy_only",
+      "curve_10y_level": null,
+      "curve_2y_level": null,
+      "curve_slope_2s10s": null,
+      "enabled": true,
+      "expected_path_level": null,
+      "front_end_level": null,
+      "last_update_at": "",
+      "notes": "Leave numeric fields null to use the policy-proxy path only. Fill them with trusted rates inputs to upgrade this currency to true-market mode."
+    },
+    "GBP": {
+      "basis": "proxy_only",
+      "curve_10y_level": null,
+      "curve_2y_level": null,
+      "curve_slope_2s10s": null,
+      "enabled": true,
+      "expected_path_level": null,
+      "front_end_level": null,
+      "last_update_at": "",
+      "notes": "Leave numeric fields null to use the policy-proxy path only. Fill them with trusted rates inputs to upgrade this currency to true-market mode."
+    },
+    "JPY": {
+      "basis": "proxy_only",
+      "curve_10y_level": null,
+      "curve_2y_level": null,
+      "curve_slope_2s10s": null,
+      "enabled": true,
+      "expected_path_level": null,
+      "front_end_level": null,
+      "last_update_at": "",
+      "notes": "Leave numeric fields null to use the policy-proxy path only. Fill them with trusted rates inputs to upgrade this currency to true-market mode."
+    },
+    "NOK": {
+      "basis": "proxy_only",
+      "curve_10y_level": null,
+      "curve_2y_level": null,
+      "curve_slope_2s10s": null,
+      "enabled": true,
+      "expected_path_level": null,
+      "front_end_level": null,
+      "last_update_at": "",
+      "notes": "Leave numeric fields null to use the policy-proxy path only. Fill them with trusted rates inputs to upgrade this currency to true-market mode."
+    },
+    "NZD": {
+      "basis": "proxy_only",
+      "curve_10y_level": null,
+      "curve_2y_level": null,
+      "curve_slope_2s10s": null,
+      "enabled": true,
+      "expected_path_level": null,
+      "front_end_level": null,
+      "last_update_at": "",
+      "notes": "Leave numeric fields null to use the policy-proxy path only. Fill them with trusted rates inputs to upgrade this currency to true-market mode."
+    },
+    "SEK": {
+      "basis": "proxy_only",
+      "curve_10y_level": null,
+      "curve_2y_level": null,
+      "curve_slope_2s10s": null,
+      "enabled": true,
+      "expected_path_level": null,
+      "front_end_level": null,
+      "last_update_at": "",
+      "notes": "Leave numeric fields null to use the policy-proxy path only. Fill them with trusted rates inputs to upgrade this currency to true-market mode."
+    },
+    "USD": {
+      "basis": "proxy_only",
+      "curve_10y_level": null,
+      "curve_2y_level": null,
+      "curve_slope_2s10s": null,
+      "enabled": true,
+      "expected_path_level": null,
+      "front_end_level": null,
+      "last_update_at": "",
+      "notes": "Leave numeric fields null to use the policy-proxy path only. Fill them with trusted rates inputs to upgrade this currency to true-market mode."
+    }
+  },
+  "schema_version": 1,
+  "updated_at": "2026-04-09T16:23:58Z"
+}

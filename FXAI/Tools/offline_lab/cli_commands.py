@@ -37,6 +37,13 @@ from .newspulse_replay import rebuild_replay_report_from_history
 from .newspulse_service import install_calendar_service
 from .performance import write_performance_reports
 from .promotion import *
+from .rates_engine_daemon import (
+    rates_engine_health_snapshot,
+    run_rates_engine_daemon,
+    run_rates_engine_once,
+    validate_rates_engine_config,
+)
+from .rates_engine_replay import build_rates_replay_report
 from .shadow_fleet import *
 from .student_router import *
 from .supervisor_service import *
@@ -119,6 +126,42 @@ def cmd_adaptive_router_validate(_args) -> int:
         "config_path": str(ADAPTIVE_ROUTER_CONFIG_PATH),
         "config": payload,
     }, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_rates_engine_validate(_args) -> int:
+    payload = validate_rates_engine_config()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if bool(payload.get("ok")) else 1
+
+
+def cmd_rates_engine_once(_args) -> int:
+    payload = run_rates_engine_once()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_rates_engine_daemon(args) -> int:
+    payload = run_rates_engine_daemon(
+        iterations=int(getattr(args, "iterations", 0) or 0),
+        interval_seconds=int(getattr(args, "interval_seconds", 0) or 0),
+    )
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_rates_engine_health(_args) -> int:
+    payload = rates_engine_health_snapshot()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_rates_engine_replay_report(args) -> int:
+    payload = build_rates_replay_report(
+        symbol=str(getattr(args, "symbol", "") or ""),
+        hours_back=int(getattr(args, "hours_back", 72) or 72),
+    )
+    print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
 
