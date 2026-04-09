@@ -1,0 +1,395 @@
+{
+  "enabled": true,
+  "fallback_to_student_router_only": true,
+  "family_defaults": {
+    "convolutional": {
+      "liquidity_robustness": 0.92,
+      "news_compatibility": 0.92,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.08,
+        "HIGH_VOL_EVENT": 0.92,
+        "LIQUIDITY_STRESS": 1.0,
+        "RANGE_MEAN_REVERTING": 1.0,
+        "RISK_ON_OFF_MACRO": 1.0,
+        "SESSION_FLOW": 1.06,
+        "TREND_PERSISTENT": 1.0
+      },
+      "session_weights": {
+        "ASIA": 1.0,
+        "LONDON": 1.0,
+        "LONDON_NY_OVERLAP": 1.0,
+        "NEWYORK": 1.0,
+        "ROLLOVER": 1.0
+      }
+    },
+    "distribution": {
+      "liquidity_robustness": 0.96,
+      "news_compatibility": 1.1,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.0,
+        "HIGH_VOL_EVENT": 1.1,
+        "LIQUIDITY_STRESS": 0.96,
+        "RANGE_MEAN_REVERTING": 1.0,
+        "RISK_ON_OFF_MACRO": 1.04,
+        "SESSION_FLOW": 1.0,
+        "TREND_PERSISTENT": 1.0
+      },
+      "session_weights": {
+        "ASIA": 1.0,
+        "LONDON": 1.0,
+        "LONDON_NY_OVERLAP": 1.0,
+        "NEWYORK": 1.0,
+        "ROLLOVER": 1.0
+      }
+    },
+    "linear": {
+      "liquidity_robustness": 0.9,
+      "news_compatibility": 0.78,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.0,
+        "HIGH_VOL_EVENT": 0.82,
+        "LIQUIDITY_STRESS": 0.88,
+        "RANGE_MEAN_REVERTING": 1.12,
+        "RISK_ON_OFF_MACRO": 1.0,
+        "SESSION_FLOW": 1.06,
+        "TREND_PERSISTENT": 1.0
+      },
+      "session_weights": {
+        "ASIA": 1.0,
+        "LONDON": 1.0,
+        "LONDON_NY_OVERLAP": 1.0,
+        "NEWYORK": 1.0,
+        "ROLLOVER": 1.0
+      }
+    },
+    "memory": {
+      "liquidity_robustness": 0.88,
+      "news_compatibility": 1.08,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.0,
+        "HIGH_VOL_EVENT": 1.08,
+        "LIQUIDITY_STRESS": 0.92,
+        "RANGE_MEAN_REVERTING": 1.0,
+        "RISK_ON_OFF_MACRO": 1.12,
+        "SESSION_FLOW": 1.0,
+        "TREND_PERSISTENT": 1.04
+      },
+      "session_weights": {
+        "ASIA": 1.0,
+        "LONDON": 1.0,
+        "LONDON_NY_OVERLAP": 1.0,
+        "NEWYORK": 1.0,
+        "ROLLOVER": 1.0
+      }
+    },
+    "mixture": {
+      "liquidity_robustness": 0.9,
+      "news_compatibility": 1.02,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.04,
+        "HIGH_VOL_EVENT": 1.04,
+        "LIQUIDITY_STRESS": 1.0,
+        "RANGE_MEAN_REVERTING": 1.06,
+        "RISK_ON_OFF_MACRO": 1.0,
+        "SESSION_FLOW": 1.0,
+        "TREND_PERSISTENT": 1.06
+      },
+      "session_weights": {
+        "ASIA": 1.0,
+        "LONDON": 1.0,
+        "LONDON_NY_OVERLAP": 1.0,
+        "NEWYORK": 1.0,
+        "ROLLOVER": 1.0
+      }
+    },
+    "other": {
+      "liquidity_robustness": 1.0,
+      "news_compatibility": 1.0,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.0,
+        "HIGH_VOL_EVENT": 1.0,
+        "LIQUIDITY_STRESS": 1.0,
+        "RANGE_MEAN_REVERTING": 1.0,
+        "RISK_ON_OFF_MACRO": 1.0,
+        "SESSION_FLOW": 1.0,
+        "TREND_PERSISTENT": 1.0
+      },
+      "session_weights": {
+        "ASIA": 1.0,
+        "LONDON": 1.0,
+        "LONDON_NY_OVERLAP": 1.0,
+        "NEWYORK": 1.0,
+        "ROLLOVER": 1.0
+      }
+    },
+    "recurrent": {
+      "liquidity_robustness": 0.88,
+      "news_compatibility": 1.04,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.1,
+        "HIGH_VOL_EVENT": 1.02,
+        "LIQUIDITY_STRESS": 0.9,
+        "RANGE_MEAN_REVERTING": 1.0,
+        "RISK_ON_OFF_MACRO": 1.0,
+        "SESSION_FLOW": 1.0,
+        "TREND_PERSISTENT": 1.14
+      },
+      "session_weights": {
+        "ASIA": 1.0,
+        "LONDON": 1.0,
+        "LONDON_NY_OVERLAP": 1.0,
+        "NEWYORK": 1.0,
+        "ROLLOVER": 1.0
+      }
+    },
+    "rule": {
+      "liquidity_robustness": 0.84,
+      "news_compatibility": 0.7,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.0,
+        "HIGH_VOL_EVENT": 0.76,
+        "LIQUIDITY_STRESS": 0.82,
+        "RANGE_MEAN_REVERTING": 1.1,
+        "RISK_ON_OFF_MACRO": 1.0,
+        "SESSION_FLOW": 1.12,
+        "TREND_PERSISTENT": 1.0
+      },
+      "session_weights": {
+        "ASIA": 1.0,
+        "LONDON": 1.0,
+        "LONDON_NY_OVERLAP": 1.0,
+        "NEWYORK": 1.0,
+        "ROLLOVER": 1.0
+      }
+    },
+    "state_space": {
+      "liquidity_robustness": 0.86,
+      "news_compatibility": 1.06,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.08,
+        "HIGH_VOL_EVENT": 1.0,
+        "LIQUIDITY_STRESS": 0.88,
+        "RANGE_MEAN_REVERTING": 1.0,
+        "RISK_ON_OFF_MACRO": 1.0,
+        "SESSION_FLOW": 1.0,
+        "TREND_PERSISTENT": 1.16
+      },
+      "session_weights": {
+        "ASIA": 1.0,
+        "LONDON": 1.0,
+        "LONDON_NY_OVERLAP": 1.0,
+        "NEWYORK": 1.0,
+        "ROLLOVER": 1.0
+      }
+    },
+    "transformer": {
+      "liquidity_robustness": 0.82,
+      "news_compatibility": 1.1,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.12,
+        "HIGH_VOL_EVENT": 1.08,
+        "LIQUIDITY_STRESS": 0.86,
+        "RANGE_MEAN_REVERTING": 1.0,
+        "RISK_ON_OFF_MACRO": 1.0,
+        "SESSION_FLOW": 1.0,
+        "TREND_PERSISTENT": 1.12
+      },
+      "session_weights": {
+        "ASIA": 1.0,
+        "LONDON": 1.0,
+        "LONDON_NY_OVERLAP": 1.0,
+        "NEWYORK": 1.0,
+        "ROLLOVER": 1.0
+      }
+    },
+    "tree": {
+      "liquidity_robustness": 0.94,
+      "news_compatibility": 0.86,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.0,
+        "HIGH_VOL_EVENT": 0.88,
+        "LIQUIDITY_STRESS": 0.9,
+        "RANGE_MEAN_REVERTING": 1.06,
+        "RISK_ON_OFF_MACRO": 1.0,
+        "SESSION_FLOW": 1.0,
+        "TREND_PERSISTENT": 1.04
+      },
+      "session_weights": {
+        "ASIA": 1.0,
+        "LONDON": 1.0,
+        "LONDON_NY_OVERLAP": 1.0,
+        "NEWYORK": 1.0,
+        "ROLLOVER": 1.0
+      }
+    },
+    "world": {
+      "liquidity_robustness": 0.9,
+      "news_compatibility": 1.08,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.06,
+        "HIGH_VOL_EVENT": 1.08,
+        "LIQUIDITY_STRESS": 1.0,
+        "RANGE_MEAN_REVERTING": 1.0,
+        "RISK_ON_OFF_MACRO": 1.14,
+        "SESSION_FLOW": 1.0,
+        "TREND_PERSISTENT": 1.0
+      },
+      "session_weights": {
+        "ASIA": 1.0,
+        "LONDON": 1.0,
+        "LONDON_NY_OVERLAP": 1.0,
+        "NEWYORK": 1.0,
+        "ROLLOVER": 1.0
+      }
+    }
+  },
+  "pair_tag_overrides": {
+    "commodity_fx": {
+      "abstain_threshold": 0.37,
+      "block_threshold": 0.2,
+      "caution_threshold": 0.56,
+      "regime_bias": {
+        "RANGE_MEAN_REVERTING": 1.02,
+        "RISK_ON_OFF_MACRO": 1.06,
+        "SESSION_FLOW": 1.04
+      }
+    },
+    "dollar_core": {
+      "abstain_threshold": 0.36,
+      "block_threshold": 0.18,
+      "caution_threshold": 0.54,
+      "regime_bias": {
+        "HIGH_VOL_EVENT": 1.1,
+        "RISK_ON_OFF_MACRO": 1.06,
+        "SESSION_FLOW": 1.02
+      }
+    },
+    "europe_rates": {
+      "abstain_threshold": 0.34,
+      "block_threshold": 0.17,
+      "caution_threshold": 0.53,
+      "regime_bias": {
+        "HIGH_VOL_EVENT": 1.08,
+        "RISK_ON_OFF_MACRO": 1.04,
+        "TREND_PERSISTENT": 1.03
+      }
+    },
+    "yen_cross": {
+      "abstain_threshold": 0.32,
+      "block_threshold": 0.15,
+      "caution_threshold": 0.5,
+      "regime_bias": {
+        "HIGH_VOL_EVENT": 1.14,
+        "LIQUIDITY_STRESS": 1.08,
+        "RISK_ON_OFF_MACRO": 1.12
+      }
+    }
+  },
+  "plugin_overrides": {
+    "ai_fewc": {
+      "regime_weights": {
+        "HIGH_VOL_EVENT": 0.84,
+        "RANGE_MEAN_REVERTING": 1.12,
+        "SESSION_FLOW": 1.06
+      }
+    },
+    "ai_gha": {
+      "news_compatibility": 1.16,
+      "regime_weights": {
+        "HIGH_VOL_EVENT": 1.1,
+        "RISK_ON_OFF_MACRO": 1.1,
+        "TREND_PERSISTENT": 1.04
+      }
+    },
+    "ai_qcew": {
+      "liquidity_robustness": 0.82,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.08,
+        "LIQUIDITY_STRESS": 0.84,
+        "RISK_ON_OFF_MACRO": 1.04
+      }
+    },
+    "ai_tesseract": {
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.1,
+        "HIGH_VOL_EVENT": 1.06,
+        "TREND_PERSISTENT": 1.1
+      }
+    }
+  },
+  "plugin_patterns": [
+    {
+      "global_weight_mult": 1.04,
+      "id": "macro_regime_models",
+      "liquidity_robustness": 0.9,
+      "match_any": [
+        "gha",
+        "stmn",
+        "macro",
+        "world",
+        "memory",
+        "tesseract"
+      ],
+      "news_compatibility": 1.14,
+      "regime_weights": {
+        "HIGH_VOL_EVENT": 1.12,
+        "LIQUIDITY_STRESS": 0.92,
+        "RISK_ON_OFF_MACRO": 1.1
+      }
+    },
+    {
+      "global_weight_mult": 1.02,
+      "id": "trend_breakout_models",
+      "liquidity_robustness": 0.88,
+      "match_any": [
+        "tft",
+        "patch",
+        "trend",
+        "momentum",
+        "state",
+        "qcew",
+        "tesseract"
+      ],
+      "news_compatibility": 1.04,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.12,
+        "RANGE_MEAN_REVERTING": 0.88,
+        "TREND_PERSISTENT": 1.1
+      }
+    },
+    {
+      "global_weight_mult": 1.0,
+      "id": "mean_reversion_models",
+      "liquidity_robustness": 0.92,
+      "match_any": [
+        "mean",
+        "revert",
+        "ou",
+        "pa",
+        "kalman",
+        "fewc"
+      ],
+      "news_compatibility": 0.76,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 0.82,
+        "HIGH_VOL_EVENT": 0.76,
+        "RANGE_MEAN_REVERTING": 1.12
+      }
+    }
+  ],
+  "router_mode": "WEIGHTED_ENSEMBLE",
+  "schema_version": 1,
+  "thresholds": {
+    "abstain_threshold": 0.35,
+    "block_threshold": 0.16,
+    "caution_threshold": 0.55,
+    "confidence_floor": 0.12,
+    "downweight_threshold": 0.78,
+    "max_active_weight_share": 0.72,
+    "max_plugin_weight": 1.8,
+    "min_plugin_weight": 0.05,
+    "stale_news_abstain_bias": 0.24,
+    "stale_news_force_caution": true,
+    "suppression_threshold": 0.34
+  }
+}

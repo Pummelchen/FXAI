@@ -106,6 +106,20 @@
    FXAI_QueryRegimeGraph(regime_id,
                          g_ai_last_macro_state_quality,
                          current_regime_q);
+   FXAIAdaptiveRegimeState adaptive_regime_state;
+   FXAI_BuildAdaptiveRegimeState(symbol,
+                                 snapshot,
+                                 spread_pred,
+                                 vol_proxy_abs,
+                                 high_arr,
+                                 low_arr,
+                                 close_arr,
+                                 min_move_pred,
+                                 context_strength,
+                                 context_quality,
+                                 current_regime_q,
+                                 adaptive_news_state,
+                                 adaptive_regime_state);
    FXAI_RecordRuntimeStageMs(FXAI_RUNTIME_STAGE_TRANSFER,
                              (double)(GetMicrosecondCount() - transfer_stage_t0) / 1000.0);
    double macro_profile_shortfall = (FXAI_MacroEventLeakageSafe()
@@ -122,4 +136,3 @@
    FXAI_ReadControlPlaneAggregate(symbol, 0, cp_sell);
    g_control_plane_last_buy_score = cp_buy.score;
    g_control_plane_last_sell_score = cp_sell.score;
-

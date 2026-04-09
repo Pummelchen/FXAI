@@ -9,6 +9,7 @@ It is not a single strategy EA. It is a research and deployment framework with:
 - an Audit Lab for certification, regression checks, and release gating
 - a Turso-backed Offline Lab for export, tuning, promotion, champion-challenger control loops, branch/PITR workflows, audit-log ingestion, and vector-backed analog retrieval
 - a NewsPulse subsystem for MT5-calendar, official-feed, and GDELT-based news-risk gating, replay timelines, append-only history, and operator visibility
+- an Adaptive Regime Classifier + Plugin Router that classifies live regime state, weights or suppresses plugin-zoo members dynamically, and adds auditable abstention posture without forcing immediate retraining
 - an FX-only tradable universe policy with MT5 cross-asset symbols stored separately as indicator-only context configuration inside the Offline Lab database
 - foundation-teacher and student-deployment bundles, autonomous governance, supervisor-service artifacts, and live deployment profiles for promoted MT5 runtime behavior
 - one workflow for research, backtesting, audit, and live operation
@@ -48,6 +49,7 @@ Detailed documentation is kept in the wiki:
 - [Audit Lab](https://github.com/Pummelchen/FXAI/wiki/Audit-Lab)
 - [Offline Lab](https://github.com/Pummelchen/FXAI/wiki/Offline-Lab)
 - [NewsPulse](https://github.com/Pummelchen/FXAI/wiki/NewsPulse)
+- [Adaptive Router](https://github.com/Pummelchen/FXAI/wiki/Adaptive-Router)
 - [GUI](https://github.com/Pummelchen/FXAI/wiki/GUI)
 - [Project Structure](https://github.com/Pummelchen/FXAI/wiki/Project-Structure)
 - [Data Policy](https://github.com/Pummelchen/FXAI/wiki/Data-Policy)

@@ -6,6 +6,10 @@ from pathlib import Path
 import libsql
 
 from .attribution import *
+from .adaptive_router import write_adaptive_router_profiles
+from .adaptive_router_config import load_config as load_adaptive_router_config
+from .adaptive_router_contracts import ADAPTIVE_ROUTER_CONFIG_PATH
+from .adaptive_router_replay import build_adaptive_router_replay_report
 from .bundle import *
 from .common import *
 from .dashboard import live_state_snapshot, write_profile_dashboard
@@ -104,6 +108,40 @@ def cmd_newspulse_replay_report(args) -> int:
 
 def cmd_newspulse_install_service(args) -> int:
     payload = install_calendar_service(compile_service=not bool(getattr(args, "skip_compile", False)))
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_adaptive_router_validate(_args) -> int:
+    payload = load_adaptive_router_config()
+    print(json.dumps({
+        "status": "ok",
+        "config_path": str(ADAPTIVE_ROUTER_CONFIG_PATH),
+        "config": payload,
+    }, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_adaptive_router_profiles(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        payload = write_adaptive_router_profiles(conn, args)
+        commit_db(conn)
+        print(json.dumps({
+            "profile": args.profile,
+            "runtime_mode": resolve_runtime_mode(getattr(args, "runtime_mode", None)),
+            "adaptive_router_profiles": payload,
+        }, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
+
+
+def cmd_adaptive_router_replay_report(args) -> int:
+    payload = build_adaptive_router_replay_report(
+        symbol=str(getattr(args, "symbol", "") or ""),
+        hours_back=int(getattr(args, "hours_back", 72) or 72),
+    )
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
@@ -343,6 +381,7 @@ def cmd_bootstrap(args) -> int:
             demo_args = argparse.Namespace(profile="smoke", runtime_mode="research")
             attribution_payload = write_attribution_profiles(conn, demo_args)
             router_payload = write_student_router_profiles(conn, demo_args)
+            adaptive_router_payload = write_adaptive_router_profiles(conn, demo_args)
             deployment_payload = write_live_deployment_profiles(conn, demo_args)
             supervisor_payload = write_portfolio_supervisor_profile(conn, demo_args)
             supervisor_service = write_supervisor_service_artifacts(conn, demo_args)
@@ -355,6 +394,7 @@ def cmd_bootstrap(args) -> int:
                 "fixture": fixture,
                 "attribution_profiles": len(attribution_payload),
                 "student_router_profiles": len(router_payload),
+                "adaptive_router_profiles": len(adaptive_router_payload),
                 "deployments": len(deployment_payload),
                 "portfolio_supervisor_artifact": str(supervisor_payload.get("artifact_path", "")),
                 "supervisor_service_artifacts": len(supervisor_service),
@@ -454,6 +494,7 @@ def cmd_best_params(args) -> int:
         student_bundles = write_student_deployment_bundles(conn, args, promoted)
         attribution_profiles = write_attribution_profiles(conn, args)
         student_router_profiles = write_student_router_profiles(conn, args)
+        adaptive_router_profiles = write_adaptive_router_profiles(conn, args)
         live_deployments = write_live_deployment_profiles(conn, args)
         governance_payload = run_autonomous_governance(conn, args, str(getattr(args, "group_key", "") or ""))
         print(json.dumps({
@@ -469,6 +510,7 @@ def cmd_best_params(args) -> int:
             "student_bundles": len(student_bundles),
             "attribution_profiles": len(attribution_profiles),
             "student_router_profiles": len(student_router_profiles),
+            "adaptive_router_profiles": len(adaptive_router_profiles),
             "live_deployments": len(live_deployments),
             "shadow_rows_ingested": int(shadow_ingest.get("rows_ingested", 0)),
             "governance_decisions": len(governance_payload.get("decisions", [])),
@@ -541,6 +583,7 @@ def cmd_seed_demo(args) -> int:
         )
         attribution_payload = write_attribution_profiles(conn, demo_args)
         router_payload = write_student_router_profiles(conn, demo_args)
+        adaptive_router_payload = write_adaptive_router_profiles(conn, demo_args)
         deployment_payload = write_live_deployment_profiles(conn, demo_args)
         supervisor_payload = write_portfolio_supervisor_profile(conn, demo_args)
         supervisor_service = write_supervisor_service_artifacts(conn, demo_args)
@@ -559,6 +602,7 @@ def cmd_seed_demo(args) -> int:
                     "fixture": fixture,
                     "attribution_profiles": len(attribution_payload),
                     "student_router_profiles": len(router_payload),
+                    "adaptive_router_profiles": len(adaptive_router_payload),
                     "deployments": len(deployment_payload),
                     "portfolio_supervisor_artifact": str(supervisor_payload.get("artifact_path", "")),
                     "supervisor_service_artifacts": len(supervisor_service),
@@ -589,6 +633,7 @@ def cmd_deploy_profiles(args) -> int:
     try:
         attribution_payload = write_attribution_profiles(conn, args)
         router_payload = write_student_router_profiles(conn, args)
+        adaptive_router_payload = write_adaptive_router_profiles(conn, args)
         payload = write_live_deployment_profiles(conn, args)
         vector_payload = refresh_research_vectors(conn, args.profile)
         symbols = [str(item["symbol"]) for item in payload]
@@ -601,6 +646,7 @@ def cmd_deploy_profiles(args) -> int:
             "runtime_mode": resolve_runtime_mode(getattr(args, "runtime_mode", None)),
             "attribution_profiles": attribution_payload,
             "student_router_profiles": router_payload,
+            "adaptive_router_profiles": adaptive_router_payload,
             "deployments": payload,
             "vector_refresh": vector_payload,
             "dashboard": dashboard,
@@ -618,6 +664,7 @@ def cmd_autonomous_governance(args) -> int:
         shadow_ingest = ingest_shadow_fleet_ledgers(conn, args.profile)
         attribution_payload = write_attribution_profiles(conn, args)
         router_payload = write_student_router_profiles(conn, args)
+        adaptive_router_payload = write_adaptive_router_profiles(conn, args)
         vector_payload = refresh_research_vectors(conn, args.profile)
         payload = run_autonomous_governance(conn, args, str(getattr(args, "group_key", "") or ""))
         write_performance_reports(sorted({str(item["symbol"]) for item in payload.get("decisions", [])}), args.profile)
@@ -630,6 +677,7 @@ def cmd_autonomous_governance(args) -> int:
             "shadow_rows_ingested": int(shadow_ingest.get("rows_ingested", 0)),
             "attribution_profiles": len(attribution_payload),
             "student_router_profiles": len(router_payload),
+            "adaptive_router_profiles": len(adaptive_router_payload),
             "vector_refresh": vector_payload,
             "governance_decisions": len(payload.get("decisions", [])),
             "world_plans": len(payload.get("world_plans", [])),
@@ -661,11 +709,13 @@ def cmd_attribution_prune(args) -> int:
     try:
         attribution_payload = write_attribution_profiles(conn, args)
         router_payload = write_student_router_profiles(conn, args)
+        adaptive_router_payload = write_adaptive_router_profiles(conn, args)
         print(json.dumps({
             "profile": args.profile,
             "runtime_mode": resolve_runtime_mode(getattr(args, "runtime_mode", None)),
             "attribution_profiles": attribution_payload,
             "student_router_profiles": router_payload,
+            "adaptive_router_profiles": adaptive_router_payload,
         }, indent=2, sort_keys=True))
         return 0
     finally:
@@ -677,6 +727,7 @@ def cmd_recover_artifacts(args) -> int:
     try:
         attribution_payload = write_attribution_profiles(conn, args)
         router_payload = write_student_router_profiles(conn, args)
+        adaptive_router_payload = write_adaptive_router_profiles(conn, args)
         deploy_payload = write_live_deployment_profiles(conn, args)
         vector_payload = refresh_research_vectors(conn, args.profile)
         supervisor_payload = write_portfolio_supervisor_profile(conn, args)
@@ -693,6 +744,7 @@ def cmd_recover_artifacts(args) -> int:
             "runtime_mode": resolve_runtime_mode(getattr(args, "runtime_mode", None)),
             "attribution_profiles": len(attribution_payload),
             "student_router_profiles": len(router_payload),
+            "adaptive_router_profiles": len(adaptive_router_payload),
             "deployments": len(deploy_payload),
             "vector_refresh": vector_payload,
             "portfolio_supervisor_artifact": str(supervisor_payload.get("artifact_path", "")),

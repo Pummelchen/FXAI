@@ -5,6 +5,9 @@
 #define FXAI_PORTFOLIO_SUPERVISOR_FILE "FXAI\\Offline\\Promotions\\fxai_portfolio_supervisor.tsv"
 #define FXAI_SUPERVISOR_SERVICE_GLOBAL_FILE "FXAI\\Offline\\Promotions\\fxai_supervisor_service_global.tsv"
 #define FXAI_SUPERVISOR_COMMAND_GLOBAL_FILE "FXAI\\Offline\\Promotions\\fxai_supervisor_command_global.tsv"
+#define FXAI_ADAPTIVE_ROUTER_REGIME_COUNT 7
+#define FXAI_ADAPTIVE_ROUTER_SESSION_COUNT 5
+#define FXAI_ADAPTIVE_ROUTER_MAX_REASONS 6
 
 #ifndef FXAI_POLICY_ACTION_NO_TRADE
 #define FXAI_POLICY_ACTION_NO_TRADE 0
@@ -184,6 +187,34 @@ struct FXAIStudentRouterProfile
    string allow_plugins_csv;
    string plugin_weights_csv;
    double family_weight[FXAI_FAMILY_OTHER + 1];
+   datetime loaded_at;
+};
+
+struct FXAIAdaptiveRouterProfile
+{
+   bool   ready;
+   bool   enabled;
+   string profile_name;
+   string symbol;
+   string router_mode;
+   bool   fallback_to_student_router_only;
+   string pair_tags_csv;
+   double caution_threshold;
+   double abstain_threshold;
+   double block_threshold;
+   double confidence_floor;
+   double suppression_threshold;
+   double downweight_threshold;
+   double stale_news_abstain_bias;
+   bool   stale_news_force_caution;
+   double min_plugin_weight;
+   double max_plugin_weight;
+   double max_active_weight_share;
+   string plugin_global_weights_csv;
+   string plugin_news_compatibility_csv;
+   string plugin_liquidity_robustness_csv;
+   string plugin_regime_weights_csv[FXAI_ADAPTIVE_ROUTER_REGIME_COUNT];
+   string plugin_session_weights_csv[FXAI_ADAPTIVE_ROUTER_SESSION_COUNT];
    datetime loaded_at;
 };
 
@@ -390,6 +421,36 @@ void FXAI_ResetStudentRouterProfile(FXAIStudentRouterProfile &out)
    out.plugin_weights_csv = "";
    for(int i=0; i<=FXAI_FAMILY_OTHER; i++)
       out.family_weight[i] = 1.0;
+   out.loaded_at = 0;
+}
+
+void FXAI_ResetAdaptiveRouterProfile(FXAIAdaptiveRouterProfile &out)
+{
+   out.ready = false;
+   out.enabled = false;
+   out.profile_name = "";
+   out.symbol = "";
+   out.router_mode = "WEIGHTED_ENSEMBLE";
+   out.fallback_to_student_router_only = true;
+   out.pair_tags_csv = "";
+   out.caution_threshold = 0.55;
+   out.abstain_threshold = 0.35;
+   out.block_threshold = 0.16;
+   out.confidence_floor = 0.12;
+   out.suppression_threshold = 0.34;
+   out.downweight_threshold = 0.78;
+   out.stale_news_abstain_bias = 0.24;
+   out.stale_news_force_caution = true;
+   out.min_plugin_weight = 0.05;
+   out.max_plugin_weight = 1.80;
+   out.max_active_weight_share = 0.72;
+   out.plugin_global_weights_csv = "";
+   out.plugin_news_compatibility_csv = "";
+   out.plugin_liquidity_robustness_csv = "";
+   for(int i=0; i<FXAI_ADAPTIVE_ROUTER_REGIME_COUNT; i++)
+      out.plugin_regime_weights_csv[i] = "";
+   for(int i=0; i<FXAI_ADAPTIVE_ROUTER_SESSION_COUNT; i++)
+      out.plugin_session_weights_csv[i] = "";
    out.loaded_at = 0;
 }
 

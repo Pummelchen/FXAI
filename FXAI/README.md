@@ -27,6 +27,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Internal Python package for Offline Lab database, export, campaign, promotion, shadow-fleet ingest, foundation and student bundling, supervisor-service generation, teacher-factory modules, world simulation, and autonomous governance.
 - `Tools/OfflineLab/NewsPulse/`
   NewsPulse operator config, local status mirrors, and subsystem documentation.
+- `Tools/OfflineLab/AdaptiveRouter/`
+  Adaptive Regime Classifier + Plugin Router docs, configs, replay outputs, and implementation notes for the regime-aware plugin-orchestration layer.
 - `GUI/`
   Optional macOS 26 SwiftUI operator app for role-based dashboards, plugin-zoo browsing, report exploration, run builders for Audit/Offline/backtest workflows, runtime inspection, promotion review, Research OS control, advanced Metal-backed visual analysis, saved workspace views, onboarding, incident recovery, detached startup, soft reconnect, terminal-first command guidance, and the shared FXAI operator theme system.
 
@@ -50,6 +52,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Extracted live-trading helpers used by the EA entrypoint, including the live control-plane snapshot and peer-pressure logic.
 - `Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
   NewsPulse runtime adapter that consumes the merged flat snapshot and applies pair-level news gating without changing the canonical model input.
+- `Engine/Runtime/runtime_adaptive_router_stage.mqh`
+  Adaptive regime classification, plugin suitability scoring, routed posture logic, and append-only runtime history for the state-aware plugin-zoo control plane.
 - `Engine/Runtime/runtime_*_block.mqh`
   Split feature, transfer, model, and policy stages behind `engine_runtime.mqh` so the main runtime entrypoint stays readable.
 - `TensorCore/`
@@ -82,9 +86,12 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Offline Lab market-universe config stored in Turso/libSQL metadata, including the FX-only tradable universe and indicator-only MT5 context symbols.
 - `Tools/offline_lab/newspulse_*.py`
   NewsPulse contracts, config, operator policy, MT5 calendar parsing, GDELT polling, official-feed ingestion, fusion, replay helpers, daemon loop, and service-install helpers.
+- `Tools/offline_lab/adaptive_router*.py`
+  Adaptive Router contracts, config, regime and plugin-prior generation, profile writing, replay reporting, and CLI validation helpers for the regime-aware plugin-routing layer.
 - `GUI/Sources/FXAIGUICore`, `GUI/Sources/FXAIGUIApp`
   Swift package targets for the GUI’s project scanner, runtime and Research OS artifact readers, advanced visualization builders, saved-workspace persistence, onboarding guides, incident builders, design system, navigation shell, operator-theme token/layout/rendering stack, reference-asset parsing, adaptive dashboard components, Phase 2 run builders, Phase 3 runtime/promotion views, Phase 4 Turso/Research OS control surfaces, Phase 5 Metal-backed visualization surfaces, and Phase 6 operator-polish features.
   The GUI also includes an integrated NewsPulse surface for source health, currency heatmap, pair risk, and recent tape visibility.
+  It now also includes an Adaptive Router surface for live regime state, plugin weights, suppression reasons, replay counts, and routing transitions by symbol.
 
 ## Operating Notes
 
@@ -98,6 +105,9 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - The preferred NewsPulse service install path is `python3 FXAI/Tools/fxai_offline_lab.py newspulse-install-service`.
 - The preferred NewsPulse smoke path is `python3 FXAI/Tools/fxai_offline_lab.py newspulse-once`.
 - The preferred NewsPulse health path is `python3 FXAI/Tools/fxai_offline_lab.py newspulse-health`.
+- The preferred Adaptive Router validation path is `python3 FXAI/Tools/fxai_offline_lab.py adaptive-router-validate`.
+- The preferred Adaptive Router promotion path is `python3 FXAI/Tools/fxai_offline_lab.py adaptive-router-profiles --profile continuous`.
+- The preferred Adaptive Router replay path is `python3 FXAI/Tools/fxai_offline_lab.py adaptive-router-replay-report --symbol EURUSD --hours-back 72`.
 - The shared TensorCore path now includes a self-supervised foundation encoder, teacher-student transfer heads, hierarchical trade-quality signals, and persistent analog regime memory.
 - The live EA now uses portfolio-native sizing and gating with directional-cluster pressure, hierarchy floors, and macro-state quality controls instead of only scalar conviction scaling.
 - The live runtime now emits per-instance control-plane snapshots and consumes promoted symbol deployment profiles so research-side promotion decisions can steer trade floors, sizing bias, and peer-pressure handling.
@@ -126,6 +136,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - Runtime profiles now support explicit `research` and `production` modes so the same framework can run either as the full research OS or as a leaner live deployment surface.
 - The default market-universe policy is `FX_ONLY`: FX pairs are tradable, while non-FX MT5 symbols are stored as indicator-only context instruments in the Offline Lab database configuration.
 - NewsPulse is phase-1 safe by design: it adds shared news-risk gating, optional official-feed monitoring, replay timelines, operator-editable pair policy, and GUI drill-down visibility without forcing model retraining or changing the canonical model-input contract by default.
+- The Adaptive Router is also phase-1 safe by design: it layers regime classification, plugin trust weighting, suppression, and abstention posture above the current zoo without breaking canonical plugin inputs or forcing immediate retraining.
 
 ## Source Of Truth
 

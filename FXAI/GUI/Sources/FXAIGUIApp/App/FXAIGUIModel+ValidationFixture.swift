@@ -10,6 +10,7 @@ extension FXAIGUIModel {
         let model = FXAIGUIModel(resourceMonitor: resourceMonitor, performInitialConnectionCheck: false)
         let snapshot = GUIValidationFixtures.projectSnapshot(projectRoot: projectRoot)
         let runtimeSnapshot = GUIValidationFixtures.runtimeSnapshot(projectRoot: projectRoot)
+        let adaptiveRouterSnapshot = GUIValidationFixtures.adaptiveRouterSnapshot(projectRoot: projectRoot)
         let researchSnapshot = GUIValidationFixtures.researchSnapshot(projectRoot: projectRoot)
         let visualizationSnapshot = GUIValidationFixtures.visualizationSnapshot(projectRoot: projectRoot)
         let incidentSnapshot = GUIValidationFixtures.incidentSnapshot(projectRoot: projectRoot)
@@ -18,6 +19,7 @@ extension FXAIGUIModel {
         model.connectionState = .connected
         model.snapshot = snapshot
         model.runtimeSnapshot = runtimeSnapshot
+        model.adaptiveRouterSnapshot = adaptiveRouterSnapshot
         model.researchSnapshot = researchSnapshot
         model.visualizationSnapshot = visualizationSnapshot
         model.incidentSnapshot = incidentSnapshot
@@ -25,6 +27,7 @@ extension FXAIGUIModel {
         model.lastConnectionCheckAt = Date()
         model.selectedRole = .liveTrader
         model.selectedRuntimeSymbol = runtimeSnapshot.symbols.first ?? ""
+        model.selectedAdaptiveSymbol = adaptiveRouterSnapshot.symbols.first?.symbol ?? ""
         model.selectedResearchSymbol = researchSnapshot.symbols.first?.symbol ?? ""
         model.selectedVisualizationSymbol = visualizationSnapshot.symbols.first ?? ""
         model.selectedIncidentID = incidentSnapshot.incidents.first?.id
@@ -40,6 +43,7 @@ extension FXAIGUIModel {
                 selection: SidebarDestination.runtimeMonitor.rawValue,
                 selectedRole: .liveTrader,
                 selectedRuntimeSymbol: runtimeSnapshot.symbols.first ?? "EURUSD",
+                selectedAdaptiveSymbol: adaptiveRouterSnapshot.symbols.first?.symbol ?? "EURUSD",
                 selectedResearchSymbol: researchSnapshot.symbols.first?.symbol ?? "EURUSD",
                 selectedVisualizationSymbol: visualizationSnapshot.symbols.first ?? "EURUSD",
                 pluginSearchText: "",

@@ -172,6 +172,10 @@ input bool   NewsPulseEnabled = true;
 // Models: all (execution/news-risk overlay, no retraining required).
 // Purpose: enables the shared NewsPulse runtime gate driven by scheduled macro events and breaking-news burst state.
 // Importance/Range: false/true; true is recommended for live and demo deployment.
+input bool   AdaptiveRouterEnabled = true;
+// Models: all (top-layer plugin-zoo orchestration).
+// Purpose: enables the regime-aware adaptive router that weights or suppresses plugins by live market state and NewsPulse context.
+// Importance/Range: false/true; true is recommended once adaptive-router artifacts are being generated.
 input bool   NewsPulseBlockOnUnknown = true;
 // Models: all (execution/news-risk overlay).
 // Purpose: blocks new entries when the shared NewsPulse snapshot is missing or stale instead of treating unknown as safe.
@@ -479,6 +483,21 @@ double   g_ai_last_context_strength = 0.0;
 double   g_ai_last_min_move_points = 0.0;
 int      g_ai_last_horizon_minutes = 0;
 int      g_ai_last_regime_id = 0;
+bool     g_adaptive_router_last_ready = false;
+string   g_adaptive_router_last_top_label = "UNKNOWN";
+double   g_adaptive_router_last_confidence = 0.0;
+string   g_adaptive_router_last_posture = "NORMAL";
+double   g_adaptive_router_last_abstain_bias = 0.0;
+string   g_adaptive_router_last_session = "";
+string   g_adaptive_router_last_spread_regime = "";
+string   g_adaptive_router_last_volatility_regime = "";
+double   g_adaptive_router_last_news_risk = 0.0;
+double   g_adaptive_router_last_liquidity_stress = 0.0;
+datetime g_adaptive_router_last_generated_at = 0;
+string   g_adaptive_router_last_reasons_csv = "";
+string   g_adaptive_router_last_active_plugins_csv = "";
+string   g_adaptive_router_last_downweighted_plugins_csv = "";
+string   g_adaptive_router_last_suppressed_plugins_csv = "";
 datetime g_last_debug_bar = 0;
 
 #define FXAI_MAX_CONTEXT_SYMBOLS 48

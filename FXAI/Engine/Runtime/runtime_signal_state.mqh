@@ -43,6 +43,21 @@ struct FXAIRuntimeSignalCache
    double control_plane_sell_score;
    string control_plane_symbol;
    datetime control_plane_bar_time;
+   bool adaptive_router_ready;
+   string adaptive_router_top_label;
+   double adaptive_router_confidence;
+   string adaptive_router_posture;
+   double adaptive_router_abstain_bias;
+   string adaptive_router_session;
+   string adaptive_router_spread_regime;
+   string adaptive_router_volatility_regime;
+   double adaptive_router_news_risk;
+   double adaptive_router_liquidity_stress;
+   datetime adaptive_router_generated_at;
+   string adaptive_router_reasons_csv;
+   string adaptive_router_active_plugins_csv;
+   string adaptive_router_downweighted_plugins_csv;
+   string adaptive_router_suppressed_plugins_csv;
 };
 
 void FXAI_RuntimePublishIdleSnapshot(const string symbol)
@@ -94,6 +109,21 @@ void FXAI_RuntimeCaptureSignalCache(FXAIRuntimeSignalCache &out)
    out.control_plane_sell_score = g_control_plane_last_sell_score;
    out.control_plane_symbol = g_control_plane_last_symbol;
    out.control_plane_bar_time = g_control_plane_last_bar_time;
+   out.adaptive_router_ready = g_adaptive_router_last_ready;
+   out.adaptive_router_top_label = g_adaptive_router_last_top_label;
+   out.adaptive_router_confidence = g_adaptive_router_last_confidence;
+   out.adaptive_router_posture = g_adaptive_router_last_posture;
+   out.adaptive_router_abstain_bias = g_adaptive_router_last_abstain_bias;
+   out.adaptive_router_session = g_adaptive_router_last_session;
+   out.adaptive_router_spread_regime = g_adaptive_router_last_spread_regime;
+   out.adaptive_router_volatility_regime = g_adaptive_router_last_volatility_regime;
+   out.adaptive_router_news_risk = g_adaptive_router_last_news_risk;
+   out.adaptive_router_liquidity_stress = g_adaptive_router_last_liquidity_stress;
+   out.adaptive_router_generated_at = g_adaptive_router_last_generated_at;
+   out.adaptive_router_reasons_csv = g_adaptive_router_last_reasons_csv;
+   out.adaptive_router_active_plugins_csv = g_adaptive_router_last_active_plugins_csv;
+   out.adaptive_router_downweighted_plugins_csv = g_adaptive_router_last_downweighted_plugins_csv;
+   out.adaptive_router_suppressed_plugins_csv = g_adaptive_router_last_suppressed_plugins_csv;
 }
 
 void FXAI_RuntimeResetSignalState(void)
@@ -138,6 +168,21 @@ void FXAI_RuntimeResetSignalState(void)
    g_control_plane_last_sell_score = 0.0;
    g_control_plane_last_symbol = "";
    g_control_plane_last_bar_time = 0;
+   g_adaptive_router_last_ready = false;
+   g_adaptive_router_last_top_label = "UNKNOWN";
+   g_adaptive_router_last_confidence = 0.0;
+   g_adaptive_router_last_posture = "NORMAL";
+   g_adaptive_router_last_abstain_bias = 0.0;
+   g_adaptive_router_last_session = "";
+   g_adaptive_router_last_spread_regime = "";
+   g_adaptive_router_last_volatility_regime = "";
+   g_adaptive_router_last_news_risk = 0.0;
+   g_adaptive_router_last_liquidity_stress = 0.0;
+   g_adaptive_router_last_generated_at = 0;
+   g_adaptive_router_last_reasons_csv = "";
+   g_adaptive_router_last_active_plugins_csv = "";
+   g_adaptive_router_last_downweighted_plugins_csv = "";
+   g_adaptive_router_last_suppressed_plugins_csv = "";
 }
 
 void FXAI_RuntimeRestoreSignalCache(const FXAIRuntimeSignalCache &cache)
@@ -182,6 +227,21 @@ void FXAI_RuntimeRestoreSignalCache(const FXAIRuntimeSignalCache &cache)
    g_control_plane_last_sell_score = cache.control_plane_sell_score;
    g_control_plane_last_symbol = cache.control_plane_symbol;
    g_control_plane_last_bar_time = cache.control_plane_bar_time;
+   g_adaptive_router_last_ready = cache.adaptive_router_ready;
+   g_adaptive_router_last_top_label = cache.adaptive_router_top_label;
+   g_adaptive_router_last_confidence = cache.adaptive_router_confidence;
+   g_adaptive_router_last_posture = cache.adaptive_router_posture;
+   g_adaptive_router_last_abstain_bias = cache.adaptive_router_abstain_bias;
+   g_adaptive_router_last_session = cache.adaptive_router_session;
+   g_adaptive_router_last_spread_regime = cache.adaptive_router_spread_regime;
+   g_adaptive_router_last_volatility_regime = cache.adaptive_router_volatility_regime;
+   g_adaptive_router_last_news_risk = cache.adaptive_router_news_risk;
+   g_adaptive_router_last_liquidity_stress = cache.adaptive_router_liquidity_stress;
+   g_adaptive_router_last_generated_at = cache.adaptive_router_generated_at;
+   g_adaptive_router_last_reasons_csv = cache.adaptive_router_reasons_csv;
+   g_adaptive_router_last_active_plugins_csv = cache.adaptive_router_active_plugins_csv;
+   g_adaptive_router_last_downweighted_plugins_csv = cache.adaptive_router_downweighted_plugins_csv;
+   g_adaptive_router_last_suppressed_plugins_csv = cache.adaptive_router_suppressed_plugins_csv;
 }
 
 #endif // __FXAI_RUNTIME_SIGNAL_STATE_MQH__

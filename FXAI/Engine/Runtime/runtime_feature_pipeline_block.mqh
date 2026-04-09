@@ -256,6 +256,12 @@
    FXAI_LoadLiveDeploymentProfile(symbol, deploy_profile, false);
    FXAIStudentRouterProfile student_router;
    FXAI_LoadStudentRouterProfile(symbol, student_router, false);
+   FXAIAdaptiveRouterProfile adaptive_router_profile;
+   FXAI_LoadAdaptiveRouterProfile(symbol, adaptive_router_profile, false);
+   FXAINewsPulsePairState adaptive_news_state;
+   FXAI_ResetNewsPulsePairState(adaptive_news_state);
+   if(NewsPulseEnabled)
+      FXAI_ReadNewsPulsePairState(symbol, adaptive_news_state);
    double vol_hint = MathAbs(FXAI_SafeReturn(close_arr, 0, 1));
    int regime_hint = FXAI_GetRegimeId(snapshot.bar_time, spread_pred, vol_hint);
    int ai_hint = (ensembleMode ? -1 : aiType);

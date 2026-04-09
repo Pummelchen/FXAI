@@ -11,6 +11,7 @@ from offline_lab.fixtures import patched_paths, seed_profile_fixture
 from offline_lab.governance import run_autonomous_governance
 from offline_lab.teacher_factory import write_live_deployment_profiles
 from offline_lab.attribution import write_attribution_profiles
+from offline_lab.adaptive_router import write_adaptive_router_profiles
 from offline_lab.student_router import write_student_router_profiles
 
 
@@ -23,6 +24,7 @@ def test_dashboard_and_live_state_render():
             args = type("Args", (), {"profile": fixture["profile_name"], "db": str(paths["default_db"]), "runtime_mode": "research"})()
             write_attribution_profiles(conn, args)
             write_student_router_profiles(conn, args)
+            write_adaptive_router_profiles(conn, args)
             write_live_deployment_profiles(conn, args)
             run_autonomous_governance(conn, args, "dash")
             payload = write_profile_dashboard(conn, fixture["profile_name"])
@@ -31,6 +33,7 @@ def test_dashboard_and_live_state_render():
             assert Path(payload["html_path"]).exists()
             assert live["deployment"]
             assert live["router"]
+            assert live["adaptive_router"]
 
 
 def test_dashboard_treats_empty_artifact_path_as_missing():
@@ -42,6 +45,7 @@ def test_dashboard_treats_empty_artifact_path_as_missing():
             args = type("Args", (), {"profile": fixture["profile_name"], "db": str(paths["default_db"]), "runtime_mode": "research"})()
             write_attribution_profiles(conn, args)
             write_student_router_profiles(conn, args)
+            write_adaptive_router_profiles(conn, args)
             write_live_deployment_profiles(conn, args)
             conn.execute(
                 "UPDATE live_deployment_profiles SET artifact_path = '' WHERE profile_name = ? AND symbol = ?",

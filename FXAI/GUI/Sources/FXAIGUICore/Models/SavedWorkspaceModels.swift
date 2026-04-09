@@ -9,6 +9,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
     public var selection: String
     public var selectedRole: WorkspaceRole
     public var selectedRuntimeSymbol: String
+    public var selectedAdaptiveSymbol: String
     public var selectedResearchSymbol: String
     public var selectedVisualizationSymbol: String
     public var pluginSearchText: String
@@ -32,6 +33,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         selection: String,
         selectedRole: WorkspaceRole,
         selectedRuntimeSymbol: String,
+        selectedAdaptiveSymbol: String,
         selectedResearchSymbol: String,
         selectedVisualizationSymbol: String,
         pluginSearchText: String,
@@ -54,6 +56,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         self.selection = selection
         self.selectedRole = selectedRole
         self.selectedRuntimeSymbol = selectedRuntimeSymbol
+        self.selectedAdaptiveSymbol = selectedAdaptiveSymbol
         self.selectedResearchSymbol = selectedResearchSymbol
         self.selectedVisualizationSymbol = selectedVisualizationSymbol
         self.pluginSearchText = pluginSearchText
@@ -78,6 +81,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         case selection
         case selectedRole
         case selectedRuntimeSymbol
+        case selectedAdaptiveSymbol
         case selectedResearchSymbol
         case selectedVisualizationSymbol
         case pluginSearchText
@@ -103,6 +107,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         selection = try container.decode(String.self, forKey: .selection)
         selectedRole = try container.decode(WorkspaceRole.self, forKey: .selectedRole)
         selectedRuntimeSymbol = try container.decodeIfPresent(String.self, forKey: .selectedRuntimeSymbol) ?? ""
+        selectedAdaptiveSymbol = try container.decodeIfPresent(String.self, forKey: .selectedAdaptiveSymbol) ?? ""
         selectedResearchSymbol = try container.decodeIfPresent(String.self, forKey: .selectedResearchSymbol) ?? ""
         selectedVisualizationSymbol = try container.decodeIfPresent(String.self, forKey: .selectedVisualizationSymbol) ?? ""
         pluginSearchText = try container.decodeIfPresent(String.self, forKey: .pluginSearchText) ?? ""
@@ -128,6 +133,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         try container.encode(selection, forKey: .selection)
         try container.encode(selectedRole, forKey: .selectedRole)
         try container.encode(selectedRuntimeSymbol, forKey: .selectedRuntimeSymbol)
+        try container.encode(selectedAdaptiveSymbol, forKey: .selectedAdaptiveSymbol)
         try container.encode(selectedResearchSymbol, forKey: .selectedResearchSymbol)
         try container.encode(selectedVisualizationSymbol, forKey: .selectedVisualizationSymbol)
         try container.encode(pluginSearchText, forKey: .pluginSearchText)

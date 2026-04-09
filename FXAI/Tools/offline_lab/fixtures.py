@@ -34,6 +34,10 @@ PATCH_MODULES = [
     "offline_lab.newspulse_replay",
     "offline_lab.newspulse_service",
     "offline_lab.newspulse_daemon",
+    "offline_lab.adaptive_router_contracts",
+    "offline_lab.adaptive_router_config",
+    "offline_lab.adaptive_router",
+    "offline_lab.adaptive_router_replay",
     "offline_lab.market_universe",
     "offline_lab.verification",
     "testlab.shared",
@@ -49,6 +53,8 @@ def patched_paths(base_dir: Path):
     newspulse_dir = offline_dir / "NewsPulse"
     newspulse_state_dir = newspulse_dir / "State"
     newspulse_report_dir = newspulse_dir / "Reports"
+    adaptive_router_dir = offline_dir / "AdaptiveRouter"
+    adaptive_router_report_dir = adaptive_router_dir / "Reports"
     common_dir = base_dir / "FILE_COMMON"
     common_promotion_dir = common_dir / "FXAI/Offline/Promotions"
     common_export_dir = common_dir / "FXAI/Offline/Exports"
@@ -64,6 +70,8 @@ def patched_paths(base_dir: Path):
         newspulse_dir,
         newspulse_state_dir,
         newspulse_report_dir,
+        adaptive_router_dir,
+        adaptive_router_report_dir,
         common_promotion_dir,
         common_export_dir,
         runtime_dir,
@@ -106,6 +114,10 @@ def patched_paths(base_dir: Path):
             "NEWSPULSE_LOCAL_HISTORY_PATH": newspulse_dir / "news_history.ndjson",
             "NEWSPULSE_STATE_PATH": newspulse_state_dir / "newspulse_state.json",
             "NEWSPULSE_REPLAY_REPORT_PATH": offline_dir / "NewsPulse/Reports/newspulse_replay_report.json",
+            "ADAPTIVE_ROUTER_DIR": adaptive_router_dir,
+            "ADAPTIVE_ROUTER_REPORT_DIR": adaptive_router_report_dir,
+            "ADAPTIVE_ROUTER_CONFIG_PATH": adaptive_router_dir / "adaptive_router_config.json",
+            "ADAPTIVE_ROUTER_REPLAY_REPORT_PATH": adaptive_router_report_dir / "adaptive_router_replay_report.json",
             "COMMON_NEWSPULSE_JSON": runtime_dir / "news_snapshot.json",
             "COMMON_NEWSPULSE_FLAT": runtime_dir / "news_snapshot_flat.tsv",
             "COMMON_NEWSPULSE_HISTORY": runtime_dir / "news_history.ndjson",
@@ -130,6 +142,7 @@ def patched_paths(base_dir: Path):
             "distill_dir": distill_dir,
             "profiles_dir": profiles_dir,
             "tester_dir": tester_dir,
+            "adaptive_router_dir": adaptive_router_dir,
         }
     finally:
         for mod_name, attrs in patched.items():

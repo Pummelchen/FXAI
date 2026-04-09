@@ -24,6 +24,9 @@ def build_parser() -> argparse.ArgumentParser:
     npv = sub.add_parser("newspulse-validate", help="Validate NewsPulse config, whitelist, and query scaffolding")
     npv.set_defaults(func=cmd_newspulse_validate)
 
+    arv = sub.add_parser("adaptive-router-validate", help="Validate the adaptive router config and regime/plugin routing priors")
+    arv.set_defaults(func=cmd_adaptive_router_validate)
+
     npi = sub.add_parser("newspulse-install-service", help="Install the MT5 NewsPulse calendar service into MQL5/Services")
     npi.add_argument("--skip-compile", action="store_true")
     npi.set_defaults(func=cmd_newspulse_install_service)
@@ -197,6 +200,16 @@ def build_parser() -> argparse.ArgumentParser:
     deploy.add_argument("--profile", default="continuous")
     deploy.add_argument("--runtime-mode", default="research", choices=sorted(RUNTIME_MODES.keys()))
     deploy.set_defaults(func=cmd_deploy_profiles)
+
+    adap = sub.add_parser("adaptive-router-profiles", help="Build adaptive regime-router profiles for live runtime orchestration")
+    adap.add_argument("--profile", default="continuous")
+    adap.add_argument("--runtime-mode", default="research", choices=sorted(RUNTIME_MODES.keys()))
+    adap.set_defaults(func=cmd_adaptive_router_profiles)
+
+    arrep = sub.add_parser("adaptive-router-replay-report", help="Rebuild adaptive router replay summaries from runtime history")
+    arrep.add_argument("--symbol", default="")
+    arrep.add_argument("--hours-back", type=int, default=72)
+    arrep.set_defaults(func=cmd_adaptive_router_replay_report)
 
     gov = sub.add_parser("autonomous-governance", help="Build portfolio supervisor and world-plan artifacts from live research telemetry")
     gov.add_argument("--profile", default="continuous")

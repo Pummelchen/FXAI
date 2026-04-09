@@ -310,13 +310,21 @@
    double drift_norm = FXAI_Clamp(live_feature_drift / 4.0, 0.0, 1.0);
    double routed_meta_weight[FXAI_AI_COUNT];
    bool routed_meta_selected[FXAI_AI_COUNT];
+   double adaptive_router_suitability[FXAI_AI_COUNT];
+   int adaptive_router_status[FXAI_AI_COUNT];
    for(int ai_i=0; ai_i<FXAI_AI_COUNT; ai_i++)
    {
       routed_meta_weight[ai_i] = -1.0;
       routed_meta_selected[ai_i] = true;
+      adaptive_router_suitability[ai_i] = 0.0;
+      adaptive_router_status[ai_i] = FXAI_ADAPTIVE_ROUTER_STATUS_ACTIVE;
    }
+   bool adaptive_router_active = (AdaptiveRouterEnabled &&
+                                  adaptive_router_profile.ready &&
+                                  adaptive_router_profile.enabled &&
+                                  (!adaptive_router_profile.fallback_to_student_router_only || student_router.ready));
    double route_cutoff = -1.0;
-   if(ensembleMode != 0 && student_router.ready)
+   if(ensembleMode != 0 && (student_router.ready || adaptive_router_active))
    {
       double top_scores[FXAI_AI_COUNT];
       for(int ti=0; ti<FXAI_AI_COUNT; ti++)
@@ -330,17 +338,42 @@
             continue;
          FXAIAIManifestV4 scan_manifest;
          FXAI_GetPluginManifest(*plugin_scan, scan_manifest);
-         if(!FXAI_StudentRouterAllowsPlugin(student_router, scan_manifest.ai_name, scan_manifest.family))
+         if(student_router.ready &&
+            !FXAI_StudentRouterAllowsPlugin(student_router, scan_manifest.ai_name, scan_manifest.family))
          {
             routed_meta_selected[ai_idx] = false;
             continue;
          }
          double base_meta_w = FXAI_GetModelMetaScore(ai_idx, regime_id, runtime_session_bucket, H, min_move_pred);
-         double family_weight = FXAI_StudentRouterFamilyWeight(student_router, scan_manifest.family);
-         double plugin_weight = FXAI_StudentRouterPluginWeight(student_router, scan_manifest.ai_name, scan_manifest.family);
-         double routed_w = base_meta_w * family_weight * plugin_weight;
+         double family_weight = (student_router.ready
+                                 ? FXAI_StudentRouterFamilyWeight(student_router, scan_manifest.family)
+                                 : 1.0);
+         double plugin_weight = (student_router.ready
+                                 ? FXAI_StudentRouterPluginWeight(student_router, scan_manifest.ai_name, scan_manifest.family)
+                                 : 1.0);
+         double adaptive_factor = (adaptive_router_active
+                                   ? FXAI_AdaptiveRouterComputeSuitability(adaptive_router_profile,
+                                                                          adaptive_regime_state,
+                                                                          scan_manifest.ai_name)
+                                   : 1.0);
+         adaptive_router_suitability[ai_idx] = adaptive_factor;
+         adaptive_router_status[ai_idx] = (adaptive_router_active
+                                           ? FXAI_AdaptiveRouterSuitabilityStatus(adaptive_router_profile,
+                                                                                  adaptive_factor)
+                                           : FXAI_ADAPTIVE_ROUTER_STATUS_ACTIVE);
+         if(adaptive_router_active &&
+            adaptive_router_status[ai_idx] == FXAI_ADAPTIVE_ROUTER_STATUS_SUPPRESSED)
+         {
+            routed_meta_selected[ai_idx] = false;
+            routed_meta_weight[ai_idx] = 0.0;
+            continue;
+         }
+         double routed_w = base_meta_w * family_weight * plugin_weight * adaptive_factor;
          routed_meta_weight[ai_idx] = routed_w;
-         if(routed_w + 1e-12 < student_router.min_meta_weight)
+         double min_meta_weight = (student_router.ready
+                                   ? student_router.min_meta_weight
+                                   : 0.0);
+         if(routed_w + 1e-12 < min_meta_weight)
          {
             routed_meta_selected[ai_idx] = false;
             continue;
@@ -357,11 +390,15 @@
             }
          }
       }
-      if(candidate_count > student_router.max_active_models)
-         route_cutoff = top_scores[student_router.max_active_models - 1];
+      int max_active_models = (student_router.ready ? student_router.max_active_models : ArraySize(active_ai_ids));
+      if(max_active_models < 1)
+         max_active_models = 1;
+      if(candidate_count > max_active_models)
+         route_cutoff = top_scores[max_active_models - 1];
       for(int ai_i=0; ai_i<FXAI_AI_COUNT; ai_i++)
       {
-         if(routed_meta_weight[ai_i] < student_router.min_meta_weight - 1e-12)
+         double min_meta_weight = (student_router.ready ? student_router.min_meta_weight : 0.0);
+         if(routed_meta_weight[ai_i] < min_meta_weight - 1e-12)
             routed_meta_selected[ai_i] = false;
          if(route_cutoff >= 0.0 &&
             routed_meta_weight[ai_i] >= 0.0 &&
@@ -383,7 +420,22 @@
       if(student_router.ready &&
          !FXAI_StudentRouterAllowsPlugin(student_router, manifest.ai_name, manifest.family))
          continue;
-      if(ensembleMode != 0 && student_router.ready && !routed_meta_selected[ai_idx])
+      if(ensembleMode != 0 && (student_router.ready || adaptive_router_active) && !routed_meta_selected[ai_idx])
+         continue;
+
+      double adaptive_factor_live = (adaptive_router_active
+                                     ? FXAI_AdaptiveRouterComputeSuitability(adaptive_router_profile,
+                                                                            adaptive_regime_state,
+                                                                            manifest.ai_name)
+                                     : 1.0);
+      adaptive_router_suitability[ai_idx] = adaptive_factor_live;
+      adaptive_router_status[ai_idx] = (adaptive_router_active
+                                        ? FXAI_AdaptiveRouterSuitabilityStatus(adaptive_router_profile,
+                                                                               adaptive_factor_live)
+                                        : FXAI_ADAPTIVE_ROUTER_STATUS_ACTIVE);
+      if(adaptive_router_active &&
+         adaptive_router_status[ai_idx] == FXAI_ADAPTIVE_ROUTER_STATUS_SUPPRESSED &&
+         ensembleMode != 0)
          continue;
 
       FXAIAIHyperParams hp_model;
@@ -672,9 +724,26 @@
                                            single_transition_guard,
                                            0.0,
                                            1.0);
+         if(adaptive_router_active)
+         {
+            g_ai_last_trade_gate = FXAI_Clamp(g_ai_last_trade_gate * FXAI_Clamp(adaptive_factor_live, 0.25, 1.40), 0.0, 1.0);
+            g_policy_last_size_mult = FXAI_Clamp(g_policy_last_size_mult * FXAI_Clamp(0.70 + 0.30 * adaptive_factor_live, 0.10, 1.60), 0.10, 1.60);
+         }
          if(single_policy.action_code == FXAI_POLICY_ACTION_NO_TRADE ||
             single_policy.no_trade_prob > FXAI_Clamp(deploy_profile.policy_no_trade_cap, 0.25, 0.95))
             signal = -1;
+         else if(adaptive_router_active &&
+                 adaptive_router_status[ai_idx] == FXAI_ADAPTIVE_ROUTER_STATUS_SUPPRESSED)
+         {
+            signal = -1;
+            singleNoTradeReason = "adaptive_router_suppressed";
+         }
+         else if(adaptive_router_active &&
+                 adaptive_factor_live < adaptive_router_profile.abstain_threshold)
+         {
+            signal = -1;
+            singleNoTradeReason = "adaptive_router_abstain_bias";
+         }
          else if(FXAI_MacroEventLeakageSafe() &&
                  g_ai_last_macro_state_quality < FXAI_Clamp(deploy_profile.macro_quality_floor, 0.0, 1.0))
             signal = -1;
@@ -699,8 +768,11 @@
          if(meta_w < 0.0)
          {
             meta_w = FXAI_GetModelMetaScore(ai_idx, regime_id, runtime_session_bucket, H, min_move_pred);
-            meta_w *= FXAI_StudentRouterFamilyWeight(student_router, manifest.family) *
-                      FXAI_StudentRouterPluginWeight(student_router, manifest.ai_name, manifest.family);
+            if(student_router.ready)
+               meta_w *= FXAI_StudentRouterFamilyWeight(student_router, manifest.family) *
+                         FXAI_StudentRouterPluginWeight(student_router, manifest.ai_name, manifest.family);
+            if(adaptive_router_active)
+               meta_w *= adaptive_factor_live;
          }
          if(meta_w <= 0.0) continue;
 

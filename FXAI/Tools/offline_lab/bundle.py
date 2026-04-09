@@ -44,6 +44,7 @@ def write_minimal_live_bundle(conn, profile_name: str, output_dir: Path | None =
         for src in [
             COMMON_PROMOTION_DIR / f"fxai_live_deploy_{token}.tsv",
             COMMON_PROMOTION_DIR / f"fxai_student_router_{token}.tsv",
+            COMMON_PROMOTION_DIR / f"fxai_adaptive_router_{token}.tsv",
             COMMON_PROMOTION_DIR / f"fxai_attribution_{token}.tsv",
             COMMON_PROMOTION_DIR / f"fxai_world_plan_{token}.tsv",
             COMMON_PROMOTION_DIR / f"fxai_supervisor_service_{token}.tsv",

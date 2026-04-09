@@ -8,6 +8,7 @@
       "copied_files": [
         "fxai_live_deploy_EURUSD.tsv",
         "fxai_student_router_EURUSD.tsv",
+        "fxai_adaptive_router_EURUSD.tsv",
         "fxai_attribution_EURUSD.tsv",
         "fxai_world_plan_EURUSD.tsv",
         "fxai_supervisor_service_EURUSD.tsv",

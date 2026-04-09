@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 
 from offline_lab.attribution import write_attribution_profiles
+from offline_lab.adaptive_router import write_adaptive_router_profiles
 from offline_lab.common import close_db, connect_db
 from offline_lab.dashboard import write_profile_dashboard
 from offline_lab.environment import bootstrap_environment
@@ -25,6 +26,7 @@ def test_lineage_and_bundle_outputs_render():
             args = type("Args", (), {"profile": fixture["profile_name"], "db": str(paths["default_db"]), "runtime_mode": "research"})()
             write_attribution_profiles(conn, args)
             write_student_router_profiles(conn, args)
+            write_adaptive_router_profiles(conn, args)
             write_live_deployment_profiles(conn, args)
             run_autonomous_governance(conn, args, "lineage")
             write_performance_reports([fixture["symbol"]], fixture["profile_name"])
@@ -39,3 +41,5 @@ def test_lineage_and_bundle_outputs_render():
             assert fixture["symbol"] in lineage["symbols"]
             assert Path(bundle["manifest_path"]).exists()
             assert int(bundle["symbol_count"]) == 1
+            manifest_text = Path(bundle["manifest_path"]).read_text(encoding="utf-8")
+            assert "fxai_adaptive_router_EURUSD.tsv" in manifest_text

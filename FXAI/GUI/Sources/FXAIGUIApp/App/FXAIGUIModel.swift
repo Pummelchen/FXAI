@@ -12,12 +12,14 @@ final class FXAIGUIModel: ObservableObject {
     @Published var snapshot: FXAIProjectSnapshot?
     @Published var runtimeSnapshot: RuntimeOperationsSnapshot?
     @Published var newsPulseSnapshot: NewsPulseSnapshot?
+    @Published var adaptiveRouterSnapshot: AdaptiveRouterSnapshot?
     @Published var researchSnapshot: ResearchOSControlSnapshot?
     @Published var visualizationSnapshot: AdvancedVisualizationSnapshot?
     @Published var incidentSnapshot: IncidentCenterSnapshot?
     @Published var selection: SidebarDestination? = .overview
     @Published var selectedRole: WorkspaceRole = .liveTrader
     @Published var selectedRuntimeSymbol = ""
+    @Published var selectedAdaptiveSymbol = ""
     @Published var selectedResearchSymbol = ""
     @Published var selectedVisualizationSymbol = ""
     @Published var selectedIncidentID: String?
@@ -43,6 +45,7 @@ final class FXAIGUIModel: ObservableObject {
     private let connectionCoordinator = ProjectConnectionCoordinator()
     private let runtimeReader = RuntimeArtifactReader()
     private let newsPulseReader = NewsPulseArtifactReader()
+    private let adaptiveRouterReader = AdaptiveRouterArtifactReader()
     private let researchReader = ResearchOSArtifactReader()
     private let visualizationBuilder = AdvancedVisualizationBuilder()
     private let incidentBuilder = IncidentBuilder()
@@ -104,6 +107,14 @@ final class FXAIGUIModel: ObservableObject {
         return researchSnapshot.symbols.first
     }
 
+    var selectedAdaptiveRouterDetail: AdaptiveRouterSymbolSnapshot? {
+        guard let adaptiveRouterSnapshot else { return nil }
+        if let selected = adaptiveRouterSnapshot.symbols.first(where: { $0.symbol == selectedAdaptiveSymbol }) {
+            return selected
+        }
+        return adaptiveRouterSnapshot.symbols.first
+    }
+
     var selectedVisualizationDetail: SymbolVisualizationDetail? {
         guard let visualizationSnapshot else { return nil }
         if let selected = visualizationSnapshot.symbolDetails.first(where: { $0.symbol == selectedVisualizationSymbol }) {
@@ -151,6 +162,7 @@ final class FXAIGUIModel: ObservableObject {
             snapshot = try scanner.scan(projectRoot: projectRoot)
             runtimeSnapshot = runtimeReader.read(projectRoot: projectRoot)
             newsPulseSnapshot = newsPulseReader.read(projectRoot: projectRoot)
+            adaptiveRouterSnapshot = adaptiveRouterReader.read(projectRoot: projectRoot)
             researchSnapshot = researchReader.read(projectRoot: projectRoot)
             visualizationSnapshot = visualizationBuilder.build(
                 projectRoot: projectRoot,
@@ -166,6 +178,7 @@ final class FXAIGUIModel: ObservableObject {
             )
             syncBuilderDefaults()
             syncRuntimeSelection()
+            syncAdaptiveSelection()
             syncResearchSelection()
             syncVisualizationSelection()
             syncIncidentSelection()
@@ -280,6 +293,7 @@ final class FXAIGUIModel: ObservableObject {
             self.selection = SidebarDestination(rawValue: savedView.selection) ?? .overview
             self.selectedRole = savedView.selectedRole
             self.selectedRuntimeSymbol = savedView.selectedRuntimeSymbol
+            self.selectedAdaptiveSymbol = savedView.selectedAdaptiveSymbol
             self.selectedResearchSymbol = savedView.selectedResearchSymbol
             self.selectedVisualizationSymbol = savedView.selectedVisualizationSymbol
             self.overviewLayout = savedView.overviewLayout.normalized()
@@ -295,6 +309,7 @@ final class FXAIGUIModel: ObservableObject {
             self.researchRecoveryDraft = savedView.researchRecoveryDraft
             self.syncBuilderDefaults()
             self.syncRuntimeSelection()
+            self.syncAdaptiveSelection()
             self.syncResearchSelection()
             self.syncVisualizationSelection()
         }
@@ -434,6 +449,26 @@ final class FXAIGUIModel: ObservableObject {
         }
     }
 
+    private func syncAdaptiveSelection() {
+        guard let adaptiveRouterSnapshot else {
+            selectedAdaptiveSymbol = ""
+            return
+        }
+
+        let symbols = adaptiveRouterSnapshot.symbols.map(\.symbol)
+        guard let first = symbols.first else {
+            selectedAdaptiveSymbol = ""
+            return
+        }
+
+        if !symbols.contains(selectedAdaptiveSymbol) {
+            selectedAdaptiveSymbol = selectedRuntimeSymbol.isEmpty ? first : selectedRuntimeSymbol
+            if !symbols.contains(selectedAdaptiveSymbol) {
+                selectedAdaptiveSymbol = first
+            }
+        }
+    }
+
     private func syncResearchSelection() {
         guard let researchSnapshot else {
             selectedResearchSymbol = ""
@@ -519,6 +554,7 @@ final class FXAIGUIModel: ObservableObject {
             $selection.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedRole.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedRuntimeSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $selectedAdaptiveSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedResearchSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedVisualizationSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $overviewLayout.dropFirst().map { _ in () }.eraseToAnyPublisher(),
@@ -666,6 +702,7 @@ final class FXAIGUIModel: ObservableObject {
             selection = SidebarDestination(rawValue: workspace.selection) ?? .overview
             selectedRole = workspace.selectedRole
             selectedRuntimeSymbol = workspace.selectedRuntimeSymbol
+            selectedAdaptiveSymbol = workspace.selectedAdaptiveSymbol
             selectedResearchSymbol = workspace.selectedResearchSymbol
             selectedVisualizationSymbol = workspace.selectedVisualizationSymbol
             overviewLayout = workspace.overviewLayout.normalized()
@@ -686,6 +723,7 @@ final class FXAIGUIModel: ObservableObject {
         snapshot = nil
         runtimeSnapshot = nil
         newsPulseSnapshot = nil
+        adaptiveRouterSnapshot = nil
         researchSnapshot = nil
         visualizationSnapshot = nil
         incidentSnapshot = nil
@@ -707,6 +745,7 @@ final class FXAIGUIModel: ObservableObject {
             selection: selection?.rawValue ?? SidebarDestination.overview.rawValue,
             selectedRole: selectedRole,
             selectedRuntimeSymbol: selectedRuntimeSymbol,
+            selectedAdaptiveSymbol: selectedAdaptiveSymbol,
             selectedResearchSymbol: selectedResearchSymbol,
             selectedVisualizationSymbol: selectedVisualizationSymbol,
             pluginSearchText: pluginSearchText,

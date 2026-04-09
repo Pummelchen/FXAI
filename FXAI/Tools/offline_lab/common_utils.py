@@ -61,6 +61,20 @@ def resolve_window(months: int, start_unix: int, end_unix: int) -> tuple[int, in
     return int(start_dt.timestamp()), int(end_dt.timestamp())
 
 
+def parse_iso8601(raw: str | None) -> datetime | None:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    try:
+        value = text.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(value)
+    except Exception:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def parse_csv_tokens(raw: str) -> list[str]:
     text = (raw or "").strip()
     if not text:

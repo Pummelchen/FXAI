@@ -339,5 +339,40 @@
                                ensemble_probs,
                                stack_feat);
    }
+   string adaptive_router_posture = "NORMAL";
+   double adaptive_router_abstain_bias = 0.0;
+   if(adaptive_router_active)
+   {
+      int adaptive_eligible_count = 0;
+      double adaptive_best_suitability = 0.0;
+      for(int ai_i=0; ai_i<FXAI_AI_COUNT; ai_i++)
+      {
+         if(adaptive_router_status[ai_i] == FXAI_ADAPTIVE_ROUTER_STATUS_SUPPRESSED)
+            continue;
+         if(adaptive_router_suitability[ai_i] > adaptive_best_suitability)
+            adaptive_best_suitability = adaptive_router_suitability[ai_i];
+         if(routed_meta_selected[ai_i] && routed_meta_weight[ai_i] > 0.0)
+            adaptive_eligible_count++;
+      }
+      adaptive_router_posture = FXAI_AdaptiveRouterComputePosture(adaptive_router_profile,
+                                                                  adaptive_regime_state,
+                                                                  adaptive_best_suitability,
+                                                                  adaptive_eligible_count);
+      adaptive_router_abstain_bias = FXAI_AdaptiveRouterPostureAbstainBias(adaptive_router_profile,
+                                                                           adaptive_regime_state,
+                                                                           adaptive_router_posture);
+      FXAI_AdaptiveRouterApplyPosture(adaptive_router_posture,
+                                      adaptive_router_abstain_bias,
+                                      decision);
+   }
+   FXAI_AdaptiveRouterWriteRuntimeArtifacts(symbol,
+                                            adaptive_router_profile,
+                                            adaptive_regime_state,
+                                            adaptive_router_posture,
+                                            adaptive_router_abstain_bias,
+                                            adaptive_router_suitability,
+                                            routed_meta_weight,
+                                            routed_meta_selected,
+                                            adaptive_router_status);
    FXAI_RecordRuntimeStageMs(FXAI_RUNTIME_STAGE_POLICY,
                              (double)(GetMicrosecondCount() - policy_stage_t0) / 1000.0);

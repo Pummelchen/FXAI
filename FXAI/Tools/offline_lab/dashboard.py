@@ -15,6 +15,11 @@ from .common import (
     safe_token,
     turso_environment_status,
 )
+from .adaptive_router_contracts import (
+    ADAPTIVE_ROUTER_REPLAY_REPORT_PATH,
+    adaptive_router_runtime_history_path,
+    adaptive_router_runtime_state_path,
+)
 from .newspulse_contracts import NEWSPULSE_REPLAY_REPORT_PATH, NEWSPULSE_STATUS_PATH
 from .performance import build_symbol_performance_report
 from .vector_store import latest_symbol_shadow_neighbors
@@ -110,9 +115,11 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
         live_state = {
             "deployment_tsv": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_live_deploy_{safe_token(symbol)}.tsv"),
             "router_tsv": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_student_router_{safe_token(symbol)}.tsv"),
+            "adaptive_router_tsv": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_adaptive_router_{safe_token(symbol)}.tsv"),
             "world_tsv": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_world_plan_{safe_token(symbol)}.tsv"),
             "service_tsv": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_supervisor_service_{safe_token(symbol)}.tsv"),
             "command_tsv": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_supervisor_command_{safe_token(symbol)}.tsv"),
+            "adaptive_runtime_tsv": _load_tsv_map(adaptive_router_runtime_state_path(symbol)),
         }
         analog_neighbors = latest_symbol_shadow_neighbors(conn, profile_name, symbol, limit=5)
         artifact_age_sec = max(now_unix - int(row["created_at"]), 0)
@@ -131,9 +138,11 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
                     "stale_artifact": bool(artifact_path_text) and artifact_age_sec > 86400,
                     "missing_deployment": not bool(live_state["deployment_tsv"]),
                     "missing_router": not bool(live_state["router_tsv"]),
+                    "missing_adaptive_router": not bool(live_state["adaptive_router_tsv"]),
                     "missing_world_plan": not bool(live_state["world_tsv"]),
                     "missing_supervisor_service": not bool(live_state["service_tsv"]),
                     "missing_supervisor_command": not bool(live_state["command_tsv"]),
+                    "missing_adaptive_runtime": not bool(live_state["adaptive_runtime_tsv"]),
                     "performance_failures": list(perf.get("budget_failures", [])),
                     "artifact_size_failures": list(perf.get("artifact_report", {}).get("budget_failures", [])),
                 },
@@ -153,6 +162,9 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
         "newspulse": {
             "status": _load_json(NEWSPULSE_STATUS_PATH),
             "replay_report": _load_json(NEWSPULSE_REPLAY_REPORT_PATH),
+        },
+        "adaptive_router": {
+            "replay_report": _load_json(ADAPTIVE_ROUTER_REPLAY_REPORT_PATH),
         },
         "source_of_truth": {
             "turso_libsql": "authoritative research and promotion state",
@@ -187,6 +199,7 @@ def write_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
         md_lines.append(f"- performance_failures: {len(item['performance'].get('budget_failures', []))}")
         md_lines.append(f"- deployment_missing: {item['artifact_health']['missing_deployment']}")
         md_lines.append(f"- router_missing: {item['artifact_health']['missing_router']}")
+        md_lines.append(f"- adaptive_router_missing: {item['artifact_health']['missing_adaptive_router']}")
         md_lines.append(f"- world_plan_missing: {item['artifact_health']['missing_world_plan']}")
         md_lines.append(f"- supervisor_missing: {item['artifact_health']['missing_supervisor_service'] or item['artifact_health']['missing_supervisor_command']}")
         md_lines.append(f"- stale_artifact: {item['artifact_health']['stale_artifact']}")
@@ -206,7 +219,13 @@ def write_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
         pl = item["payload"]
         health = item["artifact_health"]
         missing = []
-        for key, flag in [("deploy", health["missing_deployment"]), ("router", health["missing_router"]), ("world", health["missing_world_plan"])]:
+        for key, flag in [
+            ("deploy", health["missing_deployment"]),
+            ("router", health["missing_router"]),
+            ("adaptive_router", health["missing_adaptive_router"]),
+            ("world", health["missing_world_plan"]),
+            ("adaptive_runtime", health["missing_adaptive_runtime"]),
+        ]:
             if flag:
                 missing.append(key)
         body.append(
@@ -238,10 +257,13 @@ def live_state_snapshot(profile_name: str, symbol: str) -> dict[str, object]:
         "symbol": symbol,
         "deployment": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_live_deploy_{symbol_token}.tsv"),
         "router": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_student_router_{symbol_token}.tsv"),
+        "adaptive_router": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_adaptive_router_{symbol_token}.tsv"),
         "attribution": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_attribution_{symbol_token}.tsv"),
         "world_plan": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_world_plan_{symbol_token}.tsv"),
         "supervisor_service": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_supervisor_service_{symbol_token}.tsv"),
         "supervisor_command": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_supervisor_command_{symbol_token}.tsv"),
         "portfolio_supervisor": _load_tsv_map(COMMON_PROMOTION_DIR / "fxai_portfolio_supervisor.tsv"),
+        "adaptive_runtime": _load_tsv_map(adaptive_router_runtime_state_path(symbol)),
+        "adaptive_history_path": str(adaptive_router_runtime_history_path(symbol)),
         "performance": build_symbol_performance_report(symbol),
     }

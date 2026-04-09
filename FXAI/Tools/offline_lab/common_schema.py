@@ -490,6 +490,21 @@ CREATE TABLE IF NOT EXISTS student_router_profiles (
     UNIQUE(profile_name, symbol)
 );
 
+CREATE TABLE IF NOT EXISTS adaptive_router_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    artifact_path TEXT NOT NULL DEFAULT '',
+    artifact_sha256 TEXT NOT NULL DEFAULT '',
+    router_mode TEXT NOT NULL DEFAULT 'WEIGHTED_ENSEMBLE',
+    caution_threshold REAL NOT NULL DEFAULT 0.55,
+    abstain_threshold REAL NOT NULL DEFAULT 0.35,
+    block_threshold REAL NOT NULL DEFAULT 0.16,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name, symbol)
+);
+
 CREATE TABLE IF NOT EXISTS autonomous_governance_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     profile_name TEXT NOT NULL,
@@ -575,11 +590,10 @@ CREATE INDEX IF NOT EXISTS idx_supervisor_command_lookup ON supervisor_command_p
 CREATE INDEX IF NOT EXISTS idx_world_sim_lookup ON world_simulator_plans(profile_name, symbol, created_at);
 CREATE INDEX IF NOT EXISTS idx_attribution_lookup ON attribution_profiles(profile_name, symbol, created_at);
 CREATE INDEX IF NOT EXISTS idx_student_router_lookup ON student_router_profiles(profile_name, symbol, created_at);
+CREATE INDEX IF NOT EXISTS idx_adaptive_router_lookup ON adaptive_router_profiles(profile_name, symbol, created_at);
 CREATE INDEX IF NOT EXISTS idx_governance_runs_lookup ON autonomous_governance_runs(profile_name, created_at);
 CREATE INDEX IF NOT EXISTS idx_turso_branch_lookup ON turso_branch_runs(profile_name, branch_kind, created_at);
 CREATE INDEX IF NOT EXISTS idx_turso_audit_lookup ON turso_audit_log_events(organization_slug, occurred_at);
 CREATE INDEX IF NOT EXISTS idx_research_vectors_lookup ON research_vectors(profile_name, symbol, vector_scope, source_type, created_at);
 CREATE INDEX IF NOT EXISTS idx_research_vectors_ann ON research_vectors(libsql_vector_idx(vector_blob));
 """
-
-

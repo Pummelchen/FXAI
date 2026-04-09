@@ -9,6 +9,8 @@ import tempfile
 from pathlib import Path
 
 from .common import close_db, connect_db, safe_token
+from .adaptive_router import write_adaptive_router_profiles
+from .adaptive_router_replay import build_adaptive_router_replay_report
 from .dashboard import live_state_snapshot, write_profile_dashboard
 from .environment import bootstrap_environment
 from .fixtures import clear_generated_outputs, patched_paths, seed_profile_fixture
@@ -40,6 +42,11 @@ def _sanitize_fixture_text(text: str) -> str:
     sanitized = re.sub(r"fxai_fixture_[A-Za-z0-9_]+", "fxai_fixture_FIXED", sanitized)
     sanitized = re.sub(r"\"(generated_at|expires_at|reviewed_at|created_at|promoted_at|started_at|finished_at)\":\s*\d+", r'"\1": 1700000000', sanitized)
     sanitized = re.sub(r"\"(generated_at|expires_at|reviewed_at|created_at|promoted_at|started_at|finished_at)\":\s*\"\d+\"", r'"\1": "1700000000"', sanitized)
+    sanitized = re.sub(
+        r"\"(generated_at|expires_at|reviewed_at|created_at|promoted_at|started_at|finished_at)\":\s*\"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+Z\"",
+        r'"\1": "2026-01-01T00:00:00Z"',
+        sanitized,
+    )
     sanitized = re.sub(r"(\t(?:generated_at|expires_at|promoted_at|started_at|finished_at))\t\d+", r"\1\t1700000000", sanitized)
     return sanitized
 
@@ -55,10 +62,12 @@ def verify_deterministic_outputs(refresh_golden: bool = False) -> dict[str, obje
             args = type("Args", (), {"profile": profile_name, "db": str(paths["default_db"]), "runtime_mode": "research"})()
             write_attribution_profiles(conn, args)
             write_student_router_profiles(conn, args)
+            write_adaptive_router_profiles(conn, args)
             write_live_deployment_profiles(conn, args)
             write_supervisor_service_artifacts(conn, args)
             write_supervisor_command_artifacts(conn, args)
             run_autonomous_governance(conn, args, "fixture_cycle")
+            build_adaptive_router_replay_report(symbol="EURUSD", hours_back=72)
             write_performance_reports(["EURUSD"], profile_name)
             dashboard = write_profile_dashboard(conn, profile_name)
             lineage = write_lineage_report(conn, profile_name, "EURUSD")
@@ -69,6 +78,7 @@ def verify_deterministic_outputs(refresh_golden: bool = False) -> dict[str, obje
             checks = {
                 "live_deploy_tsv": paths["common_promotion_dir"] / "fxai_live_deploy_EURUSD.tsv",
                 "student_router_tsv": paths["common_promotion_dir"] / "fxai_student_router_EURUSD.tsv",
+                "adaptive_router_tsv": paths["common_promotion_dir"] / "fxai_adaptive_router_EURUSD.tsv",
                 "world_plan_tsv": paths["common_promotion_dir"] / "fxai_world_plan_EURUSD.tsv",
                 "operator_dashboard_json": Path(dashboard["json_path"]),
                 "lineage_json": Path(lineage["json_path"]),

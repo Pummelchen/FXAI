@@ -55,6 +55,12 @@ string FXAI_StudentRouterProfileFile(const string symbol)
           FXAI_ControlPlaneSafeToken(symbol) + ".tsv";
 }
 
+string FXAI_AdaptiveRouterProfileFile(const string symbol)
+{
+   return "FXAI\\Offline\\Promotions\\fxai_adaptive_router_" +
+          FXAI_ControlPlaneSafeToken(symbol) + ".tsv";
+}
+
 string FXAI_ControlPlaneSnapshotFile(const string symbol)
 {
    long login = (long)AccountInfoInteger(ACCOUNT_LOGIN);
@@ -707,6 +713,208 @@ bool FXAI_LoadStudentRouterProfile(const string symbol,
    cache_symbol = symbol;
    cache_time = now;
    return true;
+}
+
+int FXAI_AdaptiveRouterRegimeIndexByLabel(const string label)
+{
+   if(label == "TREND_PERSISTENT") return 0;
+   if(label == "RANGE_MEAN_REVERTING") return 1;
+   if(label == "BREAKOUT_TRANSITION") return 2;
+   if(label == "HIGH_VOL_EVENT") return 3;
+   if(label == "RISK_ON_OFF_MACRO") return 4;
+   if(label == "LIQUIDITY_STRESS") return 5;
+   if(label == "SESSION_FLOW") return 6;
+   return -1;
+}
+
+int FXAI_AdaptiveRouterSessionIndexByLabel(const string label)
+{
+   if(label == "ASIA") return 0;
+   if(label == "LONDON") return 1;
+   if(label == "NEWYORK") return 2;
+   if(label == "LONDON_NY_OVERLAP") return 3;
+   if(label == "ROLLOVER") return 4;
+   return -1;
+}
+
+bool FXAI_LoadAdaptiveRouterProfile(const string symbol,
+                                    FXAIAdaptiveRouterProfile &out,
+                                    const bool force_reload = false)
+{
+   static FXAIAdaptiveRouterProfile cache;
+   static string cache_symbol = "";
+   static datetime cache_time = 0;
+
+   datetime now = TimeCurrent();
+   if(now <= 0)
+      now = TimeTradeServer();
+   if(now <= 0)
+      now = iTime(_Symbol, PERIOD_M1, 0);
+
+   if(!force_reload &&
+      cache.ready &&
+      cache_symbol == symbol &&
+      cache_time > 0 &&
+      now > 0 &&
+      (now - cache_time) < 300)
+   {
+      out = cache;
+      return true;
+   }
+
+   FXAI_ResetAdaptiveRouterProfile(out);
+   out.symbol = symbol;
+   int handle = FileOpen(FXAI_AdaptiveRouterProfileFile(symbol),
+                         FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON |
+                         FILE_SHARE_READ | FILE_SHARE_WRITE);
+   if(handle == INVALID_HANDLE)
+   {
+      cache = out;
+      cache_symbol = symbol;
+      cache_time = now;
+      return false;
+   }
+
+   while(!FileIsEnding(handle))
+   {
+      string line = FileReadString(handle);
+      if(StringLen(line) <= 0)
+         continue;
+      string parts[];
+      int n = StringSplit(line, '\t', parts);
+      if(n < 2)
+         continue;
+      string key = parts[0];
+      string value = parts[1];
+      if(key == "profile_name")
+         out.profile_name = value;
+      else if(key == "symbol")
+         out.symbol = value;
+      else if(key == "enabled")
+         out.enabled = (StringToInteger(value) != 0);
+      else if(key == "router_mode")
+         out.router_mode = value;
+      else if(key == "fallback_to_student_router_only")
+         out.fallback_to_student_router_only = (StringToInteger(value) != 0);
+      else if(key == "pair_tags_csv")
+         out.pair_tags_csv = value;
+      else if(key == "caution_threshold")
+         out.caution_threshold = StringToDouble(value);
+      else if(key == "abstain_threshold")
+         out.abstain_threshold = StringToDouble(value);
+      else if(key == "block_threshold")
+         out.block_threshold = StringToDouble(value);
+      else if(key == "confidence_floor")
+         out.confidence_floor = StringToDouble(value);
+      else if(key == "suppression_threshold")
+         out.suppression_threshold = StringToDouble(value);
+      else if(key == "downweight_threshold")
+         out.downweight_threshold = StringToDouble(value);
+      else if(key == "stale_news_abstain_bias")
+         out.stale_news_abstain_bias = StringToDouble(value);
+      else if(key == "stale_news_force_caution")
+         out.stale_news_force_caution = (StringToInteger(value) != 0);
+      else if(key == "min_plugin_weight")
+         out.min_plugin_weight = StringToDouble(value);
+      else if(key == "max_plugin_weight")
+         out.max_plugin_weight = StringToDouble(value);
+      else if(key == "max_active_weight_share")
+         out.max_active_weight_share = StringToDouble(value);
+      else if(key == "plugin_global_weights_csv")
+         out.plugin_global_weights_csv = value;
+      else if(key == "plugin_news_compatibility_csv")
+         out.plugin_news_compatibility_csv = value;
+      else if(key == "plugin_liquidity_robustness_csv")
+         out.plugin_liquidity_robustness_csv = value;
+      else if(StringFind(key, "plugin_regime_") == 0 && StringFind(key, "_csv") > 0)
+      {
+         string regime_label = StringSubstr(key, 14, StringLen(key) - 18);
+         int regime_index = FXAI_AdaptiveRouterRegimeIndexByLabel(regime_label);
+         if(regime_index >= 0 && regime_index < FXAI_ADAPTIVE_ROUTER_REGIME_COUNT)
+            out.plugin_regime_weights_csv[regime_index] = value;
+      }
+      else if(StringFind(key, "plugin_session_") == 0 && StringFind(key, "_csv") > 0)
+      {
+         string session_label = StringSubstr(key, 15, StringLen(key) - 19);
+         int session_index = FXAI_AdaptiveRouterSessionIndexByLabel(session_label);
+         if(session_index >= 0 && session_index < FXAI_ADAPTIVE_ROUTER_SESSION_COUNT)
+            out.plugin_session_weights_csv[session_index] = value;
+      }
+   }
+   FileClose(handle);
+
+   out.caution_threshold = FXAI_Clamp(out.caution_threshold, 0.10, 1.50);
+   out.abstain_threshold = FXAI_Clamp(out.abstain_threshold, 0.05, out.caution_threshold);
+   out.block_threshold = FXAI_Clamp(out.block_threshold, 0.01, out.abstain_threshold);
+   out.confidence_floor = FXAI_Clamp(out.confidence_floor, 0.0, 1.0);
+   out.suppression_threshold = FXAI_Clamp(out.suppression_threshold, 0.05, 2.50);
+   out.downweight_threshold = FXAI_Clamp(out.downweight_threshold, 0.05, 2.50);
+   out.stale_news_abstain_bias = FXAI_Clamp(out.stale_news_abstain_bias, 0.0, 1.0);
+   out.min_plugin_weight = FXAI_Clamp(out.min_plugin_weight, 0.01, 1.0);
+   out.max_plugin_weight = FXAI_Clamp(out.max_plugin_weight, out.min_plugin_weight, 3.0);
+   out.max_active_weight_share = FXAI_Clamp(out.max_active_weight_share, 0.10, 0.99);
+   if(out.router_mode != "WEIGHTED_ENSEMBLE")
+      out.router_mode = "WEIGHTED_ENSEMBLE";
+   out.ready = true;
+   out.loaded_at = now;
+
+   cache = out;
+   cache_symbol = symbol;
+   cache_time = now;
+   return true;
+}
+
+double FXAI_AdaptiveRouterPluginGlobalWeight(const FXAIAdaptiveRouterProfile &profile,
+                                             const string plugin_name)
+{
+   if(!profile.ready || !profile.enabled)
+      return 1.0;
+   double value = FXAI_CSVMapWeight(profile.plugin_global_weights_csv, plugin_name, 1.0);
+   return FXAI_Clamp(value, profile.min_plugin_weight, profile.max_plugin_weight);
+}
+
+double FXAI_AdaptiveRouterPluginNewsCompatibility(const FXAIAdaptiveRouterProfile &profile,
+                                                  const string plugin_name)
+{
+   if(!profile.ready || !profile.enabled)
+      return 1.0;
+   double value = FXAI_CSVMapWeight(profile.plugin_news_compatibility_csv, plugin_name, 1.0);
+   return FXAI_Clamp(value, 0.05, 2.50);
+}
+
+double FXAI_AdaptiveRouterPluginLiquidityRobustness(const FXAIAdaptiveRouterProfile &profile,
+                                                    const string plugin_name)
+{
+   if(!profile.ready || !profile.enabled)
+      return 1.0;
+   double value = FXAI_CSVMapWeight(profile.plugin_liquidity_robustness_csv, plugin_name, 1.0);
+   return FXAI_Clamp(value, 0.05, 2.50);
+}
+
+double FXAI_AdaptiveRouterPluginRegimeWeight(const FXAIAdaptiveRouterProfile &profile,
+                                             const string plugin_name,
+                                             const string regime_label)
+{
+   if(!profile.ready || !profile.enabled)
+      return 1.0;
+   int regime_index = FXAI_AdaptiveRouterRegimeIndexByLabel(regime_label);
+   if(regime_index < 0 || regime_index >= FXAI_ADAPTIVE_ROUTER_REGIME_COUNT)
+      return 1.0;
+   double value = FXAI_CSVMapWeight(profile.plugin_regime_weights_csv[regime_index], plugin_name, 1.0);
+   return FXAI_Clamp(value, 0.05, 2.50);
+}
+
+double FXAI_AdaptiveRouterPluginSessionWeight(const FXAIAdaptiveRouterProfile &profile,
+                                              const string plugin_name,
+                                              const string session_label)
+{
+   if(!profile.ready || !profile.enabled)
+      return 1.0;
+   int session_index = FXAI_AdaptiveRouterSessionIndexByLabel(session_label);
+   if(session_index < 0 || session_index >= FXAI_ADAPTIVE_ROUTER_SESSION_COUNT)
+      return 1.0;
+   double value = FXAI_CSVMapWeight(profile.plugin_session_weights_csv[session_index], plugin_name, 1.0);
+   return FXAI_Clamp(value, 0.05, 2.50);
 }
 
 double FXAI_StudentRouterFamilyWeight(const FXAIStudentRouterProfile &profile,
