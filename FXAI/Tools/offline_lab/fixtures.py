@@ -34,6 +34,7 @@ PATCH_MODULES = [
     "offline_lab.newspulse_replay",
     "offline_lab.newspulse_service",
     "offline_lab.newspulse_daemon",
+    "offline_lab.market_universe",
     "offline_lab.verification",
     "testlab.shared",
     "testlab.reporting",

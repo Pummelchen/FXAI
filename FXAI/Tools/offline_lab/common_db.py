@@ -27,6 +27,7 @@ from .db_backend import (
     connect_backend,
     sync_backend,
 )
+from .market_universe import seed_market_universe_config
 
 def _cursor_column_names(cursor: libsql.Cursor) -> list[str]:
     description = cursor.description or []
@@ -284,6 +285,7 @@ def connect_db(db_path: Path) -> libsql.Connection:
             set_metadata(conn, "turso_database_name", str(config.database_name))
             set_metadata(conn, "turso_organization", str(config.organization_slug))
             set_metadata(conn, "turso_sync_interval_seconds", str(config.sync_interval_seconds))
+            seed_market_universe_config(conn)
             commit_db(conn)
             return conn
         except Exception as exc:
@@ -296,4 +298,3 @@ def connect_db(db_path: Path) -> libsql.Connection:
     if last_error is not None:
         raise last_error
     raise OfflineLabError(f"failed to open Turso lab: {db_path}")
-

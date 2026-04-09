@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -96,9 +97,18 @@ def verify_deterministic_outputs(refresh_golden: bool = False) -> dict[str, obje
 def run_pytest_suite(repo_root: Path) -> dict[str, object]:
     fxai_root = repo_root / "FXAI"
     cmd = [sys.executable, "-m", "pytest", "Tools/tests", "-q"]
+    env = os.environ.copy()
+    repo_tools = str(fxai_root / "Tools")
+    existing_pythonpath = str(env.get("PYTHONPATH", "") or "").strip()
+    env["PYTHONPATH"] = (
+        repo_tools
+        if not existing_pythonpath
+        else os.pathsep.join([repo_tools, existing_pythonpath])
+    )
     proc = subprocess.run(
         cmd,
         cwd=fxai_root,
+        env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,

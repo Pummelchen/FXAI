@@ -28,6 +28,21 @@ def build_parser() -> argparse.ArgumentParser:
     npi.add_argument("--skip-compile", action="store_true")
     npi.set_defaults(func=cmd_newspulse_install_service)
 
+    mus = sub.add_parser("market-universe-show", help="Show the configured tradable FX universe and indicator-only symbol universe")
+    mus.add_argument("--summary-only", action="store_true")
+    mus.set_defaults(func=cmd_market_universe_show)
+
+    mue = sub.add_parser("market-universe-export", help="Export the market-universe configuration from Turso metadata to JSON")
+    mue.add_argument("--output-path", default="")
+    mue.set_defaults(func=cmd_market_universe_export)
+
+    mui = sub.add_parser("market-universe-import", help="Import a market-universe configuration JSON into Turso metadata")
+    mui.add_argument("--input-path", required=True)
+    mui.set_defaults(func=cmd_market_universe_import)
+
+    mur = sub.add_parser("market-universe-reset-defaults", help="Reset the market-universe configuration back to the FXAI defaults")
+    mur.set_defaults(func=cmd_market_universe_reset_defaults)
+
     npo = sub.add_parser("newspulse-once", help="Run one NewsPulse fusion cycle and refresh the shared snapshot")
     npo.set_defaults(func=cmd_newspulse_once)
 

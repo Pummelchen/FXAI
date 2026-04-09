@@ -78,6 +78,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Split Offline Lab command routing into campaign, command, and parser modules behind `cli.py`.
 - `Tools/offline_lab/common_*.py`
   Split shared Offline Lab helpers into schema, utilities, DB, statistics, and path modules behind `common.py`.
+- `Tools/offline_lab/market_universe.py`
+  Offline Lab market-universe config stored in Turso/libSQL metadata, including the FX-only tradable universe and indicator-only MT5 context symbols.
 - `Tools/offline_lab/newspulse_*.py`
   NewsPulse contracts, config, operator policy, MT5 calendar parsing, GDELT polling, official-feed ingestion, fusion, replay helpers, daemon loop, and service-install helpers.
 - `GUI/Sources/FXAIGUICore`, `GUI/Sources/FXAIGUIApp`
@@ -91,6 +93,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - The preferred GUI verification path is `cd FXAI/GUI && swift test && swift build`.
 - GUI release packaging is `cd FXAI/GUI && ./Tools/package_gui_release.sh`.
 - The preferred Offline Lab bootstrap path is `python3 FXAI/Tools/fxai_offline_lab.py bootstrap --seed-demo`.
+- The preferred market-universe inspection path is `python3 FXAI/Tools/fxai_offline_lab.py market-universe-show`.
+- The preferred market-universe export path is `python3 FXAI/Tools/fxai_offline_lab.py market-universe-export`.
 - The preferred NewsPulse service install path is `python3 FXAI/Tools/fxai_offline_lab.py newspulse-install-service`.
 - The preferred NewsPulse smoke path is `python3 FXAI/Tools/fxai_offline_lab.py newspulse-once`.
 - The preferred NewsPulse health path is `python3 FXAI/Tools/fxai_offline_lab.py newspulse-health`.
@@ -120,6 +124,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - Offline Lab can run local-only through libSQL or as a Turso embedded replica when `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are configured.
 - Offline Lab now also supports local Turso file encryption, bounded sync intervals for embedded replicas, branch and point-in-time restore env artifacts, Turso audit-log ingestion, and native vector-backed analog-state retrieval in the research OS.
 - Runtime profiles now support explicit `research` and `production` modes so the same framework can run either as the full research OS or as a leaner live deployment surface.
+- The default market-universe policy is `FX_ONLY`: FX pairs are tradable, while non-FX MT5 symbols are stored as indicator-only context instruments in the Offline Lab database configuration.
 - NewsPulse is phase-1 safe by design: it adds shared news-risk gating, optional official-feed monitoring, replay timelines, operator-editable pair policy, and GUI drill-down visibility without forcing model retraining or changing the canonical model-input contract by default.
 
 ## Source Of Truth

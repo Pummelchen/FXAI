@@ -15,6 +15,13 @@ from .fixtures import seed_profile_fixture
 from .foundation_factory import *
 from .governance import *
 from .lineage import *
+from .market_universe import (
+    export_market_universe_config,
+    import_market_universe_config,
+    load_market_universe_config,
+    reset_market_universe_config,
+    summarize_market_universe_config,
+)
 from .mode import RUNTIME_MODES, resolve_runtime_mode
 from .newspulse_daemon import (
     newspulse_health_snapshot,
@@ -99,6 +106,63 @@ def cmd_newspulse_install_service(args) -> int:
     payload = install_calendar_service(compile_service=not bool(getattr(args, "skip_compile", False)))
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
+
+
+def cmd_market_universe_show(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        payload = load_market_universe_config(conn)
+        output = {
+            "summary": summarize_market_universe_config(payload),
+            "config": payload,
+        }
+        if bool(getattr(args, "summary_only", False)):
+            output.pop("config", None)
+        print(json.dumps(output, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
+
+
+def cmd_market_universe_reset_defaults(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        payload = reset_market_universe_config(conn)
+        commit_db(conn)
+        print(json.dumps({
+            "status": "reset_to_defaults",
+            "summary": summarize_market_universe_config(payload),
+        }, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
+
+
+def cmd_market_universe_export(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        payload = export_market_universe_config(
+            conn,
+            str(getattr(args, "output_path", "") or "").strip() or None,
+        )
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
+
+
+def cmd_market_universe_import(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        payload = import_market_universe_config(conn, str(getattr(args, "input_path", "") or ""))
+        commit_db(conn)
+        print(json.dumps({
+            "status": "imported",
+            **payload,
+        }, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
 
 
 def _default_turso_branch_name(profile_name: str, branch_kind: str) -> str:
