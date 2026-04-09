@@ -428,6 +428,125 @@ public enum GUIValidationFixtures {
         )
     }
 
+    public static func dynamicEnsembleSnapshot(projectRoot: URL) -> DynamicEnsembleSnapshot {
+        let now = Date()
+        let eurusd = DynamicEnsembleSymbolSnapshot(
+            symbol: "EURUSD",
+            generatedAt: now.addingTimeInterval(-90),
+            topRegime: "HIGH_VOL_EVENT",
+            sessionLabel: "LONDON_NY_OVERLAP",
+            tradePosture: "CAUTION",
+            ensembleQuality: 0.44,
+            abstainBias: 0.22,
+            agreementScore: 0.31,
+            contextFitScore: 0.58,
+            dominantPluginShare: 0.41,
+            buyProb: 0.37,
+            sellProb: 0.29,
+            skipProb: 0.34,
+            finalScore: 0.08,
+            finalAction: "SKIP",
+            fallbackUsed: false,
+            reasons: [
+                "plugin_disagreement_elevated",
+                "newspulse_caution_active",
+                "ensemble_quality_caution",
+            ],
+            activePlugins: [
+                DynamicEnsemblePluginState(name: "ai_gha", family: "memory", status: "ACTIVE", signal: "BUY", weight: 0.39, trust: 0.74, calibrationShrink: 0.88, reasons: ["adaptive_router_upweighted"]),
+                DynamicEnsemblePluginState(name: "ai_tesseract", family: "transformer", status: "ACTIVE", signal: "BUY", weight: 0.27, trust: 0.58, calibrationShrink: 0.74, reasons: ["confidence_shrunk"]),
+            ],
+            downweightedPlugins: [
+                DynamicEnsemblePluginState(name: "ai_tft", family: "transformer", status: "DOWNWEIGHTED", signal: "SELL", weight: 0.18, trust: 0.46, calibrationShrink: 0.69, reasons: ["directional_disagreement"]),
+            ],
+            suppressedPlugins: [
+                DynamicEnsemblePluginState(name: "lin_pa", family: "rule", status: "SUPPRESSED", signal: "SELL", weight: 0.0, trust: 0.18, calibrationShrink: 0.62, reasons: ["trust_below_suppress_threshold"]),
+            ],
+            replayPostureCounts: [
+                KeyValueRecord(key: "CAUTION", value: "11"),
+                KeyValueRecord(key: "ABSTAIN_BIAS", value: "4"),
+            ],
+            replayActionCounts: [
+                KeyValueRecord(key: "SKIP", value: "9"),
+                KeyValueRecord(key: "BUY", value: "6"),
+            ],
+            replayStatusCounts: [
+                KeyValueRecord(key: "ACTIVE", value: "24"),
+                KeyValueRecord(key: "DOWNWEIGHTED", value: "9"),
+                KeyValueRecord(key: "SUPPRESSED", value: "7"),
+            ],
+            replayTopReasons: [
+                KeyValueRecord(key: "plugin_disagreement_elevated", value: "8"),
+                KeyValueRecord(key: "newspulse_caution_active", value: "6"),
+            ],
+            replayTopDominantPlugins: [
+                KeyValueRecord(key: "ai_gha", value: "10"),
+                KeyValueRecord(key: "ai_tesseract", value: "4"),
+            ],
+            recentTransitions: [
+                DynamicEnsembleTransition(type: "posture_change", fromValue: "NORMAL", toValue: "CAUTION", observedAt: now.addingTimeInterval(-1700)),
+                DynamicEnsembleTransition(type: "action_change", fromValue: "BUY", toValue: "SKIP", observedAt: now.addingTimeInterval(-1600)),
+            ],
+            observationCount: 19,
+            averageQuality: 0.52,
+            maxAbstainBias: 0.38
+        )
+
+        let usdjpy = DynamicEnsembleSymbolSnapshot(
+            symbol: "USDJPY",
+            generatedAt: now.addingTimeInterval(-120),
+            topRegime: "TREND_PERSISTENT",
+            sessionLabel: "LONDON",
+            tradePosture: "NORMAL",
+            ensembleQuality: 0.71,
+            abstainBias: 0.07,
+            agreementScore: 0.74,
+            contextFitScore: 0.66,
+            dominantPluginShare: 0.48,
+            buyProb: 0.56,
+            sellProb: 0.18,
+            skipProb: 0.26,
+            finalScore: 0.38,
+            finalAction: "BUY",
+            fallbackUsed: false,
+            reasons: [
+                "strong_plugin_agreement",
+            ],
+            activePlugins: [
+                DynamicEnsemblePluginState(name: "ai_tft", family: "transformer", status: "ACTIVE", signal: "BUY", weight: 0.48, trust: 0.92, calibrationShrink: 0.86, reasons: ["adaptive_router_upweighted"]),
+                DynamicEnsemblePluginState(name: "tree_catboost", family: "tree", status: "ACTIVE", signal: "BUY", weight: 0.32, trust: 0.71, calibrationShrink: 0.91, reasons: ["Active in the current dynamic ensemble"]),
+            ],
+            downweightedPlugins: [],
+            suppressedPlugins: [],
+            replayPostureCounts: [
+                KeyValueRecord(key: "NORMAL", value: "17"),
+            ],
+            replayActionCounts: [
+                KeyValueRecord(key: "BUY", value: "12"),
+                KeyValueRecord(key: "SKIP", value: "3"),
+            ],
+            replayStatusCounts: [
+                KeyValueRecord(key: "ACTIVE", value: "20"),
+            ],
+            replayTopReasons: [
+                KeyValueRecord(key: "strong_plugin_agreement", value: "11"),
+            ],
+            replayTopDominantPlugins: [
+                KeyValueRecord(key: "ai_tft", value: "13"),
+            ],
+            recentTransitions: [],
+            observationCount: 18,
+            averageQuality: 0.67,
+            maxAbstainBias: 0.21
+        )
+
+        return DynamicEnsembleSnapshot(
+            generatedAt: now,
+            replayHoursBack: 48,
+            symbols: [eurusd, usdjpy]
+        )
+    }
+
     public static func researchSnapshot(projectRoot: URL) -> ResearchOSControlSnapshot {
         let now = Date()
         return ResearchOSControlSnapshot(

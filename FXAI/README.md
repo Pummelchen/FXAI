@@ -31,6 +31,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   NewsPulse operator config, local status mirrors, and subsystem documentation.
 - `Tools/OfflineLab/AdaptiveRouter/`
   Adaptive Regime Classifier + Plugin Router docs, configs, replay outputs, and implementation notes for the regime-aware plugin-orchestration layer.
+- `Tools/OfflineLab/DynamicEnsemble/`
+  Dynamic Ensemble / Meta-Learner docs, config, replay outputs, and implementation notes for the post-inference plugin-weighting layer that combines live plugin outputs with shared FXAI context.
 - `Tools/OfflineLab/RatesEngine/`
   Rates / term-structure / policy-path docs, configs, replay outputs, and status artifacts for the shared macro rates subsystem.
 - `Tools/OfflineLab/Microstructure/`
@@ -64,6 +66,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Microstructure runtime adapter that consumes per-pair MT5 tick-flow and liquidity-stress proxy state and applies execution-aware caution or block posture without changing the canonical model input.
 - `Engine/Runtime/runtime_adaptive_router_stage.mqh`
   Adaptive regime classification, plugin suitability scoring, routed posture logic, and append-only runtime history for the state-aware plugin-zoo control plane.
+- `Engine/Runtime/runtime_dynamic_ensemble_stage.mqh`
+  Dynamic Ensemble runtime stage that scores plugin trust after inference, normalizes participation weights, escalates abstention posture, and writes replayable runtime artifacts for the meta-learner layer.
 - `Engine/Runtime/runtime_*_block.mqh`
   Split feature, transfer, model, and policy stages behind `engine_runtime.mqh` so the main runtime entrypoint stays readable.
 - `TensorCore/`
@@ -98,6 +102,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   NewsPulse contracts, config, operator policy, MT5 calendar parsing, GDELT polling, official-feed ingestion, fusion, replay helpers, daemon loop, and service-install helpers.
 - `Tools/offline_lab/adaptive_router*.py`
   Adaptive Router contracts, config, regime and plugin-prior generation, profile writing, replay reporting, and CLI validation helpers for the regime-aware plugin-routing layer.
+- `Tools/offline_lab/dynamic_ensemble_*.py`
+  Dynamic Ensemble contracts, config, replay reporting, and CLI validation helpers for the context-aware post-inference plugin-weighting layer.
 - `Tools/offline_lab/rates_engine*.py`
   Rates Engine contracts, config, operator numeric inputs, policy-path proxy generation, NewsPulse enrichment, daemon loop, replay reporting, and runtime artifact writers.
 - `Tools/offline_lab/microstructure_*.py`
@@ -108,6 +114,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   It now also includes a Rates Engine surface for provider health, currency policy state, pair divergence, policy tape, and rates-aware trade gates.
   It now also includes a Microstructure surface for live per-symbol regime, liquidity stress, hostile execution, stop-run proxy flags, session handoff state, and runtime gating reasons.
   It now also includes an Adaptive Router surface for live regime state, plugin weights, suppression reasons, replay counts, and routing transitions by symbol.
+  It now also includes a Dynamic Ensemble surface for live post-inference posture, participation weights, suppression state, replay drift, and final-action reasoning by symbol.
 
 ## Operating Notes
 
@@ -124,6 +131,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - The preferred Adaptive Router validation path is `python3 FXAI/Tools/fxai_offline_lab.py adaptive-router-validate`.
 - The preferred Adaptive Router promotion path is `python3 FXAI/Tools/fxai_offline_lab.py adaptive-router-profiles --profile continuous`.
 - The preferred Adaptive Router replay path is `python3 FXAI/Tools/fxai_offline_lab.py adaptive-router-replay-report --symbol EURUSD --hours-back 72`.
+- The preferred Dynamic Ensemble validation path is `python3 FXAI/Tools/fxai_offline_lab.py dynamic-ensemble-validate`.
+- The preferred Dynamic Ensemble replay path is `python3 FXAI/Tools/fxai_offline_lab.py dynamic-ensemble-replay-report --symbol EURUSD --hours-back 72`.
 - The preferred Rates Engine validation path is `python3 FXAI/Tools/fxai_offline_lab.py rates-engine-validate`.
 - The preferred Rates Engine smoke path is `python3 FXAI/Tools/fxai_offline_lab.py rates-engine-once`.
 - The preferred Rates Engine health path is `python3 FXAI/Tools/fxai_offline_lab.py rates-engine-health`.
@@ -163,6 +172,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - The Rates Engine is phase-1 safe by design: it adds shared rates-aware macro gating, NewsPulse enrichment, GUI visibility, and replayable policy-path state without forcing immediate model retraining. Phase 1 supports true-market numeric inputs when operators have them and otherwise falls back to a clearly labeled NewsPulse-driven policy proxy.
 - The Microstructure layer is phase-1 safe by design: it adds MT5-observable tick-flow, spread, stop-run proxy, session-handoff, and hostile-execution gating without pretending to measure a true institutional order book and without forcing model retraining.
 - The Adaptive Router is also phase-1 safe by design: it layers regime classification, plugin trust weighting, suppression, and abstention posture above the current zoo without breaking canonical plugin inputs or forcing immediate retraining.
+- The Dynamic Ensemble is also phase-1 safe by design: it layers a deterministic meta-learner above the plugin outputs and above the Adaptive Router, reweights participation using calibration and shared context, and can be disabled without breaking canonical plugin contracts or forcing retraining.
 
 ## Source Of Truth
 

@@ -15,6 +15,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var ratesEngineSnapshot: RatesEngineSnapshot?
     @Published var microstructureSnapshot: MicrostructureSnapshot?
     @Published var adaptiveRouterSnapshot: AdaptiveRouterSnapshot?
+    @Published var dynamicEnsembleSnapshot: DynamicEnsembleSnapshot?
     @Published var researchSnapshot: ResearchOSControlSnapshot?
     @Published var visualizationSnapshot: AdvancedVisualizationSnapshot?
     @Published var incidentSnapshot: IncidentCenterSnapshot?
@@ -24,6 +25,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var selectedRatesSymbol = ""
     @Published var selectedMicrostructureSymbol = ""
     @Published var selectedAdaptiveSymbol = ""
+    @Published var selectedDynamicEnsembleSymbol = ""
     @Published var selectedResearchSymbol = ""
     @Published var selectedVisualizationSymbol = ""
     @Published var selectedIncidentID: String?
@@ -52,6 +54,7 @@ final class FXAIGUIModel: ObservableObject {
     private let ratesEngineReader = RatesEngineArtifactReader()
     private let microstructureReader = MicrostructureArtifactReader()
     private let adaptiveRouterReader = AdaptiveRouterArtifactReader()
+    private let dynamicEnsembleReader = DynamicEnsembleArtifactReader()
     private let researchReader = ResearchOSArtifactReader()
     private let visualizationBuilder = AdvancedVisualizationBuilder()
     private let incidentBuilder = IncidentBuilder()
@@ -121,6 +124,14 @@ final class FXAIGUIModel: ObservableObject {
         return adaptiveRouterSnapshot.symbols.first
     }
 
+    var selectedDynamicEnsembleDetail: DynamicEnsembleSymbolSnapshot? {
+        guard let dynamicEnsembleSnapshot else { return nil }
+        if let selected = dynamicEnsembleSnapshot.symbols.first(where: { $0.symbol == selectedDynamicEnsembleSymbol }) {
+            return selected
+        }
+        return dynamicEnsembleSnapshot.symbols.first
+    }
+
     var selectedMicrostructureDetail: MicrostructureSymbolState? {
         guard let microstructureSnapshot else { return nil }
         if let selected = microstructureSnapshot.symbols.first(where: { $0.symbol == selectedMicrostructureSymbol }) {
@@ -187,6 +198,7 @@ final class FXAIGUIModel: ObservableObject {
             ratesEngineSnapshot = ratesEngineReader.read(projectRoot: projectRoot)
             microstructureSnapshot = microstructureReader.read(projectRoot: projectRoot)
             adaptiveRouterSnapshot = adaptiveRouterReader.read(projectRoot: projectRoot)
+            dynamicEnsembleSnapshot = dynamicEnsembleReader.read(projectRoot: projectRoot)
             researchSnapshot = researchReader.read(projectRoot: projectRoot)
             visualizationSnapshot = visualizationBuilder.build(
                 projectRoot: projectRoot,
@@ -205,6 +217,7 @@ final class FXAIGUIModel: ObservableObject {
             syncRatesSelection()
             syncMicrostructureSelection()
             syncAdaptiveSelection()
+            syncDynamicEnsembleSelection()
             syncResearchSelection()
             syncVisualizationSelection()
             syncIncidentSelection()
@@ -538,6 +551,26 @@ final class FXAIGUIModel: ObservableObject {
         }
     }
 
+    private func syncDynamicEnsembleSelection() {
+        guard let dynamicEnsembleSnapshot else {
+            selectedDynamicEnsembleSymbol = ""
+            return
+        }
+
+        let symbols = dynamicEnsembleSnapshot.symbols.map(\.symbol)
+        guard let first = symbols.first else {
+            selectedDynamicEnsembleSymbol = ""
+            return
+        }
+
+        if !symbols.contains(selectedDynamicEnsembleSymbol) {
+            selectedDynamicEnsembleSymbol = selectedRuntimeSymbol.isEmpty ? first : selectedRuntimeSymbol
+            if !symbols.contains(selectedDynamicEnsembleSymbol) {
+                selectedDynamicEnsembleSymbol = first
+            }
+        }
+    }
+
     private func syncResearchSelection() {
         guard let researchSnapshot else {
             selectedResearchSymbol = ""
@@ -626,6 +659,7 @@ final class FXAIGUIModel: ObservableObject {
             $selectedRatesSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedMicrostructureSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedAdaptiveSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $selectedDynamicEnsembleSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedResearchSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedVisualizationSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $overviewLayout.dropFirst().map { _ in () }.eraseToAnyPublisher(),
@@ -776,6 +810,7 @@ final class FXAIGUIModel: ObservableObject {
             selectedRatesSymbol = workspace.selectedRatesSymbol
             selectedMicrostructureSymbol = workspace.selectedMicrostructureSymbol
             selectedAdaptiveSymbol = workspace.selectedAdaptiveSymbol
+            selectedDynamicEnsembleSymbol = workspace.selectedDynamicEnsembleSymbol
             selectedResearchSymbol = workspace.selectedResearchSymbol
             selectedVisualizationSymbol = workspace.selectedVisualizationSymbol
             overviewLayout = workspace.overviewLayout.normalized()
@@ -799,6 +834,7 @@ final class FXAIGUIModel: ObservableObject {
         ratesEngineSnapshot = nil
         microstructureSnapshot = nil
         adaptiveRouterSnapshot = nil
+        dynamicEnsembleSnapshot = nil
         researchSnapshot = nil
         visualizationSnapshot = nil
         incidentSnapshot = nil
@@ -823,6 +859,7 @@ final class FXAIGUIModel: ObservableObject {
             selectedRatesSymbol: selectedRatesSymbol,
             selectedMicrostructureSymbol: selectedMicrostructureSymbol,
             selectedAdaptiveSymbol: selectedAdaptiveSymbol,
+            selectedDynamicEnsembleSymbol: selectedDynamicEnsembleSymbol,
             selectedResearchSymbol: selectedResearchSymbol,
             selectedVisualizationSymbol: selectedVisualizationSymbol,
             pluginSearchText: pluginSearchText,

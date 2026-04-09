@@ -30,6 +30,14 @@ def build_parser() -> argparse.ArgumentParser:
     arv = sub.add_parser("adaptive-router-validate", help="Validate the adaptive router config and regime/plugin routing priors")
     arv.set_defaults(func=cmd_adaptive_router_validate)
 
+    dev = sub.add_parser("dynamic-ensemble-validate", help="Validate the dynamic ensemble config and runtime weighting thresholds")
+    dev.set_defaults(func=cmd_dynamic_ensemble_validate)
+
+    der = sub.add_parser("dynamic-ensemble-replay-report", help="Rebuild a dynamic-ensemble replay report from append-only runtime history")
+    der.add_argument("--symbol", default="")
+    der.add_argument("--hours-back", type=int, default=72)
+    der.set_defaults(func=cmd_dynamic_ensemble_replay_report)
+
     miv = sub.add_parser("microstructure-validate", help="Validate the microstructure proxy config, runtime contract, and service scaffolding")
     miv.set_defaults(func=cmd_microstructure_validate)
 

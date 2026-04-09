@@ -312,6 +312,12 @@
    bool routed_meta_selected[FXAI_AI_COUNT];
    double adaptive_router_suitability[FXAI_AI_COUNT];
    int adaptive_router_status[FXAI_AI_COUNT];
+   FXAIDynamicEnsemblePluginRecord dynamic_records[];
+   ArrayResize(dynamic_records, 0);
+   FXAIDynamicEnsembleRuntimeState dynamic_ensemble_state;
+   FXAI_ResetDynamicEnsembleRuntimeState(dynamic_ensemble_state);
+   bool dynamic_ensemble_active = (ensembleMode != 0 && DynamicEnsembleEnabled);
+   bool dynamic_ensemble_applied = false;
    for(int ai_i=0; ai_i<FXAI_AI_COUNT; ai_i++)
    {
       routed_meta_weight[ai_i] = -1.0;
@@ -791,6 +797,43 @@
          double ctx_trust = FXAI_GetModelContextTrust(ai_idx, regime_id, H);
          double model_best_edge = MathMax(model_buy_ev, model_sell_ev);
 
+         if(dynamic_ensemble_active)
+         {
+            int rec_i = ArraySize(dynamic_records);
+            ArrayResize(dynamic_records, rec_i + 1);
+            FXAI_ResetDynamicEnsemblePluginRecord(dynamic_records[rec_i]);
+            dynamic_records[rec_i].ready = true;
+            dynamic_records[rec_i].ai_idx = ai_idx;
+            dynamic_records[rec_i].ai_name = manifest.ai_name;
+            dynamic_records[rec_i].family_id = manifest.family;
+            dynamic_records[rec_i].signal = signal;
+            dynamic_records[rec_i].buy_prob = FXAI_Clamp(class_probs_pred[(int)FXAI_LABEL_BUY], 0.0, 1.0);
+            dynamic_records[rec_i].sell_prob = FXAI_Clamp(class_probs_pred[(int)FXAI_LABEL_SELL], 0.0, 1.0);
+            dynamic_records[rec_i].skip_prob = FXAI_Clamp(class_probs_pred[(int)FXAI_LABEL_SKIP], 0.0, 1.0);
+            dynamic_records[rec_i].expected_move = MathMax(expected_move, 0.0);
+            dynamic_records[rec_i].confidence = FXAI_Clamp(pred.confidence, 0.0, 1.0);
+            dynamic_records[rec_i].reliability = FXAI_Clamp(pred.reliability, 0.0, 1.0);
+            dynamic_records[rec_i].margin = FXAI_Clamp(MathAbs(class_probs_pred[(int)FXAI_LABEL_BUY] - class_probs_pred[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
+            dynamic_records[rec_i].hit_time_frac = FXAI_Clamp(pred.hit_time_frac, 0.0, 1.0);
+            dynamic_records[rec_i].path_risk = FXAI_Clamp(pred.path_risk, 0.0, 1.0);
+            dynamic_records[rec_i].fill_risk = FXAI_Clamp(pred.fill_risk, 0.0, 1.0);
+            dynamic_records[rec_i].mfe_ratio = FXAI_Clamp(pred.mfe_mean_points / MathMax(expected_move, min_move_pred), 0.0, 4.0);
+            dynamic_records[rec_i].mae_ratio = FXAI_Clamp(pred.mae_mean_points / MathMax(pred.mfe_mean_points, min_move_pred), 0.0, 2.0);
+            dynamic_records[rec_i].buy_ev = model_buy_ev;
+            dynamic_records[rec_i].sell_ev = model_sell_ev;
+            dynamic_records[rec_i].base_meta_weight = meta_w;
+            dynamic_records[rec_i].adaptive_suitability = adaptive_factor_live;
+            dynamic_records[rec_i].adaptive_status = adaptive_router_status[ai_idx];
+            dynamic_records[rec_i].ctx_edge_norm = ctx_edge_norm;
+            dynamic_records[rec_i].ctx_regret = ctx_regret;
+            dynamic_records[rec_i].global_edge_norm = global_edge_norm;
+            dynamic_records[rec_i].port_edge_norm = port_edge_norm;
+            dynamic_records[rec_i].port_stability = port_stability;
+            dynamic_records[rec_i].port_corr = port_corr;
+            dynamic_records[rec_i].port_div = port_div;
+            dynamic_records[rec_i].ctx_trust = ctx_trust;
+         }
+
          ensemble_meta_total += meta_w;
          ensemble_buy_ev_sum += meta_w * model_buy_ev;
          ensemble_sell_ev_sum += meta_w * model_sell_ev;
@@ -834,5 +877,120 @@
          if(signal == 1) ensemble_buy_support += meta_w;
          else if(signal == 0) ensemble_sell_support += meta_w;
          else ensemble_skip_support += meta_w;
+      }
+   }
+
+   if(ensembleMode != 0 && dynamic_ensemble_active && ArraySize(dynamic_records) > 0)
+   {
+      if(FXAI_DynamicEnsembleEvaluate(symbol,
+                                      snapshot.bar_time,
+                                      spread_pred,
+                                      min_move_pred,
+                                      drift_norm,
+                                      adaptive_regime_state,
+                                      adaptive_news_state,
+                                      adaptive_rates_state,
+                                      adaptive_micro_state,
+                                      dynamic_records,
+                                      dynamic_ensemble_state))
+      {
+         ensemble_buy_ev_sum = 0.0;
+         ensemble_sell_ev_sum = 0.0;
+         ensemble_buy_support = 0.0;
+         ensemble_sell_support = 0.0;
+         ensemble_skip_support = 0.0;
+         ensemble_meta_total = 0.0;
+         ensemble_expected_sum = 0.0;
+         ensemble_expected_sq_sum = 0.0;
+         ensemble_conf_sum = 0.0;
+         ensemble_rel_sum = 0.0;
+         ensemble_margin_sum = 0.0;
+         ensemble_hit_time_sum = 0.0;
+         ensemble_path_risk_sum = 0.0;
+         ensemble_fill_risk_sum = 0.0;
+         ensemble_mfe_ratio_sum = 0.0;
+         ensemble_mae_ratio_sum = 0.0;
+         ensemble_ctx_edge_sum = 0.0;
+         ensemble_ctx_regret_sum = 0.0;
+         ensemble_global_edge_sum = 0.0;
+         ensemble_port_edge_sum = 0.0;
+         ensemble_port_stability_sum = 0.0;
+         ensemble_port_corr_sum = 0.0;
+         ensemble_port_div_sum = 0.0;
+         ensemble_ctx_trust_sum = 0.0;
+         best_model_signal_edge = -1e12;
+         best_model_meta_w = 0.0;
+         best_buy_edge = -1e12;
+         best_sell_edge = -1e12;
+         best_buy_meta_w = 0.0;
+         best_sell_meta_w = 0.0;
+         for(int fam_i=0; fam_i<=FXAI_FAMILY_OTHER; fam_i++)
+            family_support[fam_i] = 0.0;
+
+         for(int rec_i=0; rec_i<ArraySize(dynamic_records); rec_i++)
+         {
+            if(!dynamic_records[rec_i].ready || dynamic_records[rec_i].normalized_weight <= 0.0)
+               continue;
+            if(dynamic_records[rec_i].status < FXAI_DYNAMIC_ENSEMBLE_STATUS_DOWNWEIGHTED)
+               continue;
+
+            double meta_w = dynamic_records[rec_i].normalized_weight;
+            double expected_move = MathMax(dynamic_records[rec_i].expected_move, 0.0);
+            double model_buy_ev = dynamic_records[rec_i].buy_ev;
+            double model_sell_ev = dynamic_records[rec_i].sell_ev;
+            double model_best_edge = MathMax(model_buy_ev, model_sell_ev);
+
+            ensemble_meta_total += meta_w;
+            ensemble_buy_ev_sum += meta_w * model_buy_ev;
+            ensemble_sell_ev_sum += meta_w * model_sell_ev;
+            ensemble_expected_sum += meta_w * expected_move;
+            ensemble_expected_sq_sum += meta_w * expected_move * expected_move;
+            ensemble_conf_sum += meta_w * dynamic_records[rec_i].confidence;
+            ensemble_rel_sum += meta_w * dynamic_records[rec_i].reliability;
+            ensemble_margin_sum += meta_w * dynamic_records[rec_i].margin;
+            ensemble_hit_time_sum += meta_w * dynamic_records[rec_i].hit_time_frac;
+            ensemble_path_risk_sum += meta_w * dynamic_records[rec_i].path_risk;
+            ensemble_fill_risk_sum += meta_w * dynamic_records[rec_i].fill_risk;
+            ensemble_mfe_ratio_sum += meta_w * dynamic_records[rec_i].mfe_ratio;
+            ensemble_mae_ratio_sum += meta_w * dynamic_records[rec_i].mae_ratio;
+            ensemble_ctx_edge_sum += meta_w * dynamic_records[rec_i].ctx_edge_norm;
+            ensemble_ctx_regret_sum += meta_w * dynamic_records[rec_i].ctx_regret;
+            ensemble_global_edge_sum += meta_w * dynamic_records[rec_i].global_edge_norm;
+            ensemble_port_edge_sum += meta_w * dynamic_records[rec_i].port_edge_norm;
+            ensemble_port_stability_sum += meta_w * dynamic_records[rec_i].port_stability;
+            ensemble_port_corr_sum += meta_w * dynamic_records[rec_i].port_corr;
+            ensemble_port_div_sum += meta_w * dynamic_records[rec_i].port_div;
+            ensemble_ctx_trust_sum += meta_w * dynamic_records[rec_i].ctx_trust;
+
+            if(dynamic_records[rec_i].family_id >= 0 && dynamic_records[rec_i].family_id <= FXAI_FAMILY_OTHER)
+               family_support[dynamic_records[rec_i].family_id] += meta_w;
+
+            if(model_best_edge > best_model_signal_edge)
+            {
+               best_model_signal_edge = model_best_edge;
+               best_model_meta_w = meta_w;
+            }
+            if(model_buy_ev > best_buy_edge)
+            {
+               best_buy_edge = model_buy_ev;
+               best_buy_meta_w = meta_w;
+            }
+            if(model_sell_ev > best_sell_edge)
+            {
+               best_sell_edge = model_sell_ev;
+               best_sell_meta_w = meta_w;
+            }
+
+            if(dynamic_records[rec_i].signal == 1) ensemble_buy_support += meta_w;
+            else if(dynamic_records[rec_i].signal == 0) ensemble_sell_support += meta_w;
+            else ensemble_skip_support += meta_w;
+         }
+         dynamic_ensemble_applied = (ensemble_meta_total > 0.0);
+         if(!dynamic_ensemble_applied)
+            dynamic_ensemble_state.fallback_used = true;
+      }
+      else
+      {
+         dynamic_ensemble_state.fallback_used = true;
       }
    }

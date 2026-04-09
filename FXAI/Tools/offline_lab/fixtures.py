@@ -49,6 +49,9 @@ PATCH_MODULES = [
     "offline_lab.adaptive_router_config",
     "offline_lab.adaptive_router",
     "offline_lab.adaptive_router_replay",
+    "offline_lab.dynamic_ensemble_contracts",
+    "offline_lab.dynamic_ensemble_config",
+    "offline_lab.dynamic_ensemble_replay",
     "offline_lab.market_universe",
     "offline_lab.verification",
     "testlab.shared",
@@ -66,6 +69,8 @@ def patched_paths(base_dir: Path):
     newspulse_report_dir = newspulse_dir / "Reports"
     adaptive_router_dir = offline_dir / "AdaptiveRouter"
     adaptive_router_report_dir = adaptive_router_dir / "Reports"
+    dynamic_ensemble_dir = offline_dir / "DynamicEnsemble"
+    dynamic_ensemble_report_dir = dynamic_ensemble_dir / "Reports"
     rates_engine_dir = offline_dir / "RatesEngine"
     rates_engine_state_dir = rates_engine_dir / "State"
     rates_engine_report_dir = rates_engine_dir / "Reports"
@@ -89,6 +94,8 @@ def patched_paths(base_dir: Path):
         newspulse_report_dir,
         adaptive_router_dir,
         adaptive_router_report_dir,
+        dynamic_ensemble_dir,
+        dynamic_ensemble_report_dir,
         rates_engine_dir,
         rates_engine_state_dir,
         rates_engine_report_dir,
@@ -141,6 +148,11 @@ def patched_paths(base_dir: Path):
             "ADAPTIVE_ROUTER_REPORT_DIR": adaptive_router_report_dir,
             "ADAPTIVE_ROUTER_CONFIG_PATH": adaptive_router_dir / "adaptive_router_config.json",
             "ADAPTIVE_ROUTER_REPLAY_REPORT_PATH": adaptive_router_report_dir / "adaptive_router_replay_report.json",
+            "DYNAMIC_ENSEMBLE_DIR": dynamic_ensemble_dir,
+            "DYNAMIC_ENSEMBLE_REPORT_DIR": dynamic_ensemble_report_dir,
+            "DYNAMIC_ENSEMBLE_CONFIG_PATH": dynamic_ensemble_dir / "dynamic_ensemble_config.json",
+            "DYNAMIC_ENSEMBLE_REPLAY_REPORT_PATH": dynamic_ensemble_report_dir / "dynamic_ensemble_replay_report.json",
+            "DYNAMIC_ENSEMBLE_RUNTIME_CONFIG_PATH": runtime_dir / "dynamic_ensemble_config.tsv",
             "RATES_ENGINE_DIR": rates_engine_dir,
             "RATES_ENGINE_STATE_DIR": rates_engine_state_dir,
             "RATES_ENGINE_REPORT_DIR": rates_engine_report_dir,
@@ -193,6 +205,7 @@ def patched_paths(base_dir: Path):
             "profiles_dir": profiles_dir,
             "tester_dir": tester_dir,
             "adaptive_router_dir": adaptive_router_dir,
+            "dynamic_ensemble_dir": dynamic_ensemble_dir,
             "rates_engine_dir": rates_engine_dir,
             "microstructure_dir": microstructure_dir,
         }

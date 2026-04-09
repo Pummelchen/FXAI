@@ -262,6 +262,10 @@
    FXAI_ResetNewsPulsePairState(adaptive_news_state);
    if(NewsPulseEnabled)
       FXAI_ReadNewsPulsePairState(symbol, adaptive_news_state);
+   FXAIRatesEnginePairState adaptive_rates_state;
+   FXAI_ResetRatesEnginePairState(adaptive_rates_state);
+   if(RatesEngineEnabled)
+      FXAI_ReadRatesEnginePairState(symbol, adaptive_rates_state);
    FXAIMicrostructurePairState adaptive_micro_state;
    FXAI_ResetMicrostructurePairState(adaptive_micro_state);
    if(MicrostructureEnabled)

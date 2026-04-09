@@ -58,6 +58,20 @@ struct FXAIRuntimeSignalCache
    string adaptive_router_active_plugins_csv;
    string adaptive_router_downweighted_plugins_csv;
    string adaptive_router_suppressed_plugins_csv;
+   bool dynamic_ensemble_ready;
+   double dynamic_ensemble_quality;
+   double dynamic_ensemble_abstain_bias;
+   string dynamic_ensemble_trade_posture;
+   string dynamic_ensemble_top_regime;
+   string dynamic_ensemble_session;
+   datetime dynamic_ensemble_generated_at;
+   double dynamic_ensemble_buy_prob;
+   double dynamic_ensemble_sell_prob;
+   double dynamic_ensemble_skip_prob;
+   string dynamic_ensemble_reasons_csv;
+   string dynamic_ensemble_active_plugins_csv;
+   string dynamic_ensemble_downweighted_plugins_csv;
+   string dynamic_ensemble_suppressed_plugins_csv;
 };
 
 void FXAI_RuntimePublishIdleSnapshot(const string symbol)
@@ -124,6 +138,20 @@ void FXAI_RuntimeCaptureSignalCache(FXAIRuntimeSignalCache &out)
    out.adaptive_router_active_plugins_csv = g_adaptive_router_last_active_plugins_csv;
    out.adaptive_router_downweighted_plugins_csv = g_adaptive_router_last_downweighted_plugins_csv;
    out.adaptive_router_suppressed_plugins_csv = g_adaptive_router_last_suppressed_plugins_csv;
+   out.dynamic_ensemble_ready = g_dynamic_ensemble_last_ready;
+   out.dynamic_ensemble_quality = g_dynamic_ensemble_last_quality;
+   out.dynamic_ensemble_abstain_bias = g_dynamic_ensemble_last_abstain_bias;
+   out.dynamic_ensemble_trade_posture = g_dynamic_ensemble_last_trade_posture;
+   out.dynamic_ensemble_top_regime = g_dynamic_ensemble_last_top_regime;
+   out.dynamic_ensemble_session = g_dynamic_ensemble_last_session;
+   out.dynamic_ensemble_generated_at = g_dynamic_ensemble_last_generated_at;
+   out.dynamic_ensemble_buy_prob = g_dynamic_ensemble_last_buy_prob;
+   out.dynamic_ensemble_sell_prob = g_dynamic_ensemble_last_sell_prob;
+   out.dynamic_ensemble_skip_prob = g_dynamic_ensemble_last_skip_prob;
+   out.dynamic_ensemble_reasons_csv = g_dynamic_ensemble_last_reasons_csv;
+   out.dynamic_ensemble_active_plugins_csv = g_dynamic_ensemble_last_active_plugins_csv;
+   out.dynamic_ensemble_downweighted_plugins_csv = g_dynamic_ensemble_last_downweighted_plugins_csv;
+   out.dynamic_ensemble_suppressed_plugins_csv = g_dynamic_ensemble_last_suppressed_plugins_csv;
 }
 
 void FXAI_RuntimeResetSignalState(void)
@@ -183,6 +211,20 @@ void FXAI_RuntimeResetSignalState(void)
    g_adaptive_router_last_active_plugins_csv = "";
    g_adaptive_router_last_downweighted_plugins_csv = "";
    g_adaptive_router_last_suppressed_plugins_csv = "";
+   g_dynamic_ensemble_last_ready = false;
+   g_dynamic_ensemble_last_quality = 0.0;
+   g_dynamic_ensemble_last_abstain_bias = 0.0;
+   g_dynamic_ensemble_last_trade_posture = "NORMAL";
+   g_dynamic_ensemble_last_top_regime = "UNKNOWN";
+   g_dynamic_ensemble_last_session = "";
+   g_dynamic_ensemble_last_generated_at = 0;
+   g_dynamic_ensemble_last_buy_prob = 0.0;
+   g_dynamic_ensemble_last_sell_prob = 0.0;
+   g_dynamic_ensemble_last_skip_prob = 1.0;
+   g_dynamic_ensemble_last_reasons_csv = "";
+   g_dynamic_ensemble_last_active_plugins_csv = "";
+   g_dynamic_ensemble_last_downweighted_plugins_csv = "";
+   g_dynamic_ensemble_last_suppressed_plugins_csv = "";
 }
 
 void FXAI_RuntimeRestoreSignalCache(const FXAIRuntimeSignalCache &cache)
@@ -242,6 +284,20 @@ void FXAI_RuntimeRestoreSignalCache(const FXAIRuntimeSignalCache &cache)
    g_adaptive_router_last_active_plugins_csv = cache.adaptive_router_active_plugins_csv;
    g_adaptive_router_last_downweighted_plugins_csv = cache.adaptive_router_downweighted_plugins_csv;
    g_adaptive_router_last_suppressed_plugins_csv = cache.adaptive_router_suppressed_plugins_csv;
+   g_dynamic_ensemble_last_ready = cache.dynamic_ensemble_ready;
+   g_dynamic_ensemble_last_quality = cache.dynamic_ensemble_quality;
+   g_dynamic_ensemble_last_abstain_bias = cache.dynamic_ensemble_abstain_bias;
+   g_dynamic_ensemble_last_trade_posture = cache.dynamic_ensemble_trade_posture;
+   g_dynamic_ensemble_last_top_regime = cache.dynamic_ensemble_top_regime;
+   g_dynamic_ensemble_last_session = cache.dynamic_ensemble_session;
+   g_dynamic_ensemble_last_generated_at = cache.dynamic_ensemble_generated_at;
+   g_dynamic_ensemble_last_buy_prob = cache.dynamic_ensemble_buy_prob;
+   g_dynamic_ensemble_last_sell_prob = cache.dynamic_ensemble_sell_prob;
+   g_dynamic_ensemble_last_skip_prob = cache.dynamic_ensemble_skip_prob;
+   g_dynamic_ensemble_last_reasons_csv = cache.dynamic_ensemble_reasons_csv;
+   g_dynamic_ensemble_last_active_plugins_csv = cache.dynamic_ensemble_active_plugins_csv;
+   g_dynamic_ensemble_last_downweighted_plugins_csv = cache.dynamic_ensemble_downweighted_plugins_csv;
+   g_dynamic_ensemble_last_suppressed_plugins_csv = cache.dynamic_ensemble_suppressed_plugins_csv;
 }
 
 #endif // __FXAI_RUNTIME_SIGNAL_STATE_MQH__

@@ -4,6 +4,7 @@
 #include "Runtime\\runtime_signal_state.mqh"
 #include "Runtime\\runtime_router_stage.mqh"
 #include "Runtime\\runtime_adaptive_router_stage.mqh"
+#include "Runtime\\runtime_dynamic_ensemble_stage.mqh"
 #include "Runtime\\runtime_signal_finalize.mqh"
 
 int SpecialDirectionAI(const string symbol)

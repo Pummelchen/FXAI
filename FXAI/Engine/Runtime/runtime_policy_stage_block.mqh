@@ -191,6 +191,25 @@
          double ps = ensemble_probs[0] + ensemble_probs[1] + ensemble_probs[2];
          if(ps <= 0.0) ps = 1.0;
          ensemble_probs[0] /= ps; ensemble_probs[1] /= ps; ensemble_probs[2] /= ps;
+         if(dynamic_ensemble_applied && dynamic_ensemble_state.ready)
+         {
+            double dynamic_blend = FXAI_Clamp(0.30 + 0.50 * dynamic_ensemble_state.ensemble_quality, 0.25, 0.80);
+            ensemble_probs[(int)FXAI_LABEL_SELL] = FXAI_Clamp(dynamic_blend * dynamic_ensemble_state.sell_prob +
+                                                              (1.0 - dynamic_blend) * ensemble_probs[(int)FXAI_LABEL_SELL],
+                                                              0.0005,
+                                                              0.9990);
+            ensemble_probs[(int)FXAI_LABEL_BUY] = FXAI_Clamp(dynamic_blend * dynamic_ensemble_state.buy_prob +
+                                                             (1.0 - dynamic_blend) * ensemble_probs[(int)FXAI_LABEL_BUY],
+                                                             0.0005,
+                                                             0.9990);
+            ensemble_probs[(int)FXAI_LABEL_SKIP] = FXAI_Clamp(dynamic_blend * dynamic_ensemble_state.skip_prob +
+                                                              (1.0 - dynamic_blend) * ensemble_probs[(int)FXAI_LABEL_SKIP],
+                                                              0.0005,
+                                                              0.9990);
+            ps = ensemble_probs[0] + ensemble_probs[1] + ensemble_probs[2];
+            if(ps <= 0.0) ps = 1.0;
+            ensemble_probs[0] /= ps; ensemble_probs[1] /= ps; ensemble_probs[2] /= ps;
+         }
 
          double stack_move = MathMax(avg_expected, 0.0);
          double stack_buy_ev = ((2.0 * ensemble_probs[(int)FXAI_LABEL_BUY]) - 1.0) * stack_move - min_move_pred;
@@ -339,6 +358,17 @@
                                ensemble_probs,
                                stack_feat);
    }
+   if(dynamic_ensemble_applied && dynamic_ensemble_state.ready)
+   {
+      FXAI_DynamicEnsembleApplyPosture(dynamic_ensemble_state, decision);
+      if(decision != -1)
+      {
+         if(decision == 1 && dynamic_ensemble_state.final_score < -0.08)
+            decision = -1;
+         else if(decision == 0 && dynamic_ensemble_state.final_score > 0.08)
+            decision = -1;
+      }
+   }
    string adaptive_router_posture = "NORMAL";
    double adaptive_router_abstain_bias = 0.0;
    if(adaptive_router_active)
@@ -374,5 +404,9 @@
                                             routed_meta_weight,
                                             routed_meta_selected,
                                             adaptive_router_status);
+   FXAI_DynamicEnsembleWriteRuntimeArtifacts(symbol,
+                                             dynamic_ensemble_state,
+                                             dynamic_records,
+                                             decision);
    FXAI_RecordRuntimeStageMs(FXAI_RUNTIME_STAGE_POLICY,
                              (double)(GetMicrosecondCount() - policy_stage_t0) / 1000.0);

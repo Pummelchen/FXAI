@@ -12,6 +12,9 @@ from .adaptive_router_contracts import ADAPTIVE_ROUTER_CONFIG_PATH
 from .adaptive_router_replay import build_adaptive_router_replay_report
 from .bundle import *
 from .common import *
+from .dynamic_ensemble_config import load_config as load_dynamic_ensemble_config
+from .dynamic_ensemble_contracts import DYNAMIC_ENSEMBLE_CONFIG_PATH
+from .dynamic_ensemble_replay import build_dynamic_ensemble_replay_report
 from .dashboard import live_state_snapshot, write_profile_dashboard
 from .environment import bootstrap_environment, validate_environment, write_environment_report
 from .exporter import *
@@ -134,6 +137,25 @@ def cmd_adaptive_router_validate(_args) -> int:
         "config_path": str(ADAPTIVE_ROUTER_CONFIG_PATH),
         "config": payload,
     }, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_dynamic_ensemble_validate(_args) -> int:
+    payload = load_dynamic_ensemble_config()
+    print(json.dumps({
+        "status": "ok",
+        "config_path": str(DYNAMIC_ENSEMBLE_CONFIG_PATH),
+        "config": payload,
+    }, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_dynamic_ensemble_replay_report(args) -> int:
+    payload = build_dynamic_ensemble_replay_report(
+        symbol=str(getattr(args, "symbol", "") or ""),
+        hours_back=int(getattr(args, "hours_back", 72) or 72),
+    )
+    print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
 

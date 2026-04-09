@@ -176,6 +176,10 @@ input bool   AdaptiveRouterEnabled = true;
 // Models: all (top-layer plugin-zoo orchestration).
 // Purpose: enables the regime-aware adaptive router that weights or suppresses plugins by live market state and NewsPulse context.
 // Importance/Range: false/true; true is recommended once adaptive-router artifacts are being generated.
+input bool   DynamicEnsembleEnabled = true;
+// Models: all (post-inference ensemble meta-layer).
+// Purpose: enables the dynamic ensemble that reweights plugin outputs using live context and plugin-quality memory before final policy gating.
+// Importance/Range: false/true; true is recommended once the runtime TSV config has been exported.
 input bool   NewsPulseBlockOnUnknown = true;
 // Models: all (execution/news-risk overlay).
 // Purpose: blocks new entries when the shared NewsPulse snapshot is missing or stale instead of treating unknown as safe.
@@ -232,6 +236,14 @@ input double MicrostructureCautionEnterProbBuffer = 0.04;
 // Models: all (execution microstructure / order-flow proxy overlay).
 // Purpose: requires a slightly stronger policy enter probability when microstructure conditions are cautionary.
 // Importance/Range: practical 0.00..0.20; 0 disables the extra floor.
+input double DynamicEnsembleCautionEnterProbBuffer = 0.04;
+// Models: all (post-inference ensemble meta-layer).
+// Purpose: requires slightly stronger policy enter probability when ensemble quality is cautionary or abstention-biased.
+// Importance/Range: practical 0.00..0.20; 0 disables the extra floor.
+input double DynamicEnsembleAbstainEnterProbFloor = 0.34;
+// Models: all (post-inference ensemble meta-layer).
+// Purpose: forces SKIP when the abstention-biased ensemble cannot keep enter probability above this floor.
+// Importance/Range: practical 0.10..0.60; higher is more conservative.
 input double RiskKillTradeGate = 0.24;
 // Models: all (open-position safety layer).
 // Purpose: forces exit when the live gate collapses under the post-entry kill threshold.
@@ -538,6 +550,20 @@ string   g_adaptive_router_last_reasons_csv = "";
 string   g_adaptive_router_last_active_plugins_csv = "";
 string   g_adaptive_router_last_downweighted_plugins_csv = "";
 string   g_adaptive_router_last_suppressed_plugins_csv = "";
+bool     g_dynamic_ensemble_last_ready = false;
+double   g_dynamic_ensemble_last_quality = 0.0;
+double   g_dynamic_ensemble_last_abstain_bias = 0.0;
+string   g_dynamic_ensemble_last_trade_posture = "NORMAL";
+string   g_dynamic_ensemble_last_top_regime = "UNKNOWN";
+string   g_dynamic_ensemble_last_session = "";
+datetime g_dynamic_ensemble_last_generated_at = 0;
+double   g_dynamic_ensemble_last_buy_prob = 0.0;
+double   g_dynamic_ensemble_last_sell_prob = 0.0;
+double   g_dynamic_ensemble_last_skip_prob = 1.0;
+string   g_dynamic_ensemble_last_reasons_csv = "";
+string   g_dynamic_ensemble_last_active_plugins_csv = "";
+string   g_dynamic_ensemble_last_downweighted_plugins_csv = "";
+string   g_dynamic_ensemble_last_suppressed_plugins_csv = "";
 datetime g_last_debug_bar = 0;
 
 #define FXAI_MAX_CONTEXT_SYMBOLS 48

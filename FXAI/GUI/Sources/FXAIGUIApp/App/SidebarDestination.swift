@@ -12,6 +12,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
     case ratesEngine
     case microstructure
     case adaptiveRouter
+    case dynamicEnsemble
     case runtimeMonitor
     case promotionCenter
     case researchControl
@@ -36,6 +37,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .ratesEngine: "Rates Engine"
         case .microstructure: "Microstructure"
         case .adaptiveRouter: "Adaptive Router"
+        case .dynamicEnsemble: "Dynamic Ensemble"
         case .runtimeMonitor: "Runtime Monitor"
         case .promotionCenter: "Promotion Center"
         case .researchControl: "Research OS"
@@ -60,6 +62,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .ratesEngine: "chart.line.text.clipboard.fill"
         case .microstructure: "waveform.path.ecg.rectangle.fill"
         case .adaptiveRouter: "point.3.filled.connected.trianglepath.dotted"
+        case .dynamicEnsemble: "dial.high.fill"
         case .runtimeMonitor: "waveform.path.ecg.rectangle.fill"
         case .promotionCenter: "rosette"
         case .researchControl: "server.rack"

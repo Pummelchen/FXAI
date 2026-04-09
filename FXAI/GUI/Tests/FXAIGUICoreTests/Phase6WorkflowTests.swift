@@ -19,6 +19,7 @@ struct Phase6WorkflowTests {
             selectedRatesSymbol: "EURUSD",
             selectedMicrostructureSymbol: "EURUSD",
             selectedAdaptiveSymbol: "EURUSD",
+            selectedDynamicEnsembleSymbol: "EURUSD",
             selectedResearchSymbol: "EURUSD",
             selectedVisualizationSymbol: "EURUSD",
             pluginSearchText: "mlp",
