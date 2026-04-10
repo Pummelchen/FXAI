@@ -2,6 +2,7 @@
 #define __FXAI_RUNTIME_DYNAMIC_ENSEMBLE_STAGE_MQH__
 
 #include "Trade\\runtime_trade_rates_engine.mqh"
+#include "Trade\\runtime_trade_cross_asset_state.mqh"
 
 #define FXAI_DYNAMIC_ENSEMBLE_MAX_PLUGIN_REASONS 4
 #define FXAI_DYNAMIC_ENSEMBLE_MAX_REASONS 8
@@ -538,6 +539,7 @@ double FXAI_DynamicEnsembleCenterDirection(const FXAIDynamicEnsemblePluginRecord
 
 double FXAI_DynamicEnsembleRiskStress(const FXAINewsPulsePairState &news_state,
                                       const FXAIRatesEnginePairState &rates_state,
+                                      const FXAICrossAssetPairState &cross_state,
                                       const FXAIMicrostructurePairState &micro_state,
                                       const double drift_norm)
 {
@@ -572,7 +574,18 @@ double FXAI_DynamicEnsembleRiskStress(const FXAINewsPulsePairState &news_state,
                                 0.0,
                                 1.0);
 
-   return FXAI_Clamp(0.34 * news_stress + 0.22 * rates_stress + 0.30 * micro_stress + 0.14 * drift_norm,
+   double cross_stress = 0.0;
+   if(!cross_state.ready || cross_state.stale)
+      cross_stress = 0.36;
+   else
+      cross_stress = FXAI_Clamp(MathMax(cross_state.pair_cross_asset_risk_score,
+                                        MathMax(cross_state.usd_liquidity_stress_score,
+                                                cross_state.trade_gate == "BLOCK" ? 0.92 :
+                                                (cross_state.trade_gate == "CAUTION" ? 0.62 : 0.0))),
+                                0.0,
+                                1.0);
+
+   return FXAI_Clamp(0.30 * news_stress + 0.18 * rates_stress + 0.22 * cross_stress + 0.18 * micro_stress + 0.12 * drift_norm,
                      0.0,
                      1.0);
 }
@@ -639,6 +652,7 @@ bool FXAI_DynamicEnsembleEvaluate(const string symbol,
                                   const FXAIAdaptiveRegimeState &regime_state,
                                   const FXAINewsPulsePairState &news_state,
                                   const FXAIRatesEnginePairState &rates_state,
+                                  const FXAICrossAssetPairState &cross_state,
                                   const FXAIMicrostructurePairState &micro_state,
                                   FXAIDynamicEnsemblePluginRecord &records[],
                                   FXAIDynamicEnsembleRuntimeState &out)
@@ -777,6 +791,21 @@ bool FXAI_DynamicEnsembleEvaluate(const string symbol,
             FXAI_DynamicEnsembleAppendPluginReason(records[i], "rates_caution_context");
       }
 
+      if(!cross_state.ready || cross_state.stale)
+      {
+         risk_mult -= cfg.penalty_stale_context * 0.28;
+         FXAI_DynamicEnsembleAppendPluginReason(records[i], "cross_asset_stale");
+      }
+      else if(cross_state.trade_gate == "BLOCK" || cross_state.trade_gate == "CAUTION")
+      {
+         risk_mult -= (cfg.penalty_rates * 0.85) *
+                      FXAI_Clamp(MathMax(cross_state.pair_cross_asset_risk_score, 0.35), 0.0, 1.0);
+         if(cross_state.trade_gate == "BLOCK")
+            FXAI_DynamicEnsembleAppendPluginReason(records[i], "cross_asset_block_context");
+         else
+            FXAI_DynamicEnsembleAppendPluginReason(records[i], "cross_asset_caution_context");
+      }
+
       if(!micro_state.ready || micro_state.stale)
       {
          risk_mult -= cfg.penalty_stale_context * 0.42;
@@ -912,7 +941,7 @@ bool FXAI_DynamicEnsembleEvaluate(const string symbol,
 
    int effective_participants = out.participating_count + out.downweighted_count;
    double trust_strength = FXAI_Clamp(quality_trust_sum / MathMax(quality_ctx_denom, 1e-6), 0.0, 1.20) / 1.20;
-   double risk_stress = FXAI_DynamicEnsembleRiskStress(news_state, rates_state, micro_state, drift_norm);
+   double risk_stress = FXAI_DynamicEnsembleRiskStress(news_state, rates_state, cross_state, micro_state, drift_norm);
    double execution_safety = FXAI_Clamp(1.0 - risk_stress, 0.0, 1.0);
    double concentration_penalty = cfg.penalty_concentration_quality *
                                   FXAI_Clamp((dominant_share - cfg.max_weight_share) /

@@ -10,6 +10,10 @@ FXAI/Tools/OfflineLab/NewsPulse/news_history.ndjson
 FXAI/Tools/OfflineLab/Microstructure/State/
 FXAI/Tools/OfflineLab/Microstructure/Reports/
 FXAI/Tools/OfflineLab/Microstructure/microstructure_status.json
+FXAI/Tools/OfflineLab/CrossAsset/State/
+FXAI/Tools/OfflineLab/CrossAsset/Reports/
+FXAI/Tools/OfflineLab/CrossAsset/cross_asset_status.json
+FXAI/Tools/OfflineLab/CrossAsset/cross_asset_history.ndjson
 FXAI/Tools/OfflineLab/RatesEngine/State/
 FXAI/Tools/OfflineLab/RatesEngine/Reports/
 FXAI/Tools/OfflineLab/RatesEngine/rates_engine_status.json

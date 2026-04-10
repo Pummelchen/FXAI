@@ -17,6 +17,7 @@ struct Phase6WorkflowTests {
             selectedRole: .liveTrader,
             selectedRuntimeSymbol: "EURUSD",
             selectedRatesSymbol: "EURUSD",
+            selectedCrossAssetSymbol: "EURUSD",
             selectedMicrostructureSymbol: "EURUSD",
             selectedAdaptiveSymbol: "EURUSD",
             selectedDynamicEnsembleSymbol: "EURUSD",

@@ -25,6 +25,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   MT5 Service that exports Economic Calendar state for the NewsPulse shared news-risk subsystem.
 - `Services/FXAI_MicrostructureProbe.mq5`
   MT5 Service that exports live tick-flow, spread, liquidity-stress, stop-run proxy, and session-handoff state for the shared microstructure subsystem.
+- `Services/FXAI_CrossAssetProbe.mq5`
+  MT5 Service that exports configured indicator-only MT5 symbols for the shared cross-asset macro/liquidity subsystem.
 - `Tools/offline_lab/`
   Internal Python package for Offline Lab database, export, campaign, promotion, shadow-fleet ingest, foundation and student bundling, supervisor-service generation, teacher-factory modules, world simulation, and autonomous governance.
 - `Tools/OfflineLab/NewsPulse/`
@@ -39,6 +41,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Execution-Quality Forecaster docs, config, tier memory, replay outputs, and runtime forecast artifacts for the execution-condition scoring layer that feeds abstention, trade-risk, and order-send controls.
 - `Tools/OfflineLab/RatesEngine/`
   Rates / term-structure / policy-path docs, configs, replay outputs, and status artifacts for the shared macro rates subsystem.
+- `Tools/OfflineLab/CrossAsset/`
+  Cross-asset macro/liquidity docs, configs, replay outputs, and MT5 probe status for the shared global-context subsystem.
 - `Tools/OfflineLab/Microstructure/`
   Microstructure subsystem docs, local status mirrors, replay outputs, and MT5 service config for the shared short-horizon execution-state layer.
 - `GUI/`
@@ -68,6 +72,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Rates Engine runtime adapter that consumes the pair-level flat snapshot and applies rates-aware caution or block posture without changing the canonical model input.
 - `Engine/Runtime/Trade/runtime_trade_microstructure.mqh`
   Microstructure runtime adapter that consumes per-pair MT5 tick-flow and liquidity-stress proxy state and applies execution-aware caution or block posture without changing the canonical model input.
+- `Engine/Runtime/Trade/runtime_trade_cross_asset_state.mqh`
+  Cross-asset runtime adapter that consumes shared pair-level macro/liquidity posture and applies deterministic caution or block state without changing canonical model inputs.
 - `Engine/Runtime/runtime_adaptive_router_stage.mqh`
   Adaptive regime classification, plugin suitability scoring, routed posture logic, and append-only runtime history for the state-aware plugin-zoo control plane.
 - `Engine/Runtime/runtime_dynamic_ensemble_stage.mqh`
@@ -118,12 +124,15 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Execution-Quality contracts, config, tier-memory export, replay reporting, and deterministic reference math for the runtime execution-condition forecaster.
 - `Tools/offline_lab/rates_engine*.py`
   Rates Engine contracts, config, operator numeric inputs, policy-path proxy generation, NewsPulse enrichment, daemon loop, replay reporting, and runtime artifact writers.
+- `Tools/offline_lab/cross_asset_*.py`
+  Cross-asset contracts, config, replay reporting, MT5 probe install helpers, and shared macro/liquidity snapshot generation on top of rates and indicator-proxy inputs.
 - `Tools/offline_lab/microstructure_*.py`
   Microstructure contracts, config, MT5 service install helpers, replay reporting, deterministic reference math, and CLI health or validation helpers for the short-horizon execution-state subsystem.
 - `GUI/Sources/FXAIGUICore`, `GUI/Sources/FXAIGUIApp`
   Swift package targets for the GUI’s project scanner, runtime and Research OS artifact readers, advanced visualization builders, saved-workspace persistence, onboarding guides, incident builders, design system, navigation shell, operator-theme token/layout/rendering stack, reference-asset parsing, adaptive dashboard components, Phase 2 run builders, Phase 3 runtime/promotion views, Phase 4 Turso/Research OS control surfaces, Phase 5 Metal-backed visualization surfaces, and Phase 6 operator-polish features.
   The GUI also includes an integrated NewsPulse surface for source health, currency heatmap, pair risk, and recent tape visibility.
   It now also includes a Rates Engine surface for provider health, currency policy state, pair divergence, policy tape, and rates-aware trade gates.
+  It now also includes a Cross Asset surface for shared macro/liquidity state, pair impact, proxy selection, source health, and transition visibility.
   It now also includes a Microstructure surface for live per-symbol regime, liquidity stress, hostile execution, stop-run proxy flags, session handoff state, and runtime gating reasons.
   It now also includes an Adaptive Router surface for live regime state, plugin weights, suppression reasons, replay counts, and routing transitions by symbol.
   It now also includes a Dynamic Ensemble surface for live post-inference posture, participation weights, suppression state, replay drift, and final-action reasoning by symbol.
@@ -155,6 +164,11 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - The preferred Rates Engine smoke path is `python3 FXAI/Tools/fxai_offline_lab.py rates-engine-once`.
 - The preferred Rates Engine health path is `python3 FXAI/Tools/fxai_offline_lab.py rates-engine-health`.
 - The preferred Rates Engine replay path is `python3 FXAI/Tools/fxai_offline_lab.py rates-engine-replay-report --symbol EURUSD --hours-back 72`.
+- The preferred Cross Asset validation path is `python3 FXAI/Tools/fxai_offline_lab.py cross-asset-validate`.
+- The preferred Cross Asset service install path is `python3 FXAI/Tools/fxai_offline_lab.py cross-asset-install-service`.
+- The preferred Cross Asset smoke path is `python3 FXAI/Tools/fxai_offline_lab.py cross-asset-once`.
+- The preferred Cross Asset health path is `python3 FXAI/Tools/fxai_offline_lab.py cross-asset-health`.
+- The preferred Cross Asset replay path is `python3 FXAI/Tools/fxai_offline_lab.py cross-asset-replay-report --symbol EURUSD --hours-back 72`.
 - The preferred Microstructure validation path is `python3 FXAI/Tools/fxai_offline_lab.py microstructure-validate`.
 - The preferred Microstructure service install path is `python3 FXAI/Tools/fxai_offline_lab.py microstructure-install-service`.
 - The preferred Microstructure health path is `python3 FXAI/Tools/fxai_offline_lab.py microstructure-health`.
@@ -188,6 +202,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - The default market-universe policy is `FX_ONLY`: FX pairs are tradable, while non-FX MT5 symbols are stored as indicator-only context instruments in the Offline Lab database configuration.
 - NewsPulse is phase-1 safe by design: it adds shared news-risk gating, optional official-feed monitoring, replay timelines, operator-editable pair policy, and GUI drill-down visibility without forcing model retraining or changing the canonical model-input contract by default.
 - The Rates Engine is phase-1 safe by design: it adds shared rates-aware macro gating, NewsPulse enrichment, GUI visibility, and replayable policy-path state without forcing immediate model retraining. Phase 1 supports true-market numeric inputs when operators have them and otherwise falls back to a clearly labeled NewsPulse-driven policy proxy.
+- The Cross-Asset engine is phase-1 safe by design: it adds shared macro/liquidity state, pair-level cross-market gating, GUI visibility, and replayable global-context history without forcing immediate model retraining or duplicating the Rates Engine.
 - The Microstructure layer is phase-1 safe by design: it adds MT5-observable tick-flow, spread, stop-run proxy, session-handoff, and hostile-execution gating without pretending to measure a true institutional order book and without forcing model retraining.
 - The Adaptive Router is also phase-1 safe by design: it layers regime classification, plugin trust weighting, suppression, and abstention posture above the current zoo without breaking canonical plugin inputs or forcing immediate retraining.
 - The Dynamic Ensemble is also phase-1 safe by design: it layers a deterministic meta-learner above the plugin outputs and above the Adaptive Router, reweights participation using calibration and shared context, and can be disabled without breaking canonical plugin contracts or forcing retraining.

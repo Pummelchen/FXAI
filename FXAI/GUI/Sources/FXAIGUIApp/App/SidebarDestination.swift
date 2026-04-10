@@ -10,6 +10,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
     case offlineLab
     case newsPulse
     case ratesEngine
+    case crossAsset
     case microstructure
     case adaptiveRouter
     case dynamicEnsemble
@@ -37,6 +38,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .offlineLab: "Offline Lab"
         case .newsPulse: "NewsPulse"
         case .ratesEngine: "Rates Engine"
+        case .crossAsset: "Cross Asset"
         case .microstructure: "Microstructure"
         case .adaptiveRouter: "Adaptive Router"
         case .dynamicEnsemble: "Dynamic Ensemble"
@@ -64,6 +66,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .offlineLab: "gearshape.2.fill"
         case .newsPulse: "dot.radiowaves.left.and.right"
         case .ratesEngine: "chart.line.text.clipboard.fill"
+        case .crossAsset: "globe.americas.fill"
         case .microstructure: "waveform.path.ecg.rectangle.fill"
         case .adaptiveRouter: "point.3.filled.connected.trianglepath.dotted"
         case .dynamicEnsemble: "dial.high.fill"

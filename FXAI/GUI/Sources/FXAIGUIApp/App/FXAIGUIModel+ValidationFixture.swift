@@ -11,6 +11,7 @@ extension FXAIGUIModel {
         let snapshot = GUIValidationFixtures.projectSnapshot(projectRoot: projectRoot)
         let runtimeSnapshot = GUIValidationFixtures.runtimeSnapshot(projectRoot: projectRoot)
         let ratesEngineSnapshot = GUIValidationFixtures.ratesEngineSnapshot(projectRoot: projectRoot)
+        let crossAssetSnapshot = GUIValidationFixtures.crossAssetSnapshot(projectRoot: projectRoot)
         let microstructureSnapshot = GUIValidationFixtures.microstructureSnapshot(projectRoot: projectRoot)
         let adaptiveRouterSnapshot = GUIValidationFixtures.adaptiveRouterSnapshot(projectRoot: projectRoot)
         let dynamicEnsembleSnapshot = GUIValidationFixtures.dynamicEnsembleSnapshot(projectRoot: projectRoot)
@@ -25,6 +26,7 @@ extension FXAIGUIModel {
         model.snapshot = snapshot
         model.runtimeSnapshot = runtimeSnapshot
         model.ratesEngineSnapshot = ratesEngineSnapshot
+        model.crossAssetSnapshot = crossAssetSnapshot
         model.microstructureSnapshot = microstructureSnapshot
         model.adaptiveRouterSnapshot = adaptiveRouterSnapshot
         model.dynamicEnsembleSnapshot = dynamicEnsembleSnapshot
@@ -38,6 +40,7 @@ extension FXAIGUIModel {
         model.selectedRole = .liveTrader
         model.selectedRuntimeSymbol = runtimeSnapshot.symbols.first ?? ""
         model.selectedRatesSymbol = ratesEngineSnapshot.pairs.first?.pair ?? ""
+        model.selectedCrossAssetSymbol = crossAssetSnapshot.pairs.first?.pair ?? ""
         model.selectedMicrostructureSymbol = microstructureSnapshot.symbols.first?.symbol ?? ""
         model.selectedAdaptiveSymbol = adaptiveRouterSnapshot.symbols.first?.symbol ?? ""
         model.selectedDynamicEnsembleSymbol = dynamicEnsembleSnapshot.symbols.first?.symbol ?? ""
@@ -59,6 +62,7 @@ extension FXAIGUIModel {
                 selectedRole: .liveTrader,
                 selectedRuntimeSymbol: runtimeSnapshot.symbols.first ?? "EURUSD",
                 selectedRatesSymbol: ratesEngineSnapshot.pairs.first?.pair ?? "EURUSD",
+                selectedCrossAssetSymbol: crossAssetSnapshot.pairs.first?.pair ?? "EURUSD",
                 selectedMicrostructureSymbol: microstructureSnapshot.symbols.first?.symbol ?? "EURUSD",
                 selectedAdaptiveSymbol: adaptiveRouterSnapshot.symbols.first?.symbol ?? "EURUSD",
                 selectedDynamicEnsembleSymbol: dynamicEnsembleSnapshot.symbols.first?.symbol ?? "EURUSD",

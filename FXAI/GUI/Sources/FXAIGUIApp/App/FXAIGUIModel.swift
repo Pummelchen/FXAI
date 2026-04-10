@@ -13,6 +13,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var runtimeSnapshot: RuntimeOperationsSnapshot?
     @Published var newsPulseSnapshot: NewsPulseSnapshot?
     @Published var ratesEngineSnapshot: RatesEngineSnapshot?
+    @Published var crossAssetSnapshot: CrossAssetSnapshot?
     @Published var microstructureSnapshot: MicrostructureSnapshot?
     @Published var adaptiveRouterSnapshot: AdaptiveRouterSnapshot?
     @Published var dynamicEnsembleSnapshot: DynamicEnsembleSnapshot?
@@ -25,6 +26,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var selectedRole: WorkspaceRole = .liveTrader
     @Published var selectedRuntimeSymbol = ""
     @Published var selectedRatesSymbol = ""
+    @Published var selectedCrossAssetSymbol = ""
     @Published var selectedMicrostructureSymbol = ""
     @Published var selectedAdaptiveSymbol = ""
     @Published var selectedDynamicEnsembleSymbol = ""
@@ -56,6 +58,7 @@ final class FXAIGUIModel: ObservableObject {
     private let runtimeReader = RuntimeArtifactReader()
     private let newsPulseReader = NewsPulseArtifactReader()
     private let ratesEngineReader = RatesEngineArtifactReader()
+    private let crossAssetReader = CrossAssetArtifactReader()
     private let microstructureReader = MicrostructureArtifactReader()
     private let adaptiveRouterReader = AdaptiveRouterArtifactReader()
     private let dynamicEnsembleReader = DynamicEnsembleArtifactReader()
@@ -170,6 +173,14 @@ final class FXAIGUIModel: ObservableObject {
         return ratesEngineSnapshot.pairs.first
     }
 
+    var selectedCrossAssetDetail: CrossAssetPairState? {
+        guard let crossAssetSnapshot else { return nil }
+        if let selected = crossAssetSnapshot.pairs.first(where: { $0.pair == selectedCrossAssetSymbol }) {
+            return selected
+        }
+        return crossAssetSnapshot.pairs.first
+    }
+
     var selectedVisualizationDetail: SymbolVisualizationDetail? {
         guard let visualizationSnapshot else { return nil }
         if let selected = visualizationSnapshot.symbolDetails.first(where: { $0.symbol == selectedVisualizationSymbol }) {
@@ -218,6 +229,7 @@ final class FXAIGUIModel: ObservableObject {
             runtimeSnapshot = runtimeReader.read(projectRoot: projectRoot)
             newsPulseSnapshot = newsPulseReader.read(projectRoot: projectRoot)
             ratesEngineSnapshot = ratesEngineReader.read(projectRoot: projectRoot)
+            crossAssetSnapshot = crossAssetReader.read(projectRoot: projectRoot)
             microstructureSnapshot = microstructureReader.read(projectRoot: projectRoot)
             adaptiveRouterSnapshot = adaptiveRouterReader.read(projectRoot: projectRoot)
             dynamicEnsembleSnapshot = dynamicEnsembleReader.read(projectRoot: projectRoot)
@@ -239,6 +251,7 @@ final class FXAIGUIModel: ObservableObject {
             syncBuilderDefaults()
             syncRuntimeSelection()
             syncRatesSelection()
+            syncCrossAssetSelection()
             syncMicrostructureSelection()
             syncAdaptiveSelection()
             syncDynamicEnsembleSelection()
@@ -359,6 +372,7 @@ final class FXAIGUIModel: ObservableObject {
             self.selectedRole = savedView.selectedRole
             self.selectedRuntimeSymbol = savedView.selectedRuntimeSymbol
             self.selectedRatesSymbol = savedView.selectedRatesSymbol
+            self.selectedCrossAssetSymbol = savedView.selectedCrossAssetSymbol
             self.selectedMicrostructureSymbol = savedView.selectedMicrostructureSymbol
             self.selectedAdaptiveSymbol = savedView.selectedAdaptiveSymbol
             self.selectedDynamicEnsembleSymbol = savedView.selectedDynamicEnsembleSymbol
@@ -380,6 +394,7 @@ final class FXAIGUIModel: ObservableObject {
             self.syncBuilderDefaults()
             self.syncRuntimeSelection()
             self.syncRatesSelection()
+            self.syncCrossAssetSelection()
             self.syncMicrostructureSelection()
             self.syncAdaptiveSelection()
             self.syncDynamicEnsembleSelection()
@@ -540,6 +555,26 @@ final class FXAIGUIModel: ObservableObject {
             selectedRatesSymbol = selectedRuntimeSymbol.isEmpty ? first : selectedRuntimeSymbol
             if !symbols.contains(selectedRatesSymbol) {
                 selectedRatesSymbol = first
+            }
+        }
+    }
+
+    private func syncCrossAssetSelection() {
+        guard let crossAssetSnapshot else {
+            selectedCrossAssetSymbol = ""
+            return
+        }
+
+        let symbols = crossAssetSnapshot.pairs.map(\.pair)
+        guard let first = symbols.first else {
+            selectedCrossAssetSymbol = ""
+            return
+        }
+
+        if !symbols.contains(selectedCrossAssetSymbol) {
+            selectedCrossAssetSymbol = selectedRuntimeSymbol.isEmpty ? first : selectedRuntimeSymbol
+            if !symbols.contains(selectedCrossAssetSymbol) {
+                selectedCrossAssetSymbol = first
             }
         }
     }
@@ -730,6 +765,7 @@ final class FXAIGUIModel: ObservableObject {
             $selectedRole.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedRuntimeSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedRatesSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $selectedCrossAssetSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedMicrostructureSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedAdaptiveSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedDynamicEnsembleSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
@@ -883,6 +919,7 @@ final class FXAIGUIModel: ObservableObject {
             selectedRole = workspace.selectedRole
             selectedRuntimeSymbol = workspace.selectedRuntimeSymbol
             selectedRatesSymbol = workspace.selectedRatesSymbol
+            selectedCrossAssetSymbol = workspace.selectedCrossAssetSymbol
             selectedMicrostructureSymbol = workspace.selectedMicrostructureSymbol
             selectedAdaptiveSymbol = workspace.selectedAdaptiveSymbol
             selectedDynamicEnsembleSymbol = workspace.selectedDynamicEnsembleSymbol
@@ -909,6 +946,7 @@ final class FXAIGUIModel: ObservableObject {
         runtimeSnapshot = nil
         newsPulseSnapshot = nil
         ratesEngineSnapshot = nil
+        crossAssetSnapshot = nil
         microstructureSnapshot = nil
         adaptiveRouterSnapshot = nil
         dynamicEnsembleSnapshot = nil
@@ -936,6 +974,7 @@ final class FXAIGUIModel: ObservableObject {
             selectedRole: selectedRole,
             selectedRuntimeSymbol: selectedRuntimeSymbol,
             selectedRatesSymbol: selectedRatesSymbol,
+            selectedCrossAssetSymbol: selectedCrossAssetSymbol,
             selectedMicrostructureSymbol: selectedMicrostructureSymbol,
             selectedAdaptiveSymbol: selectedAdaptiveSymbol,
             selectedDynamicEnsembleSymbol: selectedDynamicEnsembleSymbol,

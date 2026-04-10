@@ -41,6 +41,11 @@ PATCH_MODULES = [
     "offline_lab.rates_engine_replay",
     "offline_lab.rates_engine",
     "offline_lab.rates_engine_daemon",
+    "offline_lab.cross_asset_contracts",
+    "offline_lab.cross_asset_config",
+    "offline_lab.cross_asset_service",
+    "offline_lab.cross_asset_replay",
+    "offline_lab.cross_asset_engine",
     "offline_lab.microstructure_contracts",
     "offline_lab.microstructure_config",
     "offline_lab.microstructure_service",
@@ -84,6 +89,9 @@ def patched_paths(base_dir: Path):
     rates_engine_dir = offline_dir / "RatesEngine"
     rates_engine_state_dir = rates_engine_dir / "State"
     rates_engine_report_dir = rates_engine_dir / "Reports"
+    cross_asset_dir = offline_dir / "CrossAsset"
+    cross_asset_state_dir = cross_asset_dir / "State"
+    cross_asset_report_dir = cross_asset_dir / "Reports"
     microstructure_dir = offline_dir / "Microstructure"
     microstructure_state_dir = microstructure_dir / "State"
     microstructure_report_dir = microstructure_dir / "Reports"
@@ -113,6 +121,9 @@ def patched_paths(base_dir: Path):
         rates_engine_dir,
         rates_engine_state_dir,
         rates_engine_report_dir,
+        cross_asset_dir,
+        cross_asset_state_dir,
+        cross_asset_report_dir,
         microstructure_dir,
         microstructure_state_dir,
         microstructure_report_dir,
@@ -190,6 +201,14 @@ def patched_paths(base_dir: Path):
             "RATES_ENGINE_STATE_PATH": rates_engine_state_dir / "rates_engine_state.json",
             "RATES_ENGINE_REPLAY_REPORT_PATH": rates_engine_report_dir / "rates_replay_report.json",
             "RATES_ENGINE_LOCAL_HISTORY_PATH": rates_engine_dir / "rates_history.ndjson",
+            "CROSS_ASSET_DIR": cross_asset_dir,
+            "CROSS_ASSET_STATE_DIR": cross_asset_state_dir,
+            "CROSS_ASSET_REPORT_DIR": cross_asset_report_dir,
+            "CROSS_ASSET_CONFIG_PATH": cross_asset_dir / "cross_asset_config.json",
+            "CROSS_ASSET_STATUS_PATH": cross_asset_dir / "cross_asset_status.json",
+            "CROSS_ASSET_STATE_PATH": cross_asset_state_dir / "cross_asset_state.json",
+            "CROSS_ASSET_REPLAY_REPORT_PATH": cross_asset_report_dir / "cross_asset_replay_report.json",
+            "CROSS_ASSET_LOCAL_HISTORY_PATH": cross_asset_dir / "cross_asset_history.ndjson",
             "MICROSTRUCTURE_DIR": microstructure_dir,
             "MICROSTRUCTURE_STATE_DIR": microstructure_state_dir,
             "MICROSTRUCTURE_REPORT_DIR": microstructure_report_dir,
@@ -210,6 +229,15 @@ def patched_paths(base_dir: Path):
             "COMMON_RATES_FLAT": runtime_dir / "rates_snapshot_flat.tsv",
             "COMMON_RATES_HISTORY": runtime_dir / "rates_history.ndjson",
             "COMMON_RATES_SYMBOL_MAP": runtime_dir / "rates_symbol_map.tsv",
+            "COMMON_CROSS_ASSET_JSON": runtime_dir / "cross_asset_snapshot.json",
+            "COMMON_CROSS_ASSET_FLAT": runtime_dir / "cross_asset_snapshot_flat.tsv",
+            "COMMON_CROSS_ASSET_HISTORY": runtime_dir / "cross_asset_history.ndjson",
+            "COMMON_CROSS_ASSET_STATUS": runtime_dir / "cross_asset_status.json",
+            "COMMON_CROSS_ASSET_SYMBOL_MAP": runtime_dir / "cross_asset_symbol_map.tsv",
+            "COMMON_CROSS_ASSET_CONFIG": runtime_dir / "cross_asset_probe_config.tsv",
+            "COMMON_CROSS_ASSET_PROBE_JSON": runtime_dir / "cross_asset_probe_snapshot.json",
+            "COMMON_CROSS_ASSET_PROBE_STATUS": runtime_dir / "cross_asset_probe_status.json",
+            "COMMON_CROSS_ASSET_PROBE_HISTORY": runtime_dir / "cross_asset_probe_history.ndjson",
             "COMMON_MICROSTRUCTURE_JSON": runtime_dir / "microstructure_snapshot.json",
             "COMMON_MICROSTRUCTURE_FLAT": runtime_dir / "microstructure_snapshot_flat.tsv",
             "COMMON_MICROSTRUCTURE_HISTORY": runtime_dir / "microstructure_history.ndjson",
@@ -240,6 +268,7 @@ def patched_paths(base_dir: Path):
             "dynamic_ensemble_dir": dynamic_ensemble_dir,
             "prob_calibration_dir": prob_calibration_dir,
             "rates_engine_dir": rates_engine_dir,
+            "cross_asset_dir": cross_asset_dir,
             "microstructure_dir": microstructure_dir,
         }
     finally:

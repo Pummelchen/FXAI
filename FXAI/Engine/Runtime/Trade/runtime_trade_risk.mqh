@@ -215,6 +215,54 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       FXAI_ResetRatesEngineGlobals();
    }
 
+   FXAICrossAssetPairState cross_asset_state;
+   FXAI_ResetCrossAssetPairState(cross_asset_state);
+   bool cross_asset_caution = false;
+   if(CrossAssetEnabled)
+   {
+      bool cross_asset_available = FXAI_ReadCrossAssetPairState(symbol, cross_asset_state);
+      if(!cross_asset_available || !cross_asset_state.ready)
+      {
+         if(CrossAssetBlockOnUnknown)
+         {
+            reason = "risk_cross_asset_unknown";
+            return 0.0;
+         }
+      }
+      else
+      {
+         if(cross_asset_state.stale)
+         {
+            if(CrossAssetBlockOnUnknown)
+            {
+               reason = "risk_cross_asset_stale";
+               return 0.0;
+            }
+            cross_asset_caution = true;
+         }
+         else if(cross_asset_state.trade_gate == "BLOCK")
+         {
+            reason = "risk_cross_asset_block";
+            return 0.0;
+         }
+         else if(cross_asset_state.trade_gate == "CAUTION")
+         {
+            cross_asset_caution = true;
+            double caution_buffer = FXAI_Clamp(CrossAssetCautionEnterProbBuffer, 0.0, 0.25);
+            double caution_enter_floor = FXAI_Clamp(0.05 + caution_buffer, 0.05, 0.95);
+            if(g_policy_last_enter_prob < caution_enter_floor)
+            {
+               reason = "risk_cross_asset_caution_floor";
+               return 0.0;
+            }
+         }
+      }
+   }
+   else
+   {
+      FXAI_ResetCrossAssetGlobals();
+   }
+
    FXAIMicrostructurePairState micro_state;
    FXAI_ResetMicrostructurePairState(micro_state);
    bool micro_caution = false;
@@ -538,6 +586,10 @@ double FXAI_CalcRiskAwareLot(const string symbol,
    if(RatesEngineEnabled && rates_caution)
    {
       requested_lot *= FXAI_Clamp(RatesEngineCautionLotScale, 0.10, 1.00);
+   }
+   if(CrossAssetEnabled && cross_asset_caution)
+   {
+      requested_lot *= FXAI_Clamp(CrossAssetCautionLotScale, 0.10, 1.00);
    }
    if(MicrostructureEnabled && micro_caution)
    {

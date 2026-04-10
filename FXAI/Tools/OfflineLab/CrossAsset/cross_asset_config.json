@@ -1,0 +1,279 @@
+{
+  "critical_sources": [
+    "rates",
+    "context_service"
+  ],
+  "currency_profiles": {
+    "AUD": {
+      "commodity": 0.84,
+      "liquidity": 0.42,
+      "rates": 0.66,
+      "risk": 0.72,
+      "safe_haven": 0.1
+    },
+    "CAD": {
+      "commodity": 0.98,
+      "liquidity": 0.5,
+      "rates": 0.7,
+      "risk": 0.58,
+      "safe_haven": 0.12
+    },
+    "CHF": {
+      "commodity": 0.02,
+      "liquidity": 0.68,
+      "rates": 0.52,
+      "risk": 0.8,
+      "safe_haven": 0.92
+    },
+    "EUR": {
+      "commodity": 0.1,
+      "liquidity": 0.52,
+      "rates": 0.88,
+      "risk": 0.36,
+      "safe_haven": 0.18
+    },
+    "GBP": {
+      "commodity": 0.08,
+      "liquidity": 0.48,
+      "rates": 0.84,
+      "risk": 0.38,
+      "safe_haven": 0.16
+    },
+    "JPY": {
+      "commodity": 0.02,
+      "liquidity": 0.72,
+      "rates": 0.54,
+      "risk": 0.86,
+      "safe_haven": 1.0
+    },
+    "NOK": {
+      "commodity": 0.92,
+      "liquidity": 0.36,
+      "rates": 0.58,
+      "risk": 0.62,
+      "safe_haven": 0.06
+    },
+    "NZD": {
+      "commodity": 0.72,
+      "liquidity": 0.4,
+      "rates": 0.62,
+      "risk": 0.68,
+      "safe_haven": 0.08
+    },
+    "SEK": {
+      "commodity": 0.24,
+      "liquidity": 0.38,
+      "rates": 0.56,
+      "risk": 0.56,
+      "safe_haven": 0.08
+    },
+    "USD": {
+      "commodity": 0.06,
+      "liquidity": 1.0,
+      "rates": 1.0,
+      "risk": 0.42,
+      "safe_haven": 0.54
+    }
+  },
+  "enabled": true,
+  "feature_weights": {
+    "commodity_shock": {
+      "gold": 0.26,
+      "metals": 0.16,
+      "oil": 0.58
+    },
+    "cross_asset_dislocation": {
+      "commodity_shock": 0.16,
+      "dispersion": 0.4,
+      "rates_repricing": 0.2,
+      "volatility_shock": 0.24
+    },
+    "rates_repricing": {
+      "curve_divergence": 0.12,
+      "front_end_divergence": 0.4,
+      "policy_repricing": 0.28,
+      "policy_uncertainty": 0.2
+    },
+    "risk_off": {
+      "equity_risk": 0.46,
+      "gold": 0.14,
+      "usd_liquidity": 0.18,
+      "volatility": 0.22
+    },
+    "usd_liquidity_stress": {
+      "rates_uncertainty": 0.18,
+      "risk_off": 0.18,
+      "usd_liquidity": 0.46,
+      "volatility": 0.18
+    },
+    "volatility_shock": {
+      "cross_asset_dislocation": 0.14,
+      "equity_risk": 0.18,
+      "volatility": 0.68
+    }
+  },
+  "history_points": 192,
+  "label_thresholds": {
+    "liquidity_caution_min": 0.48,
+    "liquidity_stressed_min": 0.66,
+    "mixed_delta_max": 0.08,
+    "normal_max": 0.42,
+    "pair_block_min": 0.82,
+    "pair_caution_min": 0.56,
+    "risk_off_min": 0.58
+  },
+  "market_universe": {
+    "indicator_symbols": [
+      "APPL.NAS",
+      "AUS200",
+      "BP.LSE",
+      "BTCUSD",
+      "CA60",
+      "CHINA50",
+      "DE40",
+      "ETHUSD",
+      "FXI.NYSE",
+      "GOOG.NAS",
+      "HK50",
+      "IAU.NYSE",
+      "JP225",
+      "LTCUSD",
+      "MidDE50",
+      "MSFT.NAS",
+      "NVDA.NAS",
+      "RDSB.LSE",
+      "STOXX50",
+      "TecDE30",
+      "UNG.NYSE",
+      "US2000",
+      "US30",
+      "US500",
+      "USO.NYSE",
+      "USTEC",
+      "XAGUSD",
+      "XAUUSD",
+      "XBRUSD",
+      "XNGUSD",
+      "XOM.NYSE",
+      "XPDUSD",
+      "XPTUSD",
+      "XTIUSD"
+    ],
+    "tradable_pairs": [
+      "AUDCAD",
+      "AUDCHF",
+      "AUDJPY",
+      "AUDNZD",
+      "AUDSGD",
+      "AUDUSD",
+      "CADCHF",
+      "CADJPY",
+      "CHFJPY",
+      "CHFSGD",
+      "EURAUD",
+      "EURCAD",
+      "EURCHF",
+      "EURGBP",
+      "EURHKD",
+      "EURNOK",
+      "EURPLN",
+      "EURSEK",
+      "EURSGD",
+      "EURUSD",
+      "EURZAR",
+      "GBPAUD",
+      "GBPCAD",
+      "GBPCHF",
+      "GBPDKK",
+      "GBPJPY",
+      "GBPNOK",
+      "GBPNZD",
+      "GBPSEK",
+      "GBPSGD",
+      "GBPUSD",
+      "NOKJPY",
+      "NOKSEK",
+      "NZDCAD",
+      "NZDCHF",
+      "NZDJPY",
+      "NZDUSD",
+      "SEKJPY",
+      "SGDJPY",
+      "USDCAD",
+      "USDCHF",
+      "USDCNH",
+      "USDCZK",
+      "USDDKK",
+      "USDHKD",
+      "USDHUF",
+      "USDJPY",
+      "USDMXN",
+      "USDNOK",
+      "USDPLN",
+      "USDSEK",
+      "USDSGD",
+      "USDTHB",
+      "USDZAR"
+    ]
+  },
+  "max_recent_transitions": 24,
+  "pair_component_weights": {
+    "commodity": 0.16,
+    "liquidity": 0.16,
+    "rates": 0.28,
+    "risk_off": 0.22,
+    "volatility": 0.18
+  },
+  "poll_interval_sec": 120,
+  "probe_stale_after_sec": 300,
+  "proxy_candidates": {
+    "dollar_liquidity": [
+      "DXY",
+      "USDX",
+      "US02Y",
+      "US10Y",
+      "TNX",
+      "USB10",
+      "BUND",
+      "GILT",
+      "JGB"
+    ],
+    "equities": [
+      "US500",
+      "USTEC",
+      "US30",
+      "DE40",
+      "STOXX50",
+      "JP225",
+      "HK50",
+      "CHINA50",
+      "AUS200",
+      "CA60"
+    ],
+    "gold": [
+      "XAUUSD",
+      "IAU.NYSE",
+      "XAGUSD"
+    ],
+    "metals": [
+      "XPDUSD",
+      "XPTUSD",
+      "XAGUSD"
+    ],
+    "oil": [
+      "XBRUSD",
+      "XTIUSD",
+      "USO.NYSE"
+    ],
+    "volatility": [
+      "VIX",
+      "VIXUSD",
+      "VOLX",
+      "BTCUSD"
+    ]
+  },
+  "rates_stale_after_sec": 1200,
+  "schema_version": 1,
+  "snapshot_stale_after_sec": 900,
+  "use_market_universe_indicator_symbols": true
+}

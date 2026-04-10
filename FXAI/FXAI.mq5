@@ -216,6 +216,26 @@ input double RatesEngineCautionEnterProbBuffer = 0.04;
 // Models: all (rates / term-structure / policy-path overlay).
 // Purpose: requires a slightly stronger policy enter probability when the rates engine marks a pair as caution.
 // Importance/Range: practical 0.00..0.20; 0 disables the extra floor.
+input bool   CrossAssetEnabled = true;
+// Models: all (shared cross-asset macro/liquidity overlay).
+// Purpose: enables the shared cross-asset engine that summarizes global macro, risk-off, volatility, commodity, and USD-liquidity stress for runtime gating.
+// Importance/Range: false/true; true is recommended once the cross-asset probe service and engine are running.
+input bool   CrossAssetBlockOnUnknown = false;
+// Models: all (shared cross-asset macro/liquidity overlay).
+// Purpose: blocks new entries when the shared cross-asset snapshot is missing or stale instead of treating unknown as neutral.
+// Importance/Range: false/true; false is the safer phase-1 rollout default.
+input int    CrossAssetFreshnessMaxSec = 900;
+// Models: all (shared cross-asset macro/liquidity overlay).
+// Purpose: maximum allowed age of the shared cross-asset snapshot before it is treated as stale.
+// Importance/Range: practical 300..3600 seconds depending on daemon cadence.
+input double CrossAssetCautionLotScale = 0.78;
+// Models: all (shared cross-asset macro/liquidity overlay).
+// Purpose: scales requested lot size down during elevated global macro/liquidity stress while preserving existing model contracts.
+// Importance/Range: practical 0.25..1.00; lower is more defensive.
+input double CrossAssetCautionEnterProbBuffer = 0.03;
+// Models: all (shared cross-asset macro/liquidity overlay).
+// Purpose: requires a slightly stronger policy enter probability when the cross-asset engine marks a pair as caution.
+// Importance/Range: practical 0.00..0.20; 0 disables the extra floor.
 input bool   MicrostructureEnabled = true;
 // Models: all (execution microstructure / order-flow proxy overlay).
 // Purpose: enables the shared MT5-side microstructure proxy layer for short-horizon liquidity, burst, and hostile-execution gating.

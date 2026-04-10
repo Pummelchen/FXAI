@@ -2,6 +2,7 @@
 #define __FXAI_RUNTIME_ADAPTIVE_ROUTER_STAGE_MQH__
 
 #include "Trade\\runtime_trade_newspulse.mqh"
+#include "Trade\\runtime_trade_cross_asset_state.mqh"
 #include "Trade\\runtime_trade_microstructure.mqh"
 
 #define FXAI_ADAPTIVE_ROUTER_STATUS_SUPPRESSED 0
@@ -261,6 +262,7 @@ void FXAI_BuildAdaptiveRegimeState(const string symbol,
                                    const double context_quality,
                                    const FXAIRegimeGraphQuery &regime_graph,
                                    const FXAINewsPulsePairState &news_state,
+                                   const FXAICrossAssetPairState &cross_asset_state,
                                    const FXAIMicrostructurePairState &micro_state,
                                    FXAIAdaptiveRegimeState &out)
 {
@@ -273,6 +275,13 @@ void FXAI_BuildAdaptiveRegimeState(const string symbol,
    out.news_pressure = FXAI_Clamp((news_state.ready ? news_state.news_pressure : 0.0), -1.0, 1.0);
    out.event_eta_min = (news_state.ready ? news_state.event_eta_min : -1);
    out.stale_news = (!news_state.ready || news_state.stale);
+   bool cross_ready = (cross_asset_state.ready && !cross_asset_state.stale);
+   double cross_pair_risk = (cross_ready ? FXAI_Clamp(cross_asset_state.pair_cross_asset_risk_score, 0.0, 1.0) : 0.0);
+   double cross_risk_off = (cross_ready ? FXAI_Clamp(cross_asset_state.risk_off_score, 0.0, 1.0) : 0.0);
+   double cross_liquidity = (cross_ready ? FXAI_Clamp(MathMax(cross_asset_state.usd_liquidity_stress_score,
+                                                              cross_asset_state.cross_asset_dislocation_score),
+                                                      0.0,
+                                                      1.0) : 0.0);
    bool micro_ready = (micro_state.ready && !micro_state.stale);
    double micro_liquidity = (micro_ready ? FXAI_Clamp(micro_state.liquidity_stress_score, 0.0, 1.0) : 0.0);
    double micro_hostile = (micro_ready ? FXAI_Clamp(micro_state.hostile_execution_score, 0.0, 1.0) : 0.0);
@@ -339,7 +348,8 @@ void FXAI_BuildAdaptiveRegimeState(const string symbol,
    double macro_pressure = FXAI_Clamp(0.36 * FXAI_Clamp(regime_graph.macro_alignment, 0.0, 1.0) +
                                       0.24 * MathAbs(out.news_pressure) +
                                       0.20 * pair_macro_sensitivity +
-                                      0.20 * FXAI_Clamp(context_strength / 2.0, 0.0, 1.0),
+                                      0.12 * FXAI_Clamp(context_strength / 2.0, 0.0, 1.0) +
+                                      0.08 * cross_pair_risk,
                                       0.0,
                                       1.0);
    double liquidity_stress = FXAI_Clamp(0.28 * FXAI_Clamp(spread_ratio - 1.0, 0.0, 2.0) +
@@ -348,7 +358,8 @@ void FXAI_BuildAdaptiveRegimeState(const string symbol,
                                         0.10 * FXAI_Clamp(vol_ratio - 1.0, 0.0, 2.0) +
                                         0.10 * (out.stale_news ? 1.0 : 0.0) +
                                         0.16 * micro_liquidity +
-                                        0.10 * micro_hostile,
+                                        0.06 * micro_hostile +
+                                        0.04 * cross_liquidity,
                                         0.0,
                                         1.0);
    out.breakout_pressure = breakout_pressure;
@@ -380,8 +391,8 @@ void FXAI_BuildAdaptiveRegimeState(const string symbol,
    raw[1] = 0.12 + 0.44 * range_pressure + 0.12 * (1.0 - breakout_pressure) + 0.16 * (1.0 - out.news_risk_score) + 0.16 * (1.0 - liquidity_stress);
    raw[2] = 0.12 + 0.42 * breakout_pressure + 0.14 * trend_strength + 0.10 * FXAI_Clamp(regime_graph.transition_confidence, 0.0, 1.0) + 0.10 * FXAI_Clamp(vol_ratio - 1.0, 0.0, 2.0) + 0.12 * micro_sweep_risk;
    raw[3] = 0.08 + 0.52 * out.news_risk_score + 0.18 * (event_window ? 1.0 : 0.0) + 0.10 * FXAI_Clamp(vol_ratio - 1.0, 0.0, 2.0) + 0.12 * MathAbs(out.news_pressure);
-   raw[4] = 0.08 + 0.42 * macro_pressure + 0.16 * MathAbs(out.news_pressure) + 0.18 * pair_macro_sensitivity + 0.16 * FXAI_Clamp(context_quality, 0.0, 1.0);
-   raw[5] = 0.08 + 0.48 * liquidity_stress + 0.10 * FXAI_Clamp(regime_graph.instability, 0.0, 1.0) + 0.08 * (out.session_label == "ROLLOVER" ? 1.0 : 0.0) + 0.10 * (out.stale_news ? 1.0 : 0.0) + 0.16 * micro_hostile;
+   raw[4] = 0.08 + 0.38 * macro_pressure + 0.16 * MathAbs(out.news_pressure) + 0.18 * pair_macro_sensitivity + 0.10 * FXAI_Clamp(context_quality, 0.0, 1.0) + 0.10 * cross_risk_off;
+   raw[5] = 0.08 + 0.42 * liquidity_stress + 0.10 * FXAI_Clamp(regime_graph.instability, 0.0, 1.0) + 0.08 * (out.session_label == "ROLLOVER" ? 1.0 : 0.0) + 0.10 * (out.stale_news ? 1.0 : 0.0) + 0.12 * micro_hostile + 0.10 * cross_liquidity;
    raw[6] = 0.12 + 0.48 * session_flow_score + 0.14 * (1.0 - out.news_risk_score) + 0.08 * FXAI_Clamp(context_strength / 2.0, 0.0, 1.0) + 0.08 * (1.0 - liquidity_stress) + 0.10 * (micro_handoff ? 1.0 : 0.0);
 
    double total = 0.0;
@@ -427,6 +438,10 @@ void FXAI_BuildAdaptiveRegimeState(const string symbol,
       FXAI_AdaptiveRouterAppendReason(out, "Macro repricing pressure elevated");
    if(liquidity_stress >= 0.58)
       FXAI_AdaptiveRouterAppendReason(out, "Liquidity stress elevated");
+   if(cross_ready && cross_asset_state.macro_state != "NORMAL")
+      FXAI_AdaptiveRouterAppendReason(out, "Cross-asset macro regime active");
+   if(cross_ready && cross_asset_state.trade_gate == "BLOCK")
+      FXAI_AdaptiveRouterAppendReason(out, "Cross-asset stress blocking");
    if(micro_ready && micro_hostile >= 0.58)
       FXAI_AdaptiveRouterAppendReason(out, "Microstructure hostile execution elevated");
    if(micro_ready && micro_sweep_risk >= 0.58)

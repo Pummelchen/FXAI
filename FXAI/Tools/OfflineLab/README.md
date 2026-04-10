@@ -14,6 +14,7 @@ It does not replace the MT5 model engine. MT5 and MQL5 still execute the real pl
 - distillation artifacts for lighter student targets and learned red-team plans for future hostile-market runs
 - NewsPulse shared-news infrastructure for MT5 calendar export, GDELT fusion, runtime gating, and operator visibility
 - Rates Engine shared macro infrastructure for front-end differentials, policy-path proxies, curve state, NewsPulse enrichment, and runtime rates-aware gating
+- Cross-Asset shared macro/liquidity infrastructure for rates-aware global context, equity-risk, commodity shock, volatility stress, dollar-liquidity stress, pair-level gating, and GUI visibility
 - Microstructure shared execution-state infrastructure for MT5 tick-flow, spread-dynamics, liquidity-stress, stop-run proxy detection, session handoff, runtime gating, and replay visibility
 - Probabilistic Calibration shared decision-quality infrastructure for calibrated ensemble probabilities, cost-aware edge filtering, abstention reasons, and replay visibility
 - Execution-Quality shared execution-intelligence infrastructure for forecasted spread widening, slippage stress, fill quality, latency sensitivity, liquidity fragility, and runtime execution-state controls
@@ -42,6 +43,12 @@ python3 FXAI/Tools/fxai_offline_lab.py rates-engine-validate
 python3 FXAI/Tools/fxai_offline_lab.py rates-engine-once
 python3 FXAI/Tools/fxai_offline_lab.py rates-engine-daemon --interval-seconds 120
 python3 FXAI/Tools/fxai_offline_lab.py rates-engine-replay-report --symbol EURUSD --hours-back 72
+python3 FXAI/Tools/fxai_offline_lab.py cross-asset-validate
+python3 FXAI/Tools/fxai_offline_lab.py cross-asset-install-service
+python3 FXAI/Tools/fxai_offline_lab.py cross-asset-once
+python3 FXAI/Tools/fxai_offline_lab.py cross-asset-daemon --interval-seconds 120
+python3 FXAI/Tools/fxai_offline_lab.py cross-asset-health
+python3 FXAI/Tools/fxai_offline_lab.py cross-asset-replay-report --symbol EURUSD --hours-back 72
 python3 FXAI/Tools/fxai_offline_lab.py microstructure-validate
 python3 FXAI/Tools/fxai_offline_lab.py microstructure-install-service
 python3 FXAI/Tools/fxai_offline_lab.py microstructure-health
@@ -96,6 +103,12 @@ Notes:
 - `rates-engine-once` builds one shared rates snapshot from current operator numeric inputs and NewsPulse context.
 - `rates-engine-daemon` keeps the rates snapshot refreshed continuously for runtime, NewsPulse enrichment, Adaptive Router context, and GUI consumers.
 - `rates-engine-replay-report` summarizes recent pair gates, regime transitions, and policy-path behavior from append-only rates history.
+- `cross-asset-validate` writes the default cross-asset config plus the MT5 probe config and confirms the cross-market context layer can boot cleanly.
+- `cross-asset-install-service` installs and compiles the MT5 probe used to publish indicator-only context symbols into the shared runtime directory.
+- `cross-asset-once` builds one shared cross-asset macro/liquidity snapshot from the probe service and the Rates Engine snapshot.
+- `cross-asset-daemon` keeps the cross-asset snapshot refreshed continuously for routing, calibration, execution-quality, runtime risk, and GUI consumers.
+- `cross-asset-health` shows current shared-state health for the probe service, snapshot, and replay layer.
+- `cross-asset-replay-report` summarizes recent pair gates, macro-state transitions, and top cross-asset reasons from append-only shared history.
 - `microstructure-validate` writes the default service config, validates thresholds and required rolling windows, and confirms the microstructure subsystem can boot cleanly.
 - `microstructure-install-service` installs and compiles the MT5 tick-probe service used by the microstructure subsystem.
 - `microstructure-health` shows current service, artifact, and replay status for the shared microstructure layer.

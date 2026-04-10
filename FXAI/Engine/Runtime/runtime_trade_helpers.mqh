@@ -1,6 +1,7 @@
 #include "Trade\\runtime_trade_exposure.mqh"
 #include "Trade\\runtime_trade_newspulse.mqh"
 #include "Trade\\runtime_trade_rates_engine.mqh"
+#include "Trade\\runtime_trade_cross_asset_state.mqh"
 #include "Trade\\runtime_trade_microstructure.mqh"
 #include "Trade\\runtime_trade_execution_quality.mqh"
 #include "Trade\\runtime_trade_risk.mqh"

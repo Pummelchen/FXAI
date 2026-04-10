@@ -899,6 +899,7 @@
                                       adaptive_regime_state,
                                       adaptive_news_state,
                                       adaptive_rates_state,
+                                      adaptive_cross_asset_state,
                                       adaptive_micro_state,
                                       dynamic_records,
                                       dynamic_ensemble_state))

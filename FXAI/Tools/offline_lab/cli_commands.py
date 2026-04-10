@@ -12,6 +12,14 @@ from .adaptive_router_contracts import ADAPTIVE_ROUTER_CONFIG_PATH
 from .adaptive_router_replay import build_adaptive_router_replay_report
 from .bundle import *
 from .common import *
+from .cross_asset_engine import (
+    cross_asset_health_snapshot,
+    run_cross_asset_daemon,
+    run_cross_asset_once,
+    validate_cross_asset_config,
+)
+from .cross_asset_replay import build_cross_asset_replay_report
+from .cross_asset_service import install_cross_asset_service
 from .dynamic_ensemble_config import load_config as load_dynamic_ensemble_config
 from .dynamic_ensemble_contracts import DYNAMIC_ENSEMBLE_CONFIG_PATH
 from .dynamic_ensemble_replay import build_dynamic_ensemble_replay_report
@@ -239,6 +247,48 @@ def cmd_microstructure_replay_report(args) -> int:
     payload = build_microstructure_replay_report(
         symbol=str(getattr(args, "symbol", "") or ""),
         hours_back=int(getattr(args, "hours_back", 24) or 24),
+    )
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_cross_asset_validate(_args) -> int:
+    payload = validate_cross_asset_config()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if bool(payload.get("ok")) else 1
+
+
+def cmd_cross_asset_once(_args) -> int:
+    payload = run_cross_asset_once()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_cross_asset_daemon(args) -> int:
+    payload = run_cross_asset_daemon(
+        iterations=int(getattr(args, "iterations", 0) or 0),
+        interval_seconds=int(getattr(args, "interval_seconds", 0) or 0),
+    )
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_cross_asset_health(_args) -> int:
+    payload = cross_asset_health_snapshot()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_cross_asset_install_service(args) -> int:
+    payload = install_cross_asset_service(compile_service=not bool(getattr(args, "skip_compile", False)))
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_cross_asset_replay_report(args) -> int:
+    payload = build_cross_asset_replay_report(
+        symbol=str(getattr(args, "symbol", "") or ""),
+        hours_back=int(getattr(args, "hours_back", 72) or 72),
     )
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0

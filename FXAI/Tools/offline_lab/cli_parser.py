@@ -69,6 +69,29 @@ def build_parser() -> argparse.ArgumentParser:
     mir.add_argument("--hours-back", type=int, default=24)
     mir.set_defaults(func=cmd_microstructure_replay_report)
 
+    cav = sub.add_parser("cross-asset-validate", help="Validate the cross-asset config, runtime contracts, and probe scaffolding")
+    cav.set_defaults(func=cmd_cross_asset_validate)
+
+    cas = sub.add_parser("cross-asset-install-service", help="Install the MT5 cross-asset probe service into MQL5/Services")
+    cas.add_argument("--skip-compile", action="store_true")
+    cas.set_defaults(func=cmd_cross_asset_install_service)
+
+    cao = sub.add_parser("cross-asset-once", help="Run one cross-asset engine cycle and refresh the shared snapshot")
+    cao.set_defaults(func=cmd_cross_asset_once)
+
+    cad = sub.add_parser("cross-asset-daemon", help="Continuously refresh the cross-asset shared snapshot")
+    cad.add_argument("--interval-seconds", type=int, default=0)
+    cad.add_argument("--iterations", type=int, default=0, help="0 means run forever")
+    cad.set_defaults(func=cmd_cross_asset_daemon)
+
+    cah = sub.add_parser("cross-asset-health", help="Show current cross-asset engine and probe health, source state, and status artifacts")
+    cah.set_defaults(func=cmd_cross_asset_health)
+
+    car = sub.add_parser("cross-asset-replay-report", help="Rebuild a cross-asset replay report from append-only runtime history")
+    car.add_argument("--symbol", default="")
+    car.add_argument("--hours-back", type=int, default=72)
+    car.set_defaults(func=cmd_cross_asset_replay_report)
+
     npi = sub.add_parser("newspulse-install-service", help="Install the MT5 NewsPulse calendar service into MQL5/Services")
     npi.add_argument("--skip-compile", action="store_true")
     npi.set_defaults(func=cmd_newspulse_install_service)

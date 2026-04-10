@@ -266,6 +266,10 @@
    FXAI_ResetRatesEnginePairState(adaptive_rates_state);
    if(RatesEngineEnabled)
       FXAI_ReadRatesEnginePairState(symbol, adaptive_rates_state);
+   FXAICrossAssetPairState adaptive_cross_asset_state;
+   FXAI_ResetCrossAssetPairState(adaptive_cross_asset_state);
+   if(CrossAssetEnabled)
+      FXAI_ReadCrossAssetPairState(symbol, adaptive_cross_asset_state);
    FXAIMicrostructurePairState adaptive_micro_state;
    FXAI_ResetMicrostructurePairState(adaptive_micro_state);
    if(MicrostructureEnabled)

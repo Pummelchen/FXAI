@@ -1,6 +1,8 @@
 #ifndef __FXAI_RUNTIME_PROB_CALIBRATION_STAGE_MQH__
 #define __FXAI_RUNTIME_PROB_CALIBRATION_STAGE_MQH__
 
+#include "Trade\\runtime_trade_cross_asset_state.mqh"
+
 #define FXAI_PROB_CAL_MAX_REASONS 10
 #define FXAI_PROB_CAL_MAX_BUCKETS 4
 #define FXAI_PROB_CAL_MAX_TIERS 96
@@ -700,6 +702,7 @@ void FXAI_ProbCalibrationApply(const string symbol,
                                const FXAIExecutionProfile &exec_profile,
                                const FXAINewsPulsePairState &news_state,
                                const FXAIRatesEnginePairState &rates_state,
+                               const FXAICrossAssetPairState &cross_state,
                                const FXAIMicrostructurePairState &micro_state,
                                const FXAIAdaptiveRegimeState &adaptive_state,
                                const string adaptive_router_posture,
@@ -783,12 +786,14 @@ void FXAI_ProbCalibrationApply(const string symbol,
                                (now_time - g_prob_cal_memory_generated_at) > g_prob_cal_cfg_cache.memory_stale_after_hours * 3600));
    bool news_stale = (news_state.ready && news_state.available && news_state.stale);
    bool rates_stale = (rates_state.ready && rates_state.available && rates_state.stale);
+   bool cross_stale = (cross_state.ready && cross_state.available && cross_state.stale);
    bool micro_stale = (micro_state.ready && micro_state.available && micro_state.stale);
    bool execution_quality_unknown = (ExecutionQualityEnabled && !execution_quality_state.ready);
    bool execution_quality_stale = (execution_quality_state.ready && execution_quality_state.data_stale);
    int stale_context_count = 0;
    if(news_stale) stale_context_count++;
    if(rates_stale) stale_context_count++;
+   if(cross_stale) stale_context_count++;
    if(micro_stale) stale_context_count++;
    if(execution_quality_unknown || execution_quality_stale) stale_context_count++;
    state.input_stale = (stale_context_count > 0);
@@ -806,6 +811,12 @@ void FXAI_ProbCalibrationApply(const string symbol,
                        (news_stale ? 0.45 : 0.15));
    double rates_risk = (rates_state.ready && rates_state.available ? FXAI_Clamp(rates_state.rates_risk_score, 0.0, 1.0) :
                         (rates_stale ? 0.35 : 0.12));
+   double cross_risk = (cross_state.ready && cross_state.available ? FXAI_Clamp(MathMax(cross_state.pair_cross_asset_risk_score,
+                                                                                        MathMax(cross_state.usd_liquidity_stress_score,
+                                                                                                cross_state.cross_asset_dislocation_score)),
+                                                                                0.0,
+                                                                                1.0) :
+                        (cross_stale ? 0.32 : 0.10));
    double micro_risk = (micro_state.ready && micro_state.available ? FXAI_Clamp(MathMax(micro_state.hostile_execution_score,
                                                                                          micro_state.liquidity_stress_score),
                                                                                  0.0,
@@ -829,10 +840,11 @@ void FXAI_ProbCalibrationApply(const string symbol,
                               g_prob_cal_cfg_cache.uncertainty_distribution_width_penalty * distribution_ratio +
                               g_prob_cal_cfg_cache.uncertainty_news_penalty * news_risk +
                               g_prob_cal_cfg_cache.uncertainty_rates_penalty * rates_risk +
+                              0.12 * cross_risk +
                               g_prob_cal_cfg_cache.uncertainty_micro_penalty * micro_risk +
                               g_prob_cal_cfg_cache.uncertainty_dynamic_abstain_penalty * dynamic_abstain +
                               g_prob_cal_cfg_cache.uncertainty_adaptive_abstain_penalty * adaptive_abstain +
-                              g_prob_cal_cfg_cache.uncertainty_stale_context_penalty * FXAI_Clamp((double)stale_context_count / 3.0, 0.0, 1.0);
+                              g_prob_cal_cfg_cache.uncertainty_stale_context_penalty * FXAI_Clamp((double)stale_context_count / 4.0, 0.0, 1.0);
    uncertainty_score *= FXAI_Clamp(tier.uncertainty_mult, 0.40, 2.50);
    state.uncertainty_score = uncertainty_score;
 
@@ -914,6 +926,7 @@ void FXAI_ProbCalibrationApply(const string symbol,
                           g_prob_cal_cfg_cache.risk_path_mult * FXAI_Clamp(g_ai_last_path_risk, 0.0, 1.0) +
                           (state.news_risk_block ? g_prob_cal_cfg_cache.risk_news_block_mult : 0.0) +
                           (state.rates_risk_block ? g_prob_cal_cfg_cache.risk_rates_block_mult : 0.0) +
+                          0.18 * cross_risk +
                           (state.microstructure_stress ? g_prob_cal_cfg_cache.risk_micro_block_mult : 0.0) +
                           ((adaptive_router_posture == "CAUTION" || dynamic_state.trade_posture == "CAUTION") ? g_prob_cal_cfg_cache.risk_caution_posture_mult : 0.0) +
                           ((adaptive_router_posture == "ABSTAIN_BIAS" || dynamic_state.trade_posture == "ABSTAIN_BIAS") ? g_prob_cal_cfg_cache.risk_abstain_posture_mult : 0.0) +
@@ -974,6 +987,10 @@ void FXAI_ProbCalibrationApply(const string symbol,
       FXAI_ProbCalibrationAppendReason(state, "NEWS_RISK_BLOCK");
    if(state.rates_risk_block)
       FXAI_ProbCalibrationAppendReason(state, "RATES_RISK_BLOCK");
+   if(cross_state.ready && cross_state.available && cross_state.trade_gate == "BLOCK")
+      FXAI_ProbCalibrationAppendReason(state, "CROSS_ASSET_BLOCK");
+   else if(cross_state.ready && cross_state.available && cross_state.trade_gate == "CAUTION")
+      FXAI_ProbCalibrationAppendReason(state, "CROSS_ASSET_CAUTION");
    if(state.microstructure_stress)
       FXAI_ProbCalibrationAppendReason(state, "MICROSTRUCTURE_STRESS");
    if(execution_quality_usable)

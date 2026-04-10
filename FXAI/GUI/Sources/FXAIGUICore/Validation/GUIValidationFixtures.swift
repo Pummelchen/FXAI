@@ -796,6 +796,103 @@ public enum GUIValidationFixtures {
         )
     }
 
+    public static func crossAssetSnapshot(projectRoot _: URL) -> CrossAssetSnapshot {
+        let now = Date()
+        return CrossAssetSnapshot(
+            generatedAt: now,
+            sourceStatuses: [
+                CrossAssetSourceStatus(id: "rates", ok: true, stale: false, lastUpdateAt: now.addingTimeInterval(-90), proxySymbol: nil, availableSymbols: nil, configuredSymbols: nil),
+                CrossAssetSourceStatus(id: "context_service", ok: true, stale: false, lastUpdateAt: now.addingTimeInterval(-45), proxySymbol: nil, availableSymbols: 18, configuredSymbols: 21),
+                CrossAssetSourceStatus(id: "equities", ok: true, stale: false, lastUpdateAt: nil, proxySymbol: "US500", availableSymbols: nil, configuredSymbols: nil),
+                CrossAssetSourceStatus(id: "commodities", ok: true, stale: false, lastUpdateAt: nil, proxySymbol: "XBRUSD", availableSymbols: nil, configuredSymbols: nil),
+                CrossAssetSourceStatus(id: "volatility", ok: true, stale: false, lastUpdateAt: nil, proxySymbol: "BTCUSD", availableSymbols: nil, configuredSymbols: nil),
+                CrossAssetSourceStatus(id: "liquidity", ok: true, stale: false, lastUpdateAt: nil, proxySymbol: "US10Y", availableSymbols: nil, configuredSymbols: nil),
+            ],
+            features: [
+                KeyValueRecord(key: "front_end_rate_divergence_z", value: "1.42"),
+                KeyValueRecord(key: "equity_risk_state_z", value: "1.11"),
+                KeyValueRecord(key: "commodity_shock_oil_z", value: "0.84"),
+                KeyValueRecord(key: "volatility_stress_z", value: "1.63"),
+                KeyValueRecord(key: "usd_liquidity_stress_z", value: "0.98"),
+                KeyValueRecord(key: "cross_asset_dislocation_z", value: "1.06"),
+                KeyValueRecord(key: "global_macro_stress_z", value: "1.22"),
+            ],
+            stateScores: [
+                KeyValueRecord(key: "rates_repricing_score", value: "0.74"),
+                KeyValueRecord(key: "risk_off_score", value: "0.69"),
+                KeyValueRecord(key: "commodity_shock_score", value: "0.51"),
+                KeyValueRecord(key: "volatility_shock_score", value: "0.77"),
+                KeyValueRecord(key: "usd_liquidity_stress_score", value: "0.66"),
+                KeyValueRecord(key: "cross_asset_dislocation_score", value: "0.62"),
+            ],
+            stateLabels: [
+                KeyValueRecord(key: "macro_state", value: "RATES_REPRICING"),
+                KeyValueRecord(key: "risk_state", value: "RISK_OFF"),
+                KeyValueRecord(key: "liquidity_state", value: "STRESSED"),
+            ],
+            selectedProxies: [
+                CrossAssetProxySelection(id: "equities", symbol: "US500", fallbackUsed: false, available: true, changePct1d: -1.26, rangeRatio1d: 1.44),
+                CrossAssetProxySelection(id: "oil", symbol: "XBRUSD", fallbackUsed: false, available: true, changePct1d: 1.08, rangeRatio1d: 1.22),
+                CrossAssetProxySelection(id: "gold", symbol: "XAUUSD", fallbackUsed: false, available: true, changePct1d: 0.66, rangeRatio1d: 1.14),
+                CrossAssetProxySelection(id: "volatility", symbol: "BTCUSD", fallbackUsed: true, available: true, changePct1d: 2.42, rangeRatio1d: 1.58),
+                CrossAssetProxySelection(id: "dollar_liquidity", symbol: "US10Y", fallbackUsed: true, available: true, changePct1d: 0.73, rangeRatio1d: 1.10),
+            ],
+            pairs: [
+                CrossAssetPairState(
+                    pair: "EURUSD",
+                    baseCurrency: "EUR",
+                    quoteCurrency: "USD",
+                    macroState: "RATES_REPRICING",
+                    riskState: "RISK_OFF",
+                    liquidityState: "STRESSED",
+                    pairCrossAssetRiskScore: 0.81,
+                    pairSensitivity: 0.79,
+                    tradeGate: "BLOCK",
+                    stale: false,
+                    reasons: ["FRONT_END_RATES_DIVERGING", "USD_LIQUIDITY_PRESSURE_RISING", "CROSS_ASSET_DISLOCATION_ELEVATED"]
+                ),
+                CrossAssetPairState(
+                    pair: "USDJPY",
+                    baseCurrency: "USD",
+                    quoteCurrency: "JPY",
+                    macroState: "RATES_REPRICING",
+                    riskState: "RISK_OFF",
+                    liquidityState: "STRESSED",
+                    pairCrossAssetRiskScore: 0.63,
+                    pairSensitivity: 0.91,
+                    tradeGate: "CAUTION",
+                    stale: false,
+                    reasons: ["RISK_SENTIMENT_SENSITIVE_PAIR", "USD_LIQUIDITY_SENSITIVE_PAIR"]
+                ),
+            ],
+            recentTransitions: [
+                CrossAssetTransition(type: "macro_state", target: "global", fromValue: "NORMAL", toValue: "RATES_REPRICING", observedAt: now.addingTimeInterval(-600)),
+                CrossAssetTransition(type: "pair_gate", target: "EURUSD", fromValue: "CAUTION", toValue: "BLOCK", observedAt: now.addingTimeInterval(-420)),
+            ],
+            reasons: [
+                "FRONT_END_RATES_DIVERGING",
+                "EQUITY_RISK_PROXY_WEAK",
+                "VOLATILITY_STRESS_ELEVATED",
+                "USD_LIQUIDITY_PRESSURE_RISING",
+            ],
+            qualityFlags: [
+                KeyValueRecord(key: "fallback_proxy_used", value: "true"),
+                KeyValueRecord(key: "partial_data", value: "false"),
+                KeyValueRecord(key: "data_stale", value: "false"),
+            ],
+            healthSummary: [
+                KeyValueRecord(key: "pair_count", value: "54"),
+                KeyValueRecord(key: "feature_count", value: "10"),
+                KeyValueRecord(key: "snapshot_stale_after_sec", value: "900"),
+            ],
+            artifactPaths: [
+                KeyValueRecord(key: "snapshot_json", value: "/tmp/cross_asset_snapshot.json"),
+                KeyValueRecord(key: "snapshot_flat", value: "/tmp/cross_asset_snapshot_flat.tsv"),
+                KeyValueRecord(key: "symbol_map_tsv", value: "/tmp/cross_asset_symbol_map.tsv"),
+            ]
+        )
+    }
+
     public static func researchSnapshot(projectRoot: URL) -> ResearchOSControlSnapshot {
         let now = Date()
         return ResearchOSControlSnapshot(

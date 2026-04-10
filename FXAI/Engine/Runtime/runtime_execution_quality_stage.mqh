@@ -1,6 +1,8 @@
 #ifndef __FXAI_RUNTIME_EXECUTION_QUALITY_STAGE_MQH__
 #define __FXAI_RUNTIME_EXECUTION_QUALITY_STAGE_MQH__
 
+#include "Trade\\runtime_trade_cross_asset_state.mqh"
+
 #ifndef FXAI_EXEC_QUALITY_MAX_REASONS
 #define FXAI_EXEC_QUALITY_MAX_REASONS 12
 #endif
@@ -632,6 +634,7 @@ void FXAI_ExecutionQualityApply(const string symbol,
                                 const FXAIExecutionProfile &exec_profile,
                                 const FXAINewsPulsePairState &news_state,
                                 const FXAIRatesEnginePairState &rates_state,
+                                const FXAICrossAssetPairState &cross_state,
                                 const FXAIMicrostructurePairState &micro_state,
                                 const FXAIAdaptiveRegimeState &adaptive_state,
                                 const FXAIDynamicEnsembleRuntimeState &dynamic_state,
@@ -694,9 +697,11 @@ void FXAI_ExecutionQualityApply(const string symbol,
    int stale_context_count = 0;
    bool news_stale = (news_state.ready && news_state.available && news_state.stale);
    bool rates_stale = (rates_state.ready && rates_state.available && rates_state.stale);
+   bool cross_stale = (cross_state.ready && cross_state.available && cross_state.stale);
    bool micro_stale = (micro_state.ready && micro_state.available && micro_state.stale);
    if(news_stale) stale_context_count++;
    if(rates_stale) stale_context_count++;
+   if(cross_stale) stale_context_count++;
    if(micro_stale) stale_context_count++;
 
    state.memory_stale = (g_exec_quality_memory_generated_at <= 0 ||
@@ -733,6 +738,13 @@ void FXAI_ExecutionQualityApply(const string symbol,
    double rates_risk = (rates_state.ready && rates_state.available
                         ? FXAI_Clamp(rates_state.rates_risk_score, 0.0, 1.0)
                         : (rates_stale ? 0.32 : 0.10));
+   double cross_risk = (cross_state.ready && cross_state.available
+                        ? FXAI_Clamp(MathMax(cross_state.pair_cross_asset_risk_score,
+                                             MathMax(cross_state.usd_liquidity_stress_score,
+                                                     cross_state.cross_asset_dislocation_score)),
+                                     0.0,
+                                     1.0)
+                        : (cross_stale ? 0.34 : 0.12));
    double micro_hostile = (micro_state.ready && micro_state.available
                            ? FXAI_Clamp(micro_state.hostile_execution_score, 0.0, 1.0)
                            : (micro_stale ? 0.42 : 0.10));
@@ -762,6 +774,7 @@ void FXAI_ExecutionQualityApply(const string symbol,
                                            g_exec_quality_cfg_cache.weight_spread_zscore * spread_z_norm +
                                            g_exec_quality_cfg_cache.weight_news_risk * news_risk +
                                            g_exec_quality_cfg_cache.weight_rates_risk * rates_risk +
+                                           0.12 * cross_risk +
                                            g_exec_quality_cfg_cache.weight_micro_liquidity * micro_liquidity +
                                            g_exec_quality_cfg_cache.weight_volatility_burst * vol_burst_norm +
                                            g_exec_quality_cfg_cache.weight_session_thinness * session_thinness +
@@ -793,6 +806,7 @@ void FXAI_ExecutionQualityApply(const string symbol,
                                                0.26 * session_thinness +
                                                0.24 * news_risk +
                                                0.18 * rates_risk +
+                                               0.22 * cross_risk +
                                                0.28 * FXAI_Clamp(broker_stats.event_burst_penalty, 0.0, 1.0) +
                                                0.32 * state.broker_reject_prob +
                                                0.30 * state.broker_partial_fill_prob +
@@ -817,6 +831,7 @@ void FXAI_ExecutionQualityApply(const string symbol,
                                                 0.18 * vol_burst_norm +
                                                 0.16 * news_risk +
                                                 0.10 * rates_risk +
+                                                0.08 * cross_risk +
                                                 0.12 * FXAI_Clamp(broker_stats.latency_points / 5.0, 0.0, 1.0) * tier.latency_mult +
                                                 0.08 * micro_hostile +
                                                 0.08 * session_thinness +
@@ -830,6 +845,7 @@ void FXAI_ExecutionQualityApply(const string symbol,
                                                 0.12 * spread_z_norm +
                                                 0.08 * news_risk +
                                                 0.08 * rates_risk +
+                                                0.12 * cross_risk +
                                                 0.12 * state.broker_partial_fill_prob +
                                                 0.10 * state.broker_reject_prob +
                                                 0.10 * session_thinness +
@@ -917,6 +933,8 @@ void FXAI_ExecutionQualityApply(const string symbol,
       FXAI_ExecutionQualityAppendReason(state, "NEWS_WINDOW_ACTIVE");
    if(state.rates_repricing_active || rates_risk >= 0.68)
       FXAI_ExecutionQualityAppendReason(state, "RATES_REPRICING_ACTIVE");
+   if(cross_risk >= 0.58)
+      FXAI_ExecutionQualityAppendReason(state, "CROSS_ASSET_STRESS_ELEVATED");
    if(spread_z_norm >= 0.55)
       FXAI_ExecutionQualityAppendReason(state, "SPREAD_ALREADY_ELEVATED");
    if(micro_hostile >= 0.62)
