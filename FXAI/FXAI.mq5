@@ -236,6 +236,34 @@ input double MicrostructureCautionEnterProbBuffer = 0.04;
 // Models: all (execution microstructure / order-flow proxy overlay).
 // Purpose: requires a slightly stronger policy enter probability when microstructure conditions are cautionary.
 // Importance/Range: practical 0.00..0.20; 0 disables the extra floor.
+input bool   ExecutionQualityEnabled = true;
+// Models: all (execution-intelligence overlay).
+// Purpose: enables the execution-quality forecaster that predicts spread widening, slippage, fill quality, latency sensitivity, and liquidity fragility from live broker plus context state.
+// Importance/Range: false/true; true is recommended once runtime config and memory TSVs have been exported.
+input bool   ExecutionQualityBlockOnUnknown = true;
+// Models: all (execution-intelligence overlay).
+// Purpose: blocks new entries when the execution-quality runtime state is missing or stale instead of assuming normal execution conditions.
+// Importance/Range: false/true; true is the conservative live default.
+input int    ExecutionQualityFreshnessMaxSec = 180;
+// Models: all (execution-intelligence overlay).
+// Purpose: maximum allowed age of the execution-quality runtime state before it is treated as stale.
+// Importance/Range: practical 60..600 seconds depending on signal horizon.
+input double ExecutionQualityCautionLotScale = 0.82;
+// Models: all (execution-intelligence overlay).
+// Purpose: fallback lot-size scale when the forecaster marks the current execution state as cautionary.
+// Importance/Range: practical 0.25..1.00; lower is more defensive.
+input double ExecutionQualityStressedLotScale = 0.58;
+// Models: all (execution-intelligence overlay).
+// Purpose: fallback lot-size scale when the forecaster marks the current execution state as stressed.
+// Importance/Range: practical 0.10..1.00; lower is more defensive.
+input double ExecutionQualityCautionEnterProbBuffer = 0.04;
+// Models: all (execution-intelligence overlay).
+// Purpose: fallback enter-probability buffer added when execution quality is cautionary.
+// Importance/Range: practical 0.00..0.20; 0 disables the extra floor.
+input double ExecutionQualityStressedEnterProbBuffer = 0.08;
+// Models: all (execution-intelligence overlay).
+// Purpose: fallback enter-probability buffer added when execution quality is stressed.
+// Importance/Range: practical 0.00..0.30; higher is more defensive.
 input double DynamicEnsembleCautionEnterProbBuffer = 0.04;
 // Models: all (post-inference ensemble meta-layer).
 // Purpose: requires slightly stronger policy enter probability when ensemble quality is cautionary or abstention-biased.
@@ -600,6 +628,31 @@ string   g_prob_calibration_last_session = "UNKNOWN";
 string   g_prob_calibration_last_regime = "UNKNOWN";
 string   g_prob_calibration_last_reasons_csv = "";
 string   g_prob_calibration_last_primary_reason = "";
+bool     g_execution_quality_last_ready = false;
+bool     g_execution_quality_last_fallback_used = false;
+bool     g_execution_quality_last_memory_stale = true;
+bool     g_execution_quality_last_data_stale = true;
+bool     g_execution_quality_last_support_usable = false;
+datetime g_execution_quality_last_generated_at = 0;
+string   g_execution_quality_last_method = "SCORECARD_V1";
+string   g_execution_quality_last_tier_kind = "GLOBAL";
+string   g_execution_quality_last_tier_key = "GLOBAL|*|*|*";
+int      g_execution_quality_last_support = 0;
+double   g_execution_quality_last_quality = 0.0;
+double   g_execution_quality_last_spread_now = 0.0;
+double   g_execution_quality_last_spread_expected = 0.0;
+double   g_execution_quality_last_spread_widening_risk = 0.0;
+double   g_execution_quality_last_expected_slippage = 0.0;
+double   g_execution_quality_last_slippage_risk = 0.0;
+double   g_execution_quality_last_fill_quality = 0.0;
+double   g_execution_quality_last_latency_sensitivity = 0.0;
+double   g_execution_quality_last_liquidity_fragility = 0.0;
+double   g_execution_quality_last_quality_score = 0.0;
+double   g_execution_quality_last_allowed_deviation = 0.0;
+double   g_execution_quality_last_caution_lot_scale = 1.0;
+double   g_execution_quality_last_caution_enter_prob_buffer = 0.0;
+string   g_execution_quality_last_state = "UNKNOWN";
+string   g_execution_quality_last_reasons_csv = "";
 datetime g_last_debug_bar = 0;
 
 #define FXAI_MAX_CONTEXT_SYMBOLS 48

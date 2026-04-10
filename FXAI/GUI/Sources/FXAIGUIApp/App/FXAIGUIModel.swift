@@ -17,6 +17,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var adaptiveRouterSnapshot: AdaptiveRouterSnapshot?
     @Published var dynamicEnsembleSnapshot: DynamicEnsembleSnapshot?
     @Published var probCalibrationSnapshot: ProbCalibrationSnapshot?
+    @Published var executionQualitySnapshot: ExecutionQualitySnapshot?
     @Published var researchSnapshot: ResearchOSControlSnapshot?
     @Published var visualizationSnapshot: AdvancedVisualizationSnapshot?
     @Published var incidentSnapshot: IncidentCenterSnapshot?
@@ -28,6 +29,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var selectedAdaptiveSymbol = ""
     @Published var selectedDynamicEnsembleSymbol = ""
     @Published var selectedProbCalibrationSymbol = ""
+    @Published var selectedExecutionQualitySymbol = ""
     @Published var selectedResearchSymbol = ""
     @Published var selectedVisualizationSymbol = ""
     @Published var selectedIncidentID: String?
@@ -58,6 +60,7 @@ final class FXAIGUIModel: ObservableObject {
     private let adaptiveRouterReader = AdaptiveRouterArtifactReader()
     private let dynamicEnsembleReader = DynamicEnsembleArtifactReader()
     private let probCalibrationReader = ProbCalibrationArtifactReader()
+    private let executionQualityReader = ExecutionQualityArtifactReader()
     private let researchReader = ResearchOSArtifactReader()
     private let visualizationBuilder = AdvancedVisualizationBuilder()
     private let incidentBuilder = IncidentBuilder()
@@ -143,6 +146,14 @@ final class FXAIGUIModel: ObservableObject {
         return probCalibrationSnapshot.symbols.first
     }
 
+    var selectedExecutionQualityDetail: ExecutionQualitySymbolSnapshot? {
+        guard let executionQualitySnapshot else { return nil }
+        if let selected = executionQualitySnapshot.symbols.first(where: { $0.symbol == selectedExecutionQualitySymbol }) {
+            return selected
+        }
+        return executionQualitySnapshot.symbols.first
+    }
+
     var selectedMicrostructureDetail: MicrostructureSymbolState? {
         guard let microstructureSnapshot else { return nil }
         if let selected = microstructureSnapshot.symbols.first(where: { $0.symbol == selectedMicrostructureSymbol }) {
@@ -211,6 +222,7 @@ final class FXAIGUIModel: ObservableObject {
             adaptiveRouterSnapshot = adaptiveRouterReader.read(projectRoot: projectRoot)
             dynamicEnsembleSnapshot = dynamicEnsembleReader.read(projectRoot: projectRoot)
             probCalibrationSnapshot = probCalibrationReader.read(projectRoot: projectRoot)
+            executionQualitySnapshot = executionQualityReader.read(projectRoot: projectRoot)
             researchSnapshot = researchReader.read(projectRoot: projectRoot)
             visualizationSnapshot = visualizationBuilder.build(
                 projectRoot: projectRoot,
@@ -231,6 +243,7 @@ final class FXAIGUIModel: ObservableObject {
             syncAdaptiveSelection()
             syncDynamicEnsembleSelection()
             syncProbCalibrationSelection()
+            syncExecutionQualitySelection()
             syncResearchSelection()
             syncVisualizationSelection()
             syncIncidentSelection()
@@ -350,6 +363,7 @@ final class FXAIGUIModel: ObservableObject {
             self.selectedAdaptiveSymbol = savedView.selectedAdaptiveSymbol
             self.selectedDynamicEnsembleSymbol = savedView.selectedDynamicEnsembleSymbol
             self.selectedProbCalibrationSymbol = savedView.selectedProbCalibrationSymbol
+            self.selectedExecutionQualitySymbol = savedView.selectedExecutionQualitySymbol
             self.selectedResearchSymbol = savedView.selectedResearchSymbol
             self.selectedVisualizationSymbol = savedView.selectedVisualizationSymbol
             self.overviewLayout = savedView.overviewLayout.normalized()
@@ -370,6 +384,7 @@ final class FXAIGUIModel: ObservableObject {
             self.syncAdaptiveSelection()
             self.syncDynamicEnsembleSelection()
             self.syncProbCalibrationSelection()
+            self.syncExecutionQualitySelection()
             self.syncResearchSelection()
             self.syncVisualizationSelection()
         }
@@ -609,6 +624,26 @@ final class FXAIGUIModel: ObservableObject {
         }
     }
 
+    private func syncExecutionQualitySelection() {
+        guard let executionQualitySnapshot else {
+            selectedExecutionQualitySymbol = ""
+            return
+        }
+
+        let symbols = executionQualitySnapshot.symbols.map(\.symbol)
+        guard let first = symbols.first else {
+            selectedExecutionQualitySymbol = ""
+            return
+        }
+
+        if !symbols.contains(selectedExecutionQualitySymbol) {
+            selectedExecutionQualitySymbol = selectedRuntimeSymbol.isEmpty ? first : selectedRuntimeSymbol
+            if !symbols.contains(selectedExecutionQualitySymbol) {
+                selectedExecutionQualitySymbol = first
+            }
+        }
+    }
+
     private func syncResearchSelection() {
         guard let researchSnapshot else {
             selectedResearchSymbol = ""
@@ -699,6 +734,7 @@ final class FXAIGUIModel: ObservableObject {
             $selectedAdaptiveSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedDynamicEnsembleSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedProbCalibrationSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $selectedExecutionQualitySymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedResearchSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedVisualizationSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $overviewLayout.dropFirst().map { _ in () }.eraseToAnyPublisher(),
@@ -851,6 +887,7 @@ final class FXAIGUIModel: ObservableObject {
             selectedAdaptiveSymbol = workspace.selectedAdaptiveSymbol
             selectedDynamicEnsembleSymbol = workspace.selectedDynamicEnsembleSymbol
             selectedProbCalibrationSymbol = workspace.selectedProbCalibrationSymbol
+            selectedExecutionQualitySymbol = workspace.selectedExecutionQualitySymbol
             selectedResearchSymbol = workspace.selectedResearchSymbol
             selectedVisualizationSymbol = workspace.selectedVisualizationSymbol
             overviewLayout = workspace.overviewLayout.normalized()
@@ -876,6 +913,7 @@ final class FXAIGUIModel: ObservableObject {
         adaptiveRouterSnapshot = nil
         dynamicEnsembleSnapshot = nil
         probCalibrationSnapshot = nil
+        executionQualitySnapshot = nil
         researchSnapshot = nil
         visualizationSnapshot = nil
         incidentSnapshot = nil
@@ -902,6 +940,7 @@ final class FXAIGUIModel: ObservableObject {
             selectedAdaptiveSymbol: selectedAdaptiveSymbol,
             selectedDynamicEnsembleSymbol: selectedDynamicEnsembleSymbol,
             selectedProbCalibrationSymbol: selectedProbCalibrationSymbol,
+            selectedExecutionQualitySymbol: selectedExecutionQualitySymbol,
             selectedResearchSymbol: selectedResearchSymbol,
             selectedVisualizationSymbol: selectedVisualizationSymbol,
             pluginSearchText: pluginSearchText,

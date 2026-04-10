@@ -1,0 +1,55 @@
+{
+  "allow_block_state": true,
+  "block_on_unknown": true,
+  "bucket_hierarchy": [
+    "PAIR_SESSION_REGIME",
+    "PAIR_REGIME",
+    "SESSION_REGIME",
+    "REGIME",
+    "GLOBAL"
+  ],
+  "enabled": true,
+  "enter_prob_buffers": {
+    "blocked": 1.0,
+    "caution": 0.04,
+    "normal": 0.0,
+    "stressed": 0.08
+  },
+  "forecast_caps": {
+    "allowed_deviation_points_max": 25.0,
+    "allowed_deviation_points_min": 2.0,
+    "expected_slippage_points": 18.0,
+    "spread_expected_mult": 4.5
+  },
+  "lot_scales": {
+    "blocked": 0.0,
+    "caution": 0.82,
+    "normal": 1.0,
+    "stressed": 0.58
+  },
+  "memory_stale_after_hours": 168,
+  "schema_version": 1,
+  "state_thresholds": {
+    "caution_min": 0.54,
+    "normal_min": 0.72,
+    "stressed_min": 0.36
+  },
+  "support_hard_floor": 16,
+  "support_soft_floor": 64,
+  "weights": {
+    "broker_event_burst": 0.12,
+    "broker_latency": 0.14,
+    "broker_partial": 0.14,
+    "broker_reject": 0.16,
+    "micro_hostile": 0.18,
+    "micro_liquidity": 0.18,
+    "news_risk": 0.18,
+    "rates_risk": 0.1,
+    "session_thinness": 0.1,
+    "spread_zscore": 0.22,
+    "stale_context": 0.1,
+    "support_shortfall": 0.08,
+    "tick_rate_burst": 0.12,
+    "volatility_burst": 0.14
+  }
+}

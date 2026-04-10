@@ -15,6 +15,7 @@ extension FXAIGUIModel {
         let adaptiveRouterSnapshot = GUIValidationFixtures.adaptiveRouterSnapshot(projectRoot: projectRoot)
         let dynamicEnsembleSnapshot = GUIValidationFixtures.dynamicEnsembleSnapshot(projectRoot: projectRoot)
         let probCalibrationSnapshot = GUIValidationFixtures.probCalibrationSnapshot(projectRoot: projectRoot)
+        let executionQualitySnapshot = GUIValidationFixtures.executionQualitySnapshot(projectRoot: projectRoot)
         let researchSnapshot = GUIValidationFixtures.researchSnapshot(projectRoot: projectRoot)
         let visualizationSnapshot = GUIValidationFixtures.visualizationSnapshot(projectRoot: projectRoot)
         let incidentSnapshot = GUIValidationFixtures.incidentSnapshot(projectRoot: projectRoot)
@@ -28,6 +29,7 @@ extension FXAIGUIModel {
         model.adaptiveRouterSnapshot = adaptiveRouterSnapshot
         model.dynamicEnsembleSnapshot = dynamicEnsembleSnapshot
         model.probCalibrationSnapshot = probCalibrationSnapshot
+        model.executionQualitySnapshot = executionQualitySnapshot
         model.researchSnapshot = researchSnapshot
         model.visualizationSnapshot = visualizationSnapshot
         model.incidentSnapshot = incidentSnapshot
@@ -40,6 +42,7 @@ extension FXAIGUIModel {
         model.selectedAdaptiveSymbol = adaptiveRouterSnapshot.symbols.first?.symbol ?? ""
         model.selectedDynamicEnsembleSymbol = dynamicEnsembleSnapshot.symbols.first?.symbol ?? ""
         model.selectedProbCalibrationSymbol = probCalibrationSnapshot.symbols.first?.symbol ?? ""
+        model.selectedExecutionQualitySymbol = executionQualitySnapshot.symbols.first?.symbol ?? ""
         model.selectedResearchSymbol = researchSnapshot.symbols.first?.symbol ?? ""
         model.selectedVisualizationSymbol = visualizationSnapshot.symbols.first ?? ""
         model.selectedIncidentID = incidentSnapshot.incidents.first?.id
@@ -60,6 +63,7 @@ extension FXAIGUIModel {
                 selectedAdaptiveSymbol: adaptiveRouterSnapshot.symbols.first?.symbol ?? "EURUSD",
                 selectedDynamicEnsembleSymbol: dynamicEnsembleSnapshot.symbols.first?.symbol ?? "EURUSD",
                 selectedProbCalibrationSymbol: probCalibrationSnapshot.symbols.first?.symbol ?? "EURUSD",
+                selectedExecutionQualitySymbol: executionQualitySnapshot.symbols.first?.symbol ?? "EURUSD",
                 selectedResearchSymbol: researchSnapshot.symbols.first?.symbol ?? "EURUSD",
                 selectedVisualizationSymbol: visualizationSnapshot.symbols.first ?? "EURUSD",
                 pluginSearchText: "",

@@ -277,6 +277,7 @@
     "teacher_weight": "0.700000",
     "telemetry_level": "full"
   },
+  "execution_quality_runtime": {},
   "performance": {
     "artifact_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Runtime/fxai_perf_EURUSD.tsv",
     "artifact_report": {

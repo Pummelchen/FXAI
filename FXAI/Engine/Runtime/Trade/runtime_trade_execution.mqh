@@ -62,9 +62,17 @@ bool FXAI_SendMarketOrderChecked(const string symbol,
    request.type = (direction == 1 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL);
    request.type_filling = FXAI_ResolveOrderFilling(symbol);
    request.price = (direction == 1 ? tick.ask : tick.bid);
-   request.deviation = (ulong)MathRound(FXAI_ExecutionAllowedDeviationPoints(exec_profile,
-                                                                             g_ai_last_path_risk,
-                                                                             g_ai_last_fill_risk));
+   double allowed_deviation = FXAI_ExecutionAllowedDeviationPoints(exec_profile,
+                                                                   g_ai_last_path_risk,
+                                                                   g_ai_last_fill_risk);
+   if(ExecutionQualityEnabled &&
+      g_execution_quality_last_ready &&
+      !g_execution_quality_last_data_stale &&
+      g_execution_quality_last_allowed_deviation > 0.0)
+   {
+      allowed_deviation = MathMax(allowed_deviation, g_execution_quality_last_allowed_deviation);
+   }
+   request.deviation = (ulong)MathRound(MathMax(allowed_deviation, 0.0));
    request.comment = StringFormat("FXAI|%s|H%d|R%d",
                                   (direction == 1 ? "BUY" : "SELL"),
                                   g_ai_last_horizon_minutes,

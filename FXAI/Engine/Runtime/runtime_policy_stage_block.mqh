@@ -372,6 +372,8 @@
             decision = -1;
       }
    }
+   FXAIExecutionQualityRuntimeState execution_quality_state;
+   FXAI_ResetExecutionQualityRuntimeState(execution_quality_state);
    string adaptive_router_posture = "NORMAL";
    double adaptive_router_abstain_bias = 0.0;
    if(adaptive_router_active)
@@ -398,6 +400,20 @@
                                       adaptive_router_abstain_bias,
                                       decision);
    }
+   if(ensembleMode != 0 && ensemble_meta_total > 0.0)
+   {
+      FXAI_ExecutionQualityApply(symbol,
+                                 exec_profile,
+                                 adaptive_news_state,
+                                 adaptive_rates_state,
+                                 adaptive_micro_state,
+                                 adaptive_regime_state,
+                                 dynamic_ensemble_state,
+                                 spread_pred,
+                                 H,
+                                 decision,
+                                 execution_quality_state);
+   }
    FXAIProbCalibrationRuntimeState prob_cal_state;
    FXAI_ResetProbCalibrationRuntimeState(prob_cal_state);
    if(ensembleMode != 0 && ensemble_meta_total > 0.0)
@@ -421,6 +437,7 @@
                                 adaptive_router_posture,
                                 adaptive_router_abstain_bias,
                                 dynamic_ensemble_state,
+                                execution_quality_state,
                                 ensemble_probs[(int)FXAI_LABEL_BUY],
                                 ensemble_probs[(int)FXAI_LABEL_SELL],
                                 ensemble_probs[(int)FXAI_LABEL_SKIP],
@@ -450,6 +467,8 @@
                                              dynamic_ensemble_state,
                                              dynamic_records,
                                              decision);
+   FXAI_ExecutionQualityWriteRuntimeArtifacts(symbol,
+                                              execution_quality_state);
    FXAI_ProbCalibrationWriteRuntimeArtifacts(symbol,
                                              prob_cal_state);
    FXAI_RecordRuntimeStageMs(FXAI_RUNTIME_STAGE_POLICY,

@@ -35,6 +35,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Dynamic Ensemble / Meta-Learner docs, config, replay outputs, and implementation notes for the post-inference plugin-weighting layer that combines live plugin outputs with shared FXAI context.
 - `Tools/OfflineLab/ProbabilisticCalibration/`
   Probabilistic Calibration + Abstention docs, config, tier memory, replay outputs, and runtime decision artifacts for the cost-aware final trade-quality layer.
+- `Tools/OfflineLab/ExecutionQuality/`
+  Execution-Quality Forecaster docs, config, tier memory, replay outputs, and runtime forecast artifacts for the execution-condition scoring layer that feeds abstention, trade-risk, and order-send controls.
 - `Tools/OfflineLab/RatesEngine/`
   Rates / term-structure / policy-path docs, configs, replay outputs, and status artifacts for the shared macro rates subsystem.
 - `Tools/OfflineLab/Microstructure/`
@@ -72,6 +74,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Dynamic Ensemble runtime stage that scores plugin trust after inference, normalizes participation weights, escalates abstention posture, and writes replayable runtime artifacts for the meta-learner layer.
 - `Engine/Runtime/runtime_prob_calibration_stage.mqh`
   Probabilistic calibration runtime stage that maps ensemble output into calibrated probabilities, expected-move estimates, edge after costs, explicit abstention reasons, and replayable decision artifacts.
+- `Engine/Runtime/runtime_execution_quality_stage.mqh`
+  Execution-Quality runtime stage that forecasts spread widening, slippage, fill quality, latency sensitivity, liquidity fragility, and replayable execution-state artifacts per symbol.
 - `Engine/Runtime/runtime_*_block.mqh`
   Split feature, transfer, model, and policy stages behind `engine_runtime.mqh` so the main runtime entrypoint stays readable.
 - `TensorCore/`
@@ -110,6 +114,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Dynamic Ensemble contracts, config, replay reporting, and CLI validation helpers for the context-aware post-inference plugin-weighting layer.
 - `Tools/offline_lab/prob_calibration_*.py`
   Probabilistic calibration contracts, config, tier-memory export, replay reporting, and deterministic reference math for the final cost-aware decision layer.
+- `Tools/offline_lab/execution_quality_*.py`
+  Execution-Quality contracts, config, tier-memory export, replay reporting, and deterministic reference math for the runtime execution-condition forecaster.
 - `Tools/offline_lab/rates_engine*.py`
   Rates Engine contracts, config, operator numeric inputs, policy-path proxy generation, NewsPulse enrichment, daemon loop, replay reporting, and runtime artifact writers.
 - `Tools/offline_lab/microstructure_*.py`
@@ -122,6 +128,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   It now also includes an Adaptive Router surface for live regime state, plugin weights, suppression reasons, replay counts, and routing transitions by symbol.
   It now also includes a Dynamic Ensemble surface for live post-inference posture, participation weights, suppression state, replay drift, and final-action reasoning by symbol.
   It now also includes a Probabilistic Calibration surface for calibrated probabilities, expected move quantiles, edge-after-costs, selected tier support, and abstention reasons by symbol.
+  It now also includes an Execution Quality surface for expected spread, slippage stress, fill quality, latency sensitivity, liquidity fragility, and current execution-state reasons by symbol.
 
 ## Operating Notes
 
@@ -142,6 +149,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - The preferred Dynamic Ensemble replay path is `python3 FXAI/Tools/fxai_offline_lab.py dynamic-ensemble-replay-report --symbol EURUSD --hours-back 72`.
 - The preferred Probabilistic Calibration validation path is `python3 FXAI/Tools/fxai_offline_lab.py prob-calibration-validate`.
 - The preferred Probabilistic Calibration replay path is `python3 FXAI/Tools/fxai_offline_lab.py prob-calibration-replay-report --symbol EURUSD --hours-back 72`.
+- The preferred Execution-Quality validation path is `python3 FXAI/Tools/fxai_offline_lab.py execution-quality-validate`.
+- The preferred Execution-Quality replay path is `python3 FXAI/Tools/fxai_offline_lab.py execution-quality-replay-report --symbol EURUSD --hours-back 72`.
 - The preferred Rates Engine validation path is `python3 FXAI/Tools/fxai_offline_lab.py rates-engine-validate`.
 - The preferred Rates Engine smoke path is `python3 FXAI/Tools/fxai_offline_lab.py rates-engine-once`.
 - The preferred Rates Engine health path is `python3 FXAI/Tools/fxai_offline_lab.py rates-engine-health`.
@@ -183,6 +192,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - The Adaptive Router is also phase-1 safe by design: it layers regime classification, plugin trust weighting, suppression, and abstention posture above the current zoo without breaking canonical plugin inputs or forcing immediate retraining.
 - The Dynamic Ensemble is also phase-1 safe by design: it layers a deterministic meta-learner above the plugin outputs and above the Adaptive Router, reweights participation using calibration and shared context, and can be disabled without breaking canonical plugin contracts or forcing retraining.
 - The Probabilistic Calibration layer is also phase-1 safe by design: it sits after the Dynamic Ensemble, calibrates only the final decision path in phase 1, prices spread, slippage, and uncertainty explicitly, and prefers `SKIP` when calibrated edge does not clear the configured safety floor.
+- The Execution-Quality Forecaster is also phase-1 safe by design: it turns broker-visible spread, slippage, liquidity, and latency conditions into deterministic execution-state forecasts that tighten abstention, trade-risk, and allowed-deviation logic without changing canonical model inputs.
 
 ## Source Of Truth
 

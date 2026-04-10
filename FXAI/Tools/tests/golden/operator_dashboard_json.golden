@@ -830,6 +830,9 @@
       "symbol": "EURUSD"
     }
   ],
+  "execution_quality": {
+    "replay_report": {}
+  },
   "newspulse": {
     "replay_report": {},
     "status": {}

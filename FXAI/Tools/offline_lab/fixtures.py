@@ -55,6 +55,9 @@ PATCH_MODULES = [
     "offline_lab.prob_calibration_contracts",
     "offline_lab.prob_calibration_config",
     "offline_lab.prob_calibration_replay",
+    "offline_lab.execution_quality_contracts",
+    "offline_lab.execution_quality_config",
+    "offline_lab.execution_quality_replay",
     "offline_lab.market_universe",
     "offline_lab.verification",
     "testlab.shared",
@@ -76,6 +79,8 @@ def patched_paths(base_dir: Path):
     dynamic_ensemble_report_dir = dynamic_ensemble_dir / "Reports"
     prob_calibration_dir = offline_dir / "ProbabilisticCalibration"
     prob_calibration_report_dir = prob_calibration_dir / "Reports"
+    execution_quality_dir = offline_dir / "ExecutionQuality"
+    execution_quality_report_dir = execution_quality_dir / "Reports"
     rates_engine_dir = offline_dir / "RatesEngine"
     rates_engine_state_dir = rates_engine_dir / "State"
     rates_engine_report_dir = rates_engine_dir / "Reports"
@@ -103,6 +108,8 @@ def patched_paths(base_dir: Path):
         dynamic_ensemble_report_dir,
         prob_calibration_dir,
         prob_calibration_report_dir,
+        execution_quality_dir,
+        execution_quality_report_dir,
         rates_engine_dir,
         rates_engine_state_dir,
         rates_engine_report_dir,
@@ -167,6 +174,13 @@ def patched_paths(base_dir: Path):
             "PROB_CALIBRATION_REPLAY_REPORT_PATH": prob_calibration_report_dir / "prob_calibration_replay_report.json",
             "PROB_CALIBRATION_RUNTIME_CONFIG_PATH": runtime_dir / "prob_calibration_config.tsv",
             "PROB_CALIBRATION_RUNTIME_MEMORY_PATH": runtime_dir / "prob_calibration_memory.tsv",
+            "EXECUTION_QUALITY_DIR": execution_quality_dir,
+            "EXECUTION_QUALITY_REPORT_DIR": execution_quality_report_dir,
+            "EXECUTION_QUALITY_CONFIG_PATH": execution_quality_dir / "execution_quality_config.json",
+            "EXECUTION_QUALITY_MEMORY_PATH": execution_quality_dir / "execution_quality_memory.json",
+            "EXECUTION_QUALITY_REPLAY_REPORT_PATH": execution_quality_report_dir / "execution_quality_replay_report.json",
+            "EXECUTION_QUALITY_RUNTIME_CONFIG_PATH": runtime_dir / "execution_quality_config.tsv",
+            "EXECUTION_QUALITY_RUNTIME_MEMORY_PATH": runtime_dir / "execution_quality_memory.tsv",
             "RATES_ENGINE_DIR": rates_engine_dir,
             "RATES_ENGINE_STATE_DIR": rates_engine_state_dir,
             "RATES_ENGINE_REPORT_DIR": rates_engine_report_dir,
@@ -204,6 +218,8 @@ def patched_paths(base_dir: Path):
             "COMMON_MICROSTRUCTURE_CONFIG": runtime_dir / "microstructure_service_config.tsv",
             "COMMON_PROB_CALIBRATION_RUNTIME_CONFIG": runtime_dir / "prob_calibration_config.tsv",
             "COMMON_PROB_CALIBRATION_RUNTIME_MEMORY": runtime_dir / "prob_calibration_memory.tsv",
+            "COMMON_EXECUTION_QUALITY_RUNTIME_CONFIG": runtime_dir / "execution_quality_config.tsv",
+            "COMMON_EXECUTION_QUALITY_RUNTIME_MEMORY": runtime_dir / "execution_quality_memory.tsv",
         }.items():
             if hasattr(mod, attr):
                 patched[mod_name][attr] = getattr(mod, attr)

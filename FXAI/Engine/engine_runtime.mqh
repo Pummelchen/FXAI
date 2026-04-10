@@ -5,6 +5,7 @@
 #include "Runtime\\runtime_router_stage.mqh"
 #include "Runtime\\runtime_adaptive_router_stage.mqh"
 #include "Runtime\\runtime_dynamic_ensemble_stage.mqh"
+#include "Runtime\\runtime_execution_quality_stage.mqh"
 #include "Runtime\\runtime_prob_calibration_stage.mqh"
 #include "Runtime\\runtime_signal_finalize.mqh"
 

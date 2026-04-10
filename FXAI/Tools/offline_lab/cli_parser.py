@@ -46,6 +46,14 @@ def build_parser() -> argparse.ArgumentParser:
     pcr.add_argument("--hours-back", type=int, default=72)
     pcr.set_defaults(func=cmd_prob_calibration_replay_report)
 
+    eqv = sub.add_parser("execution-quality-validate", help="Validate the execution-quality config, tier memory, and runtime forecast scaffolding")
+    eqv.set_defaults(func=cmd_execution_quality_validate)
+
+    eqr = sub.add_parser("execution-quality-replay-report", help="Rebuild an execution-quality replay report from append-only runtime history")
+    eqr.add_argument("--symbol", default="")
+    eqr.add_argument("--hours-back", type=int, default=72)
+    eqr.set_defaults(func=cmd_execution_quality_replay_report)
+
     miv = sub.add_parser("microstructure-validate", help="Validate the microstructure proxy config, runtime contract, and service scaffolding")
     miv.set_defaults(func=cmd_microstructure_validate)
 

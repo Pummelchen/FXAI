@@ -17,6 +17,13 @@ from .dynamic_ensemble_contracts import DYNAMIC_ENSEMBLE_CONFIG_PATH
 from .dynamic_ensemble_replay import build_dynamic_ensemble_replay_report
 from .dashboard import live_state_snapshot, write_profile_dashboard
 from .environment import bootstrap_environment, validate_environment, write_environment_report
+from .execution_quality_config import (
+    EXECUTION_QUALITY_CONFIG_PATH,
+    EXECUTION_QUALITY_MEMORY_PATH,
+    load_config as load_execution_quality_config,
+    load_memory as load_execution_quality_memory,
+)
+from .execution_quality_replay import build_execution_quality_replay_report
 from .exporter import *
 from .fixtures import seed_profile_fixture
 from .foundation_factory import *
@@ -181,6 +188,28 @@ def cmd_prob_calibration_validate(_args) -> int:
 
 def cmd_prob_calibration_replay_report(args) -> int:
     payload = build_prob_calibration_replay_report(
+        symbol=str(getattr(args, "symbol", "") or ""),
+        hours_back=int(getattr(args, "hours_back", 72) or 72),
+    )
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_execution_quality_validate(_args) -> int:
+    config_payload = load_execution_quality_config()
+    memory_payload = load_execution_quality_memory()
+    print(json.dumps({
+        "status": "ok",
+        "config_path": str(EXECUTION_QUALITY_CONFIG_PATH),
+        "memory_path": str(EXECUTION_QUALITY_MEMORY_PATH),
+        "config": config_payload,
+        "memory": memory_payload,
+    }, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_execution_quality_replay_report(args) -> int:
+    payload = build_execution_quality_replay_report(
         symbol=str(getattr(args, "symbol", "") or ""),
         hours_back=int(getattr(args, "hours_back", 72) or 72),
     )

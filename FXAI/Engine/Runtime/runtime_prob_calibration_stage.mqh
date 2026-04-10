@@ -366,11 +366,16 @@ string FXAI_ProbCalibrationRegimeLabel(const FXAIDynamicEnsembleRuntimeState &dy
                                        const FXAIAdaptiveRegimeState &adaptive_state,
                                        const int regime_id)
 {
+   int fallback_regime_id = regime_id;
+   if(fallback_regime_id < 0)
+      fallback_regime_id = 0;
+   if(fallback_regime_id >= FXAI_ADAPTIVE_ROUTER_REGIME_COUNT)
+      fallback_regime_id = FXAI_ADAPTIVE_ROUTER_REGIME_COUNT - 1;
    if(adaptive_state.valid && StringLen(adaptive_state.top_label) > 0)
       return adaptive_state.top_label;
    if(dynamic_state.ready && StringLen(dynamic_state.top_regime) > 0)
       return dynamic_state.top_regime;
-   return FXAI_AdaptiveRouterRegimeLabel(FXAI_Clamp(regime_id, 0, FXAI_ADAPTIVE_ROUTER_REGIME_COUNT - 1));
+   return FXAI_AdaptiveRouterRegimeLabel(fallback_regime_id);
 }
 
 void FXAI_ProbCalibrationLoadConfig(FXAIProbCalibrationConfig &out)
@@ -700,6 +705,7 @@ void FXAI_ProbCalibrationApply(const string symbol,
                                const string adaptive_router_posture,
                                const double adaptive_router_abstain_bias,
                                const FXAIDynamicEnsembleRuntimeState &dynamic_state,
+                               const FXAIExecutionQualityRuntimeState &execution_quality_state,
                                const double raw_buy_prob,
                                const double raw_sell_prob,
                                const double raw_skip_prob,
@@ -778,10 +784,13 @@ void FXAI_ProbCalibrationApply(const string symbol,
    bool news_stale = (news_state.ready && news_state.available && news_state.stale);
    bool rates_stale = (rates_state.ready && rates_state.available && rates_state.stale);
    bool micro_stale = (micro_state.ready && micro_state.available && micro_state.stale);
+   bool execution_quality_unknown = (ExecutionQualityEnabled && !execution_quality_state.ready);
+   bool execution_quality_stale = (execution_quality_state.ready && execution_quality_state.data_stale);
    int stale_context_count = 0;
    if(news_stale) stale_context_count++;
    if(rates_stale) stale_context_count++;
    if(micro_stale) stale_context_count++;
+   if(execution_quality_unknown || execution_quality_stale) stale_context_count++;
    state.input_stale = (stale_context_count > 0);
    state.news_risk_block = (news_state.ready && news_state.available &&
                             (news_state.trade_gate == "BLOCK" || news_state.news_risk_score >= 0.84));
@@ -862,10 +871,10 @@ void FXAI_ProbCalibrationApply(const string symbol,
    state.expected_move_mean_points = MathMax(move_mean_points * tier.move_mean_scale * uncertainty_mean_mult,
                                              state.expected_move_q50_points);
 
-   double spread_cost = MathMax(spread_points, 0.0) +
-                        MathMax(commission_points, 0.0) +
-                        MathMax(cost_buffer_points, 0.0) +
-                        MathMax(exec_profile.cost_buffer_points, 0.0);
+   double base_spread_cost = MathMax(spread_points, 0.0) +
+                             MathMax(commission_points, 0.0) +
+                             MathMax(cost_buffer_points, 0.0) +
+                             MathMax(exec_profile.cost_buffer_points, 0.0);
    double spread_stress = (micro_state.ready && micro_state.available ? FXAI_Clamp(MathMax(micro_state.spread_zscore_60s, 0.0), 0.0, 4.0) : 0.0);
    int path_flags = 0;
    if(state.news_risk_block || state.rates_risk_block || state.microstructure_stress)
@@ -875,26 +884,55 @@ void FXAI_ProbCalibrationApply(const string symbol,
    if(g_ai_last_fill_risk >= 0.72 || (micro_state.ready && micro_state.available && micro_state.handoff_flag))
       path_flags |= 8;
 
+   double spread_cost = base_spread_cost;
+   double slippage_cost = FXAI_ExecutionSlippagePoints(exec_profile,
+                                                       base_spread_cost,
+                                                       horizon_minutes,
+                                                       spread_stress,
+                                                       path_flags);
+   bool execution_quality_usable = (execution_quality_state.ready &&
+                                    !execution_quality_state.data_stale &&
+                                    execution_quality_state.spread_expected_points >= 0.0);
+   if(execution_quality_usable)
+   {
+      spread_cost = MathMax(MathMax(execution_quality_state.spread_expected_points, MathMax(spread_points, 0.0)), 0.0) +
+                    MathMax(commission_points, 0.0) +
+                    MathMax(cost_buffer_points, 0.0) +
+                    MathMax(exec_profile.cost_buffer_points, 0.0);
+      slippage_cost = MathMax(slippage_cost,
+                              MathMax(execution_quality_state.expected_slippage_points, 0.0));
+   }
    state.spread_cost_points = spread_cost;
-   state.slippage_cost_points = FXAI_ExecutionSlippagePoints(exec_profile,
-                                                             spread_cost,
-                                                             horizon_minutes,
-                                                             spread_stress,
-                                                             path_flags);
+   state.slippage_cost_points = slippage_cost;
    state.uncertainty_penalty_points = MathMax(min_move_points, 0.25) * uncertainty_score;
-   state.risk_penalty_points = FXAI_ExecutionFillPenaltyPoints(exec_profile,
-                                                               spread_cost,
-                                                               spread_stress,
-                                                               path_flags) +
-                               MathMax(min_move_points, 0.25) *
-                               (g_prob_cal_cfg_cache.risk_fill_mult * FXAI_Clamp(g_ai_last_fill_risk, 0.0, 1.0) +
-                                g_prob_cal_cfg_cache.risk_path_mult * FXAI_Clamp(g_ai_last_path_risk, 0.0, 1.0) +
-                                (state.news_risk_block ? g_prob_cal_cfg_cache.risk_news_block_mult : 0.0) +
-                                (state.rates_risk_block ? g_prob_cal_cfg_cache.risk_rates_block_mult : 0.0) +
-                                (state.microstructure_stress ? g_prob_cal_cfg_cache.risk_micro_block_mult : 0.0) +
-                                ((adaptive_router_posture == "CAUTION" || dynamic_state.trade_posture == "CAUTION") ? g_prob_cal_cfg_cache.risk_caution_posture_mult : 0.0) +
-                                ((adaptive_router_posture == "ABSTAIN_BIAS" || dynamic_state.trade_posture == "ABSTAIN_BIAS") ? g_prob_cal_cfg_cache.risk_abstain_posture_mult : 0.0) +
-                                ((adaptive_router_posture == "BLOCK" || dynamic_state.trade_posture == "BLOCK") ? g_prob_cal_cfg_cache.risk_block_posture_mult : 0.0));
+   double risk_penalty = FXAI_ExecutionFillPenaltyPoints(exec_profile,
+                                                         spread_cost,
+                                                         spread_stress,
+                                                         path_flags) +
+                         MathMax(min_move_points, 0.25) *
+                         (g_prob_cal_cfg_cache.risk_fill_mult * FXAI_Clamp(g_ai_last_fill_risk, 0.0, 1.0) +
+                          g_prob_cal_cfg_cache.risk_path_mult * FXAI_Clamp(g_ai_last_path_risk, 0.0, 1.0) +
+                          (state.news_risk_block ? g_prob_cal_cfg_cache.risk_news_block_mult : 0.0) +
+                          (state.rates_risk_block ? g_prob_cal_cfg_cache.risk_rates_block_mult : 0.0) +
+                          (state.microstructure_stress ? g_prob_cal_cfg_cache.risk_micro_block_mult : 0.0) +
+                          ((adaptive_router_posture == "CAUTION" || dynamic_state.trade_posture == "CAUTION") ? g_prob_cal_cfg_cache.risk_caution_posture_mult : 0.0) +
+                          ((adaptive_router_posture == "ABSTAIN_BIAS" || dynamic_state.trade_posture == "ABSTAIN_BIAS") ? g_prob_cal_cfg_cache.risk_abstain_posture_mult : 0.0) +
+                          ((adaptive_router_posture == "BLOCK" || dynamic_state.trade_posture == "BLOCK") ? g_prob_cal_cfg_cache.risk_block_posture_mult : 0.0));
+   if(execution_quality_usable)
+   {
+      double execution_penalty_mult = MathMax(min_move_points, 0.25);
+      risk_penalty += execution_penalty_mult *
+                      (0.42 * FXAI_Clamp(1.0 - execution_quality_state.fill_quality_score, 0.0, 1.0) +
+                       0.32 * FXAI_Clamp(execution_quality_state.latency_sensitivity_score, 0.0, 1.0) +
+                       0.26 * FXAI_Clamp(execution_quality_state.liquidity_fragility_score, 0.0, 1.0));
+      if(execution_quality_state.execution_state == "BLOCKED")
+         risk_penalty += execution_penalty_mult * 0.60;
+      else if(execution_quality_state.execution_state == "STRESSED")
+         risk_penalty += execution_penalty_mult * 0.35;
+      else if(execution_quality_state.execution_state == "CAUTION")
+         risk_penalty += execution_penalty_mult * 0.18;
+   }
+   state.risk_penalty_points = risk_penalty;
 
    state.expected_gross_edge_points = MathAbs(state.calibrated_buy_prob - state.calibrated_sell_prob) *
                                       state.expected_move_mean_points;
@@ -914,6 +952,10 @@ void FXAI_ProbCalibrationApply(const string symbol,
       FXAI_ProbCalibrationAppendReason(state, "CALIBRATION_STALE");
    if(state.input_stale)
       FXAI_ProbCalibrationAppendReason(state, "INPUT_STALE");
+   if(execution_quality_unknown)
+      FXAI_ProbCalibrationAppendReason(state, "EXECUTION_QUALITY_UNKNOWN");
+   if(execution_quality_stale)
+      FXAI_ProbCalibrationAppendReason(state, "EXECUTION_QUALITY_STALE");
    if(!state.support_usable)
       FXAI_ProbCalibrationAppendReason(state, "SUPPORT_TOO_LOW");
    if(tier.calibration_quality < g_prob_cal_cfg_cache.min_calibration_quality)
@@ -934,6 +976,15 @@ void FXAI_ProbCalibrationApply(const string symbol,
       FXAI_ProbCalibrationAppendReason(state, "RATES_RISK_BLOCK");
    if(state.microstructure_stress)
       FXAI_ProbCalibrationAppendReason(state, "MICROSTRUCTURE_STRESS");
+   if(execution_quality_usable)
+   {
+      if(execution_quality_state.execution_state == "BLOCKED")
+         FXAI_ProbCalibrationAppendReason(state, "EXECUTION_QUALITY_BLOCK");
+      else if(execution_quality_state.execution_state == "STRESSED")
+         FXAI_ProbCalibrationAppendReason(state, "EXECUTION_QUALITY_STRESSED");
+      else if(execution_quality_state.execution_state == "CAUTION")
+         FXAI_ProbCalibrationAppendReason(state, "EXECUTION_QUALITY_CAUTION");
+   }
 
    state.abstain = false;
    if(decision != -1)

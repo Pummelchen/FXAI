@@ -16,6 +16,7 @@ It does not replace the MT5 model engine. MT5 and MQL5 still execute the real pl
 - Rates Engine shared macro infrastructure for front-end differentials, policy-path proxies, curve state, NewsPulse enrichment, and runtime rates-aware gating
 - Microstructure shared execution-state infrastructure for MT5 tick-flow, spread-dynamics, liquidity-stress, stop-run proxy detection, session handoff, runtime gating, and replay visibility
 - Probabilistic Calibration shared decision-quality infrastructure for calibrated ensemble probabilities, cost-aware edge filtering, abstention reasons, and replay visibility
+- Execution-Quality shared execution-intelligence infrastructure for forecasted spread widening, slippage stress, fill quality, latency sensitivity, liquidity fragility, and runtime execution-state controls
 - ready-to-use MT5 `.set` files so no parameter copy/paste is needed
 
 Main commands from the repo root:
@@ -47,6 +48,8 @@ python3 FXAI/Tools/fxai_offline_lab.py microstructure-health
 python3 FXAI/Tools/fxai_offline_lab.py microstructure-replay-report --symbol EURUSD --hours-back 72
 python3 FXAI/Tools/fxai_offline_lab.py prob-calibration-validate
 python3 FXAI/Tools/fxai_offline_lab.py prob-calibration-replay-report --symbol EURUSD --hours-back 72
+python3 FXAI/Tools/fxai_offline_lab.py execution-quality-validate
+python3 FXAI/Tools/fxai_offline_lab.py execution-quality-replay-report --symbol EURUSD --hours-back 72
 python3 FXAI/Tools/fxai_offline_lab.py deploy-profiles --profile continuous
 python3 FXAI/Tools/fxai_offline_lab.py supervisor-sync --profile continuous
 python3 FXAI/Tools/fxai_offline_lab.py autonomous-governance --profile continuous
@@ -99,6 +102,8 @@ Notes:
 - `microstructure-replay-report` summarizes recent per-symbol regime shifts, hostile-execution transitions, and stop-run proxy events from append-only microstructure history.
 - `prob-calibration-validate` writes the default calibration config and tier-memory exports used by the MT5 runtime, validates thresholds, and confirms the calibration layer can boot cleanly.
 - `prob-calibration-replay-report` summarizes recent calibrated final actions, tier usage, abstention counts, edge-after-costs ranges, and top abstention reasons from append-only runtime history.
+- `execution-quality-validate` writes the default execution-quality config and tier-memory exports used by the MT5 runtime, validates thresholds, and confirms the execution forecaster can boot cleanly.
+- `execution-quality-replay-report` summarizes recent execution-state transitions, spread or slippage stress, liquidity-fragility changes, and execution-quality reasons from append-only runtime history.
 - `fxai_testlab.py verify-all` is the one-command platform verification path: Python tests, deterministic fixture checks, and clean MT5 compiles.
 - Exact-window datasets store the effective exported first and last bar range, so later tuning and promotion stay aligned to the data that was actually ingested.
 - Turso access uses bounded open retry so overlapping admin and control-loop calls fail cleanly instead of drifting silently.

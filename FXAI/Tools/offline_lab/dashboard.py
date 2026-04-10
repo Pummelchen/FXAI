@@ -20,6 +20,7 @@ from .adaptive_router_contracts import (
     adaptive_router_runtime_history_path,
     adaptive_router_runtime_state_path,
 )
+from .execution_quality_contracts import EXECUTION_QUALITY_REPLAY_REPORT_PATH, execution_quality_runtime_state_path
 from .newspulse_contracts import NEWSPULSE_REPLAY_REPORT_PATH, NEWSPULSE_STATUS_PATH
 from .rates_engine_contracts import RATES_ENGINE_REPLAY_REPORT_PATH, RATES_ENGINE_STATUS_PATH
 from .performance import build_symbol_performance_report
@@ -171,6 +172,9 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
         "adaptive_router": {
             "replay_report": _load_json(ADAPTIVE_ROUTER_REPLAY_REPORT_PATH),
         },
+        "execution_quality": {
+            "replay_report": _load_json(EXECUTION_QUALITY_REPLAY_REPORT_PATH),
+        },
         "source_of_truth": {
             "turso_libsql": "authoritative research and promotion state",
             "file_common_promotions": "authoritative MT5 runtime consumption layer",
@@ -269,6 +273,7 @@ def live_state_snapshot(profile_name: str, symbol: str) -> dict[str, object]:
         "supervisor_command": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_supervisor_command_{symbol_token}.tsv"),
         "portfolio_supervisor": _load_tsv_map(COMMON_PROMOTION_DIR / "fxai_portfolio_supervisor.tsv"),
         "adaptive_runtime": _load_tsv_map(adaptive_router_runtime_state_path(symbol)),
+        "execution_quality_runtime": _load_tsv_map(execution_quality_runtime_state_path(symbol)),
         "adaptive_history_path": str(adaptive_router_runtime_history_path(symbol)),
         "performance": build_symbol_performance_report(symbol),
     }

@@ -270,6 +270,78 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       FXAI_ResetMicrostructureGlobals();
    }
 
+   FXAIExecutionQualityPairState execution_quality_state;
+   FXAI_ResetExecutionQualityPairState(execution_quality_state);
+   bool execution_quality_available = false;
+   bool execution_quality_caution = false;
+   bool execution_quality_stressed = false;
+   if(ExecutionQualityEnabled)
+   {
+      execution_quality_available = FXAI_ReadExecutionQualityPairState(symbol, execution_quality_state);
+      if(!execution_quality_available || !execution_quality_state.ready)
+      {
+         if(ExecutionQualityBlockOnUnknown)
+         {
+            reason = "risk_execution_quality_unknown";
+            return 0.0;
+         }
+         execution_quality_caution = true;
+      }
+      else
+      {
+         if(execution_quality_state.stale || execution_quality_state.data_stale)
+         {
+            if(ExecutionQualityBlockOnUnknown)
+            {
+               reason = "risk_execution_quality_stale";
+               return 0.0;
+            }
+            execution_quality_caution = true;
+         }
+         else if(execution_quality_state.execution_state == "BLOCKED")
+         {
+            reason = "risk_execution_quality_block";
+            return 0.0;
+         }
+         else if(execution_quality_state.execution_state == "STRESSED")
+         {
+            execution_quality_caution = true;
+            execution_quality_stressed = true;
+         }
+         else if(execution_quality_state.execution_state == "CAUTION")
+         {
+            execution_quality_caution = true;
+         }
+
+      }
+   }
+   else
+   {
+      FXAI_ResetExecutionQualityGlobals();
+   }
+   if(ExecutionQualityEnabled && execution_quality_caution)
+   {
+      double caution_buffer = execution_quality_state.caution_enter_prob_buffer;
+      if(caution_buffer < 0.0 ||
+         !execution_quality_available ||
+         !execution_quality_state.ready)
+      {
+         caution_buffer = FXAI_Clamp(execution_quality_stressed
+                                     ? ExecutionQualityStressedEnterProbBuffer
+                                     : ExecutionQualityCautionEnterProbBuffer,
+                                     0.0,
+                                     0.35);
+      }
+      double caution_enter_floor = FXAI_Clamp(0.05 + caution_buffer, 0.05, 0.99);
+      if(g_policy_last_enter_prob < caution_enter_floor)
+      {
+         reason = (execution_quality_stressed
+                   ? "risk_execution_quality_stressed_floor"
+                   : "risk_execution_quality_caution_floor");
+         return 0.0;
+      }
+   }
+
    double requested_lot = Lot;
    double hard_cap_lot = 1000000.0;
    double edge_scale = FXAI_Clamp(g_ai_last_trade_edge_points / MathMax(g_ai_last_min_move_points, 0.25), -1.0, 4.0);
@@ -473,6 +545,21 @@ double FXAI_CalcRiskAwareLot(const string symbol,
                                   micro_state.caution_lot_scale :
                                   FXAI_Clamp(MicrostructureCautionLotScale, 0.10, 1.00));
       requested_lot *= FXAI_Clamp(caution_lot_scale, 0.10, 1.00);
+   }
+   if(ExecutionQualityEnabled && execution_quality_caution)
+   {
+      double caution_lot_scale = execution_quality_state.caution_lot_scale;
+      if(caution_lot_scale <= 0.0 ||
+         (!execution_quality_state.ready) ||
+         (execution_quality_state.execution_state != "CAUTION" &&
+          execution_quality_state.execution_state != "STRESSED" &&
+          execution_quality_state.execution_state != "BLOCKED"))
+         caution_lot_scale = FXAI_Clamp(execution_quality_stressed
+                                        ? ExecutionQualityStressedLotScale
+                                        : ExecutionQualityCautionLotScale,
+                                        0.05,
+                                        1.00);
+      requested_lot *= FXAI_Clamp(caution_lot_scale, 0.05, 1.00);
    }
 
    requested_lot = FXAI_NormalizeLot(symbol, requested_lot);

@@ -680,6 +680,122 @@ public enum GUIValidationFixtures {
         )
     }
 
+    public static func executionQualitySnapshot(projectRoot: URL) -> ExecutionQualitySnapshot {
+        let now = Date()
+        let eurusd = ExecutionQualitySymbolSnapshot(
+            symbol: "EURUSD",
+            generatedAt: now.addingTimeInterval(-70),
+            method: "SCORECARD_V1",
+            sessionLabel: "LONDON_NY_OVERLAP",
+            regimeLabel: "HIGH_VOL_EVENT",
+            tierKind: "PAIR_REGIME",
+            tierKey: "PAIR_REGIME|EURUSD|LONDON_NY_OVERLAP|HIGH_VOL_EVENT",
+            support: 92,
+            quality: 0.58,
+            fallbackUsed: false,
+            memoryStale: false,
+            dataStale: false,
+            supportUsable: true,
+            newsWindowActive: true,
+            ratesRepricingActive: false,
+            brokerCoverage: 0.71,
+            brokerRejectProbability: 0.19,
+            brokerPartialFillProbability: 0.14,
+            spreadNowPoints: 1.3,
+            spreadExpectedPoints: 2.8,
+            spreadWideningRisk: 0.68,
+            expectedSlippagePoints: 1.1,
+            slippageRisk: 0.57,
+            fillQualityScore: 0.49,
+            latencySensitivityScore: 0.63,
+            liquidityFragilityScore: 0.61,
+            executionQualityScore: 0.44,
+            allowedDeviationPoints: 6.0,
+            cautionLotScale: 0.82,
+            cautionEnterProbBuffer: 0.04,
+            executionState: "CAUTION",
+            reasons: [
+                "NEWS_WINDOW_ACTIVE",
+                "SPREAD_ALREADY_ELEVATED",
+                "LATENCY_SENSITIVITY_HIGH",
+            ],
+            replayStateCounts: [
+                KeyValueRecord(key: "CAUTION", value: "11"),
+                KeyValueRecord(key: "NORMAL", value: "7"),
+            ],
+            replayTierCounts: [
+                KeyValueRecord(key: "PAIR_REGIME", value: "12"),
+                KeyValueRecord(key: "REGIME", value: "6"),
+            ],
+            replayTopReasons: [
+                KeyValueRecord(key: "NEWS_WINDOW_ACTIVE", value: "9"),
+                KeyValueRecord(key: "SPREAD_ALREADY_ELEVATED", value: "7"),
+            ],
+            recentTransitions: [
+                ExecutionQualityTransition(type: "execution_state", fromValue: "NORMAL", toValue: "CAUTION", observedAt: now.addingTimeInterval(-900)),
+            ],
+            observationCount: 18,
+            maxSpreadWideningRisk: 0.79,
+            maxSlippageRisk: 0.66,
+            minExecutionQualityScore: 0.39
+        )
+
+        let usdjpy = ExecutionQualitySymbolSnapshot(
+            symbol: "USDJPY",
+            generatedAt: now.addingTimeInterval(-95),
+            method: "SCORECARD_V1",
+            sessionLabel: "LONDON",
+            regimeLabel: "TREND_PERSISTENT",
+            tierKind: "GLOBAL",
+            tierKey: "GLOBAL|*|*|*",
+            support: 244,
+            quality: 0.74,
+            fallbackUsed: false,
+            memoryStale: false,
+            dataStale: false,
+            supportUsable: true,
+            newsWindowActive: false,
+            ratesRepricingActive: false,
+            brokerCoverage: 0.84,
+            brokerRejectProbability: 0.07,
+            brokerPartialFillProbability: 0.05,
+            spreadNowPoints: 1.1,
+            spreadExpectedPoints: 1.4,
+            spreadWideningRisk: 0.29,
+            expectedSlippagePoints: 0.4,
+            slippageRisk: 0.22,
+            fillQualityScore: 0.74,
+            latencySensitivityScore: 0.31,
+            liquidityFragilityScore: 0.28,
+            executionQualityScore: 0.73,
+            allowedDeviationPoints: 3.0,
+            cautionLotScale: 1.0,
+            cautionEnterProbBuffer: 0.0,
+            executionState: "NORMAL",
+            reasons: [],
+            replayStateCounts: [
+                KeyValueRecord(key: "NORMAL", value: "17"),
+            ],
+            replayTierCounts: [
+                KeyValueRecord(key: "GLOBAL", value: "17"),
+            ],
+            replayTopReasons: [
+                KeyValueRecord(key: "LOW_LIQUIDITY_SESSION", value: "2"),
+            ],
+            recentTransitions: [],
+            observationCount: 17,
+            maxSpreadWideningRisk: 0.42,
+            maxSlippageRisk: 0.33,
+            minExecutionQualityScore: 0.66
+        )
+
+        return ExecutionQualitySnapshot(
+            generatedAt: now,
+            replayHoursBack: 48,
+            symbols: [eurusd, usdjpy]
+        )
+    }
+
     public static func researchSnapshot(projectRoot: URL) -> ResearchOSControlSnapshot {
         let now = Date()
         return ResearchOSControlSnapshot(
