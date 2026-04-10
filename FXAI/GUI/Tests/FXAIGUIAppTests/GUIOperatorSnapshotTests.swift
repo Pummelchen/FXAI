@@ -9,6 +9,7 @@ struct GUIOperatorSnapshotTests {
     private let destinations: [SidebarDestination] = [
         .overview,
         .roles,
+        .probCalibration,
         .runtimeMonitor,
         .reports,
         .settings

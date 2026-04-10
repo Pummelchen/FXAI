@@ -52,6 +52,9 @@ PATCH_MODULES = [
     "offline_lab.dynamic_ensemble_contracts",
     "offline_lab.dynamic_ensemble_config",
     "offline_lab.dynamic_ensemble_replay",
+    "offline_lab.prob_calibration_contracts",
+    "offline_lab.prob_calibration_config",
+    "offline_lab.prob_calibration_replay",
     "offline_lab.market_universe",
     "offline_lab.verification",
     "testlab.shared",
@@ -71,6 +74,8 @@ def patched_paths(base_dir: Path):
     adaptive_router_report_dir = adaptive_router_dir / "Reports"
     dynamic_ensemble_dir = offline_dir / "DynamicEnsemble"
     dynamic_ensemble_report_dir = dynamic_ensemble_dir / "Reports"
+    prob_calibration_dir = offline_dir / "ProbabilisticCalibration"
+    prob_calibration_report_dir = prob_calibration_dir / "Reports"
     rates_engine_dir = offline_dir / "RatesEngine"
     rates_engine_state_dir = rates_engine_dir / "State"
     rates_engine_report_dir = rates_engine_dir / "Reports"
@@ -96,6 +101,8 @@ def patched_paths(base_dir: Path):
         adaptive_router_report_dir,
         dynamic_ensemble_dir,
         dynamic_ensemble_report_dir,
+        prob_calibration_dir,
+        prob_calibration_report_dir,
         rates_engine_dir,
         rates_engine_state_dir,
         rates_engine_report_dir,
@@ -153,6 +160,13 @@ def patched_paths(base_dir: Path):
             "DYNAMIC_ENSEMBLE_CONFIG_PATH": dynamic_ensemble_dir / "dynamic_ensemble_config.json",
             "DYNAMIC_ENSEMBLE_REPLAY_REPORT_PATH": dynamic_ensemble_report_dir / "dynamic_ensemble_replay_report.json",
             "DYNAMIC_ENSEMBLE_RUNTIME_CONFIG_PATH": runtime_dir / "dynamic_ensemble_config.tsv",
+            "PROB_CALIBRATION_DIR": prob_calibration_dir,
+            "PROB_CALIBRATION_REPORT_DIR": prob_calibration_report_dir,
+            "PROB_CALIBRATION_CONFIG_PATH": prob_calibration_dir / "prob_calibration_config.json",
+            "PROB_CALIBRATION_MEMORY_PATH": prob_calibration_dir / "prob_calibration_memory.json",
+            "PROB_CALIBRATION_REPLAY_REPORT_PATH": prob_calibration_report_dir / "prob_calibration_replay_report.json",
+            "PROB_CALIBRATION_RUNTIME_CONFIG_PATH": runtime_dir / "prob_calibration_config.tsv",
+            "PROB_CALIBRATION_RUNTIME_MEMORY_PATH": runtime_dir / "prob_calibration_memory.tsv",
             "RATES_ENGINE_DIR": rates_engine_dir,
             "RATES_ENGINE_STATE_DIR": rates_engine_state_dir,
             "RATES_ENGINE_REPORT_DIR": rates_engine_report_dir,
@@ -188,6 +202,8 @@ def patched_paths(base_dir: Path):
             "COMMON_MICROSTRUCTURE_STATUS": runtime_dir / "microstructure_status.json",
             "COMMON_MICROSTRUCTURE_SYMBOL_MAP": runtime_dir / "microstructure_symbol_map.tsv",
             "COMMON_MICROSTRUCTURE_CONFIG": runtime_dir / "microstructure_service_config.tsv",
+            "COMMON_PROB_CALIBRATION_RUNTIME_CONFIG": runtime_dir / "prob_calibration_config.tsv",
+            "COMMON_PROB_CALIBRATION_RUNTIME_MEMORY": runtime_dir / "prob_calibration_memory.tsv",
         }.items():
             if hasattr(mod, attr):
                 patched[mod_name][attr] = getattr(mod, attr)
@@ -206,6 +222,7 @@ def patched_paths(base_dir: Path):
             "tester_dir": tester_dir,
             "adaptive_router_dir": adaptive_router_dir,
             "dynamic_ensemble_dir": dynamic_ensemble_dir,
+            "prob_calibration_dir": prob_calibration_dir,
             "rates_engine_dir": rates_engine_dir,
             "microstructure_dir": microstructure_dir,
         }

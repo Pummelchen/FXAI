@@ -547,6 +547,139 @@ public enum GUIValidationFixtures {
         )
     }
 
+    public static func probCalibrationSnapshot(projectRoot: URL) -> ProbCalibrationSnapshot {
+        let now = Date()
+        let eurusd = ProbCalibrationSymbolSnapshot(
+            symbol: "EURUSD",
+            generatedAt: now.addingTimeInterval(-80),
+            method: "LOGISTIC_AFFINE",
+            sessionLabel: "LONDON_NY_OVERLAP",
+            regimeLabel: "HIGH_VOL_EVENT",
+            tierKind: "PAIR_REGIME",
+            tierKey: "PAIR_REGIME|EURUSD|*|HIGH_VOL_EVENT",
+            support: 118,
+            quality: 0.61,
+            rawAction: "BUY",
+            rawScore: 0.19,
+            rawBuyProb: 0.57,
+            rawSellProb: 0.21,
+            rawSkipProb: 0.22,
+            calibratedBuyProb: 0.46,
+            calibratedSellProb: 0.24,
+            calibratedSkipProb: 0.30,
+            calibratedConfidence: 0.46,
+            expectedMoveMeanPoints: 8.4,
+            expectedMoveQ25Points: 2.7,
+            expectedMoveQ50Points: 6.1,
+            expectedMoveQ75Points: 11.3,
+            spreadCostPoints: 1.6,
+            slippageCostPoints: 0.9,
+            uncertaintyScore: 0.63,
+            uncertaintyPenaltyPoints: 2.1,
+            riskPenaltyPoints: 1.2,
+            expectedGrossEdgePoints: 1.85,
+            edgeAfterCostsPoints: -3.95,
+            finalAction: "SKIP",
+            abstain: true,
+            fallbackUsed: false,
+            calibrationStale: false,
+            inputStale: false,
+            supportUsable: true,
+            reasons: [
+                "EDGE_TOO_SMALL",
+                "UNCERTAINTY_TOO_HIGH",
+                "NEWS_RISK_BLOCK",
+            ],
+            replayActionCounts: [
+                KeyValueRecord(key: "SKIP", value: "12"),
+                KeyValueRecord(key: "BUY", value: "5"),
+            ],
+            replayTierCounts: [
+                KeyValueRecord(key: "PAIR_REGIME", value: "13"),
+                KeyValueRecord(key: "REGIME", value: "4"),
+            ],
+            replayTopReasons: [
+                KeyValueRecord(key: "EDGE_TOO_SMALL", value: "10"),
+                KeyValueRecord(key: "UNCERTAINTY_TOO_HIGH", value: "6"),
+            ],
+            recentTransitions: [
+                ProbCalibrationTransition(type: "action_change", fromValue: "BUY", toValue: "SKIP", observedAt: now.addingTimeInterval(-1600)),
+            ],
+            observationCount: 18,
+            abstainCount: 12,
+            fallbackCount: 1,
+            averageConfidence: 0.49,
+            averageEdgeAfterCostsPoints: -0.84,
+            averageUncertaintyScore: 0.47,
+            minEdgeAfterCostsPoints: -4.10,
+            maxEdgeAfterCostsPoints: 2.40
+        )
+
+        let usdjpy = ProbCalibrationSymbolSnapshot(
+            symbol: "USDJPY",
+            generatedAt: now.addingTimeInterval(-100),
+            method: "LOGISTIC_AFFINE",
+            sessionLabel: "LONDON",
+            regimeLabel: "TREND_PERSISTENT",
+            tierKind: "GLOBAL",
+            tierKey: "GLOBAL|*|*|*",
+            support: 504,
+            quality: 0.72,
+            rawAction: "BUY",
+            rawScore: 0.41,
+            rawBuyProb: 0.64,
+            rawSellProb: 0.14,
+            rawSkipProb: 0.22,
+            calibratedBuyProb: 0.61,
+            calibratedSellProb: 0.13,
+            calibratedSkipProb: 0.26,
+            calibratedConfidence: 0.61,
+            expectedMoveMeanPoints: 10.6,
+            expectedMoveQ25Points: 4.0,
+            expectedMoveQ50Points: 8.2,
+            expectedMoveQ75Points: 14.8,
+            spreadCostPoints: 1.4,
+            slippageCostPoints: 0.6,
+            uncertaintyScore: 0.24,
+            uncertaintyPenaltyPoints: 0.8,
+            riskPenaltyPoints: 0.5,
+            expectedGrossEdgePoints: 5.09,
+            edgeAfterCostsPoints: 1.79,
+            finalAction: "BUY",
+            abstain: false,
+            fallbackUsed: true,
+            calibrationStale: false,
+            inputStale: false,
+            supportUsable: true,
+            reasons: [],
+            replayActionCounts: [
+                KeyValueRecord(key: "BUY", value: "14"),
+                KeyValueRecord(key: "SKIP", value: "3"),
+            ],
+            replayTierCounts: [
+                KeyValueRecord(key: "GLOBAL", value: "17"),
+            ],
+            replayTopReasons: [
+                KeyValueRecord(key: "EDGE_TOO_SMALL", value: "2"),
+            ],
+            recentTransitions: [],
+            observationCount: 17,
+            abstainCount: 3,
+            fallbackCount: 5,
+            averageConfidence: 0.58,
+            averageEdgeAfterCostsPoints: 1.22,
+            averageUncertaintyScore: 0.29,
+            minEdgeAfterCostsPoints: -0.40,
+            maxEdgeAfterCostsPoints: 3.10
+        )
+
+        return ProbCalibrationSnapshot(
+            generatedAt: now,
+            replayHoursBack: 48,
+            symbols: [eurusd, usdjpy]
+        )
+    }
+
     public static func researchSnapshot(projectRoot: URL) -> ResearchOSControlSnapshot {
         let now = Date()
         return ResearchOSControlSnapshot(

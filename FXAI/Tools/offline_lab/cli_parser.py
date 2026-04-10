@@ -38,6 +38,14 @@ def build_parser() -> argparse.ArgumentParser:
     der.add_argument("--hours-back", type=int, default=72)
     der.set_defaults(func=cmd_dynamic_ensemble_replay_report)
 
+    pcv = sub.add_parser("prob-calibration-validate", help="Validate the probabilistic calibration config, fallback memory, and runtime exports")
+    pcv.set_defaults(func=cmd_prob_calibration_validate)
+
+    pcr = sub.add_parser("prob-calibration-replay-report", help="Rebuild a probabilistic-calibration replay report from append-only runtime history")
+    pcr.add_argument("--symbol", default="")
+    pcr.add_argument("--hours-back", type=int, default=72)
+    pcr.set_defaults(func=cmd_prob_calibration_replay_report)
+
     miv = sub.add_parser("microstructure-validate", help="Validate the microstructure proxy config, runtime contract, and service scaffolding")
     miv.set_defaults(func=cmd_microstructure_validate)
 

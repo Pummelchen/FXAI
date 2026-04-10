@@ -17,6 +17,42 @@ void ResetAIState(const string symbol)
    g_ai_last_min_move_points = 0.0;
    g_ai_last_horizon_minutes = 0;
    g_ai_last_regime_id = 0;
+   g_prob_calibration_last_ready = false;
+   g_prob_calibration_last_fallback_used = false;
+   g_prob_calibration_last_abstain = false;
+   g_prob_calibration_last_calibration_stale = true;
+   g_prob_calibration_last_input_stale = true;
+   g_prob_calibration_last_generated_at = 0;
+   g_prob_calibration_last_method = "LOGISTIC_AFFINE";
+   g_prob_calibration_last_tier_kind = "GLOBAL";
+   g_prob_calibration_last_tier_key = "GLOBAL|*|*|*";
+   g_prob_calibration_last_support = 0;
+   g_prob_calibration_last_quality = 0.0;
+   g_prob_calibration_last_raw_score = 0.0;
+   g_prob_calibration_last_raw_action = "SKIP";
+   g_prob_calibration_last_raw_buy_prob = 0.0;
+   g_prob_calibration_last_raw_sell_prob = 0.0;
+   g_prob_calibration_last_raw_skip_prob = 1.0;
+   g_prob_calibration_last_buy_prob = 0.0;
+   g_prob_calibration_last_sell_prob = 0.0;
+   g_prob_calibration_last_skip_prob = 1.0;
+   g_prob_calibration_last_confidence = 0.0;
+   g_prob_calibration_last_move_mean = 0.0;
+   g_prob_calibration_last_move_q25 = 0.0;
+   g_prob_calibration_last_move_q50 = 0.0;
+   g_prob_calibration_last_move_q75 = 0.0;
+   g_prob_calibration_last_spread_cost = 0.0;
+   g_prob_calibration_last_slippage_cost = 0.0;
+   g_prob_calibration_last_uncertainty_score = 0.0;
+   g_prob_calibration_last_uncertainty_penalty = 0.0;
+   g_prob_calibration_last_risk_penalty = 0.0;
+   g_prob_calibration_last_gross_edge = 0.0;
+   g_prob_calibration_last_edge_after_costs = 0.0;
+   g_prob_calibration_last_final_action = "SKIP";
+   g_prob_calibration_last_session = "UNKNOWN";
+   g_prob_calibration_last_regime = "UNKNOWN";
+   g_prob_calibration_last_reasons_csv = "";
+   g_prob_calibration_last_primary_reason = "";
    g_ai_warmup_done = (!AI_Warmup);
    FXAI_ParseHorizonList(AI_Horizons, PredictionTargetMinutes, g_horizon_minutes);
    FXAI_ResetModelHyperParams();
@@ -67,4 +103,3 @@ void ResetAIState(const string symbol)
       g_ai_last_train_bar[i] = 0;
    }
 }
-

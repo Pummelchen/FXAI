@@ -61,6 +61,9 @@ struct FXAIDynamicEnsemblePluginRecord
    double sell_prob;
    double skip_prob;
    double expected_move;
+   double move_q25;
+   double move_q50;
+   double move_q75;
    double confidence;
    double reliability;
    double margin;
@@ -255,6 +258,9 @@ void FXAI_ResetDynamicEnsemblePluginRecord(FXAIDynamicEnsemblePluginRecord &out)
    out.sell_prob = 0.0;
    out.skip_prob = 1.0;
    out.expected_move = 0.0;
+   out.move_q25 = 0.0;
+   out.move_q50 = 0.0;
+   out.move_q75 = 0.0;
    out.confidence = 0.0;
    out.reliability = 0.0;
    out.margin = 0.0;

@@ -1,0 +1,56 @@
+{
+  "allow_abstain_flag": true,
+  "base_uncertainty_score": 0.18,
+  "bucket_hierarchy": [
+    "PAIR_SESSION_REGIME",
+    "PAIR_REGIME",
+    "REGIME",
+    "GLOBAL"
+  ],
+  "edge_floor_mult": 0.08,
+  "enabled": true,
+  "max_uncertainty_score": 0.92,
+  "memory_stale_after_hours": 96,
+  "min_calibration_quality": 0.44,
+  "neutral_blend_gain": 0.65,
+  "risk_penalties": {
+    "abstain_posture_mult": 0.24,
+    "block_posture_mult": 0.42,
+    "caution_posture_mult": 0.14,
+    "fill_risk_mult": 0.2,
+    "micro_block_mult": 0.36,
+    "news_block_mult": 0.32,
+    "path_risk_mult": 0.16,
+    "rates_block_mult": 0.24
+  },
+  "schema_version": 1,
+  "signal_zero_band": 0.035,
+  "skip_calibration_credit": 0.05,
+  "skip_cap": 0.96,
+  "skip_floor": 0.02,
+  "skip_uncertainty_gain": 0.12,
+  "soft_fallback": {
+    "confidence_cap": 0.58,
+    "move_mean_scale": 0.78,
+    "move_q25_scale": 0.6,
+    "move_q50_scale": 0.72,
+    "move_q75_scale": 0.88,
+    "prob_scale": 1.6,
+    "skip_bias": 0.08
+  },
+  "support_hard_floor": 16,
+  "support_soft_floor": 64,
+  "trade_edge_floor_points": 0.05,
+  "uncertainty_penalties": {
+    "adaptive_abstain": 0.22,
+    "disagreement": 0.26,
+    "distribution_width": 0.22,
+    "dynamic_abstain": 0.2,
+    "micro": 0.24,
+    "news": 0.18,
+    "quality": 0.28,
+    "rates": 0.14,
+    "stale_context": 0.16,
+    "support": 0.34
+  }
+}

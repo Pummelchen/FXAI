@@ -15,6 +15,9 @@
          double avg_sell_ev = ensemble_sell_ev_sum / ensemble_meta_total;
          double avg_expected = ensemble_expected_sum / ensemble_meta_total;
          double avg_expected_sq = ensemble_expected_sq_sum / ensemble_meta_total;
+         double avg_move_q25 = ensemble_move_q25_sum / ensemble_meta_total;
+         double avg_move_q50 = ensemble_move_q50_sum / ensemble_meta_total;
+         double avg_move_q75 = ensemble_move_q75_sum / ensemble_meta_total;
          double avg_conf = ensemble_conf_sum / ensemble_meta_total;
          double avg_rel = ensemble_rel_sum / ensemble_meta_total;
          double avg_margin = ensemble_margin_sum / ensemble_meta_total;
@@ -395,6 +398,45 @@
                                       adaptive_router_abstain_bias,
                                       decision);
    }
+   FXAIProbCalibrationRuntimeState prob_cal_state;
+   FXAI_ResetProbCalibrationRuntimeState(prob_cal_state);
+   if(ensembleMode != 0 && ensemble_meta_total > 0.0)
+   {
+      double probcal_agreement_score = g_ai_last_hierarchy_consistency;
+      double probcal_move_mean = ensemble_expected_sum / ensemble_meta_total;
+      double probcal_move_q25 = ensemble_move_q25_sum / ensemble_meta_total;
+      double probcal_move_q50 = ensemble_move_q50_sum / ensemble_meta_total;
+      double probcal_move_q75 = ensemble_move_q75_sum / ensemble_meta_total;
+      if(dynamic_ensemble_state.ready)
+         probcal_agreement_score = FXAI_Clamp(0.55 * dynamic_ensemble_state.agreement_score +
+                                              0.45 * g_ai_last_hierarchy_consistency,
+                                              0.0,
+                                              1.0);
+      FXAI_ProbCalibrationApply(symbol,
+                                exec_profile,
+                                adaptive_news_state,
+                                adaptive_rates_state,
+                                adaptive_micro_state,
+                                adaptive_regime_state,
+                                adaptive_router_posture,
+                                adaptive_router_abstain_bias,
+                                dynamic_ensemble_state,
+                                ensemble_probs[(int)FXAI_LABEL_BUY],
+                                ensemble_probs[(int)FXAI_LABEL_SELL],
+                                ensemble_probs[(int)FXAI_LABEL_SKIP],
+                                probcal_move_mean,
+                                probcal_move_q25,
+                                probcal_move_q50,
+                                probcal_move_q75,
+                                probcal_agreement_score,
+                                min_move_pred,
+                                spread_pred,
+                                commission_points,
+                                cost_buffer_points,
+                                H,
+                                decision,
+                                prob_cal_state);
+   }
    FXAI_AdaptiveRouterWriteRuntimeArtifacts(symbol,
                                             adaptive_router_profile,
                                             adaptive_regime_state,
@@ -408,5 +450,7 @@
                                              dynamic_ensemble_state,
                                              dynamic_records,
                                              decision);
+   FXAI_ProbCalibrationWriteRuntimeArtifacts(symbol,
+                                             prob_cal_state);
    FXAI_RecordRuntimeStageMs(FXAI_RUNTIME_STAGE_POLICY,
                              (double)(GetMicrosecondCount() - policy_stage_t0) / 1000.0);

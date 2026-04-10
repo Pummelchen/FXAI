@@ -20,6 +20,8 @@ int FXAI_RuntimeFinalizeDecision(const string symbol,
       g_ai_last_reason = "buy";
    else if(decision == 0)
       g_ai_last_reason = "sell";
+   else if(g_prob_calibration_last_ready && StringLen(g_prob_calibration_last_primary_reason) > 0)
+      g_ai_last_reason = g_prob_calibration_last_primary_reason;
    else if(!ensemble_mode && ai_type == (int)AI_M1SYNC && StringLen(single_no_trade_reason) > 0)
       g_ai_last_reason = single_no_trade_reason;
    else if(ensemble_mode && ensemble_meta_total <= 0.0)

@@ -13,6 +13,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
     case microstructure
     case adaptiveRouter
     case dynamicEnsemble
+    case probCalibration
     case runtimeMonitor
     case promotionCenter
     case researchControl
@@ -38,6 +39,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .microstructure: "Microstructure"
         case .adaptiveRouter: "Adaptive Router"
         case .dynamicEnsemble: "Dynamic Ensemble"
+        case .probCalibration: "Prob Calibration"
         case .runtimeMonitor: "Runtime Monitor"
         case .promotionCenter: "Promotion Center"
         case .researchControl: "Research OS"
@@ -63,6 +65,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .microstructure: "waveform.path.ecg.rectangle.fill"
         case .adaptiveRouter: "point.3.filled.connected.trianglepath.dotted"
         case .dynamicEnsemble: "dial.high.fill"
+        case .probCalibration: "checkmark.shield.fill"
         case .runtimeMonitor: "waveform.path.ecg.rectangle.fill"
         case .promotionCenter: "rosette"
         case .researchControl: "server.rack"

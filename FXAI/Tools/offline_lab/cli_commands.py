@@ -48,6 +48,13 @@ from .newspulse_replay import rebuild_replay_report_from_history
 from .newspulse_service import install_calendar_service
 from .performance import write_performance_reports
 from .promotion import *
+from .prob_calibration_config import (
+    PROB_CALIBRATION_CONFIG_PATH,
+    PROB_CALIBRATION_MEMORY_PATH,
+    load_config as load_prob_calibration_config,
+    load_memory as load_prob_calibration_memory,
+)
+from .prob_calibration_replay import build_prob_calibration_replay_report
 from .rates_engine_daemon import (
     rates_engine_health_snapshot,
     run_rates_engine_daemon,
@@ -152,6 +159,28 @@ def cmd_dynamic_ensemble_validate(_args) -> int:
 
 def cmd_dynamic_ensemble_replay_report(args) -> int:
     payload = build_dynamic_ensemble_replay_report(
+        symbol=str(getattr(args, "symbol", "") or ""),
+        hours_back=int(getattr(args, "hours_back", 72) or 72),
+    )
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_prob_calibration_validate(_args) -> int:
+    config_payload = load_prob_calibration_config()
+    memory_payload = load_prob_calibration_memory()
+    print(json.dumps({
+        "status": "ok",
+        "config_path": str(PROB_CALIBRATION_CONFIG_PATH),
+        "memory_path": str(PROB_CALIBRATION_MEMORY_PATH),
+        "config": config_payload,
+        "memory": memory_payload,
+    }, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_prob_calibration_replay_report(args) -> int:
+    payload = build_prob_calibration_replay_report(
         symbol=str(getattr(args, "symbol", "") or ""),
         hours_back=int(getattr(args, "hours_back", 72) or 72),
     )

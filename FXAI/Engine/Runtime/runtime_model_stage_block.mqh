@@ -275,6 +275,9 @@
    double ensemble_meta_total = 0.0;
    double ensemble_expected_sum = 0.0;
    double ensemble_expected_sq_sum = 0.0;
+   double ensemble_move_q25_sum = 0.0;
+   double ensemble_move_q50_sum = 0.0;
+   double ensemble_move_q75_sum = 0.0;
    double ensemble_conf_sum = 0.0;
    double ensemble_rel_sum = 0.0;
    double ensemble_margin_sum = 0.0;
@@ -811,6 +814,9 @@
             dynamic_records[rec_i].sell_prob = FXAI_Clamp(class_probs_pred[(int)FXAI_LABEL_SELL], 0.0, 1.0);
             dynamic_records[rec_i].skip_prob = FXAI_Clamp(class_probs_pred[(int)FXAI_LABEL_SKIP], 0.0, 1.0);
             dynamic_records[rec_i].expected_move = MathMax(expected_move, 0.0);
+            dynamic_records[rec_i].move_q25 = MathMax(pred.move_q25_points, 0.0);
+            dynamic_records[rec_i].move_q50 = MathMax(pred.move_q50_points, dynamic_records[rec_i].move_q25);
+            dynamic_records[rec_i].move_q75 = MathMax(pred.move_q75_points, dynamic_records[rec_i].move_q50);
             dynamic_records[rec_i].confidence = FXAI_Clamp(pred.confidence, 0.0, 1.0);
             dynamic_records[rec_i].reliability = FXAI_Clamp(pred.reliability, 0.0, 1.0);
             dynamic_records[rec_i].margin = FXAI_Clamp(MathAbs(class_probs_pred[(int)FXAI_LABEL_BUY] - class_probs_pred[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
@@ -839,6 +845,9 @@
          ensemble_sell_ev_sum += meta_w * model_sell_ev;
          ensemble_expected_sum += meta_w * expected_move;
          ensemble_expected_sq_sum += meta_w * expected_move * expected_move;
+         ensemble_move_q25_sum += meta_w * MathMax(pred.move_q25_points, 0.0);
+         ensemble_move_q50_sum += meta_w * MathMax(pred.move_q50_points, MathMax(pred.move_q25_points, 0.0));
+         ensemble_move_q75_sum += meta_w * MathMax(pred.move_q75_points, MathMax(pred.move_q50_points, pred.move_q25_points));
          ensemble_conf_sum += meta_w * FXAI_Clamp(pred.confidence, 0.0, 1.0);
          ensemble_rel_sum += meta_w * FXAI_Clamp(pred.reliability, 0.0, 1.0);
          ensemble_margin_sum += meta_w * FXAI_Clamp(MathAbs(class_probs_pred[(int)FXAI_LABEL_BUY] - class_probs_pred[(int)FXAI_LABEL_SELL]), 0.0, 1.0);
@@ -902,6 +911,9 @@
          ensemble_meta_total = 0.0;
          ensemble_expected_sum = 0.0;
          ensemble_expected_sq_sum = 0.0;
+         ensemble_move_q25_sum = 0.0;
+         ensemble_move_q50_sum = 0.0;
+         ensemble_move_q75_sum = 0.0;
          ensemble_conf_sum = 0.0;
          ensemble_rel_sum = 0.0;
          ensemble_margin_sum = 0.0;
@@ -945,6 +957,9 @@
             ensemble_sell_ev_sum += meta_w * model_sell_ev;
             ensemble_expected_sum += meta_w * expected_move;
             ensemble_expected_sq_sum += meta_w * expected_move * expected_move;
+            ensemble_move_q25_sum += meta_w * MathMax(dynamic_records[rec_i].move_q25, 0.0);
+            ensemble_move_q50_sum += meta_w * MathMax(dynamic_records[rec_i].move_q50, dynamic_records[rec_i].move_q25);
+            ensemble_move_q75_sum += meta_w * MathMax(dynamic_records[rec_i].move_q75, dynamic_records[rec_i].move_q50);
             ensemble_conf_sum += meta_w * dynamic_records[rec_i].confidence;
             ensemble_rel_sum += meta_w * dynamic_records[rec_i].reliability;
             ensemble_margin_sum += meta_w * dynamic_records[rec_i].margin;

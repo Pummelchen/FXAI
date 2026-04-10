@@ -20,6 +20,7 @@ struct Phase6WorkflowTests {
             selectedMicrostructureSymbol: "EURUSD",
             selectedAdaptiveSymbol: "EURUSD",
             selectedDynamicEnsembleSymbol: "EURUSD",
+            selectedProbCalibrationSymbol: "EURUSD",
             selectedResearchSymbol: "EURUSD",
             selectedVisualizationSymbol: "EURUSD",
             pluginSearchText: "mlp",
@@ -49,6 +50,7 @@ struct Phase6WorkflowTests {
         #expect(loaded.savedViews.count == 1)
         #expect(loaded.savedViews.first?.name == "Live EURUSD")
         #expect(loaded.lastWorkspace?.selection == "runtimeMonitor")
+        #expect(loaded.savedViews.first?.selectedProbCalibrationSymbol == "EURUSD")
         #expect(loaded.savedViews.first?.overviewLayout.sections.count == OverviewDashboardSectionKind.allCases.count)
         #expect(Set(loaded.completedOnboardingRoles) == Set([.liveTrader, .architect]))
         #expect(loaded.preferredProjectRootPath == "/tmp/fxai")
