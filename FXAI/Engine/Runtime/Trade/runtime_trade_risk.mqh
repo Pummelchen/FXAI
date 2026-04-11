@@ -390,6 +390,58 @@ double FXAI_CalcRiskAwareLot(const string symbol,
       }
    }
 
+   FXAIPairNetworkDecisionState pair_network_state;
+   FXAI_ResetPairNetworkDecisionState(pair_network_state);
+   double pair_network_size_mult = 1.0;
+   if(PairNetworkEnabled)
+   {
+      bool pair_network_ready = FXAI_PairNetworkEvaluate(symbol,
+                                                         direction,
+                                                         news_state,
+                                                         rates_state,
+                                                         cross_asset_state,
+                                                         micro_state,
+                                                         execution_quality_state,
+                                                         pair_network_state);
+      if(pair_network_ready)
+      {
+         FXAI_PairNetworkWriteRuntimeArtifacts(symbol, pair_network_state);
+         if(g_pair_network_cfg_cache.auto_apply)
+         {
+            if(pair_network_state.decision == "BLOCK_CONTRADICTORY")
+            {
+               reason = "risk_pair_network_contradiction";
+               return 0.0;
+            }
+            if(pair_network_state.decision == "BLOCK_CONCENTRATION")
+            {
+               reason = "risk_pair_network_concentration";
+               return 0.0;
+            }
+            if(pair_network_state.decision == "SUPPRESS_REDUNDANT")
+            {
+               reason = "risk_pair_network_redundant";
+               return 0.0;
+            }
+            if(pair_network_state.decision == "PREFER_ALTERNATIVE_EXPRESSION")
+            {
+               reason = "risk_pair_network_prefer_expression";
+               return 0.0;
+            }
+            if(pair_network_state.decision == "ALLOW_REDUCED")
+               pair_network_size_mult = FXAI_Clamp(pair_network_state.recommended_size_multiplier, 0.05, 1.0);
+         }
+      }
+      else
+      {
+         FXAI_ResetPairNetworkGlobals();
+      }
+   }
+   else
+   {
+      FXAI_ResetPairNetworkGlobals();
+   }
+
    double requested_lot = Lot;
    double hard_cap_lot = 1000000.0;
    double edge_scale = FXAI_Clamp(g_ai_last_trade_edge_points / MathMax(g_ai_last_min_move_points, 0.25), -1.0, 4.0);
@@ -612,6 +664,10 @@ double FXAI_CalcRiskAwareLot(const string symbol,
                                         0.05,
                                         1.00);
       requested_lot *= FXAI_Clamp(caution_lot_scale, 0.05, 1.00);
+   }
+   if(PairNetworkEnabled)
+   {
+      requested_lot *= FXAI_Clamp(pair_network_size_mult, 0.05, 1.00);
    }
 
    requested_lot = FXAI_NormalizeLot(symbol, requested_lot);

@@ -70,6 +70,10 @@ PATCH_MODULES = [
     "offline_lab.execution_quality_contracts",
     "offline_lab.execution_quality_config",
     "offline_lab.execution_quality_replay",
+    "offline_lab.pair_network_contracts",
+    "offline_lab.pair_network_config",
+    "offline_lab.pair_network_math",
+    "offline_lab.pair_network",
     "offline_lab.market_universe",
     "offline_lab.verification",
     "testlab.shared",
@@ -93,6 +97,8 @@ def patched_paths(base_dir: Path):
     prob_calibration_report_dir = prob_calibration_dir / "Reports"
     execution_quality_dir = offline_dir / "ExecutionQuality"
     execution_quality_report_dir = execution_quality_dir / "Reports"
+    pair_network_dir = offline_dir / "PairNetwork"
+    pair_network_report_dir = pair_network_dir / "Reports"
     rates_engine_dir = offline_dir / "RatesEngine"
     rates_engine_state_dir = rates_engine_dir / "State"
     rates_engine_report_dir = rates_engine_dir / "Reports"
@@ -131,6 +137,8 @@ def patched_paths(base_dir: Path):
         prob_calibration_report_dir,
         execution_quality_dir,
         execution_quality_report_dir,
+        pair_network_dir,
+        pair_network_report_dir,
         rates_engine_dir,
         rates_engine_state_dir,
         rates_engine_report_dir,
@@ -211,6 +219,14 @@ def patched_paths(base_dir: Path):
             "EXECUTION_QUALITY_REPLAY_REPORT_PATH": execution_quality_report_dir / "execution_quality_replay_report.json",
             "EXECUTION_QUALITY_RUNTIME_CONFIG_PATH": runtime_dir / "execution_quality_config.tsv",
             "EXECUTION_QUALITY_RUNTIME_MEMORY_PATH": runtime_dir / "execution_quality_memory.tsv",
+            "PAIR_NETWORK_DIR": pair_network_dir,
+            "PAIR_NETWORK_REPORT_DIR": pair_network_report_dir,
+            "PAIR_NETWORK_CONFIG_PATH": pair_network_dir / "pair_network_config.json",
+            "PAIR_NETWORK_STATUS_PATH": pair_network_dir / "pair_network_status.json",
+            "PAIR_NETWORK_REPORT_PATH": pair_network_report_dir / "pair_network_report.json",
+            "PAIR_NETWORK_HISTORY_PATH": pair_network_dir / "pair_network_history.ndjson",
+            "PAIR_NETWORK_RUNTIME_CONFIG_PATH": runtime_dir / "pair_network_config.tsv",
+            "PAIR_NETWORK_RUNTIME_STATUS_PATH": runtime_dir / "pair_network_status.tsv",
             "RATES_ENGINE_DIR": rates_engine_dir,
             "RATES_ENGINE_STATE_DIR": rates_engine_state_dir,
             "RATES_ENGINE_REPORT_DIR": rates_engine_report_dir,

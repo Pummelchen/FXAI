@@ -49,6 +49,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Multi-Horizon Label Engine + Meta-Labeling docs, config, reports, and artifact outputs for shared target construction, cost-aware tradeability labels, and signal-level meta-label research.
 - `Tools/OfflineLab/DriftGovernance/`
   Online Drift Detector + Champion/Challenger Governance docs, config, reports, and audit history for plugin-health monitoring, conservative demotion, and promotion-review workflows.
+- `Tools/OfflineLab/PairNetwork/`
+  Pair-Network / Factor Graph + Portfolio Conflict Resolver docs, config, graph reports, and runtime decision history for portfolio-level exposure coordination and conflict resolution.
 - `GUI/`
   Optional macOS 26 SwiftUI operator app for role-based dashboards, plugin-zoo browsing, report exploration, run builders for Audit/Offline/backtest workflows, runtime inspection, promotion review, Research OS control, advanced Metal-backed visual analysis, saved workspace views, onboarding, incident recovery, detached startup, soft reconnect, terminal-first command guidance, and the shared FXAI operator theme system.
 
@@ -78,6 +80,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Microstructure runtime adapter that consumes per-pair MT5 tick-flow and liquidity-stress proxy state and applies execution-aware caution or block posture without changing the canonical model input.
 - `Engine/Runtime/Trade/runtime_trade_cross_asset_state.mqh`
   Cross-asset runtime adapter that consumes shared pair-level macro/liquidity posture and applies deterministic caution or block state without changing canonical model inputs.
+- `Engine/Runtime/Trade/runtime_trade_pair_network.mqh`
+  Pair-network runtime adapter that decomposes current and candidate pair exposure, scores redundancy or contradiction, and suppresses or resizes trades before final order approval.
 - `Engine/Runtime/runtime_adaptive_router_stage.mqh`
   Adaptive regime classification, plugin suitability scoring, routed posture logic, and append-only runtime history for the state-aware plugin-zoo control plane.
 - `Engine/Runtime/runtime_dynamic_ensemble_stage.mqh`
@@ -136,6 +140,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Multi-horizon label contracts, config, deterministic label math, artifact builders, and CLI helpers for direction, magnitude, time-to-move, tradeability, and signal meta-label generation.
 - `Tools/offline_lab/drift_governance*.py`
   Drift-governance contracts, config, deterministic drift math, DB persistence, report builders, challenger evaluation, and CLI helpers for plugin-health monitoring and champion/challenger policy.
+- `Tools/offline_lab/pair_network*.py`
+  Pair-network contracts, config, deterministic dependency math, structural exposure decomposition, report builders, and CLI helpers for portfolio conflict resolution.
 - `GUI/Sources/FXAIGUICore`, `GUI/Sources/FXAIGUIApp`
   Swift package targets for the GUI’s project scanner, runtime and Research OS artifact readers, advanced visualization builders, saved-workspace persistence, onboarding guides, incident builders, design system, navigation shell, operator-theme token/layout/rendering stack, reference-asset parsing, adaptive dashboard components, Phase 2 run builders, Phase 3 runtime/promotion views, Phase 4 Turso/Research OS control surfaces, Phase 5 Metal-backed visualization surfaces, and Phase 6 operator-polish features.
   The GUI also includes an integrated NewsPulse surface for source health, currency heatmap, pair risk, and recent tape visibility.
@@ -148,6 +154,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   It now also includes an Execution Quality surface for expected spread, slippage stress, fill quality, latency sensitivity, liquidity fragility, and current execution-state reasons by symbol.
   It now also includes a Label Engine surface for offline artifact review, multi-horizon tradeability rates, meta-label acceptance, top failure reasons, and per-dataset label quality diagnostics.
   It now also includes a Drift Governance surface for plugin-health states, applied or recommended actions, challenger eligibility, reason codes, and per-symbol governance context.
+  It now also includes a Pair Network surface for portfolio conflict decisions, currency and factor exposure, top dependency edges, and preferred-expression selections by symbol.
 
 ## Operating Notes
 
@@ -189,6 +196,9 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - The preferred Drift Governance validation path is `python3 FXAI/Tools/fxai_offline_lab.py drift-governance-validate`.
 - The preferred Drift Governance cycle path is `python3 FXAI/Tools/fxai_offline_lab.py drift-governance-run --profile continuous`.
 - The preferred Drift Governance report path is `python3 FXAI/Tools/fxai_offline_lab.py drift-governance-report --profile continuous`.
+- The preferred Pair Network validation path is `python3 FXAI/Tools/fxai_offline_lab.py pair-network-validate`.
+- The preferred Pair Network build path is `python3 FXAI/Tools/fxai_offline_lab.py pair-network-build --profile continuous`.
+- The preferred Pair Network report path is `python3 FXAI/Tools/fxai_offline_lab.py pair-network-report --profile continuous`.
 - The shared TensorCore path now includes a self-supervised foundation encoder, teacher-student transfer heads, hierarchical trade-quality signals, and persistent analog regime memory.
 - The live EA now uses portfolio-native sizing and gating with directional-cluster pressure, hierarchy floors, and macro-state quality controls instead of only scalar conviction scaling.
 - The live runtime now emits per-instance control-plane snapshots and consumes promoted symbol deployment profiles so research-side promotion decisions can steer trade floors, sizing bias, and peer-pressure handling.
@@ -226,6 +236,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - The Execution-Quality Forecaster is also phase-1 safe by design: it turns broker-visible spread, slippage, liquidity, and latency conditions into deterministic execution-state forecasts that tighten abstention, trade-risk, and allowed-deviation logic without changing canonical model inputs.
 - The Multi-Horizon Label Engine + Meta-Labeling subsystem is also phase-1 safe by design: it upgrades target construction for training and evaluation with reproducible direction, magnitude, timing, tradeability, and signal-filter labels without forcing a full plugin-zoo architecture rewrite.
 - The Online Drift Detector + Champion/Challenger Governance subsystem is also phase-1 safe by design: it monitors live plugin-health decay, writes deterministic governance state, downweights or restricts degraded plugins conservatively, and keeps challenger promotion behind support-aware review rather than unsafe autonomous replacement.
+- The Pair-Network / Factor Graph + Portfolio Conflict Resolver subsystem is also phase-1 safe by design: it resolves redundant, contradictory, or over-concentrated pair candidates after calibration and execution-quality scoring using deterministic currency and factor exposure rules rather than opaque portfolio optimization.
 
 ## Source Of Truth
 

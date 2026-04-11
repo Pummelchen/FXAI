@@ -4,6 +4,7 @@
 #include "Trade\\runtime_trade_cross_asset_state.mqh"
 #include "Trade\\runtime_trade_microstructure.mqh"
 #include "Trade\\runtime_trade_execution_quality.mqh"
+#include "Trade\\runtime_trade_pair_network.mqh"
 #include "Trade\\runtime_trade_risk.mqh"
 #include "Trade\\runtime_trade_execution.mqh"
 #include "Trade\\runtime_trade_lifecycle.mqh"

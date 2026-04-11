@@ -54,6 +54,17 @@ def build_parser() -> argparse.ArgumentParser:
     eqr.add_argument("--hours-back", type=int, default=72)
     eqr.set_defaults(func=cmd_execution_quality_replay_report)
 
+    pnv = sub.add_parser("pair-network-validate", help="Validate the pair-network config, exported runtime policy, and factor mapping scaffolding")
+    pnv.set_defaults(func=cmd_pair_network_validate)
+
+    pnb = sub.add_parser("pair-network-build", help="Build the pair-network/factor-graph report and export the runtime portfolio-conflict policy")
+    pnb.add_argument("--profile", default="continuous")
+    pnb.set_defaults(func=cmd_pair_network_build)
+
+    pnr = sub.add_parser("pair-network-report", help="Rebuild the pair-network report from the current offline-lab state")
+    pnr.add_argument("--profile", default="continuous")
+    pnr.set_defaults(func=cmd_pair_network_report)
+
     dgv = sub.add_parser("drift-governance-validate", help="Validate the drift-governance config, thresholds, and challenger policy")
     dgv.set_defaults(func=cmd_drift_governance_validate)
 

@@ -26,6 +26,9 @@ FXAI/Tools/OfflineLab/DriftGovernance/Artifacts/
 FXAI/Tools/OfflineLab/DriftGovernance/Reports/
 FXAI/Tools/OfflineLab/DriftGovernance/drift_governance_status.json
 FXAI/Tools/OfflineLab/DriftGovernance/drift_governance_history.ndjson
+FXAI/Tools/OfflineLab/PairNetwork/Reports/
+FXAI/Tools/OfflineLab/PairNetwork/pair_network_status.json
+FXAI/Tools/OfflineLab/PairNetwork/pair_network_history.ndjson
 FXAI/Tools/Runtime/drift_governance_summary.json
 FXAI/GUI/.build/
 FXAI/GUI/.swiftpm/

@@ -24,6 +24,7 @@ from .drift_governance_contracts import DRIFT_GOVERNANCE_REPORT_PATH, DRIFT_GOVE
 from .execution_quality_contracts import EXECUTION_QUALITY_REPLAY_REPORT_PATH, execution_quality_runtime_state_path
 from .label_engine_contracts import LABEL_ENGINE_REPORT_PATH, LABEL_ENGINE_STATUS_PATH
 from .newspulse_contracts import NEWSPULSE_REPLAY_REPORT_PATH, NEWSPULSE_STATUS_PATH
+from .pair_network_contracts import PAIR_NETWORK_REPORT_PATH, PAIR_NETWORK_STATUS_PATH, pair_network_runtime_state_path
 from .rates_engine_contracts import RATES_ENGINE_REPLAY_REPORT_PATH, RATES_ENGINE_STATUS_PATH
 from .performance import build_symbol_performance_report
 from .vector_store import latest_symbol_shadow_neighbors
@@ -124,6 +125,7 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
             "service_tsv": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_supervisor_service_{safe_token(symbol)}.tsv"),
             "command_tsv": _load_tsv_map(COMMON_PROMOTION_DIR / f"fxai_supervisor_command_{safe_token(symbol)}.tsv"),
             "adaptive_runtime_tsv": _load_tsv_map(adaptive_router_runtime_state_path(symbol)),
+            "pair_network_tsv": _load_tsv_map(pair_network_runtime_state_path(symbol)),
         }
         analog_neighbors = latest_symbol_shadow_neighbors(conn, profile_name, symbol, limit=5)
         artifact_age_sec = max(now_unix - int(row["created_at"]), 0)
@@ -184,6 +186,10 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
         "label_engine": {
             "status": _load_json(LABEL_ENGINE_STATUS_PATH),
             "report": _load_json(LABEL_ENGINE_REPORT_PATH),
+        },
+        "pair_network": {
+            "status": _load_json(PAIR_NETWORK_STATUS_PATH),
+            "report": _load_json(PAIR_NETWORK_REPORT_PATH),
         },
         "source_of_truth": {
             "turso_libsql": "authoritative research and promotion state",
@@ -284,8 +290,11 @@ def live_state_snapshot(profile_name: str, symbol: str) -> dict[str, object]:
         "portfolio_supervisor": _load_tsv_map(COMMON_PROMOTION_DIR / "fxai_portfolio_supervisor.tsv"),
         "adaptive_runtime": _load_tsv_map(adaptive_router_runtime_state_path(symbol)),
         "execution_quality_runtime": _load_tsv_map(execution_quality_runtime_state_path(symbol)),
+        "pair_network_runtime": _load_tsv_map(pair_network_runtime_state_path(symbol)),
         "drift_governance_status": _load_json(DRIFT_GOVERNANCE_STATUS_PATH),
         "drift_governance_report": _load_json(DRIFT_GOVERNANCE_REPORT_PATH),
+        "pair_network_status": _load_json(PAIR_NETWORK_STATUS_PATH),
+        "pair_network_report": _load_json(PAIR_NETWORK_REPORT_PATH),
         "adaptive_history_path": str(adaptive_router_runtime_history_path(symbol)),
         "performance": build_symbol_performance_report(symbol),
     }

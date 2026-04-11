@@ -12,6 +12,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
     case newsPulse
     case ratesEngine
     case crossAsset
+    case pairNetwork
     case microstructure
     case adaptiveRouter
     case driftGovernance
@@ -42,6 +43,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .newsPulse: "NewsPulse"
         case .ratesEngine: "Rates Engine"
         case .crossAsset: "Cross Asset"
+        case .pairNetwork: "Pair Network"
         case .microstructure: "Microstructure"
         case .adaptiveRouter: "Adaptive Router"
         case .driftGovernance: "Drift Governance"
@@ -72,6 +74,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .newsPulse: "dot.radiowaves.left.and.right"
         case .ratesEngine: "chart.line.text.clipboard.fill"
         case .crossAsset: "globe.americas.fill"
+        case .pairNetwork: "point.3.connected.trianglepath.dotted"
         case .microstructure: "waveform.path.ecg.rectangle.fill"
         case .adaptiveRouter: "point.3.filled.connected.trianglepath.dotted"
         case .driftGovernance: "waveform.and.magnifyingglass"

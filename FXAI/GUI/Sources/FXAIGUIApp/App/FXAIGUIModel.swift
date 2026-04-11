@@ -14,6 +14,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var newsPulseSnapshot: NewsPulseSnapshot?
     @Published var ratesEngineSnapshot: RatesEngineSnapshot?
     @Published var crossAssetSnapshot: CrossAssetSnapshot?
+    @Published var pairNetworkSnapshot: PairNetworkSnapshot?
     @Published var microstructureSnapshot: MicrostructureSnapshot?
     @Published var adaptiveRouterSnapshot: AdaptiveRouterSnapshot?
     @Published var driftGovernanceSnapshot: DriftGovernanceSnapshot?
@@ -29,6 +30,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var selectedRuntimeSymbol = ""
     @Published var selectedRatesSymbol = ""
     @Published var selectedCrossAssetSymbol = ""
+    @Published var selectedPairNetworkSymbol = ""
     @Published var selectedMicrostructureSymbol = ""
     @Published var selectedAdaptiveSymbol = ""
     @Published var selectedDynamicEnsembleSymbol = ""
@@ -62,6 +64,7 @@ final class FXAIGUIModel: ObservableObject {
     private let newsPulseReader = NewsPulseArtifactReader()
     private let ratesEngineReader = RatesEngineArtifactReader()
     private let crossAssetReader = CrossAssetArtifactReader()
+    private let pairNetworkReader = PairNetworkArtifactReader()
     private let microstructureReader = MicrostructureArtifactReader()
     private let adaptiveRouterReader = AdaptiveRouterArtifactReader()
     private let driftGovernanceReader = DriftGovernanceArtifactReader()
@@ -202,6 +205,14 @@ final class FXAIGUIModel: ObservableObject {
         return crossAssetSnapshot.pairs.first
     }
 
+    var selectedPairNetworkDetail: PairNetworkSymbolSnapshot? {
+        guard let pairNetworkSnapshot else { return nil }
+        if let selected = pairNetworkSnapshot.symbols.first(where: { $0.symbol == selectedPairNetworkSymbol }) {
+            return selected
+        }
+        return pairNetworkSnapshot.symbols.first
+    }
+
     var selectedVisualizationDetail: SymbolVisualizationDetail? {
         guard let visualizationSnapshot else { return nil }
         if let selected = visualizationSnapshot.symbolDetails.first(where: { $0.symbol == selectedVisualizationSymbol }) {
@@ -251,6 +262,7 @@ final class FXAIGUIModel: ObservableObject {
             newsPulseSnapshot = newsPulseReader.read(projectRoot: projectRoot)
             ratesEngineSnapshot = ratesEngineReader.read(projectRoot: projectRoot)
             crossAssetSnapshot = crossAssetReader.read(projectRoot: projectRoot)
+            pairNetworkSnapshot = pairNetworkReader.read(projectRoot: projectRoot)
             microstructureSnapshot = microstructureReader.read(projectRoot: projectRoot)
             adaptiveRouterSnapshot = adaptiveRouterReader.read(projectRoot: projectRoot)
             driftGovernanceSnapshot = driftGovernanceReader.read(projectRoot: projectRoot)
@@ -275,6 +287,7 @@ final class FXAIGUIModel: ObservableObject {
             syncRuntimeSelection()
             syncRatesSelection()
             syncCrossAssetSelection()
+            syncPairNetworkSelection()
             syncMicrostructureSelection()
             syncAdaptiveSelection()
             syncDriftGovernanceSelection()
@@ -398,6 +411,7 @@ final class FXAIGUIModel: ObservableObject {
             self.selectedRuntimeSymbol = savedView.selectedRuntimeSymbol
             self.selectedRatesSymbol = savedView.selectedRatesSymbol
             self.selectedCrossAssetSymbol = savedView.selectedCrossAssetSymbol
+            self.selectedPairNetworkSymbol = savedView.selectedPairNetworkSymbol
             self.selectedMicrostructureSymbol = savedView.selectedMicrostructureSymbol
             self.selectedAdaptiveSymbol = savedView.selectedAdaptiveSymbol
             self.selectedDynamicEnsembleSymbol = savedView.selectedDynamicEnsembleSymbol
@@ -602,6 +616,26 @@ final class FXAIGUIModel: ObservableObject {
             selectedCrossAssetSymbol = selectedRuntimeSymbol.isEmpty ? first : selectedRuntimeSymbol
             if !symbols.contains(selectedCrossAssetSymbol) {
                 selectedCrossAssetSymbol = first
+            }
+        }
+    }
+
+    private func syncPairNetworkSelection() {
+        guard let pairNetworkSnapshot else {
+            selectedPairNetworkSymbol = ""
+            return
+        }
+
+        let symbols = pairNetworkSnapshot.symbols.map(\.symbol)
+        guard let first = symbols.first else {
+            selectedPairNetworkSymbol = ""
+            return
+        }
+
+        if !symbols.contains(selectedPairNetworkSymbol) {
+            selectedPairNetworkSymbol = selectedRuntimeSymbol.isEmpty ? first : selectedRuntimeSymbol
+            if !symbols.contains(selectedPairNetworkSymbol) {
+                selectedPairNetworkSymbol = first
             }
         }
     }
@@ -821,6 +855,7 @@ final class FXAIGUIModel: ObservableObject {
             $selectedRuntimeSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedRatesSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedCrossAssetSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $selectedPairNetworkSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedMicrostructureSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedAdaptiveSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedDynamicEnsembleSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
@@ -976,6 +1011,7 @@ final class FXAIGUIModel: ObservableObject {
             selectedRuntimeSymbol = workspace.selectedRuntimeSymbol
             selectedRatesSymbol = workspace.selectedRatesSymbol
             selectedCrossAssetSymbol = workspace.selectedCrossAssetSymbol
+            selectedPairNetworkSymbol = workspace.selectedPairNetworkSymbol
             selectedMicrostructureSymbol = workspace.selectedMicrostructureSymbol
             selectedAdaptiveSymbol = workspace.selectedAdaptiveSymbol
             selectedDynamicEnsembleSymbol = workspace.selectedDynamicEnsembleSymbol
@@ -1004,6 +1040,7 @@ final class FXAIGUIModel: ObservableObject {
         newsPulseSnapshot = nil
         ratesEngineSnapshot = nil
         crossAssetSnapshot = nil
+        pairNetworkSnapshot = nil
         microstructureSnapshot = nil
         adaptiveRouterSnapshot = nil
         driftGovernanceSnapshot = nil
@@ -1034,6 +1071,7 @@ final class FXAIGUIModel: ObservableObject {
             selectedRuntimeSymbol: selectedRuntimeSymbol,
             selectedRatesSymbol: selectedRatesSymbol,
             selectedCrossAssetSymbol: selectedCrossAssetSymbol,
+            selectedPairNetworkSymbol: selectedPairNetworkSymbol,
             selectedMicrostructureSymbol: selectedMicrostructureSymbol,
             selectedAdaptiveSymbol: selectedAdaptiveSymbol,
             selectedDynamicEnsembleSymbol: selectedDynamicEnsembleSymbol,

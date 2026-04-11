@@ -11,6 +11,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
     public var selectedRuntimeSymbol: String
     public var selectedRatesSymbol: String
     public var selectedCrossAssetSymbol: String
+    public var selectedPairNetworkSymbol: String
     public var selectedMicrostructureSymbol: String
     public var selectedAdaptiveSymbol: String
     public var selectedDynamicEnsembleSymbol: String
@@ -42,6 +43,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         selectedRuntimeSymbol: String,
         selectedRatesSymbol: String,
         selectedCrossAssetSymbol: String,
+        selectedPairNetworkSymbol: String,
         selectedMicrostructureSymbol: String,
         selectedAdaptiveSymbol: String,
         selectedDynamicEnsembleSymbol: String,
@@ -72,6 +74,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         self.selectedRuntimeSymbol = selectedRuntimeSymbol
         self.selectedRatesSymbol = selectedRatesSymbol
         self.selectedCrossAssetSymbol = selectedCrossAssetSymbol
+        self.selectedPairNetworkSymbol = selectedPairNetworkSymbol
         self.selectedMicrostructureSymbol = selectedMicrostructureSymbol
         self.selectedAdaptiveSymbol = selectedAdaptiveSymbol
         self.selectedDynamicEnsembleSymbol = selectedDynamicEnsembleSymbol
@@ -104,6 +107,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         case selectedRuntimeSymbol
         case selectedRatesSymbol
         case selectedCrossAssetSymbol
+        case selectedPairNetworkSymbol
         case selectedMicrostructureSymbol
         case selectedAdaptiveSymbol
         case selectedDynamicEnsembleSymbol
@@ -137,6 +141,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         selectedRuntimeSymbol = try container.decodeIfPresent(String.self, forKey: .selectedRuntimeSymbol) ?? ""
         selectedRatesSymbol = try container.decodeIfPresent(String.self, forKey: .selectedRatesSymbol) ?? selectedRuntimeSymbol
         selectedCrossAssetSymbol = try container.decodeIfPresent(String.self, forKey: .selectedCrossAssetSymbol) ?? selectedRatesSymbol
+        selectedPairNetworkSymbol = try container.decodeIfPresent(String.self, forKey: .selectedPairNetworkSymbol) ?? selectedCrossAssetSymbol
         selectedMicrostructureSymbol = try container.decodeIfPresent(String.self, forKey: .selectedMicrostructureSymbol) ?? selectedRuntimeSymbol
         selectedAdaptiveSymbol = try container.decodeIfPresent(String.self, forKey: .selectedAdaptiveSymbol) ?? ""
         selectedDynamicEnsembleSymbol = try container.decodeIfPresent(String.self, forKey: .selectedDynamicEnsembleSymbol) ?? selectedAdaptiveSymbol
@@ -170,6 +175,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         try container.encode(selectedRuntimeSymbol, forKey: .selectedRuntimeSymbol)
         try container.encode(selectedRatesSymbol, forKey: .selectedRatesSymbol)
         try container.encode(selectedCrossAssetSymbol, forKey: .selectedCrossAssetSymbol)
+        try container.encode(selectedPairNetworkSymbol, forKey: .selectedPairNetworkSymbol)
         try container.encode(selectedMicrostructureSymbol, forKey: .selectedMicrostructureSymbol)
         try container.encode(selectedAdaptiveSymbol, forKey: .selectedAdaptiveSymbol)
         try container.encode(selectedDynamicEnsembleSymbol, forKey: .selectedDynamicEnsembleSymbol)

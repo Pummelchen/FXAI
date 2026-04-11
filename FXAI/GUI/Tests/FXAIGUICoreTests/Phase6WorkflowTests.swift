@@ -18,6 +18,7 @@ struct Phase6WorkflowTests {
             selectedRuntimeSymbol: "EURUSD",
             selectedRatesSymbol: "EURUSD",
             selectedCrossAssetSymbol: "EURUSD",
+            selectedPairNetworkSymbol: "EURUSD",
             selectedMicrostructureSymbol: "EURUSD",
             selectedAdaptiveSymbol: "EURUSD",
             selectedDynamicEnsembleSymbol: "EURUSD",

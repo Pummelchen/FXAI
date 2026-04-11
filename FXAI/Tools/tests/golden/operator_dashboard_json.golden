@@ -48,13 +48,13 @@
           },
           "recent_transitions": [
             {
-              "at": "2026-04-09T08:30:00Z",
+              "at": "2026-01-01T00:00:00Z",
               "from": "BREAKOUT_TRANSITION",
               "to": "HIGH_VOL_EVENT",
               "type": "regime_change"
             },
             {
-              "at": "2026-04-09T08:30:00Z",
+              "at": "2026-01-01T00:00:00Z",
               "from": "NORMAL",
               "to": "CAUTION",
               "type": "posture_change"
@@ -392,6 +392,7 @@
           "teacher_weight": "0.700000",
           "telemetry_level": "full"
         },
+        "pair_network_tsv": {},
         "router_tsv": {
           "allow_plugins_csv": "ai_mlp",
           "champion_only": "0",
@@ -995,6 +996,10 @@
   },
   "newspulse": {
     "replay_report": {},
+    "status": {}
+  },
+  "pair_network": {
+    "report": {},
     "status": {}
   },
   "profile_name": "fixture",

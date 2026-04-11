@@ -1295,6 +1295,213 @@ public enum GUIValidationFixtures {
         )
     }
 
+    public static func pairNetworkSnapshot(projectRoot _: URL) -> PairNetworkSnapshot {
+        let now = Date()
+        let eurusdDependencies = [
+            PairNetworkDependencyEdge(
+                sourcePair: "EURUSD",
+                targetPair: "GBPUSD",
+                combinedScore: 0.82,
+                structuralScore: 0.78,
+                empiricalScore: 0.74,
+                correlation: 0.74,
+                support: 288,
+                relation: "SHARED_CURRENCY",
+                sharedCurrencies: ["USD"]
+            ),
+            PairNetworkDependencyEdge(
+                sourcePair: "EURUSD",
+                targetPair: "AUDUSD",
+                combinedScore: 0.76,
+                structuralScore: 0.72,
+                empiricalScore: 0.68,
+                correlation: 0.68,
+                support: 288,
+                relation: "SHARED_CURRENCY",
+                sharedCurrencies: ["USD"]
+            ),
+            PairNetworkDependencyEdge(
+                sourcePair: "EURUSD",
+                targetPair: "USDCHF",
+                combinedScore: 0.73,
+                structuralScore: 0.76,
+                empiricalScore: 0.60,
+                correlation: -0.60,
+                support: 288,
+                relation: "INVERSE",
+                sharedCurrencies: ["USD"]
+            ),
+        ]
+
+        return PairNetworkSnapshot(
+            generatedAt: now,
+            graphMode: "STRUCTURAL_PLUS_EMPIRICAL",
+            actionMode: "AUTO_APPLY",
+            pairCount: 54,
+            currencyCount: 20,
+            edgeCount: 420,
+            fallbackGraphUsed: false,
+            partialDependencyData: false,
+            graphStale: false,
+            symbols: [
+                PairNetworkSymbolSnapshot(
+                    symbol: "EURUSD",
+                    generatedAt: now.addingTimeInterval(-60),
+                    decision: "ALLOW_REDUCED",
+                    fallbackGraphUsed: false,
+                    partialDependencyData: false,
+                    graphStale: false,
+                    conflictScore: 0.68,
+                    redundancyScore: 0.66,
+                    contradictionScore: 0.18,
+                    concentrationScore: 0.61,
+                    currencyConcentration: 0.58,
+                    factorConcentration: 0.55,
+                    recommendedSizeMultiplier: 0.72,
+                    preferredExpression: "",
+                    currencyExposure: [
+                        KeyValueRecord(key: "EUR", value: "1.4000"),
+                        KeyValueRecord(key: "USD", value: "-2.1000"),
+                        KeyValueRecord(key: "JPY", value: "0.7000"),
+                    ],
+                    factorExposure: [
+                        KeyValueRecord(key: "usd_bloc", value: "-1.8800"),
+                        KeyValueRecord(key: "risk_on", value: "0.8200"),
+                        KeyValueRecord(key: "macro_shock", value: "0.6100"),
+                    ],
+                    reasons: [
+                        "DUPLICATES_EXISTING_USD_SHORT_EXPOSURE",
+                        "FACTOR_CONCENTRATION_ELEVATED",
+                    ]
+                ),
+                PairNetworkSymbolSnapshot(
+                    symbol: "NZDUSD",
+                    generatedAt: now.addingTimeInterval(-45),
+                    decision: "PREFER_ALTERNATIVE_EXPRESSION",
+                    fallbackGraphUsed: false,
+                    partialDependencyData: false,
+                    graphStale: false,
+                    conflictScore: 0.79,
+                    redundancyScore: 0.83,
+                    contradictionScore: 0.05,
+                    concentrationScore: 0.57,
+                    currencyConcentration: 0.60,
+                    factorConcentration: 0.62,
+                    recommendedSizeMultiplier: 0.0,
+                    preferredExpression: "AUDUSD",
+                    currencyExposure: [
+                        KeyValueRecord(key: "NZD", value: "1.0000"),
+                        KeyValueRecord(key: "USD", value: "-1.0000"),
+                    ],
+                    factorExposure: [
+                        KeyValueRecord(key: "commodity_fx", value: "1.0600"),
+                        KeyValueRecord(key: "risk_on", value: "1.0800"),
+                    ],
+                    reasons: [
+                        "BETTER_ALTERNATIVE_EXPRESSION",
+                        "HIGH_COMMODITY_BLOC_OVERLAP",
+                    ]
+                ),
+                PairNetworkSymbolSnapshot(
+                    symbol: "USDCHF",
+                    generatedAt: now.addingTimeInterval(-30),
+                    decision: "BLOCK_CONTRADICTORY",
+                    fallbackGraphUsed: false,
+                    partialDependencyData: false,
+                    graphStale: false,
+                    conflictScore: 0.88,
+                    redundancyScore: 0.34,
+                    contradictionScore: 0.88,
+                    concentrationScore: 0.49,
+                    currencyConcentration: 0.62,
+                    factorConcentration: 0.57,
+                    recommendedSizeMultiplier: 0.0,
+                    preferredExpression: "",
+                    currencyExposure: [
+                        KeyValueRecord(key: "USD", value: "1.0000"),
+                        KeyValueRecord(key: "CHF", value: "-1.0000"),
+                    ],
+                    factorExposure: [
+                        KeyValueRecord(key: "usd_bloc", value: "1.0400"),
+                        KeyValueRecord(key: "safe_haven", value: "-0.2000"),
+                    ],
+                    reasons: [
+                        "DIRECT_SYMBOL_CONTRADICTION",
+                        "CURRENCY_EXPOSURE_CONFLICT",
+                    ]
+                ),
+            ],
+            topEdges: eurusdDependencies + [
+                PairNetworkDependencyEdge(
+                    sourcePair: "AUDUSD",
+                    targetPair: "NZDUSD",
+                    combinedScore: 0.85,
+                    structuralScore: 0.80,
+                    empiricalScore: 0.77,
+                    correlation: 0.77,
+                    support: 288,
+                    relation: "SHARED_CURRENCY",
+                    sharedCurrencies: ["USD"]
+                )
+            ],
+            pairSummaries: [
+                PairNetworkPairSummary(
+                    pair: "EURUSD",
+                    baseCurrency: "EUR",
+                    quoteCurrency: "USD",
+                    factorSignature: [
+                        KeyValueRecord(key: "usd_bloc", value: "1.2000"),
+                        KeyValueRecord(key: "eur_rates", value: "0.8400"),
+                        KeyValueRecord(key: "macro_shock", value: "0.2600"),
+                    ],
+                    topDependencies: eurusdDependencies
+                ),
+                PairNetworkPairSummary(
+                    pair: "NZDUSD",
+                    baseCurrency: "NZD",
+                    quoteCurrency: "USD",
+                    factorSignature: [
+                        KeyValueRecord(key: "commodity_fx", value: "1.0600"),
+                        KeyValueRecord(key: "risk_on", value: "1.0800"),
+                        KeyValueRecord(key: "usd_bloc", value: "1.1800"),
+                    ],
+                    topDependencies: [
+                        PairNetworkDependencyEdge(
+                            sourcePair: "NZDUSD",
+                            targetPair: "AUDUSD",
+                            combinedScore: 0.85,
+                            structuralScore: 0.80,
+                            empiricalScore: 0.77,
+                            correlation: 0.77,
+                            support: 288,
+                            relation: "SHARED_CURRENCY",
+                            sharedCurrencies: ["USD"]
+                        )
+                    ]
+                ),
+            ],
+            reasons: [
+                "STRUCTURAL_PLUS_EMPIRICAL_GRAPH_READY",
+            ],
+            qualityFlags: [
+                KeyValueRecord(key: "fallback_graph_used", value: "false"),
+                KeyValueRecord(key: "partial_dependency_data", value: "false"),
+                KeyValueRecord(key: "graph_stale", value: "false"),
+            ],
+            statusRecords: [
+                KeyValueRecord(key: "action_mode", value: "AUTO_APPLY"),
+                KeyValueRecord(key: "graph_mode", value: "STRUCTURAL_PLUS_EMPIRICAL"),
+                KeyValueRecord(key: "pair_count", value: "54"),
+                KeyValueRecord(key: "edge_count", value: "420"),
+            ],
+            artifactPaths: [
+                KeyValueRecord(key: "config_path", value: "/tmp/pair_network_config.json"),
+                KeyValueRecord(key: "runtime_config_path", value: "/tmp/pair_network_config.tsv"),
+                KeyValueRecord(key: "report_path", value: "/tmp/pair_network_report.json"),
+            ]
+        )
+    }
+
     public static func researchSnapshot(projectRoot: URL) -> ResearchOSControlSnapshot {
         let now = Date()
         return ResearchOSControlSnapshot(

@@ -429,6 +429,9 @@
     "symbol_count": 1
   },
   "execution_quality_runtime": {},
+  "pair_network_report": {},
+  "pair_network_runtime": {},
+  "pair_network_status": {},
   "performance": {
     "artifact_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Runtime/fxai_perf_EURUSD.tsv",
     "artifact_report": {

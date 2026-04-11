@@ -260,6 +260,10 @@ input bool   ExecutionQualityEnabled = true;
 // Models: all (execution-intelligence overlay).
 // Purpose: enables the execution-quality forecaster that predicts spread widening, slippage, fill quality, latency sensitivity, and liquidity fragility from live broker plus context state.
 // Importance/Range: false/true; true is recommended once runtime config and memory TSVs have been exported.
+input bool   PairNetworkEnabled = true;
+// Models: all (portfolio conflict-resolution overlay).
+// Purpose: enables the pair-network / factor-graph portfolio resolver that suppresses redundant trades, blocks contradictory exposure, and reduces hidden concentration before final order approval.
+// Importance/Range: false/true; true is recommended once pair-network runtime policy artifacts are being exported.
 input bool   ExecutionQualityBlockOnUnknown = true;
 // Models: all (execution-intelligence overlay).
 // Purpose: blocks new entries when the execution-quality runtime state is missing or stale instead of assuming normal execution conditions.
