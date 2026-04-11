@@ -14,6 +14,11 @@ Run:
 - `python3 Tools/fxai_offline_lab.py dynamic-ensemble-validate`
 - `python3 Tools/fxai_offline_lab.py dynamic-ensemble-replay-report --symbol EURUSD --hours-back 72`
 
+Offline Lab files:
+
+- `Tools/OfflineLab/DynamicEnsemble/dynamic_ensemble_config.json`
+- `Tools/OfflineLab/DynamicEnsemble/Reports/dynamic_ensemble_replay_report.json`
+
 Runtime artifacts:
 
 - `FILE_COMMON/FXAI/Runtime/dynamic_ensemble_config.tsv`

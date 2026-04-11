@@ -1,0 +1,135 @@
+{
+  "enabled": true,
+  "fallback_to_routed_ensemble": true,
+  "families": {
+    "convolutional": {
+      "confidence_cap": 0.9,
+      "cost_robustness": 0.92,
+      "disagreement_tolerance": 0.96,
+      "micro_compat": 0.98,
+      "news_compat": 0.92,
+      "rates_compat": 0.92
+    },
+    "distribution": {
+      "confidence_cap": 0.92,
+      "cost_robustness": 0.96,
+      "disagreement_tolerance": 0.96,
+      "micro_compat": 0.9,
+      "news_compat": 1.08,
+      "rates_compat": 1.04
+    },
+    "linear": {
+      "confidence_cap": 0.84,
+      "cost_robustness": 0.98,
+      "disagreement_tolerance": 0.92,
+      "micro_compat": 0.96,
+      "news_compat": 0.82,
+      "rates_compat": 0.92
+    },
+    "memory": {
+      "confidence_cap": 0.88,
+      "cost_robustness": 0.88,
+      "disagreement_tolerance": 0.96,
+      "micro_compat": 0.86,
+      "news_compat": 1.06,
+      "rates_compat": 1.06
+    },
+    "mixture": {
+      "confidence_cap": 0.9,
+      "cost_robustness": 0.92,
+      "disagreement_tolerance": 1.02,
+      "micro_compat": 0.92,
+      "news_compat": 1.02,
+      "rates_compat": 0.98
+    },
+    "other": {
+      "confidence_cap": 0.96,
+      "cost_robustness": 1.0,
+      "disagreement_tolerance": 1.0,
+      "micro_compat": 1.0,
+      "news_compat": 1.0,
+      "rates_compat": 1.0
+    },
+    "recurrent": {
+      "confidence_cap": 0.9,
+      "cost_robustness": 0.86,
+      "disagreement_tolerance": 1.0,
+      "micro_compat": 0.9,
+      "news_compat": 1.0,
+      "rates_compat": 0.98
+    },
+    "rule": {
+      "confidence_cap": 0.78,
+      "cost_robustness": 1.02,
+      "disagreement_tolerance": 0.9,
+      "micro_compat": 1.02,
+      "news_compat": 0.76,
+      "rates_compat": 0.88
+    },
+    "state_space": {
+      "confidence_cap": 0.88,
+      "cost_robustness": 0.86,
+      "disagreement_tolerance": 0.94,
+      "micro_compat": 0.88,
+      "news_compat": 1.02,
+      "rates_compat": 1.02
+    },
+    "transformer": {
+      "confidence_cap": 0.86,
+      "cost_robustness": 0.82,
+      "disagreement_tolerance": 0.92,
+      "micro_compat": 0.84,
+      "news_compat": 1.08,
+      "rates_compat": 1.0
+    },
+    "tree": {
+      "confidence_cap": 0.88,
+      "cost_robustness": 0.98,
+      "disagreement_tolerance": 0.96,
+      "micro_compat": 0.96,
+      "news_compat": 0.9,
+      "rates_compat": 0.94
+    },
+    "world": {
+      "confidence_cap": 0.9,
+      "cost_robustness": 0.9,
+      "disagreement_tolerance": 0.96,
+      "micro_compat": 0.88,
+      "news_compat": 1.06,
+      "rates_compat": 1.08
+    }
+  },
+  "penalties": {
+    "concentration_quality_penalty": 0.22,
+    "confidence_gap_penalty": 0.52,
+    "context_regret_penalty": 0.38,
+    "disagreement_penalty": 0.28,
+    "drift_penalty": 0.18,
+    "micro_penalty": 0.3,
+    "news_penalty": 0.24,
+    "rates_penalty": 0.2,
+    "single_plugin_quality_penalty": 0.16,
+    "spread_cost_penalty": 0.28,
+    "stale_context_penalty": 0.24
+  },
+  "schema_version": 1,
+  "thresholds": {
+    "abstain_quality_threshold": 0.36,
+    "block_quality_threshold": 0.18,
+    "caution_quality_threshold": 0.56,
+    "downweight_trust_threshold": 0.72,
+    "max_weight_share": 0.66,
+    "min_active_plugins": 1,
+    "min_effective_weight": 0.04,
+    "suppress_trust_threshold": 0.3
+  },
+  "weights": {
+    "adaptive_downweight_penalty": 0.14,
+    "adaptive_upweight_gain": 0.05,
+    "context_edge_gain": 0.18,
+    "context_trust_gain": 0.18,
+    "global_edge_gain": 0.1,
+    "portfolio_gain": 0.16,
+    "reliability_gain": 0.34
+  }
+}
