@@ -47,6 +47,11 @@ def _sanitize_fixture_text(text: str) -> str:
         r'"\1": "2026-01-01T00:00:00Z"',
         sanitized,
     )
+    sanitized = re.sub(
+        r"\"at\":\s*\"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+Z\"",
+        '"at": "2026-01-01T00:00:00Z"',
+        sanitized,
+    )
     sanitized = re.sub(r"(\t(?:generated_at|expires_at|promoted_at|started_at|finished_at))\t\d+", r"\1\t1700000000", sanitized)
     return sanitized
 

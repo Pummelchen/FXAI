@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+from datetime import timedelta
 from pathlib import Path
 
 from offline_lab.adaptive_router import write_adaptive_router_profiles
@@ -10,6 +11,7 @@ from offline_lab.adaptive_router_replay import build_adaptive_router_replay_repo
 from offline_lab.common import close_db, connect_db, query_scalar
 from offline_lab.environment import bootstrap_environment
 from offline_lab.fixtures import patched_paths, seed_profile_fixture
+from offline_lab.adaptive_router_contracts import isoformat_utc, utc_now
 
 
 def test_adaptive_router_profile_generation_writes_artifacts_and_db_rows():
@@ -40,13 +42,14 @@ def test_adaptive_router_replay_report_summarizes_runtime_history():
             bootstrap_environment(paths["default_db"], init_db=True)
             history_path = adaptive_router_runtime_history_path("EURUSD")
             history_path.parent.mkdir(parents=True, exist_ok=True)
+            now = utc_now()
             history_path.write_text(
                 "\n".join(
                     [
                         json.dumps(
                             {
                                 "schema_version": 1,
-                                "generated_at": "2026-04-09T08:00:00Z",
+                                "generated_at": isoformat_utc(now - timedelta(hours=47, minutes=30)),
                                 "symbol": "EURUSD",
                                 "regime": {
                                     "top_label": "BREAKOUT_TRANSITION",
@@ -67,7 +70,7 @@ def test_adaptive_router_replay_report_summarizes_runtime_history():
                         json.dumps(
                             {
                                 "schema_version": 1,
-                                "generated_at": "2026-04-09T08:30:00Z",
+                                "generated_at": isoformat_utc(now - timedelta(hours=47)),
                                 "symbol": "EURUSD",
                                 "regime": {
                                     "top_label": "HIGH_VOL_EVENT",
