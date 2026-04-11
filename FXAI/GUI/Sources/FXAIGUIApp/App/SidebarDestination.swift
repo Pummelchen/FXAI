@@ -14,6 +14,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
     case crossAsset
     case microstructure
     case adaptiveRouter
+    case driftGovernance
     case dynamicEnsemble
     case probCalibration
     case executionQuality
@@ -43,6 +44,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .crossAsset: "Cross Asset"
         case .microstructure: "Microstructure"
         case .adaptiveRouter: "Adaptive Router"
+        case .driftGovernance: "Drift Governance"
         case .dynamicEnsemble: "Dynamic Ensemble"
         case .probCalibration: "Prob Calibration"
         case .executionQuality: "Execution Quality"
@@ -72,6 +74,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .crossAsset: "globe.americas.fill"
         case .microstructure: "waveform.path.ecg.rectangle.fill"
         case .adaptiveRouter: "point.3.filled.connected.trianglepath.dotted"
+        case .driftGovernance: "waveform.and.magnifyingglass"
         case .dynamicEnsemble: "dial.high.fill"
         case .probCalibration: "checkmark.shield.fill"
         case .executionQuality: "speedometer"

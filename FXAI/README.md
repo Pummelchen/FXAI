@@ -47,6 +47,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Microstructure subsystem docs, local status mirrors, replay outputs, and MT5 service config for the shared short-horizon execution-state layer.
 - `Tools/OfflineLab/LabelEngine/`
   Multi-Horizon Label Engine + Meta-Labeling docs, config, reports, and artifact outputs for shared target construction, cost-aware tradeability labels, and signal-level meta-label research.
+- `Tools/OfflineLab/DriftGovernance/`
+  Online Drift Detector + Champion/Challenger Governance docs, config, reports, and audit history for plugin-health monitoring, conservative demotion, and promotion-review workflows.
 - `GUI/`
   Optional macOS 26 SwiftUI operator app for role-based dashboards, plugin-zoo browsing, report exploration, run builders for Audit/Offline/backtest workflows, runtime inspection, promotion review, Research OS control, advanced Metal-backed visual analysis, saved workspace views, onboarding, incident recovery, detached startup, soft reconnect, terminal-first command guidance, and the shared FXAI operator theme system.
 
@@ -132,6 +134,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Microstructure contracts, config, MT5 service install helpers, replay reporting, deterministic reference math, and CLI health or validation helpers for the short-horizon execution-state subsystem.
 - `Tools/offline_lab/label_engine*.py`
   Multi-horizon label contracts, config, deterministic label math, artifact builders, and CLI helpers for direction, magnitude, time-to-move, tradeability, and signal meta-label generation.
+- `Tools/offline_lab/drift_governance*.py`
+  Drift-governance contracts, config, deterministic drift math, DB persistence, report builders, challenger evaluation, and CLI helpers for plugin-health monitoring and champion/challenger policy.
 - `GUI/Sources/FXAIGUICore`, `GUI/Sources/FXAIGUIApp`
   Swift package targets for the GUI’s project scanner, runtime and Research OS artifact readers, advanced visualization builders, saved-workspace persistence, onboarding guides, incident builders, design system, navigation shell, operator-theme token/layout/rendering stack, reference-asset parsing, adaptive dashboard components, Phase 2 run builders, Phase 3 runtime/promotion views, Phase 4 Turso/Research OS control surfaces, Phase 5 Metal-backed visualization surfaces, and Phase 6 operator-polish features.
   The GUI also includes an integrated NewsPulse surface for source health, currency heatmap, pair risk, and recent tape visibility.
@@ -143,6 +147,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   It now also includes a Probabilistic Calibration surface for calibrated probabilities, expected move quantiles, edge-after-costs, selected tier support, and abstention reasons by symbol.
   It now also includes an Execution Quality surface for expected spread, slippage stress, fill quality, latency sensitivity, liquidity fragility, and current execution-state reasons by symbol.
   It now also includes a Label Engine surface for offline artifact review, multi-horizon tradeability rates, meta-label acceptance, top failure reasons, and per-dataset label quality diagnostics.
+  It now also includes a Drift Governance surface for plugin-health states, applied or recommended actions, challenger eligibility, reason codes, and per-symbol governance context.
 
 ## Operating Notes
 
@@ -181,6 +186,9 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - The preferred Label Engine validation path is `python3 FXAI/Tools/fxai_offline_lab.py label-engine-validate`.
 - The preferred Label Engine build path is `python3 FXAI/Tools/fxai_offline_lab.py label-engine-build --profile continuous --limit-datasets 1`.
 - The preferred Label Engine report path is `python3 FXAI/Tools/fxai_offline_lab.py label-engine-report --profile continuous`.
+- The preferred Drift Governance validation path is `python3 FXAI/Tools/fxai_offline_lab.py drift-governance-validate`.
+- The preferred Drift Governance cycle path is `python3 FXAI/Tools/fxai_offline_lab.py drift-governance-run --profile continuous`.
+- The preferred Drift Governance report path is `python3 FXAI/Tools/fxai_offline_lab.py drift-governance-report --profile continuous`.
 - The shared TensorCore path now includes a self-supervised foundation encoder, teacher-student transfer heads, hierarchical trade-quality signals, and persistent analog regime memory.
 - The live EA now uses portfolio-native sizing and gating with directional-cluster pressure, hierarchy floors, and macro-state quality controls instead of only scalar conviction scaling.
 - The live runtime now emits per-instance control-plane snapshots and consumes promoted symbol deployment profiles so research-side promotion decisions can steer trade floors, sizing bias, and peer-pressure handling.
@@ -217,6 +225,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - The Probabilistic Calibration layer is also phase-1 safe by design: it sits after the Dynamic Ensemble, calibrates only the final decision path in phase 1, prices spread, slippage, and uncertainty explicitly, and prefers `SKIP` when calibrated edge does not clear the configured safety floor.
 - The Execution-Quality Forecaster is also phase-1 safe by design: it turns broker-visible spread, slippage, liquidity, and latency conditions into deterministic execution-state forecasts that tighten abstention, trade-risk, and allowed-deviation logic without changing canonical model inputs.
 - The Multi-Horizon Label Engine + Meta-Labeling subsystem is also phase-1 safe by design: it upgrades target construction for training and evaluation with reproducible direction, magnitude, timing, tradeability, and signal-filter labels without forcing a full plugin-zoo architecture rewrite.
+- The Online Drift Detector + Champion/Challenger Governance subsystem is also phase-1 safe by design: it monitors live plugin-health decay, writes deterministic governance state, downweights or restricts degraded plugins conservatively, and keeps challenger promotion behind support-aware review rather than unsafe autonomous replacement.
 
 ## Source Of Truth
 

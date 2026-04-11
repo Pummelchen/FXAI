@@ -1,0 +1,130 @@
+{
+  "action_mode": "AUTO_APPLY_PROTECTIVE",
+  "actions": {
+    "auto_demote": true,
+    "auto_disable": true,
+    "auto_promote": false,
+    "caution_weight_multiplier": 0.82,
+    "degraded_weight_multiplier": 0.58,
+    "disabled_weight_multiplier": 0.0,
+    "restrict_live_states": [
+      "SHADOW_ONLY",
+      "DEMOTED",
+      "DISABLED"
+    ],
+    "shadow_only_weight_multiplier": 0.02,
+    "suppress_router_states": [
+      "SHADOW_ONLY",
+      "DISABLED"
+    ]
+  },
+  "aggregation_weights": {
+    "calibration_drift_score": 0.18,
+    "execution_drift_score": 0.1,
+    "feature_drift_score": 0.18,
+    "pair_decay_score": 0.16,
+    "performance_drift_score": 0.16,
+    "post_event_drift_score": 0.1,
+    "regime_drift_score": 0.12
+  },
+  "challenger_policy": {
+    "discover_from_best_configs": true,
+    "max_calibration_error": 0.3,
+    "max_candidates_per_symbol": 3,
+    "max_issue_count": 1.5,
+    "min_adversarial_score": 68.0,
+    "min_macro_event_score": 64.0,
+    "min_portfolio_score": 0.52,
+    "min_recent_score": 74.0,
+    "min_reliability": 0.52,
+    "min_shadow_score": 0.02,
+    "min_walkforward_score": 72.0,
+    "promotion_margin": 0.5,
+    "rollback_hours": 96
+  },
+  "context_modifiers": {
+    "calibration_score_multiplier": 1.05,
+    "cross_asset_score_multiplier": 1.05,
+    "elevated_cross_asset_risk": 0.65,
+    "elevated_uncertainty_floor": 0.6,
+    "event_or_posture_risk_gates": [
+      "CAUTION",
+      "BLOCK",
+      "STRESSED",
+      "HIGH_VOL_EVENT"
+    ],
+    "event_score_multiplier": 1.08,
+    "execution_score_multiplier": 1.1,
+    "stressed_execution_quality_floor": 0.45
+  },
+  "enabled": true,
+  "hysteresis": {
+    "cooldown_hours": 24,
+    "recovery_hold_hours": 48
+  },
+  "metric_keys": {
+    "execution_keys": [
+      "portfolio_pressure",
+      "control_plane_score",
+      "portfolio_supervisor_score",
+      "policy_no_trade_prob"
+    ],
+    "feature_keys": [
+      "meta_weight",
+      "reliability",
+      "global_edge",
+      "context_edge",
+      "context_regret",
+      "route_value",
+      "route_regret",
+      "policy_enter_prob",
+      "policy_no_trade_prob",
+      "portfolio_pressure",
+      "control_plane_score",
+      "portfolio_supervisor_score",
+      "shadow_score"
+    ],
+    "performance_keys": [
+      "shadow_score",
+      "route_value",
+      "portfolio_objective",
+      "portfolio_stability",
+      "reliability"
+    ]
+  },
+  "policy_version": 1,
+  "recent_window": {
+    "max_age_hours": 96,
+    "max_observations": 24
+  },
+  "reference_window": {
+    "max_age_hours": 1440,
+    "max_observations": 120
+  },
+  "schema_version": 1,
+  "support": {
+    "min_challenger_runs": 3,
+    "min_challenger_shadow_observations": 2,
+    "min_recent_observations": 4,
+    "min_reference_observations": 8
+  },
+  "thresholds": {
+    "calibration_degrade_delta": 0.18,
+    "calibration_warn_delta": 0.08,
+    "caution_score": 0.34,
+    "degraded_score": 0.56,
+    "disable_score": 0.88,
+    "execution_degrade_delta": 0.18,
+    "execution_warn_delta": 0.08,
+    "feature_psi_degrade": 0.3,
+    "feature_psi_warn": 0.15,
+    "max_low_support_score": 0.58,
+    "performance_degrade_delta": 0.18,
+    "performance_warn_delta": 0.08,
+    "recover_score": 0.22,
+    "recover_to_healthy_score": 0.14,
+    "regime_mix_degrade": 0.4,
+    "regime_mix_warn": 0.2,
+    "shadow_only_score": 0.74
+  }
+}

@@ -20,6 +20,7 @@ from .adaptive_router_contracts import (
     adaptive_router_runtime_history_path,
     adaptive_router_runtime_state_path,
 )
+from .drift_governance_contracts import DRIFT_GOVERNANCE_REPORT_PATH, DRIFT_GOVERNANCE_STATUS_PATH
 from .execution_quality_contracts import EXECUTION_QUALITY_REPLAY_REPORT_PATH, execution_quality_runtime_state_path
 from .label_engine_contracts import LABEL_ENGINE_REPORT_PATH, LABEL_ENGINE_STATUS_PATH
 from .newspulse_contracts import NEWSPULSE_REPLAY_REPORT_PATH, NEWSPULSE_STATUS_PATH
@@ -176,6 +177,10 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
         "execution_quality": {
             "replay_report": _load_json(EXECUTION_QUALITY_REPLAY_REPORT_PATH),
         },
+        "drift_governance": {
+            "status": _load_json(DRIFT_GOVERNANCE_STATUS_PATH),
+            "report": _load_json(DRIFT_GOVERNANCE_REPORT_PATH),
+        },
         "label_engine": {
             "status": _load_json(LABEL_ENGINE_STATUS_PATH),
             "report": _load_json(LABEL_ENGINE_REPORT_PATH),
@@ -279,6 +284,8 @@ def live_state_snapshot(profile_name: str, symbol: str) -> dict[str, object]:
         "portfolio_supervisor": _load_tsv_map(COMMON_PROMOTION_DIR / "fxai_portfolio_supervisor.tsv"),
         "adaptive_runtime": _load_tsv_map(adaptive_router_runtime_state_path(symbol)),
         "execution_quality_runtime": _load_tsv_map(execution_quality_runtime_state_path(symbol)),
+        "drift_governance_status": _load_json(DRIFT_GOVERNANCE_STATUS_PATH),
+        "drift_governance_report": _load_json(DRIFT_GOVERNANCE_REPORT_PATH),
         "adaptive_history_path": str(adaptive_router_runtime_history_path(symbol)),
         "performance": build_symbol_performance_report(symbol),
     }

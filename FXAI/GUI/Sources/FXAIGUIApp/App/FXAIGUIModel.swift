@@ -16,6 +16,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var crossAssetSnapshot: CrossAssetSnapshot?
     @Published var microstructureSnapshot: MicrostructureSnapshot?
     @Published var adaptiveRouterSnapshot: AdaptiveRouterSnapshot?
+    @Published var driftGovernanceSnapshot: DriftGovernanceSnapshot?
     @Published var dynamicEnsembleSnapshot: DynamicEnsembleSnapshot?
     @Published var probCalibrationSnapshot: ProbCalibrationSnapshot?
     @Published var executionQualitySnapshot: ExecutionQualitySnapshot?
@@ -63,6 +64,7 @@ final class FXAIGUIModel: ObservableObject {
     private let crossAssetReader = CrossAssetArtifactReader()
     private let microstructureReader = MicrostructureArtifactReader()
     private let adaptiveRouterReader = AdaptiveRouterArtifactReader()
+    private let driftGovernanceReader = DriftGovernanceArtifactReader()
     private let dynamicEnsembleReader = DynamicEnsembleArtifactReader()
     private let probCalibrationReader = ProbCalibrationArtifactReader()
     private let executionQualityReader = ExecutionQualityArtifactReader()
@@ -134,6 +136,14 @@ final class FXAIGUIModel: ObservableObject {
             return selected
         }
         return adaptiveRouterSnapshot.symbols.first
+    }
+
+    var selectedDriftGovernanceDetail: DriftGovernanceSymbolSnapshot? {
+        guard let driftGovernanceSnapshot else { return nil }
+        if let selected = driftGovernanceSnapshot.symbols.first(where: { $0.symbol == selectedRuntimeSymbol }) {
+            return selected
+        }
+        return driftGovernanceSnapshot.symbols.first
     }
 
     var selectedDynamicEnsembleDetail: DynamicEnsembleSymbolSnapshot? {
@@ -243,6 +253,7 @@ final class FXAIGUIModel: ObservableObject {
             crossAssetSnapshot = crossAssetReader.read(projectRoot: projectRoot)
             microstructureSnapshot = microstructureReader.read(projectRoot: projectRoot)
             adaptiveRouterSnapshot = adaptiveRouterReader.read(projectRoot: projectRoot)
+            driftGovernanceSnapshot = driftGovernanceReader.read(projectRoot: projectRoot)
             dynamicEnsembleSnapshot = dynamicEnsembleReader.read(projectRoot: projectRoot)
             probCalibrationSnapshot = probCalibrationReader.read(projectRoot: projectRoot)
             executionQualitySnapshot = executionQualityReader.read(projectRoot: projectRoot)
@@ -266,6 +277,7 @@ final class FXAIGUIModel: ObservableObject {
             syncCrossAssetSelection()
             syncMicrostructureSelection()
             syncAdaptiveSelection()
+            syncDriftGovernanceSelection()
             syncDynamicEnsembleSelection()
             syncProbCalibrationSelection()
             syncExecutionQualitySelection()
@@ -634,6 +646,17 @@ final class FXAIGUIModel: ObservableObject {
         }
     }
 
+    private func syncDriftGovernanceSelection() {
+        guard let driftGovernanceSnapshot else { return }
+
+        let symbols = driftGovernanceSnapshot.symbols.map(\.symbol)
+        guard let first = symbols.first else { return }
+
+        if !symbols.contains(selectedRuntimeSymbol) {
+            selectedRuntimeSymbol = first
+        }
+    }
+
     private func syncDynamicEnsembleSelection() {
         guard let dynamicEnsembleSnapshot else {
             selectedDynamicEnsembleSymbol = ""
@@ -983,6 +1006,7 @@ final class FXAIGUIModel: ObservableObject {
         crossAssetSnapshot = nil
         microstructureSnapshot = nil
         adaptiveRouterSnapshot = nil
+        driftGovernanceSnapshot = nil
         dynamicEnsembleSnapshot = nil
         probCalibrationSnapshot = nil
         executionQualitySnapshot = nil

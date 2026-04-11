@@ -34,6 +34,10 @@ def test_dashboard_and_live_state_render():
             assert live["deployment"]
             assert live["router"]
             assert live["adaptive_router"]
+            dashboard_json = json.loads(Path(payload["json_path"]).read_text(encoding="utf-8"))
+            assert "drift_governance" in dashboard_json
+            assert "status" in dashboard_json["drift_governance"]
+            assert "drift_governance_status" in live
 
 
 def test_dashboard_treats_empty_artifact_path_as_missing():

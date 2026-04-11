@@ -5,6 +5,7 @@ from pathlib import Path
 import libsql
 
 from .common import *
+from .drift_governance import latest_governance_state_map
 from .mode import resolve_runtime_mode
 from .shadow_fleet import symbol_shadow_summary
 
@@ -79,6 +80,18 @@ def _parse_plugin_weights(payload: dict) -> dict[str, float]:
     return out
 
 
+def _governance_reason_codes(state: dict) -> list[str]:
+    reasons = _safe_json(str(state.get("reason_codes_json", "") or "[]"), [])
+    if isinstance(reasons, list):
+        return [str(item) for item in reasons if str(item)]
+    payload = _safe_json(str(state.get("payload_json", "") or "{}"), {})
+    if isinstance(payload, dict):
+        nested = payload.get("reason_codes", [])
+        if isinstance(nested, list):
+            return [str(item) for item in nested if str(item)]
+    return []
+
+
 def write_student_router_profiles(conn: libsql.Connection,
                                   args) -> list[dict]:
     mode_cfg = resolve_runtime_mode(getattr(args, "runtime_mode", None))
@@ -104,6 +117,7 @@ def write_student_router_profiles(conn: libsql.Connection,
     ensure_dir(out_dir)
     ensure_dir(COMMON_PROMOTION_DIR)
     attribution_map = _latest_attribution_payload(conn, args.profile)
+    governance_map = latest_governance_state_map(conn, args.profile)
     artifacts: list[dict] = []
     created_at = now_unix()
     active_symbols = set(symbols)
@@ -148,6 +162,7 @@ def write_student_router_profiles(conn: libsql.Connection,
             )
         attr_plugin_weights = _parse_plugin_weights(attr)
         pruned_plugins = {str(item) for item in list(attr.get("pruned_plugins", []))}
+        governance_overrides: dict[str, dict] = {}
 
         top_plugins: list[str] = []
         plugin_weights: dict[str, float] = {}
@@ -195,6 +210,45 @@ def write_student_router_profiles(conn: libsql.Connection,
         for plugin_name in pruned_plugins:
             plugin_weights[plugin_name] = min(plugin_weights.get(plugin_name, 0.05), 0.02)
 
+        for plugin_name in list(plugin_weights):
+            state = dict(governance_map.get((symbol, plugin_name), {}))
+            if not state:
+                continue
+            governance_state = str(state.get("governance_state", "HEALTHY") or "HEALTHY").upper()
+            action_recommendation = str(state.get("action_recommendation", "NONE") or "NONE").upper()
+            action_applied = bool(int(state.get("action_applied", 0) or 0))
+            weight_multiplier = _clamp(float(state.get("weight_multiplier", 1.0) or 1.0), 0.0, 2.0)
+            restrict_live = bool(int(state.get("restrict_live", 0) or 0))
+            disabled = bool(int(state.get("disabled", 0) or 0))
+            shadow_only = bool(int(state.get("shadow_only", 0) or 0))
+            if action_applied:
+                plugin_weights[plugin_name] = _clamp(plugin_weights.get(plugin_name, 0.0) * weight_multiplier, 0.0, 1.60)
+                if restrict_live or disabled or shadow_only or governance_state in {"DISABLED", "SHADOW_ONLY", "DEMOTED"}:
+                    pruned_plugins.add(plugin_name)
+                    plugin_weights[plugin_name] = 0.0
+            governance_overrides[plugin_name] = {
+                "governance_state": governance_state,
+                "action_recommendation": action_recommendation,
+                "action_applied": action_applied,
+                "weight_multiplier": round(weight_multiplier, 6),
+                "restrict_live": restrict_live,
+                "disabled": disabled,
+                "shadow_only": shadow_only,
+                "reason_codes": _governance_reason_codes(state),
+            }
+
+        top_plugins = [
+            plugin_name
+            for plugin_name in top_plugins
+            if plugin_name not in pruned_plugins and plugin_weights.get(plugin_name, 0.0) > 0.021
+        ]
+        if not top_plugins:
+            top_plugins = [
+                plugin_name
+                for plugin_name, weight in sorted(plugin_weights.items(), key=lambda item: item[1], reverse=True)
+                if weight > 0.021
+            ][:24]
+
         portfolio_div = _clamp(float(shadow.get("mean_portfolio_div", 0.0)), 0.0, 1.0)
         route_regret = _clamp(float(shadow.get("mean_route_regret", 0.0)), 0.0, 1.0)
         champion_only = bool(attr.get("champion_only", False)) and any(str(row.get("status", "")) == "champion" for row in champions)
@@ -217,6 +271,7 @@ def write_student_router_profiles(conn: libsql.Connection,
             "family_weights": family_weights,
             "plugin_weights": plugin_weights,
             "pruned_plugins": sorted(pruned_plugins),
+            "governance_overrides": governance_overrides,
             "attribution": attr,
             "shadow_summary": shadow,
         }
@@ -232,6 +287,19 @@ def write_student_router_profiles(conn: libsql.Connection,
                 f"{name}={float(plugin_weights[name]):.6f}"
                 for name in sorted(plugin_weights)
             )),
+            ("governance_state_csv", ",".join(
+                f"{name}={governance_overrides[name]['governance_state']}"
+                for name in sorted(governance_overrides)
+            )),
+            ("governance_weight_multipliers_csv", ",".join(
+                f"{name}={float(governance_overrides[name]['weight_multiplier']):.6f}"
+                for name in sorted(governance_overrides)
+            )),
+            ("governance_restrict_live_csv", ",".join(
+                name
+                for name in sorted(governance_overrides)
+                if bool(governance_overrides[name]["restrict_live"])
+            ) or "none"),
         ]
         for family_name in sorted(family_weights):
             lines.append((f"family_weight_{family_name}", f"{float(family_weights[family_name]):.6f}"))

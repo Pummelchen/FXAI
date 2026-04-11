@@ -22,6 +22,11 @@ FXAI/Tools/OfflineLab/ExecutionQuality/Reports/
 FXAI/Tools/OfflineLab/LabelEngine/Artifacts/
 FXAI/Tools/OfflineLab/LabelEngine/Reports/
 FXAI/Tools/OfflineLab/LabelEngine/label_engine_status.json
+FXAI/Tools/OfflineLab/DriftGovernance/Artifacts/
+FXAI/Tools/OfflineLab/DriftGovernance/Reports/
+FXAI/Tools/OfflineLab/DriftGovernance/drift_governance_status.json
+FXAI/Tools/OfflineLab/DriftGovernance/drift_governance_history.ndjson
+FXAI/Tools/Runtime/drift_governance_summary.json
 FXAI/GUI/.build/
 FXAI/GUI/.swiftpm/
 FXAI/GUI/Artifacts/

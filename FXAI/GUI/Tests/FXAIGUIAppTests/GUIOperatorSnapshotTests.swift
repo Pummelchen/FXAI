@@ -10,6 +10,7 @@ struct GUIOperatorSnapshotTests {
         .overview,
         .roles,
         .crossAsset,
+        .driftGovernance,
         .probCalibration,
         .runtimeMonitor,
         .reports,

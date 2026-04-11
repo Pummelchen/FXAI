@@ -21,7 +21,7 @@ DEFAULT_HORIZON_CANDIDATES = [3, 5, 8, 13, 21, 34]
 DEFAULT_M1SYNC_CANDIDATES = [2, 3, 5, 8]
 DEFAULT_EXECUTION_PROFILES = ["default", "tight-fx", "prime-ecn", "retail-fx", "stress"]
 EXPORT_EXPERT = r"FXAI\Tests\FXAI_OfflineExportRunner.ex5"
-OFFLINE_SCHEMA_VERSION = 5
+OFFLINE_SCHEMA_VERSION = 6
 OFFLINE_ARTIFACT_SCHEMA_VERSION = 2
 OFFLINE_MACRO_SCHEMA_MIN = 2
 RESEARCH_VECTOR_DIMS = 16
@@ -523,6 +523,100 @@ CREATE TABLE IF NOT EXISTS adaptive_router_profiles (
     UNIQUE(profile_name, symbol)
 );
 
+CREATE TABLE IF NOT EXISTS plugin_drift_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    plugin_name TEXT NOT NULL,
+    family_id INTEGER NOT NULL DEFAULT 11,
+    context_scope TEXT NOT NULL DEFAULT 'symbol_plugin',
+    reference_scope TEXT NOT NULL DEFAULT 'symbol_plugin',
+    feature_drift_score REAL NOT NULL DEFAULT 0.0,
+    regime_drift_score REAL NOT NULL DEFAULT 0.0,
+    calibration_drift_score REAL NOT NULL DEFAULT 0.0,
+    pair_decay_score REAL NOT NULL DEFAULT 0.0,
+    post_event_drift_score REAL NOT NULL DEFAULT 0.0,
+    execution_drift_score REAL NOT NULL DEFAULT 0.0,
+    performance_drift_score REAL NOT NULL DEFAULT 0.0,
+    aggregate_risk_score REAL NOT NULL DEFAULT 0.0,
+    recent_support INTEGER NOT NULL DEFAULT 0,
+    reference_support INTEGER NOT NULL DEFAULT 0,
+    recent_window_start INTEGER NOT NULL DEFAULT 0,
+    recent_window_end INTEGER NOT NULL DEFAULT 0,
+    reference_window_start INTEGER NOT NULL DEFAULT 0,
+    reference_window_end INTEGER NOT NULL DEFAULT 0,
+    quality_flags_json TEXT NOT NULL DEFAULT '{}',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS plugin_governance_states (
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    plugin_name TEXT NOT NULL,
+    family_id INTEGER NOT NULL DEFAULT 11,
+    base_registry_status TEXT NOT NULL DEFAULT 'candidate',
+    health_state TEXT NOT NULL DEFAULT 'HEALTHY',
+    governance_state TEXT NOT NULL DEFAULT 'HEALTHY',
+    action_recommendation TEXT NOT NULL DEFAULT 'NONE',
+    action_applied INTEGER NOT NULL DEFAULT 0,
+    weight_multiplier REAL NOT NULL DEFAULT 1.0,
+    restrict_live INTEGER NOT NULL DEFAULT 0,
+    shadow_only INTEGER NOT NULL DEFAULT 0,
+    disabled INTEGER NOT NULL DEFAULT 0,
+    candidate_eligible INTEGER NOT NULL DEFAULT 0,
+    champion_eligible INTEGER NOT NULL DEFAULT 0,
+    aggregate_risk_score REAL NOT NULL DEFAULT 0.0,
+    reason_codes_json TEXT NOT NULL DEFAULT '[]',
+    quality_flags_json TEXT NOT NULL DEFAULT '{}',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    policy_version INTEGER NOT NULL DEFAULT 1,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(profile_name, symbol, plugin_name)
+);
+
+CREATE TABLE IF NOT EXISTS plugin_governance_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    plugin_name TEXT NOT NULL,
+    family_id INTEGER NOT NULL DEFAULT 11,
+    previous_state TEXT NOT NULL DEFAULT '',
+    new_state TEXT NOT NULL DEFAULT '',
+    action_kind TEXT NOT NULL DEFAULT 'NONE',
+    action_applied INTEGER NOT NULL DEFAULT 0,
+    policy_version INTEGER NOT NULL DEFAULT 1,
+    reason_codes_json TEXT NOT NULL DEFAULT '[]',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS plugin_challenger_evaluations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    plugin_name TEXT NOT NULL,
+    family_id INTEGER NOT NULL DEFAULT 11,
+    challenger_run_id INTEGER NOT NULL DEFAULT 0,
+    evaluation_scope TEXT NOT NULL DEFAULT 'symbol',
+    eligibility_state TEXT NOT NULL DEFAULT 'insufficient',
+    walkforward_score REAL NOT NULL DEFAULT 0.0,
+    recent_score REAL NOT NULL DEFAULT 0.0,
+    adversarial_score REAL NOT NULL DEFAULT 0.0,
+    macro_event_score REAL NOT NULL DEFAULT 0.0,
+    calibration_error REAL NOT NULL DEFAULT 0.0,
+    issue_count REAL NOT NULL DEFAULT 0.0,
+    live_shadow_score REAL NOT NULL DEFAULT 0.0,
+    live_reliability REAL NOT NULL DEFAULT 0.0,
+    portfolio_score REAL NOT NULL DEFAULT 0.0,
+    support_count INTEGER NOT NULL DEFAULT 0,
+    promotion_margin REAL NOT NULL DEFAULT 0.0,
+    qualifies INTEGER NOT NULL DEFAULT 0,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    UNIQUE(profile_name, symbol, plugin_name, evaluation_scope, challenger_run_id)
+);
+
 CREATE TABLE IF NOT EXISTS autonomous_governance_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     profile_name TEXT NOT NULL,
@@ -610,6 +704,10 @@ CREATE INDEX IF NOT EXISTS idx_world_sim_lookup ON world_simulator_plans(profile
 CREATE INDEX IF NOT EXISTS idx_attribution_lookup ON attribution_profiles(profile_name, symbol, created_at);
 CREATE INDEX IF NOT EXISTS idx_student_router_lookup ON student_router_profiles(profile_name, symbol, created_at);
 CREATE INDEX IF NOT EXISTS idx_adaptive_router_lookup ON adaptive_router_profiles(profile_name, symbol, created_at);
+CREATE INDEX IF NOT EXISTS idx_plugin_drift_lookup ON plugin_drift_snapshots(profile_name, symbol, plugin_name, created_at);
+CREATE INDEX IF NOT EXISTS idx_plugin_gov_state_lookup ON plugin_governance_states(profile_name, symbol, plugin_name, updated_at);
+CREATE INDEX IF NOT EXISTS idx_plugin_gov_action_lookup ON plugin_governance_actions(profile_name, symbol, plugin_name, created_at);
+CREATE INDEX IF NOT EXISTS idx_plugin_challenger_eval_lookup ON plugin_challenger_evaluations(profile_name, symbol, plugin_name, created_at);
 CREATE INDEX IF NOT EXISTS idx_governance_runs_lookup ON autonomous_governance_runs(profile_name, created_at);
 CREATE INDEX IF NOT EXISTS idx_turso_branch_lookup ON turso_branch_runs(profile_name, branch_kind, created_at);
 CREATE INDEX IF NOT EXISTS idx_turso_audit_lookup ON turso_audit_log_events(organization_slug, occurred_at);

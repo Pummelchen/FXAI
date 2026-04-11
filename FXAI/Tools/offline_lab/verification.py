@@ -67,6 +67,8 @@ def verify_deterministic_outputs(refresh_golden: bool = False) -> dict[str, obje
             write_supervisor_service_artifacts(conn, args)
             write_supervisor_command_artifacts(conn, args)
             run_autonomous_governance(conn, args, "fixture_cycle")
+            write_student_router_profiles(conn, args)
+            write_adaptive_router_profiles(conn, args)
             build_adaptive_router_replay_report(symbol="EURUSD", hours_back=72)
             write_performance_reports(["EURUSD"], profile_name)
             dashboard = write_profile_dashboard(conn, profile_name)

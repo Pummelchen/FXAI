@@ -19,6 +19,7 @@ max_active_weight_share	0.720000
 plugin_global_weights_csv	ai_mlp=1.083852
 plugin_news_compatibility_csv	ai_mlp=1.040000
 plugin_liquidity_robustness_csv	ai_mlp=0.880000
+governance_state_csv	ai_mlp=CHAMPION
 regime_bias_TREND_PERSISTENT	1.030000
 plugin_regime_TREND_PERSISTENT_csv	ai_mlp=1.305476
 regime_bias_RANGE_MEAN_REVERTING	1.000000

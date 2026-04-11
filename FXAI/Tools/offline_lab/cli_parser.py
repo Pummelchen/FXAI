@@ -54,6 +54,19 @@ def build_parser() -> argparse.ArgumentParser:
     eqr.add_argument("--hours-back", type=int, default=72)
     eqr.set_defaults(func=cmd_execution_quality_replay_report)
 
+    dgv = sub.add_parser("drift-governance-validate", help="Validate the drift-governance config, thresholds, and challenger policy")
+    dgv.set_defaults(func=cmd_drift_governance_validate)
+
+    dgr = sub.add_parser("drift-governance-run", help="Run one drift-governance cycle, update router artifacts, and refresh the dashboard")
+    dgr.add_argument("--profile", default="continuous")
+    dgr.add_argument("--group-key", default="")
+    dgr.add_argument("--runtime-mode", default="research", choices=sorted(RUNTIME_MODES.keys()))
+    dgr.set_defaults(func=cmd_drift_governance_run)
+
+    dgrep = sub.add_parser("drift-governance-report", help="Rebuild the drift-governance report from stored DB state")
+    dgrep.add_argument("--profile", default="continuous")
+    dgrep.set_defaults(func=cmd_drift_governance_report)
+
     lev = sub.add_parser("label-engine-validate", help="Validate the multi-horizon label-engine config, horizons, and artifact paths")
     lev.set_defaults(func=cmd_label_engine_validate)
 

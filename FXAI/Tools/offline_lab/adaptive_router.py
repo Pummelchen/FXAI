@@ -16,6 +16,7 @@ from .adaptive_router_contracts import (
     research_profile_dir,
 )
 from .common import *
+from .drift_governance import latest_governance_state_map
 from .mode import resolve_runtime_mode
 from .shadow_fleet import latest_shadow_rows
 
@@ -223,6 +224,18 @@ def _plugin_override_effects(config: dict[str, Any],
     return out
 
 
+def _governance_reason_codes(state: dict[str, Any]) -> list[str]:
+    reasons = _safe_json(str(state.get("reason_codes_json", "") or "[]"), [])
+    if isinstance(reasons, list):
+        return [str(item) for item in reasons if str(item)]
+    payload = _safe_json(str(state.get("payload_json", "") or "{}"), {})
+    if isinstance(payload, dict):
+        nested = payload.get("reason_codes", [])
+        if isinstance(nested, list):
+            return [str(item) for item in nested if str(item)]
+    return []
+
+
 def _plugin_global_weight(candidate: dict[str, Any],
                           family_strength: float) -> float:
     status = str(candidate.get("status", "candidate") or "candidate").lower()
@@ -329,11 +342,17 @@ def write_adaptive_router_profiles(conn: libsql.Connection,
     created_at = now_unix()
     active_symbols = set(symbols)
     artifacts: list[dict[str, Any]] = []
+    governance_map = latest_governance_state_map(conn, args.profile)
 
     for symbol in symbols:
         regime_bias, thresholds, pair_tags = _apply_pair_tag_overrides(config, symbol)
         family_strengths = _family_strengths(conn, args.profile, symbol)
         candidates = _plugin_candidates(conn, args.profile, symbol)
+        governance_rows = {
+            plugin_name: row
+            for (row_symbol, plugin_name), row in governance_map.items()
+            if row_symbol == symbol
+        }
 
         family_regime_rows: dict[str, dict[str, float]] = {}
         family_session_rows: dict[str, dict[str, float]] = {}
@@ -361,6 +380,7 @@ def write_adaptive_router_profiles(conn: libsql.Connection,
             label: {} for label in ADAPTIVE_ROUTER_SESSIONS
         }
         plugin_payloads: dict[str, dict[str, Any]] = {}
+        governance_overrides: dict[str, dict[str, Any]] = {}
 
         for candidate in candidates:
             plugin_name = str(candidate["plugin_name"])
@@ -393,8 +413,34 @@ def write_adaptive_router_profiles(conn: libsql.Connection,
                 0.05,
                 2.50,
             )
+            governance_row = dict(governance_rows.get(plugin_name, {}))
+            governance_state = str(governance_row.get("governance_state", "HEALTHY") or "HEALTHY").upper()
+            weight_multiplier = _clamp(float(governance_row.get("weight_multiplier", 1.0) or 1.0), 0.0, 2.0)
+            restrict_live = bool(int(governance_row.get("restrict_live", 0) or 0))
+            shadow_only = bool(int(governance_row.get("shadow_only", 0) or 0))
+            disabled = bool(int(governance_row.get("disabled", 0) or 0))
+            if governance_row and bool(int(governance_row.get("action_applied", 0) or 0)):
+                global_weight = _clamp(
+                    global_weight * weight_multiplier,
+                    0.0,
+                    float(config["thresholds"]["max_plugin_weight"]),
+                )
+                if governance_state in {"SHADOW_ONLY", "DEMOTED", "DISABLED"} or restrict_live or shadow_only or disabled:
+                    global_weight = float(config["thresholds"]["min_plugin_weight"])
+                    news_compatibility = min(news_compatibility, 0.25)
+                    liquidity_robustness = min(liquidity_robustness, 0.25)
             plugin_news_compatibility[plugin_name] = news_compatibility
             plugin_liquidity_robustness[plugin_name] = liquidity_robustness
+            governance_overrides[plugin_name] = {
+                "governance_state": governance_state,
+                "action_recommendation": str(governance_row.get("action_recommendation", "") or "NONE").upper(),
+                "action_applied": bool(int(governance_row.get("action_applied", 0) or 0)),
+                "weight_multiplier": round(weight_multiplier, 6),
+                "restrict_live": restrict_live,
+                "shadow_only": shadow_only,
+                "disabled": disabled,
+                "reason_codes": _governance_reason_codes(governance_row),
+            }
             session_weights: dict[str, float] = {}
             for session in ADAPTIVE_ROUTER_SESSIONS:
                 session_weight = _clamp(
@@ -428,6 +474,7 @@ def write_adaptive_router_profiles(conn: libsql.Connection,
                 "session_weights": {key: round(value, 6) for key, value in session_weights.items()},
                 "regime_weights": {key: round(value, 6) for key, value in regime_weights.items()},
                 "matched_patterns": list(pattern["matched_patterns"]),
+                "governance": governance_overrides[plugin_name],
                 "shadow": dict(candidate.get("shadow", {})),
             }
 
@@ -472,6 +519,7 @@ def write_adaptive_router_profiles(conn: libsql.Connection,
             "family_news_compatibility": family_news,
             "family_liquidity_robustness": family_liquidity,
             "plugins": plugin_payloads,
+            "governance_overrides": governance_overrides,
             "summary": {
                 "plugin_count": len(plugin_payloads),
                 "top_plugins": [name for name, _weight in sorted_plugins[:12]],
@@ -503,6 +551,10 @@ def write_adaptive_router_profiles(conn: libsql.Connection,
             ("plugin_global_weights_csv", ",".join(f"{name}={float(weight):.6f}" for name, weight in sorted(plugin_global_weights.items()))),
             ("plugin_news_compatibility_csv", ",".join(f"{name}={float(value):.6f}" for name, value in sorted(plugin_news_compatibility.items()))),
             ("plugin_liquidity_robustness_csv", ",".join(f"{name}={float(value):.6f}" for name, value in sorted(plugin_liquidity_robustness.items()))),
+            ("governance_state_csv", ",".join(
+                f"{name}={governance_overrides[name]['governance_state']}"
+                for name in sorted(governance_overrides)
+            )),
         ]
         for label in ADAPTIVE_ROUTER_REGIMES:
             lines.append((f"regime_bias_{label}", f"{float(regime_bias[label]):.6f}"))

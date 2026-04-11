@@ -547,6 +547,315 @@ public enum GUIValidationFixtures {
         )
     }
 
+    public static func driftGovernanceSnapshot(projectRoot _: URL) -> DriftGovernanceSnapshot {
+        let now = Date()
+        let eurusd = DriftGovernanceSymbolSnapshot(
+            symbol: "EURUSD",
+            pluginCount: 3,
+            healthCounts: [
+                KeyValueRecord(key: "CAUTION", value: "1"),
+                KeyValueRecord(key: "DEGRADED", value: "1"),
+                KeyValueRecord(key: "HEALTHY", value: "1"),
+            ],
+            governanceCounts: [
+                KeyValueRecord(key: "CAUTION", value: "1"),
+                KeyValueRecord(key: "DEGRADED", value: "1"),
+                KeyValueRecord(key: "CHAMPION", value: "1"),
+            ],
+            actionCounts: [
+                KeyValueRecord(key: "DOWNWEIGHT", value: "2"),
+                KeyValueRecord(key: "NONE", value: "1"),
+            ],
+            latestContext: [
+                KeyValueRecord(key: "execution.state", value: "CAUTION"),
+                KeyValueRecord(key: "router.regime", value: "HIGH_VOL_EVENT"),
+                KeyValueRecord(key: "newspulse.trade_gate", value: "CAUTION"),
+                KeyValueRecord(key: "ensemble.max_abstain", value: "0.380"),
+            ],
+            plugins: [
+                DriftGovernancePluginSnapshot(
+                    pluginName: "ai_tft",
+                    familyID: 31,
+                    familyName: "Transformer",
+                    baseRegistryStatus: "champion",
+                    healthState: "DEGRADED",
+                    governanceState: "DEGRADED",
+                    recommendedGovernanceState: "DEGRADED",
+                    actionRecommendation: "DOWNWEIGHT",
+                    actionApplied: true,
+                    weightMultiplier: 0.55,
+                    restrictLive: false,
+                    shadowOnly: false,
+                    disabled: false,
+                    aggregateRiskScore: 0.71,
+                    driftScores: [
+                        KeyValueRecord(key: "calibration_drift_score", value: "0.810"),
+                        KeyValueRecord(key: "pair_decay_score", value: "0.760"),
+                        KeyValueRecord(key: "performance_drift_score", value: "0.790"),
+                    ],
+                    support: [
+                        KeyValueRecord(key: "sample_count_recent", value: "842"),
+                        KeyValueRecord(key: "sample_count_reference", value: "10420"),
+                        KeyValueRecord(key: "reference_scope", value: "SYMBOL_PLUGIN"),
+                    ],
+                    reasonCodes: [
+                        "CALIBRATION_DRIFT_ELEVATED",
+                        "PAIR_DECAY_EURUSD",
+                        "RECENT_COST_ADJUSTED_UTILITY_WEAK",
+                    ],
+                    qualityFlags: [
+                        KeyValueRecord(key: "low_support", value: "false"),
+                        KeyValueRecord(key: "fallback_thresholds_used", value: "false"),
+                    ],
+                    contextSummary: [
+                        KeyValueRecord(key: "execution.min_quality", value: "0.440"),
+                        KeyValueRecord(key: "router.posture", value: "CAUTION"),
+                    ],
+                    challengerEvaluation: nil
+                ),
+                DriftGovernancePluginSnapshot(
+                    pluginName: "ai_gha",
+                    familyID: 24,
+                    familyName: "Macro",
+                    baseRegistryStatus: "challenger",
+                    healthState: "CAUTION",
+                    governanceState: "CHAMPION_CANDIDATE",
+                    recommendedGovernanceState: "CHAMPION_CANDIDATE",
+                    actionRecommendation: "PROMOTION_REVIEW",
+                    actionApplied: false,
+                    weightMultiplier: 1.0,
+                    restrictLive: false,
+                    shadowOnly: false,
+                    disabled: false,
+                    aggregateRiskScore: 0.34,
+                    driftScores: [
+                        KeyValueRecord(key: "feature_drift_score", value: "0.210"),
+                        KeyValueRecord(key: "execution_drift_score", value: "0.410"),
+                    ],
+                    support: [
+                        KeyValueRecord(key: "sample_count_recent", value: "516"),
+                        KeyValueRecord(key: "sample_count_reference", value: "8021"),
+                        KeyValueRecord(key: "reference_scope", value: "SYMBOL_PLUGIN"),
+                    ],
+                    reasonCodes: [
+                        "CHALLENGER_PROMOTION_ELIGIBLE",
+                    ],
+                    qualityFlags: [
+                        KeyValueRecord(key: "low_support", value: "false"),
+                    ],
+                    contextSummary: [
+                        KeyValueRecord(key: "prob.uncertainty", value: "0.270"),
+                        KeyValueRecord(key: "cross_asset.macro", value: "RATES_REPRICING"),
+                    ],
+                    challengerEvaluation: DriftGovernanceChallengerEvaluation(
+                        eligibilityState: "QUALIFIED",
+                        qualifies: true,
+                        supportCount: 14,
+                        shadowSupport: 516,
+                        walkforwardScore: 74.0,
+                        recentScore: 72.0,
+                        adversarialScore: 68.0,
+                        macroEventScore: 71.0,
+                        calibrationError: 0.08,
+                        issueCount: 0.0,
+                        liveShadowScore: 0.66,
+                        liveReliability: 0.71,
+                        portfolioScore: 0.74,
+                        promotionMargin: 0.05
+                    )
+                ),
+                DriftGovernancePluginSnapshot(
+                    pluginName: "tree_catboost",
+                    familyID: 12,
+                    familyName: "Tree",
+                    baseRegistryStatus: "champion",
+                    healthState: "HEALTHY",
+                    governanceState: "CHAMPION",
+                    recommendedGovernanceState: "CHAMPION",
+                    actionRecommendation: "NONE",
+                    actionApplied: false,
+                    weightMultiplier: 1.0,
+                    restrictLive: false,
+                    shadowOnly: false,
+                    disabled: false,
+                    aggregateRiskScore: 0.18,
+                    driftScores: [
+                        KeyValueRecord(key: "feature_drift_score", value: "0.120"),
+                        KeyValueRecord(key: "regime_drift_score", value: "0.090"),
+                    ],
+                    support: [
+                        KeyValueRecord(key: "sample_count_recent", value: "910"),
+                        KeyValueRecord(key: "sample_count_reference", value: "13210"),
+                    ],
+                    reasonCodes: [],
+                    qualityFlags: [
+                        KeyValueRecord(key: "low_support", value: "false"),
+                    ],
+                    contextSummary: [
+                        KeyValueRecord(key: "ensemble.quality", value: "0.670"),
+                    ],
+                    challengerEvaluation: nil
+                ),
+            ],
+            recentActions: [
+                DriftGovernanceActionRecord(
+                    pluginName: "ai_tft",
+                    previousState: "CHAMPION",
+                    newState: "DEGRADED",
+                    actionKind: "DOWNWEIGHT",
+                    actionApplied: true,
+                    createdAt: now.addingTimeInterval(-900)
+                ),
+                DriftGovernanceActionRecord(
+                    pluginName: "ai_gha",
+                    previousState: "CHALLENGER",
+                    newState: "CHAMPION_CANDIDATE",
+                    actionKind: "PROMOTION_REVIEW",
+                    actionApplied: false,
+                    createdAt: now.addingTimeInterval(-1200)
+                ),
+            ]
+        )
+
+        let usdjpy = DriftGovernanceSymbolSnapshot(
+            symbol: "USDJPY",
+            pluginCount: 2,
+            healthCounts: [
+                KeyValueRecord(key: "HEALTHY", value: "2"),
+            ],
+            governanceCounts: [
+                KeyValueRecord(key: "CHAMPION", value: "1"),
+                KeyValueRecord(key: "CHALLENGER", value: "1"),
+            ],
+            actionCounts: [
+                KeyValueRecord(key: "NONE", value: "2"),
+            ],
+            latestContext: [
+                KeyValueRecord(key: "execution.state", value: "NORMAL"),
+                KeyValueRecord(key: "router.regime", value: "TREND_PERSISTENT"),
+            ],
+            plugins: [
+                DriftGovernancePluginSnapshot(
+                    pluginName: "tree_catboost",
+                    familyID: 12,
+                    familyName: "Tree",
+                    baseRegistryStatus: "champion",
+                    healthState: "HEALTHY",
+                    governanceState: "CHAMPION",
+                    recommendedGovernanceState: "CHAMPION",
+                    actionRecommendation: "NONE",
+                    actionApplied: false,
+                    weightMultiplier: 1.0,
+                    restrictLive: false,
+                    shadowOnly: false,
+                    disabled: false,
+                    aggregateRiskScore: 0.11,
+                    driftScores: [
+                        KeyValueRecord(key: "feature_drift_score", value: "0.050"),
+                        KeyValueRecord(key: "performance_drift_score", value: "0.090"),
+                    ],
+                    support: [
+                        KeyValueRecord(key: "sample_count_recent", value: "688"),
+                        KeyValueRecord(key: "sample_count_reference", value: "9401"),
+                    ],
+                    reasonCodes: [],
+                    qualityFlags: [
+                        KeyValueRecord(key: "low_support", value: "false"),
+                    ],
+                    contextSummary: [
+                        KeyValueRecord(key: "execution.min_quality", value: "0.720"),
+                    ],
+                    challengerEvaluation: nil
+                ),
+                DriftGovernancePluginSnapshot(
+                    pluginName: "ai_tft",
+                    familyID: 31,
+                    familyName: "Transformer",
+                    baseRegistryStatus: "challenger",
+                    healthState: "HEALTHY",
+                    governanceState: "CHALLENGER",
+                    recommendedGovernanceState: "CHALLENGER",
+                    actionRecommendation: "NONE",
+                    actionApplied: false,
+                    weightMultiplier: 1.0,
+                    restrictLive: false,
+                    shadowOnly: false,
+                    disabled: false,
+                    aggregateRiskScore: 0.22,
+                    driftScores: [
+                        KeyValueRecord(key: "pair_decay_score", value: "0.140"),
+                    ],
+                    support: [
+                        KeyValueRecord(key: "sample_count_recent", value: "402"),
+                        KeyValueRecord(key: "sample_count_reference", value: "5770"),
+                    ],
+                    reasonCodes: [],
+                    qualityFlags: [
+                        KeyValueRecord(key: "low_support", value: "false"),
+                    ],
+                    contextSummary: [
+                        KeyValueRecord(key: "newspulse.trade_gate", value: "ALLOW"),
+                    ],
+                    challengerEvaluation: DriftGovernanceChallengerEvaluation(
+                        eligibilityState: "INSUFFICIENT",
+                        qualifies: false,
+                        supportCount: 8,
+                        shadowSupport: 402,
+                        walkforwardScore: 66.0,
+                        recentScore: 61.0,
+                        adversarialScore: 58.0,
+                        macroEventScore: 60.0,
+                        calibrationError: 0.12,
+                        issueCount: 1.0,
+                        liveShadowScore: 0.58,
+                        liveReliability: 0.62,
+                        portfolioScore: 0.60,
+                        promotionMargin: 0.01
+                    )
+                ),
+            ],
+            recentActions: []
+        )
+
+        return DriftGovernanceSnapshot(
+            generatedAt: now,
+            profileName: "continuous",
+            policyVersion: 1,
+            actionMode: "AUTO_APPLY_PROTECTIVE",
+            symbolCount: 2,
+            pluginCount: 5,
+            latestActionCount: 2,
+            healthCounts: [
+                KeyValueRecord(key: "CAUTION", value: "1"),
+                KeyValueRecord(key: "DEGRADED", value: "1"),
+                KeyValueRecord(key: "HEALTHY", value: "3"),
+            ],
+            governanceCounts: [
+                KeyValueRecord(key: "CAUTION", value: "1"),
+                KeyValueRecord(key: "CHALLENGER", value: "1"),
+                KeyValueRecord(key: "CHAMPION", value: "2"),
+                KeyValueRecord(key: "CHAMPION_CANDIDATE", value: "1"),
+            ],
+            actionCounts: [
+                KeyValueRecord(key: "DOWNWEIGHT", value: "1"),
+                KeyValueRecord(key: "NONE", value: "3"),
+                KeyValueRecord(key: "PROMOTION_REVIEW", value: "1"),
+            ],
+            statusRecords: [
+                KeyValueRecord(key: "applied_action_count", value: "1"),
+                KeyValueRecord(key: "plugin_count", value: "5"),
+                KeyValueRecord(key: "policy_version", value: "1"),
+                KeyValueRecord(key: "symbol_count", value: "2"),
+            ],
+            artifactPaths: [
+                KeyValueRecord(key: "history_path", value: "/tmp/FXAI/Tools/OfflineLab/DriftGovernance/drift_governance_history.ndjson"),
+                KeyValueRecord(key: "report_path", value: "/tmp/FXAI/Tools/OfflineLab/DriftGovernance/Reports/drift_governance_report.json"),
+                KeyValueRecord(key: "status_path", value: "/tmp/FXAI/Tools/OfflineLab/DriftGovernance/drift_governance_status.json"),
+            ],
+            symbols: [eurusd, usdjpy]
+        )
+    }
+
     public static func probCalibrationSnapshot(projectRoot: URL) -> ProbCalibrationSnapshot {
         let now = Date()
         let eurusd = ProbCalibrationSymbolSnapshot(

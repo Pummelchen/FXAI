@@ -20,6 +20,11 @@ from .cross_asset_engine import (
 )
 from .cross_asset_replay import build_cross_asset_replay_report
 from .cross_asset_service import install_cross_asset_service
+from .drift_governance import (
+    build_drift_governance_report,
+    run_drift_governance_cycle,
+    validate_drift_governance_config,
+)
 from .dynamic_ensemble_config import load_config as load_dynamic_ensemble_config
 from .dynamic_ensemble_contracts import DYNAMIC_ENSEMBLE_CONFIG_PATH
 from .dynamic_ensemble_replay import build_dynamic_ensemble_replay_report
@@ -224,6 +229,41 @@ def cmd_execution_quality_replay_report(args) -> int:
     )
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
+
+
+def cmd_drift_governance_validate(_args) -> int:
+    payload = validate_drift_governance_config()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if bool(payload.get("ok")) else 1
+
+
+def cmd_drift_governance_run(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        payload = run_drift_governance_cycle(conn, args, str(getattr(args, "group_key", "") or ""))
+        router_payload = write_student_router_profiles(conn, args)
+        adaptive_router_payload = write_adaptive_router_profiles(conn, args)
+        dashboard = write_profile_dashboard(conn, args.profile)
+        print(json.dumps({
+            "profile": args.profile,
+            "drift_governance": payload,
+            "student_router_profiles": len(router_payload),
+            "adaptive_router_profiles": len(adaptive_router_payload),
+            "dashboard": dashboard,
+        }, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
+
+
+def cmd_drift_governance_report(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        payload = build_drift_governance_report(conn, args.profile)
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
 
 
 def cmd_label_engine_validate(_args) -> int:
@@ -728,10 +768,10 @@ def cmd_best_params(args) -> int:
         foundation_bundles = write_foundation_model_bundles(conn, args, promoted)
         student_bundles = write_student_deployment_bundles(conn, args, promoted)
         attribution_profiles = write_attribution_profiles(conn, args)
+        governance_payload = run_autonomous_governance(conn, args, str(getattr(args, "group_key", "") or ""))
         student_router_profiles = write_student_router_profiles(conn, args)
         adaptive_router_profiles = write_adaptive_router_profiles(conn, args)
         live_deployments = write_live_deployment_profiles(conn, args)
-        governance_payload = run_autonomous_governance(conn, args, str(getattr(args, "group_key", "") or ""))
         print(json.dumps({
             "profile": args.profile,
             "promoted_count": len(promoted),
@@ -898,10 +938,10 @@ def cmd_autonomous_governance(args) -> int:
     try:
         shadow_ingest = ingest_shadow_fleet_ledgers(conn, args.profile)
         attribution_payload = write_attribution_profiles(conn, args)
-        router_payload = write_student_router_profiles(conn, args)
-        adaptive_router_payload = write_adaptive_router_profiles(conn, args)
         vector_payload = refresh_research_vectors(conn, args.profile)
         payload = run_autonomous_governance(conn, args, str(getattr(args, "group_key", "") or ""))
+        router_payload = write_student_router_profiles(conn, args)
+        adaptive_router_payload = write_adaptive_router_profiles(conn, args)
         write_performance_reports(sorted({str(item["symbol"]) for item in payload.get("decisions", [])}), args.profile)
         dashboard = write_profile_dashboard(conn, args.profile)
         lineage = write_lineage_report(conn, args.profile)

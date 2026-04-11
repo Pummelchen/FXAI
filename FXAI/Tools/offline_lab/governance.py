@@ -5,6 +5,7 @@ from pathlib import Path
 import libsql
 
 from .common import *
+from .drift_governance import run_drift_governance_cycle
 from .shadow_fleet import symbol_shadow_summary
 from .supervisor_service import (
     write_supervisor_command_artifacts,
@@ -479,43 +480,34 @@ def write_world_simulator_plans(conn: libsql.Connection,
 def run_autonomous_governance(conn: libsql.Connection,
                               args,
                               cycle_group_key: str = "") -> dict:
-    champion_rows = query_all(
-        conn,
-        """
-        SELECT *
-          FROM champion_registry
-         WHERE profile_name = ?
-         ORDER BY symbol, plugin_name
-        """,
-        (args.profile,),
-    )
-    promoted = 0
-    challengers = 0
-    review = 0
-    rollback = 0
-    decisions: list[dict] = []
     created_at = now_unix()
-    for item in champion_rows:
-        symbol = str(item["symbol"])
-        shadow = symbol_shadow_summary(conn, args.profile, symbol)
-        action = "keep"
-        notes = []
-        if float(shadow.get("mean_shadow_score", 0.0)) < -0.10 or float(shadow.get("mean_portfolio_supervisor_score", 0.0)) > 0.95:
-            action = "review"
-            review += 1
-            notes.append("shadow weakness or supervisor stress")
-        if item["status"] == "challenger":
-            challengers += 1
-            margin = float(item.get("challenger_score", 0.0)) - float(item.get("champion_score", 0.0))
-            if margin > 0.50 and float(shadow.get("mean_shadow_score", 0.0)) > 0.05:
-                action = "promote"
-                promoted += 1
-                notes.append("challenger margin with positive shadow score")
-        if item["status"] == "champion" and float(shadow.get("mean_policy_no_trade_prob", 0.0)) > 0.82:
-            action = "rollback_watch"
-            rollback += 1
-            notes.append("live no-trade dominance")
+    drift_payload = run_drift_governance_cycle(conn, args, cycle_group_key)
+    decisions: list[dict] = [
+        {
+            "symbol": str(item.get("symbol", "")),
+            "plugin_name": str(item.get("plugin_name", "")),
+            "status": str(item.get("governance_state", "")),
+            "action": str(item.get("action", "NONE")),
+            "notes": list(item.get("reason_codes", [])),
+            "action_applied": bool(item.get("action_applied", False)),
+            "aggregate_risk_score": float(item.get("aggregate_risk_score", 0.0) or 0.0),
+        }
+        for item in list(drift_payload.get("actions", []))
+    ]
+    promoted = sum(1 for item in decisions if str(item.get("action", "")).upper() in {"PROMOTE", "PROMOTION_REVIEW"})
+    challengers = sum(
+        1
+        for symbol_payload in list(drift_payload.get("symbols", []))
+        for item in list(symbol_payload.get("plugins", []))
+        if str(dict(item).get("challenger_evaluation", {}).get("eligibility_state", "")).upper() in {"QUALIFIED", "INSUFFICIENT"}
+    )
+    review = sum(1 for item in decisions if str(item.get("action", "")).upper() in {"DOWNWEIGHT", "DEMOTE", "PROMOTION_REVIEW"})
+    rollback = sum(1 for item in decisions if str(item.get("action", "")).upper() == "ROLLBACK")
 
+    for item in decisions:
+        symbol = str(item["symbol"])
+        plugin_name = str(item["plugin_name"])
+        shadow = symbol_shadow_summary(conn, args.profile, symbol)
         conn.execute(
             """
             UPDATE champion_registry
@@ -524,19 +516,22 @@ def run_autonomous_governance(conn: libsql.Connection,
             """,
             (
                 created_at,
-                json.dumps({"action": action, "notes": notes, "shadow": shadow}, indent=2, sort_keys=True),
+                json.dumps(
+                    {
+                        "action": item["action"],
+                        "notes": item["notes"],
+                        "action_applied": bool(item.get("action_applied", False)),
+                        "aggregate_risk_score": float(item.get("aggregate_risk_score", 0.0) or 0.0),
+                        "shadow": shadow,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                ),
                 args.profile,
                 symbol,
-                str(item["plugin_name"]),
+                plugin_name,
             ),
         )
-        decisions.append({
-            "symbol": symbol,
-            "plugin_name": str(item["plugin_name"]),
-            "status": str(item["status"]),
-            "action": action,
-            "notes": notes,
-        })
 
     supervisor = write_portfolio_supervisor_profile(conn, args)
     supervisor_service = write_supervisor_service_artifacts(conn, args)
@@ -552,6 +547,14 @@ def run_autonomous_governance(conn: libsql.Connection,
         "review_count": review,
         "rollback_count": rollback,
         "decisions": decisions,
+        "drift_governance": {
+            "action_mode": str(drift_payload.get("action_mode", "")),
+            "report_path": str(dict(drift_payload.get("status", {})).get("artifacts", {}).get("report_path", "")),
+            "status_path": str(dict(drift_payload.get("status", {})).get("artifacts", {}).get("status_path", "")),
+            "symbol_count": int(dict(drift_payload.get("status", {})).get("symbol_count", 0) or 0),
+            "plugin_count": int(dict(drift_payload.get("status", {})).get("plugin_count", 0) or 0),
+            "applied_action_count": int(dict(drift_payload.get("status", {})).get("applied_action_count", 0) or 0),
+        },
         "portfolio_supervisor": supervisor,
         "supervisor_service": supervisor_service,
         "supervisor_commands": supervisor_commands,

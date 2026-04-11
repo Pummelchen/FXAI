@@ -46,6 +46,10 @@ PATCH_MODULES = [
     "offline_lab.cross_asset_service",
     "offline_lab.cross_asset_replay",
     "offline_lab.cross_asset_engine",
+    "offline_lab.drift_governance_contracts",
+    "offline_lab.drift_governance_config",
+    "offline_lab.drift_governance_math",
+    "offline_lab.drift_governance",
     "offline_lab.label_engine_contracts",
     "offline_lab.label_engine_config",
     "offline_lab.label_engine",
@@ -95,6 +99,9 @@ def patched_paths(base_dir: Path):
     cross_asset_dir = offline_dir / "CrossAsset"
     cross_asset_state_dir = cross_asset_dir / "State"
     cross_asset_report_dir = cross_asset_dir / "Reports"
+    drift_governance_dir = offline_dir / "DriftGovernance"
+    drift_governance_report_dir = drift_governance_dir / "Reports"
+    drift_governance_artifact_dir = drift_governance_dir / "Artifacts"
     label_engine_dir = offline_dir / "LabelEngine"
     label_engine_report_dir = label_engine_dir / "Reports"
     label_engine_artifact_dir = label_engine_dir / "Artifacts"
@@ -130,6 +137,9 @@ def patched_paths(base_dir: Path):
         cross_asset_dir,
         cross_asset_state_dir,
         cross_asset_report_dir,
+        drift_governance_dir,
+        drift_governance_report_dir,
+        drift_governance_artifact_dir,
         label_engine_dir,
         label_engine_report_dir,
         label_engine_artifact_dir,
@@ -218,6 +228,14 @@ def patched_paths(base_dir: Path):
             "CROSS_ASSET_STATE_PATH": cross_asset_state_dir / "cross_asset_state.json",
             "CROSS_ASSET_REPLAY_REPORT_PATH": cross_asset_report_dir / "cross_asset_replay_report.json",
             "CROSS_ASSET_LOCAL_HISTORY_PATH": cross_asset_dir / "cross_asset_history.ndjson",
+            "DRIFT_GOVERNANCE_DIR": drift_governance_dir,
+            "DRIFT_GOVERNANCE_REPORT_DIR": drift_governance_report_dir,
+            "DRIFT_GOVERNANCE_ARTIFACT_DIR": drift_governance_artifact_dir,
+            "DRIFT_GOVERNANCE_CONFIG_PATH": drift_governance_dir / "drift_governance_config.json",
+            "DRIFT_GOVERNANCE_STATUS_PATH": drift_governance_dir / "drift_governance_status.json",
+            "DRIFT_GOVERNANCE_REPORT_PATH": drift_governance_report_dir / "drift_governance_report.json",
+            "DRIFT_GOVERNANCE_HISTORY_PATH": drift_governance_dir / "drift_governance_history.ndjson",
+            "DRIFT_GOVERNANCE_RUNTIME_SUMMARY_PATH": runtime_dir / "drift_governance_summary.json",
             "LABEL_ENGINE_DIR": label_engine_dir,
             "LABEL_ENGINE_REPORT_DIR": label_engine_report_dir,
             "LABEL_ENGINE_ARTIFACT_DIR": label_engine_artifact_dir,
@@ -286,6 +304,7 @@ def patched_paths(base_dir: Path):
             "rates_engine_dir": rates_engine_dir,
             "cross_asset_dir": cross_asset_dir,
             "label_engine_dir": label_engine_dir,
+            "drift_governance_dir": drift_governance_dir,
             "microstructure_dir": microstructure_dir,
         }
     finally:

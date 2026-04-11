@@ -14,6 +14,7 @@ extension FXAIGUIModel {
         let crossAssetSnapshot = GUIValidationFixtures.crossAssetSnapshot(projectRoot: projectRoot)
         let microstructureSnapshot = GUIValidationFixtures.microstructureSnapshot(projectRoot: projectRoot)
         let adaptiveRouterSnapshot = GUIValidationFixtures.adaptiveRouterSnapshot(projectRoot: projectRoot)
+        let driftGovernanceSnapshot = GUIValidationFixtures.driftGovernanceSnapshot(projectRoot: projectRoot)
         let dynamicEnsembleSnapshot = GUIValidationFixtures.dynamicEnsembleSnapshot(projectRoot: projectRoot)
         let probCalibrationSnapshot = GUIValidationFixtures.probCalibrationSnapshot(projectRoot: projectRoot)
         let executionQualitySnapshot = GUIValidationFixtures.executionQualitySnapshot(projectRoot: projectRoot)
@@ -30,6 +31,7 @@ extension FXAIGUIModel {
         model.crossAssetSnapshot = crossAssetSnapshot
         model.microstructureSnapshot = microstructureSnapshot
         model.adaptiveRouterSnapshot = adaptiveRouterSnapshot
+        model.driftGovernanceSnapshot = driftGovernanceSnapshot
         model.dynamicEnsembleSnapshot = dynamicEnsembleSnapshot
         model.probCalibrationSnapshot = probCalibrationSnapshot
         model.executionQualitySnapshot = executionQualitySnapshot

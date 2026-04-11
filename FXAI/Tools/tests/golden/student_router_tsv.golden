@@ -5,6 +5,9 @@ max_active_models	12
 min_meta_weight	0.022700
 allow_plugins_csv	ai_mlp
 plugin_weights_csv	ai_mlp=1.257070
+governance_state_csv	ai_mlp=CHAMPION
+governance_weight_multipliers_csv	ai_mlp=1.000000
+governance_restrict_live_csv	none
 family_weight_convolutional	0.900000
 family_weight_distribution	0.900000
 family_weight_linear	0.900000

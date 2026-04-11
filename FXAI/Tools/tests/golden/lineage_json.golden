@@ -9,7 +9,7 @@
           "champion_best_config_id": 1,
           "champion_score": 83.5,
           "family_id": 2,
-          "notes": "{\n  \"action\": \"keep\",\n  \"notes\": [],\n  \"shadow\": {\n    \"mean_control_plane_score\": 0.36,\n    \"mean_counterfactual\": 0.18,\n    \"mean_policy_add_prob\": 0.27,\n    \"mean_policy_capital_efficiency\": 0.72,\n    \"mean_policy_enter_prob\": 0.61,\n    \"mean_policy_exit_prob\": 0.14,\n    \"mean_policy_lifecycle_action\": 2.0,\n    \"mean_policy_no_trade_prob\": 0.32,\n    \"mean_policy_portfolio_fit\": 0.66,\n    \"mean_policy_reduce_prob\": 0.21,\n    \"mean_policy_tighten_prob\": 0.23,\n    \"mean_policy_timeout_prob\": 0.19,\n    \"mean_portfolio_corr\": 0.22,\n    \"mean_portfolio_div\": 0.71,\n    \"mean_portfolio_objective\": 0.42,\n    \"mean_portfolio_pressure\": 0.28,\n    \"mean_portfolio_stability\": 0.68,\n    \"mean_portfolio_supervisor_score\": 0.44,\n    \"mean_route_regret\": 0.14,\n    \"mean_route_value\": 0.26,\n    \"mean_shadow_score\": 0.44,\n    \"obs_count\": 1\n  }\n}",
+          "notes": "{\n  \"action\": \"NONE\",\n  \"action_applied\": false,\n  \"aggregate_risk_score\": 0.0,\n  \"notes\": [\n    \"LOW_SUPPORT\"\n  ],\n  \"shadow\": {\n    \"mean_control_plane_score\": 0.36,\n    \"mean_counterfactual\": 0.18,\n    \"mean_policy_add_prob\": 0.27,\n    \"mean_policy_capital_efficiency\": 0.72,\n    \"mean_policy_enter_prob\": 0.61,\n    \"mean_policy_exit_prob\": 0.14,\n    \"mean_policy_lifecycle_action\": 2.0,\n    \"mean_policy_no_trade_prob\": 0.32,\n    \"mean_policy_portfolio_fit\": 0.66,\n    \"mean_policy_reduce_prob\": 0.21,\n    \"mean_policy_tighten_prob\": 0.23,\n    \"mean_policy_timeout_prob\": 0.19,\n    \"mean_portfolio_corr\": 0.22,\n    \"mean_portfolio_div\": 0.71,\n    \"mean_portfolio_objective\": 0.42,\n    \"mean_portfolio_pressure\": 0.28,\n    \"mean_portfolio_stability\": 0.68,\n    \"mean_portfolio_supervisor_score\": 0.44,\n    \"mean_route_regret\": 0.14,\n    \"mean_route_value\": 0.26,\n    \"mean_shadow_score\": 0.44,\n    \"obs_count\": 1\n  }\n}",
           "plugin_name": "ai_mlp",
           "portfolio_score": 0.72,
           "profile_name": "fixture",
@@ -199,6 +199,7 @@
           "family_session_world_LONDON_NY_OVERLAP": "1.000000",
           "family_session_world_NEWYORK": "1.000000",
           "family_session_world_ROLLOVER": "1.000000",
+          "governance_state_csv": "ai_mlp=CHAMPION",
           "max_active_weight_share": "0.720000",
           "max_plugin_weight": "1.800000",
           "min_plugin_weight": "0.050000",
@@ -300,6 +301,156 @@
           "teacher_weight": "0.700000",
           "telemetry_level": "full"
         },
+        "drift_governance_report": {
+          "action_counts": {
+            "NONE": 1
+          },
+          "action_mode": "AUTO_APPLY_PROTECTIVE",
+          "artifacts": {
+            "history_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/OfflineLab/DriftGovernance/drift_governance_history.ndjson",
+            "report_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/OfflineLab/DriftGovernance/Reports/drift_governance_report.json",
+            "status_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/OfflineLab/DriftGovernance/drift_governance_status.json"
+          },
+          "generated_at": "2026-01-01T00:00:00Z",
+          "governance_counts": {
+            "CHAMPION": 1
+          },
+          "health_counts": {
+            "HEALTHY": 1
+          },
+          "latest_action_count": 0,
+          "plugin_count": 1,
+          "policy_version": 1,
+          "profile_name": "fixture",
+          "report_version": 1,
+          "schema_version": 1,
+          "symbol_count": 1,
+          "symbols": [
+            {
+              "action_counts": {
+                "NONE": 1
+              },
+              "governance_counts": {
+                "CHAMPION": 1
+              },
+              "health_counts": {
+                "HEALTHY": 1
+              },
+              "latest_context": {
+                "adaptive_router": {},
+                "cross_asset": {},
+                "dynamic_ensemble": {},
+                "execution_quality": {},
+                "microstructure": {},
+                "newspulse": {},
+                "prob_calibration": {}
+              },
+              "plugin_count": 1,
+              "plugins": [
+                {
+                  "action_applied": false,
+                  "action_recommendation": "NONE",
+                  "aggregate_risk_score": 0.0,
+                  "base_registry_status": "champion",
+                  "challenger_evaluation": {
+                    "adversarial_score": 0.0,
+                    "calibration_error": 0.0,
+                    "challenger_run_id": 0,
+                    "eligibility_state": "INSUFFICIENT",
+                    "issue_count": 0.0,
+                    "live_reliability": 0.78,
+                    "live_shadow_score": 0.44,
+                    "macro_event_score": 0.0,
+                    "plugin_name": "ai_mlp",
+                    "portfolio_score": 0.154,
+                    "promotion_margin": -83.5,
+                    "qualifies": false,
+                    "recent_score": 0.0,
+                    "shadow_support": 1,
+                    "support_count": 0,
+                    "symbol": "EURUSD",
+                    "walkforward_score": 0.0
+                  },
+                  "context": {
+                    "adaptive_router": {},
+                    "cross_asset": {},
+                    "dynamic_ensemble": {},
+                    "execution_quality": {},
+                    "microstructure": {},
+                    "newspulse": {},
+                    "prob_calibration": {}
+                  },
+                  "disabled": false,
+                  "drift_scores": {
+                    "calibration_drift_score": 0.0,
+                    "execution_drift_score": 0.0,
+                    "feature_drift_score": 0.0,
+                    "pair_decay_score": 0.0,
+                    "performance_drift_score": 0.0,
+                    "post_event_drift_score": 0.0,
+                    "regime_drift_score": 0.0
+                  },
+                  "family_id": 2,
+                  "family_name": "recurrent",
+                  "governance_state": "CHAMPION",
+                  "health_state": "HEALTHY",
+                  "plugin_name": "ai_mlp",
+                  "quality_flags": {
+                    "fallback_thresholds_used": true,
+                    "low_support": true,
+                    "reference_fallback_scope": "PLUGIN_GLOBAL",
+                    "shadow_evaluation_only": false
+                  },
+                  "reason_codes": [
+                    "LOW_SUPPORT"
+                  ],
+                  "recommended_governance_state": "CHAMPION",
+                  "restrict_live": false,
+                  "shadow_only": false,
+                  "support": {
+                    "reference_scope": "PLUGIN_GLOBAL",
+                    "sample_count_recent": 1,
+                    "sample_count_reference": 0
+                  },
+                  "weight_multiplier": 1.0
+                }
+              ],
+              "recent_actions": [],
+              "symbol": "EURUSD"
+            }
+          ]
+        },
+        "drift_governance_status": {
+          "action_mode": "AUTO_APPLY_PROTECTIVE",
+          "applied_action_count": 0,
+          "artifacts": {
+            "history_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/OfflineLab/DriftGovernance/drift_governance_history.ndjson",
+            "report_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/OfflineLab/DriftGovernance/Reports/drift_governance_report.json",
+            "status_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/OfflineLab/DriftGovernance/drift_governance_status.json"
+          },
+          "generated_at": "2026-01-01T00:00:00Z",
+          "latest_actions": [
+            {
+              "action": "NONE",
+              "action_applied": false,
+              "aggregate_risk_score": 0.0,
+              "governance_state": "CHAMPION",
+              "health_state": "HEALTHY",
+              "plugin_name": "ai_mlp",
+              "reason_codes": [
+                "LOW_SUPPORT"
+              ],
+              "recommended_governance_state": "CHAMPION",
+              "symbol": "EURUSD",
+              "weight_multiplier": 1.0
+            }
+          ],
+          "plugin_count": 1,
+          "policy_version": 1,
+          "profile_name": "fixture",
+          "schema_version": 1,
+          "symbol_count": 1
+        },
         "execution_quality_runtime": {},
         "performance": {
           "artifact_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Runtime/fxai_perf_EURUSD.tsv",
@@ -320,7 +471,7 @@
                 "exists": true,
                 "over_budget": false,
                 "path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Offline/Promotions/fxai_student_router_EURUSD.tsv",
-                "size_bytes": 538
+                "size_bytes": 659
               },
               {
                 "artifact_key": "fxai_attribution",
@@ -364,7 +515,7 @@
               }
             ],
             "symbol": "EURUSD",
-            "total_bytes": 3938
+            "total_bytes": 4059
           },
           "budget_failures": [],
           "exists": false,
@@ -402,6 +553,9 @@
           "family_weight_transformer": "0.900000",
           "family_weight_tree": "0.900000",
           "family_weight_world": "0.900000",
+          "governance_restrict_live_csv": "none",
+          "governance_state_csv": "ai_mlp=CHAMPION",
+          "governance_weight_multipliers_csv": "ai_mlp=1.000000",
           "max_active_models": "12",
           "min_meta_weight": "0.022700",
           "plugin_weights_csv": "ai_mlp=1.257070",
