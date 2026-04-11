@@ -17,6 +17,7 @@ extension FXAIGUIModel {
         let dynamicEnsembleSnapshot = GUIValidationFixtures.dynamicEnsembleSnapshot(projectRoot: projectRoot)
         let probCalibrationSnapshot = GUIValidationFixtures.probCalibrationSnapshot(projectRoot: projectRoot)
         let executionQualitySnapshot = GUIValidationFixtures.executionQualitySnapshot(projectRoot: projectRoot)
+        let labelEngineSnapshot = GUIValidationFixtures.labelEngineSnapshot(projectRoot: projectRoot)
         let researchSnapshot = GUIValidationFixtures.researchSnapshot(projectRoot: projectRoot)
         let visualizationSnapshot = GUIValidationFixtures.visualizationSnapshot(projectRoot: projectRoot)
         let incidentSnapshot = GUIValidationFixtures.incidentSnapshot(projectRoot: projectRoot)
@@ -32,6 +33,7 @@ extension FXAIGUIModel {
         model.dynamicEnsembleSnapshot = dynamicEnsembleSnapshot
         model.probCalibrationSnapshot = probCalibrationSnapshot
         model.executionQualitySnapshot = executionQualitySnapshot
+        model.labelEngineSnapshot = labelEngineSnapshot
         model.researchSnapshot = researchSnapshot
         model.visualizationSnapshot = visualizationSnapshot
         model.incidentSnapshot = incidentSnapshot
@@ -46,6 +48,7 @@ extension FXAIGUIModel {
         model.selectedDynamicEnsembleSymbol = dynamicEnsembleSnapshot.symbols.first?.symbol ?? ""
         model.selectedProbCalibrationSymbol = probCalibrationSnapshot.symbols.first?.symbol ?? ""
         model.selectedExecutionQualitySymbol = executionQualitySnapshot.symbols.first?.symbol ?? ""
+        model.selectedLabelEngineDatasetKey = labelEngineSnapshot.builds.first?.datasetKey ?? ""
         model.selectedResearchSymbol = researchSnapshot.symbols.first?.symbol ?? ""
         model.selectedVisualizationSymbol = visualizationSnapshot.symbols.first ?? ""
         model.selectedIncidentID = incidentSnapshot.incidents.first?.id
@@ -68,6 +71,7 @@ extension FXAIGUIModel {
                 selectedDynamicEnsembleSymbol: dynamicEnsembleSnapshot.symbols.first?.symbol ?? "EURUSD",
                 selectedProbCalibrationSymbol: probCalibrationSnapshot.symbols.first?.symbol ?? "EURUSD",
                 selectedExecutionQualitySymbol: executionQualitySnapshot.symbols.first?.symbol ?? "EURUSD",
+                selectedLabelEngineDatasetKey: labelEngineSnapshot.builds.first?.datasetKey ?? "label:eurusd:m1",
                 selectedResearchSymbol: researchSnapshot.symbols.first?.symbol ?? "EURUSD",
                 selectedVisualizationSymbol: visualizationSnapshot.symbols.first ?? "EURUSD",
                 pluginSearchText: "",

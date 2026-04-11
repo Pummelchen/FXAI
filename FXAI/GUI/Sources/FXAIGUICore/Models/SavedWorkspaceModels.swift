@@ -16,6 +16,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
     public var selectedDynamicEnsembleSymbol: String
     public var selectedProbCalibrationSymbol: String
     public var selectedExecutionQualitySymbol: String
+    public var selectedLabelEngineDatasetKey: String
     public var selectedResearchSymbol: String
     public var selectedVisualizationSymbol: String
     public var pluginSearchText: String
@@ -46,6 +47,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         selectedDynamicEnsembleSymbol: String,
         selectedProbCalibrationSymbol: String,
         selectedExecutionQualitySymbol: String,
+        selectedLabelEngineDatasetKey: String,
         selectedResearchSymbol: String,
         selectedVisualizationSymbol: String,
         pluginSearchText: String,
@@ -75,6 +77,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         self.selectedDynamicEnsembleSymbol = selectedDynamicEnsembleSymbol
         self.selectedProbCalibrationSymbol = selectedProbCalibrationSymbol
         self.selectedExecutionQualitySymbol = selectedExecutionQualitySymbol
+        self.selectedLabelEngineDatasetKey = selectedLabelEngineDatasetKey
         self.selectedResearchSymbol = selectedResearchSymbol
         self.selectedVisualizationSymbol = selectedVisualizationSymbol
         self.pluginSearchText = pluginSearchText
@@ -106,6 +109,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         case selectedDynamicEnsembleSymbol
         case selectedProbCalibrationSymbol
         case selectedExecutionQualitySymbol
+        case selectedLabelEngineDatasetKey
         case selectedResearchSymbol
         case selectedVisualizationSymbol
         case pluginSearchText
@@ -138,6 +142,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         selectedDynamicEnsembleSymbol = try container.decodeIfPresent(String.self, forKey: .selectedDynamicEnsembleSymbol) ?? selectedAdaptiveSymbol
         selectedProbCalibrationSymbol = try container.decodeIfPresent(String.self, forKey: .selectedProbCalibrationSymbol) ?? selectedDynamicEnsembleSymbol
         selectedExecutionQualitySymbol = try container.decodeIfPresent(String.self, forKey: .selectedExecutionQualitySymbol) ?? selectedProbCalibrationSymbol
+        selectedLabelEngineDatasetKey = try container.decodeIfPresent(String.self, forKey: .selectedLabelEngineDatasetKey) ?? ""
         selectedResearchSymbol = try container.decodeIfPresent(String.self, forKey: .selectedResearchSymbol) ?? ""
         selectedVisualizationSymbol = try container.decodeIfPresent(String.self, forKey: .selectedVisualizationSymbol) ?? ""
         pluginSearchText = try container.decodeIfPresent(String.self, forKey: .pluginSearchText) ?? ""
@@ -170,6 +175,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         try container.encode(selectedDynamicEnsembleSymbol, forKey: .selectedDynamicEnsembleSymbol)
         try container.encode(selectedProbCalibrationSymbol, forKey: .selectedProbCalibrationSymbol)
         try container.encode(selectedExecutionQualitySymbol, forKey: .selectedExecutionQualitySymbol)
+        try container.encode(selectedLabelEngineDatasetKey, forKey: .selectedLabelEngineDatasetKey)
         try container.encode(selectedResearchSymbol, forKey: .selectedResearchSymbol)
         try container.encode(selectedVisualizationSymbol, forKey: .selectedVisualizationSymbol)
         try container.encode(pluginSearchText, forKey: .pluginSearchText)

@@ -796,6 +796,99 @@ public enum GUIValidationFixtures {
         )
     }
 
+    public static func labelEngineSnapshot(projectRoot _: URL) -> LabelEngineSnapshot {
+        let now = Date()
+        let build = LabelEngineBuildSnapshot(
+            datasetKey: "continuous:EURUSD:m1:labels",
+            profileName: "continuous",
+            symbol: "EURUSD",
+            timeframe: "M1",
+            barCount: 96,
+            pointSize: 0.00001,
+            executionProfile: "default",
+            labelVersion: 1,
+            generatedAt: now.addingTimeInterval(-320),
+            summaryMetrics: [
+                KeyValueRecord(key: "label_row_count", value: "224"),
+                KeyValueRecord(key: "meta_label_count", value: "28"),
+                KeyValueRecord(key: "candidate_count", value: "28"),
+                KeyValueRecord(key: "long_tradeability_rate", value: "0.61"),
+                KeyValueRecord(key: "short_tradeability_rate", value: "0.47"),
+                KeyValueRecord(key: "meta_acceptance_rate", value: "0.43"),
+            ],
+            metaSummary: [
+                KeyValueRecord(key: "candidate_mode", value: "BASELINE_MOMENTUM"),
+                KeyValueRecord(key: "accepted_count", value: "12"),
+                KeyValueRecord(key: "rejected_count", value: "16"),
+                KeyValueRecord(key: "min_raw_signal_strength", value: "0.15"),
+            ],
+            qualityFlags: [
+                KeyValueRecord(key: "path_approximation_used", value: "true"),
+                KeyValueRecord(key: "partial_cost_model", value: "true"),
+                KeyValueRecord(key: "external_candidates_used", value: "false"),
+            ],
+            artifactPaths: [
+                KeyValueRecord(key: "bundle_json", value: "/tmp/label_bundle.json"),
+                KeyValueRecord(key: "labels_ndjson", value: "/tmp/labels.ndjson"),
+                KeyValueRecord(key: "meta_labels_ndjson", value: "/tmp/meta_labels.ndjson"),
+            ],
+            topReasons: [
+                LabelEngineReasonCount(reason: "MOVE_TOO_SMALL_AFTER_COSTS", count: 44),
+                LabelEngineReasonCount(reason: "ADVERSE_HIT_FIRST", count: 19),
+            ],
+            horizons: [
+                LabelEngineHorizonSnapshot(
+                    horizonID: "M5",
+                    bars: 5,
+                    sampleCount: 56,
+                    longTradeabilityRate: 0.66,
+                    shortTradeabilityRate: 0.52,
+                    candidateCount: 8,
+                    candidateAcceptanceRate: 0.50,
+                    meanCostAdjustedReturnPoints: 3.2,
+                    medianTimeToFavorableHitSec: 180
+                ),
+                LabelEngineHorizonSnapshot(
+                    horizonID: "M15",
+                    bars: 15,
+                    sampleCount: 56,
+                    longTradeabilityRate: 0.61,
+                    shortTradeabilityRate: 0.47,
+                    candidateCount: 8,
+                    candidateAcceptanceRate: 0.43,
+                    meanCostAdjustedReturnPoints: 4.8,
+                    medianTimeToFavorableHitSec: 420
+                ),
+                LabelEngineHorizonSnapshot(
+                    horizonID: "H1",
+                    bars: 60,
+                    sampleCount: 56,
+                    longTradeabilityRate: 0.54,
+                    shortTradeabilityRate: 0.38,
+                    candidateCount: 12,
+                    candidateAcceptanceRate: 0.33,
+                    meanCostAdjustedReturnPoints: 6.4,
+                    medianTimeToFavorableHitSec: 1320
+                ),
+            ]
+        )
+        return LabelEngineSnapshot(
+            generatedAt: now,
+            artifactCount: 1,
+            latestDatasetKey: build.datasetKey,
+            builds: [build],
+            statusRecords: [
+                KeyValueRecord(key: "artifact_count", value: "1"),
+                KeyValueRecord(key: "latest_dataset_key", value: build.datasetKey),
+                KeyValueRecord(key: "profile_name", value: "continuous"),
+            ],
+            artifactPaths: [
+                KeyValueRecord(key: "report_json", value: "/tmp/label_engine_report.json"),
+                KeyValueRecord(key: "runtime_summary_json", value: "/tmp/label_engine_summary.json"),
+            ]
+        )
+    }
+
     public static func crossAssetSnapshot(projectRoot _: URL) -> CrossAssetSnapshot {
         let now = Date()
         return CrossAssetSnapshot(

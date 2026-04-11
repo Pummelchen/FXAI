@@ -23,6 +23,7 @@ struct Phase6WorkflowTests {
             selectedDynamicEnsembleSymbol: "EURUSD",
             selectedProbCalibrationSymbol: "EURUSD",
             selectedExecutionQualitySymbol: "EURUSD",
+            selectedLabelEngineDatasetKey: "continuous:EURUSD:m1:labels",
             selectedResearchSymbol: "EURUSD",
             selectedVisualizationSymbol: "EURUSD",
             pluginSearchText: "mlp",

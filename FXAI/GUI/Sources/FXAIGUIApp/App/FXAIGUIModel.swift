@@ -19,6 +19,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var dynamicEnsembleSnapshot: DynamicEnsembleSnapshot?
     @Published var probCalibrationSnapshot: ProbCalibrationSnapshot?
     @Published var executionQualitySnapshot: ExecutionQualitySnapshot?
+    @Published var labelEngineSnapshot: LabelEngineSnapshot?
     @Published var researchSnapshot: ResearchOSControlSnapshot?
     @Published var visualizationSnapshot: AdvancedVisualizationSnapshot?
     @Published var incidentSnapshot: IncidentCenterSnapshot?
@@ -32,6 +33,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var selectedDynamicEnsembleSymbol = ""
     @Published var selectedProbCalibrationSymbol = ""
     @Published var selectedExecutionQualitySymbol = ""
+    @Published var selectedLabelEngineDatasetKey = ""
     @Published var selectedResearchSymbol = ""
     @Published var selectedVisualizationSymbol = ""
     @Published var selectedIncidentID: String?
@@ -64,6 +66,7 @@ final class FXAIGUIModel: ObservableObject {
     private let dynamicEnsembleReader = DynamicEnsembleArtifactReader()
     private let probCalibrationReader = ProbCalibrationArtifactReader()
     private let executionQualityReader = ExecutionQualityArtifactReader()
+    private let labelEngineReader = LabelEngineArtifactReader()
     private let researchReader = ResearchOSArtifactReader()
     private let visualizationBuilder = AdvancedVisualizationBuilder()
     private let incidentBuilder = IncidentBuilder()
@@ -157,6 +160,14 @@ final class FXAIGUIModel: ObservableObject {
         return executionQualitySnapshot.symbols.first
     }
 
+    var selectedLabelEngineDetail: LabelEngineBuildSnapshot? {
+        guard let labelEngineSnapshot else { return nil }
+        if let selected = labelEngineSnapshot.builds.first(where: { $0.datasetKey == selectedLabelEngineDatasetKey }) {
+            return selected
+        }
+        return labelEngineSnapshot.builds.first
+    }
+
     var selectedMicrostructureDetail: MicrostructureSymbolState? {
         guard let microstructureSnapshot else { return nil }
         if let selected = microstructureSnapshot.symbols.first(where: { $0.symbol == selectedMicrostructureSymbol }) {
@@ -235,6 +246,7 @@ final class FXAIGUIModel: ObservableObject {
             dynamicEnsembleSnapshot = dynamicEnsembleReader.read(projectRoot: projectRoot)
             probCalibrationSnapshot = probCalibrationReader.read(projectRoot: projectRoot)
             executionQualitySnapshot = executionQualityReader.read(projectRoot: projectRoot)
+            labelEngineSnapshot = labelEngineReader.read(projectRoot: projectRoot)
             researchSnapshot = researchReader.read(projectRoot: projectRoot)
             visualizationSnapshot = visualizationBuilder.build(
                 projectRoot: projectRoot,
@@ -257,6 +269,7 @@ final class FXAIGUIModel: ObservableObject {
             syncDynamicEnsembleSelection()
             syncProbCalibrationSelection()
             syncExecutionQualitySelection()
+            syncLabelEngineSelection()
             syncResearchSelection()
             syncVisualizationSelection()
             syncIncidentSelection()
@@ -378,6 +391,7 @@ final class FXAIGUIModel: ObservableObject {
             self.selectedDynamicEnsembleSymbol = savedView.selectedDynamicEnsembleSymbol
             self.selectedProbCalibrationSymbol = savedView.selectedProbCalibrationSymbol
             self.selectedExecutionQualitySymbol = savedView.selectedExecutionQualitySymbol
+            self.selectedLabelEngineDatasetKey = savedView.selectedLabelEngineDatasetKey
             self.selectedResearchSymbol = savedView.selectedResearchSymbol
             self.selectedVisualizationSymbol = savedView.selectedVisualizationSymbol
             self.overviewLayout = savedView.overviewLayout.normalized()
@@ -400,6 +414,7 @@ final class FXAIGUIModel: ObservableObject {
             self.syncDynamicEnsembleSelection()
             self.syncProbCalibrationSelection()
             self.syncExecutionQualitySelection()
+            self.syncLabelEngineSelection()
             self.syncResearchSelection()
             self.syncVisualizationSelection()
         }
@@ -679,6 +694,23 @@ final class FXAIGUIModel: ObservableObject {
         }
     }
 
+    private func syncLabelEngineSelection() {
+        guard let labelEngineSnapshot else {
+            selectedLabelEngineDatasetKey = ""
+            return
+        }
+
+        let datasetKeys = labelEngineSnapshot.builds.map(\.datasetKey)
+        guard let first = datasetKeys.first else {
+            selectedLabelEngineDatasetKey = ""
+            return
+        }
+
+        if !datasetKeys.contains(selectedLabelEngineDatasetKey) {
+            selectedLabelEngineDatasetKey = first
+        }
+    }
+
     private func syncResearchSelection() {
         guard let researchSnapshot else {
             selectedResearchSymbol = ""
@@ -771,6 +803,7 @@ final class FXAIGUIModel: ObservableObject {
             $selectedDynamicEnsembleSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedProbCalibrationSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedExecutionQualitySymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $selectedLabelEngineDatasetKey.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedResearchSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedVisualizationSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $overviewLayout.dropFirst().map { _ in () }.eraseToAnyPublisher(),
@@ -925,6 +958,7 @@ final class FXAIGUIModel: ObservableObject {
             selectedDynamicEnsembleSymbol = workspace.selectedDynamicEnsembleSymbol
             selectedProbCalibrationSymbol = workspace.selectedProbCalibrationSymbol
             selectedExecutionQualitySymbol = workspace.selectedExecutionQualitySymbol
+            selectedLabelEngineDatasetKey = workspace.selectedLabelEngineDatasetKey
             selectedResearchSymbol = workspace.selectedResearchSymbol
             selectedVisualizationSymbol = workspace.selectedVisualizationSymbol
             overviewLayout = workspace.overviewLayout.normalized()
@@ -952,6 +986,7 @@ final class FXAIGUIModel: ObservableObject {
         dynamicEnsembleSnapshot = nil
         probCalibrationSnapshot = nil
         executionQualitySnapshot = nil
+        labelEngineSnapshot = nil
         researchSnapshot = nil
         visualizationSnapshot = nil
         incidentSnapshot = nil
@@ -980,6 +1015,7 @@ final class FXAIGUIModel: ObservableObject {
             selectedDynamicEnsembleSymbol: selectedDynamicEnsembleSymbol,
             selectedProbCalibrationSymbol: selectedProbCalibrationSymbol,
             selectedExecutionQualitySymbol: selectedExecutionQualitySymbol,
+            selectedLabelEngineDatasetKey: selectedLabelEngineDatasetKey,
             selectedResearchSymbol: selectedResearchSymbol,
             selectedVisualizationSymbol: selectedVisualizationSymbol,
             pluginSearchText: pluginSearchText,

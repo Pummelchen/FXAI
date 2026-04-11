@@ -21,7 +21,7 @@ DEFAULT_HORIZON_CANDIDATES = [3, 5, 8, 13, 21, 34]
 DEFAULT_M1SYNC_CANDIDATES = [2, 3, 5, 8]
 DEFAULT_EXECUTION_PROFILES = ["default", "tight-fx", "prime-ecn", "retail-fx", "stress"]
 EXPORT_EXPERT = r"FXAI\Tests\FXAI_OfflineExportRunner.ex5"
-OFFLINE_SCHEMA_VERSION = 4
+OFFLINE_SCHEMA_VERSION = 5
 OFFLINE_ARTIFACT_SCHEMA_VERSION = 2
 OFFLINE_MACRO_SCHEMA_MIN = 2
 RESEARCH_VECTOR_DIMS = 16
@@ -398,6 +398,24 @@ CREATE TABLE IF NOT EXISTS shadow_fleet_observations (
     UNIQUE(profile_name, symbol, plugin_name, captured_at, source_sha256)
 );
 
+CREATE TABLE IF NOT EXISTS label_engine_artifacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dataset_id INTEGER NOT NULL,
+    profile_name TEXT NOT NULL DEFAULT '',
+    artifact_scope TEXT NOT NULL DEFAULT 'latest',
+    artifact_dir TEXT NOT NULL DEFAULT '',
+    bundle_path TEXT NOT NULL DEFAULT '',
+    labels_path TEXT NOT NULL DEFAULT '',
+    meta_labels_path TEXT NOT NULL DEFAULT '',
+    summary_path TEXT NOT NULL DEFAULT '',
+    config_sha256 TEXT NOT NULL DEFAULT '',
+    label_version INTEGER NOT NULL DEFAULT 1,
+    summary_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    UNIQUE(dataset_id, profile_name, artifact_scope),
+    FOREIGN KEY(dataset_id) REFERENCES datasets(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS supervisor_service_states (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     profile_name TEXT NOT NULL,
@@ -585,6 +603,7 @@ CREATE INDEX IF NOT EXISTS idx_student_bundle_lookup ON student_deployment_bundl
 CREATE INDEX IF NOT EXISTS idx_live_deploy_lookup ON live_deployment_profiles(profile_name, symbol, deployment_scope);
 CREATE INDEX IF NOT EXISTS idx_portfolio_supervisor_lookup ON portfolio_supervisor_profiles(profile_name, created_at);
 CREATE INDEX IF NOT EXISTS idx_shadow_fleet_lookup ON shadow_fleet_observations(profile_name, symbol, plugin_name, captured_at);
+CREATE INDEX IF NOT EXISTS idx_label_engine_lookup ON label_engine_artifacts(profile_name, dataset_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_supervisor_service_lookup ON supervisor_service_states(profile_name, symbol, created_at);
 CREATE INDEX IF NOT EXISTS idx_supervisor_command_lookup ON supervisor_command_profiles(profile_name, symbol, created_at);
 CREATE INDEX IF NOT EXISTS idx_world_sim_lookup ON world_simulator_plans(profile_name, symbol, created_at);

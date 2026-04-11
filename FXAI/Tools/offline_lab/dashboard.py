@@ -21,6 +21,7 @@ from .adaptive_router_contracts import (
     adaptive_router_runtime_state_path,
 )
 from .execution_quality_contracts import EXECUTION_QUALITY_REPLAY_REPORT_PATH, execution_quality_runtime_state_path
+from .label_engine_contracts import LABEL_ENGINE_REPORT_PATH, LABEL_ENGINE_STATUS_PATH
 from .newspulse_contracts import NEWSPULSE_REPLAY_REPORT_PATH, NEWSPULSE_STATUS_PATH
 from .rates_engine_contracts import RATES_ENGINE_REPLAY_REPORT_PATH, RATES_ENGINE_STATUS_PATH
 from .performance import build_symbol_performance_report
@@ -174,6 +175,10 @@ def build_profile_dashboard(conn, profile_name: str) -> dict[str, object]:
         },
         "execution_quality": {
             "replay_report": _load_json(EXECUTION_QUALITY_REPLAY_REPORT_PATH),
+        },
+        "label_engine": {
+            "status": _load_json(LABEL_ENGINE_STATUS_PATH),
+            "report": _load_json(LABEL_ENGINE_REPORT_PATH),
         },
         "source_of_truth": {
             "turso_libsql": "authoritative research and promotion state",

@@ -54,6 +54,29 @@ def build_parser() -> argparse.ArgumentParser:
     eqr.add_argument("--hours-back", type=int, default=72)
     eqr.set_defaults(func=cmd_execution_quality_replay_report)
 
+    lev = sub.add_parser("label-engine-validate", help="Validate the multi-horizon label-engine config, horizons, and artifact paths")
+    lev.set_defaults(func=cmd_label_engine_validate)
+
+    leb = sub.add_parser("label-engine-build", help="Build deterministic multi-horizon labels and meta-labels for existing exported datasets")
+    leb.add_argument("--profile", default="continuous")
+    leb.add_argument("--dataset-keys", default="")
+    leb.add_argument("--group-key", default="")
+    leb.add_argument("--symbol", default="EURUSD")
+    leb.add_argument("--symbol-list", default="")
+    leb.add_argument("--symbol-pack", default="", choices=[""] + sorted(testlab.SYMBOL_PACKS.keys()))
+    leb.add_argument("--months-list", default="3")
+    leb.add_argument("--start-unix", type=int, default=0)
+    leb.add_argument("--end-unix", type=int, default=0)
+    leb.add_argument("--execution-profile", default="", choices=[""] + sorted(testlab.EXECUTION_PROFILES.keys()))
+    leb.add_argument("--candidate-path", default="")
+    leb.add_argument("--candidate-mode", default="")
+    leb.add_argument("--limit-datasets", type=int, default=0)
+    leb.set_defaults(func=cmd_label_engine_build)
+
+    ler = sub.add_parser("label-engine-report", help="Rebuild the aggregated label-engine report from stored artifact metadata")
+    ler.add_argument("--profile", default="")
+    ler.set_defaults(func=cmd_label_engine_report)
+
     miv = sub.add_parser("microstructure-validate", help="Validate the microstructure proxy config, runtime contract, and service scaffolding")
     miv.set_defaults(func=cmd_microstructure_validate)
 

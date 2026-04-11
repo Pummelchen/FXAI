@@ -262,6 +262,10 @@ def connect_db(db_path: Path) -> libsql.Connection:
                 "ON best_configs(profile_name, family_id, symbol)"
             )
             conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_label_engine_lookup "
+                "ON label_engine_artifacts(profile_name, dataset_id, created_at)"
+            )
+            conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_shadow_fleet_symbol "
                 "ON shadow_fleet_observations(profile_name, symbol, captured_at)"
             )

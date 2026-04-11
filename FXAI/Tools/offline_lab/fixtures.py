@@ -46,6 +46,9 @@ PATCH_MODULES = [
     "offline_lab.cross_asset_service",
     "offline_lab.cross_asset_replay",
     "offline_lab.cross_asset_engine",
+    "offline_lab.label_engine_contracts",
+    "offline_lab.label_engine_config",
+    "offline_lab.label_engine",
     "offline_lab.microstructure_contracts",
     "offline_lab.microstructure_config",
     "offline_lab.microstructure_service",
@@ -92,6 +95,9 @@ def patched_paths(base_dir: Path):
     cross_asset_dir = offline_dir / "CrossAsset"
     cross_asset_state_dir = cross_asset_dir / "State"
     cross_asset_report_dir = cross_asset_dir / "Reports"
+    label_engine_dir = offline_dir / "LabelEngine"
+    label_engine_report_dir = label_engine_dir / "Reports"
+    label_engine_artifact_dir = label_engine_dir / "Artifacts"
     microstructure_dir = offline_dir / "Microstructure"
     microstructure_state_dir = microstructure_dir / "State"
     microstructure_report_dir = microstructure_dir / "Reports"
@@ -124,6 +130,9 @@ def patched_paths(base_dir: Path):
         cross_asset_dir,
         cross_asset_state_dir,
         cross_asset_report_dir,
+        label_engine_dir,
+        label_engine_report_dir,
+        label_engine_artifact_dir,
         microstructure_dir,
         microstructure_state_dir,
         microstructure_report_dir,
@@ -209,6 +218,13 @@ def patched_paths(base_dir: Path):
             "CROSS_ASSET_STATE_PATH": cross_asset_state_dir / "cross_asset_state.json",
             "CROSS_ASSET_REPLAY_REPORT_PATH": cross_asset_report_dir / "cross_asset_replay_report.json",
             "CROSS_ASSET_LOCAL_HISTORY_PATH": cross_asset_dir / "cross_asset_history.ndjson",
+            "LABEL_ENGINE_DIR": label_engine_dir,
+            "LABEL_ENGINE_REPORT_DIR": label_engine_report_dir,
+            "LABEL_ENGINE_ARTIFACT_DIR": label_engine_artifact_dir,
+            "LABEL_ENGINE_CONFIG_PATH": label_engine_dir / "label_engine_config.json",
+            "LABEL_ENGINE_STATUS_PATH": label_engine_dir / "label_engine_status.json",
+            "LABEL_ENGINE_REPORT_PATH": label_engine_report_dir / "label_engine_report.json",
+            "LABEL_ENGINE_RUNTIME_SUMMARY_PATH": runtime_dir / "label_engine_summary.json",
             "MICROSTRUCTURE_DIR": microstructure_dir,
             "MICROSTRUCTURE_STATE_DIR": microstructure_state_dir,
             "MICROSTRUCTURE_REPORT_DIR": microstructure_report_dir,
@@ -269,6 +285,7 @@ def patched_paths(base_dir: Path):
             "prob_calibration_dir": prob_calibration_dir,
             "rates_engine_dir": rates_engine_dir,
             "cross_asset_dir": cross_asset_dir,
+            "label_engine_dir": label_engine_dir,
             "microstructure_dir": microstructure_dir,
         }
     finally:

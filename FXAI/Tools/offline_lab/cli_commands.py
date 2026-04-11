@@ -36,6 +36,7 @@ from .exporter import *
 from .fixtures import seed_profile_fixture
 from .foundation_factory import *
 from .governance import *
+from .label_engine import build_label_engine_artifacts, build_label_engine_report, validate_label_engine_config
 from .lineage import *
 from .market_universe import (
     export_market_universe_config,
@@ -223,6 +224,32 @@ def cmd_execution_quality_replay_report(args) -> int:
     )
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
+
+
+def cmd_label_engine_validate(_args) -> int:
+    payload = validate_label_engine_config()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if bool(payload.get("ok")) else 1
+
+
+def cmd_label_engine_build(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        payload = build_label_engine_artifacts(conn, args=args)
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
+
+
+def cmd_label_engine_report(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        payload = build_label_engine_report(conn, profile_name=str(getattr(args, "profile", "") or ""))
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
 
 
 def cmd_microstructure_validate(_args) -> int:

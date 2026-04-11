@@ -1,0 +1,61 @@
+{
+  "commission_points": 0.0,
+  "default_point_sizes": {
+    "crypto": 0.01,
+    "fx": 1e-05,
+    "fx_jpy": 0.001,
+    "index": 0.1,
+    "metal": 0.01,
+    "other": 0.0001,
+    "share": 0.01
+  },
+  "direction_zero_band_points": 0.5,
+  "enabled": true,
+  "execution_profile": "default",
+  "horizons": [
+    {
+      "bars": 5,
+      "id": "M5"
+    },
+    {
+      "bars": 15,
+      "id": "M15"
+    },
+    {
+      "bars": 30,
+      "id": "M30"
+    },
+    {
+      "bars": 60,
+      "id": "H1"
+    }
+  ],
+  "label_version": 1,
+  "meta_labeling": {
+    "baseline_lookback_bars": 5,
+    "baseline_signal_threshold_points": 6.0,
+    "candidate_mode": "BASELINE_MOMENTUM",
+    "enabled": true,
+    "execution_penalty_points": 0.0,
+    "min_raw_signal_strength": 0.15,
+    "news_penalty_points": 0.0,
+    "raw_score_scale_points": 20.0
+  },
+  "overlap_stride_bars": 1,
+  "safety_margin_points": 0.25,
+  "sample_start_bars": 16,
+  "schema_version": 1,
+  "spread_multiplier": 1.0,
+  "symbol_point_overrides": {},
+  "timeframe": "M1",
+  "tradeability": {
+    "adverse_cost_mult": 1.0,
+    "favorable_cost_mult": 1.25,
+    "max_mae_cost_mult": 1.35,
+    "max_time_to_favorable_ratio": 0.65,
+    "min_adverse_points": 2.0,
+    "min_favorable_points": 2.0,
+    "require_favorable_before_adverse": true,
+    "tradeability_cost_mult": 1.1
+  }
+}

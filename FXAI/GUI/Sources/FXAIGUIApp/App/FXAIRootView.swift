@@ -6,7 +6,7 @@ struct FXAIRootView: View {
     @EnvironmentObject private var themeEnvironment: ThemeEnvironment
     private let sidebarSections: [(title: String, destinations: [SidebarDestination])] = [
         ("Start", [.overview, .roles, .onboarding, .incidents]),
-        ("Build", [.auditLab, .backtestBuilder, .offlineLab]),
+        ("Build", [.auditLab, .backtestBuilder, .offlineLab, .labelEngine]),
         ("Operate", [.newsPulse, .ratesEngine, .crossAsset, .microstructure, .adaptiveRouter, .dynamicEnsemble, .probCalibration, .executionQuality, .runtimeMonitor, .promotionCenter, .researchControl]),
         ("Inspect", [.plugins, .reports, .commands, .advancedVisuals]),
         ("System", [.settings])
@@ -184,6 +184,8 @@ struct FXAIRootView: View {
             BacktestBuilderView()
         case .offlineLab:
             OfflineLabBuilderView()
+        case .labelEngine:
+            LabelEngineView()
         case .newsPulse:
             NewsPulseView()
         case .ratesEngine:
