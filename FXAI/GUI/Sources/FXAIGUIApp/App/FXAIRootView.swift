@@ -5,7 +5,8 @@ struct FXAIRootView: View {
     @EnvironmentObject private var model: FXAIGUIModel
     @EnvironmentObject private var themeEnvironment: ThemeEnvironment
     private let sidebarSections: [(title: String, destinations: [SidebarDestination])] = [
-        ("Start", [.overview, .roles, .onboarding, .incidents]),
+        ("Workspaces", [.liveOverview, .demoOverview, .researchWorkspace, .platformControl, .roles, .onboarding, .incidents]),
+        ("Overview", [.overview]),
         ("Build", [.auditLab, .backtestBuilder, .offlineLab, .labelEngine]),
         ("Operate", [.newsPulse, .ratesEngine, .crossAsset, .pairNetwork, .microstructure, .adaptiveRouter, .driftGovernance, .dynamicEnsemble, .probCalibration, .executionQuality, .runtimeMonitor, .promotionCenter, .researchControl]),
         ("Inspect", [.plugins, .reports, .commands, .advancedVisuals]),
@@ -172,6 +173,10 @@ struct FXAIRootView: View {
         switch model.selection ?? .overview {
         case .overview:
             OverviewDashboardView()
+        case .liveOverview:
+            RoleWorkspaceDashboardView(role: .liveTrader)
+        case .demoOverview:
+            RoleWorkspaceDashboardView(role: .demoTrader)
         case .onboarding:
             OnboardingGuideView()
         case .roles:
@@ -184,6 +189,8 @@ struct FXAIRootView: View {
             BacktestBuilderView()
         case .offlineLab:
             OfflineLabBuilderView()
+        case .researchWorkspace:
+            RoleWorkspaceDashboardView(role: .researcher)
         case .labelEngine:
             LabelEngineView()
         case .newsPulse:
@@ -210,6 +217,8 @@ struct FXAIRootView: View {
             RuntimeMonitorView()
         case .promotionCenter:
             PromotionCenterView()
+        case .platformControl:
+            RoleWorkspaceDashboardView(role: .architect)
         case .researchControl:
             ResearchOSControlView()
         case .advancedVisuals:

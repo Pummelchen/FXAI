@@ -348,6 +348,11 @@ final class FXAIGUIModel: ObservableObject {
         selection = destination
     }
 
+    func activateRoleWorkspace(_ role: WorkspaceRole) {
+        selectedRole = role
+        selection = role.defaultDestination
+    }
+
     func openProjectRootInFinder() {
         guard let projectRoot else { return }
         NSWorkspace.shared.open(projectRoot)

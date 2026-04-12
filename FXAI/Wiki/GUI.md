@@ -22,6 +22,7 @@ FXAI GUI is the optional operator shell for users who want faster inspection, gu
 
 ## What The GUI Is For
 
+- first-class role workspaces that open the correct default operator surface for each user type
 - overview dashboards
 - runtime monitoring
 - role-based workspaces

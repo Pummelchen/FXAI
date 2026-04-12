@@ -34,11 +34,18 @@ struct CommandCenterView: View {
                                                 .foregroundStyle(FXAITheme.textSecondary)
                                         }
                                         Spacer()
-                                        Button("Copy") {
-                                            model.copyToPasteboard(recipe.command)
+                                        HStack(spacing: 8) {
+                                            Button("Copy") {
+                                                model.copyToPasteboard(recipe.command)
+                                            }
+                                            .buttonStyle(.bordered)
+
+                                            Button("Terminal") {
+                                                model.handoffCommandToTerminal(recipe.command)
+                                            }
+                                            .buttonStyle(.borderedProminent)
+                                            .tint(FXAITheme.accent)
                                         }
-                                        .buttonStyle(.borderedProminent)
-                                        .tint(FXAITheme.accent)
                                     }
 
                                     Text(recipe.command)

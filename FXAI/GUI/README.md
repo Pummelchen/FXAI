@@ -10,6 +10,7 @@ The primary app surface is the FXAI operator shell, not the old visual reference
 
 Phase 1 through Phase 6 are implemented here:
 - polished dark macOS dashboard
+- first-class role workspaces for Live Overview, Demo Overview, Research Workspace, and Platform Control
 - role-based workspaces
 - plugin-zoo explorer
 - report explorer over current FXAI artifact surfaces
@@ -110,6 +111,7 @@ The GUI can start cleanly even when MT5 or the FXAI project tree is not ready ye
 
 - terminal-first, GUI-assisted
 - read-only by default for sensitive runtime workflows
+- role workspaces are real operator entry points, not just onboarding labels
 - role-oriented information architecture
 - minimalistic dark visual language
 - adaptive, not fixed-canvas

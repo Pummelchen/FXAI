@@ -12,9 +12,9 @@ public enum OnboardingGuideFactory {
                 summary: "Live traders should first confirm the deployed symbol state, artifact freshness, and policy constraints before caring about plugin details.",
                 steps: [
                     OnboardingStep(
-                        title: "Check the Overview first",
+                        title: "Check Live Overview first",
                         summary: "Confirm build health, runtime profiles, and current research database state before trusting any live interpretation.",
-                        destination: OnboardingDestinationHint(title: "Overview", selection: "overview")
+                        destination: OnboardingDestinationHint(title: "Live Overview", selection: "liveOverview")
                     ),
                     OnboardingStep(
                         title: "Inspect Runtime Monitor per symbol",
@@ -28,7 +28,7 @@ public enum OnboardingGuideFactory {
                     )
                 ],
                 recommendedDestinations: [
-                    OnboardingDestinationHint(title: "Overview", selection: "overview"),
+                    OnboardingDestinationHint(title: "Live Overview", selection: "liveOverview"),
                     OnboardingDestinationHint(title: "Runtime Monitor", selection: "runtimeMonitor"),
                     OnboardingDestinationHint(title: "Promotion Center", selection: "promotionCenter")
                 ],
@@ -41,9 +41,9 @@ public enum OnboardingGuideFactory {
                 summary: "Demo traders benefit most from the runtime view, audit builder, and reports explorer, with less focus on Turso administration.",
                 steps: [
                     OnboardingStep(
-                        title: "Inspect current runtime behavior",
+                        title: "Start in Demo Overview",
                         summary: "Use Runtime Monitor to see what the promoted deployment actually loaded before you evaluate demo behavior.",
-                        destination: OnboardingDestinationHint(title: "Runtime Monitor", selection: "runtimeMonitor")
+                        destination: OnboardingDestinationHint(title: "Demo Overview", selection: "demoOverview")
                     ),
                     OnboardingStep(
                         title: "Launch a focused audit pack",
@@ -57,6 +57,7 @@ public enum OnboardingGuideFactory {
                     )
                 ],
                 recommendedDestinations: [
+                    OnboardingDestinationHint(title: "Demo Overview", selection: "demoOverview"),
                     OnboardingDestinationHint(title: "Runtime Monitor", selection: "runtimeMonitor"),
                     OnboardingDestinationHint(title: "Audit Lab Builder", selection: "auditLab"),
                     OnboardingDestinationHint(title: "Reports Explorer", selection: "reports")
@@ -98,9 +99,9 @@ public enum OnboardingGuideFactory {
                 summary: "Researchers should pivot between the plugin zoo, Offline Lab workflows, promotion state, and advanced visuals instead of tuning one plugin in isolation.",
                 steps: [
                     OnboardingStep(
-                        title: "Start in Plugin Zoo",
+                        title: "Start in Research Workspace",
                         summary: "Filter the model inventory, review family coverage, and pick realistic candidates before launching tuning runs.",
-                        destination: OnboardingDestinationHint(title: "Plugin Zoo", selection: "plugins")
+                        destination: OnboardingDestinationHint(title: "Research Workspace", selection: "researchWorkspace")
                     ),
                     OnboardingStep(
                         title: "Use Offline Lab Builder for campaign chains",
@@ -114,6 +115,7 @@ public enum OnboardingGuideFactory {
                     )
                 ],
                 recommendedDestinations: [
+                    OnboardingDestinationHint(title: "Research Workspace", selection: "researchWorkspace"),
                     OnboardingDestinationHint(title: "Plugin Zoo", selection: "plugins"),
                     OnboardingDestinationHint(title: "Offline Lab Builder", selection: "offlineLab"),
                     OnboardingDestinationHint(title: "Promotion Center", selection: "promotionCenter"),
@@ -128,9 +130,9 @@ public enum OnboardingGuideFactory {
                 summary: "System architects should anchor on environment health, branches, incident state, recovery, and packaging, while keeping the terminal available for exact commands.",
                 steps: [
                     OnboardingStep(
-                        title: "Validate environment and research health",
+                        title: "Start in Platform Control",
                         summary: "Open the Research OS Control surface first and inspect backend, sync mode, encryption, branches, and audit-event freshness.",
-                        destination: OnboardingDestinationHint(title: "Research OS Control", selection: "researchControl")
+                        destination: OnboardingDestinationHint(title: "Platform Control", selection: "platformControl")
                     ),
                     OnboardingStep(
                         title: "Use Incident Center for drift or breakage",
@@ -143,6 +145,7 @@ public enum OnboardingGuideFactory {
                     )
                 ],
                 recommendedDestinations: [
+                    OnboardingDestinationHint(title: "Platform Control", selection: "platformControl"),
                     OnboardingDestinationHint(title: "Research OS Control", selection: "researchControl"),
                     OnboardingDestinationHint(title: "Incident Center", selection: "incidents"),
                     OnboardingDestinationHint(title: "Settings", selection: "settings"),
@@ -153,4 +156,3 @@ public enum OnboardingGuideFactory {
         }
     }
 }
-

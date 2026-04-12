@@ -172,12 +172,17 @@ struct RoleWorkspacesView: View {
 
     private func roleActions(role: WorkspaceRole) -> some View {
         Group {
+            Button("Open Default Workspace") {
+                model.activateRoleWorkspace(role)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(FXAITheme.accent)
+
             Button("Open Role Guide") {
                 model.selectedRole = role
                 model.navigate(to: .onboarding)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(FXAITheme.accent)
+            .buttonStyle(.bordered)
 
             Button(model.hasCompletedOnboarding(for: role) ? "Reset Onboarding" : "Mark Onboarding Complete") {
                 if model.hasCompletedOnboarding(for: role) {

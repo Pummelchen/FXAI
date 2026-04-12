@@ -185,9 +185,14 @@ struct Phase6WorkflowTests {
     @Test
     func onboardingGuideProvidesRoleSpecificDestinationsAndCommands() {
         let projectRoot = URL(fileURLWithPath: "/tmp/fxai", isDirectory: true)
+        let liveGuide = OnboardingGuideFactory.guide(role: .liveTrader, projectRoot: projectRoot)
+        let researcherGuide = OnboardingGuideFactory.guide(role: .researcher, projectRoot: projectRoot)
         let guide = OnboardingGuideFactory.guide(role: .architect, projectRoot: projectRoot)
 
+        #expect(liveGuide.recommendedDestinations.contains(where: { $0.selection == "liveOverview" }))
+        #expect(researcherGuide.recommendedDestinations.contains(where: { $0.selection == "researchWorkspace" }))
         #expect(guide.steps.count >= 3)
+        #expect(guide.recommendedDestinations.contains(where: { $0.selection == "platformControl" }))
         #expect(guide.recommendedDestinations.contains(where: { $0.selection == "researchControl" }))
         #expect(guide.recommendedCommands.contains(where: { $0.command.contains("autonomous-governance") }))
     }
