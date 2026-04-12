@@ -1169,6 +1169,10 @@ void FXAI_DynamicEnsembleWriteRuntimeArtifacts(const string symbol,
    int hist = FileOpen(FXAI_DynamicEnsembleRuntimeHistoryFile(symbol),
                        FILE_READ | FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_COMMON |
                        FILE_SHARE_READ | FILE_SHARE_WRITE);
+   if(hist == INVALID_HANDLE)
+      hist = FileOpen(FXAI_DynamicEnsembleRuntimeHistoryFile(symbol),
+                      FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_COMMON |
+                      FILE_SHARE_READ | FILE_SHARE_WRITE);
    if(hist != INVALID_HANDLE)
    {
       FileSeek(hist, 0, SEEK_END);

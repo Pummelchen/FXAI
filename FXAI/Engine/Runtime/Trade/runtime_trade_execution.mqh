@@ -225,9 +225,35 @@ bool FXAI_CloseManagedFraction(const string symbol,
       bool ok = false;
       if(hedging && remaining + 1e-9 < volume)
       {
-         ok = trade.PositionClosePartial(ticket, remaining);
-         if(ok)
-            closed += remaining;
+         double min_volume = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+         double max_volume = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+         double volume_step = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+         if(min_volume <= 0.0)
+            min_volume = 0.01;
+         if(max_volume <= 0.0)
+            max_volume = volume;
+         if(volume_step <= 0.0)
+            volume_step = min_volume;
+
+         double partial_volume = remaining;
+         if(volume_step > 0.0)
+            partial_volume = MathFloor((partial_volume + 1e-12) / volume_step) * volume_step;
+         partial_volume = MathMax(partial_volume, 0.0);
+         partial_volume = MathMin(partial_volume, MathMin(volume, max_volume));
+         partial_volume = NormalizeDouble(partial_volume, 8);
+
+         if(partial_volume + 1e-9 >= volume)
+         {
+            ok = trade.PositionClose(ticket);
+            if(ok)
+               closed += volume;
+         }
+         else if(partial_volume + 1e-9 >= min_volume)
+         {
+            ok = trade.PositionClosePartial(ticket, partial_volume);
+            if(ok)
+               closed += partial_volume;
+         }
       }
       else
       {

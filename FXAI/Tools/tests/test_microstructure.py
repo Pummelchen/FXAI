@@ -17,7 +17,11 @@ from offline_lab.microstructure_reference import (
     tick_imbalance_from_changes,
 )
 from offline_lab.microstructure_replay import build_microstructure_replay_report
-from offline_lab.microstructure_service import microstructure_health_snapshot, validate_microstructure_config
+from offline_lab.microstructure_service import (
+    microstructure_health_snapshot,
+    sync_local_status_from_runtime,
+    validate_microstructure_config,
+)
 import offline_lab.microstructure_contracts as contracts
 
 
@@ -138,6 +142,27 @@ def test_microstructure_health_snapshot_handles_missing_runtime_artifacts():
             assert payload["service"]["ok"] is False
             assert payload["service"]["stale"] is True
             assert payload["symbols"] == {}
+
+
+def test_microstructure_sync_local_status_persists_runtime_status_mtime():
+    with tempfile.TemporaryDirectory(prefix="fxai_micro_status_sync_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)):
+            contracts.COMMON_MICROSTRUCTURE_STATUS.write_text(
+                json.dumps(
+                    {
+                        "generated_at": _iso_hours_ago(1.0),
+                        "service": {"ok": True, "stale": False},
+                        "health": {"snapshot_stale_after_sec": 45},
+                        "symbols": {},
+                    },
+                    sort_keys=True,
+                ),
+                encoding="utf-8",
+            )
+            payload = sync_local_status_from_runtime()
+            saved = json.loads(contracts.MICROSTRUCTURE_STATUS_PATH.read_text(encoding="utf-8"))
+            assert "runtime_status_mtime" in payload["health"]
+            assert saved["health"]["runtime_status_mtime"] == payload["health"]["runtime_status_mtime"]
 
 
 def test_microstructure_replay_report_summarizes_history():

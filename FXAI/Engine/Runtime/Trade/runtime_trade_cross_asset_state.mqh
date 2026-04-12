@@ -195,7 +195,10 @@ bool FXAI_ReadCrossAssetPairState(const string symbol,
    FXAI_ResetCrossAssetPairState(out);
    string pair_id = FXAI_CrossAssetPairId(symbol);
    if(StringLen(pair_id) != 6)
+   {
+      FXAI_ResetCrossAssetGlobals();
       return false;
+   }
 
    int handle = FileOpen(FXAI_CROSS_ASSET_FLAT_FILE,
                          FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON |
@@ -277,9 +280,8 @@ bool FXAI_ReadCrossAssetPairState(const string symbol,
          out.stale = out.stale || ((now_time - out.generated_at) > MathMax(CrossAssetFreshnessMaxSec, 60));
       else
          out.stale = true;
-
-      FXAI_ApplyCrossAssetPairState(out);
    }
+   FXAI_ApplyCrossAssetPairState(out);
    return out.available;
 }
 

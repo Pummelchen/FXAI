@@ -121,6 +121,7 @@ double FXAI_ContextDataHealthScore(const string symbol)
       return -1.0;
 
    MqlRates rates[];
+   ArraySetAsSeries(rates, true);
    int copied = CopyRates(symbol, PERIOD_M1, 0, 4, rates);
    if(copied <= 0)
       return 0.10;
@@ -242,6 +243,17 @@ void FXAI_AppendUniqueContextCandidate(string &arr[],
    int sz = ArraySize(arr);
    ArrayResize(arr, sz + 1);
    arr[sz] = symbol;
+}
+
+void FXAI_BuildContextScoreReference(const string &selected[],
+                                     const string &pending[],
+                                     string &reference[])
+{
+   ArrayResize(reference, 0);
+   for(int i=0; i<ArraySize(selected); i++)
+      FXAI_AppendUniqueContextCandidate(reference, selected[i]);
+   for(int i=0; i<ArraySize(pending); i++)
+      FXAI_AppendUniqueContextCandidate(reference, pending[i]);
 }
 
 void FXAI_BuildCuratedContextUniverse(const string main_symbol,
@@ -403,7 +415,9 @@ void FXAI_ExtendContextSymbolsFromMarketWatch(const string main_symbol, string &
          if(cat_used[cat] >= cat_caps[cat])
             continue;
 
-         double score = FXAI_ContextCandidateScore(main_symbol, sym, symbols);
+         string reference[];
+         FXAI_BuildContextScoreReference(symbols, best_sym, reference);
+         double score = FXAI_ContextCandidateScore(main_symbol, sym, reference);
          if(!selected_only)
          {
             // Broader-universe candidates need a slightly higher bar to justify
@@ -472,7 +486,9 @@ void FXAI_ExtendContextSymbolsFromMarketWatch(const string main_symbol, string &
       if(cat_used[cat] >= cat_caps[cat])
          continue;
 
-      double score = FXAI_ContextCandidateScore(main_symbol, sym, symbols) + 0.08;
+      string reference[];
+      FXAI_BuildContextScoreReference(symbols, best_sym, reference);
+      double score = FXAI_ContextCandidateScore(main_symbol, sym, reference) + 0.08;
       if(score <= 0.0)
          continue;
       int sz = ArraySize(best_sym);

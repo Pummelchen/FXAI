@@ -69,12 +69,16 @@ def _status_payload_from_runtime(now_dt=None) -> dict[str, Any]:
 def sync_local_status_from_runtime() -> dict[str, Any]:
     ensure_microstructure_dirs()
     payload = _status_payload_from_runtime()
-    json_dump(MICROSTRUCTURE_STATUS_PATH, payload)
+    health = payload.get("health")
+    if not isinstance(health, dict):
+        health = {}
+        payload["health"] = health
     if COMMON_MICROSTRUCTURE_STATUS.exists():
         try:
-            payload.get("health", {})["runtime_status_mtime"] = COMMON_MICROSTRUCTURE_STATUS.stat().st_mtime
+            health["runtime_status_mtime"] = COMMON_MICROSTRUCTURE_STATUS.stat().st_mtime
         except Exception:
             pass
+    json_dump(MICROSTRUCTURE_STATUS_PATH, payload)
     return payload
 
 
