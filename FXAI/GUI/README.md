@@ -63,10 +63,10 @@ The theme system includes:
 - a detached-safe startup path so the GUI can launch even before FXAI or MT5 is fully ready
 
 The phased implementation reference is stored in:
-- [Docs/FXAI_GUI_IMPLEMENTATION_PLAN.md](/Users/andreborchert/FXAI-main2/FXAI/GUI/Docs/FXAI_GUI_IMPLEMENTATION_PLAN.md)
-- [Docs/FXAI_GUI_RELEASE_CHECKLIST.md](/Users/andreborchert/FXAI-main2/FXAI/GUI/Docs/FXAI_GUI_RELEASE_CHECKLIST.md)
-- [Docs/FINANCE_APP_THEME_MIGRATION.md](/Users/andreborchert/FXAI-main2/FXAI/GUI/Docs/FINANCE_APP_THEME_MIGRATION.md)
-- [Docs/ADDING_THEME_V2.md](/Users/andreborchert/FXAI-main2/FXAI/GUI/Docs/ADDING_THEME_V2.md)
+- [Docs/FXAI_GUI_IMPLEMENTATION_PLAN.md](Docs/FXAI_GUI_IMPLEMENTATION_PLAN.md)
+- [Docs/FXAI_GUI_RELEASE_CHECKLIST.md](Docs/FXAI_GUI_RELEASE_CHECKLIST.md)
+- [Docs/FINANCE_APP_THEME_MIGRATION.md](Docs/FINANCE_APP_THEME_MIGRATION.md)
+- [Docs/ADDING_THEME_V2.md](Docs/ADDING_THEME_V2.md)
 
 ## Build
 
