@@ -18,8 +18,8 @@ public struct FinancialDashboardThemeV1: AppTheme {
 
     public init() {
         let colors = ThemeColors(
-            outerBackground: Color(hex: 0xE8E5E1),
-            outerVignette: Color(hex: 0xD8D4CE),
+            outerBackground: Color(hex: 0x000000),
+            outerVignette: Color(hex: 0x000000),
             mainPanel: Color(hex: 0x2A2A2A),
             sidebar: Color(hex: 0x3C3C3C),
             footer: Color(hex: 0x464646),

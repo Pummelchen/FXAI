@@ -14,12 +14,15 @@ struct FXAIRootView: View {
     ]
 
     var body: some View {
-        NavigationSplitView {
-            sidebar
-        } detail: {
-            detailView
-                .padding(20)
-                .background(FXAIBackgroundView().opacity(0.92))
+        ZStack {
+            FXAIBackgroundView()
+
+            NavigationSplitView {
+                sidebar
+            } detail: {
+                detailView
+                    .padding(20)
+            }
         }
         .navigationSplitViewStyle(.balanced)
         .toolbar {

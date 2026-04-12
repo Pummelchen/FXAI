@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+from datetime import timedelta
 from pathlib import Path
 
 from offline_lab.fixtures import patched_paths
@@ -242,9 +243,10 @@ def test_prob_calibration_decide_action_prefers_skip_when_edge_is_not_enough():
 def test_prob_calibration_replay_report_summarizes_history():
     with tempfile.TemporaryDirectory(prefix="fxai_probcal_replay_") as tmp_dir:
         with patched_paths(Path(tmp_dir)):
+            now_dt = contracts.utc_now()
             history_rows = [
                 {
-                    "generated_at": "2026-04-10T10:00:00Z",
+                    "generated_at": contracts.isoformat_utc(now_dt - timedelta(hours=2, minutes=5)),
                     "symbol": "EURUSD",
                     "state": {
                         "selected_tier_kind": "REGIME",
@@ -258,7 +260,7 @@ def test_prob_calibration_replay_report_summarizes_history():
                     },
                 },
                 {
-                    "generated_at": "2026-04-10T10:05:00Z",
+                    "generated_at": contracts.isoformat_utc(now_dt - timedelta(hours=2)),
                     "symbol": "EURUSD",
                     "state": {
                         "selected_tier_kind": "REGIME",

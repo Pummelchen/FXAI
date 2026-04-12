@@ -1,3 +1,4 @@
+import AppKit
 import FXAIGUICore
 import Testing
 
@@ -16,6 +17,21 @@ struct ThemeTokenTests {
         #expect(theme.renderingPolicy.compactGlowReductionThreshold == 0.86)
         #expect(theme.shadows.lightSource.normalizedPosition.x == 0.92)
         #expect(theme.shadows.lightSource.normalizedPosition.y == 0.08)
+    }
+
+    @Test
+    func financialDashboardThemeV1UsesBlackShellBackground() throws {
+        let theme = FinancialDashboardThemeV1()
+
+        let outerBackground = try #require(NSColor(theme.colors.outerBackground).usingColorSpace(.sRGB))
+        let outerVignette = try #require(NSColor(theme.colors.outerVignette).usingColorSpace(.sRGB))
+
+        #expect(outerBackground.redComponent == 0)
+        #expect(outerBackground.greenComponent == 0)
+        #expect(outerBackground.blueComponent == 0)
+        #expect(outerVignette.redComponent == 0)
+        #expect(outerVignette.greenComponent == 0)
+        #expect(outerVignette.blueComponent == 0)
     }
 
     @Test

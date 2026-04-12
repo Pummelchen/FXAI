@@ -8,8 +8,8 @@ struct WindowConfigurator: NSViewRepresentable {
             guard let window = view.window else { return }
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
-            window.isOpaque = false
-            window.backgroundColor = .clear
+            window.isOpaque = true
+            window.backgroundColor = .black
             window.toolbarStyle = .unifiedCompact
             window.styleMask.insert(.fullSizeContentView)
             window.isMovableByWindowBackground = true

@@ -21,7 +21,7 @@ struct FXAIGUIApp: App {
                 FXAIRootView()
                     .environmentObject(appState.model)
                     .environmentObject(appState.themeEnvironment)
-                    .background(Color.clear)
+                    .background(Color.black)
                     .overlay(WindowConfigurator().allowsHitTesting(false))
             }
         }
