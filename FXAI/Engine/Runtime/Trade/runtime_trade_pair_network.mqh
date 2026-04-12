@@ -370,9 +370,11 @@ void FXAI_PairNetworkAddKeyValue(string &keys[],
                                  const double delta,
                                  const int max_count)
 {
-   if(StringLen(key) <= 0 || count < 0 || count >= max_count && FXAI_PairNetworkFindKey(keys, count, key) < 0)
+   if(StringLen(key) <= 0 || count < 0)
       return;
    int idx = FXAI_PairNetworkFindKey(keys, count, key);
+   if(count >= max_count && idx < 0)
+      return;
    if(idx < 0)
    {
       idx = count;
