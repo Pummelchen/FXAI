@@ -25,19 +25,8 @@ struct DashboardRootView: View {
             let frameModel = layoutOutput.frameModel
 
             ZStack(alignment: .topLeading) {
-                theme.gradients.canvas
+                Color.black
                     .ignoresSafeArea()
-
-                RadialGradient(
-                    colors: [
-                        theme.colors.outerVignette.opacity(0.4),
-                        theme.colors.outerBackground.opacity(0)
-                    ],
-                    center: .center,
-                    startRadius: 60,
-                    endRadius: max(geometry.size.width, geometry.size.height)
-                )
-                .ignoresSafeArea()
 
                 dashboardStage(layoutOutput: layoutOutput, theme: theme)
                     .frame(width: frameModel.stageFrame.width, height: frameModel.stageFrame.height)
