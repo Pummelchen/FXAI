@@ -67,6 +67,7 @@ def default_config() -> dict[str, Any]:
         "rates_stale_after_sec": 1200,
         "history_points": 192,
         "max_recent_transitions": 24,
+        "probe_required_for_live_gates": False,
         "critical_sources": ["rates", "context_service"],
         "use_market_universe_indicator_symbols": True,
         "proxy_candidates": {
@@ -206,6 +207,8 @@ def validate_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
         raise OfflineLabError("Cross-asset rates_stale_after_sec must be at least 60")
     if int(merged.get("history_points", 0) or 0) < 32:
         raise OfflineLabError("Cross-asset history_points must be at least 32")
+    if not isinstance(merged.get("probe_required_for_live_gates"), bool):
+        raise OfflineLabError("Cross-asset probe_required_for_live_gates must be a boolean")
 
     critical_sources = [str(item or "").strip() for item in list(merged.get("critical_sources", []))]
     if not critical_sources:

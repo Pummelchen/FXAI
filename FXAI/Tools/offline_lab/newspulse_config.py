@@ -25,9 +25,15 @@ def default_config() -> dict[str, object]:
         "poll_interval_sec": 60,
         "calendar_stale_after_sec": 360,
         "gdelt_stale_after_sec": 360,
+        "official_stale_after_sec": 360,
         "snapshot_stale_after_sec": 360,
         "unknown_blocks": True,
         "history_recent_limit": 80,
+        "source_requirements": {
+            "calendar": True,
+            "gdelt": False,
+            "official": False,
+        },
         "calendar": {
             "high_impact_min": 2,
             "pre_window_min_by_importance": {"1": 10, "2": 25, "3": 45},
@@ -284,6 +290,28 @@ def validate_config_payload(payload: dict[str, object], sources: dict[str, objec
     poll_interval = int(payload.get("poll_interval_sec", 0) or 0)
     if poll_interval < 15:
         raise OfflineLabError("NewsPulse poll_interval_sec must be at least 15 seconds")
+
+    calendar_stale_after_sec = int(payload.get("calendar_stale_after_sec", 0) or 0)
+    gdelt_stale_after_sec = int(payload.get("gdelt_stale_after_sec", 0) or 0)
+    official_stale_after_sec = int(payload.get("official_stale_after_sec", 0) or 0)
+    snapshot_stale_after_sec = int(payload.get("snapshot_stale_after_sec", 0) or 0)
+    if calendar_stale_after_sec <= 0:
+        raise OfflineLabError("NewsPulse calendar_stale_after_sec must be positive")
+    if gdelt_stale_after_sec <= 0:
+        raise OfflineLabError("NewsPulse gdelt_stale_after_sec must be positive")
+    if official_stale_after_sec <= 0:
+        raise OfflineLabError("NewsPulse official_stale_after_sec must be positive")
+    if snapshot_stale_after_sec <= 0:
+        raise OfflineLabError("NewsPulse snapshot_stale_after_sec must be positive")
+
+    source_requirements = payload.get("source_requirements")
+    if not isinstance(source_requirements, dict):
+        raise OfflineLabError("NewsPulse source_requirements config is missing")
+    for source_name in ("calendar", "gdelt", "official"):
+        if source_name not in source_requirements:
+            raise OfflineLabError(f"NewsPulse source_requirements must define {source_name}")
+        if not isinstance(source_requirements.get(source_name), bool):
+            raise OfflineLabError(f"NewsPulse source_requirements.{source_name} must be a boolean")
 
     gdelt = payload.get("gdelt")
     if not isinstance(gdelt, dict):

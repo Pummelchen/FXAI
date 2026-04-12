@@ -141,6 +141,8 @@ def test_microstructure_health_snapshot_handles_missing_runtime_artifacts():
             payload = microstructure_health_snapshot()
             assert payload["service"]["ok"] is False
             assert payload["service"]["stale"] is True
+            assert payload["service"]["enabled"] is True
+            assert payload["service"]["configured_pairs"] > 0
             assert payload["symbols"] == {}
 
 

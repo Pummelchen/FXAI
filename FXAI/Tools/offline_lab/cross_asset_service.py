@@ -29,14 +29,24 @@ from testlab.shared import METAEDITOR, TERMINAL_ROOT, WINE, read_utf16_or_text, 
 
 def cross_asset_probe_health_snapshot() -> dict[str, Any]:
     ensure_cross_asset_dirs()
+    config = load_config()
     status = json_load(COMMON_CROSS_ASSET_PROBE_STATUS)
     snapshot = json_load(COMMON_CROSS_ASSET_PROBE_JSON)
     generated_at = str(status.get("generated_at", "") or snapshot.get("generated_at", ""))
+    service = dict(status.get("service", {}))
+    if not service:
+        service = {
+            "ok": False,
+            "stale": True,
+            "enabled": bool(config.get("enabled", True)),
+            "configured_symbols": len(resolve_probe_symbols(config)),
+            "last_error": "cross-asset probe has not produced a snapshot yet",
+        }
     return {
         "generated_at": generated_at,
         "probe_status_path": str(COMMON_CROSS_ASSET_PROBE_STATUS),
         "probe_snapshot_path": str(COMMON_CROSS_ASSET_PROBE_JSON),
-        "service": dict(status.get("service", {})),
+        "service": service,
         "symbols": dict(snapshot.get("symbols", {})),
     }
 

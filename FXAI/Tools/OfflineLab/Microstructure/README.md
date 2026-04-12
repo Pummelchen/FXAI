@@ -72,6 +72,8 @@ python3 Tools/fxai_offline_lab.py microstructure-replay-report --symbol EURUSD -
 python3 Tools/fxai_offline_lab.py microstructure-health
 ```
 
+If the probe has been installed but not started from MT5 `Services`, the health output now reports the configured pair count and an explicit start hint instead of an empty disabled status.
+
 ## Key Outputs
 
 Per tradable FX symbol, the layer exposes:

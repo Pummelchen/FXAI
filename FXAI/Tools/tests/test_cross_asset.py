@@ -214,6 +214,65 @@ def test_cross_asset_cycle_builds_snapshot_and_runtime_exports():
             assert "symbol\tEURUSD\tEURUSD" in contracts.COMMON_CROSS_ASSET_SYMBOL_MAP.read_text(encoding="utf-8")
 
 
+def test_cross_asset_rates_only_fallback_keeps_runtime_live_when_probe_is_missing():
+    with tempfile.TemporaryDirectory(prefix="fxai_cross_asset_rates_only_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)):
+            import offline_lab.cross_asset_config as config_module
+
+            now = datetime(2026, 4, 11, 10, 0, tzinfo=timezone.utc)
+            _write_rates_snapshot(now)
+
+            config = load_config()
+            config["probe_required_for_live_gates"] = False
+            config_module.CROSS_ASSET_CONFIG_PATH.write_text(json.dumps(config, indent=2, sort_keys=True), encoding="utf-8")
+
+            saved_engine_now = engine.utc_now
+            saved_replay_now = replay.utc_now
+            engine.utc_now = lambda: now
+            replay.utc_now = lambda: now
+            try:
+                engine.run_cross_asset_cycle()
+            finally:
+                engine.utc_now = saved_engine_now
+                replay.utc_now = saved_replay_now
+
+            snapshot = json.loads(contracts.COMMON_CROSS_ASSET_JSON.read_text(encoding="utf-8"))
+            assert snapshot["quality_flags"]["partial_data"] is True
+            assert snapshot["quality_flags"]["data_stale"] is False
+            assert snapshot["quality_flags"]["rates_only_fallback"] is True
+            assert snapshot["source_status"]["context_service"]["stale"] is True
+            assert snapshot["pair_states"]["EURUSD"]["stale"] is False
+            assert "cross-asset state stale or incomplete" not in snapshot["pair_states"]["EURUSD"]["reasons"]
+
+
+def test_cross_asset_can_require_probe_for_live_gates():
+    with tempfile.TemporaryDirectory(prefix="fxai_cross_asset_probe_required_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)):
+            import offline_lab.cross_asset_config as config_module
+
+            now = datetime(2026, 4, 11, 10, 0, tzinfo=timezone.utc)
+            _write_rates_snapshot(now)
+
+            config = load_config()
+            config["probe_required_for_live_gates"] = True
+            config_module.CROSS_ASSET_CONFIG_PATH.write_text(json.dumps(config, indent=2, sort_keys=True), encoding="utf-8")
+
+            saved_engine_now = engine.utc_now
+            saved_replay_now = replay.utc_now
+            engine.utc_now = lambda: now
+            replay.utc_now = lambda: now
+            try:
+                engine.run_cross_asset_cycle()
+            finally:
+                engine.utc_now = saved_engine_now
+                replay.utc_now = saved_replay_now
+
+            snapshot = json.loads(contracts.COMMON_CROSS_ASSET_JSON.read_text(encoding="utf-8"))
+            assert snapshot["quality_flags"]["data_stale"] is True
+            assert snapshot["pair_states"]["EURUSD"]["stale"] is True
+            assert snapshot["pair_states"]["EURUSD"]["trade_gate"] == "BLOCK"
+
+
 def test_cross_asset_blocks_pairs_when_critical_sources_are_stale():
     with tempfile.TemporaryDirectory(prefix="fxai_cross_asset_stale_") as tmp_dir:
         with patched_paths(Path(tmp_dir)):

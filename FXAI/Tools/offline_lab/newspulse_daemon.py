@@ -108,12 +108,18 @@ def run_newspulse_daemon(iterations: int = 0, interval_seconds: int | None = Non
             consecutive_failures = 0
             finished_at = utc_now()
             degraded_reasons = []
-            if not bool(last_payload.get("calendar_ok", False)):
-                degraded_reasons.append("calendar_source_not_ready")
-            if not bool(last_payload.get("gdelt_ok", False)):
-                degraded_reasons.append("gdelt_source_not_ready")
-            if not bool(last_payload.get("official_ok", True)):
-                degraded_reasons.append("official_feed_not_ready")
+            source_status = dict(last_payload.get("source_status", {}))
+            source_reason_map = {
+                "calendar": "calendar_source_not_ready",
+                "gdelt": "gdelt_source_not_ready",
+                "official": "official_feed_not_ready",
+            }
+            for source_name, degraded_reason in source_reason_map.items():
+                status = dict(source_status.get(source_name, {}))
+                if not bool(status.get("required", False)):
+                    continue
+                if not bool(status.get("ok", False)) or bool(status.get("stale", True)):
+                    degraded_reasons.append(degraded_reason)
             _write_daemon_health(
                 {
                     "mode": "daemon",

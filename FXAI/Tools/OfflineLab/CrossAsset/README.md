@@ -35,6 +35,11 @@ Phase 1 is intentionally practical and auditable:
 - maps global state into pair-level `ALLOW | CAUTION | BLOCK` posture without changing canonical model inputs
 - degrades safely when rates or probe data are stale
 
+Default live-gate posture:
+- fresh Rates Engine state is the only hard live requirement by default
+- the MT5 context/probe rail is allowed to degrade into a rates-only fallback mode
+- partial probe coverage is still surfaced explicitly in health, reasons, and quality flags
+
 It does not claim to be a full global-macro research platform.
 
 ## What it scores
@@ -100,6 +105,8 @@ python3 Tools/fxai_offline_lab.py cross-asset-daemon --interval-seconds 120
 python3 Tools/fxai_offline_lab.py cross-asset-health
 python3 Tools/fxai_offline_lab.py cross-asset-replay-report --symbol EURUSD --hours-back 72
 ```
+
+If the MT5 probe is installed but not started yet, `cross-asset-health` now reports that explicitly as a configured-but-missing probe instead of an empty service payload. The engine can still publish a degraded shared state while the probe is unavailable unless `probe_required_for_live_gates` is set to `true` in `cross_asset_config.json`.
 
 ## Runtime use
 

@@ -216,6 +216,7 @@
   },
   "gdelt_stale_after_sec": 360,
   "history_recent_limit": 80,
+  "official_stale_after_sec": 360,
   "pairs": {
     "currencies": [
       "USD",
@@ -241,6 +242,11 @@
     "intensity_half_life_min": 12.0,
     "post_release_hot_minutes": 8,
     "stale_risk_score": 0.92
+  },
+  "source_requirements": {
+    "calendar": true,
+    "gdelt": false,
+    "official": false
   },
   "snapshot_stale_after_sec": 360,
   "topic_groups": {

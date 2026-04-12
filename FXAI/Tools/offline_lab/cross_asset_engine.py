@@ -135,6 +135,13 @@ def _source_status(ok: bool, stale: bool, **extra: Any) -> dict[str, Any]:
     return payload
 
 
+def _effective_critical_sources(config: dict[str, Any]) -> list[str]:
+    critical_sources = [str(item or "").strip() for item in list(config.get("critical_sources", []))]
+    if bool(config.get("probe_required_for_live_gates", False)):
+        return critical_sources
+    return [source_name for source_name in critical_sources if source_name != "context_service"]
+
+
 def _compute_raw_metrics(
     *,
     config: dict[str, Any],
@@ -413,9 +420,10 @@ def _build_pair_states(
     thresholds = dict(config.get("label_thresholds", {}))
     profiles = dict(config.get("currency_profiles", {}))
     weights = dict(config.get("pair_component_weights", {}))
+    effective_critical_sources = _effective_critical_sources(config)
     stale = any(
         bool(dict(source_status.get(source_name, {})).get("stale", True))
-        for source_name in list(config.get("critical_sources", []))
+        for source_name in effective_critical_sources
     )
     pairs: dict[str, dict[str, Any]] = {}
     for pair in list(dict(config.get("market_universe", {})).get("tradable_pairs", [])):
@@ -504,6 +512,7 @@ def _build_source_status(
         "context_service": _source_status(
             bool(probe_payload),
             probe_stale,
+            required_for_live_gates=bool(config.get("probe_required_for_live_gates", False)),
             last_update_at=isoformat_utc(probe_generated_at) if probe_generated_at else "",
             available_symbols=len(_symbol_records(probe_payload)),
             configured_symbols=len(list(config.get("market_universe", {}).get("indicator_symbols", []))),
@@ -623,9 +632,10 @@ def run_cross_asset_cycle(daemon_context: dict[str, Any] | None = None) -> dict[
     labels, global_reasons = _assign_labels(config=config, scores=scores)
 
     partial_data = any(not bool(spec.get("ok", False)) for name, spec in source_status.items() if name not in {"rates", "context_service"})
+    effective_critical_sources = _effective_critical_sources(config)
     stale = any(
         bool(dict(source_status.get(source_name, {})).get("stale", True))
-        for source_name in list(config.get("critical_sources", []))
+        for source_name in effective_critical_sources
     )
     reasons = list(dict.fromkeys(global_reasons + fallback_reasons))
     if partial_data:
@@ -673,6 +683,7 @@ def run_cross_asset_cycle(daemon_context: dict[str, Any] | None = None) -> dict[
             "fallback_proxy_used": any(bool(selection.get("fallback_used", False)) for selection in selected.values()),
             "partial_data": partial_data,
             "data_stale": stale,
+            "rates_only_fallback": bool(source_status.get("context_service", {}).get("stale", True)) and not bool(config.get("probe_required_for_live_gates", False)),
         },
     }
     status_payload = {
@@ -685,6 +696,7 @@ def run_cross_asset_cycle(daemon_context: dict[str, Any] | None = None) -> dict[
             "snapshot_stale_after_sec": int(config.get("snapshot_stale_after_sec", 900) or 900),
             "partial_data": partial_data,
             "data_stale": stale,
+            "critical_sources": effective_critical_sources,
         },
         "artifacts": {
             "snapshot_json": str(COMMON_CROSS_ASSET_JSON),
@@ -755,6 +767,16 @@ def cross_asset_health_snapshot() -> dict[str, Any]:
     runtime_status = json_load(COMMON_CROSS_ASSET_STATUS)
     local_status = json_load(CROSS_ASSET_STATUS_PATH)
     probe_status = json_load(COMMON_CROSS_ASSET_PROBE_STATUS)
+    config = load_config()
+    probe_service = dict(probe_status.get("service", {}))
+    if not probe_service:
+        probe_service = {
+            "ok": False,
+            "stale": True,
+            "enabled": bool(config.get("enabled", True)),
+            "configured_symbols": len(resolve_probe_symbols(config)),
+            "last_error": "cross-asset probe has not produced a snapshot yet",
+        }
     generated_at = (
         str(runtime_status.get("generated_at", "") or local_status.get("generated_at", "") or probe_status.get("generated_at", ""))
     )
@@ -767,7 +789,7 @@ def cross_asset_health_snapshot() -> dict[str, Any]:
         "probe_snapshot_path": str(COMMON_CROSS_ASSET_PROBE_JSON),
         "source_status": runtime_status.get("source_status", {}),
         "health": runtime_status.get("health", {}),
-        "probe": probe_status.get("service", {}),
+        "probe": probe_service,
     }
 
 

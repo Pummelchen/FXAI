@@ -32,6 +32,7 @@ from testlab.shared import METAEDITOR, TERMINAL_ROOT, WINE, read_utf16_or_text, 
 
 def _status_payload_from_runtime(now_dt=None) -> dict[str, Any]:
     now_dt = now_dt or utc_now()
+    config = load_config()
     runtime_snapshot = json_load(COMMON_MICROSTRUCTURE_JSON)
     runtime_status = json_load(COMMON_MICROSTRUCTURE_STATUS)
     generated_at = sanitize_utc_timestamp(
@@ -41,9 +42,16 @@ def _status_payload_from_runtime(now_dt=None) -> dict[str, Any]:
     if not runtime_status and not runtime_snapshot:
         return {
             "generated_at": isoformat_utc(now_dt),
-            "service": {"ok": False, "stale": True, "enabled": False, "last_error": "microstructure service has not produced a snapshot yet"},
+            "service": {
+                "ok": False,
+                "stale": True,
+                "enabled": bool(config.get("enabled", True)),
+                "collector_mode": str(config.get("collector_mode", "mt5_service")),
+                "configured_pairs": len(list(dict(config.get("symbol_universe", {})).get("canonical_pairs", []))),
+                "last_error": "microstructure service has not produced a snapshot yet; start FXAI_MicrostructureProbe in MT5 Services",
+            },
             "symbols": {},
-            "health": {"snapshot_stale_after_sec": int(load_config().get("snapshot_stale_after_sec", 45) or 45)},
+            "health": {"snapshot_stale_after_sec": int(config.get("snapshot_stale_after_sec", 45) or 45)},
             "artifacts": {
                 "snapshot_json": str(COMMON_MICROSTRUCTURE_JSON),
                 "service_config_tsv": str(COMMON_MICROSTRUCTURE_CONFIG),
@@ -57,6 +65,13 @@ def _status_payload_from_runtime(now_dt=None) -> dict[str, Any]:
     payload.setdefault("symbols", runtime_snapshot.get("symbols", {}))
     payload.setdefault("health", runtime_status.get("health", {}))
     payload.setdefault("service", runtime_status.get("service", runtime_snapshot.get("service", {})))
+    service = payload.get("service")
+    if not isinstance(service, dict):
+        service = {}
+        payload["service"] = service
+    service.setdefault("enabled", bool(config.get("enabled", True)))
+    service.setdefault("collector_mode", str(config.get("collector_mode", "mt5_service")))
+    service.setdefault("configured_pairs", len(list(dict(config.get("symbol_universe", {})).get("canonical_pairs", []))))
     payload["artifacts"] = {
         "snapshot_json": str(COMMON_MICROSTRUCTURE_JSON),
         "service_config_tsv": str(COMMON_MICROSTRUCTURE_CONFIG),

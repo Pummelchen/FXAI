@@ -128,6 +128,7 @@ Main config:
 Controls:
 - poll interval
 - calendar stale thresholds
+- source requirement policy
 - GDELT request timeout
 - max query sets per cycle
 - max per-cycle runtime budget
@@ -135,6 +136,13 @@ Controls:
 - calendar pre/post windows
 - risk thresholds
 - supported currencies and topic groups
+
+Default source requirement posture:
+- `calendar` is required
+- `gdelt` is advisory by default
+- `official` is advisory by default
+
+That means NewsPulse can keep the shared snapshot fresh for downstream consumers when official feeds are healthy but GDELT is rate-limited or exhausted. Scheduled calendar state still remains a required live gate.
 
 Source whitelist:
 

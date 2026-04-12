@@ -225,6 +225,7 @@
     "volatility": 0.18
   },
   "poll_interval_sec": 120,
+  "probe_required_for_live_gates": false,
   "probe_stale_after_sec": 300,
   "proxy_candidates": {
     "dollar_liquidity": [

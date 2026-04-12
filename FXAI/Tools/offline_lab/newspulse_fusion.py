@@ -586,6 +586,10 @@ def _source_status(config: dict[str, Any],
                    gdelt_meta: dict[str, Any],
                    official_meta: dict[str, Any],
                    now_dt: datetime) -> dict[str, Any]:
+    source_requirements = dict(config.get("source_requirements", {}))
+    calendar_required = bool(source_requirements.get("calendar", True))
+    gdelt_required = bool(source_requirements.get("gdelt", False))
+    official_required = bool(source_requirements.get("official", False))
     last_poll = sanitize_utc_timestamp(str(state.get("last_gdelt_poll_at", "")), now_dt=now_dt)
     last_success = sanitize_utc_timestamp(str(state.get("last_gdelt_success_at", "")), now_dt=now_dt)
     gdelt_stale_after_sec = int(config.get("gdelt_stale_after_sec", 360) or 360)
@@ -595,7 +599,7 @@ def _source_status(config: dict[str, Any],
 
     last_official_poll = sanitize_utc_timestamp(str(state.get("last_official_poll_at", "")), now_dt=now_dt)
     last_official_success = sanitize_utc_timestamp(str(state.get("last_official_success_at", "")), now_dt=now_dt)
-    official_stale_after_sec = int(config.get("gdelt_stale_after_sec", 360) or 360)
+    official_stale_after_sec = int(config.get("official_stale_after_sec", config.get("gdelt_stale_after_sec", 360)) or 360)
     official_stale = False
     official_enabled = int(official_meta.get("query_count", 0) or 0) > 0
     if official_enabled:
@@ -613,7 +617,7 @@ def _source_status(config: dict[str, Any],
             "ok": bool(calendar_status.get("ok", False)),
             "stale": calendar_stale,
             "enabled": True,
-            "required": True,
+            "required": calendar_required,
             "last_update_at": isoformat_utc(calendar_last) if calendar_last is not None else "",
             "last_update_trade_server": str(calendar_status.get("last_update_trade_server", "")),
             "time_basis": str(calendar_status.get("time_basis", "trade_server")),
@@ -624,7 +628,7 @@ def _source_status(config: dict[str, Any],
             "ok": gdelt_meta.get("success_count", 0) > 0 or (last_success is not None and not gdelt_stale),
             "stale": gdelt_stale,
             "enabled": True,
-            "required": True,
+            "required": gdelt_required,
             "last_poll_at": isoformat_utc(last_poll) if last_poll is not None else "",
             "last_success_at": isoformat_utc(last_success) if last_success is not None else "",
             "last_error": gdelt_meta["errors"][-1] if gdelt_meta.get("errors") else "",
@@ -636,7 +640,7 @@ def _source_status(config: dict[str, Any],
             "ok": (not official_enabled) or official_meta.get("success_count", 0) > 0 or (last_official_success is not None and not official_stale),
             "stale": official_stale,
             "enabled": official_enabled,
-            "required": False,
+            "required": official_enabled and official_required,
             "last_poll_at": isoformat_utc(last_official_poll) if last_official_poll is not None else "",
             "last_success_at": isoformat_utc(last_official_success) if last_official_success is not None else "",
             "last_error": official_meta["errors"][-1] if official_meta.get("errors") else "",
@@ -880,6 +884,7 @@ def run_newspulse_cycle(daemon_context: dict[str, Any] | None = None) -> dict[st
         "snapshot_path": str(COMMON_NEWSPULSE_JSON),
         "flat_path": str(COMMON_NEWSPULSE_FLAT),
         "history_path": str(NEWSPULSE_LOCAL_HISTORY_PATH),
+        "source_status": source_status,
         "query_count": int(gdelt_meta.get("query_count", 0) or 0),
         "official_query_count": int(official_meta.get("query_count", 0) or 0),
         "gdelt_errors": list(gdelt_meta.get("errors", [])),

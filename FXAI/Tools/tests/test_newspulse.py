@@ -297,7 +297,66 @@ def test_newspulse_stale_source_blocks_pairs():
 
             snapshot = json.loads(contracts.COMMON_NEWSPULSE_JSON.read_text(encoding="utf-8"))
             assert snapshot["pairs"]["EURUSD"]["trade_gate"] == "BLOCK"
-            assert snapshot["currencies"]["USD"]["stale"] is True
+
+
+def test_newspulse_optional_gdelt_keeps_required_sources_healthy():
+    with tempfile.TemporaryDirectory(prefix="fxai_newspulse_optional_gdelt_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)):
+            config, _sources = load_config()
+            config["source_requirements"]["gdelt"] = False
+            contracts.NEWSPULSE_CONFIG_PATH.write_text(json.dumps(config, indent=2, sort_keys=True), encoding="utf-8")
+
+            now_dt = datetime(2026, 4, 8, 9, 30, tzinfo=timezone.utc)
+            _write_calendar_fixture(now_dt)
+
+            def fake_query_gdelt(_config, _sources, _query_specs, _seen_at_iso):
+                return [], {"errors": ["gdelt timeout"], "query_count": 1, "success_count": 0, "throttled": False}
+
+            def fake_query_official_feeds(_config, _sources, seen_at_iso):
+                return (
+                    [
+                        {
+                            "id": "official-usd-1",
+                            "source": "official",
+                            "published_at": "2026-04-08T09:20:00Z",
+                            "seen_at": seen_at_iso,
+                            "currency_tags": ["USD"],
+                            "topic_tags": ["monetary_policy"],
+                            "domain": "federalreserve.gov",
+                            "title": "Federal Reserve releases policy statement",
+                            "url": "https://www.federalreserve.gov/example",
+                            "importance": "",
+                            "tone": -0.8,
+                            "tier_weight": 1.25,
+                            "topic_weight": 1.0,
+                            "title_signature": "federal reserve releases policy statement",
+                        }
+                    ],
+                    {"errors": [], "query_count": 1, "success_count": 1},
+                )
+
+            import offline_lab.newspulse_fusion as fusion
+
+            saved = {
+                "query_gdelt": fusion.query_gdelt,
+                "query_official_feeds": fusion.query_official_feeds,
+                "utc_now": fusion.utc_now,
+            }
+            fusion.query_gdelt = fake_query_gdelt
+            fusion.query_official_feeds = fake_query_official_feeds
+            fusion.utc_now = lambda: now_dt
+            try:
+                run_newspulse_cycle()
+            finally:
+                fusion.query_gdelt = saved["query_gdelt"]
+                fusion.query_official_feeds = saved["query_official_feeds"]
+                fusion.utc_now = saved["utc_now"]
+
+            status = json.loads(contracts.NEWSPULSE_STATUS_PATH.read_text(encoding="utf-8"))
+            assert status["source_status"]["gdelt"]["required"] is False
+            assert status["source_status"]["official"]["ok"] is True
+            assert status["health"]["required_sources_stale"] is False
+            assert status["currencies"]["USD"]["stale"] is False
 
 
 def test_newspulse_future_state_timestamps_are_sanitized():
