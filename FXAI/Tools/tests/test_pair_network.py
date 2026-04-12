@@ -55,6 +55,61 @@ def test_pair_network_validate_creates_default_files():
             assert "EURUSD" in config["market_universe"]["tradable_pairs"]
 
 
+def _read_tsv_pairs(path: Path) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        key, _, value = line.partition("\t")
+        if key:
+            out[key] = value
+    return out
+
+
+def test_pair_network_validate_preserves_built_status():
+    with tempfile.TemporaryDirectory(prefix="fxai_pair_network_validate_preserve_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)) as paths:
+            bootstrap_environment(paths["default_db"], init_db=True)
+            conn = connect_db(paths["default_db"])
+            try:
+                build_pair_network_artifacts(conn, profile_name="continuous")
+            finally:
+                close_db(conn)
+
+            before = _read_tsv_pairs(contracts.PAIR_NETWORK_RUNTIME_STATUS_PATH)
+            assert before["graph_mode"] in {"STRUCTURAL_ONLY", "STRUCTURAL_PLUS_EMPIRICAL"}
+
+            payload = validate_pair_network_config()
+            after = _read_tsv_pairs(contracts.PAIR_NETWORK_RUNTIME_STATUS_PATH)
+
+            assert payload["ok"] is True
+            assert after["graph_mode"] == before["graph_mode"]
+            assert after["edge_count"] == before["edge_count"]
+            assert after["generated_at"] == before["generated_at"]
+
+
+def test_pair_network_validate_preserves_runtime_status_without_local_json():
+    with tempfile.TemporaryDirectory(prefix="fxai_pair_network_validate_runtime_only_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)) as paths:
+            bootstrap_environment(paths["default_db"], init_db=True)
+            conn = connect_db(paths["default_db"])
+            try:
+                build_pair_network_artifacts(conn, profile_name="continuous")
+            finally:
+                close_db(conn)
+
+            before = _read_tsv_pairs(contracts.PAIR_NETWORK_RUNTIME_STATUS_PATH)
+            contracts.PAIR_NETWORK_STATUS_PATH.unlink()
+
+            payload = validate_pair_network_config()
+            after = _read_tsv_pairs(contracts.PAIR_NETWORK_RUNTIME_STATUS_PATH)
+
+            assert payload["ok"] is True
+            assert after["graph_mode"] == before["graph_mode"]
+            assert after["edge_count"] == before["edge_count"]
+            assert after["generated_at"] == before["generated_at"]
+
+
 def test_pair_network_exposure_decomposition_and_factor_mapping():
     config = load_config()
     profiles = config["currency_profiles"]

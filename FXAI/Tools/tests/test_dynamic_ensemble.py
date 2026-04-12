@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from offline_lab.dynamic_ensemble_config import load_config
@@ -9,6 +10,10 @@ import offline_lab.dynamic_ensemble_contracts as contracts
 from offline_lab.dynamic_ensemble_replay import build_dynamic_ensemble_replay_report
 from offline_lab.environment import bootstrap_environment
 from offline_lab.fixtures import patched_paths
+
+
+def _iso_hours_ago(hours_ago: float) -> str:
+    return (datetime.now(timezone.utc) - timedelta(hours=hours_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def test_dynamic_ensemble_validate_exports_runtime_config():
@@ -36,7 +41,7 @@ def test_dynamic_ensemble_replay_report_summarizes_runtime_history():
                         json.dumps(
                             {
                                 "schema_version": 1,
-                                "generated_at": "2026-04-10T01:00:00Z",
+                                "generated_at": _iso_hours_ago(2.0),
                                 "symbol": "EURUSD",
                                 "ensemble": {
                                     "trade_posture": "NORMAL",
@@ -54,7 +59,7 @@ def test_dynamic_ensemble_replay_report_summarizes_runtime_history():
                         json.dumps(
                             {
                                 "schema_version": 1,
-                                "generated_at": "2026-04-10T01:30:00Z",
+                                "generated_at": _iso_hours_ago(1.5),
                                 "symbol": "EURUSD",
                                 "ensemble": {
                                     "trade_posture": "CAUTION",

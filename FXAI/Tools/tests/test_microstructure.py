@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from offline_lab.fixtures import patched_paths
@@ -19,6 +19,10 @@ from offline_lab.microstructure_reference import (
 from offline_lab.microstructure_replay import build_microstructure_replay_report
 from offline_lab.microstructure_service import microstructure_health_snapshot, validate_microstructure_config
 import offline_lab.microstructure_contracts as contracts
+
+
+def _iso_hours_ago(hours_ago: float) -> str:
+    return (datetime.now(timezone.utc) - timedelta(hours=hours_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def test_microstructure_validate_creates_default_files_and_required_windows():
@@ -141,7 +145,7 @@ def test_microstructure_replay_report_summarizes_history():
         with patched_paths(Path(tmp_dir)):
             history_records = [
                 {
-                    "generated_at": "2026-04-09T09:30:00Z",
+                    "generated_at": _iso_hours_ago(2.0),
                     "symbol": "EURUSD",
                     "state": {
                         "microstructure_regime": "NORMAL",
@@ -152,7 +156,7 @@ def test_microstructure_replay_report_summarizes_history():
                     },
                 },
                 {
-                    "generated_at": "2026-04-09T09:33:00Z",
+                    "generated_at": _iso_hours_ago(1.95),
                     "symbol": "EURUSD",
                     "state": {
                         "microstructure_regime": "STOP_RUN_RISK",

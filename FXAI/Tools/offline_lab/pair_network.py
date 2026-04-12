@@ -592,11 +592,8 @@ def _status_payload(*, report: dict[str, Any], config: dict[str, Any]) -> dict[s
     }
 
 
-def validate_pair_network_config() -> dict[str, Any]:
-    ensure_pair_network_dirs()
-    config = load_config()
-    export_runtime_config(config)
-    status = {
+def _default_unbuilt_status(config: dict[str, Any]) -> dict[str, Any]:
+    return {
         "ok": True,
         "generated_at": "",
         "graph_mode": "UNBUILT",
@@ -608,14 +605,55 @@ def validate_pair_network_config() -> dict[str, Any]:
         "graph_stale": True,
         "action_mode": config.get("action_mode", "AUTO_APPLY"),
     }
-    export_runtime_status(status)
-    json_dump(PAIR_NETWORK_STATUS_PATH, status)
+
+
+def _load_runtime_status_tsv(path: Path) -> dict[str, Any]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return {}
+    payload: dict[str, Any] = {}
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        key, sep, value = line.partition("\t")
+        if not sep or not key:
+            continue
+        payload[key] = value
+    return payload
+
+
+def validate_pair_network_config() -> dict[str, Any]:
+    ensure_pair_network_dirs()
+    config = load_config()
+    export_runtime_config(config)
+    runtime_status = _load_runtime_status_tsv(PAIR_NETWORK_RUNTIME_STATUS_PATH)
+    local_status = json_load(PAIR_NETWORK_STATUS_PATH)
+    status = runtime_status if runtime_status else local_status
+    if not status:
+        status = _default_unbuilt_status(config)
+        export_runtime_status(status)
+        json_dump(PAIR_NETWORK_STATUS_PATH, status)
+    else:
+        status = dict(status)
+        status.setdefault("ok", True)
+        status.setdefault("action_mode", config.get("action_mode", "AUTO_APPLY"))
+        status.setdefault("config_path", str(Path(PAIR_NETWORK_CONFIG_PATH).resolve()))
+        status.setdefault("runtime_config_path", str(PAIR_NETWORK_RUNTIME_CONFIG_PATH))
+        status.setdefault("runtime_status_path", str(PAIR_NETWORK_RUNTIME_STATUS_PATH))
+        status.setdefault("report_path", str(PAIR_NETWORK_REPORT_PATH))
+        if not runtime_status:
+            export_runtime_status(status)
+        if not local_status:
+            json_dump(PAIR_NETWORK_STATUS_PATH, status)
     return {
         "ok": True,
         "config_path": str(PAIR_NETWORK_CONFIG_PATH),
         "runtime_config_path": str(PAIR_NETWORK_RUNTIME_CONFIG_PATH),
         "runtime_status_path": str(PAIR_NETWORK_RUNTIME_STATUS_PATH),
         "config": config,
+        "status": status,
     }
 
 

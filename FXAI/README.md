@@ -6,10 +6,11 @@ This directory is the MT5 project subtree that gets synchronized into:
 
 It is kept self-describing so the live MT5 tree can be inspected without opening the full git repo root.
 
-If you are approaching FXAI as an operator rather than as a framework engineer, start with the role-based quick start in the wiki:
-- `Quick Start By Role`
-- then `Getting Started`
-- then the subsystem page you actually need first, such as `Audit Lab`, `Offline Lab`, `NewsPulse`, or `GUI`
+If you are approaching FXAI as an operator rather than as a framework engineer, start with the versioned handbook in `Wiki/`:
+- [`Home`](Wiki/Home.md)
+- [`Quick Start By Role`](Wiki/Quick%20Start%20By%20Role.md)
+- [`Getting Started`](Wiki/Getting%20Started.md)
+- then the subsystem page you actually need first, such as [`Audit Lab`](Wiki/Audit%20Lab.md), [`Offline Lab`](Wiki/Offline%20Lab.md), [`NewsPulse`](Wiki/NewsPulse.md), [`Runtime Control Plane`](Wiki/Runtime%20Control%20Plane.md), or [`GUI`](Wiki/GUI.md)
 
 ## Main Entry Points
 
@@ -53,6 +54,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Pair-Network / Factor Graph + Portfolio Conflict Resolver docs, config, graph reports, and runtime decision history for portfolio-level exposure coordination and conflict resolution.
 - `GUI/`
   Optional macOS 26 SwiftUI operator app for role-based dashboards, plugin-zoo browsing, report exploration, run builders for Audit/Offline/backtest workflows, runtime inspection, promotion review, Research OS control, advanced Metal-backed visual analysis, saved workspace views, onboarding, incident recovery, detached startup, soft reconnect, terminal-first command guidance, and the shared FXAI operator theme system.
+- `Wiki/`
+  Versioned operator handbook with role-based quick starts, getting-started flows, subsystem guides, and scenario-driven examples.
 
 ## Key Runtime Areas
 

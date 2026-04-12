@@ -17,6 +17,10 @@ from offline_lab.newspulse_story import build_story_clusters
 from offline_lab.fixtures import patched_paths
 
 
+def _iso_hours_ago(hours_ago: float) -> str:
+    return (datetime.now(timezone.utc) - timedelta(hours=hours_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _write_calendar_fixture(now: datetime) -> None:
     contracts.COMMON_NEWSPULSE_CALENDAR_STATE.write_text(
         "\n".join(
@@ -527,7 +531,7 @@ def test_newspulse_replay_report_rebuilds_from_history():
                             {
                                 "record_type": "snapshot",
                                 "snapshot": {
-                                    "generated_at": "2026-04-08T09:30:00Z",
+                                    "generated_at": _iso_hours_ago(4.0),
                                     "pairs": {
                                         "EURUSD": {
                                             "trade_gate": "CAUTION",

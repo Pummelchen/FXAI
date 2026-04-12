@@ -200,10 +200,10 @@ input bool   RatesEngineEnabled = true;
 // Models: all (rates / term-structure / policy-path overlay).
 // Purpose: enables the shared rates engine runtime gate driven by policy repricing, divergence, and rates-risk state.
 // Importance/Range: false/true; true is recommended once the rates engine daemon is running.
-input bool   RatesEngineBlockOnUnknown = false;
+input bool   RatesEngineBlockOnUnknown = true;
 // Models: all (rates / term-structure / policy-path overlay).
 // Purpose: blocks new entries when the shared rates snapshot is missing or stale instead of treating unknown as neutral.
-// Importance/Range: false/true; false is safer for phase-1 rollout because proxy mode is optional.
+// Importance/Range: false/true; true is the safer live default when the rates overlay is enabled.
 input int    RatesEngineFreshnessMaxSec = 900;
 // Models: all (rates / term-structure / policy-path overlay).
 // Purpose: maximum allowed age of the shared rates snapshot before it is treated as stale.
@@ -220,10 +220,10 @@ input bool   CrossAssetEnabled = true;
 // Models: all (shared cross-asset macro/liquidity overlay).
 // Purpose: enables the shared cross-asset engine that summarizes global macro, risk-off, volatility, commodity, and USD-liquidity stress for runtime gating.
 // Importance/Range: false/true; true is recommended once the cross-asset probe service and engine are running.
-input bool   CrossAssetBlockOnUnknown = false;
+input bool   CrossAssetBlockOnUnknown = true;
 // Models: all (shared cross-asset macro/liquidity overlay).
 // Purpose: blocks new entries when the shared cross-asset snapshot is missing or stale instead of treating unknown as neutral.
-// Importance/Range: false/true; false is the safer phase-1 rollout default.
+// Importance/Range: false/true; true is the safer live default when the shared macro/liquidity overlay is enabled.
 input int    CrossAssetFreshnessMaxSec = 900;
 // Models: all (shared cross-asset macro/liquidity overlay).
 // Purpose: maximum allowed age of the shared cross-asset snapshot before it is treated as stale.
@@ -240,10 +240,10 @@ input bool   MicrostructureEnabled = true;
 // Models: all (execution microstructure / order-flow proxy overlay).
 // Purpose: enables the shared MT5-side microstructure proxy layer for short-horizon liquidity, burst, and hostile-execution gating.
 // Importance/Range: false/true; true is recommended once the microstructure service is running.
-input bool   MicrostructureBlockOnUnknown = false;
+input bool   MicrostructureBlockOnUnknown = true;
 // Models: all (execution microstructure / order-flow proxy overlay).
 // Purpose: blocks new entries when the shared microstructure snapshot is missing or stale instead of treating unknown as cautionary.
-// Importance/Range: false/true; false is the safer phase-1 rollout default.
+// Importance/Range: false/true; true is the safer live default when the microstructure overlay is enabled.
 input int    MicrostructureFreshnessMaxSec = 45;
 // Models: all (execution microstructure / order-flow proxy overlay).
 // Purpose: maximum allowed age of the shared microstructure snapshot before it is treated as stale.
