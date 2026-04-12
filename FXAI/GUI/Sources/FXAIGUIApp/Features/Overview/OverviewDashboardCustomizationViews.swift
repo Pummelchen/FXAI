@@ -163,7 +163,6 @@ struct OverviewDashboardSectionView: View {
 
 struct OverviewDashboardWidgetContainer: View {
     @EnvironmentObject private var model: FXAIGUIModel
-    @State private var dragTranslation: CGSize = .zero
 
     let sectionID: UUID
     let widget: OverviewDashboardWidgetLayout
@@ -173,140 +172,33 @@ struct OverviewDashboardWidgetContainer: View {
     let content: AnyView
 
     var body: some View {
-        let card = ZStack(alignment: .topTrailing) {
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-
-            if customizationEnabled {
-                customizationOverlay
-                    .padding(10)
-            }
-        }
-        .frame(width: placement.frame.width, height: placement.frame.height)
-        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-
-        let positioned = card
-            .position(x: placement.frame.midX, y: placement.frame.midY)
-            .offset(x: dragTranslation.width, y: dragTranslation.height)
-
-        positioned
-    }
-
-    private var customizationOverlay: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            HStack(spacing: 8) {
-                labelChip
-                Spacer(minLength: 8)
-                movementPad
-            }
-
-            HStack(spacing: 8) {
-                resizeGroup(
-                    title: "W",
-                    decrease: { model.resizeOverviewWidget(sectionID: sectionID, widgetID: widget.id, widthDelta: -1) },
-                    increase: { model.resizeOverviewWidget(sectionID: sectionID, widgetID: widget.id, widthDelta: 1) }
-                )
-                resizeGroup(
-                    title: "H",
-                    decrease: { model.resizeOverviewWidget(sectionID: sectionID, widgetID: widget.id, heightDelta: -1) },
-                    increase: { model.resizeOverviewWidget(sectionID: sectionID, widgetID: widget.id, heightDelta: 1) }
-                )
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var labelChip: some View {
-        let chip = HStack(spacing: 8) {
-            Image(systemName: "hand.draw")
-            Text(widget.kind.title)
-                .lineLimit(1)
-            Text("C\(placement.columnIndex + 1) R\(placement.rowIndex + 1)")
-                .foregroundStyle(FXAITheme.textMuted)
-            Text("\(placement.widthUnits)×\(placement.heightUnits)")
-                .foregroundStyle(FXAITheme.textMuted)
-        }
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(FXAITheme.textPrimary)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(FXAIGlassCapsuleBackground(style: .badge, tint: FXAITheme.accentSoft.opacity(0.12)))
-
-        if customizationEnabled {
-            chip
-                .gesture(widgetMoveGesture)
-                .help("Drag to move this widget on the 1 cm grid")
-        } else {
-            chip
-        }
-    }
-
-    private var movementPad: some View {
-        VStack(spacing: 6) {
-            controlButton(systemName: "arrow.up") {
-                model.moveOverviewWidgetOnGrid(sectionID: sectionID, widgetID: widget.id, rowDelta: -1)
-            }
-
-            HStack(spacing: 6) {
-                controlButton(systemName: "arrow.left") {
-                    model.moveOverviewWidgetOnGrid(sectionID: sectionID, widgetID: widget.id, columnDelta: -1)
-                }
-                controlButton(systemName: "arrow.down") {
-                    model.moveOverviewWidgetOnGrid(sectionID: sectionID, widgetID: widget.id, rowDelta: 1)
-                }
-                controlButton(systemName: "arrow.right") {
-                    model.moveOverviewWidgetOnGrid(sectionID: sectionID, widgetID: widget.id, columnDelta: 1)
-                }
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(FXAIGlassCapsuleBackground(style: .badge, tint: FXAITheme.accent.opacity(0.10)))
-    }
-
-    private func resizeGroup(title: String, decrease: @escaping () -> Void, increase: @escaping () -> Void) -> some View {
-        HStack(spacing: 6) {
-            Text(title)
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(FXAITheme.textSecondary)
-            controlButton(systemName: "minus", action: decrease)
-            controlButton(systemName: "plus", action: increase)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(FXAIGlassCapsuleBackground(style: .badge, tint: FXAITheme.accent.opacity(0.08)))
-    }
-
-    private func controlButton(systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(FXAITheme.textPrimary)
-                .frame(width: 24, height: 24)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var widgetMoveGesture: some Gesture {
-        DragGesture(minimumDistance: 3)
-            .onChanged { value in
-                dragTranslation = value.translation
-            }
-            .onEnded { value in
-                defer { dragTranslation = .zero }
-
-                let snapStep = max(gridStepPoints, 1)
-                let columnDelta = Int((value.translation.width / snapStep).rounded())
-                let rowDelta = Int((value.translation.height / snapStep).rounded())
-                guard columnDelta != 0 || rowDelta != 0 else { return }
-
+        let spec = OverviewDashboardLayoutState.spec(for: widget.kind)
+        DashboardGridSurfaceContainer(
+            title: widget.kind.title,
+            placement: DashboardGridSurfacePlacement(placement),
+            gridStepPoints: gridStepPoints,
+            minimumWidthUnits: spec.minimumWidthUnits,
+            maximumWidthUnits: spec.maximumWidthUnits,
+            minimumHeightUnits: spec.minimumHeightUnits,
+            maximumHeightUnits: spec.maximumHeightUnits,
+            customizationEnabled: customizationEnabled,
+            onMove: { columnDelta, rowDelta in
                 model.moveOverviewWidgetOnGrid(
                     sectionID: sectionID,
                     widgetID: widget.id,
                     columnDelta: columnDelta,
                     rowDelta: rowDelta
                 )
-            }
+            },
+            onResize: { widthDelta, heightDelta in
+                model.resizeOverviewWidget(
+                    sectionID: sectionID,
+                    widgetID: widget.id,
+                    widthDelta: widthDelta,
+                    heightDelta: heightDelta
+                )
+            },
+            content: content
+        )
     }
 }

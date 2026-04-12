@@ -90,7 +90,8 @@ extension FXAIGUIModel {
                 researchAuditDraft: model.researchAuditDraft,
                 researchVectorDraft: model.researchVectorDraft,
                 researchRecoveryDraft: model.researchRecoveryDraft,
-                overviewLayout: model.overviewLayout
+                overviewLayout: model.overviewLayout,
+                roleWorkspaceLayouts: model.roleWorkspaceLayouts
             )
         ]
         model.completedOnboardingRoles = [.liveTrader]

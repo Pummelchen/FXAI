@@ -23,7 +23,7 @@ FXAI GUI is the optional operator shell for users who want faster inspection, gu
 ## What The GUI Is For
 
 - first-class role workspaces that open the correct default operator surface for each user type
-- overview dashboards
+- overview dashboards and role dashboards with draggable, resizable panels
 - runtime monitoring
 - role-based workspaces
 - Audit Lab, Backtest, and Offline Lab builders
@@ -33,9 +33,8 @@ FXAI GUI is the optional operator shell for users who want faster inspection, gu
 ## How To Launch It
 
 ```bash
-cd /Users/andreborchert/FXAI-main2/FXAI/GUI
-swift test
-swift run FXAIGUI
+cd /path/to/FXAI/GUI
+./start.sh
 ```
 
 ## How To Use It By Role
@@ -48,6 +47,7 @@ Use it for:
 - health checks
 - current runtime posture
 - fast reading of why a pair is blocked or cautioned
+- rearranging the dashboard so the panels you trust most stay in the top band for repeat reviews
 
 ### Demo Trader
 
@@ -56,6 +56,7 @@ Open `Demo Overview`.
 Use it for:
 - observing session changes
 - comparing runtime posture against expected audit behavior
+- saving a demo-specific dashboard layout that keeps scenarios and quick screens visible during study
 
 ### Backtester
 
@@ -73,6 +74,7 @@ Use it for:
 - browsing plugin zoo and reports
 - comparing promotion and lineage artifacts
 - moving between research outputs and command recipes quickly
+- dragging and resizing the workspace panels so commands, scenarios, and quick screens match your research flow
 
 ### System Architect
 
@@ -82,6 +84,7 @@ Use it for:
 - operator dashboard inspection
 - research OS and branch health
 - incident recovery guidance
+- keeping incidents, commands, and quick screens in a layout tuned for governance work
 
 ## Example Case Scenarios
 
@@ -105,6 +108,14 @@ What to do:
 1. Open Platform Control or Incident Center.
 2. Identify which artifact or service is missing.
 3. Run the recommended rebuild or recovery command from the GUI or terminal.
+
+### Scenario: An operator wants a permanent custom dashboard
+
+What to do:
+1. Open `Overview`, `Live Overview`, `Demo Overview`, `Research Workspace`, or `Platform Control`.
+2. Click `Customize`.
+3. Drag panels by the handle chip, resize them with the corner handle or size controls, and let the GUI auto-save the layout.
+4. Use `Reset Layout` if you need to return that dashboard to the shipped arrangement.
 
 ## When To Prefer The Terminal
 

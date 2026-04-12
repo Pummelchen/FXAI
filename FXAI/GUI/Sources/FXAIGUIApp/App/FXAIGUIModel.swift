@@ -41,6 +41,7 @@ final class FXAIGUIModel: ObservableObject {
     @Published var selectedVisualizationSymbol = ""
     @Published var selectedIncidentID: String?
     @Published var overviewLayout = OverviewDashboardLayoutState.default()
+    @Published var roleWorkspaceLayouts = RoleWorkspaceDashboardLayouts.default()
     @Published var pluginSearchText = ""
     @Published var selectedPluginFamily = "All"
     @Published var reportCategoryFilter = "All"
@@ -426,6 +427,7 @@ final class FXAIGUIModel: ObservableObject {
             self.selectedResearchSymbol = savedView.selectedResearchSymbol
             self.selectedVisualizationSymbol = savedView.selectedVisualizationSymbol
             self.overviewLayout = savedView.overviewLayout.normalized()
+            self.roleWorkspaceLayouts = savedView.roleWorkspaceLayouts.normalized()
             self.pluginSearchText = savedView.pluginSearchText
             self.selectedPluginFamily = savedView.selectedPluginFamily
             self.reportCategoryFilter = savedView.reportCategoryFilter
@@ -467,6 +469,20 @@ final class FXAIGUIModel: ObservableObject {
 
     func resetOverviewLayout() {
         overviewLayout = .default()
+    }
+
+    func roleWorkspaceLayout(for role: WorkspaceRole) -> RoleWorkspaceDashboardLayoutState {
+        guard let kind = RoleWorkspaceDashboardKind(role: role) else {
+            return .default(for: .liveOverview)
+        }
+        return roleWorkspaceLayouts.layout(for: kind)
+    }
+
+    func resetRoleWorkspaceLayout(for role: WorkspaceRole) {
+        guard let kind = RoleWorkspaceDashboardKind(role: role) else { return }
+        updateRoleWorkspaceLayout(for: kind) { layout in
+            layout = .default(for: kind)
+        }
     }
 
     func moveOverviewSection(_ sectionID: UUID, by delta: Int) {
@@ -553,6 +569,30 @@ final class FXAIGUIModel: ObservableObject {
             widget.widthUnits = min(max(widget.widthUnits + widthDelta, spec.minimumWidthUnits), spec.maximumWidthUnits)
             widget.heightUnits = min(max(widget.heightUnits + heightDelta, spec.minimumHeightUnits), spec.maximumHeightUnits)
             layout.sections[sectionIndex].widgets[widgetIndex] = widget
+        }
+    }
+
+    func moveRoleWorkspacePanelOnGrid(role: WorkspaceRole, panelID: UUID, columnDelta: Int = 0, rowDelta: Int = 0) {
+        guard let kind = RoleWorkspaceDashboardKind(role: role) else { return }
+        updateRoleWorkspaceLayout(for: kind) { layout in
+            guard let panelIndex = layout.panels.firstIndex(where: { $0.id == panelID }) else { return }
+
+            var panel = layout.panels.remove(at: panelIndex)
+            panel.columnUnits = max(0, panel.columnUnits + columnDelta)
+            panel.rowUnits = max(0, panel.rowUnits + rowDelta)
+            layout.panels.insert(panel, at: 0)
+        }
+    }
+
+    func resizeRoleWorkspacePanel(role: WorkspaceRole, panelID: UUID, widthDelta: Int = 0, heightDelta: Int = 0) {
+        guard let kind = RoleWorkspaceDashboardKind(role: role) else { return }
+        updateRoleWorkspaceLayout(for: kind) { layout in
+            guard let panelIndex = layout.panels.firstIndex(where: { $0.id == panelID }) else { return }
+            var panel = layout.panels[panelIndex]
+            let spec = RoleWorkspaceDashboardLayoutState.spec(for: panel.kind)
+            panel.widthUnits = min(max(panel.widthUnits + widthDelta, spec.minimumWidthUnits), spec.maximumWidthUnits)
+            panel.heightUnits = min(max(panel.heightUnits + heightDelta, spec.minimumHeightUnits), spec.maximumHeightUnits)
+            layout.panels[panelIndex] = panel
         }
     }
 
@@ -882,6 +922,7 @@ final class FXAIGUIModel: ObservableObject {
             $selectedResearchSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedVisualizationSymbol.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $overviewLayout.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $roleWorkspaceLayouts.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $pluginSearchText.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $selectedPluginFamily.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             $reportCategoryFilter.dropFirst().map { _ in () }.eraseToAnyPublisher(),
@@ -1038,6 +1079,7 @@ final class FXAIGUIModel: ObservableObject {
             selectedResearchSymbol = workspace.selectedResearchSymbol
             selectedVisualizationSymbol = workspace.selectedVisualizationSymbol
             overviewLayout = workspace.overviewLayout.normalized()
+            roleWorkspaceLayouts = workspace.roleWorkspaceLayouts.normalized()
             pluginSearchText = workspace.pluginSearchText
             selectedPluginFamily = workspace.selectedPluginFamily
             reportCategoryFilter = workspace.reportCategoryFilter
@@ -1107,7 +1149,8 @@ final class FXAIGUIModel: ObservableObject {
             researchAuditDraft: researchAuditDraft,
             researchVectorDraft: researchVectorDraft,
             researchRecoveryDraft: researchRecoveryDraft,
-            overviewLayout: overviewLayout.normalized()
+            overviewLayout: overviewLayout.normalized(),
+            roleWorkspaceLayouts: roleWorkspaceLayouts.normalized()
         )
     }
 
@@ -1115,5 +1158,16 @@ final class FXAIGUIModel: ObservableObject {
         var updated = overviewLayout
         mutate(&updated)
         overviewLayout = updated.normalized()
+    }
+
+    private func updateRoleWorkspaceLayout(
+        for kind: RoleWorkspaceDashboardKind,
+        _ mutate: (inout RoleWorkspaceDashboardLayoutState) -> Void
+    ) {
+        var layouts = roleWorkspaceLayouts
+        var updated = layouts.layout(for: kind)
+        mutate(&updated)
+        layouts.setLayout(updated.normalized(), for: kind)
+        roleWorkspaceLayouts = layouts.normalized()
     }
 }

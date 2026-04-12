@@ -35,6 +35,7 @@ Phase 1 through Phase 6 are implemented here:
 - incident detection with generated recovery playbooks
 - detached startup with explicit connect/disconnect handling and soft auto reconnect every 10 seconds
 - customizable overview dashboard with draggable categories, movable widgets, 1 cm grid-based resizing, automatic layout persistence, and reset-to-default controls
+- customizable role workspaces with draggable and resizable panels, automatic layout persistence per dashboard, and per-workspace reset controls
 - automatic resource guards that back off glass, Metal, blur, and background polling under memory, thermal, or inactive-app pressure
 - release packaging support for a polished macOS app bundle
 
@@ -70,10 +71,8 @@ The phased implementation reference is stored in:
 ## Build
 
 ```bash
-cd /Users/andreborchert/FXAI-main2/FXAI/GUI
-swift test
-swift build
-swift run FXAIGUI
+cd /path/to/FXAI/GUI
+./start.sh
 ./Tools/package_gui_release.sh
 ```
 

@@ -31,6 +31,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
     public var researchVectorDraft: ResearchOSVectorDraft
     public var researchRecoveryDraft: ResearchOSRecoveryDraft
     public var overviewLayout: OverviewDashboardLayoutState
+    public var roleWorkspaceLayouts: RoleWorkspaceDashboardLayouts
 
     public init(
         id: UUID = UUID(),
@@ -62,7 +63,8 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         researchAuditDraft: ResearchOSAuditDraft,
         researchVectorDraft: ResearchOSVectorDraft,
         researchRecoveryDraft: ResearchOSRecoveryDraft,
-        overviewLayout: OverviewDashboardLayoutState = .default()
+        overviewLayout: OverviewDashboardLayoutState = .default(),
+        roleWorkspaceLayouts: RoleWorkspaceDashboardLayouts = .default()
     ) {
         self.id = id
         self.name = name
@@ -94,6 +96,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         self.researchVectorDraft = researchVectorDraft
         self.researchRecoveryDraft = researchRecoveryDraft
         self.overviewLayout = overviewLayout
+        self.roleWorkspaceLayouts = roleWorkspaceLayouts
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -127,6 +130,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         case researchVectorDraft
         case researchRecoveryDraft
         case overviewLayout
+        case roleWorkspaceLayouts
     }
 
     public init(from decoder: Decoder) throws {
@@ -161,6 +165,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         researchVectorDraft = try container.decodeIfPresent(ResearchOSVectorDraft.self, forKey: .researchVectorDraft) ?? ResearchOSVectorDraft()
         researchRecoveryDraft = try container.decodeIfPresent(ResearchOSRecoveryDraft.self, forKey: .researchRecoveryDraft) ?? ResearchOSRecoveryDraft()
         overviewLayout = try container.decodeIfPresent(OverviewDashboardLayoutState.self, forKey: .overviewLayout)?.normalized() ?? .default()
+        roleWorkspaceLayouts = try container.decodeIfPresent(RoleWorkspaceDashboardLayouts.self, forKey: .roleWorkspaceLayouts)?.normalized() ?? .default()
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -195,6 +200,7 @@ public struct SavedWorkspaceView: Identifiable, Codable, Hashable, Sendable {
         try container.encode(researchVectorDraft, forKey: .researchVectorDraft)
         try container.encode(researchRecoveryDraft, forKey: .researchRecoveryDraft)
         try container.encode(overviewLayout.normalized(), forKey: .overviewLayout)
+        try container.encode(roleWorkspaceLayouts.normalized(), forKey: .roleWorkspaceLayouts)
     }
 
     public var titleSummary: String {
