@@ -7,6 +7,7 @@ import Testing
 @MainActor
 struct GUIOperatorSnapshotTests {
     private let destinations: [SidebarDestination] = [
+        .overview,
         .liveOverview,
         .demoOverview,
         .researchWorkspace,

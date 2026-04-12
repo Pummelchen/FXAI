@@ -265,27 +265,33 @@ struct OverviewDashboardView: View {
                     .font(.headline)
                     .foregroundStyle(FXAITheme.textPrimary)
 
-                ForEach(snapshot.recentArtifacts.prefix(8)) { artifact in
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(artifact.name)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(FXAITheme.textPrimary)
+                ScrollView(.vertical, showsIndicators: true) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(snapshot.recentArtifacts.prefix(8)) { artifact in
+                            HStack(alignment: .top) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(artifact.name)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(FXAITheme.textPrimary)
 
-                            Text(artifact.category)
-                                .font(.caption)
-                                .foregroundStyle(FXAITheme.textMuted)
+                                    Text(artifact.category)
+                                        .font(.caption)
+                                        .foregroundStyle(FXAITheme.textMuted)
+                                }
+                                Spacer()
+                                Text(FXAIFormatting.byteCountString(for: artifact.sizeBytes))
+                                    .font(.caption)
+                                    .foregroundStyle(FXAITheme.textSecondary)
+                            }
+                            .padding(.vertical, 4)
                         }
-                        Spacer()
-                        Text(FXAIFormatting.byteCountString(for: artifact.sizeBytes))
-                            .font(.caption)
-                            .foregroundStyle(FXAITheme.textSecondary)
                     }
-                    .padding(.vertical, 4)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func runtimeProfiles(snapshot: FXAIProjectSnapshot) -> some View {
@@ -300,28 +306,34 @@ struct OverviewDashboardView: View {
                         .font(.subheadline)
                         .foregroundStyle(FXAITheme.textSecondary)
                 } else {
-                    ForEach(snapshot.runtimeProfiles.prefix(8)) { profile in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(profile.symbol)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(FXAITheme.textPrimary)
-                                Spacer()
-                                Text(profile.runtimeMode)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(FXAITheme.accent)
-                            }
+                    ScrollView(.vertical, showsIndicators: true) {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(snapshot.runtimeProfiles.prefix(8)) { profile in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text(profile.symbol)
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(FXAITheme.textPrimary)
+                                        Spacer()
+                                        Text(profile.runtimeMode)
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(FXAITheme.accent)
+                                    }
 
-                            Text("\(profile.pluginName) • \(profile.promotionTier)")
-                                .font(.caption)
-                                .foregroundStyle(FXAITheme.textSecondary)
+                                    Text("\(profile.pluginName) • \(profile.promotionTier)")
+                                        .font(.caption)
+                                        .foregroundStyle(FXAITheme.textSecondary)
+                                }
+                                .padding(.vertical, 4)
+                            }
                         }
-                        .padding(.vertical, 4)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func onboardingPrompt(guide: RoleOnboardingGuide) -> some View {

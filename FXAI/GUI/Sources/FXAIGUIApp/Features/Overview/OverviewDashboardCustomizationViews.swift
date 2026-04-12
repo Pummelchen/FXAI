@@ -175,6 +175,7 @@ struct OverviewDashboardWidgetContainer: View {
     var body: some View {
         let card = ZStack(alignment: .topTrailing) {
             content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             if customizationEnabled {
                 customizationOverlay
@@ -183,6 +184,7 @@ struct OverviewDashboardWidgetContainer: View {
         }
         .frame(width: placement.frame.width, height: placement.frame.height)
         .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
 
         let positioned = card
             .position(x: placement.frame.midX, y: placement.frame.midY)
