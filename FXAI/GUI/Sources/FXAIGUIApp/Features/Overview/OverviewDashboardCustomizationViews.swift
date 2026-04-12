@@ -54,6 +54,7 @@ struct OverviewDashboardSectionView: View {
                                 sectionID: section.id,
                                 widget: widget,
                                 placement: placement,
+                                gridStepPoints: plan.unitPoints + plan.gapPoints,
                                 customizationEnabled: customizationEnabled,
                                 content: contentProvider(widget)
                             )
@@ -67,16 +68,6 @@ struct OverviewDashboardSectionView: View {
         .dropDestination(for: OverviewSectionDragPayload.self) { items, _ in
             guard customizationEnabled, let payload = items.first else { return false }
             model.reorderOverviewSection(draggedSectionID: payload.sectionID, before: section.id)
-            return true
-        }
-        .dropDestination(for: OverviewWidgetDragPayload.self) { items, _ in
-            guard customizationEnabled, let payload = items.first else { return false }
-            model.reorderOverviewWidget(
-                draggedWidgetID: payload.widgetID,
-                from: payload.sectionID,
-                to: section.id,
-                before: nil
-            )
             return true
         }
     }
@@ -172,10 +163,12 @@ struct OverviewDashboardSectionView: View {
 
 struct OverviewDashboardWidgetContainer: View {
     @EnvironmentObject private var model: FXAIGUIModel
+    @State private var dragTranslation: CGSize = .zero
 
     let sectionID: UUID
     let widget: OverviewDashboardWidgetLayout
     let placement: OverviewDashboardGridPlacement
+    let gridStepPoints: CGFloat
     let customizationEnabled: Bool
     let content: AnyView
 
@@ -190,24 +183,12 @@ struct OverviewDashboardWidgetContainer: View {
         }
         .frame(width: placement.frame.width, height: placement.frame.height)
         .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .dropDestination(for: OverviewWidgetDragPayload.self) { items, _ in
-            guard customizationEnabled, let payload = items.first else { return false }
-            model.reorderOverviewWidget(
-                draggedWidgetID: payload.widgetID,
-                from: payload.sectionID,
-                to: sectionID,
-                before: widget.id
-            )
-            return true
-        }
 
-        let positioned = card.position(x: placement.frame.midX, y: placement.frame.midY)
+        let positioned = card
+            .position(x: placement.frame.midX, y: placement.frame.midY)
+            .offset(x: dragTranslation.width, y: dragTranslation.height)
 
-        if customizationEnabled {
-            positioned.draggable(OverviewWidgetDragPayload(sectionID: sectionID, widgetID: widget.id))
-        } else {
-            positioned
-        }
+        positioned
     }
 
     private var customizationOverlay: some View {
@@ -215,12 +196,7 @@ struct OverviewDashboardWidgetContainer: View {
             HStack(spacing: 8) {
                 labelChip
                 Spacer(minLength: 8)
-                controlButton(systemName: "arrow.up") {
-                    model.moveOverviewWidget(sectionID: sectionID, widgetID: widget.id, by: -1)
-                }
-                controlButton(systemName: "arrow.down") {
-                    model.moveOverviewWidget(sectionID: sectionID, widgetID: widget.id, by: 1)
-                }
+                movementPad
             }
 
             HStack(spacing: 8) {
@@ -238,11 +214,14 @@ struct OverviewDashboardWidgetContainer: View {
         }
     }
 
+    @ViewBuilder
     private var labelChip: some View {
-        HStack(spacing: 8) {
+        let chip = HStack(spacing: 8) {
             Image(systemName: "hand.draw")
             Text(widget.kind.title)
                 .lineLimit(1)
+            Text("C\(placement.columnIndex + 1) R\(placement.rowIndex + 1)")
+                .foregroundStyle(FXAITheme.textMuted)
             Text("\(placement.widthUnits)×\(placement.heightUnits)")
                 .foregroundStyle(FXAITheme.textMuted)
         }
@@ -251,6 +230,37 @@ struct OverviewDashboardWidgetContainer: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .background(FXAIGlassCapsuleBackground(style: .badge, tint: FXAITheme.accentSoft.opacity(0.12)))
+
+        if customizationEnabled {
+            chip
+                .gesture(widgetMoveGesture)
+                .help("Drag to move this widget on the 1 cm grid")
+        } else {
+            chip
+        }
+    }
+
+    private var movementPad: some View {
+        VStack(spacing: 6) {
+            controlButton(systemName: "arrow.up") {
+                model.moveOverviewWidgetOnGrid(sectionID: sectionID, widgetID: widget.id, rowDelta: -1)
+            }
+
+            HStack(spacing: 6) {
+                controlButton(systemName: "arrow.left") {
+                    model.moveOverviewWidgetOnGrid(sectionID: sectionID, widgetID: widget.id, columnDelta: -1)
+                }
+                controlButton(systemName: "arrow.down") {
+                    model.moveOverviewWidgetOnGrid(sectionID: sectionID, widgetID: widget.id, rowDelta: 1)
+                }
+                controlButton(systemName: "arrow.right") {
+                    model.moveOverviewWidgetOnGrid(sectionID: sectionID, widgetID: widget.id, columnDelta: 1)
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(FXAIGlassCapsuleBackground(style: .badge, tint: FXAITheme.accent.opacity(0.10)))
     }
 
     private func resizeGroup(title: String, decrease: @escaping () -> Void, increase: @escaping () -> Void) -> some View {
@@ -274,5 +284,27 @@ struct OverviewDashboardWidgetContainer: View {
                 .frame(width: 24, height: 24)
         }
         .buttonStyle(.plain)
+    }
+
+    private var widgetMoveGesture: some Gesture {
+        DragGesture(minimumDistance: 3)
+            .onChanged { value in
+                dragTranslation = value.translation
+            }
+            .onEnded { value in
+                defer { dragTranslation = .zero }
+
+                let snapStep = max(gridStepPoints, 1)
+                let columnDelta = Int((value.translation.width / snapStep).rounded())
+                let rowDelta = Int((value.translation.height / snapStep).rounded())
+                guard columnDelta != 0 || rowDelta != 0 else { return }
+
+                model.moveOverviewWidgetOnGrid(
+                    sectionID: sectionID,
+                    widgetID: widget.id,
+                    columnDelta: columnDelta,
+                    rowDelta: rowDelta
+                )
+            }
     }
 }

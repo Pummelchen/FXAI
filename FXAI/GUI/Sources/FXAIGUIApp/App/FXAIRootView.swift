@@ -96,12 +96,11 @@ struct FXAIRootView: View {
     }
 
     private var sidebar: some View {
-        List(selection: $model.selection) {
+        List {
             ForEach(sidebarSections, id: \.title) { section in
                 Section(section.title) {
                     ForEach(section.destinations) { destination in
-                        sidebarLabel(for: destination)
-                            .tag(Optional(destination))
+                        sidebarDestinationRow(for: destination)
                     }
                 }
             }
@@ -161,6 +160,8 @@ struct FXAIRootView: View {
                 .padding(.vertical, 6)
             }
         }
+        .listStyle(.sidebar)
+        .navigationTitle("")
         .scrollContentBackground(.hidden)
         .background(
             FXAIGlassRoundedBackground(cornerRadius: 24, style: .sidebar, tint: FXAITheme.accentSoft.opacity(0.10))
@@ -241,6 +242,7 @@ struct FXAIRootView: View {
     private func sidebarLabel(for destination: SidebarDestination) -> some View {
         HStack {
             Label(destination.title, systemImage: destination.symbolName)
+                .foregroundStyle(model.selection == destination ? FXAITheme.textPrimary : FXAITheme.textSecondary)
             if destination == .incidents, let incidentSnapshot = model.incidentSnapshot, !incidentSnapshot.incidents.isEmpty {
                 Spacer()
                 Text("\(incidentSnapshot.incidents.count)")
@@ -254,6 +256,23 @@ struct FXAIRootView: View {
                     )
             }
         }
+    }
+
+    private func sidebarDestinationRow(for destination: SidebarDestination) -> some View {
+        Button {
+            model.navigate(to: destination)
+        } label: {
+            sidebarLabel(for: destination)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(model.selection == destination ? FXAITheme.accent.opacity(0.18) : Color.clear)
+                .padding(.vertical, 2)
+        )
     }
 
     private var connectionColor: Color {

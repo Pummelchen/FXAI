@@ -68,11 +68,11 @@ struct OverviewDashboardView: View {
             Text("Dynamic Dashboard")
                 .font(.headline)
                 .foregroundStyle(FXAITheme.textPrimary)
-            Text("Resize widgets on a 1 cm grid, drag categories or widgets to reorder them, and the GUI saves every change automatically.")
+            Text("Move and resize widgets on a 1 cm snap grid, drag the handle chip to reposition them, and the GUI saves every change automatically.")
                 .font(.subheadline)
                 .foregroundStyle(FXAITheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Grid unit: \(Int(model.overviewLayout.gridUnitPoints.rounded())) pt minimum • Sidebar stays pinned • Reset restores the shipped layout")
+            Text("Grid unit: 1 cm snap (\(Int(model.overviewLayout.gridUnitPoints.rounded())) pt base) • Sidebar stays pinned • Reset restores the shipped layout")
                 .font(.caption)
                 .foregroundStyle(FXAITheme.textMuted)
         }

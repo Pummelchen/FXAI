@@ -504,6 +504,18 @@ final class FXAIGUIModel: ObservableObject {
         }
     }
 
+    func moveOverviewWidgetOnGrid(sectionID: UUID, widgetID: UUID, columnDelta: Int = 0, rowDelta: Int = 0) {
+        updateOverviewLayout { layout in
+            guard let sectionIndex = layout.sections.firstIndex(where: { $0.id == sectionID }) else { return }
+            guard let widgetIndex = layout.sections[sectionIndex].widgets.firstIndex(where: { $0.id == widgetID }) else { return }
+
+            var widget = layout.sections[sectionIndex].widgets.remove(at: widgetIndex)
+            widget.columnUnits = max(0, widget.columnUnits + columnDelta)
+            widget.rowUnits = max(0, widget.rowUnits + rowDelta)
+            layout.sections[sectionIndex].widgets.insert(widget, at: 0)
+        }
+    }
+
     func reorderOverviewWidget(
         draggedWidgetID: UUID,
         from sourceSectionID: UUID,

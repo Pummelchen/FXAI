@@ -95,6 +95,8 @@ public struct OverviewDashboardWidgetSpec: Hashable, Sendable {
     public let maximumHeightUnits: Int
     public let defaultWidthUnits: Int
     public let defaultHeightUnits: Int
+    public let defaultColumnUnits: Int
+    public let defaultRowUnits: Int
     public let priority: Int
 
     public init(
@@ -106,6 +108,8 @@ public struct OverviewDashboardWidgetSpec: Hashable, Sendable {
         maximumHeightUnits: Int,
         defaultWidthUnits: Int,
         defaultHeightUnits: Int,
+        defaultColumnUnits: Int,
+        defaultRowUnits: Int,
         priority: Int
     ) {
         self.kind = kind
@@ -116,6 +120,8 @@ public struct OverviewDashboardWidgetSpec: Hashable, Sendable {
         self.maximumHeightUnits = maximumHeightUnits
         self.defaultWidthUnits = defaultWidthUnits
         self.defaultHeightUnits = defaultHeightUnits
+        self.defaultColumnUnits = defaultColumnUnits
+        self.defaultRowUnits = defaultRowUnits
         self.priority = priority
     }
 }
@@ -125,17 +131,32 @@ public struct OverviewDashboardWidgetLayout: Identifiable, Codable, Hashable, Se
     public var kind: OverviewDashboardWidgetKind
     public var widthUnits: Int
     public var heightUnits: Int
+    public var columnUnits: Int
+    public var rowUnits: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case kind
+        case widthUnits
+        case heightUnits
+        case columnUnits
+        case rowUnits
+    }
 
     public init(
         id: UUID = UUID(),
         kind: OverviewDashboardWidgetKind,
         widthUnits: Int,
-        heightUnits: Int
+        heightUnits: Int,
+        columnUnits: Int = 0,
+        rowUnits: Int = 0
     ) {
         self.id = id
         self.kind = kind
         self.widthUnits = widthUnits
         self.heightUnits = heightUnits
+        self.columnUnits = max(0, columnUnits)
+        self.rowUnits = max(0, rowUnits)
     }
 
     public init(kind: OverviewDashboardWidgetKind) {
@@ -143,18 +164,50 @@ public struct OverviewDashboardWidgetLayout: Identifiable, Codable, Hashable, Se
         self.init(
             kind: kind,
             widthUnits: spec.defaultWidthUnits,
-            heightUnits: spec.defaultHeightUnits
+            heightUnits: spec.defaultHeightUnits,
+            columnUnits: spec.defaultColumnUnits,
+            rowUnits: spec.defaultRowUnits
         )
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        kind = try container.decode(OverviewDashboardWidgetKind.self, forKey: .kind)
+        widthUnits = try container.decodeIfPresent(Int.self, forKey: .widthUnits) ?? OverviewDashboardLayoutState.spec(for: kind).defaultWidthUnits
+        heightUnits = try container.decodeIfPresent(Int.self, forKey: .heightUnits) ?? OverviewDashboardLayoutState.spec(for: kind).defaultHeightUnits
+        columnUnits = max(0, try container.decodeIfPresent(Int.self, forKey: .columnUnits) ?? OverviewDashboardLayoutState.spec(for: kind).defaultColumnUnits)
+        rowUnits = max(0, try container.decodeIfPresent(Int.self, forKey: .rowUnits) ?? OverviewDashboardLayoutState.spec(for: kind).defaultRowUnits)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(widthUnits, forKey: .widthUnits)
+        try container.encode(heightUnits, forKey: .heightUnits)
+        try container.encode(columnUnits, forKey: .columnUnits)
+        try container.encode(rowUnits, forKey: .rowUnits)
     }
 
     public func clamped(for availableColumns: Int? = nil) -> OverviewDashboardWidgetLayout {
         let spec = OverviewDashboardLayoutState.spec(for: kind)
         let maximumWidth = min(spec.maximumWidthUnits, max(spec.minimumWidthUnits, availableColumns ?? spec.maximumWidthUnits))
+        let clampedWidth = min(max(widthUnits, spec.minimumWidthUnits), maximumWidth)
+        let clampedHeight = min(max(heightUnits, spec.minimumHeightUnits), spec.maximumHeightUnits)
+        let clampedColumn: Int
+        if let availableColumns {
+            clampedColumn = min(max(0, columnUnits), max(0, availableColumns - clampedWidth))
+        } else {
+            clampedColumn = max(0, columnUnits)
+        }
         return OverviewDashboardWidgetLayout(
             id: id,
             kind: kind,
-            widthUnits: min(max(widthUnits, spec.minimumWidthUnits), maximumWidth),
-            heightUnits: min(max(heightUnits, spec.minimumHeightUnits), spec.maximumHeightUnits)
+            widthUnits: clampedWidth,
+            heightUnits: clampedHeight,
+            columnUnits: clampedColumn,
+            rowUnits: max(0, rowUnits)
         )
     }
 }
@@ -180,10 +233,10 @@ public struct OverviewDashboardLayoutState: Codable, Hashable, Sendable {
     public var sections: [OverviewDashboardSectionLayout]
 
     public init(
-        gridUnitPoints: Double = 40,
+        gridUnitPoints: Double = 72.0 / 2.54,
         sections: [OverviewDashboardSectionLayout] = []
     ) {
-        self.gridUnitPoints = max(40, gridUnitPoints)
+        self.gridUnitPoints = max(72.0 / 2.54, gridUnitPoints)
         self.sections = Self.normalizedSections(from: sections.isEmpty ? Self.defaultSections() : sections)
     }
 
@@ -196,7 +249,7 @@ public struct OverviewDashboardLayoutState: Codable, Hashable, Sendable {
     }
 
     public func normalized() -> OverviewDashboardLayoutState {
-        OverviewDashboardLayoutState(gridUnitPoints: max(40, gridUnitPoints), sections: Self.normalizedSections(from: sections))
+        OverviewDashboardLayoutState(gridUnitPoints: max(72.0 / 2.54, gridUnitPoints), sections: Self.normalizedSections(from: sections))
     }
 
     private static func defaultSections() -> [OverviewDashboardSectionLayout] {
@@ -278,17 +331,17 @@ public struct OverviewDashboardLayoutState: Codable, Hashable, Sendable {
     }
 
     private static let specs: [OverviewDashboardWidgetKind: OverviewDashboardWidgetSpec] = [
-        .heroSummary: OverviewDashboardWidgetSpec(kind: .heroSummary, defaultSection: .hero, minimumWidthUnits: 6, maximumWidthUnits: 12, minimumHeightUnits: 4, maximumHeightUnits: 7, defaultWidthUnits: 12, defaultHeightUnits: 5, priority: 100),
-        .buildTargetsMetric: OverviewDashboardWidgetSpec(kind: .buildTargetsMetric, defaultSection: .metrics, minimumWidthUnits: 2, maximumWidthUnits: 6, minimumHeightUnits: 2, maximumHeightUnits: 4, defaultWidthUnits: 3, defaultHeightUnits: 3, priority: 92),
-        .pluginsMetric: OverviewDashboardWidgetSpec(kind: .pluginsMetric, defaultSection: .metrics, minimumWidthUnits: 2, maximumWidthUnits: 6, minimumHeightUnits: 2, maximumHeightUnits: 4, defaultWidthUnits: 3, defaultHeightUnits: 3, priority: 90),
-        .artifactsMetric: OverviewDashboardWidgetSpec(kind: .artifactsMetric, defaultSection: .metrics, minimumWidthUnits: 2, maximumWidthUnits: 6, minimumHeightUnits: 2, maximumHeightUnits: 4, defaultWidthUnits: 3, defaultHeightUnits: 3, priority: 89),
-        .runtimeProfilesMetric: OverviewDashboardWidgetSpec(kind: .runtimeProfilesMetric, defaultSection: .metrics, minimumWidthUnits: 2, maximumWidthUnits: 6, minimumHeightUnits: 2, maximumHeightUnits: 4, defaultWidthUnits: 3, defaultHeightUnits: 3, priority: 88),
-        .incidentsMetric: OverviewDashboardWidgetSpec(kind: .incidentsMetric, defaultSection: .metrics, minimumWidthUnits: 2, maximumWidthUnits: 6, minimumHeightUnits: 2, maximumHeightUnits: 4, defaultWidthUnits: 3, defaultHeightUnits: 3, priority: 87),
-        .savedViewsMetric: OverviewDashboardWidgetSpec(kind: .savedViewsMetric, defaultSection: .metrics, minimumWidthUnits: 2, maximumWidthUnits: 6, minimumHeightUnits: 2, maximumHeightUnits: 4, defaultWidthUnits: 3, defaultHeightUnits: 3, priority: 86),
-        .pluginChart: OverviewDashboardWidgetSpec(kind: .pluginChart, defaultSection: .analytics, minimumWidthUnits: 4, maximumWidthUnits: 12, minimumHeightUnits: 4, maximumHeightUnits: 8, defaultWidthUnits: 6, defaultHeightUnits: 5, priority: 82),
-        .reportChart: OverviewDashboardWidgetSpec(kind: .reportChart, defaultSection: .analytics, minimumWidthUnits: 4, maximumWidthUnits: 12, minimumHeightUnits: 4, maximumHeightUnits: 8, defaultWidthUnits: 6, defaultHeightUnits: 5, priority: 81),
-        .recentArtifacts: OverviewDashboardWidgetSpec(kind: .recentArtifacts, defaultSection: .operations, minimumWidthUnits: 4, maximumWidthUnits: 12, minimumHeightUnits: 4, maximumHeightUnits: 9, defaultWidthUnits: 6, defaultHeightUnits: 6, priority: 76),
-        .deploymentProfiles: OverviewDashboardWidgetSpec(kind: .deploymentProfiles, defaultSection: .operations, minimumWidthUnits: 4, maximumWidthUnits: 12, minimumHeightUnits: 4, maximumHeightUnits: 9, defaultWidthUnits: 6, defaultHeightUnits: 6, priority: 75),
-        .onboardingPrompt: OverviewDashboardWidgetSpec(kind: .onboardingPrompt, defaultSection: .guidance, minimumWidthUnits: 4, maximumWidthUnits: 12, minimumHeightUnits: 3, maximumHeightUnits: 6, defaultWidthUnits: 12, defaultHeightUnits: 3, priority: 70)
+        .heroSummary: OverviewDashboardWidgetSpec(kind: .heroSummary, defaultSection: .hero, minimumWidthUnits: 6, maximumWidthUnits: 12, minimumHeightUnits: 4, maximumHeightUnits: 7, defaultWidthUnits: 12, defaultHeightUnits: 5, defaultColumnUnits: 0, defaultRowUnits: 0, priority: 100),
+        .buildTargetsMetric: OverviewDashboardWidgetSpec(kind: .buildTargetsMetric, defaultSection: .metrics, minimumWidthUnits: 2, maximumWidthUnits: 6, minimumHeightUnits: 2, maximumHeightUnits: 4, defaultWidthUnits: 3, defaultHeightUnits: 3, defaultColumnUnits: 0, defaultRowUnits: 0, priority: 92),
+        .pluginsMetric: OverviewDashboardWidgetSpec(kind: .pluginsMetric, defaultSection: .metrics, minimumWidthUnits: 2, maximumWidthUnits: 6, minimumHeightUnits: 2, maximumHeightUnits: 4, defaultWidthUnits: 3, defaultHeightUnits: 3, defaultColumnUnits: 3, defaultRowUnits: 0, priority: 90),
+        .artifactsMetric: OverviewDashboardWidgetSpec(kind: .artifactsMetric, defaultSection: .metrics, minimumWidthUnits: 2, maximumWidthUnits: 6, minimumHeightUnits: 2, maximumHeightUnits: 4, defaultWidthUnits: 3, defaultHeightUnits: 3, defaultColumnUnits: 6, defaultRowUnits: 0, priority: 89),
+        .runtimeProfilesMetric: OverviewDashboardWidgetSpec(kind: .runtimeProfilesMetric, defaultSection: .metrics, minimumWidthUnits: 2, maximumWidthUnits: 6, minimumHeightUnits: 2, maximumHeightUnits: 4, defaultWidthUnits: 3, defaultHeightUnits: 3, defaultColumnUnits: 9, defaultRowUnits: 0, priority: 88),
+        .incidentsMetric: OverviewDashboardWidgetSpec(kind: .incidentsMetric, defaultSection: .metrics, minimumWidthUnits: 2, maximumWidthUnits: 6, minimumHeightUnits: 2, maximumHeightUnits: 4, defaultWidthUnits: 3, defaultHeightUnits: 3, defaultColumnUnits: 0, defaultRowUnits: 3, priority: 87),
+        .savedViewsMetric: OverviewDashboardWidgetSpec(kind: .savedViewsMetric, defaultSection: .metrics, minimumWidthUnits: 2, maximumWidthUnits: 6, minimumHeightUnits: 2, maximumHeightUnits: 4, defaultWidthUnits: 3, defaultHeightUnits: 3, defaultColumnUnits: 3, defaultRowUnits: 3, priority: 86),
+        .pluginChart: OverviewDashboardWidgetSpec(kind: .pluginChart, defaultSection: .analytics, minimumWidthUnits: 4, maximumWidthUnits: 12, minimumHeightUnits: 4, maximumHeightUnits: 8, defaultWidthUnits: 6, defaultHeightUnits: 5, defaultColumnUnits: 0, defaultRowUnits: 0, priority: 82),
+        .reportChart: OverviewDashboardWidgetSpec(kind: .reportChart, defaultSection: .analytics, minimumWidthUnits: 4, maximumWidthUnits: 12, minimumHeightUnits: 4, maximumHeightUnits: 8, defaultWidthUnits: 6, defaultHeightUnits: 5, defaultColumnUnits: 6, defaultRowUnits: 0, priority: 81),
+        .recentArtifacts: OverviewDashboardWidgetSpec(kind: .recentArtifacts, defaultSection: .operations, minimumWidthUnits: 4, maximumWidthUnits: 12, minimumHeightUnits: 4, maximumHeightUnits: 9, defaultWidthUnits: 6, defaultHeightUnits: 6, defaultColumnUnits: 0, defaultRowUnits: 0, priority: 76),
+        .deploymentProfiles: OverviewDashboardWidgetSpec(kind: .deploymentProfiles, defaultSection: .operations, minimumWidthUnits: 4, maximumWidthUnits: 12, minimumHeightUnits: 4, maximumHeightUnits: 9, defaultWidthUnits: 6, defaultHeightUnits: 6, defaultColumnUnits: 6, defaultRowUnits: 0, priority: 75),
+        .onboardingPrompt: OverviewDashboardWidgetSpec(kind: .onboardingPrompt, defaultSection: .guidance, minimumWidthUnits: 4, maximumWidthUnits: 12, minimumHeightUnits: 3, maximumHeightUnits: 6, defaultWidthUnits: 12, defaultHeightUnits: 3, defaultColumnUnits: 0, defaultRowUnits: 0, priority: 70)
     ]
 }

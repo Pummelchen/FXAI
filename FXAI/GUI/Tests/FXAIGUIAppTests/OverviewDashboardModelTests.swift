@@ -16,6 +16,14 @@ struct OverviewDashboardModelTests {
         let resizedWidget = try #require(resizedSection.widgets.first(where: { $0.id == widget.id }))
         #expect(resizedWidget.widthUnits >= widget.widthUnits)
         #expect(resizedWidget.heightUnits >= widget.heightUnits)
+        #expect(resizedWidget.columnUnits == widget.columnUnits)
+        #expect(resizedWidget.rowUnits == widget.rowUnits)
+
+        model.moveOverviewWidgetOnGrid(sectionID: section.id, widgetID: widget.id, columnDelta: 1, rowDelta: 1)
+        let movedSection = try #require(model.overviewLayout.sections.first(where: { $0.id == section.id }))
+        let movedWidget = try #require(movedSection.widgets.first(where: { $0.id == widget.id }))
+        #expect(movedWidget.columnUnits == widget.columnUnits + 1)
+        #expect(movedWidget.rowUnits == widget.rowUnits + 1)
 
         model.moveOverviewWidget(sectionID: section.id, widgetID: widget.id, by: 1)
         let reorderedSection = try #require(model.overviewLayout.sections.first(where: { $0.id == section.id }))
@@ -34,6 +42,14 @@ struct OverviewDashboardModelTests {
         #expect(
             model.overviewLayout.sections.map { $0.widgets.map(\.heightUnits) } ==
             baseline.sections.map { $0.widgets.map(\.heightUnits) }
+        )
+        #expect(
+            model.overviewLayout.sections.map { $0.widgets.map(\.columnUnits) } ==
+            baseline.sections.map { $0.widgets.map(\.columnUnits) }
+        )
+        #expect(
+            model.overviewLayout.sections.map { $0.widgets.map(\.rowUnits) } ==
+            baseline.sections.map { $0.widgets.map(\.rowUnits) }
         )
     }
 }

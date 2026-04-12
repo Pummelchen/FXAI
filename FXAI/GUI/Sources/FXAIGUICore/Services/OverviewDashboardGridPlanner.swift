@@ -6,6 +6,8 @@ public struct OverviewDashboardGridPlacement: Identifiable, Hashable, Sendable {
     public let widgetID: UUID
     public let widgetKind: OverviewDashboardWidgetKind
     public let frame: CGRect
+    public let columnIndex: Int
+    public let rowIndex: Int
     public let widthUnits: Int
     public let heightUnits: Int
 
@@ -13,6 +15,8 @@ public struct OverviewDashboardGridPlacement: Identifiable, Hashable, Sendable {
         widgetID: UUID,
         widgetKind: OverviewDashboardWidgetKind,
         frame: CGRect,
+        columnIndex: Int,
+        rowIndex: Int,
         widthUnits: Int,
         heightUnits: Int
     ) {
@@ -20,6 +24,8 @@ public struct OverviewDashboardGridPlacement: Identifiable, Hashable, Sendable {
         self.widgetID = widgetID
         self.widgetKind = widgetKind
         self.frame = frame
+        self.columnIndex = columnIndex
+        self.rowIndex = rowIndex
         self.widthUnits = widthUnits
         self.heightUnits = heightUnits
     }
@@ -48,9 +54,9 @@ public struct OverviewDashboardGridPlan: Hashable, Sendable {
 }
 
 public enum OverviewDashboardGridPlanner {
-    public static let minimumGridUnitPoints: CGFloat = 40
-    public static let preferredGridUnitPoints: CGFloat = 58
-    public static let maximumGridUnitPoints: CGFloat = 84
+    public static let minimumGridUnitPoints: CGFloat = 72.0 / 2.54
+    public static let preferredGridUnitPoints: CGFloat = 36
+    public static let maximumGridUnitPoints: CGFloat = 56
     public static let gridGapPoints: CGFloat = 12
 
     public static func plan(
@@ -72,7 +78,13 @@ public enum OverviewDashboardGridPlanner {
             let widthUnits = min(max(widget.widthUnits, spec.minimumWidthUnits), min(spec.maximumWidthUnits, columnCount))
             let heightUnits = min(max(widget.heightUnits, spec.minimumHeightUnits), spec.maximumHeightUnits)
 
-            let slot = firstAvailableSlot(
+            let slot = preferredAvailableSlot(
+                occupancy: &occupancy,
+                columns: columnCount,
+                widget: widget,
+                widthUnits: widthUnits,
+                heightUnits: heightUnits
+            ) ?? firstAvailableSlot(
                 occupancy: &occupancy,
                 columns: columnCount,
                 widthUnits: widthUnits,
@@ -97,6 +109,8 @@ public enum OverviewDashboardGridPlanner {
                     widgetID: widget.id,
                     widgetKind: widget.kind,
                     frame: CGRect(x: x, y: y, width: width, height: height),
+                    columnIndex: slot.column,
+                    rowIndex: slot.row,
                     widthUnits: widthUnits,
                     heightUnits: heightUnits
                 )
@@ -160,6 +174,28 @@ public enum OverviewDashboardGridPlanner {
             }
             row += 1
         }
+    }
+
+    private static func preferredAvailableSlot(
+        occupancy: inout [[Bool]],
+        columns: Int,
+        widget: OverviewDashboardWidgetLayout,
+        widthUnits: Int,
+        heightUnits: Int
+    ) -> (row: Int, column: Int)? {
+        let preferredRow = max(0, widget.rowUnits)
+        let preferredColumn = min(max(0, widget.columnUnits), max(0, columns - widthUnits))
+        ensureRows(&occupancy, count: preferredRow + heightUnits, columns: columns)
+        guard isAreaFree(
+            occupancy: occupancy,
+            row: preferredRow,
+            column: preferredColumn,
+            widthUnits: widthUnits,
+            heightUnits: heightUnits
+        ) else {
+            return nil
+        }
+        return (preferredRow, preferredColumn)
     }
 
     private static func ensureRows(_ occupancy: inout [[Bool]], count: Int, columns: Int) {
