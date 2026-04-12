@@ -33,38 +33,39 @@ public final class GUIResourceMonitor: ObservableObject {
 
     private func bindLifecycleNotifications() {
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.isApplicationActive = true
-                self?.recomputeProfile()
+                self?.handleApplicationActivityChange(isActive: true)
             }
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.isApplicationActive = false
-                self?.recomputeProfile()
+                self?.handleApplicationActivityChange(isActive: false)
             }
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: NSApplication.didHideNotification)
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.isApplicationActive = false
-                self?.recomputeProfile()
+                self?.handleApplicationActivityChange(isActive: false)
             }
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: NSApplication.didUnhideNotification)
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.isApplicationActive = NSApp?.isActive ?? true
-                self?.recomputeProfile()
+                self?.handleApplicationActivityChange(isActive: NSApp?.isActive ?? true)
             }
             .store(in: &cancellables)
     }
 
     private func bindProcessNotifications() {
         NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.recomputeProfile()
+                self?.handleThermalStateDidChange()
             }
             .store(in: &cancellables)
     }
@@ -72,18 +73,29 @@ public final class GUIResourceMonitor: ObservableObject {
     private func bindMemoryPressureNotifications() {
         let source = DispatchSource.makeMemoryPressureSource(
             eventMask: [.normal, .warning, .critical],
-            queue: DispatchQueue.global(qos: .utility)
+            queue: DispatchQueue.main
         )
         source.setEventHandler { [weak self, weak source] in
             guard let source else { return }
             let level = Self.mapMemoryPressure(source.data)
-            Task { @MainActor [weak self] in
-                self?.memoryPressureLevel = level
-                self?.recomputeProfile()
-            }
+            self?.handleMemoryPressure(level)
         }
         source.resume()
         memoryPressureSource = source
+    }
+
+    func handleApplicationActivityChange(isActive: Bool) {
+        isApplicationActive = isActive
+        recomputeProfile()
+    }
+
+    func handleThermalStateDidChange() {
+        recomputeProfile()
+    }
+
+    func handleMemoryPressure(_ level: GUIMemoryPressureLevel) {
+        memoryPressureLevel = level
+        recomputeProfile()
     }
 
     private func recomputeProfile() {
