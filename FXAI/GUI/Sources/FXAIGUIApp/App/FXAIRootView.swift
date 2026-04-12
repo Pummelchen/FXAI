@@ -4,8 +4,8 @@ import SwiftUI
 struct FXAIRootView: View {
     @EnvironmentObject private var model: FXAIGUIModel
     @EnvironmentObject private var themeEnvironment: ThemeEnvironment
-    private let sidebarSections: [(title: String, destinations: [SidebarDestination])] = [
-        ("Workspaces", [.liveOverview, .demoOverview, .researchWorkspace, .platformControl, .roles, .onboarding, .incidents]),
+    private let sidebarSections: [(title: String?, destinations: [SidebarDestination])] = [
+        (nil, [.liveOverview, .demoOverview, .researchWorkspace, .platformControl, .roles, .onboarding, .incidents]),
         ("Overview", [.overview]),
         ("Build", [.auditLab, .backtestBuilder, .offlineLab, .labelEngine]),
         ("Operate", [.newsPulse, .ratesEngine, .crossAsset, .pairNetwork, .microstructure, .adaptiveRouter, .driftGovernance, .dynamicEnsemble, .probCalibration, .executionQuality, .runtimeMonitor, .promotionCenter, .researchControl]),
@@ -97,8 +97,14 @@ struct FXAIRootView: View {
 
     private var sidebar: some View {
         List {
-            ForEach(sidebarSections, id: \.title) { section in
-                Section(section.title) {
+            ForEach(Array(sidebarSections.enumerated()), id: \.offset) { _, section in
+                if let title = section.title {
+                    Section(title) {
+                        ForEach(section.destinations) { destination in
+                            sidebarDestinationRow(for: destination)
+                        }
+                    }
+                } else {
                     ForEach(section.destinations) { destination in
                         sidebarDestinationRow(for: destination)
                     }
