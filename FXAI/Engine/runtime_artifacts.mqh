@@ -2,7 +2,7 @@
 #define __FXAI_RUNTIME_ARTIFACTS_MQH__
 
 #define FXAI_RUNTIME_ARTIFACT_DIR "FXAI\\Runtime"
-#define FXAI_RUNTIME_ARTIFACT_VERSION 14
+#define FXAI_RUNTIME_ARTIFACT_VERSION 15
 
 string FXAI_RuntimeArtifactSafeSymbol(const string symbol)
 {
@@ -465,6 +465,30 @@ bool FXAI_SaveRuntimeArtifacts(const string symbol)
       }
    }
 
+   FileWriteInteger(handle, (g_fxai_norm_fit_inited ? 1 : 0));
+   for(int h=0; h<FXAI_MAX_HORIZONS; h++)
+   {
+      for(int m=0; m<FXAI_NORM_METHOD_COUNT; m++)
+      {
+         FileWriteInteger(handle, (g_fxai_norm_fit_ready[h][m] ? 1 : 0));
+         FileWriteInteger(handle, g_fxai_norm_fit_obs[h][m]);
+         for(int f=0; f<FXAI_AI_FEATURES; f++)
+         {
+            FileWriteDouble(handle, g_fxai_norm_fit_min[h][m][f]);
+            FileWriteDouble(handle, g_fxai_norm_fit_max[h][m][f]);
+            FileWriteDouble(handle, g_fxai_norm_fit_mean[h][m][f]);
+            FileWriteDouble(handle, g_fxai_norm_fit_std[h][m][f]);
+            FileWriteDouble(handle, g_fxai_norm_fit_median[h][m][f]);
+            FileWriteDouble(handle, g_fxai_norm_fit_iqr[h][m][f]);
+            FileWriteDouble(handle, g_fxai_norm_fit_yeojohnson_lambda[h][m][f]);
+            FileWriteDouble(handle, g_fxai_norm_fit_yeojohnson_mean[h][m][f]);
+            FileWriteDouble(handle, g_fxai_norm_fit_yeojohnson_std[h][m][f]);
+            for(int k=0; k<FXAI_NORM_QUANTILE_KNOTS; k++)
+               FileWriteDouble(handle, g_fxai_norm_fit_quantiles[h][m][f][k]);
+         }
+      }
+   }
+
    FileWriteInteger(handle, g_replay_count);
    FileWriteInteger(handle, g_replay_cursor);
    for(int h=0; h<FXAI_MAX_HORIZONS; h++)
@@ -733,6 +757,30 @@ bool FXAI_LoadRuntimeArtifacts(const string symbol)
                g_fxai_norm_hist_head[m][f] = FileReadInteger(handle);
                for(int k=0; k<FXAI_NORM_ROLL_WINDOW_MAX; k++)
                   g_fxai_norm_hist[m][f][k] = FileReadDouble(handle);
+            }
+         }
+
+         g_fxai_norm_fit_inited = (FileReadInteger(handle) != 0);
+         for(int h=0; h<FXAI_MAX_HORIZONS; h++)
+         {
+            for(int m=0; m<FXAI_NORM_METHOD_COUNT; m++)
+            {
+               g_fxai_norm_fit_ready[h][m] = (FileReadInteger(handle) != 0);
+               g_fxai_norm_fit_obs[h][m] = FileReadInteger(handle);
+               for(int f=0; f<FXAI_AI_FEATURES; f++)
+               {
+                  g_fxai_norm_fit_min[h][m][f] = FileReadDouble(handle);
+                  g_fxai_norm_fit_max[h][m][f] = FileReadDouble(handle);
+                  g_fxai_norm_fit_mean[h][m][f] = FileReadDouble(handle);
+                  g_fxai_norm_fit_std[h][m][f] = FileReadDouble(handle);
+                  g_fxai_norm_fit_median[h][m][f] = FileReadDouble(handle);
+                  g_fxai_norm_fit_iqr[h][m][f] = FileReadDouble(handle);
+                  g_fxai_norm_fit_yeojohnson_lambda[h][m][f] = FileReadDouble(handle);
+                  g_fxai_norm_fit_yeojohnson_mean[h][m][f] = FileReadDouble(handle);
+                  g_fxai_norm_fit_yeojohnson_std[h][m][f] = FileReadDouble(handle);
+                  for(int k=0; k<FXAI_NORM_QUANTILE_KNOTS; k++)
+                     g_fxai_norm_fit_quantiles[h][m][f][k] = FileReadDouble(handle);
+               }
             }
          }
 

@@ -9,6 +9,13 @@ double FXAI_AuditGetArrayValue(const double &arr[],
    return def_value;
 }
 
+double FXAI_GetArrayValue(const double &arr[],
+                          const int idx,
+                          const double def_value)
+{
+   return FXAI_AuditGetArrayValue(arr, idx, def_value);
+}
+
 double FXAI_AuditGetIntArrayMean(const int &arr[],
                                  const int start_idx,
                                  const int width,
@@ -41,6 +48,11 @@ int FXAI_AuditClampHorizon(const int h_in)
    return h;
 }
 
+int FXAI_ClampHorizon(const int h_in)
+{
+   return FXAI_AuditClampHorizon(h_in);
+}
+
 int FXAI_AuditGetHorizonSlot(const int horizon_minutes)
 {
    int h = FXAI_AuditClampHorizon(horizon_minutes);
@@ -52,6 +64,19 @@ int FXAI_AuditGetHorizonSlot(const int horizon_minutes)
    if(h <= 34) return 5;
    if(h <= 55) return 6;
    return 7;
+}
+
+int FXAI_GetHorizonSlot(const int horizon_minutes)
+{
+   return FXAI_AuditGetHorizonSlot(horizon_minutes);
+}
+
+ENUM_FXAI_FEATURE_NORMALIZATION FXAI_SanitizeNormMethod(const int method_id)
+{
+   int v = method_id;
+   if(v < (int)FXAI_NORM_EXISTING || v > (int)FXAI_NORM_MINMAX_BUFFER3)
+      v = (int)FXAI_NORM_EXISTING;
+   return (ENUM_FXAI_FEATURE_NORMALIZATION)v;
 }
 
 int FXAI_AuditGetStaticRegimeId(const datetime sample_time,

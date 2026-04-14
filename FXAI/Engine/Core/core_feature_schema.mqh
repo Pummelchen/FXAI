@@ -598,6 +598,28 @@ void FXAI_ApplyFeatureSchemaToPayloadEx(const int schema_id,
                                     x);
 }
 
+void FXAI_ApplyPayloadTransformPipelineEx(const int schema_id,
+                                          const ulong groups_mask,
+                                          const int normalization_method_id,
+                                          const int horizon_minutes,
+                                          const int sequence_bars,
+                                          double &x_window[][FXAI_AI_WEIGHTS],
+                                          const int window_size,
+                                          double &x[])
+{
+   FXAI_ApplyPayloadAdaptiveNormalization(normalization_method_id,
+                                          horizon_minutes,
+                                          x_window,
+                                          window_size,
+                                          x);
+   FXAI_ApplyFeatureSchemaToPayloadEx(schema_id,
+                                      groups_mask,
+                                      sequence_bars,
+                                      x_window,
+                                      window_size,
+                                      x);
+}
+
 int FXAI_ContextExtraIndex(const int sample_idx, const int feat_idx)
 {
    if(sample_idx < 0) return -1;
@@ -801,4 +823,3 @@ void FXAI_ApplyFeatureSchemaToInput(const int schema_id,
          dummy_window[b][k] = 0.0;
    FXAI_ApplyFeatureSchemaToPayloadEx(schema_id, groups_mask, 1, dummy_window, 0, x);
 }
-

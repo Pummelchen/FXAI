@@ -203,12 +203,14 @@ bool FXAI_AuditGenerateAdversarialScenarioSeries(CFXAIAIRegistry &registry,
                             base_ctx_extra,
                             req.x_window,
                             req.window_size);
-      FXAI_ApplyFeatureSchemaToPayloadEx(schema_id,
-                                         feature_groups_mask,
-                                         req.ctx.sequence_bars,
-                                         req.x_window,
-                                         req.window_size,
-                                         req.x);
+      FXAI_ApplyPayloadTransformPipelineEx(schema_id,
+                                           feature_groups_mask,
+                                           req.ctx.normalization_method_id,
+                                           req.ctx.horizon_minutes,
+                                           req.ctx.sequence_bars,
+                                           req.x_window,
+                                           req.window_size,
+                                           req.x);
 
       FXAIAIPredictionV4 pred;
       string pred_reason = "";
@@ -267,12 +269,14 @@ bool FXAI_AuditGenerateAdversarialScenarioSeries(CFXAIAIRegistry &registry,
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          train_req.x[k] = x[k];
       FXAI_CopyWindowPayload(req.x_window, req.window_size, train_req.x_window, train_req.window_size);
-      FXAI_ApplyFeatureSchemaToPayloadEx(schema_id,
-                                         feature_groups_mask,
-                                         train_req.ctx.sequence_bars,
-                                         train_req.x_window,
-                                         train_req.window_size,
-                                         train_req.x);
+      FXAI_ApplyPayloadTransformPipelineEx(schema_id,
+                                           feature_groups_mask,
+                                           train_req.ctx.normalization_method_id,
+                                           train_req.ctx.horizon_minutes,
+                                           train_req.ctx.sequence_bars,
+                                           train_req.x_window,
+                                           train_req.window_size,
+                                           train_req.x);
       FXAI_TrainViaV4(*miner, train_req, hp);
    }
 
@@ -398,4 +402,3 @@ bool FXAI_AuditGenerateAdversarialScenarioSeries(CFXAIAIRegistry &registry,
                                                ctx_up_arr,
                                                ctx_extra_arr);
 }
-

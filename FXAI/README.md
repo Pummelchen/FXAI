@@ -203,6 +203,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - The preferred Pair Network build path is `python3 FXAI/Tools/fxai_offline_lab.py pair-network-build --profile continuous`.
 - The preferred Pair Network report path is `python3 FXAI/Tools/fxai_offline_lab.py pair-network-report --profile continuous`.
 - The shared TensorCore path now includes a self-supervised foundation encoder, teacher-student transfer heads, hierarchical trade-quality signals, and persistent analog regime memory.
+- Feature normalization now uses train-fit artifacts for min/max buffer, z-score, robust, quantile-to-normal, and Yeo-Johnson transforms, while RevIN/DAIN run as sequence-aware payload normalization over the current input plus rolling window; these fitted stats are persisted in runtime artifacts so warmup and live reuse the same scaling contract.
 - The live EA now uses portfolio-native sizing and gating with directional-cluster pressure, hierarchy floors, and macro-state quality controls instead of only scalar conviction scaling.
 - The live runtime now emits per-instance control-plane snapshots and consumes promoted symbol deployment profiles so research-side promotion decisions can steer trade floors, sizing bias, and peer-pressure handling.
 - The live runtime now also consumes promoted supervisor-service artifacts and policy lifecycle thresholds so add, reduce, tighten, timeout, and exit behavior can be governed by the research OS rather than static EA-only logic.

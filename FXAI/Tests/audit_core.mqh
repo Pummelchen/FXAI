@@ -2,11 +2,11 @@
 #define __FXAI_AUDIT_CORE_MQH__
 
 #include "..\Engine\core.mqh"
+#include "audit_utils.mqh"
 #include "..\Engine\data_pipeline.mqh"
 #include "..\API\api.mqh"
 
 #include "audit_defs.mqh"
-#include "audit_utils.mqh"
 
 #define FXAI_AUDIT_RUNTIME_DIR "FXAI\\Audit\\Runtime"
 #define FXAI_AUDIT_RUNTIME_MAGIC 1179874889

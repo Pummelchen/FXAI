@@ -684,14 +684,16 @@ datetime g_last_debug_bar = 0;
 #ifndef FXAI_REGIME_COUNT
 #define FXAI_REGIME_COUNT 12
 #endif
+#ifndef FXAI_MAX_HORIZONS
 #define FXAI_MAX_HORIZONS 8
+#endif
 #define FXAI_STACK_FEATS 84
 #define FXAI_STACK_HIDDEN 28
 #define FXAI_TRADE_GATE_FEATS FXAI_STACK_FEATS
 #define FXAI_TRADE_GATE_HIDDEN 16
 #define FXAI_HPOL_FEATS 48
 #define FXAI_HPOL_HIDDEN 16
-#define FXAI_NORM_CAND_MAX 8
+#define FXAI_NORM_CAND_MAX 12
 #define FXAI_REPLAY_CAPACITY 384
 #define FXAI_REPLAY_DRAWS 12
 #ifndef FXAI_PATHFLAG_DUAL_HIT
@@ -911,6 +913,9 @@ struct FXAIPreparedSample
 struct FXAINormSampleCache
 {
    int method_id;
+   int horizon_minutes;
+   int fit_start;
+   int fit_end;
    bool ready;
    FXAIPreparedSample samples[];
 };
@@ -918,6 +923,7 @@ struct FXAINormSampleCache
 struct FXAINormInputCache
 {
    int method_id;
+   int horizon_minutes;
    bool ready;
    double x[FXAI_AI_WEIGHTS];
 };

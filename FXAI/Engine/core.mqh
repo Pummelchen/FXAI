@@ -14,7 +14,10 @@
 #define FXAI_AI_MLP_HIDDEN 12
 #define FXAI_AI_COUNT 36
 #define FXAI_CONFORMAL_DEPTH 96
-#define FXAI_NORM_METHOD_COUNT 15
+#define FXAI_NORM_METHOD_COUNT 17
+#ifndef FXAI_MAX_HORIZONS
+#define FXAI_MAX_HORIZONS 8
+#endif
 #define FXAI_ENHASH_BUCKETS 128
 #define FXAI_PLUGIN_CLASS_FEATURES 5
 #define FXAI_PLUGIN_REGIME_BUCKETS 12
@@ -218,7 +221,9 @@ enum ENUM_FXAI_FEATURE_NORMALIZATION
    FXAI_NORM_QUANTILE_TO_NORMAL,    // Rank/quantile map (approx.) to normal space.
    FXAI_NORM_POWER_YEOJOHNSON,      // Yeo-Johnson power transform + standardize.
    FXAI_NORM_REVIN,                 // RevIN instance/window normalization.
-   FXAI_NORM_DAIN                   // DAIN adaptive normalization (lightweight learnable).
+   FXAI_NORM_DAIN,                  // DAIN adaptive normalization.
+   FXAI_NORM_MINMAX_BUFFER2,        // Min/Max mapped to [0,1] with +/-2% buffer.
+   FXAI_NORM_MINMAX_BUFFER3         // Min/Max mapped to [0,1] with +/-3% buffer.
 };
 
 enum ENUM_FXAI_MTF_STATE_METRIC

@@ -164,12 +164,14 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
             s3.x[k] = samples[i].x[k];
          FXAI_BuildPreparedSampleWindow(samples, i, s3.ctx.sequence_bars, s3.x_window, s3.window_size);
-         FXAI_ApplyFeatureSchemaToPayloadEx(trial_manifest.feature_schema_id,
-                                          trial_manifest.feature_groups_mask,
-                                          s3.ctx.sequence_bars,
-                                          s3.x_window,
-                                          s3.window_size,
-                                          s3.x);
+         FXAI_ApplyPayloadTransformPipelineEx(trial_manifest.feature_schema_id,
+                                              trial_manifest.feature_groups_mask,
+                                              s3.ctx.normalization_method_id,
+                                              s3.ctx.horizon_minutes,
+                                              s3.ctx.sequence_bars,
+                                              s3.x_window,
+                                              s3.window_size,
+                                              s3.x);
          FXAI_TrainViaV4(*trial, s3, hp);
       }
    }
@@ -458,7 +460,16 @@ void FXAI_OptimizeNormalizationWindows(const int i_start,
    FXAI_ApplyNormWindows(windows_tmp, default_window);
 }
 
+bool FXAI_DeriveNormCandidateSplit(const int H,
+                                   const int i_start,
+                                   const int i_end,
+                                   int &val_start,
+                                   int &val_end,
+                                   int &train_start,
+                                   int &train_end);
+
 double FXAI_ScoreNormMethodCandidate(const int ai_idx,
+                                     const int method_id,
                                      const int H,
                                      const int warmup_train_epochs,
                                      const int i_start,
@@ -470,22 +481,18 @@ double FXAI_ScoreNormMethodCandidate(const int ai_idx,
                                      double &regime_scores[],
                                      int &regime_trades[])
 {
-   int span = i_end - i_start + 1;
-   if(span < 240) return -1e9;
-
-   int val_len = span / 3;
-   if(val_len < 80) val_len = 80;
-   if(val_len > 240) val_len = 240;
-   int val_start = i_start;
-   int val_end = val_start + val_len - 1;
-   if(val_end >= i_end) val_end = i_end - 1;
-   if(val_end <= val_start) return -1e9;
-
-   int purge = H + 240;
-   if(purge < H + 40) purge = H + 40;
-   int train_start = val_end + purge + 1;
-   int train_end = i_end;
-   if(train_end - train_start < 100) return -1e9;
+   int val_start = 0;
+   int val_end = -1;
+   int train_start = 0;
+   int train_end = -1;
+   if(!FXAI_DeriveNormCandidateSplit(H,
+                                     i_start,
+                                     i_end,
+                                     val_start,
+                                     val_end,
+                                     train_start,
+                                     train_end))
+      return -1e9;
 
    CFXAIAIPlugin *trial = g_plugins.CreateInstance(ai_idx);
    if(trial == NULL) return -1e9;
@@ -520,6 +527,39 @@ double FXAI_ScoreNormMethodCandidate(const int ai_idx,
    return score;
 }
 
+bool FXAI_DeriveNormCandidateSplit(const int H,
+                                   const int i_start,
+                                   const int i_end,
+                                   int &val_start,
+                                   int &val_end,
+                                   int &train_start,
+                                   int &train_end)
+{
+   val_start = 0;
+   val_end = -1;
+   train_start = 0;
+   train_end = -1;
+
+   int span = i_end - i_start + 1;
+   if(span < 240)
+      return false;
+
+   int val_len = span / 3;
+   if(val_len < 80) val_len = 80;
+   if(val_len > 240) val_len = 240;
+   val_start = i_start;
+   val_end = val_start + val_len - 1;
+   if(val_end >= i_end) val_end = i_end - 1;
+   if(val_end <= val_start)
+      return false;
+
+   int purge = H + 240;
+   if(purge < H + 40) purge = H + 40;
+   train_start = val_end + purge + 1;
+   train_end = i_end;
+   return (train_end - train_start >= 100);
+}
+
 void FXAI_StoreNormBank(const int ai_idx,
                         const int regime_id,
                         const int horizon_minutes,
@@ -547,6 +587,29 @@ void FXAI_WarmupSelectNormBanksForHorizon(const int H,
                                           const int warmup_train_epochs,
                                           const int i_start,
                                           const int i_end,
+                                          const FXAIDataSnapshot &snapshot,
+                                          const int &spread_m1[],
+                                          const datetime &time_arr[],
+                                          const double &open_arr[],
+                                          const double &high_arr[],
+                                          const double &low_arr[],
+                                          const double &close_arr[],
+                                          const datetime &time_m5[],
+                                          const double &close_m5[],
+                                          const int &map_m5[],
+                                          const datetime &time_m15[],
+                                          const double &close_m15[],
+                                          const int &map_m15[],
+                                          const datetime &time_m30[],
+                                          const double &close_m30[],
+                                          const int &map_m30[],
+                                          const datetime &time_h1[],
+                                          const double &close_h1[],
+                                          const int &map_h1[],
+                                          const double &ctx_mean_arr[],
+                                          const double &ctx_std_arr[],
+                                          const double &ctx_up_arr[],
+                                          const double &ctx_extra_arr[],
                                           const FXAIAIHyperParams &base_hp,
                                           const double base_buy_thr,
                                           const double base_sell_thr,
@@ -571,12 +634,59 @@ void FXAI_WarmupSelectNormBanksForHorizon(const int H,
       for(int m=0; m<ArraySize(methods); m++)
       {
          int method_id = methods[m];
-         int cache_idx = FXAI_FindNormSampleCache(method_id, norm_caches);
+         int val_start = 0;
+         int val_end = -1;
+         int train_start = 0;
+         int train_end = -1;
+         if(!FXAI_DeriveNormCandidateSplit(H,
+                                           i_start,
+                                           i_end,
+                                           val_start,
+                                           val_end,
+                                           train_start,
+                                           train_end))
+            continue;
+
+         int cache_idx = FXAI_EnsureNormSampleCache(method_id,
+                                                    H,
+                                                    i_start,
+                                                    i_end,
+                                                    train_start,
+                                                    train_end,
+                                                    H,
+                                                    snapshot.commission_points,
+                                                    (AI_CostBufferPoints < 0.0 ? 0.0 : AI_CostBufferPoints),
+                                                    FXAI_Clamp(AI_EVThresholdPoints, 0.0, 100.0),
+                                                    snapshot,
+                                                    spread_m1,
+                                                    time_arr,
+                                                    open_arr,
+                                                    high_arr,
+                                                    low_arr,
+                                                    close_arr,
+                                                    time_m5,
+                                                    close_m5,
+                                                    map_m5,
+                                                    time_m15,
+                                                    close_m15,
+                                                    map_m15,
+                                                    time_m30,
+                                                    close_m30,
+                                                    map_m30,
+                                                    time_h1,
+                                                    close_h1,
+                                                    map_h1,
+                                                    ctx_mean_arr,
+                                                    ctx_std_arr,
+                                                    ctx_up_arr,
+                                                    ctx_extra_arr,
+                                                    norm_caches);
          if(cache_idx < 0) continue;
 
          double regime_scores[];
          int regime_trades[];
          double score = FXAI_ScoreNormMethodCandidate(ai_idx,
+                                                      method_id,
                                                       H,
                                                       warmup_train_epochs,
                                                       i_start,
@@ -700,4 +810,3 @@ struct FXAIWarmupBucketStats
    double eq_peak;
    double max_dd;
 };
-

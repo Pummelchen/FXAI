@@ -64,6 +64,7 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
    if(!FXAI_ExportDataSnapshot(symbol, AI_CommissionPerLotSide, AI_CostBufferPoints, snapshot))
       return false;
    FXAI_ResetFeatureNormalizationState();
+   FXAI_ResetFeatureNormalizationFits();
 
    MqlRates rates_m1[];
    MqlRates rates_m5[];
@@ -277,52 +278,34 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
 
       FXAINormSampleCache norm_caches[];
       ArrayResize(norm_caches, 0);
-      for(int ai_idx=0; ai_idx<FXAI_AI_COUNT; ai_idx++)
-      {
-         int methods[];
-         FXAI_BuildNormMethodCandidateList(ai_idx, methods);
-         for(int m=0; m<ArraySize(methods); m++)
-         {
-            if(FXAI_FindNormSampleCache(methods[m], norm_caches) >= 0) continue;
-            FXAI_EnsureNormSampleCache(methods[m],
-                                       i_start,
-                                       i_end,
-                                       H,
-                                       commission_points,
-                                       cost_buffer_points,
-                                       evThresholdPoints,
-                                       snapshot,
-                                       spread_m1,
-                                       time_arr,
-                                       open_arr,
-                                       high_arr,
-                                       low_arr,
-                                       close_arr,
-                                       time_m5,
-                                       close_m5,
-                                       map_m5,
-                                       time_m15,
-                                       close_m15,
-                                       map_m15,
-                                       time_m30,
-                                       close_m30,
-                                       map_m30,
-                                       time_h1,
-                                       close_h1,
-                                       map_h1,
-                                       ctx_mean_arr,
-                                       ctx_std_arr,
-                                       ctx_up_arr,
-                                       ctx_extra_arr,
-                                       norm_caches);
-         }
-      }
-
       FXAI_WarmupSelectNormBanksForHorizon(H,
                                            H == base_h,
                                            warmup_train_epochs,
                                            i_start,
                                            i_end,
+                                           snapshot,
+                                           spread_m1,
+                                           time_arr,
+                                           open_arr,
+                                           high_arr,
+                                           low_arr,
+                                           close_arr,
+                                           time_m5,
+                                           close_m5,
+                                           map_m5,
+                                           time_m15,
+                                           close_m15,
+                                           map_m15,
+                                           time_m30,
+                                           close_m30,
+                                           map_m30,
+                                           time_h1,
+                                           close_h1,
+                                           map_h1,
+                                           ctx_mean_arr,
+                                           ctx_std_arr,
+                                           ctx_up_arr,
+                                           ctx_extra_arr,
                                            base_hp,
                                            base_buy_thr,
                                            base_sell_thr,
@@ -657,5 +640,3 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
          ", horizons=", ArraySize(horizons));
    return true;
 }
-
-

@@ -58,7 +58,7 @@ def write_audit_set(path: Path, args) -> None:
         f"Audit_Bars={args.bars}||2048||1||1000000||N",
         f"PredictionTargetMinutes={args.horizon}||1||1||720||N",
         f"Audit_M1SyncBars={args.m1sync_bars}||2||1||12||N",
-        f"Audit_Normalization={args.normalization}||0||0||14||N",
+        f"Audit_Normalization={args.normalization}||0||0||16||N",
         f"Audit_SequenceBarsOverride={args.sequence_bars}||0||0||256||N",
         f"Audit_SchemaOverride={args.schema_id}||0||0||6||N",
         f"Audit_FeatureGroupsMaskOverride={args.feature_mask}||0||0||9223372036854775807||N",
@@ -264,4 +264,3 @@ def run_single_symbol_audit(args, symbol: str, raw_report_path: Path | None = No
         "text": text,
         "execution_profile": getattr(run_args, "execution_profile", "default"),
     }
-

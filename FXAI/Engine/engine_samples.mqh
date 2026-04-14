@@ -509,7 +509,13 @@ bool FXAI_PrepareTrainingSample(const int i,
 
    double feat_norm[FXAI_AI_FEATURES];
    sample.sample_time = ((i >= 0 && i < ArraySize(time_arr)) ? time_arr[i] : 0);
-   FXAI_ApplyFeatureNormalization(norm_method, feat, feat_prev, has_prev_feat, sample.sample_time, feat_norm);
+   FXAI_ApplyFeatureNormalizationEx(norm_method,
+                                    H,
+                                    feat,
+                                    feat_prev,
+                                    has_prev_feat,
+                                    sample.sample_time,
+                                    feat_norm);
 
    if(!has_label)
       return false;

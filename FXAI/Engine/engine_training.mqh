@@ -169,19 +169,29 @@ void FXAI_PrecomputeTrainingSamples(const int i_start,
 }
 
 int FXAI_FindNormSampleCache(const int method_id,
+                             const int horizon_minutes,
+                             const int fit_start,
+                             const int fit_end,
                              FXAINormSampleCache &caches[])
 {
    for(int i=0; i<ArraySize(caches); i++)
    {
-      if(caches[i].ready && caches[i].method_id == method_id)
+      if(caches[i].ready &&
+         caches[i].method_id == method_id &&
+         caches[i].horizon_minutes == horizon_minutes &&
+         caches[i].fit_start == fit_start &&
+         caches[i].fit_end == fit_end)
          return i;
    }
    return -1;
 }
 
 int FXAI_EnsureNormSampleCache(const int method_id,
+                               const int horizon_minutes,
                                const int i_start,
                                const int i_end,
+                               const int fit_start,
+                               const int fit_end,
                                const int H,
                                const double commission_points,
                                const double cost_buffer_points,
@@ -211,13 +221,44 @@ int FXAI_EnsureNormSampleCache(const int method_id,
                                const double &ctx_extra_arr[],
                                FXAINormSampleCache &caches[])
 {
-   int idx = FXAI_FindNormSampleCache(method_id, caches);
+   int idx = FXAI_FindNormSampleCache(method_id, horizon_minutes, fit_start, fit_end, caches);
    if(idx >= 0) return idx;
 
    int sz = ArraySize(caches);
    ArrayResize(caches, sz + 1);
    caches[sz].method_id = method_id;
+   caches[sz].horizon_minutes = horizon_minutes;
+   caches[sz].fit_start = fit_start;
+   caches[sz].fit_end = fit_end;
    caches[sz].ready = true;
+   FXAI_ResetFeatureNormalizationMethodState(method_id);
+   FXAI_FitFeatureNormalizationMethodForRange(method_id,
+                                              horizon_minutes,
+                                              fit_start,
+                                              fit_end,
+                                              snapshot,
+                                              spread_m1,
+                                              time_arr,
+                                              open_arr,
+                                              high_arr,
+                                              low_arr,
+                                              close_arr,
+                                              time_m5,
+                                              close_m5,
+                                              map_m5,
+                                              time_m15,
+                                              close_m15,
+                                              map_m15,
+                                              time_m30,
+                                              close_m30,
+                                              map_m30,
+                                              time_h1,
+                                              close_h1,
+                                              map_h1,
+                                              ctx_mean_arr,
+                                              ctx_std_arr,
+                                              ctx_up_arr,
+                                              ctx_extra_arr);
    FXAI_PrecomputeTrainingSamples(i_start,
                                   i_end,
                                   H,
@@ -311,6 +352,9 @@ void FXAI_EnsureRoutedNormCachesForSamples(const int ai_idx,
       needed_method[method_id] = true;
 
       FXAI_EnsureNormSampleCache(method_id,
+                                 H,
+                                 i_start,
+                                 i_end,
                                  i_start,
                                  i_end,
                                  H,
@@ -347,6 +391,9 @@ void FXAI_EnsureRoutedNormCachesForSamples(const int ai_idx,
    if(default_method >= 0 && default_method < FXAI_NORM_METHOD_COUNT && !needed_method[default_method])
    {
       FXAI_EnsureNormSampleCache(default_method,
+                                 H,
+                                 i_start,
+                                 i_end,
                                  i_start,
                                  i_end,
                                  H,
@@ -390,7 +437,17 @@ void FXAI_GetCachedPreparedSample(const int ai_idx,
    int method_id = (int)FXAI_GetModelNormMethodRouted(ai_idx,
                                                       reference_sample.regime_id,
                                                       reference_sample.horizon_minutes);
-   int cache_idx = FXAI_FindNormSampleCache(method_id, caches);
+   int cache_idx = -1;
+   for(int ci=0; ci<ArraySize(caches); ci++)
+   {
+      if(caches[ci].ready &&
+         caches[ci].method_id == method_id &&
+         caches[ci].horizon_minutes == reference_sample.horizon_minutes)
+      {
+         cache_idx = ci;
+         break;
+      }
+   }
    if(cache_idx < 0)
    {
       out_sample.valid = false;
@@ -454,17 +511,21 @@ void FXAI_BuildPreparedSampleWindowCached(const int ai_idx,
 }
 
 int FXAI_FindNormInputCache(const int method_id,
+                            const int horizon_minutes,
                             FXAINormInputCache &caches[])
 {
    for(int i=0; i<ArraySize(caches); i++)
    {
-      if(caches[i].ready && caches[i].method_id == method_id)
+      if(caches[i].ready &&
+         caches[i].method_id == method_id &&
+         caches[i].horizon_minutes == horizon_minutes)
          return i;
    }
    return -1;
 }
 
 int FXAI_EnsureNormInputCache(const int method_id,
+                              const int horizon_minutes,
                               const double spread_pred,
                               const int &spread_m1[],
                               const FXAIDataSnapshot &snapshot,
@@ -491,7 +552,7 @@ int FXAI_EnsureNormInputCache(const int method_id,
                               const double &ctx_extra_arr[],
                               FXAINormInputCache &caches[])
 {
-   int idx = FXAI_FindNormInputCache(method_id, caches);
+   int idx = FXAI_FindNormInputCache(method_id, horizon_minutes, caches);
    if(idx >= 0) return idx;
 
    ENUM_FXAI_FEATURE_NORMALIZATION norm_method = FXAI_SanitizeNormMethod(method_id);
@@ -570,16 +631,18 @@ int FXAI_EnsureNormInputCache(const int method_id,
    }
 
    double feat_norm[FXAI_AI_FEATURES];
-   FXAI_ApplyFeatureNormalization(norm_method,
-                                  feat_pred,
-                                  feat_prev,
-                                  has_prev_feat,
-                                  snapshot.bar_time,
-                                  feat_norm);
+   FXAI_ApplyFeatureNormalizationEx(norm_method,
+                                    horizon_minutes,
+                                    feat_pred,
+                                    feat_prev,
+                                    has_prev_feat,
+                                    snapshot.bar_time,
+                                    feat_norm);
 
    int sz = ArraySize(caches);
    ArrayResize(caches, sz + 1);
    caches[sz].method_id = method_id;
+   caches[sz].horizon_minutes = horizon_minutes;
    caches[sz].ready = true;
    FXAI_BuildInputVector(feat_norm, caches[sz].x);
    return sz;
@@ -634,12 +697,14 @@ void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
    for(int b=0; b<window_size && b<FXAI_MAX_SEQUENCE_BARS; b++)
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          s3.x_window[b][k] = x_window[b][k];
-   FXAI_ApplyFeatureSchemaToPayloadEx(manifest.feature_schema_id,
-                                    manifest.feature_groups_mask,
-                                    s3.ctx.sequence_bars,
-                                    s3.x_window,
-                                    s3.window_size,
-                                    s3.x);
+   FXAI_ApplyPayloadTransformPipelineEx(manifest.feature_schema_id,
+                                        manifest.feature_groups_mask,
+                                        s3.ctx.normalization_method_id,
+                                        s3.ctx.horizon_minutes,
+                                        s3.ctx.sequence_bars,
+                                        s3.x_window,
+                                        s3.window_size,
+                                        s3.x);
 
    FXAI_TrainViaV4(plugin, s3, hp);
    FXAI_UpdateModelMoveStats(ai_idx, sample.move_points);

@@ -165,12 +165,14 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             for(int k=0; k<FXAI_AI_WEIGHTS; k++)
                req.x[k] = pred_sample.x[k];
             FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, i, norm_caches, req.ctx.sequence_bars, req.x_window, req.window_size);
-            FXAI_ApplyFeatureSchemaToPayloadEx(plugin_manifest.feature_schema_id,
-                                             plugin_manifest.feature_groups_mask,
-                                             req.ctx.sequence_bars,
-                                             req.x_window,
-                                             req.window_size,
-                                             req.x);
+            FXAI_ApplyPayloadTransformPipelineEx(plugin_manifest.feature_schema_id,
+                                                 plugin_manifest.feature_groups_mask,
+                                                 req.ctx.normalization_method_id,
+                                                 req.ctx.horizon_minutes,
+                                                 req.ctx.sequence_bars,
+                                                 req.x_window,
+                                                 req.window_size,
+                                                 req.x);
 
             FXAIAIPredictionV4 pred;
             FXAI_PredictViaV4(*plugin, req, hp_model, pred);
@@ -981,4 +983,3 @@ bool FXAI_WarmupBuildTransferSymbolSamplesForHorizon(const string target_symbol,
 
    return (ArraySize(out) > 0);
 }
-

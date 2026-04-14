@@ -29,7 +29,7 @@ def write_ea_set(path: Path, row: dict, params: dict) -> None:
         f"PredictionTargetMinutes={horizon}||5||1||720||N",
         "AI_MultiHorizon=false||true||0||true||N",
         f"AI_Horizons={{{horizon}}}||0||0||0||N",
-        f"AI_FeatureNormalization={int(params.get('normalization', 0))}||0||0||14||N",
+        f"AI_FeatureNormalization={int(params.get('normalization', 0))}||0||0||16||N",
         f"AI_ExecutionProfile={execution_profile_enum(str(params.get('execution_profile', 'default')))}||0||0||4||N",
         f"AI_CommissionPerLotSide={float(params.get('commission_per_lot_side', 0.0)):.6f}||0||0||100||N",
         f"AI_CostBufferPoints={float(params.get('cost_buffer_points', 2.0)):.6f}||2||0||100||N",

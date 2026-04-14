@@ -124,7 +124,13 @@ bool FXAI_AuditBuildSample(const int i,
    }
 
    double feat_norm[FXAI_AI_FEATURES];
-   FXAI_ApplyFeatureNormalization(norm_method, feat, feat_prev, has_prev, snapshot.bar_time, feat_norm);
+   FXAI_ApplyFeatureNormalizationEx(norm_method,
+                                    horizon_minutes,
+                                    feat,
+                                    feat_prev,
+                                    has_prev,
+                                    snapshot.bar_time,
+                                    feat_norm);
    ArrayResize(x, FXAI_AI_WEIGHTS);
    FXAI_BuildInputVector(feat_norm, x);
 

@@ -32,7 +32,7 @@ bool FXAI_IsShadowBar(const int cadence_bars, const int bar_seq)
 ENUM_FXAI_FEATURE_NORMALIZATION FXAI_GetFeatureNormalizationMethod()
 {
    int v = (int)AI_FeatureNormalization;
-   if(v < (int)FXAI_NORM_EXISTING || v > (int)FXAI_NORM_DAIN)
+   if(v < (int)FXAI_NORM_EXISTING || v > (int)FXAI_NORM_MINMAX_BUFFER3)
       return FXAI_NORM_EXISTING;
    return (ENUM_FXAI_FEATURE_NORMALIZATION)v;
 }
@@ -40,7 +40,7 @@ ENUM_FXAI_FEATURE_NORMALIZATION FXAI_GetFeatureNormalizationMethod()
 ENUM_FXAI_FEATURE_NORMALIZATION FXAI_SanitizeNormMethod(const int method_id)
 {
    int v = method_id;
-   if(v < (int)FXAI_NORM_EXISTING || v > (int)FXAI_NORM_DAIN)
+   if(v < (int)FXAI_NORM_EXISTING || v > (int)FXAI_NORM_MINMAX_BUFFER3)
       v = (int)FXAI_NORM_EXISTING;
    return (ENUM_FXAI_FEATURE_NORMALIZATION)v;
 }
@@ -95,6 +95,7 @@ void FXAI_BuildNormMethodCandidateList(const int ai_idx, int &methods[])
       seed_methods[n_seed++] = (int)FXAI_NORM_REVIN;
       seed_methods[n_seed++] = (int)FXAI_NORM_DAIN;
       seed_methods[n_seed++] = (int)FXAI_NORM_ROBUST_MEDIAN_IQR;
+      seed_methods[n_seed++] = (int)FXAI_NORM_MINMAX_BUFFER3;
    }
    else
    {
@@ -105,12 +106,14 @@ void FXAI_BuildNormMethodCandidateList(const int ai_idx, int &methods[])
       seed_methods[n_seed++] = (int)FXAI_NORM_CHANGE_PERCENT;
       seed_methods[n_seed++] = (int)FXAI_NORM_VOL_STD_RETURNS;
       seed_methods[n_seed++] = (int)FXAI_NORM_ATR_NATR_UNIT;
+      seed_methods[n_seed++] = (int)FXAI_NORM_POWER_YEOJOHNSON;
+      seed_methods[n_seed++] = (int)FXAI_NORM_MINMAX_BUFFER3;
    }
 
    for(int i=0; i<n_seed; i++)
    {
       int m = seed_methods[i];
-      if(m < (int)FXAI_NORM_EXISTING || m > (int)FXAI_NORM_DAIN) continue;
+      if(m < (int)FXAI_NORM_EXISTING || m > (int)FXAI_NORM_MINMAX_BUFFER3) continue;
       bool exists = false;
       for(int j=0; j<ArraySize(methods); j++)
       {

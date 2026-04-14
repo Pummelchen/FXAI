@@ -184,9 +184,10 @@
                                                runtime_norm_caches);
       }
 
-      if(FXAI_FindNormInputCache(method_id, input_caches) < 0)
+      if(FXAI_FindNormInputCache(method_id, H, input_caches) < 0)
       {
          FXAI_EnsureNormInputCache(method_id,
+                                   H,
                                    spread_pred,
                                    spread_m1,
                                    snapshot,
@@ -501,10 +502,11 @@
       req.ctx.point_value = (snapshot.point > 0.0 ? snapshot.point : (_Point > 0.0 ? _Point : 1.0));
       req.ctx.domain_hash = FXAI_SymbolHash01(snapshot.symbol);
       req.ctx.sample_time = snapshot.bar_time;
-      int input_idx = FXAI_FindNormInputCache(method_id, input_caches);
+      int input_idx = FXAI_FindNormInputCache(method_id, H, input_caches);
       if(input_idx < 0)
       {
          input_idx = FXAI_EnsureNormInputCache(method_id,
+                                               H,
                                                spread_pred,
                                                spread_m1,
                                                snapshot,
@@ -544,12 +546,14 @@
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = input_caches[input_idx].x[k];
       FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, 0, runtime_norm_caches, req.ctx.sequence_bars, req.x_window, req.window_size);
-      FXAI_ApplyFeatureSchemaToPayloadEx(manifest.feature_schema_id,
-                                       manifest.feature_groups_mask,
-                                       req.ctx.sequence_bars,
-                                       req.x_window,
-                                       req.window_size,
-                                       req.x);
+      FXAI_ApplyPayloadTransformPipelineEx(manifest.feature_schema_id,
+                                           manifest.feature_groups_mask,
+                                           req.ctx.normalization_method_id,
+                                           req.ctx.horizon_minutes,
+                                           req.ctx.sequence_bars,
+                                           req.x_window,
+                                           req.window_size,
+                                           req.x);
 
       FXAIAIPredictionV4 pred;
       FXAI_PredictViaV4(*plugin, req, hp_model, pred);
