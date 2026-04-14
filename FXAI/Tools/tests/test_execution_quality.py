@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import json
 import tempfile
 from pathlib import Path
@@ -160,13 +161,16 @@ def test_execution_quality_forecast_stays_normal_in_supported_calm_state():
 def test_execution_quality_replay_report_summarizes_history():
     with tempfile.TemporaryDirectory(prefix="fxai_execquality_replay_") as tmp_dir:
         with patched_paths(Path(tmp_dir)):
+            now = datetime.now(timezone.utc).replace(microsecond=0)
+            earlier = now - timedelta(hours=2)
+            later = now - timedelta(hours=1)
             history_path = contracts.execution_quality_runtime_history_path("EURUSD")
             history_path.write_text(
                 "\n".join(
                     [
                         json.dumps(
                             {
-                                "generated_at": "2026-04-10T04:00:00Z",
+                                "generated_at": earlier.isoformat().replace("+00:00", "Z"),
                                 "symbol": "EURUSD",
                                 "state": {
                                     "symbol": "EURUSD",
@@ -181,7 +185,7 @@ def test_execution_quality_replay_report_summarizes_history():
                         ),
                         json.dumps(
                             {
-                                "generated_at": "2026-04-10T05:00:00Z",
+                                "generated_at": later.isoformat().replace("+00:00", "Z"),
                                 "symbol": "EURUSD",
                                 "state": {
                                     "symbol": "EURUSD",

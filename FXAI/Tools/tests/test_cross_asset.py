@@ -302,15 +302,18 @@ def test_cross_asset_blocks_pairs_when_critical_sources_are_stale():
 def test_cross_asset_replay_report_summarizes_pair_history():
     with tempfile.TemporaryDirectory(prefix="fxai_cross_asset_replay_") as tmp_dir:
         with patched_paths(Path(tmp_dir)):
+            now = datetime.now(timezone.utc).replace(microsecond=0)
+            earlier = now - timedelta(hours=2)
+            later = now - timedelta(hours=1)
             contracts.COMMON_CROSS_ASSET_HISTORY.write_text(
                 "\n".join(
                     [
                         json.dumps(
                             {
                                 "record_type": "snapshot",
-                                "generated_at": "2026-04-11T09:00:00Z",
+                                "generated_at": _iso(earlier),
                                 "snapshot": {
-                                    "generated_at": "2026-04-11T09:00:00Z",
+                                    "generated_at": _iso(earlier),
                                     "state_labels": {
                                         "macro_state": "NORMAL",
                                         "risk_state": "NORMAL",
@@ -333,9 +336,9 @@ def test_cross_asset_replay_report_summarizes_pair_history():
                         json.dumps(
                             {
                                 "record_type": "snapshot",
-                                "generated_at": "2026-04-11T10:00:00Z",
+                                "generated_at": _iso(later),
                                 "snapshot": {
-                                    "generated_at": "2026-04-11T10:00:00Z",
+                                    "generated_at": _iso(later),
                                     "state_labels": {
                                         "macro_state": "RATES_REPRICING",
                                         "risk_state": "RISK_OFF",
