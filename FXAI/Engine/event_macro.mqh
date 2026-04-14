@@ -544,28 +544,24 @@ void FXAI_BuildMacroState(const string symbol,
    double growth_norm = (growth_weight > 1e-6 ? growth_acc / growth_weight : 0.0);
    double trade_norm = (trade_weight > 1e-6 ? trade_acc / trade_weight : 0.0);
 
-   out.policy_divergence = FXAI_Clamp(policy_norm - 0.35 * inflation_norm + 0.20 * growth_norm, -1.0, 1.0);
-   out.policy_pressure = FXAI_Clamp(0.70 * policy_norm + 0.30 * inflation_norm, -1.0, 1.0);
-   out.inflation_pressure = FXAI_Clamp(inflation_norm, -1.0, 1.0);
-   out.labor_pressure = FXAI_Clamp(labor_norm, -1.0, 1.0);
-   out.growth_pressure = FXAI_Clamp(0.78 * growth_norm + 0.22 * trade_norm, -1.0, 1.0);
-   out.carry_pressure = FXAI_Clamp(0.60 * out.policy_pressure +
-                                   0.25 * out.policy_divergence +
-                                   0.15 * out.growth_pressure,
-                                   -1.0,
-                                   1.0);
-   out.event_decay = FXAI_Clamp(out.event_decay, 0.0, 1.0);
+   out.policy_divergence = FXAI_ClampSignedUnitOpen(policy_norm - 0.35 * inflation_norm + 0.20 * growth_norm);
+   out.policy_pressure = FXAI_ClampSignedUnitOpen(0.70 * policy_norm + 0.30 * inflation_norm);
+   out.inflation_pressure = FXAI_ClampSignedUnitOpen(inflation_norm);
+   out.labor_pressure = FXAI_ClampSignedUnitOpen(labor_norm);
+   out.growth_pressure = FXAI_ClampSignedUnitOpen(0.78 * growth_norm + 0.22 * trade_norm);
+   out.carry_pressure = FXAI_ClampSignedUnitOpen(0.60 * out.policy_pressure +
+                                                 0.25 * out.policy_divergence +
+                                                 0.15 * out.growth_pressure);
+   out.event_decay = FXAI_ClampUnitOpen(out.event_decay);
 
    double trust_mean = (coverage_weight > 1e-6 ? trust_sum / coverage_weight : 0.0);
    double relevance_mean = (coverage_weight > 1e-6 ? relevance_sum / coverage_weight : 0.0);
-   double family_diversity = FXAI_Clamp((double)family_hits / 5.0, 0.0, 1.0);
-   double density = FXAI_Clamp(coverage_weight / 2.0, 0.0, 1.0);
-   out.state_quality = FXAI_Clamp(0.34 * trust_mean +
-                                  0.28 * relevance_mean +
-                                  0.20 * density +
-                                  0.18 * family_diversity,
-                                  0.0,
-                                  1.0);
+   double family_diversity = FXAI_ClampUnitOpen((double)family_hits / 5.0);
+   double density = FXAI_ClampUnitOpen(coverage_weight / 2.0);
+   out.state_quality = FXAI_ClampUnitOpen(0.34 * trust_mean +
+                                          0.28 * relevance_mean +
+                                          0.20 * density +
+                                          0.18 * family_diversity);
 }
 
 void FXAI_ResetMacroEventStore(void)
@@ -1038,20 +1034,20 @@ void FXAI_GetMacroEventFeatures(const string symbol,
    else
       revision_abs = 0.0;
 
-   pre_embargo = FXAI_Clamp(pre_embargo, 0.0, 1.0);
-   post_embargo = FXAI_Clamp(post_embargo, 0.0, 1.0);
-   event_importance = FXAI_Clamp(event_importance, 0.0, 1.0);
+   pre_embargo = FXAI_ClampUnitOpen(pre_embargo);
+   post_embargo = FXAI_ClampUnitOpen(post_embargo);
+   event_importance = FXAI_ClampUnitOpen(event_importance);
    surprise_signed = FXAI_Clamp(surprise_signed, -6.0, 6.0);
    surprise_abs = FXAI_Clamp(surprise_abs, 0.0, 6.0);
-   event_class_bias = FXAI_Clamp(event_class_bias, -1.0, 1.0);
+   event_class_bias = FXAI_ClampSignedUnitOpen(event_class_bias);
    surprise_zscore = FXAI_Clamp(surprise_zscore, -8.0, 8.0);
    revision_abs = FXAI_Clamp(revision_abs, 0.0, 8.0);
-   currency_relevance = FXAI_Clamp(currency_relevance, 0.0, 1.0);
-   provenance_trust = FXAI_Clamp(provenance_trust, 0.0, 1.0);
-   rates_activity = FXAI_Clamp(rates_activity, 0.0, 1.0);
-   inflation_activity = FXAI_Clamp(inflation_activity, 0.0, 1.0);
-   labor_activity = FXAI_Clamp(labor_activity, 0.0, 1.0);
-   growth_activity = FXAI_Clamp(growth_activity, 0.0, 1.0);
+   currency_relevance = FXAI_ClampUnitOpen(currency_relevance);
+   provenance_trust = FXAI_ClampUnitOpen(provenance_trust);
+   rates_activity = FXAI_ClampUnitOpen(rates_activity);
+   inflation_activity = FXAI_ClampUnitOpen(inflation_activity);
+   labor_activity = FXAI_ClampUnitOpen(labor_activity);
+   growth_activity = FXAI_ClampUnitOpen(growth_activity);
 }
 
 #endif // __FXAI_EVENT_MACRO_MQH__

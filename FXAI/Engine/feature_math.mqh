@@ -230,8 +230,8 @@ void FXAI_CandleGeometryNormalize(const double o,
    if(lower_wick < 0.0) lower_wick = 0.0;
 
    body_norm = (c - o) / den_close;
-   upper_wick_norm = upper_wick / den_range;
-   lower_wick_norm = lower_wick / den_range;
+   upper_wick_norm = FXAI_ClampUnitOpen(upper_wick / den_range);
+   lower_wick_norm = FXAI_ClampUnitOpen(lower_wick / den_range);
    range_norm = range / den_close;
 }
 

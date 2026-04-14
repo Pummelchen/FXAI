@@ -57,7 +57,7 @@ def test_requested_signals_are_emitted_by_canonical_feature_builder():
     expected_assignments = {
         38: r"features\[38\]\s*=\s*FXAI_MAEdgeFeature\(c,\s*qsdema_100,\s*vol_unit\);",
         39: r"features\[39\]\s*=\s*FXAI_MAEdgeFeature\(c,\s*qsdema_200,\s*vol_unit\);",
-        40: r"features\[40\]\s*=\s*\(rsi14\s*-\s*50\.0\)\s*/\s*50\.0;",
+        40: r"features\[40\]\s*=\s*FXAI_ClampSignedUnitOpen\(\(rsi14\s*-\s*50\.0\)\s*/\s*50\.0\);",
         41: r"features\[41\]\s*=\s*\(c\s*>\s*0\.0\s*\?\s*\(\(atr14\s*/\s*c\)\s*/\s*vol_unit\)\s*:\s*0\.0\);",
         42: r"features\[42\]\s*=\s*natr14;",
         43: r"features\[43\]\s*=\s*\(vol_unit\s*>\s*0\.0\s*\?\s*\(parkinson20\s*/\s*vol_unit\)\s*:\s*0\.0\);",

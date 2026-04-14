@@ -9,7 +9,7 @@ double FXAI_CyclicHourPulse(const double hour_value,
    double d = MathAbs(hour_value - center_hour);
    if(d > 12.0)
       d = 24.0 - d;
-   return FXAI_Clamp(1.0 - d / radius, 0.0, 1.0);
+   return FXAI_ClampUnitOpen(1.0 - d / radius);
 }
 
 double FXAI_RolloverProximityFeature(const datetime sample_time)
@@ -28,7 +28,7 @@ double FXAI_SessionTransitionFeature(const datetime sample_time)
    double asia_to_eu = FXAI_CyclicHourPulse(hour_value, 7.0, 2.5);
    double eu_to_us = FXAI_CyclicHourPulse(hour_value, 13.0, 2.5);
    double us_to_roll = FXAI_CyclicHourPulse(hour_value, 21.0, 2.5);
-   return FXAI_Clamp(0.60 * asia_to_eu + 0.80 * eu_to_us - 0.70 * us_to_roll, -1.0, 1.0);
+   return FXAI_ClampSignedUnitOpen(0.60 * asia_to_eu + 0.80 * eu_to_us - 0.70 * us_to_roll);
 }
 
 double FXAI_SessionOverlapFeature(const datetime sample_time)
@@ -39,7 +39,7 @@ double FXAI_SessionOverlapFeature(const datetime sample_time)
    double london_open = FXAI_CyclicHourPulse(hour_value, 8.0, 3.0);
    double ny_open = FXAI_CyclicHourPulse(hour_value, 13.5, 3.0);
    double overlap = MathMin(london_open, ny_open);
-   return FXAI_Clamp(0.70 * overlap + 0.30 * FXAI_CyclicHourPulse(hour_value, 15.0, 2.0), 0.0, 1.0);
+   return FXAI_ClampUnitOpen(0.70 * overlap + 0.30 * FXAI_CyclicHourPulse(hour_value, 15.0, 2.0));
 }
 
 void FXAI_GetSwapCarryFeatures(const string symbol,
@@ -62,7 +62,7 @@ void FXAI_GetSwapCarryFeatures(const string symbol,
       triple_dow = 3;
    double day_bias = (dt.day_of_week == triple_dow ? 1.0 : -0.25);
    double roll_bias = FXAI_RolloverProximityFeature(sample_time);
-   triple_swap_bias = FXAI_Clamp(day_bias * (0.35 + 0.65 * roll_bias), -1.0, 1.0);
+   triple_swap_bias = FXAI_ClampSignedUnitOpen(day_bias * (0.35 + 0.65 * roll_bias));
 
    double swap_long = SymbolInfoDouble(symbol, SYMBOL_SWAP_LONG);
    double swap_short = SymbolInfoDouble(symbol, SYMBOL_SWAP_SHORT);
@@ -147,7 +147,7 @@ void FXAI_GetSpreadStateFeatures(const int i,
    double spread_std20 = MathSqrt(var);
    spread_z20 = (cur_spread - avg_spread20) / MathMax(spread_std20, 0.25);
    spread_vol_ratio20 = spread_std20 / MathMax(avg_spread20, 0.25);
-   spread_rank20 = FXAI_Clamp(2.0 * ((double)rank_le / (double)MathMax(used, 1)) - 1.0, -1.0, 1.0);
+   spread_rank20 = FXAI_ClampSignedUnitOpen(2.0 * ((double)rank_le / (double)MathMax(used, 1)) - 1.0);
 }
 
 bool FXAI_ComputeFeatureVector(const int i,
@@ -293,7 +293,7 @@ bool FXAI_ComputeFeatureVector(const int i,
    // [10] mean return, [11] return dispersion, [12] up-breadth in [-1, +1]
    features[10] = ctx_ret_mean / vol_unit;
    features[11] = ctx_ret_std / vol_unit;
-   features[12] = FXAI_Clamp((ctx_up_ratio - 0.5) * 2.0, -1.0, 1.0);
+   features[12] = FXAI_ClampSignedUnitOpen((ctx_up_ratio - 0.5) * 2.0);
 
    // MTF slopes on aligned anchor bars
    double sl5 = FXAI_NormalizedSlope(main_m5, i5, 6) / vol_unit;
@@ -314,9 +314,9 @@ bool FXAI_ComputeFeatureVector(const int i,
    if(mm > 59) mm = 59;
 
    // Time features (normalized from requested MT5 ranges)
-   features[15] = ((double)weekday - 3.0) / 2.0;
-   features[16] = ((double)hh - 11.5) / 11.5;
-   features[17] = ((double)mm - 29.5) / 29.5;
+   features[15] = FXAI_ClampSignedUnitOpen(((double)weekday - 3.0) / 2.0);
+   features[16] = FXAI_ClampSignedUnitOpen(((double)hh - 11.5) / 11.5);
+   features[17] = FXAI_ClampSignedUnitOpen(((double)mm - 29.5) / 29.5);
 
    // OHLC features from current M1 bar
    double o = main_o1[i];
@@ -380,7 +380,7 @@ bool FXAI_ComputeFeatureVector(const int i,
    features[39] = FXAI_MAEdgeFeature(c, qsdema_200, vol_unit);
 
    double rsi14 = FXAI_RSIAt(main_m1, i, 14);
-   features[40] = (rsi14 - 50.0) / 50.0;
+   features[40] = FXAI_ClampSignedUnitOpen((rsi14 - 50.0) / 50.0);
 
    features[41] = (c > 0.0 ? ((atr14 / c) / vol_unit) : 0.0);
 
@@ -422,17 +422,17 @@ bool FXAI_ComputeFeatureVector(const int i,
       features[base_f + 0] = ctx_ret / vol_unit;
       features[base_f + 1] = ctx_lag / vol_unit;
       features[base_f + 2] = ctx_rel / vol_unit;
-      features[base_f + 3] = ctx_corr;
+      features[base_f + 3] = FXAI_ClampSignedUnitOpen(ctx_corr);
    }
 
    double shared_util = FXAI_GetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 0, 0.0);
    double shared_stability = FXAI_GetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 1, 0.5);
    double shared_lead = FXAI_GetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 2, 0.5);
    double shared_coverage = FXAI_GetContextExtraValue(ctx_extra_arr, i, FXAI_CONTEXT_SHARED_OFFSET + 3, 0.0);
-   features[62] = FXAI_Clamp(shared_util, -1.0, 1.0);
-   features[63] = FXAI_Clamp(2.0 * shared_stability - 1.0, -1.0, 1.0);
-   features[64] = FXAI_Clamp(2.0 * shared_lead - 1.0, -1.0, 1.0);
-   features[65] = FXAI_Clamp(2.0 * shared_coverage - 1.0, -1.0, 1.0);
+   features[62] = FXAI_ClampSignedUnitOpen(shared_util);
+   features[63] = FXAI_ClampSignedUnitOpen(2.0 * shared_stability - 1.0);
+   features[64] = FXAI_ClampSignedUnitOpen(2.0 * shared_lead - 1.0);
+   features[65] = FXAI_ClampSignedUnitOpen(2.0 * shared_coverage - 1.0);
 
    double point_value = SymbolInfoDouble(symbol, SYMBOL_POINT);
    if(point_value <= 0.0)
@@ -598,17 +598,17 @@ bool FXAI_ComputeFeatureVector(const int i,
    features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 11] = macro_inflation_activity;
    features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 12] = macro_labor_activity;
    features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 13] = macro_growth_activity;
-   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 14] = FXAI_Clamp(macro_state.policy_divergence, -1.0, 1.0);
-   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 15] = FXAI_Clamp(macro_state.policy_pressure, -1.0, 1.0);
-   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 16] = FXAI_Clamp(macro_state.inflation_pressure, -1.0, 1.0);
-   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 17] = FXAI_Clamp(macro_state.labor_pressure, -1.0, 1.0);
-   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 18] = FXAI_Clamp(macro_state.growth_pressure, -1.0, 1.0);
-   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 19] = FXAI_Clamp(macro_state.state_quality, 0.0, 1.0);
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 14] = FXAI_ClampSignedUnitOpen(macro_state.policy_divergence);
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 15] = FXAI_ClampSignedUnitOpen(macro_state.policy_pressure);
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 16] = FXAI_ClampSignedUnitOpen(macro_state.inflation_pressure);
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 17] = FXAI_ClampSignedUnitOpen(macro_state.labor_pressure);
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 18] = FXAI_ClampSignedUnitOpen(macro_state.growth_pressure);
+   features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 19] = FXAI_ClampUnitOpen(macro_state.state_quality);
 
    features[80] = FXAI_Clamp(MathLog(1.0 + MathMax(spread_points, 0.0)), 0.0, 6.0);
    features[81] = FXAI_Clamp(spread_z20, -8.0, 8.0);
    features[82] = FXAI_Clamp(spread_vol_ratio20, 0.0, 4.5);
-   features[83] = FXAI_Clamp(spread_rank20, -1.0, 1.0);
+   features[83] = FXAI_ClampSignedUnitOpen(spread_rank20);
    features[79] = FXAI_LocalFeatureFamilyDrift(features);
 
    for(int f=0; f<FXAI_AI_FEATURES; f++)

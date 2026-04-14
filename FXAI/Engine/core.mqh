@@ -52,6 +52,10 @@
 #define FXAI_ANALOG_MEMORY_MIN_MATCHES 3
 #define FXAI_API_VERSION_V4 4
 #define FXAI_MAX_SEQUENCE_BARS 96
+#define FXAI_UNIT_RANGE_FLOOR 0.0001
+#define FXAI_UNIT_RANGE_CEIL 0.9999
+#define FXAI_SIGNED_UNIT_RANGE_FLOOR -0.9999
+#define FXAI_SIGNED_UNIT_RANGE_CEIL 0.9999
 
 #ifndef FXAI_REGIME_COUNT
 #define FXAI_REGIME_COUNT FXAI_PLUGIN_REGIME_BUCKETS
@@ -692,6 +696,16 @@ double FXAI_Clamp(const double v, const double lo, const double hi)
    if(v < lo) return lo;
    if(v > hi) return hi;
    return v;
+}
+
+double FXAI_ClampUnitOpen(const double v)
+{
+   return FXAI_Clamp(v, FXAI_UNIT_RANGE_FLOOR, FXAI_UNIT_RANGE_CEIL);
+}
+
+double FXAI_ClampSignedUnitOpen(const double v)
+{
+   return FXAI_Clamp(v, FXAI_SIGNED_UNIT_RANGE_FLOOR, FXAI_SIGNED_UNIT_RANGE_CEIL);
 }
 
 double FXAI_Sigmoid(const double z)

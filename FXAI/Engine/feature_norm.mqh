@@ -86,7 +86,7 @@ double FXAI_MinMaxBufferMap(const double v,
    if(den <= 1e-12)
       return 0.5;
 
-   return FXAI_Clamp((v - lo_b) / den, 0.0, 1.0);
+   return FXAI_ClampUnitOpen((v - lo_b) / den);
 }
 
 double FXAI_MinMaxBuffer5Map(const double v, const double lo, const double hi)
@@ -1009,7 +1009,7 @@ void FXAI_ApplyFeatureNormalizationEx(const ENUM_FXAI_FEATURE_NORMALIZATION meth
          }
 
          case FXAI_NORM_BINARY_01:
-            out_v = (has_prev && cur > prev ? 1.0 : 0.0);
+            out_v = (has_prev && cur > prev ? FXAI_UNIT_RANGE_CEIL : FXAI_UNIT_RANGE_FLOOR);
             break;
 
          case FXAI_NORM_LOG_RETURN:
