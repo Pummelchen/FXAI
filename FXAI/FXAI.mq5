@@ -679,7 +679,9 @@ string   g_execution_quality_last_state = "UNKNOWN";
 string   g_execution_quality_last_reasons_csv = "";
 datetime g_last_debug_bar = 0;
 
+#ifndef FXAI_MAX_CONTEXT_SYMBOLS
 #define FXAI_MAX_CONTEXT_SYMBOLS 48
+#endif
 #define FXAI_REL_MAX_PENDING 2048
 #ifndef FXAI_REGIME_COUNT
 #define FXAI_REGIME_COUNT 12
@@ -859,74 +861,6 @@ bool     g_meta_artifacts_dirty = false;
 datetime g_meta_last_save_time = 0;
 bool     g_runtime_artifacts_dirty = false;
 datetime g_runtime_last_save_time = 0;
-
-struct FXAIContextSeries
-{
-   bool loaded;
-   string symbol;
-   datetime last_bar_time;
-   MqlRates rates[];
-   double open[];
-   double high[];
-   double low[];
-   double close[];
-   datetime time[];
-   int spread[];
-   int aligned_idx[];
-};
-
-struct FXAIPreparedSample
-{
-   bool valid;
-   int label_class;
-   int regime_id;
-   int horizon_minutes;
-   int horizon_slot;
-   double move_points;
-   double min_move_points;
-   double cost_points;
-   double sample_weight;
-   double quality_score;
-   double mfe_points;
-   double mae_points;
-   double spread_stress;
-   double trace_spread_mean_ratio;
-   double trace_spread_peak_ratio;
-   double trace_range_mean_ratio;
-   double trace_body_efficiency;
-   double trace_gap_ratio;
-   double trace_reversal_ratio;
-   double trace_session_transition;
-   double trace_rollover;
-   double time_to_hit_frac;
-   int path_flags;
-   double masked_step_target;
-   double next_vol_target;
-   double regime_shift_target;
-   double context_lead_target;
-   double point_value;
-   double domain_hash;
-   datetime sample_time;
-   double x[FXAI_AI_WEIGHTS];
-};
-
-struct FXAINormSampleCache
-{
-   int method_id;
-   int horizon_minutes;
-   int fit_start;
-   int fit_end;
-   bool ready;
-   FXAIPreparedSample samples[];
-};
-
-struct FXAINormInputCache
-{
-   int method_id;
-   int horizon_minutes;
-   bool ready;
-   double x[FXAI_AI_WEIGHTS];
-};
 
 FXAIPreparedSample g_replay_samples[FXAI_REPLAY_CAPACITY];
 bool     g_replay_used[FXAI_REPLAY_CAPACITY];

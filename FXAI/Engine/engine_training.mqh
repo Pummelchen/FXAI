@@ -130,41 +130,50 @@ void FXAI_PrecomputeTrainingSamples(const int i_start,
    if(ArraySize(samples) < need_size)
       ArrayResize(samples, need_size);
 
-   // Build samples oldest -> newest (as-series: larger index is older) so
-   // any stateful normalizer sees a causal timeline.
-   for(int i=i_end; i>=i_start; i--)
-   {
-      if(i < 0 || i >= ArraySize(samples)) continue;
-      FXAI_PrepareTrainingSample(i,
-                                H,
-                                commission_points,
-                                cost_buffer_points,
-                                ev_threshold_points,
-                                snapshot,
-                                spread_m1,
-                                time_arr,
+   FXAIDataCoreBundle bundle;
+   int align_upto = i_end;
+   if(align_upto < 0)
+      align_upto = 0;
+   FXAI_DataCoreBindArrayBundle(snapshot,
+                                ArraySize(close_arr),
+                                align_upto,
                                 open_arr,
                                 high_arr,
                                 low_arr,
                                 close_arr,
-                                time_m5,
+                                time_arr,
+                                spread_m1,
                                 close_m5,
+                                time_m5,
                                 map_m5,
-                                time_m15,
                                 close_m15,
+                                time_m15,
                                 map_m15,
-                                time_m30,
                                 close_m30,
+                                time_m30,
                                 map_m30,
-                                time_h1,
                                 close_h1,
+                                time_h1,
                                 map_h1,
                                 ctx_mean_arr,
                                 ctx_std_arr,
                                 ctx_up_arr,
                                 ctx_extra_arr,
-                                norm_method_override,
-                                samples[i]);
+                                bundle);
+
+   // Build samples oldest -> newest (as-series: larger index is older) so
+   // any stateful normalizer sees a causal timeline.
+   for(int i=i_end; i>=i_start; i--)
+   {
+      if(i < 0 || i >= ArraySize(samples)) continue;
+      FXAI_PrepareTrainingSampleFromBundle(bundle,
+                                           i,
+                                           H,
+                                           commission_points,
+                                           cost_buffer_points,
+                                           ev_threshold_points,
+                                           norm_method_override,
+                                           samples[i]);
    }
 }
 
@@ -556,95 +565,56 @@ int FXAI_EnsureNormInputCache(const int method_id,
    if(idx >= 0) return idx;
 
    ENUM_FXAI_FEATURE_NORMALIZATION norm_method = FXAI_SanitizeNormMethod(method_id);
-   double ctx_mean_pred = FXAI_GetArrayValue(ctx_mean_arr, 0, 0.0);
-   double ctx_std_pred = FXAI_GetArrayValue(ctx_std_arr, 0, 0.0);
-   double ctx_up_pred = FXAI_GetArrayValue(ctx_up_arr, 0, 0.5);
-   double feat_pred[FXAI_AI_FEATURES];
-   if(!FXAI_ComputeFeatureVector(0,
-                                 snapshot.symbol,
-                                 spread_pred,
-                                 time_arr,
-                                 open_arr,
-                                 high_arr,
-                                 low_arr,
-                                 close_arr,
-                                 spread_m1,
-                                 time_m5,
-                                 close_m5,
-                                 map_m5,
-                                 time_m15,
-                                 close_m15,
-                                 map_m15,
-                                 time_m30,
-                                 close_m30,
-                                 map_m30,
-                                 time_h1,
-                                 close_h1,
-                                 map_h1,
-                                 ctx_mean_pred,
-                                 ctx_std_pred,
-                                 ctx_up_pred,
-                                 ctx_extra_arr,
-                                 norm_method,
-                                 feat_pred))
+   FXAIDataSnapshot predict_snapshot = snapshot;
+   predict_snapshot.spread_points = spread_pred;
+   FXAIDataCoreBundle bundle;
+   int align_upto = 1;
+   if(align_upto >= ArraySize(close_arr))
+      align_upto = ArraySize(close_arr) - 1;
+   if(align_upto < 0)
+      align_upto = 0;
+   FXAI_DataCoreBindArrayBundle(predict_snapshot,
+                                ArraySize(close_arr),
+                                align_upto,
+                                open_arr,
+                                high_arr,
+                                low_arr,
+                                close_arr,
+                                time_arr,
+                                spread_m1,
+                                close_m5,
+                                time_m5,
+                                map_m5,
+                                close_m15,
+                                time_m15,
+                                map_m15,
+                                close_m30,
+                                time_m30,
+                                map_m30,
+                                close_h1,
+                                time_h1,
+                                map_h1,
+                                ctx_mean_arr,
+                                ctx_std_arr,
+                                ctx_up_arr,
+                                ctx_extra_arr,
+                                bundle);
+
+   FXAIFeatureCoreFrame feature_frame;
+   if(!FXAI_FeatureCoreBuildFrameFromBundle(bundle, 0, horizon_minutes, norm_method, feature_frame))
       return -1;
-
-   bool need_prev = FXAI_FeatureNormNeedsPrevious(norm_method);
-   bool has_prev_feat = false;
-   double feat_prev[FXAI_AI_FEATURES];
-   for(int f=0; f<FXAI_AI_FEATURES; f++)
-      feat_prev[f] = 0.0;
-
-   if(need_prev && ArraySize(close_arr) > 1)
-   {
-      double spread_prev = FXAI_GetSpreadAtIndex(1, spread_m1, spread_pred);
-      double ctx_mean_prev = FXAI_GetArrayValue(ctx_mean_arr, 1, ctx_mean_pred);
-      double ctx_std_prev = FXAI_GetArrayValue(ctx_std_arr, 1, ctx_std_pred);
-      double ctx_up_prev = FXAI_GetArrayValue(ctx_up_arr, 1, ctx_up_pred);
-      has_prev_feat = FXAI_ComputeFeatureVector(1,
-                                               snapshot.symbol,
-                                               spread_prev,
-                                               time_arr,
-                                               open_arr,
-                                               high_arr,
-                                               low_arr,
-                                               close_arr,
-                                               spread_m1,
-                                               time_m5,
-                                               close_m5,
-                                               map_m5,
-                                               time_m15,
-                                               close_m15,
-                                               map_m15,
-                                               time_m30,
-                                               close_m30,
-                                               map_m30,
-                                               time_h1,
-                                               close_h1,
-                                               map_h1,
-                                               ctx_mean_prev,
-                                               ctx_std_prev,
-                                               ctx_up_prev,
-                                               ctx_extra_arr,
-                                               norm_method,
-                                               feat_prev);
-   }
-
-   double feat_norm[FXAI_AI_FEATURES];
-   FXAI_ApplyFeatureNormalizationEx(norm_method,
-                                    horizon_minutes,
-                                    feat_pred,
-                                    feat_prev,
-                                    has_prev_feat,
-                                    snapshot.bar_time,
-                                    feat_norm);
+   feature_frame.spread_points = spread_pred;
+   FXAINormalizationCoreFrame norm_frame;
+   if(!FXAI_NormalizationCoreBuildInputFrameFromFeatureFrame(feature_frame, norm_frame))
+      return -1;
 
    int sz = ArraySize(caches);
    ArrayResize(caches, sz + 1);
    caches[sz].method_id = method_id;
    caches[sz].horizon_minutes = horizon_minutes;
    caches[sz].ready = true;
-   FXAI_BuildInputVector(feat_norm, caches[sz].x);
+   for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      caches[sz].x[k] = norm_frame.model_input[k];
    return sz;
 }
 

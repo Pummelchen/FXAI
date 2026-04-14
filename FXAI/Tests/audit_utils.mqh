@@ -1,6 +1,10 @@
 #ifndef __FXAI_AUDIT_UTILS_MQH__
 #define __FXAI_AUDIT_UTILS_MQH__
 
+// The slim audit runner intentionally excludes the live context-symbol
+// discovery layer. Shared pipeline cores compile in empty-context mode there.
+#define FXAI_DISABLE_DYNAMIC_CONTEXT_API 1
+
 double FXAI_AuditGetArrayValue(const double &arr[],
                                const int idx,
                                const double def_value)

@@ -60,44 +60,29 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
 
    int needed = warmup_samples + max_h + FEATURE_LB;
 
-   FXAIDataSnapshot snapshot;
-   if(!FXAI_ExportDataSnapshot(symbol, AI_CommissionPerLotSide, AI_CostBufferPoints, snapshot))
-      return false;
    FXAI_ResetFeatureNormalizationState();
    FXAI_ResetFeatureNormalizationFits();
+   FXAIDataCoreBundle warmup_bundle;
+   string warmup_data_reason = "";
+   if(!FXAI_DataCoreLoadHistoryBundle(symbol,
+                                      needed,
+                                      needed - 1,
+                                      AI_CommissionPerLotSide,
+                                      AI_CostBufferPoints,
+                                      warmup_bundle,
+                                      warmup_data_reason))
+   {
+      Print("FXAI warmup data core load failed: ", warmup_data_reason);
+      return false;
+   }
 
-   MqlRates rates_m1[];
-   MqlRates rates_m5[];
-   MqlRates rates_m15[];
-   MqlRates rates_m30[];
-   MqlRates rates_h1[];
-   MqlRates rates_ctx_tmp[];
-
+   FXAIDataSnapshot snapshot = warmup_bundle.snapshot;
    double open_arr[];
    double high_arr[];
    double low_arr[];
    double close_arr[];
    datetime time_arr[];
    int spread_m1[];
-   if(!FXAI_LoadSeriesWithSpread(symbol, needed, rates_m1, close_arr, time_arr, spread_m1))
-      return false;
-
-   FXAI_ExtractRatesOHLC(rates_m1, open_arr, high_arr, low_arr, close_arr);
-
-   if(ArraySize(close_arr) < needed || ArraySize(time_arr) < needed)
-      return false;
-   if(!FXAI_ValidateM1SeriesBundle(time_arr, open_arr, high_arr, low_arr, close_arr, spread_m1, needed))
-      return false;
-
-   int needed_m5 = (needed / 5) + 80;
-   int needed_m15 = (needed / 15) + 80;
-   int needed_m30 = (needed / 30) + 80;
-   int needed_h1 = (needed / 60) + 80;
-   if(needed_m5 < 220) needed_m5 = 220;
-   if(needed_m15 < 220) needed_m15 = 220;
-   if(needed_m30 < 220) needed_m30 = 220;
-   if(needed_h1 < 220) needed_h1 = 220;
-
    double close_m5[];
    datetime time_m5[];
    double close_m15[];
@@ -110,77 +95,38 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
    int map_m15[];
    int map_m30[];
    int map_h1[];
-
-   FXAI_LoadSeriesOptionalCached(symbol, PERIOD_M5, needed_m5, rates_m5, close_m5, time_m5);
-   FXAI_LoadSeriesOptionalCached(symbol, PERIOD_M15, needed_m15, rates_m15, close_m15, time_m15);
-   FXAI_LoadSeriesOptionalCached(symbol, PERIOD_M30, needed_m30, rates_m30, close_m30, time_m30);
-   FXAI_LoadSeriesOptionalCached(symbol, PERIOD_H1, needed_h1, rates_h1, close_h1, time_h1);
-
-   int lag_m5 = 2 * PeriodSeconds(PERIOD_M5);
-   int lag_m15 = 2 * PeriodSeconds(PERIOD_M15);
-   int lag_m30 = 2 * PeriodSeconds(PERIOD_M30);
-   int lag_h1 = 2 * PeriodSeconds(PERIOD_H1);
-   if(lag_m5 <= 0) lag_m5 = 600;
-   if(lag_m15 <= 0) lag_m15 = 1800;
-   if(lag_m30 <= 0) lag_m30 = 3600;
-   if(lag_h1 <= 0) lag_h1 = 7200;
-
-   FXAI_BuildAlignedIndexMap(time_arr, time_m5, lag_m5, map_m5);
-   FXAI_BuildAlignedIndexMap(time_arr, time_m15, lag_m15, map_m15);
-   FXAI_BuildAlignedIndexMap(time_arr, time_m30, lag_m30, map_m30);
-   FXAI_BuildAlignedIndexMap(time_arr, time_h1, lag_h1, map_h1);
-
-   int ctx_count = ArraySize(g_context_symbols);
-   if(ctx_count > FXAI_MAX_CONTEXT_SYMBOLS) ctx_count = FXAI_MAX_CONTEXT_SYMBOLS;
-   FXAIContextSeries ctx_series[];
-   ArrayResize(ctx_series, ctx_count);
-   for(int s=0; s<ctx_count; s++)
-   {
-      ctx_series[s].symbol = g_context_symbols[s];
-      ctx_series[s].loaded = FXAI_LoadRatesOptional(g_context_symbols[s],
-                                                    PERIOD_M1,
-                                                    needed,
-                                                    rates_ctx_tmp);
-      if(ctx_series[s].loaded)
-      {
-         FXAI_ExtractRatesCloseTimeSpread(rates_ctx_tmp,
-                                          ctx_series[s].close,
-                                          ctx_series[s].time,
-                                          ctx_series[s].spread);
-         FXAI_ExtractRatesOHLC(rates_ctx_tmp,
-                               ctx_series[s].open,
-                               ctx_series[s].high,
-                               ctx_series[s].low,
-                               ctx_series[s].close);
-         ctx_series[s].loaded = FXAI_ValidateM1SeriesBundle(ctx_series[s].time,
-                                                            ctx_series[s].open,
-                                                            ctx_series[s].high,
-                                                            ctx_series[s].low,
-                                                            ctx_series[s].close,
-                                                            ctx_series[s].spread,
-                                                            needed);
-      }
-   }
+   double ctx_mean_arr[];
+   double ctx_std_arr[];
+   double ctx_up_arr[];
+   double ctx_extra_arr[];
+   ArrayCopy(open_arr, warmup_bundle.open_arr);
+   ArrayCopy(high_arr, warmup_bundle.high_arr);
+   ArrayCopy(low_arr, warmup_bundle.low_arr);
+   ArrayCopy(close_arr, warmup_bundle.close_arr);
+   ArrayCopy(time_arr, warmup_bundle.time_arr);
+   ArrayCopy(spread_m1, warmup_bundle.spread_m1);
+   ArrayCopy(close_m5, warmup_bundle.close_m5);
+   ArrayCopy(time_m5, warmup_bundle.time_m5);
+   ArrayCopy(close_m15, warmup_bundle.close_m15);
+   ArrayCopy(time_m15, warmup_bundle.time_m15);
+   ArrayCopy(close_m30, warmup_bundle.close_m30);
+   ArrayCopy(time_m30, warmup_bundle.time_m30);
+   ArrayCopy(close_h1, warmup_bundle.close_h1);
+   ArrayCopy(time_h1, warmup_bundle.time_h1);
+   ArrayCopy(map_m5, warmup_bundle.map_m5);
+   ArrayCopy(map_m15, warmup_bundle.map_m15);
+   ArrayCopy(map_m30, warmup_bundle.map_m30);
+   ArrayCopy(map_h1, warmup_bundle.map_h1);
 
    int i_start = max_h;
    int i_end = max_h + warmup_samples - 1;
    int max_valid = needed - FEATURE_LB - 1;
    if(i_end > max_valid) i_end = max_valid;
    if(i_end <= i_start) return false;
-
-   double ctx_mean_arr[];
-   double ctx_std_arr[];
-   double ctx_up_arr[];
-   double ctx_extra_arr[];
-   FXAI_PrecomputeDynamicContextAggregates(time_arr,
-                                           close_arr,
-                                           ctx_series,
-                                           ctx_count,
-                                           i_end,
-                                           ctx_mean_arr,
-                                           ctx_std_arr,
-                                           ctx_up_arr,
-                                           ctx_extra_arr);
+   ArrayCopy(ctx_mean_arr, warmup_bundle.ctx_mean_arr);
+   ArrayCopy(ctx_std_arr, warmup_bundle.ctx_std_arr);
+   ArrayCopy(ctx_up_arr, warmup_bundle.ctx_up_arr);
+   ArrayCopy(ctx_extra_arr, warmup_bundle.ctx_extra_arr);
 
    double cost_buffer_points = (AI_CostBufferPoints < 0.0 ? 0.0 : AI_CostBufferPoints);
    double commission_points = snapshot.commission_points;

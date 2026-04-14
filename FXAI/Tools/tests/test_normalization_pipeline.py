@@ -109,7 +109,9 @@ def test_bounded_feature_emitters_use_open_interval_clamps():
 def test_training_pipeline_uses_horizon_aware_fit_and_payload_transform():
     engine_training = _read("Engine/engine_training.mqh")
     assert "FXAI_FitFeatureNormalizationMethodForRange(method_id," in engine_training
-    assert "FXAI_ApplyFeatureNormalizationEx(norm_method," in engine_training
+    assert "FXAI_DataCoreBindArrayBundle(predict_snapshot," in engine_training
+    assert "FXAI_FeatureCoreBuildFrameFromBundle(bundle, 0, horizon_minutes, norm_method, feature_frame)" in engine_training
+    assert "FXAI_NormalizationCoreBuildInputFrameFromFeatureFrame(feature_frame, norm_frame)" in engine_training
     assert "FXAI_ApplyPayloadTransformPipelineEx(manifest.feature_schema_id," in engine_training
     assert "caches[sz].horizon_minutes = horizon_minutes;" in engine_training
 

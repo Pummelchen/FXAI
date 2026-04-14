@@ -58,81 +58,49 @@ bool FXAI_AuditBuildSample(const int i,
                                                             exec_profile);
    if(snapshot.min_move_points < 0.0) snapshot.min_move_points = 0.0;
 
-   double feat[FXAI_AI_FEATURES];
-   if(!FXAI_ComputeFeatureVector(i,
-                                 snapshot.symbol,
-                                 snapshot.spread_points,
-                                 time_arr,
-                                 open_arr,
-                                 high_arr,
-                                 low_arr,
-                                 close_arr,
-                                 spread_arr,
-                                 time_m5,
-                                 close_m5,
-                                 map_m5,
-                                 time_m15,
-                                 close_m15,
-                                 map_m15,
-                                 time_m30,
-                                 close_m30,
-                                 map_m30,
-                                 time_h1,
-                                 close_h1,
-                                 map_h1,
-                                 FXAI_AuditGetArrayValue(ctx_mean_arr, i, 0.0),
-                                 FXAI_AuditGetArrayValue(ctx_std_arr, i, 0.0),
-                                 FXAI_AuditGetArrayValue(ctx_up_arr, i, 0.5),
-                                 ctx_extra_arr,
-                                 norm_method,
-                                 feat))
+   FXAIDataCoreBundle bundle;
+   int align_upto = n - 1;
+   if(align_upto < 0) align_upto = 0;
+   FXAI_DataCoreBindArrayBundle(snapshot,
+                                n,
+                                align_upto,
+                                open_arr,
+                                high_arr,
+                                low_arr,
+                                close_arr,
+                                time_arr,
+                                spread_arr,
+                                close_m5,
+                                time_m5,
+                                map_m5,
+                                close_m15,
+                                time_m15,
+                                map_m15,
+                                close_m30,
+                                time_m30,
+                                map_m30,
+                                close_h1,
+                                time_h1,
+                                map_h1,
+                                ctx_mean_arr,
+                                ctx_std_arr,
+                                ctx_up_arr,
+                                ctx_extra_arr,
+                                bundle);
+
+   FXAIFeatureCoreFrame feature_frame;
+   if(!FXAI_FeatureCoreBuildFrameFromBundle(bundle,
+                                            i,
+                                            horizon_minutes,
+                                            norm_method,
+                                            feature_frame))
       return false;
-
-   bool need_prev = FXAI_FeatureNormNeedsPrevious(norm_method);
-   bool has_prev = false;
-   double feat_prev[FXAI_AI_FEATURES];
-   for(int f=0; f<FXAI_AI_FEATURES; f++) feat_prev[f] = 0.0;
-   if(need_prev && (i + 1) < n)
-   {
-      has_prev = FXAI_ComputeFeatureVector(i + 1,
-                                           snapshot.symbol,
-                                           FXAI_GetSpreadAtIndex(i + 1, spread_arr, snapshot.spread_points),
-                                           time_arr,
-                                           open_arr,
-                                           high_arr,
-                                           low_arr,
-                                           close_arr,
-                                           spread_arr,
-                                           time_m5,
-                                           close_m5,
-                                           map_m5,
-                                           time_m15,
-                                           close_m15,
-                                           map_m15,
-                                           time_m30,
-                                           close_m30,
-                                           map_m30,
-                                           time_h1,
-                                           close_h1,
-                                           map_h1,
-                                           FXAI_AuditGetArrayValue(ctx_mean_arr, i + 1, 0.0),
-                                           FXAI_AuditGetArrayValue(ctx_std_arr, i + 1, 0.0),
-                                           FXAI_AuditGetArrayValue(ctx_up_arr, i + 1, 0.5),
-                                           ctx_extra_arr,
-                                           norm_method,
-                                           feat_prev);
-   }
-
-   double feat_norm[FXAI_AI_FEATURES];
-   FXAI_ApplyFeatureNormalizationEx(norm_method,
-                                    horizon_minutes,
-                                    feat,
-                                    feat_prev,
-                                    has_prev,
-                                    snapshot.bar_time,
-                                    feat_norm);
+   FXAINormalizationCoreFrame norm_frame;
+   if(!FXAI_NormalizationCoreBuildInputFrameFromFeatureFrame(feature_frame, norm_frame))
+      return false;
    ArrayResize(x, FXAI_AI_WEIGHTS);
-   FXAI_BuildInputVector(feat_norm, x);
+   for(int k=0; k<FXAI_AI_WEIGHTS; k++)
+      x[k] = norm_frame.model_input[k];
 
    double cost_points = snapshot.min_move_points;
    move_points = 0.0;
@@ -168,7 +136,7 @@ bool FXAI_AuditBuildSample(const int i,
 
    double spread_ref = FXAI_AuditGetIntArrayMean(spread_arr, i, 64, snapshot.spread_points);
    double vol_ref = FXAI_RollingAbsReturn(close_arr, i, 64);
-   double vol_proxy = MathAbs(feat[5]);
+    double vol_proxy = MathAbs(feature_frame.raw[5]);
    ctx.api_version = FXAI_API_VERSION_V4;
    ctx.regime_id = FXAI_AuditGetStaticRegimeId(snapshot.bar_time, snapshot.spread_points, spread_ref, vol_proxy, vol_ref);
    ctx.session_bucket = FXAI_DeriveSessionBucket(snapshot.bar_time);

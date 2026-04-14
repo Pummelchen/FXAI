@@ -68,7 +68,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - `Engine/`
   Data loading, feature building, normalization, warmup, runtime orchestration, persistence, and meta layers.
 - `Engine/Core/`
-  Shared core helpers split out from `Engine/core.mqh` for analog memory, broker replay, model context, schema handling, and request validation.
+  Shared core helpers split out from `Engine/core.mqh` for analog memory, broker replay, model context, schema handling, request validation, and the dedicated pipeline cores. `core_data_core.mqh`, `core_feature_core.mqh`, and `core_normalization_core.mqh` now expose one unified bundle/frame API so warmup, training, audit, and live runtime all consume the same MT5 data, feature-generation, and normalization contracts.
 - `Engine/Lifecycle/`
   Split lifecycle internals for context-symbol discovery, reset and recovery, bootstrap, and compliance or promotion-readiness checks.
 - `Engine/Warmup/`
