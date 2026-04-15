@@ -113,6 +113,8 @@ What to do:
 1. Run `python3 Tools/fxai_testlab.py verify-all`.
 2. If you changed the GUI, run `cd GUI && swift test`.
 3. If you changed an Offline Lab subsystem, run its dedicated `*-validate` command too.
+4. Build MT5 release binaries with `python3 Tools/fxai_testlab.py package-mt5-release --version <tag>`.
+5. Upload the generated `.ex5` files, manifest, and SHA-256 checksum files to GitHub Releases; do not commit compiled MT5 binaries.
 
 ## Common Mistakes
 

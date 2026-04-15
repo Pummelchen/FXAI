@@ -12,6 +12,7 @@ from .baseline import compare_summaries, load_baseline_summary, resolve_baseline
 from .compile import compile_target
 from .optimize import build_optimization_campaign, execute_optimization_campaign, render_optimization_campaign
 from .release_gate import cmd_release_gate
+from .release_artifacts import cmd_package_mt5_release
 from .reporting import build_multisymbol_summary, load_current_summary, load_rows, render_multisymbol_report, render_report, render_summary_report
 from .shared import (
     AuditRunError,
@@ -250,6 +251,14 @@ def main():
 
     cm = sub.add_parser("compile-main", help="Compile the main FXAI EA")
     cm.set_defaults(func=cmd_compile_main)
+
+    pkg = sub.add_parser("package-mt5-release", help="Compile and package MT5 .ex5 binaries for GitHub Releases")
+    pkg.add_argument("--version", required=True, help="Release version or tag used in artifact metadata")
+    pkg.add_argument("--output-dir", default="")
+    pkg.add_argument("--release-profile", default="production")
+    pkg.add_argument("--compatible-profiles", default="research,production")
+    pkg.add_argument("--skip-compile", action="store_true", help="Package existing local .ex5 files without recompiling")
+    pkg.set_defaults(func=cmd_package_mt5_release)
 
     va = sub.add_parser("verify-all", help="Run Python tests, deterministic fixture checks, and clean MT5 compiles")
     va.add_argument("--refresh-golden", action="store_true")

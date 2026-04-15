@@ -19,7 +19,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - `Tests/FXAI_AuditRunner.mq5`
   MT5-side Audit Lab runner.
 - `Tools/fxai_testlab.py`
-  External compile, audit, baseline, and release-gate tool.
+  External compile, audit, baseline, MT5 release-artifact packaging, and release-gate tool.
 - `Tools/fxai_offline_lab.py`
   Stable CLI wrapper for the Turso/libSQL-backed offline export, tuning, promotion, and control-loop tool.
 - `Services/FXAI_NewsPulseCalendar.mq5`
@@ -163,6 +163,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 
 - Canonical research data is `M1 OHLC + spread`.
 - The preferred platform verification path is `python3 FXAI/Tools/fxai_testlab.py verify-all`.
+- The preferred MT5 binary release path is `python3 FXAI/Tools/fxai_testlab.py package-mt5-release --version <tag>` after a clean verification gate. Git tracks `.mq5`/`.mqh` source and manifests only; compiled `.ex5` files must be uploaded to GitHub Releases with the generated manifest and SHA-256 sums instead of being committed.
 - The preferred GUI verification path is `cd FXAI/GUI && swift test && swift build`.
 - GUI release packaging is `cd FXAI/GUI && ./Tools/package_gui_release.sh`.
 - The preferred Offline Lab bootstrap path is `python3 FXAI/Tools/fxai_offline_lab.py bootstrap --seed-demo`.
