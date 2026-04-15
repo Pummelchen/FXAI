@@ -25,9 +25,13 @@ def test_data_pipeline_exposes_dedicated_cores_and_contracts():
 def test_core_pipeline_contracts_define_stage_structures():
     contracts = _read("Engine/Core/core_pipeline_contracts.mqh")
     required_tokens = [
+        "struct FXAIDataCoreRequest",
         "struct FXAIDataCoreBundle",
+        "struct FXAIFeatureCoreRequest",
         "struct FXAIFeatureCoreFrame",
         "struct FXAINormalizationCoreFrame",
+        "struct FXAINormalizationPayloadRequest",
+        "struct FXAINormalizationPayloadFrame",
         "struct FXAIContextSeries",
         "struct FXAIPreparedSample",
     ]
@@ -41,14 +45,24 @@ def test_core_stage_files_expose_unified_api():
     normalization_core = _read("Engine/Core/core_normalization_core.mqh")
 
     for token in [
+        "void FXAI_DataCoreResetRequest(",
+        "void FXAI_DataCoreInitRequest(",
+        "bool FXAI_DataCoreAddContextSymbol(",
+        "void FXAI_DataCoreCaptureGlobalContextSymbols(",
+        "bool FXAI_DataCoreLoadBundleFromRequest(",
         "bool FXAI_DataCoreLoadHistoryBundle(",
         "bool FXAI_DataCoreRefreshLiveBundle(",
         "void FXAI_DataCoreBindArrayBundle(",
     ]:
         assert token in data_core
 
+    assert "void FXAI_FeatureCoreResetRequest(" in feature_core
+    assert "bool FXAI_FeatureCoreBuildFrame(" in feature_core
     assert "bool FXAI_FeatureCoreBuildFrameFromBundle(" in feature_core
     assert "bool FXAI_NormalizationCoreBuildInputFrameFromFeatureFrame(" in normalization_core
+    assert "bool FXAI_NormalizationCoreBuildPayloadFrame(" in normalization_core
+    assert "bool FXAI_NormalizationCoreFinalizePredictRequest(" in normalization_core
+    assert "bool FXAI_NormalizationCoreFinalizeTrainRequest(" in normalization_core
 
 
 def test_runtime_training_and_audit_paths_use_pipeline_cores():
@@ -80,6 +94,7 @@ def test_runtime_training_and_audit_paths_use_pipeline_cores():
         "FXAI_DataCoreBindArrayBundle(snapshot,",
         "FXAI_FeatureCoreBuildFrameFromBundle(bundle, 0, horizon_minutes, norm_method, feature_frame)",
         "FXAI_NormalizationCoreBuildInputFrameFromFeatureFrame(feature_frame, norm_frame)",
+        "FXAI_NormalizationCoreFinalizeTrainRequest(manifest, s3)",
     ]
     for token in training_tokens:
         assert token in engine_training
@@ -93,6 +108,32 @@ def test_runtime_training_and_audit_paths_use_pipeline_cores():
         assert token in audit_samples
 
     assert "FXAI_DataCoreLoadHistoryBundle(symbol," in warmup_entry
+
+
+def test_shortcut_paths_are_removed_from_pipeline_callers():
+    warmup_transfer = _read("Engine/Warmup/warmup_transfer.mqh")
+    meta_reliability = _read("Engine/meta_reliability.mqh")
+    feature_norm = _read("Engine/feature_norm.mqh")
+    direct_payload_callers = [
+        "Engine/engine_training.mqh",
+        "Engine/Runtime/runtime_model_stage_block.mqh",
+        "Engine/Warmup/warmup_scoring.mqh",
+        "Engine/Warmup/warmup_transfer.mqh",
+        "Engine/Warmup/warmup_normalization.mqh",
+        "Engine/Warmup/warmup_portfolio.mqh",
+        "Engine/Lifecycle/lifecycle_bootstrap.mqh",
+        "Engine/Lifecycle/lifecycle_compliance.mqh",
+        "Tests/Scoring/audit_scoring_run.mqh",
+        "Tests/Scoring/audit_scoring_adversarial.mqh",
+    ]
+
+    assert "FXAI_LoadSeriesOptionalCached(" not in warmup_transfer
+    assert "FXAI_LoadRatesOptional(" not in warmup_transfer
+    assert "FXAI_UpdateRatesRolling(" not in meta_reliability
+    assert "FXAI_ComputeFeatureVector(" not in feature_norm
+
+    for rel_path in direct_payload_callers:
+        assert "FXAI_ApplyPayloadTransformPipelineEx(" not in _read(rel_path)
 
 
 def test_audit_harness_provides_context_shim_for_pipeline_cores():

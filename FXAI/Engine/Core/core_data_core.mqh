@@ -1,6 +1,67 @@
 #ifndef __FXAI_CORE_DATA_CORE_MQH__
 #define __FXAI_CORE_DATA_CORE_MQH__
 
+void FXAI_DataCoreResetRequest(FXAIDataCoreRequest &request)
+{
+   request.live_mode = false;
+   request.symbol = "";
+   request.signal_bar = 0;
+   request.needed = 0;
+   request.align_upto = -1;
+   request.commission_per_lot_side = 0.0;
+   request.buffer_points = 0.0;
+   request.context_symbol_count = 0;
+   for(int i=0; i<FXAI_MAX_CONTEXT_SYMBOLS; i++)
+      request.context_symbols[i] = "";
+}
+
+void FXAI_DataCoreInitRequest(FXAIDataCoreRequest &request,
+                              const bool live_mode,
+                              const string symbol,
+                              const datetime signal_bar,
+                              const int needed,
+                              const int align_upto,
+                              const double commission_per_lot_side,
+                              const double buffer_points)
+{
+   FXAI_DataCoreResetRequest(request);
+   request.live_mode = live_mode;
+   request.symbol = symbol;
+   request.signal_bar = signal_bar;
+   request.needed = needed;
+   request.align_upto = align_upto;
+   request.commission_per_lot_side = commission_per_lot_side;
+   request.buffer_points = buffer_points;
+}
+
+bool FXAI_DataCoreAddContextSymbol(FXAIDataCoreRequest &request,
+                                   const string symbol)
+{
+   if(StringLen(symbol) <= 0)
+      return false;
+
+   for(int i=0; i<request.context_symbol_count; i++)
+      if(request.context_symbols[i] == symbol)
+         return false;
+
+   if(request.context_symbol_count >= FXAI_MAX_CONTEXT_SYMBOLS)
+      return false;
+
+   request.context_symbols[request.context_symbol_count] = symbol;
+   request.context_symbol_count++;
+   return true;
+}
+
+void FXAI_DataCoreCaptureGlobalContextSymbols(FXAIDataCoreRequest &request)
+{
+#ifdef FXAI_DISABLE_DYNAMIC_CONTEXT_API
+   request.context_symbol_count = 0;
+#else
+   for(int i=0; i<ArraySize(g_context_symbols); i++)
+      FXAI_DataCoreAddContextSymbol(request, g_context_symbols[i]);
+#endif
+}
+
 void FXAI_DataCoreResetContextSeries(FXAIContextSeries &series)
 {
    series.loaded = false;
@@ -136,11 +197,7 @@ bool FXAI_DataCoreBuildContextAggregates(FXAIDataCoreBundle &bundle,
    reason = "";
    return true;
 #else
-   int ctx_count = ArraySize(g_context_symbols);
-   if(ctx_count > FXAI_MAX_CONTEXT_SYMBOLS)
-      ctx_count = FXAI_MAX_CONTEXT_SYMBOLS;
-
-   FXAI_DataCoreEnsureContextSlots(bundle, ctx_count);
+   int ctx_count = ArraySize(bundle.ctx_series);
    if(ctx_count <= 0)
    {
       FXAI_DataCoreClearContextAggregates(bundle);
@@ -193,23 +250,22 @@ bool FXAI_DataCoreRefreshLiveHigherTimeframe(const string symbol,
 }
 
 bool FXAI_DataCoreLoadHistoryContext(FXAIDataCoreBundle &bundle,
-                                     const int needed)
+                                     const int needed,
+                                     const FXAIDataCoreRequest &request)
 {
 #ifdef FXAI_DISABLE_DYNAMIC_CONTEXT_API
    FXAI_DataCoreEnsureContextSlots(bundle, 0);
    return true;
 #else
-   int ctx_count = ArraySize(g_context_symbols);
-   if(ctx_count > FXAI_MAX_CONTEXT_SYMBOLS)
-      ctx_count = FXAI_MAX_CONTEXT_SYMBOLS;
-
+   int ctx_count = request.context_symbol_count;
    FXAI_DataCoreEnsureContextSlots(bundle, ctx_count);
    MqlRates rates_ctx_tmp[];
    for(int s=0; s<ctx_count; s++)
    {
       FXAI_DataCoreResetContextSeries(bundle.ctx_series[s]);
-      bundle.ctx_series[s].symbol = g_context_symbols[s];
-      bundle.ctx_series[s].loaded = FXAI_LoadRatesOptional(g_context_symbols[s],
+      string ctx_symbol = request.context_symbols[s];
+      bundle.ctx_series[s].symbol = ctx_symbol;
+      bundle.ctx_series[s].loaded = FXAI_LoadRatesOptional(ctx_symbol,
                                                            PERIOD_M1,
                                                            needed,
                                                            rates_ctx_tmp);
@@ -235,27 +291,25 @@ bool FXAI_DataCoreLoadHistoryContext(FXAIDataCoreBundle &bundle,
       if(!bundle.ctx_series[s].loaded)
          FXAI_DataCoreResetContextSeries(bundle.ctx_series[s]);
       else
-         bundle.ctx_series[s].symbol = g_context_symbols[s];
+         bundle.ctx_series[s].symbol = ctx_symbol;
    }
    return true;
 #endif
 }
 
 bool FXAI_DataCoreRefreshLiveContext(FXAIDataCoreBundle &bundle,
-                                     const int needed)
+                                     const int needed,
+                                     const FXAIDataCoreRequest &request)
 {
 #ifdef FXAI_DISABLE_DYNAMIC_CONTEXT_API
    FXAI_DataCoreEnsureContextSlots(bundle, 0);
    return true;
 #else
-   int ctx_count = ArraySize(g_context_symbols);
-   if(ctx_count > FXAI_MAX_CONTEXT_SYMBOLS)
-      ctx_count = FXAI_MAX_CONTEXT_SYMBOLS;
-
+   int ctx_count = request.context_symbol_count;
    FXAI_DataCoreEnsureContextSlots(bundle, ctx_count);
    for(int s=0; s<ctx_count; s++)
    {
-      string ctx_symbol = g_context_symbols[s];
+      string ctx_symbol = request.context_symbols[s];
       if(bundle.ctx_series[s].symbol != ctx_symbol)
       {
          FXAI_DataCoreResetContextSeries(bundle.ctx_series[s]);
@@ -298,36 +352,59 @@ bool FXAI_DataCoreRefreshLiveContext(FXAIDataCoreBundle &bundle,
 #endif
 }
 
-bool FXAI_DataCoreLoadHistoryBundle(const string symbol,
-                                    const int needed,
-                                    const int align_upto,
-                                    const double commission_per_lot_side,
-                                    const double buffer_points,
-                                    FXAIDataCoreBundle &bundle,
-                                    string &reason)
+bool FXAI_DataCoreLoadBundleFromRequest(const FXAIDataCoreRequest &request,
+                                        FXAIDataCoreBundle &bundle,
+                                        string &reason)
 {
-   FXAI_DataCoreResetBundle(bundle);
-   bundle.live_mode = false;
-   bundle.symbol = symbol;
-   bundle.needed = needed;
-   bundle.align_upto = align_upto;
+   if(bundle.symbol != request.symbol || bundle.live_mode != request.live_mode)
+      FXAI_DataCoreResetBundle(bundle);
 
-   if(!FXAI_ExportDataSnapshot(symbol, commission_per_lot_side, buffer_points, bundle.snapshot))
+   bundle.live_mode = request.live_mode;
+   bundle.symbol = request.symbol;
+   bundle.signal_bar = request.signal_bar;
+   bundle.needed = request.needed;
+   bundle.align_upto = request.align_upto;
+
+   if(!FXAI_ExportDataSnapshot(request.symbol,
+                               request.commission_per_lot_side,
+                               request.buffer_points,
+                               bundle.snapshot))
    {
       reason = "snapshot_export_failed";
       return false;
    }
+   if(request.live_mode && request.signal_bar > 0)
+      bundle.snapshot.bar_time = request.signal_bar;
    bundle.signal_bar = bundle.snapshot.bar_time;
 
-   if(!FXAI_LoadSeriesWithSpread(symbol,
-                                 needed,
-                                 bundle.rates_m1,
-                                 bundle.close_arr,
-                                 bundle.time_arr,
-                                 bundle.spread_m1))
+   if(request.live_mode)
    {
-      reason = "m1_series_load_failed";
-      return false;
+      if(!FXAI_UpdateRatesRolling(request.symbol,
+                                  PERIOD_M1,
+                                  request.needed,
+                                  bundle.last_bar_m1,
+                                  bundle.rates_m1))
+      {
+         reason = "m1_series_load_failed";
+         return false;
+      }
+      FXAI_ExtractRatesCloseTimeSpread(bundle.rates_m1,
+                                       bundle.close_arr,
+                                       bundle.time_arr,
+                                       bundle.spread_m1);
+   }
+   else
+   {
+      if(!FXAI_LoadSeriesWithSpread(request.symbol,
+                                    request.needed,
+                                    bundle.rates_m1,
+                                    bundle.close_arr,
+                                    bundle.time_arr,
+                                    bundle.spread_m1))
+      {
+         reason = "m1_series_load_failed";
+         return false;
+      }
    }
 
    FXAI_ExtractRatesOHLC(bundle.rates_m1,
@@ -335,9 +412,9 @@ bool FXAI_DataCoreLoadHistoryBundle(const string symbol,
                          bundle.high_arr,
                          bundle.low_arr,
                          bundle.close_arr);
-   if(ArraySize(bundle.close_arr) < needed ||
-      ArraySize(bundle.time_arr) < needed ||
-      ArraySize(bundle.spread_m1) < needed)
+   if(ArraySize(bundle.close_arr) < request.needed ||
+      ArraySize(bundle.time_arr) < request.needed ||
+      ArraySize(bundle.spread_m1) < request.needed)
    {
       reason = "m1_series_size_failed";
       return false;
@@ -348,7 +425,7 @@ bool FXAI_DataCoreLoadHistoryBundle(const string symbol,
                                    bundle.low_arr,
                                    bundle.close_arr,
                                    bundle.spread_m1,
-                                   needed))
+                                   request.needed))
    {
       reason = "m1_series_integrity_failed";
       return false;
@@ -358,12 +435,22 @@ bool FXAI_DataCoreLoadHistoryBundle(const string symbol,
    int needed_m15 = 0;
    int needed_m30 = 0;
    int needed_h1 = 0;
-   FXAI_DataCorePrepareTimeframeNeeds(needed, needed_m5, needed_m15, needed_m30, needed_h1);
+   FXAI_DataCorePrepareTimeframeNeeds(request.needed, needed_m5, needed_m15, needed_m30, needed_h1);
 
-   FXAI_DataCoreLoadHistoryHigherTimeframe(symbol, PERIOD_M5, needed_m5, bundle.rates_m5, bundle.close_m5, bundle.time_m5);
-   FXAI_DataCoreLoadHistoryHigherTimeframe(symbol, PERIOD_M15, needed_m15, bundle.rates_m15, bundle.close_m15, bundle.time_m15);
-   FXAI_DataCoreLoadHistoryHigherTimeframe(symbol, PERIOD_M30, needed_m30, bundle.rates_m30, bundle.close_m30, bundle.time_m30);
-   FXAI_DataCoreLoadHistoryHigherTimeframe(symbol, PERIOD_H1, needed_h1, bundle.rates_h1, bundle.close_h1, bundle.time_h1);
+   if(request.live_mode)
+   {
+      FXAI_DataCoreRefreshLiveHigherTimeframe(request.symbol, PERIOD_M5, needed_m5, bundle.last_bar_m5, bundle.rates_m5, bundle.close_m5, bundle.time_m5, bundle.map_m5);
+      FXAI_DataCoreRefreshLiveHigherTimeframe(request.symbol, PERIOD_M15, needed_m15, bundle.last_bar_m15, bundle.rates_m15, bundle.close_m15, bundle.time_m15, bundle.map_m15);
+      FXAI_DataCoreRefreshLiveHigherTimeframe(request.symbol, PERIOD_M30, needed_m30, bundle.last_bar_m30, bundle.rates_m30, bundle.close_m30, bundle.time_m30, bundle.map_m30);
+      FXAI_DataCoreRefreshLiveHigherTimeframe(request.symbol, PERIOD_H1, needed_h1, bundle.last_bar_h1, bundle.rates_h1, bundle.close_h1, bundle.time_h1, bundle.map_h1);
+   }
+   else
+   {
+      FXAI_DataCoreLoadHistoryHigherTimeframe(request.symbol, PERIOD_M5, needed_m5, bundle.rates_m5, bundle.close_m5, bundle.time_m5);
+      FXAI_DataCoreLoadHistoryHigherTimeframe(request.symbol, PERIOD_M15, needed_m15, bundle.rates_m15, bundle.close_m15, bundle.time_m15);
+      FXAI_DataCoreLoadHistoryHigherTimeframe(request.symbol, PERIOD_M30, needed_m30, bundle.rates_m30, bundle.close_m30, bundle.time_m30);
+      FXAI_DataCoreLoadHistoryHigherTimeframe(request.symbol, PERIOD_H1, needed_h1, bundle.rates_h1, bundle.close_h1, bundle.time_h1);
+   }
 
    int lag_m5 = 0;
    int lag_m15 = 0;
@@ -371,18 +458,54 @@ bool FXAI_DataCoreLoadHistoryBundle(const string symbol,
    int lag_h1 = 0;
    FXAI_DataCorePrepareTimeframeLags(lag_m5, lag_m15, lag_m30, lag_h1);
 
-   FXAI_BuildAlignedIndexMapRange(bundle.time_arr, bundle.time_m5, lag_m5, align_upto, bundle.map_m5);
-   FXAI_BuildAlignedIndexMapRange(bundle.time_arr, bundle.time_m15, lag_m15, align_upto, bundle.map_m15);
-   FXAI_BuildAlignedIndexMapRange(bundle.time_arr, bundle.time_m30, lag_m30, align_upto, bundle.map_m30);
-   FXAI_BuildAlignedIndexMapRange(bundle.time_arr, bundle.time_h1, lag_h1, align_upto, bundle.map_h1);
+   FXAI_BuildAlignedIndexMapRange(bundle.time_arr, bundle.time_m5, lag_m5, request.align_upto, bundle.map_m5);
+   FXAI_BuildAlignedIndexMapRange(bundle.time_arr, bundle.time_m15, lag_m15, request.align_upto, bundle.map_m15);
+   FXAI_BuildAlignedIndexMapRange(bundle.time_arr, bundle.time_m30, lag_m30, request.align_upto, bundle.map_m30);
+   FXAI_BuildAlignedIndexMapRange(bundle.time_arr, bundle.time_h1, lag_h1, request.align_upto, bundle.map_h1);
 
-   FXAI_DataCoreLoadHistoryContext(bundle, needed);
-   if(!FXAI_DataCoreBuildContextAggregates(bundle, align_upto, reason))
+   if(request.live_mode)
+   {
+      if(!FXAI_DataCoreRefreshLiveContext(bundle, request.needed, request))
+      {
+         reason = "context_load_failed";
+         return false;
+      }
+   }
+   else
+   {
+      if(!FXAI_DataCoreLoadHistoryContext(bundle, request.needed, request))
+      {
+         reason = "context_load_failed";
+         return false;
+      }
+   }
+   if(!FXAI_DataCoreBuildContextAggregates(bundle, request.align_upto, reason))
       return false;
 
    bundle.ready = true;
    reason = "";
    return true;
+}
+
+bool FXAI_DataCoreLoadHistoryBundle(const string symbol,
+                                    const int needed,
+                                    const int align_upto,
+                                    const double commission_per_lot_side,
+                                    const double buffer_points,
+                                    FXAIDataCoreBundle &bundle,
+                                    string &reason)
+{
+   FXAIDataCoreRequest request;
+   FXAI_DataCoreInitRequest(request,
+                            false,
+                            symbol,
+                            0,
+                            needed,
+                            align_upto,
+                            commission_per_lot_side,
+                            buffer_points);
+   FXAI_DataCoreCaptureGlobalContextSymbols(request);
+   return FXAI_DataCoreLoadBundleFromRequest(request, bundle, reason);
 }
 
 bool FXAI_DataCoreRefreshLiveBundle(FXAIDataCoreBundle &bundle,
@@ -394,84 +517,17 @@ bool FXAI_DataCoreRefreshLiveBundle(FXAIDataCoreBundle &bundle,
                                     const double buffer_points,
                                     string &reason)
 {
-   if(bundle.symbol != symbol || !bundle.live_mode)
-      FXAI_DataCoreResetBundle(bundle);
-
-   bundle.live_mode = true;
-   bundle.symbol = symbol;
-   bundle.signal_bar = signal_bar;
-   bundle.needed = needed;
-   bundle.align_upto = align_upto;
-
-   if(!FXAI_ExportDataSnapshot(symbol, commission_per_lot_side, buffer_points, bundle.snapshot))
-   {
-      reason = "snapshot_export_failed";
-      return false;
-   }
-   bundle.snapshot.bar_time = signal_bar;
-
-   if(!FXAI_UpdateRatesRolling(symbol, PERIOD_M1, needed, bundle.last_bar_m1, bundle.rates_m1))
-   {
-      reason = "m1_series_load_failed";
-      return false;
-   }
-   FXAI_ExtractRatesCloseTimeSpread(bundle.rates_m1,
-                                    bundle.close_arr,
-                                    bundle.time_arr,
-                                    bundle.spread_m1);
-   FXAI_ExtractRatesOHLC(bundle.rates_m1,
-                         bundle.open_arr,
-                         bundle.high_arr,
-                         bundle.low_arr,
-                         bundle.close_arr);
-   if(ArraySize(bundle.close_arr) < needed ||
-      ArraySize(bundle.time_arr) < needed ||
-      ArraySize(bundle.spread_m1) < needed)
-   {
-      reason = "m1_series_size_failed";
-      return false;
-   }
-   if(!FXAI_ValidateM1SeriesBundle(bundle.time_arr,
-                                   bundle.open_arr,
-                                   bundle.high_arr,
-                                   bundle.low_arr,
-                                   bundle.close_arr,
-                                   bundle.spread_m1,
-                                   needed))
-   {
-      reason = "m1_series_integrity_failed";
-      return false;
-   }
-
-   int needed_m5 = 0;
-   int needed_m15 = 0;
-   int needed_m30 = 0;
-   int needed_h1 = 0;
-   FXAI_DataCorePrepareTimeframeNeeds(needed, needed_m5, needed_m15, needed_m30, needed_h1);
-
-   FXAI_DataCoreRefreshLiveHigherTimeframe(symbol, PERIOD_M5, needed_m5, bundle.last_bar_m5, bundle.rates_m5, bundle.close_m5, bundle.time_m5, bundle.map_m5);
-   FXAI_DataCoreRefreshLiveHigherTimeframe(symbol, PERIOD_M15, needed_m15, bundle.last_bar_m15, bundle.rates_m15, bundle.close_m15, bundle.time_m15, bundle.map_m15);
-   FXAI_DataCoreRefreshLiveHigherTimeframe(symbol, PERIOD_M30, needed_m30, bundle.last_bar_m30, bundle.rates_m30, bundle.close_m30, bundle.time_m30, bundle.map_m30);
-   FXAI_DataCoreRefreshLiveHigherTimeframe(symbol, PERIOD_H1, needed_h1, bundle.last_bar_h1, bundle.rates_h1, bundle.close_h1, bundle.time_h1, bundle.map_h1);
-
-   int lag_m5 = 0;
-   int lag_m15 = 0;
-   int lag_m30 = 0;
-   int lag_h1 = 0;
-   FXAI_DataCorePrepareTimeframeLags(lag_m5, lag_m15, lag_m30, lag_h1);
-
-   FXAI_BuildAlignedIndexMapRange(bundle.time_arr, bundle.time_m5, lag_m5, align_upto, bundle.map_m5);
-   FXAI_BuildAlignedIndexMapRange(bundle.time_arr, bundle.time_m15, lag_m15, align_upto, bundle.map_m15);
-   FXAI_BuildAlignedIndexMapRange(bundle.time_arr, bundle.time_m30, lag_m30, align_upto, bundle.map_m30);
-   FXAI_BuildAlignedIndexMapRange(bundle.time_arr, bundle.time_h1, lag_h1, align_upto, bundle.map_h1);
-
-   FXAI_DataCoreRefreshLiveContext(bundle, needed);
-   if(!FXAI_DataCoreBuildContextAggregates(bundle, align_upto, reason))
-      return false;
-
-   bundle.ready = true;
-   reason = "";
-   return true;
+   FXAIDataCoreRequest request;
+   FXAI_DataCoreInitRequest(request,
+                            true,
+                            symbol,
+                            signal_bar,
+                            needed,
+                            align_upto,
+                            commission_per_lot_side,
+                            buffer_points);
+   FXAI_DataCoreCaptureGlobalContextSymbols(request);
+   return FXAI_DataCoreLoadBundleFromRequest(request, bundle, reason);
 }
 
 void FXAI_DataCoreBindArrayBundle(const FXAIDataSnapshot &snapshot,

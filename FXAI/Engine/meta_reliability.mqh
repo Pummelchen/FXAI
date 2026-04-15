@@ -395,27 +395,13 @@ void FXAI_ProcessReliabilityBar(const string symbol)
 
    static string rel_symbol = "";
    static datetime rel_last_processed_bar = 0;
-   static datetime rel_last_rates_bar = 0;
-   static MqlRates rel_rates_m1[];
-   static double rel_open_arr[];
-   static double rel_high_arr[];
-   static double rel_low_arr[];
-   static double rel_close_arr[];
-   static datetime rel_time_arr[];
-   static int rel_spread_arr[];
+   static FXAIDataCoreBundle rel_bundle;
 
    if(rel_symbol != symbol)
    {
       rel_symbol = symbol;
       rel_last_processed_bar = 0;
-      rel_last_rates_bar = 0;
-      ArrayResize(rel_rates_m1, 0);
-      ArrayResize(rel_open_arr, 0);
-      ArrayResize(rel_high_arr, 0);
-      ArrayResize(rel_low_arr, 0);
-      ArrayResize(rel_close_arr, 0);
-      ArrayResize(rel_time_arr, 0);
-      ArrayResize(rel_spread_arr, 0);
+      FXAI_DataCoreResetBundle(rel_bundle);
    }
 
    FXAI_AdvanceReliabilityClock(signal_bar);
@@ -426,31 +412,31 @@ void FXAI_ProcessReliabilityBar(const string symbol)
    if(needed < 128) needed = 128;
    if(needed > 1500) needed = 1500;
 
-   if(!FXAI_UpdateRatesRolling(symbol, PERIOD_M1, needed, rel_last_rates_bar, rel_rates_m1))
+   string data_reason = "";
+   if(!FXAI_DataCoreRefreshLiveBundle(rel_bundle,
+                                      symbol,
+                                      signal_bar,
+                                      needed,
+                                      needed - 1,
+                                      AI_CommissionPerLotSide,
+                                      AI_CostBufferPoints,
+                                      data_reason))
+      return;
+   if(ArraySize(rel_bundle.close_arr) <= H || ArraySize(rel_bundle.spread_m1) <= H)
       return;
 
-   FXAI_ExtractRatesCloseTimeSpread(rel_rates_m1, rel_close_arr, rel_time_arr, rel_spread_arr);
-   FXAI_ExtractRatesOHLC(rel_rates_m1, rel_open_arr, rel_high_arr, rel_low_arr, rel_close_arr);
-   if(ArraySize(rel_close_arr) <= H || ArraySize(rel_spread_arr) <= H)
-      return;
-   if(!FXAI_ValidateM1SeriesBundle(rel_time_arr, rel_open_arr, rel_high_arr, rel_low_arr, rel_close_arr, rel_spread_arr, H + 1))
-      return;
-
-   FXAIDataSnapshot snapshot;
-   if(!FXAI_ExportDataSnapshot(symbol, AI_CommissionPerLotSide, AI_CostBufferPoints, snapshot))
-      return;
-   snapshot.bar_time = signal_bar;
+   FXAIDataSnapshot snapshot = rel_bundle.snapshot;
 
    double cost_buffer_points = (AI_CostBufferPoints < 0.0 ? 0.0 : AI_CostBufferPoints);
    double commission_points = snapshot.commission_points;
    double evThresholdPoints = FXAI_Clamp(AI_EVThresholdPoints, 0.0, 100.0);
    int signal_seq = g_rel_clock_seq;
-   double spread_now = FXAI_GetSpreadAtIndex(0, rel_spread_arr, snapshot.spread_points);
-   double vol_now = FXAI_RollingReturnStd(rel_close_arr, 0, 10);
+   double spread_now = FXAI_GetSpreadAtIndex(0, rel_bundle.spread_m1, snapshot.spread_points);
+   double vol_now = FXAI_RollingReturnStd(rel_bundle.close_arr, 0, 10);
    if(vol_now < 1e-6)
-      vol_now = FXAI_RollingAbsReturn(rel_close_arr, 0, 10);
+      vol_now = FXAI_RollingAbsReturn(rel_bundle.close_arr, 0, 10);
    if(vol_now < 1e-6)
-      vol_now = MathAbs(FXAI_SafeReturn(rel_close_arr, 0, 1));
+      vol_now = MathAbs(FXAI_SafeReturn(rel_bundle.close_arr, 0, 1));
    int current_regime = FXAI_GetRegimeId(signal_bar, spread_now, vol_now);
    FXAI_RecordRegimeGraphState(current_regime,
                                signal_bar,
@@ -461,22 +447,22 @@ void FXAI_ProcessReliabilityBar(const string symbol)
       FXAI_UpdateReliabilityFromPending(ai_idx,
                                        signal_seq,
                                        snapshot,
-                                       rel_spread_arr,
-                                       rel_time_arr,
-                                       rel_high_arr,
-                                       rel_low_arr,
-                                       rel_close_arr,
+                                       rel_bundle.spread_m1,
+                                       rel_bundle.time_arr,
+                                       rel_bundle.high_arr,
+                                       rel_bundle.low_arr,
+                                       rel_bundle.close_arr,
                                        commission_points,
                                        cost_buffer_points,
                                        evThresholdPoints);
       FXAI_UpdateConformalFromPending(ai_idx,
                                       signal_seq,
                                       snapshot,
-                                      rel_spread_arr,
-                                      rel_time_arr,
-                                      rel_high_arr,
-                                      rel_low_arr,
-                                      rel_close_arr,
+                                      rel_bundle.spread_m1,
+                                      rel_bundle.time_arr,
+                                      rel_bundle.high_arr,
+                                      rel_bundle.low_arr,
+                                      rel_bundle.close_arr,
                                       commission_points,
                                       cost_buffer_points,
                                       evThresholdPoints);
@@ -484,10 +470,10 @@ void FXAI_ProcessReliabilityBar(const string symbol)
 
    FXAI_UpdateStackFromPending(signal_seq,
                                snapshot,
-                               rel_spread_arr,
-                               rel_high_arr,
-                               rel_low_arr,
-                               rel_close_arr,
+                               rel_bundle.spread_m1,
+                               rel_bundle.high_arr,
+                               rel_bundle.low_arr,
+                               rel_bundle.close_arr,
                                commission_points,
                                cost_buffer_points,
                                evThresholdPoints);
@@ -495,19 +481,19 @@ void FXAI_ProcessReliabilityBar(const string symbol)
                                 current_regime,
                                 g_ai_last_macro_state_quality,
                                 snapshot,
-                                rel_spread_arr,
-                                rel_high_arr,
-                                rel_low_arr,
-                                rel_close_arr,
+                                rel_bundle.spread_m1,
+                                rel_bundle.high_arr,
+                                rel_bundle.low_arr,
+                                rel_bundle.close_arr,
                                 commission_points,
                                 cost_buffer_points,
                                 evThresholdPoints);
    FXAI_UpdateHorizonPolicyFromPending(signal_seq,
                                        snapshot,
-                                       rel_spread_arr,
-                                       rel_high_arr,
-                                       rel_low_arr,
-                                       rel_close_arr,
+                                       rel_bundle.spread_m1,
+                                       rel_bundle.high_arr,
+                                       rel_bundle.low_arr,
+                                       rel_bundle.close_arr,
                                        commission_points,
                                        cost_buffer_points,
                                        evThresholdPoints);

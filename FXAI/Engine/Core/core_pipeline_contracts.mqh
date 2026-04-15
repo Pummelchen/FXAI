@@ -73,6 +73,19 @@ struct FXAINormInputCache
    double x[FXAI_AI_WEIGHTS];
 };
 
+struct FXAIDataCoreRequest
+{
+   bool live_mode;
+   string symbol;
+   datetime signal_bar;
+   int needed;
+   int align_upto;
+   double commission_per_lot_side;
+   double buffer_points;
+   int context_symbol_count;
+   string context_symbols[FXAI_MAX_CONTEXT_SYMBOLS];
+};
+
 struct FXAIDataCoreBundle
 {
    bool ready;
@@ -117,6 +130,13 @@ struct FXAIDataCoreBundle
    double ctx_extra_arr[];
 };
 
+struct FXAIFeatureCoreRequest
+{
+   int sample_idx;
+   int horizon_minutes;
+   ENUM_FXAI_FEATURE_NORMALIZATION norm_method;
+};
+
 struct FXAIFeatureCoreFrame
 {
    bool valid;
@@ -138,6 +158,34 @@ struct FXAINormalizationCoreFrame
    datetime sample_time;
    double normalized[FXAI_AI_FEATURES];
    double model_input[FXAI_AI_WEIGHTS];
+};
+
+struct FXAINormalizationPayloadRequest
+{
+   bool valid;
+   int feature_schema_id;
+   ulong feature_groups_mask;
+   int normalization_method_id;
+   int horizon_minutes;
+   int sequence_bars;
+   datetime sample_time;
+   int window_size;
+   double x[FXAI_AI_WEIGHTS];
+   double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
+};
+
+struct FXAINormalizationPayloadFrame
+{
+   bool valid;
+   int feature_schema_id;
+   ulong feature_groups_mask;
+   int normalization_method_id;
+   int horizon_minutes;
+   int sequence_bars;
+   datetime sample_time;
+   int window_size;
+   double x[FXAI_AI_WEIGHTS];
+   double x_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
 };
 
 #endif // __FXAI_CORE_PIPELINE_CONTRACTS_MQH__

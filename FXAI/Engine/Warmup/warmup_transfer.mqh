@@ -165,14 +165,8 @@ void FXAI_WarmupPretrainMetaForSamples(const int H,
             for(int k=0; k<FXAI_AI_WEIGHTS; k++)
                req.x[k] = pred_sample.x[k];
             FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, i, norm_caches, req.ctx.sequence_bars, req.x_window, req.window_size);
-            FXAI_ApplyPayloadTransformPipelineEx(plugin_manifest.feature_schema_id,
-                                                 plugin_manifest.feature_groups_mask,
-                                                 req.ctx.normalization_method_id,
-                                                 req.ctx.horizon_minutes,
-                                                 req.ctx.sequence_bars,
-                                                 req.x_window,
-                                                 req.window_size,
-                                                 req.x);
+            if(!FXAI_NormalizationCoreFinalizePredictRequest(plugin_manifest, req))
+               continue;
 
             FXAIAIPredictionV4 pred;
             FXAI_PredictViaV4(*plugin, req, hp_model, pred);
@@ -786,146 +780,23 @@ bool FXAI_WarmupBuildTransferSymbolSamplesForHorizon(const string target_symbol,
       return false;
 
    const int FEATURE_LB = 10;
+   FXAIDataCoreRequest data_request;
+   FXAI_DataCoreInitRequest(data_request,
+                            false,
+                            target_symbol,
+                            0,
+                            needed,
+                            needed - 1,
+                            commission_per_lot_side,
+                            cost_buffer_points);
+   if(StringLen(main_symbol) > 0 && main_symbol != target_symbol)
+      FXAI_DataCoreAddContextSymbol(data_request, main_symbol);
+   FXAI_DataCoreCaptureGlobalContextSymbols(data_request);
 
-   FXAIDataSnapshot snapshot;
-   if(!FXAI_ExportDataSnapshot(target_symbol, commission_per_lot_side, cost_buffer_points, snapshot))
+   FXAIDataCoreBundle transfer_bundle;
+   string transfer_reason = "";
+   if(!FXAI_DataCoreLoadBundleFromRequest(data_request, transfer_bundle, transfer_reason))
       return false;
-
-   MqlRates rates_m1[];
-   MqlRates rates_m5[];
-   MqlRates rates_m15[];
-   MqlRates rates_m30[];
-   MqlRates rates_h1[];
-   MqlRates rates_ctx_tmp[];
-
-   double open_arr[];
-   double high_arr[];
-   double low_arr[];
-   double close_arr[];
-   datetime time_arr[];
-   int spread_m1[];
-   if(!FXAI_LoadSeriesWithSpread(target_symbol, needed, rates_m1, close_arr, time_arr, spread_m1))
-      return false;
-   FXAI_ExtractRatesOHLC(rates_m1, open_arr, high_arr, low_arr, close_arr);
-   if(ArraySize(close_arr) < needed || ArraySize(time_arr) < needed)
-      return false;
-   if(!FXAI_ValidateM1SeriesBundle(time_arr, open_arr, high_arr, low_arr, close_arr, spread_m1, needed))
-      return false;
-
-   int needed_m5 = MathMax((needed / 5) + 80, 220);
-   int needed_m15 = MathMax((needed / 15) + 80, 220);
-   int needed_m30 = MathMax((needed / 30) + 80, 220);
-   int needed_h1 = MathMax((needed / 60) + 80, 220);
-
-   double close_m5[];
-   datetime time_m5[];
-   double close_m15[];
-   datetime time_m15[];
-   double close_m30[];
-   datetime time_m30[];
-   double close_h1[];
-   datetime time_h1[];
-   int map_m5[];
-   int map_m15[];
-   int map_m30[];
-   int map_h1[];
-
-   FXAI_LoadSeriesOptionalCached(target_symbol, PERIOD_M5, needed_m5, rates_m5, close_m5, time_m5);
-   FXAI_LoadSeriesOptionalCached(target_symbol, PERIOD_M15, needed_m15, rates_m15, close_m15, time_m15);
-   FXAI_LoadSeriesOptionalCached(target_symbol, PERIOD_M30, needed_m30, rates_m30, close_m30, time_m30);
-   FXAI_LoadSeriesOptionalCached(target_symbol, PERIOD_H1, needed_h1, rates_h1, close_h1, time_h1);
-
-   int lag_m5 = 2 * PeriodSeconds(PERIOD_M5);
-   int lag_m15 = 2 * PeriodSeconds(PERIOD_M15);
-   int lag_m30 = 2 * PeriodSeconds(PERIOD_M30);
-   int lag_h1 = 2 * PeriodSeconds(PERIOD_H1);
-   if(lag_m5 <= 0) lag_m5 = 600;
-   if(lag_m15 <= 0) lag_m15 = 1800;
-   if(lag_m30 <= 0) lag_m30 = 3600;
-   if(lag_h1 <= 0) lag_h1 = 7200;
-   FXAI_BuildAlignedIndexMap(time_arr, time_m5, lag_m5, map_m5);
-   FXAI_BuildAlignedIndexMap(time_arr, time_m15, lag_m15, map_m15);
-   FXAI_BuildAlignedIndexMap(time_arr, time_m30, lag_m30, map_m30);
-   FXAI_BuildAlignedIndexMap(time_arr, time_h1, lag_h1, map_h1);
-
-   FXAIContextSeries ctx_series[];
-   ArrayResize(ctx_series, FXAI_MAX_CONTEXT_SYMBOLS);
-   int ctx_loaded = 0;
-
-   if(StringLen(main_symbol) > 0 && main_symbol != target_symbol && ctx_loaded < FXAI_MAX_CONTEXT_SYMBOLS)
-   {
-      ctx_series[ctx_loaded].symbol = main_symbol;
-      ctx_series[ctx_loaded].loaded = FXAI_LoadRatesOptional(main_symbol,
-                                                             PERIOD_M1,
-                                                             needed,
-                                                             rates_ctx_tmp);
-      if(ctx_series[ctx_loaded].loaded)
-      {
-         FXAI_ExtractRatesCloseTimeSpread(rates_ctx_tmp,
-                                          ctx_series[ctx_loaded].close,
-                                          ctx_series[ctx_loaded].time,
-                                          ctx_series[ctx_loaded].spread);
-         FXAI_ExtractRatesOHLC(rates_ctx_tmp,
-                               ctx_series[ctx_loaded].open,
-                               ctx_series[ctx_loaded].high,
-                               ctx_series[ctx_loaded].low,
-                               ctx_series[ctx_loaded].close);
-         ctx_series[ctx_loaded].loaded = FXAI_ValidateM1SeriesBundle(ctx_series[ctx_loaded].time,
-                                                                     ctx_series[ctx_loaded].open,
-                                                                     ctx_series[ctx_loaded].high,
-                                                                     ctx_series[ctx_loaded].low,
-                                                                     ctx_series[ctx_loaded].close,
-                                                                     ctx_series[ctx_loaded].spread,
-                                                                     needed);
-      }
-      if(ctx_series[ctx_loaded].loaded)
-         ctx_loaded++;
-   }
-
-   for(int s=0; s<ArraySize(g_context_symbols) && ctx_loaded < FXAI_MAX_CONTEXT_SYMBOLS; s++)
-   {
-      string ctx_symbol = g_context_symbols[s];
-      if(StringLen(ctx_symbol) <= 0 || ctx_symbol == target_symbol || ctx_symbol == main_symbol)
-         continue;
-      bool dup = false;
-      for(int j=0; j<ctx_loaded; j++)
-      {
-         if(ctx_series[j].symbol == ctx_symbol)
-         {
-            dup = true;
-            break;
-         }
-      }
-      if(dup)
-         continue;
-      ctx_series[ctx_loaded].symbol = ctx_symbol;
-      ctx_series[ctx_loaded].loaded = FXAI_LoadRatesOptional(ctx_symbol,
-                                                             PERIOD_M1,
-                                                             needed,
-                                                             rates_ctx_tmp);
-      if(ctx_series[ctx_loaded].loaded)
-      {
-         FXAI_ExtractRatesCloseTimeSpread(rates_ctx_tmp,
-                                          ctx_series[ctx_loaded].close,
-                                          ctx_series[ctx_loaded].time,
-                                          ctx_series[ctx_loaded].spread);
-         FXAI_ExtractRatesOHLC(rates_ctx_tmp,
-                               ctx_series[ctx_loaded].open,
-                               ctx_series[ctx_loaded].high,
-                               ctx_series[ctx_loaded].low,
-                               ctx_series[ctx_loaded].close);
-         ctx_series[ctx_loaded].loaded = FXAI_ValidateM1SeriesBundle(ctx_series[ctx_loaded].time,
-                                                                     ctx_series[ctx_loaded].open,
-                                                                     ctx_series[ctx_loaded].high,
-                                                                     ctx_series[ctx_loaded].low,
-                                                                     ctx_series[ctx_loaded].close,
-                                                                     ctx_series[ctx_loaded].spread,
-                                                                     needed);
-      }
-      if(ctx_series[ctx_loaded].loaded)
-         ctx_loaded++;
-   }
-   ArrayResize(ctx_series, ctx_loaded);
 
    int i_start = max_h;
    int i_end = i_start + sample_cap - 1;
@@ -935,49 +806,35 @@ bool FXAI_WarmupBuildTransferSymbolSamplesForHorizon(const string target_symbol,
    if(i_end <= i_start)
       return false;
 
-   double ctx_mean_arr[];
-   double ctx_std_arr[];
-   double ctx_up_arr[];
-   double ctx_extra_arr[];
-   FXAI_PrecomputeDynamicContextAggregates(time_arr,
-                                           close_arr,
-                                           ctx_series,
-                                           ctx_loaded,
-                                           i_end,
-                                           ctx_mean_arr,
-                                           ctx_std_arr,
-                                           ctx_up_arr,
-                                           ctx_extra_arr);
-
    FXAI_PrecomputeTrainingSamples(i_start,
                                   i_end,
                                   horizon_minutes,
-                                  snapshot.commission_points,
+                                  transfer_bundle.snapshot.commission_points,
                                   cost_buffer_points,
                                   ev_threshold_points,
-                                  snapshot,
-                                  spread_m1,
-                                  time_arr,
-                                  open_arr,
-                                  high_arr,
-                                  low_arr,
-                                  close_arr,
-                                  time_m5,
-                                  close_m5,
-                                  map_m5,
-                                  time_m15,
-                                  close_m15,
-                                  map_m15,
-                                  time_m30,
-                                  close_m30,
-                                  map_m30,
-                                  time_h1,
-                                  close_h1,
-                                  map_h1,
-                                  ctx_mean_arr,
-                                  ctx_std_arr,
-                                  ctx_up_arr,
-                                  ctx_extra_arr,
+                                  transfer_bundle.snapshot,
+                                  transfer_bundle.spread_m1,
+                                  transfer_bundle.time_arr,
+                                  transfer_bundle.open_arr,
+                                  transfer_bundle.high_arr,
+                                  transfer_bundle.low_arr,
+                                  transfer_bundle.close_arr,
+                                  transfer_bundle.time_m5,
+                                  transfer_bundle.close_m5,
+                                  transfer_bundle.map_m5,
+                                  transfer_bundle.time_m15,
+                                  transfer_bundle.close_m15,
+                                  transfer_bundle.map_m15,
+                                  transfer_bundle.time_m30,
+                                  transfer_bundle.close_m30,
+                                  transfer_bundle.map_m30,
+                                  transfer_bundle.time_h1,
+                                  transfer_bundle.close_h1,
+                                  transfer_bundle.map_h1,
+                                  transfer_bundle.ctx_mean_arr,
+                                  transfer_bundle.ctx_std_arr,
+                                  transfer_bundle.ctx_up_arr,
+                                  transfer_bundle.ctx_extra_arr,
                                   -1,
                                   out);
 

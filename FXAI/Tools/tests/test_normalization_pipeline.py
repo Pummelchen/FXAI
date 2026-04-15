@@ -108,12 +108,16 @@ def test_bounded_feature_emitters_use_open_interval_clamps():
 
 def test_training_pipeline_uses_horizon_aware_fit_and_payload_transform():
     engine_training = _read("Engine/engine_training.mqh")
+    normalization_core = _read("Engine/Core/core_normalization_core.mqh")
     assert "FXAI_FitFeatureNormalizationMethodForRange(method_id," in engine_training
     assert "FXAI_DataCoreBindArrayBundle(predict_snapshot," in engine_training
     assert "FXAI_FeatureCoreBuildFrameFromBundle(bundle, 0, horizon_minutes, norm_method, feature_frame)" in engine_training
     assert "FXAI_NormalizationCoreBuildInputFrameFromFeatureFrame(feature_frame, norm_frame)" in engine_training
-    assert "FXAI_ApplyPayloadTransformPipelineEx(manifest.feature_schema_id," in engine_training
+    assert "FXAI_NormalizationCoreFinalizeTrainRequest(manifest, s3)" in engine_training
     assert "caches[sz].horizon_minutes = horizon_minutes;" in engine_training
+    assert "bool FXAI_NormalizationCoreBuildPayloadFrame(" in normalization_core
+    assert "bool FXAI_NormalizationCoreFinalizePredictRequest(" in normalization_core
+    assert "bool FXAI_NormalizationCoreFinalizeTrainRequest(" in normalization_core
 
 
 def test_warmup_normalization_fits_candidates_on_train_only_split():

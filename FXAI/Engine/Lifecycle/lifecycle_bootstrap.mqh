@@ -52,14 +52,8 @@ bool FXAI_ValidateNativePluginAPI()
       for(int kk=0; kk<FXAI_AI_WEIGHTS; kk++)
          req_v4.x[kk] = x_dummy[kk];
       FXAI_FillComplianceWindow(req_v4.ctx, req_v4.x, req_v4.x_window, req_v4.window_size);
-      FXAI_ApplyPayloadTransformPipelineEx(manifest.feature_schema_id,
-                                           manifest.feature_groups_mask,
-                                           req_v4.ctx.normalization_method_id,
-                                           req_v4.ctx.horizon_minutes,
-                                           req_v4.ctx.sequence_bars,
-                                           req_v4.x_window,
-                                           req_v4.window_size,
-                                           req_v4.x);
+      if(!FXAI_NormalizationCoreFinalizePredictRequest(manifest, req_v4))
+         return false;
 
       FXAIAIPredictionV4 pred_v4;
       if(!plugin.Predict(req_v4, hp, pred_v4))

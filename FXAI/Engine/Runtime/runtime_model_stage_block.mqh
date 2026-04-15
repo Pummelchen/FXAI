@@ -546,14 +546,8 @@
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = input_caches[input_idx].x[k];
       FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, 0, runtime_norm_caches, req.ctx.sequence_bars, req.x_window, req.window_size);
-      FXAI_ApplyPayloadTransformPipelineEx(manifest.feature_schema_id,
-                                           manifest.feature_groups_mask,
-                                           req.ctx.normalization_method_id,
-                                           req.ctx.horizon_minutes,
-                                           req.ctx.sequence_bars,
-                                           req.x_window,
-                                           req.window_size,
-                                           req.x);
+      if(!FXAI_NormalizationCoreFinalizePredictRequest(manifest, req))
+         continue;
 
       FXAIAIPredictionV4 pred;
       FXAI_PredictViaV4(*plugin, req, hp_model, pred);

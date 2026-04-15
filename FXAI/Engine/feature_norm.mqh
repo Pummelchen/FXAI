@@ -628,48 +628,53 @@ bool FXAI_BuildRawNormalizationMatrix(const int i_start,
 
    int cap = end - start + 1;
    ArrayResize(rows, cap * FXAI_AI_FEATURES);
+   FXAIDataCoreBundle bundle;
+   int align_upto = end;
+   if(align_upto < 0)
+      align_upto = 0;
+   FXAI_DataCoreBindArrayBundle(snapshot,
+                                n,
+                                align_upto,
+                                open_arr,
+                                high_arr,
+                                low_arr,
+                                close_arr,
+                                time_arr,
+                                spread_m1,
+                                close_m5,
+                                time_m5,
+                                map_m5,
+                                close_m15,
+                                time_m15,
+                                map_m15,
+                                close_m30,
+                                time_m30,
+                                map_m30,
+                                close_h1,
+                                time_h1,
+                                map_h1,
+                                ctx_mean_arr,
+                                ctx_std_arr,
+                                ctx_up_arr,
+                                ctx_extra_arr,
+                                bundle);
 
    for(int i=end; i>=start; i--)
    {
-      double spread_i = FXAI_GetSpreadAtIndex(i, spread_m1, snapshot.spread_points);
-      double ctx_mean_i = FXAI_GetArrayValue(ctx_mean_arr, i, 0.0);
-      double ctx_std_i = FXAI_GetArrayValue(ctx_std_arr, i, 0.0);
-      double ctx_up_i = FXAI_GetArrayValue(ctx_up_arr, i, 0.5);
+      FXAIFeatureCoreRequest feature_request;
+      FXAI_FeatureCoreResetRequest(feature_request);
+      feature_request.sample_idx = i;
+      feature_request.horizon_minutes = horizon_minutes;
+      feature_request.norm_method = norm_method;
 
-      double feat[FXAI_AI_FEATURES];
-      if(!FXAI_ComputeFeatureVector(i,
-                                    snapshot.symbol,
-                                    spread_i,
-                                    time_arr,
-                                    open_arr,
-                                    high_arr,
-                                    low_arr,
-                                    close_arr,
-                                    spread_m1,
-                                    time_m5,
-                                    close_m5,
-                                    map_m5,
-                                    time_m15,
-                                    close_m15,
-                                    map_m15,
-                                    time_m30,
-                                    close_m30,
-                                    map_m30,
-                                    time_h1,
-                                    close_h1,
-                                    map_h1,
-                                    ctx_mean_i,
-                                    ctx_std_i,
-                                    ctx_up_i,
-                                    ctx_extra_arr,
-                                    norm_method,
-                                    feat))
+      FXAIFeatureCoreFrame feature_frame;
+      if(!FXAI_FeatureCoreBuildFrame(bundle, feature_request, feature_frame))
       {
          continue;
       }
 
       for(int f=0; f<FXAI_AI_FEATURES; f++)
-         rows[row_count * FXAI_AI_FEATURES + f] = feat[f];
+         rows[row_count * FXAI_AI_FEATURES + f] = feature_frame.raw[f];
       row_count++;
    }
 

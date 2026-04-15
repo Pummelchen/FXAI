@@ -164,14 +164,8 @@ double FXAI_ScoreNormalizationSetup(const int i_start,
          for(int k=0; k<FXAI_AI_WEIGHTS; k++)
             s3.x[k] = samples[i].x[k];
          FXAI_BuildPreparedSampleWindow(samples, i, s3.ctx.sequence_bars, s3.x_window, s3.window_size);
-         FXAI_ApplyPayloadTransformPipelineEx(trial_manifest.feature_schema_id,
-                                              trial_manifest.feature_groups_mask,
-                                              s3.ctx.normalization_method_id,
-                                              s3.ctx.horizon_minutes,
-                                              s3.ctx.sequence_bars,
-                                              s3.x_window,
-                                              s3.window_size,
-                                              s3.x);
+         if(!FXAI_NormalizationCoreFinalizeTrainRequest(trial_manifest, s3))
+            continue;
          FXAI_TrainViaV4(*trial, s3, hp);
       }
    }

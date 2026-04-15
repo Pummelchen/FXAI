@@ -81,14 +81,8 @@ void FXAI_FillComplianceTrainRequest(CFXAIAIPlugin &plugin,
    FXAIAIManifestV4 manifest;
    FXAI_GetPluginManifest(plugin, manifest);
    FXAI_FillComplianceWindow(req.ctx, req.x, req.x_window, req.window_size);
-   FXAI_ApplyPayloadTransformPipelineEx(manifest.feature_schema_id,
-                                        manifest.feature_groups_mask,
-                                        req.ctx.normalization_method_id,
-                                        req.ctx.horizon_minutes,
-                                        req.ctx.sequence_bars,
-                                        req.x_window,
-                                        req.window_size,
-                                        req.x);
+   if(!FXAI_NormalizationCoreFinalizeTrainRequest(manifest, req))
+      req.valid = false;
 }
 
 void FXAI_FillCompliancePredictRequest(CFXAIAIPlugin &plugin,
@@ -117,14 +111,8 @@ void FXAI_FillCompliancePredictRequest(CFXAIAIPlugin &plugin,
    FXAIAIManifestV4 manifest;
    FXAI_GetPluginManifest(plugin, manifest);
    FXAI_FillComplianceWindow(req.ctx, req.x, req.x_window, req.window_size);
-   FXAI_ApplyPayloadTransformPipelineEx(manifest.feature_schema_id,
-                                        manifest.feature_groups_mask,
-                                        req.ctx.normalization_method_id,
-                                        req.ctx.horizon_minutes,
-                                        req.ctx.sequence_bars,
-                                        req.x_window,
-                                        req.window_size,
-                                        req.x);
+   if(!FXAI_NormalizationCoreFinalizePredictRequest(manifest, req))
+      req.valid = false;
 }
 
 bool FXAI_ValidatePredictionOutput(const CFXAIAIPlugin &plugin,
@@ -268,38 +256,20 @@ bool FXAI_RunSequenceWindowCompliance(CFXAIAIPlugin &plugin,
                                    -0.75, -0.42, -0.18, now_t - 150, 3, horizon);
    train_req.ctx.sequence_bars = seq;
    FXAI_FillComplianceWindow(train_req.ctx, train_req.x, train_req.x_window, train_req.window_size);
-   FXAI_ApplyPayloadTransformPipelineEx(manifest.feature_schema_id,
-                                        manifest.feature_groups_mask,
-                                        train_req.ctx.normalization_method_id,
-                                        train_req.ctx.horizon_minutes,
-                                        train_req.ctx.sequence_bars,
-                                        train_req.x_window,
-                                        train_req.window_size,
-                                        train_req.x);
+   if(!FXAI_NormalizationCoreFinalizeTrainRequest(manifest, train_req))
+      return false;
 
    FXAIAIPredictRequestV4 pred_req_seq, pred_req_one;
    FXAI_FillCompliancePredictRequest(plugin, pred_req_seq, 0.9, -0.75, -0.42, -0.18, now_t - 10, 3, horizon);
    FXAI_FillCompliancePredictRequest(plugin, pred_req_one, 0.9, -0.75, -0.42, -0.18, now_t - 10, 3, horizon);
    pred_req_seq.ctx.sequence_bars = seq;
    FXAI_FillComplianceWindow(pred_req_seq.ctx, pred_req_seq.x, pred_req_seq.x_window, pred_req_seq.window_size);
-   FXAI_ApplyPayloadTransformPipelineEx(manifest.feature_schema_id,
-                                        manifest.feature_groups_mask,
-                                        pred_req_seq.ctx.normalization_method_id,
-                                        pred_req_seq.ctx.horizon_minutes,
-                                        pred_req_seq.ctx.sequence_bars,
-                                        pred_req_seq.x_window,
-                                        pred_req_seq.window_size,
-                                        pred_req_seq.x);
+   if(!FXAI_NormalizationCoreFinalizePredictRequest(manifest, pred_req_seq))
+      return false;
    pred_req_one.ctx.sequence_bars = 1;
    FXAI_FillComplianceWindow(pred_req_one.ctx, pred_req_one.x, pred_req_one.x_window, pred_req_one.window_size);
-   FXAI_ApplyPayloadTransformPipelineEx(manifest.feature_schema_id,
-                                        manifest.feature_groups_mask,
-                                        pred_req_one.ctx.normalization_method_id,
-                                        pred_req_one.ctx.horizon_minutes,
-                                        pred_req_one.ctx.sequence_bars,
-                                        pred_req_one.x_window,
-                                        pred_req_one.window_size,
-                                        pred_req_one.x);
+   if(!FXAI_NormalizationCoreFinalizePredictRequest(manifest, pred_req_one))
+      return false;
 
    for(int i=0; i<4; i++)
       FXAI_TrainViaV4(plugin, train_req, hp);

@@ -100,14 +100,8 @@ double FXAI_ScoreWarmupTrial(CFXAIAIPlugin &plugin,
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = samples[i].x[k];
       FXAI_BuildPreparedSampleWindow(samples, i, req.ctx.sequence_bars, req.x_window, req.window_size);
-      FXAI_ApplyPayloadTransformPipelineEx(plugin_manifest.feature_schema_id,
-                                           plugin_manifest.feature_groups_mask,
-                                           req.ctx.normalization_method_id,
-                                           req.ctx.horizon_minutes,
-                                           req.ctx.sequence_bars,
-                                           req.x_window,
-                                           req.window_size,
-                                           req.x);
+      if(!FXAI_NormalizationCoreFinalizePredictRequest(plugin_manifest, req))
+         continue;
 
       FXAIAIPredictionV4 pred;
       FXAI_PredictViaV4(plugin, req, hp, pred);
@@ -246,14 +240,8 @@ double FXAI_ScoreWarmupTrialRouted(const int ai_idx,
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          req.x[k] = eval_sample.x[k];
       FXAI_BuildPreparedSampleWindowCached(ai_idx, samples, i, caches, req.ctx.sequence_bars, req.x_window, req.window_size);
-      FXAI_ApplyPayloadTransformPipelineEx(plugin_manifest.feature_schema_id,
-                                           plugin_manifest.feature_groups_mask,
-                                           req.ctx.normalization_method_id,
-                                           req.ctx.horizon_minutes,
-                                           req.ctx.sequence_bars,
-                                           req.x_window,
-                                           req.window_size,
-                                           req.x);
+      if(!FXAI_NormalizationCoreFinalizePredictRequest(plugin_manifest, req))
+         continue;
 
       FXAIAIPredictionV4 pred;
       FXAI_PredictViaV4(plugin, req, hp, pred);

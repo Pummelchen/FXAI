@@ -667,14 +667,8 @@ void FXAI_ApplyPreparedSampleToModel(const int ai_idx,
    for(int b=0; b<window_size && b<FXAI_MAX_SEQUENCE_BARS; b++)
       for(int k=0; k<FXAI_AI_WEIGHTS; k++)
          s3.x_window[b][k] = x_window[b][k];
-   FXAI_ApplyPayloadTransformPipelineEx(manifest.feature_schema_id,
-                                        manifest.feature_groups_mask,
-                                        s3.ctx.normalization_method_id,
-                                        s3.ctx.horizon_minutes,
-                                        s3.ctx.sequence_bars,
-                                        s3.x_window,
-                                        s3.window_size,
-                                        s3.x);
+   if(!FXAI_NormalizationCoreFinalizeTrainRequest(manifest, s3))
+      return;
 
    FXAI_TrainViaV4(plugin, s3, hp);
    FXAI_UpdateModelMoveStats(ai_idx, sample.move_points);
