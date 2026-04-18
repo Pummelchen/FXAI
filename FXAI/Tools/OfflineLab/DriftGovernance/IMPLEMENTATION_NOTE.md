@@ -3,21 +3,21 @@
 ## Repo Mapping
 
 - Drift metrics, policy config, math, DB persistence, report building, and runtime summaries live in:
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/drift_governance.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/drift_governance_config.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/drift_governance_math.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/drift_governance_contracts.py`
-- Schema support is in `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/common_schema.py`.
+  - `<FXAI_ROOT>/Tools/offline_lab/drift_governance.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/drift_governance_config.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/drift_governance_math.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/drift_governance_contracts.py`
+- Schema support is in `<FXAI_ROOT>/Tools/offline_lab/common_schema.py`.
 - CLI entry points are wired through:
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/cli_parser.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/cli_commands.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/cli_parser.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/cli_commands.py`
 - Runtime integration is non-invasive and currently happens through:
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/student_router.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/adaptive_router.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/governance.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/student_router.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/adaptive_router.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/governance.py`
 - GUI ingestion and display are in:
-  - `/Users/andreborchert/FXAI-main2/FXAI/GUI/Sources/FXAIGUICore/Services/DriftGovernanceArtifactReader.swift`
-  - `/Users/andreborchert/FXAI-main2/FXAI/GUI/Sources/FXAIGUIApp/Features/DriftGovernance/DriftGovernanceView.swift`
+  - `<FXAI_ROOT>/GUI/Sources/FXAIGUICore/Services/DriftGovernanceArtifactReader.swift`
+  - `<FXAI_ROOT>/GUI/Sources/FXAIGUIApp/Features/DriftGovernance/DriftGovernanceView.swift`
 
 ## Phase-1 Scope
 

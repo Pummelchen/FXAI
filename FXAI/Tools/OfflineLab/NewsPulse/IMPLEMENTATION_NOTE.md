@@ -5,38 +5,38 @@ This note maps the NewsPulse design onto the actual FXAI repository structure.
 ## Real Integration Points
 
 - MT5 scheduled macro collector:
-  - `/Users/andreborchert/FXAI-main2/FXAI/Services/FXAI_NewsPulseCalendar.mq5`
+  - `<FXAI_ROOT>/Services/FXAI_NewsPulseCalendar.mq5`
   - Runs as an MT5 Service, not a chart EA.
   - Exports calendar feed and state into `FILE_COMMON/FXAI/Runtime/`.
 
 - Python collectors, fusion, policy, and daemon:
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/newspulse_contracts.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/newspulse_config.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/newspulse_policy.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/newspulse_calendar.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/newspulse_gdelt.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/newspulse_official.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/newspulse_story.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/newspulse_replay.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/newspulse_fusion.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/newspulse_daemon.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/newspulse_service.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_contracts.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_config.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_policy.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_calendar.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_gdelt.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_official.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_story.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_replay.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_fusion.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_daemon.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_service.py`
 
 - Runtime gating adapter:
-  - `/Users/andreborchert/FXAI-main2/FXAI/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Engine/Runtime/Trade/runtime_trade_risk.mqh`
+  - `<FXAI_ROOT>/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
+  - `<FXAI_ROOT>/Engine/Runtime/Trade/runtime_trade_risk.mqh`
   - Consumes flat, file-backed pair state without changing the canonical model vector.
 
 - Audit and replay seam:
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tests/Scenarios/audit_newspulse_replay.mqh`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tests/Scenarios/audit_context_series.mqh`
+  - `<FXAI_ROOT>/Tests/Scenarios/audit_newspulse_replay.mqh`
+  - `<FXAI_ROOT>/Tests/Scenarios/audit_context_series.mqh`
   - Pulls replay timelines into the existing macro-event audit scenario instead of inventing a parallel audit flow.
 
 - GUI operator surface:
-  - `/Users/andreborchert/FXAI-main2/FXAI/GUI/Sources/FXAIGUICore/Models/NewsPulseModels.swift`
-  - `/Users/andreborchert/FXAI-main2/FXAI/GUI/Sources/FXAIGUICore/Services/NewsPulseArtifactReader.swift`
-  - `/Users/andreborchert/FXAI-main2/FXAI/GUI/Sources/FXAIGUIApp/Features/NewsPulse/NewsPulseView.swift`
-  - `/Users/andreborchert/FXAI-main2/FXAI/GUI/Sources/FXAIGUICore/Services/IncidentBuilder.swift`
+  - `<FXAI_ROOT>/GUI/Sources/FXAIGUICore/Models/NewsPulseModels.swift`
+  - `<FXAI_ROOT>/GUI/Sources/FXAIGUICore/Services/NewsPulseArtifactReader.swift`
+  - `<FXAI_ROOT>/GUI/Sources/FXAIGUIApp/Features/NewsPulse/NewsPulseView.swift`
+  - `<FXAI_ROOT>/GUI/Sources/FXAIGUICore/Services/IncidentBuilder.swift`
 
 ## Why This Structure
 

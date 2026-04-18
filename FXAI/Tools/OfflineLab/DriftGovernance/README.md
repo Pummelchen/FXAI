@@ -36,11 +36,11 @@ python3 Tools/fxai_offline_lab.py drift-governance-report --profile continuous
 
 ## Artifacts
 
-- Config: `/Users/andreborchert/FXAI-main2/FXAI/Tools/OfflineLab/DriftGovernance/drift_governance_config.json`
-- Status: `/Users/andreborchert/FXAI-main2/FXAI/Tools/OfflineLab/DriftGovernance/drift_governance_status.json`
-- Report: `/Users/andreborchert/FXAI-main2/FXAI/Tools/OfflineLab/DriftGovernance/Reports/drift_governance_report.json`
-- History: `/Users/andreborchert/FXAI-main2/FXAI/Tools/OfflineLab/DriftGovernance/drift_governance_history.ndjson`
-- Runtime summary: `/Users/andreborchert/FXAI-main2/FXAI/Tools/Runtime/drift_governance_summary.json`
+- Config: `<FXAI_ROOT>/Tools/OfflineLab/DriftGovernance/drift_governance_config.json`
+- Status: `<FXAI_ROOT>/Tools/OfflineLab/DriftGovernance/drift_governance_status.json`
+- Report: `<FXAI_ROOT>/Tools/OfflineLab/DriftGovernance/Reports/drift_governance_report.json`
+- History: `<FXAI_ROOT>/Tools/OfflineLab/DriftGovernance/drift_governance_history.ndjson`
+- Runtime summary: `<FXAI_ROOT>/Tools/Runtime/drift_governance_summary.json`
 
 ## Notes
 

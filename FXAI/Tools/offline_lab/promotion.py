@@ -20,6 +20,36 @@ def execution_profile_enum(name: str) -> int:
     return int(mapping.get(profile, 0))
 
 
+def _portable_artifact_path(value: str | Path) -> str:
+    raw = str(value or "")
+    if not raw:
+        return raw
+    candidate = Path(raw)
+    replacements = (
+        (testlab.TESTER_PRESET_DIR, "<FXAI_TESTER_PRESET_DIR>"),
+        (COMMON_PROMOTION_DIR, "<FXAI_PROMOTION_DIR>"),
+        (testlab.ROOT, "<FXAI_ROOT>"),
+    )
+    for base, token in replacements:
+        try:
+            relative = candidate.relative_to(base)
+        except ValueError:
+            continue
+        return token if str(relative) == "." else f"{token}/{relative.as_posix()}"
+    return raw
+
+
+def _portableize_rows(rows: list[dict], *, path_keys: set[str]) -> list[dict]:
+    portable_rows: list[dict] = []
+    for row in rows:
+        converted = dict(row)
+        for key in path_keys:
+            if key in converted and converted[key]:
+                converted[key] = _portable_artifact_path(converted[key])
+        portable_rows.append(converted)
+    return portable_rows
+
+
 def write_ea_set(path: Path, row: dict, params: dict) -> None:
     horizon = int(params.get("horizon", 5))
     content = "\n".join([
@@ -555,9 +585,10 @@ def update_champion_registry(conn: libsql.Connection,
             shutil.copy2(src_ea, dst_dir / "__TOP__ea.set")
             shutil.copy2(src_ea, testlab.TESTER_PRESET_DIR / f"fxai_offline_{safe_token(args.profile)}__{safe_token(symbol)}__top__ea.set")
 
+    summary_rows = _portableize_rows(champion_rows_dict, path_keys={"champion_set_path"})
     summary_path = RESEARCH_DIR / safe_token(args.profile) / "champions.json"
     ensure_dir(summary_path.parent)
-    summary_path.write_text(json.dumps(champion_rows_dict, indent=2, sort_keys=True), encoding="utf-8")
+    summary_path.write_text(json.dumps(summary_rows, indent=2, sort_keys=True), encoding="utf-8")
     return decisions
 
 
@@ -644,7 +675,7 @@ def write_distillation_artifacts(conn: libsql.Connection,
             "symbol": row["symbol"],
             "plugin_name": row["plugin_name"],
             "family_id": family_id,
-            "artifact_path": str(artifact_path),
+            "artifact_path": _portable_artifact_path(artifact_path),
             "artifact_sha256": artifact_sha,
         })
     commit_db(conn)
@@ -737,11 +768,15 @@ def persist_best_configs(conn: libsql.Connection, args, winners: list[dict]) -> 
     summary_json = profile_dir / "promoted_best.json"
     summary_tsv = profile_dir / "promoted_best.tsv"
     summary_md = profile_dir / "promoted_best.md"
-    summary_json.write_text(json.dumps(promoted_rows, indent=2, sort_keys=True), encoding="utf-8")
+    portable_rows = _portableize_rows(
+        promoted_rows,
+        path_keys={"audit_set_path", "ea_set_path", "tester_audit_set_path", "tester_ea_set_path"},
+    )
+    summary_json.write_text(json.dumps(portable_rows, indent=2, sort_keys=True), encoding="utf-8")
     with summary_tsv.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle, delimiter="\t")
         writer.writerow(["symbol", "plugin_name", "ai_id", "score", "ranking_score", "support_count", "audit_set_path", "ea_set_path"])
-        for row in sorted(promoted_rows, key=lambda item: (item["symbol"], -float(item["ranking_score"]), item["plugin_name"])):
+        for row in sorted(portable_rows, key=lambda item: (item["symbol"], -float(item["ranking_score"]), item["plugin_name"])):
             writer.writerow([
                 row["symbol"],
                 row["plugin_name"],

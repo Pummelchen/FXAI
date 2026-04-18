@@ -3,22 +3,22 @@
 ## Repo Mapping
 
 - Offline Lab contracts, config, math, graph construction, and resolver logic live in:
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/pair_network_contracts.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/pair_network_config.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/pair_network_math.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/pair_network.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/pair_network_contracts.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/pair_network_config.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/pair_network_math.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/pair_network.py`
 - CLI entry points are wired through:
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/cli_parser.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/cli_commands.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/cli_parser.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/cli_commands.py`
 - Runtime integration is in:
-  - `/Users/andreborchert/FXAI-main2/FXAI/Engine/Runtime/Trade/runtime_trade_pair_network.mqh`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Engine/Runtime/Trade/runtime_trade_risk.mqh`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Engine/Runtime/runtime_trade_helpers.mqh`
-  - `/Users/andreborchert/FXAI-main2/FXAI/FXAI.mq5`
+  - `<FXAI_ROOT>/Engine/Runtime/Trade/runtime_trade_pair_network.mqh`
+  - `<FXAI_ROOT>/Engine/Runtime/Trade/runtime_trade_risk.mqh`
+  - `<FXAI_ROOT>/Engine/Runtime/runtime_trade_helpers.mqh`
+  - `<FXAI_ROOT>/FXAI.mq5`
 - GUI ingestion and display are in:
-  - `/Users/andreborchert/FXAI-main2/FXAI/GUI/Sources/FXAIGUICore/Models/PairNetworkModels.swift`
-  - `/Users/andreborchert/FXAI-main2/FXAI/GUI/Sources/FXAIGUICore/Services/PairNetworkArtifactReader.swift`
-  - `/Users/andreborchert/FXAI-main2/FXAI/GUI/Sources/FXAIGUIApp/Features/PairNetwork/PairNetworkView.swift`
+  - `<FXAI_ROOT>/GUI/Sources/FXAIGUICore/Models/PairNetworkModels.swift`
+  - `<FXAI_ROOT>/GUI/Sources/FXAIGUICore/Services/PairNetworkArtifactReader.swift`
+  - `<FXAI_ROOT>/GUI/Sources/FXAIGUIApp/Features/PairNetwork/PairNetworkView.swift`
 
 ## Phase-1 Scope
 

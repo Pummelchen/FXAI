@@ -1,9 +1,9 @@
 {
-  "bundle_root": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/OfflineLab/ResearchOS/fixture/minimal_live_bundle",
+  "bundle_root": "<FXAI_ROOT>/Tools/OfflineLab/ResearchOS/fixture/minimal_live_bundle",
   "profile_name": "fixture",
   "symbols": [
     {
-      "artifact_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Offline/Promotions/fxai_live_deploy_EURUSD.tsv",
+      "artifact_path": "<FXAI_PROMOTION_DIR>/fxai_live_deploy_EURUSD.tsv",
       "artifact_sha256": "5df7f7063017d50b4edde39c510f3e99182e031e071592e10d0811b60b48278a",
       "copied_files": [
         "fxai_live_deploy_EURUSD.tsv",

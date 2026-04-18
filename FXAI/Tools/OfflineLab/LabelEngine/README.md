@@ -56,10 +56,10 @@ python3 Tools/fxai_offline_lab.py label-engine-report --profile continuous
 
 ## Artifacts
 
-- Config: `/Users/andreborchert/FXAI-main2/FXAI/Tools/OfflineLab/LabelEngine/label_engine_config.json`
-- Status: `/Users/andreborchert/FXAI-main2/FXAI/Tools/OfflineLab/LabelEngine/label_engine_status.json`
-- Report: `/Users/andreborchert/FXAI-main2/FXAI/Tools/OfflineLab/LabelEngine/Reports/label_engine_report.json`
-- Per-dataset artifacts: `/Users/andreborchert/FXAI-main2/FXAI/Tools/OfflineLab/LabelEngine/Artifacts/...`
+- Config: `<FXAI_ROOT>/Tools/OfflineLab/LabelEngine/label_engine_config.json`
+- Status: `<FXAI_ROOT>/Tools/OfflineLab/LabelEngine/label_engine_status.json`
+- Report: `<FXAI_ROOT>/Tools/OfflineLab/LabelEngine/Reports/label_engine_report.json`
+- Per-dataset artifacts: `<FXAI_ROOT>/Tools/OfflineLab/LabelEngine/Artifacts/...`
 
 Each artifact bundle contains:
 

@@ -4,18 +4,18 @@ This note maps the subsystem design onto the actual FXAI codebase.
 
 ## Real Integration Points
 
-- Live runtime entrypoint: `/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI/Engine/engine_runtime.mqh`
-- Live feature and context stage: `/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI/Engine/Runtime/runtime_feature_pipeline_block.mqh`
-- Live transfer/context stage: `/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI/Engine/Runtime/runtime_transfer_stage_block.mqh`
-- Plugin aggregation and existing student-router weighting: `/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI/Engine/Runtime/runtime_model_stage_block.mqh`
-- Final posture and decision gating: `/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI/Engine/Runtime/runtime_policy_stage_block.mqh`
-- Existing control-plane artifact rails: `/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI/Engine/Runtime/ControlPlane/runtime_control_plane_types.mqh` and `/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI/Engine/Runtime/ControlPlane/runtime_control_plane_profiles.mqh`
-- Existing live NewsPulse runtime context: `/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
-- Existing plugin empirical route memory: `/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI/Engine/meta_calibration.mqh`
-- Existing shadow-fleet / research telemetry: `/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI/Tools/offline_lab/shadow_fleet.py`
-- Existing student-router artifact generation: `/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI/Tools/offline_lab/student_router.py`
-- Existing operator dashboard export: `/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI/Tools/offline_lab/dashboard.py`
-- Existing GUI runtime reader and monitor: `/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI/GUI/Sources/FXAIGUICore/Services/RuntimeArtifactReader.swift` and `/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI/GUI/Sources/FXAIGUIApp/Features/Runtime/RuntimeMonitorView.swift`
+- Live runtime entrypoint: `<FXAI_ROOT>/Engine/engine_runtime.mqh`
+- Live feature and context stage: `<FXAI_ROOT>/Engine/Runtime/runtime_feature_pipeline_block.mqh`
+- Live transfer/context stage: `<FXAI_ROOT>/Engine/Runtime/runtime_transfer_stage_block.mqh`
+- Plugin aggregation and existing student-router weighting: `<FXAI_ROOT>/Engine/Runtime/runtime_model_stage_block.mqh`
+- Final posture and decision gating: `<FXAI_ROOT>/Engine/Runtime/runtime_policy_stage_block.mqh`
+- Existing control-plane artifact rails: `<FXAI_ROOT>/Engine/Runtime/ControlPlane/runtime_control_plane_types.mqh` and `<FXAI_ROOT>/Engine/Runtime/ControlPlane/runtime_control_plane_profiles.mqh`
+- Existing live NewsPulse runtime context: `<FXAI_ROOT>/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
+- Existing plugin empirical route memory: `<FXAI_ROOT>/Engine/meta_calibration.mqh`
+- Existing shadow-fleet / research telemetry: `<FXAI_ROOT>/Tools/offline_lab/shadow_fleet.py`
+- Existing student-router artifact generation: `<FXAI_ROOT>/Tools/offline_lab/student_router.py`
+- Existing operator dashboard export: `<FXAI_ROOT>/Tools/offline_lab/dashboard.py`
+- Existing GUI runtime reader and monitor: `<FXAI_ROOT>/GUI/Sources/FXAIGUICore/Services/RuntimeArtifactReader.swift` and `<FXAI_ROOT>/GUI/Sources/FXAIGUIApp/Features/Runtime/RuntimeMonitorView.swift`
 
 ## Repo-Aware Design Choice
 

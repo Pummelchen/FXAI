@@ -1,7 +1,7 @@
 {
   "deployments": [
     {
-      "artifact_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Offline/Promotions/fxai_live_deploy_EURUSD.tsv",
+      "artifact_path": "<FXAI_PROMOTION_DIR>/fxai_live_deploy_EURUSD.tsv",
       "artifact_sha256": "5df7f7063017d50b4edde39c510f3e99182e031e071592e10d0811b60b48278a",
       "champions": [
         {
@@ -22,7 +22,7 @@
       "created_at": 1700000000,
       "lineage": [],
       "live_state": {
-        "adaptive_history_path": "/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/andreborchert/AppData/Roaming/MetaQuotes/Terminal/Common/Files/FXAI/Runtime/fxai_regime_router_history_EURUSD.ndjson",
+        "adaptive_history_path": "<FXAI_RUNTIME_DIR>/fxai_regime_router_history_EURUSD.ndjson",
         "adaptive_router": {
           "abstain_threshold": "0.340000",
           "block_threshold": "0.160000",
@@ -307,9 +307,9 @@
           },
           "action_mode": "AUTO_APPLY_PROTECTIVE",
           "artifacts": {
-            "history_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/OfflineLab/DriftGovernance/drift_governance_history.ndjson",
-            "report_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/OfflineLab/DriftGovernance/Reports/drift_governance_report.json",
-            "status_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/OfflineLab/DriftGovernance/drift_governance_status.json"
+            "history_path": "<FXAI_ROOT>/Tools/OfflineLab/DriftGovernance/drift_governance_history.ndjson",
+            "report_path": "<FXAI_ROOT>/Tools/OfflineLab/DriftGovernance/Reports/drift_governance_report.json",
+            "status_path": "<FXAI_ROOT>/Tools/OfflineLab/DriftGovernance/drift_governance_status.json"
           },
           "generated_at": "2026-01-01T00:00:00Z",
           "governance_counts": {
@@ -424,9 +424,9 @@
           "action_mode": "AUTO_APPLY_PROTECTIVE",
           "applied_action_count": 0,
           "artifacts": {
-            "history_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/OfflineLab/DriftGovernance/drift_governance_history.ndjson",
-            "report_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/OfflineLab/DriftGovernance/Reports/drift_governance_report.json",
-            "status_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/OfflineLab/DriftGovernance/drift_governance_status.json"
+            "history_path": "<FXAI_ROOT>/Tools/OfflineLab/DriftGovernance/drift_governance_history.ndjson",
+            "report_path": "<FXAI_ROOT>/Tools/OfflineLab/DriftGovernance/Reports/drift_governance_report.json",
+            "status_path": "<FXAI_ROOT>/Tools/OfflineLab/DriftGovernance/drift_governance_status.json"
           },
           "generated_at": "2026-01-01T00:00:00Z",
           "latest_actions": [
@@ -456,7 +456,7 @@
         "pair_network_runtime": {},
         "pair_network_status": {},
         "performance": {
-          "artifact_path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Runtime/fxai_perf_EURUSD.tsv",
+          "artifact_path": "<FXAI_RUNTIME_DIR>/fxai_perf_EURUSD.tsv",
           "artifact_report": {
             "budget_failures": [],
             "items": [
@@ -465,7 +465,7 @@
                 "budget_bytes": 24576,
                 "exists": true,
                 "over_budget": false,
-                "path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Offline/Promotions/fxai_live_deploy_EURUSD.tsv",
+                "path": "<FXAI_PROMOTION_DIR>/fxai_live_deploy_EURUSD.tsv",
                 "size_bytes": 948
               },
               {
@@ -473,7 +473,7 @@
                 "budget_bytes": 24576,
                 "exists": true,
                 "over_budget": false,
-                "path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Offline/Promotions/fxai_student_router_EURUSD.tsv",
+                "path": "<FXAI_PROMOTION_DIR>/fxai_student_router_EURUSD.tsv",
                 "size_bytes": 659
               },
               {
@@ -481,7 +481,7 @@
                 "budget_bytes": 32768,
                 "exists": true,
                 "over_budget": false,
-                "path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Offline/Promotions/fxai_attribution_EURUSD.tsv",
+                "path": "<FXAI_PROMOTION_DIR>/fxai_attribution_EURUSD.tsv",
                 "size_bytes": 781
               },
               {
@@ -489,7 +489,7 @@
                 "budget_bytes": 32768,
                 "exists": true,
                 "over_budget": false,
-                "path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Offline/Promotions/fxai_world_plan_EURUSD.tsv",
+                "path": "<FXAI_PROMOTION_DIR>/fxai_world_plan_EURUSD.tsv",
                 "size_bytes": 688
               },
               {
@@ -497,7 +497,7 @@
                 "budget_bytes": 24576,
                 "exists": true,
                 "over_budget": false,
-                "path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Offline/Promotions/fxai_supervisor_service_EURUSD.tsv",
+                "path": "<FXAI_PROMOTION_DIR>/fxai_supervisor_service_EURUSD.tsv",
                 "size_bytes": 551
               },
               {
@@ -505,7 +505,7 @@
                 "budget_bytes": 16384,
                 "exists": true,
                 "over_budget": false,
-                "path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Offline/Promotions/fxai_supervisor_command_EURUSD.tsv",
+                "path": "<FXAI_PROMOTION_DIR>/fxai_supervisor_command_EURUSD.tsv",
                 "size_bytes": 432
               },
               {
@@ -513,7 +513,7 @@
                 "budget_bytes": 131072,
                 "exists": false,
                 "over_budget": false,
-                "path": "/private/var/folders/gd/71hcflq91rj3skfxfh5ldccc0000gn/T/fxai_fixture_FIXED/FILE_COMMON/FXAI/Runtime/fxai_perf_EURUSD.tsv",
+                "path": "<FXAI_RUNTIME_DIR>/fxai_perf_EURUSD.tsv",
                 "size_bytes": 0
               }
             ],

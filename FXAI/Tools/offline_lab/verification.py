@@ -38,10 +38,27 @@ def _write_golden(path: Path, text: str) -> None:
 
 
 def _sanitize_fixture_text(text: str) -> str:
+    from .common import COMMON_EXPORT_DIR, COMMON_PROMOTION_DIR, OFFLINE_DIR
+    from testlab.shared import COMMON_FILES, ROOT, RUNTIME_DIR, TESTER_PRESET_DIR
+
     sanitized = str(text)
+    exact_path_replacements = [
+        (str(COMMON_PROMOTION_DIR), "<FXAI_PROMOTION_DIR>"),
+        (str(RUNTIME_DIR), "<FXAI_RUNTIME_DIR>"),
+        (str(COMMON_EXPORT_DIR), "<FXAI_EXPORT_DIR>"),
+        (str(COMMON_FILES), "<FXAI_COMMON_FILES>"),
+        (str(TESTER_PRESET_DIR), "<FXAI_TESTER_PRESET_DIR>"),
+        (str(OFFLINE_DIR), "<FXAI_ROOT>/Tools/OfflineLab"),
+        (str(ROOT), "<FXAI_ROOT>"),
+    ]
+    for source, target in exact_path_replacements:
+        if source:
+            sanitized = sanitized.replace(source, target)
+
     sanitized = re.sub(r"fxai_fixture_[A-Za-z0-9_]+", "fxai_fixture_FIXED", sanitized)
     sanitized = re.sub(r"\"(generated_at|expires_at|reviewed_at|created_at|promoted_at|started_at|finished_at)\":\s*\d+", r'"\1": 1700000000', sanitized)
     sanitized = re.sub(r"\"(generated_at|expires_at|reviewed_at|created_at|promoted_at|started_at|finished_at)\":\s*\"\d+\"", r'"\1": "1700000000"', sanitized)
+    sanitized = re.sub(r"\"artifact_age_sec\":\s*\d+", '"artifact_age_sec": 0', sanitized)
     sanitized = re.sub(
         r"\"(generated_at|expires_at|reviewed_at|created_at|promoted_at|started_at|finished_at)\":\s*\"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+Z\"",
         r'"\1": "2026-01-01T00:00:00Z"',
@@ -53,6 +70,41 @@ def _sanitize_fixture_text(text: str) -> str:
         sanitized,
     )
     sanitized = re.sub(r"(\t(?:generated_at|expires_at|promoted_at|started_at|finished_at))\t\d+", r"\1\t1700000000", sanitized)
+    sanitized = re.sub(
+        r"/(?:[^/\s\"`]+/)*FILE_COMMON/FXAI/Offline/Promotions",
+        "<FXAI_PROMOTION_DIR>",
+        sanitized,
+    )
+    sanitized = re.sub(
+        r"/[^\"`\n]+?/Common/Files/FXAI/Offline/Promotions",
+        "<FXAI_PROMOTION_DIR>",
+        sanitized,
+    )
+    sanitized = re.sub(
+        r"/(?:[^/\s\"`]+/)*FILE_COMMON/FXAI/Runtime",
+        "<FXAI_RUNTIME_DIR>",
+        sanitized,
+    )
+    sanitized = re.sub(
+        r"/[^\"`\n]+?/Common/Files/FXAI/Runtime",
+        "<FXAI_RUNTIME_DIR>",
+        sanitized,
+    )
+    sanitized = re.sub(
+        r"/(?:[^/\s\"`]+/)*FILE_COMMON",
+        "<FXAI_COMMON_FILES>",
+        sanitized,
+    )
+    sanitized = re.sub(
+        r"/(?:[^/\s\"`]+/)*MT5/Profiles/Tester",
+        "<FXAI_TESTER_PRESET_DIR>",
+        sanitized,
+    )
+    sanitized = re.sub(
+        r"/(?:[^/\s\"`]+/){2,}OfflineLab",
+        "<FXAI_ROOT>/Tools/OfflineLab",
+        sanitized,
+    )
     return sanitized
 
 

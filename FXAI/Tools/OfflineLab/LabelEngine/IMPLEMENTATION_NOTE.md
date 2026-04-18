@@ -2,20 +2,20 @@
 
 ## Repo Mapping
 
-- Canonical training data source: `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/exporter.py`
-- Canonical dataset tables: `datasets` and `dataset_bars` in `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/common_schema.py`
-- Existing offline orchestration entry points: `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/cli_parser.py` and `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/cli_commands.py`
+- Canonical training data source: `<FXAI_ROOT>/Tools/offline_lab/exporter.py`
+- Canonical dataset tables: `datasets` and `dataset_bars` in `<FXAI_ROOT>/Tools/offline_lab/common_schema.py`
+- Existing offline orchestration entry points: `<FXAI_ROOT>/Tools/offline_lab/cli_parser.py` and `<FXAI_ROOT>/Tools/offline_lab/cli_commands.py`
 - Existing cost/execution context reused by label construction:
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/testlab/shared.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/prob_calibration_math.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/execution_quality_math.py`
+  - `<FXAI_ROOT>/Tools/testlab/shared.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/prob_calibration_math.py`
+  - `<FXAI_ROOT>/Tools/offline_lab/execution_quality_math.py`
 - Existing operator/reporting surfaces extended:
-  - `/Users/andreborchert/FXAI-main2/FXAI/Tools/offline_lab/dashboard.py`
-  - `/Users/andreborchert/FXAI-main2/FXAI/GUI/Sources/FXAIGUIApp`
+  - `<FXAI_ROOT>/Tools/offline_lab/dashboard.py`
+  - `<FXAI_ROOT>/GUI/Sources/FXAIGUIApp`
 
 ## What Was Added
 
-- A dedicated offline-lab subsystem rooted at `/Users/andreborchert/FXAI-main2/FXAI/Tools/OfflineLab/LabelEngine`
+- A dedicated offline-lab subsystem rooted at `<FXAI_ROOT>/Tools/OfflineLab/LabelEngine`
 - Deterministic multi-horizon side-aware labels over exported `dataset_bars`
 - Cost-aware tradeability labels driven by spread, slippage, fill penalty, commission, and safety margin
 - Path-aware barrier timing and MFE/MAE labeling using bar-path approximation
