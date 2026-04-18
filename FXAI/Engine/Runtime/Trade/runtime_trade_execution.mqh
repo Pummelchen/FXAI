@@ -1,5 +1,316 @@
 #ifndef __FXAI_RUNTIME_TRADE_EXECUTION_MQH__
 #define __FXAI_RUNTIME_TRADE_EXECUTION_MQH__
+
+struct FXAIExecutionPlan
+{
+   bool            ready;
+   bool            use_pending;
+   ENUM_ORDER_TYPE order_type;
+   double          entry_price;
+   double          stop_loss;
+   double          take_profit;
+   datetime        expiry_time;
+   string          mode;
+};
+
+void FXAI_ResetExecutionPlan(FXAIExecutionPlan &out)
+{
+   out.ready = false;
+   out.use_pending = false;
+   out.order_type = ORDER_TYPE_BUY;
+   out.entry_price = 0.0;
+   out.stop_loss = 0.0;
+   out.take_profit = 0.0;
+   out.expiry_time = 0;
+   out.mode = "MARKET";
+}
+
+double FXAI_SymbolPointValue(const string symbol)
+{
+   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   if(point <= 0.0)
+      point = (_Point > 0.0 ? _Point : 0.0001);
+   return point;
+}
+
+double FXAI_NormalizeOrderPrice(const string symbol,
+                                const double price)
+{
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   if(digits < 0)
+      digits = _Digits;
+   return NormalizeDouble(price, digits);
+}
+
+double FXAI_TradeDistanceMinPoints(const string symbol)
+{
+   long stops_level = 0;
+   long freeze_level = 0;
+   SymbolInfoInteger(symbol, SYMBOL_TRADE_STOPS_LEVEL, stops_level);
+   SymbolInfoInteger(symbol, SYMBOL_TRADE_FREEZE_LEVEL, freeze_level);
+   return (double)MathMax((long)2, MathMax(stops_level, freeze_level));
+}
+
+void FXAI_ApplyProtectiveLevels(const string symbol,
+                                const int direction,
+                                const double entry_price,
+                                double &stop_loss,
+                                double &take_profit)
+{
+   double point = FXAI_SymbolPointValue(symbol);
+   double min_points = FXAI_TradeDistanceMinPoints(symbol);
+   double risk_points = MathMax(FXAI_EstimatedRiskPointsForDecision(), min_points + 2.0);
+   double reward_points = MathMax(1.35 * MathMax(g_ai_last_expected_move_points, risk_points), risk_points * 1.15);
+   if(direction == 1)
+   {
+      stop_loss = entry_price - risk_points * point;
+      take_profit = entry_price + reward_points * point;
+   }
+   else
+   {
+      stop_loss = entry_price + risk_points * point;
+      take_profit = entry_price - reward_points * point;
+   }
+   stop_loss = FXAI_NormalizeOrderPrice(symbol, stop_loss);
+   take_profit = FXAI_NormalizeOrderPrice(symbol, take_profit);
+}
+
+bool FXAI_BuildExecutionPlan(const string symbol,
+                             const int direction,
+                             FXAIExecutionPlan &plan)
+{
+   FXAI_ResetExecutionPlan(plan);
+   if(direction != 0 && direction != 1)
+      return false;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(symbol, tick))
+      return false;
+
+   double point = FXAI_SymbolPointValue(symbol);
+   double min_points = FXAI_TradeDistanceMinPoints(symbol);
+   double setup_points = MathMax(MathMax(g_ai_last_min_move_points, 4.0), min_points + 1.0);
+   double entry_offset_points = MathMax(0.30 * FXAI_EstimatedRiskPointsForDecision(),
+                                        MathMax(min_points + 1.0, 0.35 * setup_points));
+   bool prefer_pending = (g_system_health_last_ready &&
+                          g_system_health_last_state.posture != "HEALTHY") ||
+                         (g_execution_quality_last_state == "CAUTION") ||
+                         (g_execution_quality_last_state == "STRESSED") ||
+                         (g_newspulse_last_trade_gate == "CAUTION") ||
+                         g_last_order_request_pending;
+
+   double entry_price = 0.0;
+   if(prefer_pending)
+   {
+      bool use_breakout = (g_ai_last_trade_gate >= 0.60 &&
+                           g_ai_last_hierarchy_execution >= 0.55 &&
+                           g_ai_last_path_risk <= 0.55);
+      if(direction == 1)
+      {
+         if(use_breakout)
+         {
+            plan.order_type = ORDER_TYPE_BUY_STOP;
+            entry_price = tick.ask + entry_offset_points * point;
+            plan.mode = "BUY_STOP";
+         }
+         else
+         {
+            plan.order_type = ORDER_TYPE_BUY_LIMIT;
+            entry_price = tick.bid - entry_offset_points * point;
+            plan.mode = "BUY_LIMIT";
+         }
+      }
+      else
+      {
+         if(use_breakout)
+         {
+            plan.order_type = ORDER_TYPE_SELL_STOP;
+            entry_price = tick.bid - entry_offset_points * point;
+            plan.mode = "SELL_STOP";
+         }
+         else
+         {
+            plan.order_type = ORDER_TYPE_SELL_LIMIT;
+            entry_price = tick.ask + entry_offset_points * point;
+            plan.mode = "SELL_LIMIT";
+         }
+      }
+
+      plan.use_pending = true;
+      plan.entry_price = FXAI_NormalizeOrderPrice(symbol, entry_price);
+      plan.expiry_time = FXAI_ServerNow();
+      if(plan.expiry_time <= 0)
+         plan.expiry_time = TimeCurrent();
+      if(plan.expiry_time <= 0)
+         plan.expiry_time = tick.time;
+      plan.expiry_time += 20 * 60;
+   }
+   else
+   {
+      plan.use_pending = false;
+      plan.order_type = (direction == 1 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL);
+      plan.entry_price = (direction == 1 ? tick.ask : tick.bid);
+      plan.mode = "MARKET";
+   }
+
+   if(plan.entry_price <= 0.0)
+      return false;
+
+   FXAI_ApplyProtectiveLevels(symbol, direction, plan.entry_price, plan.stop_loss, plan.take_profit);
+
+   if(plan.use_pending)
+   {
+      double min_distance = min_points * point;
+      if(plan.order_type == ORDER_TYPE_BUY_LIMIT && plan.entry_price >= tick.ask - min_distance)
+         plan.entry_price = FXAI_NormalizeOrderPrice(symbol, tick.ask - (min_points + 1.0) * point);
+      if(plan.order_type == ORDER_TYPE_SELL_LIMIT && plan.entry_price <= tick.bid + min_distance)
+         plan.entry_price = FXAI_NormalizeOrderPrice(symbol, tick.bid + (min_points + 1.0) * point);
+      if(plan.order_type == ORDER_TYPE_BUY_STOP && plan.entry_price <= tick.ask + min_distance)
+         plan.entry_price = FXAI_NormalizeOrderPrice(symbol, tick.ask + (min_points + 1.0) * point);
+      if(plan.order_type == ORDER_TYPE_SELL_STOP && plan.entry_price >= tick.bid - min_distance)
+         plan.entry_price = FXAI_NormalizeOrderPrice(symbol, tick.bid - (min_points + 1.0) * point);
+      FXAI_ApplyProtectiveLevels(symbol,
+                                 direction,
+                                 plan.entry_price,
+                                 plan.stop_loss,
+                                 plan.take_profit);
+   }
+
+   plan.ready = true;
+   return true;
+}
+
+bool FXAI_SendExecutionPlanChecked(const string symbol,
+                                   const int direction,
+                                   const double trade_lot,
+                                   const FXAIExecutionPlan &plan,
+                                   string &reason,
+                                   uint &retcode,
+                                   string &ret_desc)
+{
+   reason = "ok";
+   retcode = 0;
+   ret_desc = "";
+   if(!plan.ready)
+   {
+      reason = "execution_plan_invalid";
+      return false;
+   }
+
+   MqlTick tick;
+   if(!SymbolInfoTick(symbol, tick))
+   {
+      reason = "symbol_tick_failed";
+      return false;
+   }
+
+   FXAIExecutionProfile exec_profile;
+   FXAI_ResolveExecutionProfile(exec_profile);
+
+   MqlTradeRequest request;
+   MqlTradeCheckResult check;
+   MqlTradeResult result;
+   ZeroMemory(request);
+   ZeroMemory(check);
+   ZeroMemory(result);
+
+   request.action = (plan.use_pending ? TRADE_ACTION_PENDING : TRADE_ACTION_DEAL);
+   request.magic = TradeMagic;
+   request.symbol = symbol;
+   request.volume = trade_lot;
+   request.type = plan.order_type;
+   request.type_filling = FXAI_ResolveOrderFilling(symbol);
+   request.price = plan.entry_price;
+   request.sl = plan.stop_loss;
+   request.tp = plan.take_profit;
+   if(plan.use_pending)
+   {
+      request.type_time = ORDER_TIME_SPECIFIED;
+      request.expiration = plan.expiry_time;
+   }
+
+   double allowed_deviation = FXAI_ExecutionAllowedDeviationPoints(exec_profile,
+                                                                   g_ai_last_path_risk,
+                                                                   g_ai_last_fill_risk);
+   if(ExecutionQualityEnabled &&
+      g_execution_quality_last_ready &&
+      !g_execution_quality_last_data_stale &&
+      g_execution_quality_last_allowed_deviation > 0.0)
+   {
+      allowed_deviation = MathMax(allowed_deviation, g_execution_quality_last_allowed_deviation);
+   }
+   request.deviation = (ulong)MathRound(MathMax(allowed_deviation, 0.0));
+   request.comment = StringFormat("FXAI|%s|%s|H%d|R%d",
+                                  (direction == 1 ? "BUY" : "SELL"),
+                                  plan.mode,
+                                  g_ai_last_horizon_minutes,
+                                  g_ai_last_regime_id);
+
+   if(request.price <= 0.0)
+   {
+      reason = "invalid_order_price";
+      return false;
+   }
+
+   ulong order_start_us = GetMicrosecondCount();
+   datetime order_sample_time = FXAI_ServerNow();
+   if(order_sample_time <= 0)
+      order_sample_time = tick.time;
+
+   if(!OrderCheck(request, check))
+   {
+      retcode = (uint)check.retcode;
+      ret_desc = check.comment;
+      reason = "order_check_failed";
+      FXAI_ClearLastOrderRequestState();
+      return false;
+   }
+   if(!FXAI_IsTradeRetcodeSuccess((uint)check.retcode))
+   {
+      retcode = (uint)check.retcode;
+      ret_desc = check.comment;
+      reason = "order_check_rejected";
+      FXAI_ClearLastOrderRequestState();
+      return false;
+   }
+
+   g_last_order_request_time = order_sample_time;
+   g_last_order_request_us = order_start_us;
+   g_last_order_request_price = request.price;
+   g_last_order_request_volume = request.volume;
+   g_last_order_request_filled_volume = 0.0;
+   g_last_order_request_horizon = g_ai_last_horizon_minutes;
+   g_last_order_request_side = (direction == 1 ? 1 : -1);
+   g_last_order_request_type = FXAI_BrokerOrderTypeBucket(request.type);
+   g_last_order_request_symbol = symbol;
+   g_last_order_request_order_ticket = 0;
+   g_last_order_request_uses_pending_order = plan.use_pending;
+   g_last_order_request_pending = true;
+
+   if(!OrderSend(request, result))
+   {
+      retcode = (uint)result.retcode;
+      ret_desc = result.comment;
+      reason = "order_send_failed";
+      FXAI_ClearLastOrderRequestState();
+      return false;
+   }
+
+   retcode = (uint)result.retcode;
+   ret_desc = result.comment;
+   if(!FXAI_IsTradeRetcodeSuccess(retcode))
+   {
+      reason = "order_send_rejected";
+      FXAI_ClearLastOrderRequestState();
+      return false;
+   }
+
+   g_last_order_request_order_ticket = result.order;
+   if(plan.use_pending)
+      FXAI_MarkRuntimeArtifactsDirty();
+   return true;
+}
+
 int FXAI_BrokerOrderTypeBucket(const ENUM_ORDER_TYPE order_type)
 {
    switch(order_type)
@@ -28,169 +339,80 @@ bool FXAI_SendMarketOrderChecked(const string symbol,
                                  uint &retcode,
                                  string &ret_desc)
 {
-   reason = "ok";
-   retcode = 0;
-   ret_desc = "";
-
-   if(direction != 0 && direction != 1)
-   {
-      reason = "invalid_direction";
-      return false;
-   }
-
+   FXAIExecutionPlan plan;
+   FXAI_ResetExecutionPlan(plan);
+   plan.ready = true;
+   plan.use_pending = false;
+   plan.order_type = (direction == 1 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL);
    MqlTick tick;
    if(!SymbolInfoTick(symbol, tick))
    {
       reason = "symbol_tick_failed";
+      retcode = 0;
+      ret_desc = "";
       return false;
    }
+   plan.entry_price = (direction == 1 ? tick.ask : tick.bid);
+   plan.mode = "MARKET";
+   FXAI_ApplyProtectiveLevels(symbol, direction, plan.entry_price, plan.stop_loss, plan.take_profit);
+   return FXAI_SendExecutionPlanChecked(symbol, direction, trade_lot, plan, reason, retcode, ret_desc);
+}
 
-   FXAIExecutionProfile exec_profile;
-   FXAI_ResolveExecutionProfile(exec_profile);
-
-   MqlTradeRequest request;
-   MqlTradeCheckResult check;
-   MqlTradeResult result;
-   ZeroMemory(request);
-   ZeroMemory(check);
-   ZeroMemory(result);
-
-   request.action = TRADE_ACTION_DEAL;
-   request.magic = TradeMagic;
-   request.symbol = symbol;
-   request.volume = trade_lot;
-   request.type = (direction == 1 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL);
-   request.type_filling = FXAI_ResolveOrderFilling(symbol);
-   request.price = (direction == 1 ? tick.ask : tick.bid);
-   double allowed_deviation = FXAI_ExecutionAllowedDeviationPoints(exec_profile,
-                                                                   g_ai_last_path_risk,
-                                                                   g_ai_last_fill_risk);
-   if(ExecutionQualityEnabled &&
-      g_execution_quality_last_ready &&
-      !g_execution_quality_last_data_stale &&
-      g_execution_quality_last_allowed_deviation > 0.0)
+bool FXAI_SendTradeIntentChecked(const string symbol,
+                                 const int direction,
+                                 const double trade_lot,
+                                 string &reason,
+                                 uint &retcode,
+                                 string &ret_desc)
+{
+   FXAIExecutionPlan plan;
+   if(!FXAI_BuildExecutionPlan(symbol, direction, plan))
    {
-      allowed_deviation = MathMax(allowed_deviation, g_execution_quality_last_allowed_deviation);
-   }
-   request.deviation = (ulong)MathRound(MathMax(allowed_deviation, 0.0));
-   request.comment = StringFormat("FXAI|%s|H%d|R%d",
-                                  (direction == 1 ? "BUY" : "SELL"),
-                                  g_ai_last_horizon_minutes,
-                                  g_ai_last_regime_id);
-
-   if(request.price <= 0.0)
-   {
-      reason = "invalid_order_price";
+      reason = "execution_plan_build_failed";
+      retcode = 0;
+      ret_desc = "";
       return false;
    }
+   return FXAI_SendExecutionPlanChecked(symbol, direction, trade_lot, plan, reason, retcode, ret_desc);
+}
 
-   ulong order_start_us = GetMicrosecondCount();
-   datetime order_sample_time = TimeCurrent();
-   if(order_sample_time <= 0)
-      order_sample_time = tick.time;
-   if(order_sample_time <= 0)
-      order_sample_time = TimeTradeServer();
-
-   if(!OrderCheck(request, check))
+bool FXAI_CancelManagedPendingOrders(const string symbol,
+                                     const bool cancel_all = false)
+{
+   datetime now_time = FXAI_ServerNow();
+   bool any = false;
+   for(int i=OrdersTotal() - 1; i>=0; i--)
    {
-      retcode = (uint)check.retcode;
-      ret_desc = check.comment;
-      double elapsed_ms = (double)(GetMicrosecondCount() - order_start_us) / 1000.0;
-      double latency_points = 0.05 * MathLog(1.0 + MathMax(elapsed_ms, 0.0));
-      FXAI_RecordBrokerExecutionEventEx(order_sample_time,
-                                        symbol,
-                                        g_ai_last_horizon_minutes,
-                                        (direction == 1 ? 1 : -1),
-                                        FXAI_BrokerOrderTypeBucket(request.type),
-                                        0,
-                                        0.0,
-                                        latency_points,
-                                        true,
-                                        false,
-                                        0.0);
-      FXAI_MarkRuntimeArtifactsDirty();
-      reason = "order_check_failed";
-      return false;
-   }
-   if(!FXAI_IsTradeRetcodeSuccess((uint)check.retcode))
-   {
-      retcode = (uint)check.retcode;
-      ret_desc = check.comment;
-      double elapsed_ms = (double)(GetMicrosecondCount() - order_start_us) / 1000.0;
-      double latency_points = 0.05 * MathLog(1.0 + MathMax(elapsed_ms, 0.0));
-      FXAI_RecordBrokerExecutionEventEx(order_sample_time,
-                                        symbol,
-                                        g_ai_last_horizon_minutes,
-                                        (direction == 1 ? 1 : -1),
-                                        FXAI_BrokerOrderTypeBucket(request.type),
-                                        0,
-                                        0.0,
-                                        latency_points,
-                                        true,
-                                        false,
-                                        0.0);
-      FXAI_MarkRuntimeArtifactsDirty();
-      reason = "order_check_rejected";
-      return false;
-   }
+      ulong ticket = OrderGetTicket(i);
+      if(ticket == 0) continue;
+      if(!OrderSelect(ticket)) continue;
+      if((ulong)OrderGetInteger(ORDER_MAGIC) != TradeMagic) continue;
+      if(StringLen(symbol) > 0 && OrderGetString(ORDER_SYMBOL) != symbol) continue;
 
-   g_last_order_request_time = order_sample_time;
-   g_last_order_request_us = order_start_us;
-   g_last_order_request_price = request.price;
-   g_last_order_request_volume = request.volume;
-   g_last_order_request_filled_volume = 0.0;
-   g_last_order_request_horizon = g_ai_last_horizon_minutes;
-   g_last_order_request_side = (direction == 1 ? 1 : -1);
-   g_last_order_request_type = FXAI_BrokerOrderTypeBucket(request.type);
-   g_last_order_request_pending = true;
+      ENUM_ORDER_TYPE order_type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+      bool is_pending = (order_type == ORDER_TYPE_BUY_LIMIT ||
+                         order_type == ORDER_TYPE_SELL_LIMIT ||
+                         order_type == ORDER_TYPE_BUY_STOP ||
+                         order_type == ORDER_TYPE_SELL_STOP ||
+                         order_type == ORDER_TYPE_BUY_STOP_LIMIT ||
+                         order_type == ORDER_TYPE_SELL_STOP_LIMIT);
+      if(!is_pending)
+         continue;
 
-   if(!OrderSend(request, result))
-   {
-      retcode = (uint)result.retcode;
-      ret_desc = result.comment;
-      double elapsed_ms = (double)(GetMicrosecondCount() - order_start_us) / 1000.0;
-      double latency_points = 0.05 * MathLog(1.0 + MathMax(elapsed_ms, 0.0));
-      FXAI_RecordBrokerExecutionEventEx(order_sample_time,
-                                        symbol,
-                                        g_ai_last_horizon_minutes,
-                                        (direction == 1 ? 1 : -1),
-                                        FXAI_BrokerOrderTypeBucket(request.type),
-                                        0,
-                                        0.0,
-                                        latency_points,
-                                        true,
-                                        false,
-                                        0.0);
-      FXAI_MarkRuntimeArtifactsDirty();
-      FXAI_ClearLastOrderRequestState();
-      reason = "order_send_failed";
-      return false;
+      bool delete_now = cancel_all;
+      datetime expiry = (datetime)OrderGetInteger(ORDER_TIME_EXPIRATION);
+      if(!delete_now && expiry > 0 && now_time > 0 && now_time >= expiry)
+         delete_now = true;
+      if(!delete_now &&
+         g_system_health_last_ready &&
+         g_system_health_last_state.posture == "DEGRADED" &&
+         g_system_health_last_state.health_score < 0.35)
+         delete_now = true;
+
+      if(delete_now && trade.OrderDelete(ticket))
+         any = true;
    }
-
-   retcode = (uint)result.retcode;
-   ret_desc = result.comment;
-   if(!FXAI_IsTradeRetcodeSuccess(retcode))
-   {
-      double elapsed_ms = (double)(GetMicrosecondCount() - order_start_us) / 1000.0;
-      double latency_points = 0.05 * MathLog(1.0 + MathMax(elapsed_ms, 0.0));
-      FXAI_RecordBrokerExecutionEventEx(order_sample_time,
-                                        symbol,
-                                        g_ai_last_horizon_minutes,
-                                        (direction == 1 ? 1 : -1),
-                                        FXAI_BrokerOrderTypeBucket(request.type),
-                                        0,
-                                        0.0,
-                                        latency_points,
-                                        true,
-                                        false,
-                                        0.0);
-      FXAI_MarkRuntimeArtifactsDirty();
-      FXAI_ClearLastOrderRequestState();
-      reason = "order_send_rejected";
-      return false;
-   }
-
-   return true;
+   return any;
 }
 
 bool FXAI_CloseManagedFraction(const string symbol,
@@ -338,20 +560,22 @@ bool FXAI_SendLifecycleAddOrder(const string symbol,
 {
    uint retcode = 0;
    string ret_desc = "";
-   bool exec_ok = FXAI_SendMarketOrderChecked(symbol, direction, trade_lot, reason, retcode, ret_desc);
+   bool exec_ok = FXAI_SendTradeIntentChecked(symbol, direction, trade_lot, reason, retcode, ret_desc);
    if(!exec_ok)
       return false;
 
-   if(!CycleActive)
+   if(!CycleActive && FXAI_ManagedPositionsTotal(symbol) > 0)
    {
       ResetCycleState();
       CycleActive = true;
       CycleEntryEquity = AccountInfoDouble(ACCOUNT_EQUITY);
       CycleEntryManagedPnl = FXAI_ManagedOpenProfit(symbol);
       CycleEntryRealizedProfit = RealizedManagedProfit;
-      CycleStartTime = TimeCurrent();
+      CycleStartTime = FXAI_GetOldestPositionTime(symbol);
       if(CycleStartTime <= 0)
-         CycleStartTime = TimeTradeServer();
+         CycleStartTime = FXAI_ServerNow();
+      if(CycleStartTime <= 0)
+         CycleStartTime = TimeCurrent();
       if(CycleStartTime <= 0)
          CycleStartTime = iTime(symbol, PERIOD_M1, 0);
    }

@@ -5,7 +5,7 @@
    double current_shared_window[FXAI_MAX_SEQUENCE_BARS][FXAI_AI_WEIGHTS];
    int current_shared_window_size = 0;
    FXAI_ClearInputWindow(current_shared_window, current_shared_window_size);
-   int current_shared_span = FXAI_ContextSequenceSpan(24, H, _Symbol, 8);
+   int current_shared_span = FXAI_ContextSequenceSpan(24, H, snapshot.symbol, 8);
    if(current_shared_span < 1) current_shared_span = 1;
    for(int k=0; k<FXAI_AI_WEIGHTS; k++)
       current_shared_window[0][k] = current_raw_x[k];

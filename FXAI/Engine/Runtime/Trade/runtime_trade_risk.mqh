@@ -52,6 +52,26 @@ double FXAI_CalcRiskAwareLot(const string symbol,
    FXAILiveDeploymentProfile deploy_profile;
    FXAI_LoadLiveDeploymentProfile(symbol, deploy_profile, false);
 
+   FXAISystemHealthState system_health;
+   FXAI_RefreshSystemHealth(symbol, system_health);
+   if(system_health.ready && system_health.posture == "DEGRADED" && system_health.health_score < 0.35)
+   {
+      reason = "risk_system_health_degraded";
+      return 0.0;
+   }
+
+   FXAIPairFactorContext factor_context;
+   FXAI_ResetPairFactorContext(factor_context);
+   bool factor_ready = FXAI_RefreshFactorContext(symbol, factor_context);
+   if(factor_ready &&
+      factor_context.bias_direction >= 0 &&
+      factor_context.bias_direction != direction &&
+      MathAbs(factor_context.blended_score) > 0.42)
+   {
+      reason = "risk_factor_context_opposed";
+      return 0.0;
+   }
+
    if(g_ai_last_confidence < FXAI_Clamp(RiskMinConfidence, 0.0, 1.0))
    {
       reason = "risk_confidence_floor";
@@ -458,6 +478,16 @@ double FXAI_CalcRiskAwareLot(const string symbol,
                                   0.10 * FXAI_Clamp(edge_scale / 2.0, 0.0, 1.0),
                                   0.20,
                                   1.60);
+   if(factor_ready)
+   {
+      double factor_conviction = FXAI_Clamp(0.85 + 0.35 * MathAbs(factor_context.blended_score), 0.60, 1.25);
+      if(factor_context.bias_direction == direction)
+         conviction *= factor_conviction;
+      else if(factor_context.bias_direction >= 0)
+         conviction *= FXAI_Clamp(1.10 - 0.55 * MathAbs(factor_context.blended_score), 0.40, 1.10);
+   }
+   if(system_health.ready)
+      conviction *= FXAI_Clamp(0.65 + 0.45 * system_health.health_score, 0.35, 1.10);
    conviction *= FXAI_Clamp(g_policy_last_size_mult, 0.25, 1.60);
    conviction *= FXAI_Clamp(deploy_profile.portfolio_budget_bias, 0.40, 1.60);
    conviction *= FXAI_Clamp(0.75 + 0.35 * g_policy_last_portfolio_fit, 0.25, 1.25);
@@ -669,6 +699,8 @@ double FXAI_CalcRiskAwareLot(const string symbol,
    {
       requested_lot *= FXAI_Clamp(pair_network_size_mult, 0.05, 1.00);
    }
+   if(system_health.ready && system_health.posture == "CAUTION")
+      requested_lot *= FXAI_Clamp(0.70 + 0.30 * system_health.health_score, 0.40, 1.00);
 
    requested_lot = FXAI_NormalizeLot(symbol, requested_lot);
    if(requested_lot > hard_cap_lot + 1e-9)

@@ -207,16 +207,17 @@ bool FXAI_ApplyPolicyLifecycle(const string symbol,
 }
 
 //------------------------- CLOSE ALL --------------------------------
-bool CloseAll()
+bool CloseAll(const string symbol = "")
 {
    const int max_passes = 25;
    bool in_tester = (MQLInfoInteger(MQL_TESTER) != 0);
    int op_pause_ms = (in_tester ? 0 : 100);
+   string target_symbol = symbol;
 
    for(int pass=0; pass<max_passes; pass++)
    {
-      int pos_before = FXAI_ManagedPositionsTotal(_Symbol);
-      int ord_before = FXAI_ManagedOrdersTotal(_Symbol);
+      int pos_before = FXAI_ManagedPositionsTotal(target_symbol);
+      int ord_before = FXAI_ManagedOrdersTotal(target_symbol);
 
       for(int i=PositionsTotal() - 1; i>=0; i--)
       {
@@ -224,7 +225,7 @@ bool CloseAll()
          if(ticket == 0) continue;
          if(!PositionSelectByTicket(ticket)) continue;
          if((ulong)PositionGetInteger(POSITION_MAGIC) != TradeMagic) continue;
-         if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+         if(StringLen(target_symbol) > 0 && PositionGetString(POSITION_SYMBOL) != target_symbol) continue;
          trade.PositionClose(ticket);
          if(op_pause_ms > 0) Sleep(op_pause_ms);
       }
@@ -235,7 +236,7 @@ bool CloseAll()
          if(ticket == 0) continue;
          if(!OrderSelect(ticket)) continue;
          if((ulong)OrderGetInteger(ORDER_MAGIC) != TradeMagic) continue;
-         if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
+         if(StringLen(target_symbol) > 0 && OrderGetString(ORDER_SYMBOL) != target_symbol) continue;
 
          long orderType = OrderGetInteger(ORDER_TYPE);
          if(orderType == ORDER_TYPE_BUY_LIMIT      || orderType == ORDER_TYPE_SELL_LIMIT ||
@@ -247,8 +248,8 @@ bool CloseAll()
          }
       }
 
-      int pos_after = FXAI_ManagedPositionsTotal(_Symbol);
-      int ord_after = FXAI_ManagedOrdersTotal(_Symbol);
+      int pos_after = FXAI_ManagedPositionsTotal(target_symbol);
+      int ord_after = FXAI_ManagedOrdersTotal(target_symbol);
       if(pos_after == 0 && ord_after == 0)
          return true;
 
@@ -258,10 +259,10 @@ bool CloseAll()
    }
 
    Print("FXAI warning: CloseAll incomplete. Remaining managed positions=",
-         FXAI_ManagedPositionsTotal(_Symbol),
-         ", managed orders=", FXAI_ManagedOrdersTotal(_Symbol));
-   return (FXAI_ManagedPositionsTotal(_Symbol) == 0 &&
-           FXAI_ManagedOrdersTotal(_Symbol) == 0);
+         FXAI_ManagedPositionsTotal(target_symbol),
+         ", managed orders=", FXAI_ManagedOrdersTotal(target_symbol));
+   return (FXAI_ManagedPositionsTotal(target_symbol) == 0 &&
+           FXAI_ManagedOrdersTotal(target_symbol) == 0);
 }
 
 //---------------------- TRADE POSSIBLE ------------------------------
@@ -269,6 +270,14 @@ int TradePossible(const string symbol, string &reason)
 {
    bool in_tester = (MQLInfoInteger(MQL_TESTER) != 0);
    reason = "ok";
+
+   if(g_system_health_last_ready &&
+      g_system_health_last_state.posture == "DEGRADED" &&
+      g_system_health_last_state.health_score < 0.35)
+   {
+      reason = "system_health_degraded";
+      return 0;
+   }
 
    if(!SymbolSelect(symbol, true))
    {
@@ -310,7 +319,9 @@ int TradePossible(const string symbol, string &reason)
    }
 
    datetime lastTickTime = last_tick.time;
-   datetime currentTime  = TimeCurrent();
+   datetime currentTime  = FXAI_ServerNow();
+   if(currentTime <= 0)
+      currentTime = TimeCurrent();
    if(!in_tester && currentTime - lastTickTime > 10)
    {
       reason = "stale_tick";

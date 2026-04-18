@@ -216,6 +216,32 @@ void FXAI_ApplyNewsPulsePairState(const FXAINewsPulsePairState &state)
    g_newspulse_last_reasons_csv = FXAI_NewsPulseReasonsCSV(state);
 }
 
+bool FXAI_ApplyNewsPulseCalendarFallback(const string symbol,
+                                         FXAINewsPulsePairState &out)
+{
+   FXAICalendarCachePairState calendar_state;
+   if(!FXAI_ReadCalendarCachePairState(symbol, calendar_state))
+      return false;
+
+   out.available = calendar_state.ready;
+   out.ready = calendar_state.ready;
+   out.stale = calendar_state.stale;
+   out.generated_at = calendar_state.generated_at;
+   out.event_eta_min = calendar_state.next_event_eta_min;
+   out.news_risk_score = FXAI_Clamp(calendar_state.event_risk_score, 0.0, 1.0);
+   out.news_pressure = FXAI_Clamp(0.50 * calendar_state.event_risk_score, -1.0, 1.0);
+   out.trade_gate = calendar_state.trade_gate;
+   out.session_profile = "calendar_cache";
+   out.calibration_profile = "calendar_cache";
+   out.watchlist_tags_csv = "mt5_calendar_cache";
+   out.caution_lot_scale = calendar_state.caution_lot_scale;
+   out.caution_enter_prob_buffer = calendar_state.caution_enter_prob_buffer;
+   for(int i=0; i<calendar_state.reason_count; i++)
+      FXAI_NewsPulseAppendReason(out, calendar_state.reasons[i]);
+   FXAI_NewsPulseAppendReason(out, "calendar_cache_fallback");
+   return out.ready;
+}
+
 bool FXAI_ReadNewsPulsePairState(const string symbol,
                                  FXAINewsPulsePairState &out)
 {
@@ -229,8 +255,14 @@ bool FXAI_ReadNewsPulsePairState(const string symbol,
                          FILE_SHARE_READ | FILE_SHARE_WRITE);
    if(handle == INVALID_HANDLE)
    {
-      FXAI_ResetNewsPulseGlobals();
-      return false;
+      bool fallback_ok = FXAI_ApplyNewsPulseCalendarFallback(symbol, out);
+      if(!fallback_ok)
+      {
+         FXAI_ResetNewsPulseGlobals();
+         return false;
+      }
+      FXAI_ApplyNewsPulsePairState(out);
+      return true;
    }
 
    while(!FileIsEnding(handle))
@@ -288,9 +320,7 @@ bool FXAI_ReadNewsPulsePairState(const string symbol,
 
    if(out.available)
    {
-      datetime now_time = TimeCurrent();
-      if(now_time <= 0)
-         now_time = TimeTradeServer();
+      datetime now_time = FXAI_ServerNow();
       if(now_time > 0 && out.generated_at > 0)
       {
          if((now_time - out.generated_at) > MathMax(NewsPulseFreshnessMaxSec, 60))
@@ -309,6 +339,13 @@ bool FXAI_ReadNewsPulsePairState(const string symbol,
       if(out.caution_enter_prob_buffer >= 0.0)
          out.caution_enter_prob_buffer = FXAI_Clamp(out.caution_enter_prob_buffer, 0.0, 0.25);
    }
+
+    if((!out.available || out.stale || StringLen(out.trade_gate) <= 0 || out.trade_gate == "UNKNOWN") &&
+       FXAI_ApplyNewsPulseCalendarFallback(symbol, out))
+    {
+       out.available = true;
+       out.ready = true;
+    }
 
    FXAI_ApplyNewsPulsePairState(out);
    return out.available;

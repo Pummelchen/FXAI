@@ -26,6 +26,7 @@ NewsPulse is FXAI's shared news-risk layer. It turns macro-event timing and sour
 - assigns pair-level news posture and watchlist context
 - exposes source freshness and source failure clearly
 - enriches other layers such as Rates Engine with policy-aware context
+- provides an MT5-calendar-cache fallback inside the EA runtime when the flattened pair snapshot is missing or stale
 
 ## Core Commands
 
@@ -42,6 +43,7 @@ python3 Tools/fxai_offline_lab.py newspulse-install-service
 2. Refresh NewsPulse or run the daemon.
 3. Check source freshness before trusting pair-level posture.
 4. Read the pair reasons, not only the top-level gate.
+5. If the flat pair snapshot is stale, expect the EA to fall back to MT5 calendar-cache posture rather than treating the pair as silently safe.
 
 ## Example Case Scenarios
 
@@ -78,6 +80,7 @@ What to do:
 - clear awareness of upcoming policy events
 - explicit respect for stale-source blocks
 - replayable event context for later audit and research
+- understanding that the EA can now degrade from full NewsPulse state to MT5 calendar-cache state and still remain event-aware
 
 ## Next Pages
 

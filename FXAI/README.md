@@ -75,8 +75,16 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Warmup modules split by normalization search, scoring, transfer, portfolio diagnostics, and entrypoint orchestration.
 - `Engine/Runtime/`
   Extracted live-trading helpers used by the EA entrypoint, including the live control-plane snapshot and peer-pressure logic.
+- `Engine/Runtime/runtime_time_service.mqh`
+  Canonical trade-server-first time context used by the EA runtime for server, UTC, and local conversions, session labeling, and timer-driven maintenance.
+- `Engine/Runtime/runtime_calendar_cache.mqh`
+  MT5-native calendar cache reader that turns the NewsPulse calendar service feed into pair-level fallback event-risk state for live runtime and Strategy Tester-safe operation.
+- `Engine/Runtime/runtime_factor_context.mqh`
+  Deterministic MT5-native currency-factor context that scores slow trend, carry proxy, policy/event pressure, value proxy, and commodity sensitivity as an interpretable runtime overlay.
+- `Engine/Runtime/runtime_system_health.mqh`
+  Unified runtime health and invariant layer that aggregates subsystem freshness, degraded-mode posture, and cycle or pending-order reconciliation before new entries are allowed.
 - `Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
-  NewsPulse runtime adapter that consumes the merged flat snapshot and applies pair-level news gating without changing the canonical model input.
+  NewsPulse runtime adapter that consumes the merged flat snapshot and, when needed, falls back to the MT5 calendar cache before applying pair-level news gating.
 - `Engine/Runtime/Trade/runtime_trade_rates_engine.mqh`
   Rates Engine runtime adapter that consumes the pair-level flat snapshot and applies rates-aware caution or block posture without changing the canonical model input.
 - `Engine/Runtime/Trade/runtime_trade_microstructure.mqh`
@@ -206,6 +214,10 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - The shared TensorCore path now includes a self-supervised foundation encoder, teacher-student transfer heads, hierarchical trade-quality signals, and persistent analog regime memory.
 - Feature normalization now uses train-fit artifacts for min/max buffer, z-score, robust, quantile-to-normal, and Yeo-Johnson transforms, while RevIN/DAIN run as sequence-aware payload normalization over the current input plus rolling window; these fitted stats are persisted in runtime artifacts so warmup and live reuse the same scaling contract.
 - The live EA now uses portfolio-native sizing and gating with directional-cluster pressure, hierarchy floors, and macro-state quality controls instead of only scalar conviction scaling.
+- The live EA now refreshes a timer-driven runtime maintenance pass that rebuilds server-time context, subsystem health, factor context, and pending-order reconciliation even when the chart tick stream is quiet.
+- The live EA can now express entry intent as either direct market execution or broker-safe pending execution with expiry and attached protective geometry, instead of assuming every approved trade must be a market order.
+- NewsPulse runtime gating now has an MT5-native calendar-cache fallback, so missing or stale flat snapshots can degrade into explicit event-risk posture rather than silently becoming unknown.
+- The live runtime now carries an interpretable MT5-native factor context layer that can veto or scale trades when slow currency trend, carry proxy, policy pressure, and value proxy are strongly misaligned with the model direction.
 - The live runtime now emits per-instance control-plane snapshots and consumes promoted symbol deployment profiles so research-side promotion decisions can steer trade floors, sizing bias, and peer-pressure handling.
 - The live runtime now also consumes promoted supervisor-service artifacts and policy lifecycle thresholds so add, reduce, tighten, timeout, and exit behavior can be governed by the research OS rather than static EA-only logic.
 - Live deployment profiles now carry fitted teacher, student, foundation, macro, and lifecycle gains so runtime trust and adaptation can be steered from shadow telemetry instead of only static profile weights.

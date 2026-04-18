@@ -878,6 +878,9 @@ double   g_last_order_request_filled_volume = 0.0;
 int      g_last_order_request_horizon = 0;
 int      g_last_order_request_side = 0;
 int      g_last_order_request_type = 0;
+string   g_last_order_request_symbol = "";
+ulong    g_last_order_request_order_ticket = 0;
+bool     g_last_order_request_uses_pending_order = false;
 bool     g_last_order_request_pending = false;
 
 void FXAI_ClearLastOrderRequestState()
@@ -890,6 +893,9 @@ void FXAI_ClearLastOrderRequestState()
    g_last_order_request_horizon = 0;
    g_last_order_request_side = 0;
    g_last_order_request_type = 0;
+   g_last_order_request_symbol = "";
+   g_last_order_request_order_ticket = 0;
+   g_last_order_request_uses_pending_order = false;
    g_last_order_request_pending = false;
 }
 
@@ -898,6 +904,7 @@ void FXAI_ClearLastOrderRequestState()
 
 int OnInit()
 {
+   FXAI_RefreshTimeContext();
    FXAI_SetRandomSeed((ulong)((long)TimeLocal() > 0 ? (long)TimeLocal() : 1));
    trade.SetExpertMagicNumber((long)TradeMagic);
 
@@ -932,17 +939,26 @@ int OnInit()
 
    ResetAIState(_Symbol);
    FXAI_WriteControlPlaneLocalSnapshot(_Symbol, -1, 0.0);
-   FXAI_RecoverManagedCycleState();
+   FXAI_RunRuntimeMaintenance(_Symbol, false);
+   FXAI_RecoverManagedCycleState(_Symbol);
+   EventSetTimer(60);
    return(INIT_SUCCEEDED);
 }
 
 void OnDeinit(const int reason)
 {
+   EventKillTimer();
    FXAI_RemoveControlPlaneLocalSnapshot(_Symbol);
    FXAI_SaveRuntimeArtifacts(_Symbol);
    FXAI_SaveMetaArtifacts(_Symbol);
    g_plugins.Release();
    g_plugins_ready = false;
+}
+
+void OnTimer()
+{
+   FXAI_RunRuntimeMaintenance(_Symbol, AI_DebugFlow);
+   FXAI_CancelManagedPendingOrders(_Symbol, false);
 }
 
 int FXAI_GetM1SyncBars(void)
@@ -985,26 +1001,68 @@ void ResetCycleState()
    TrailPeakProfit  = 0.0;
 }
 
-void FXAI_RecoverManagedCycleState()
+string FXAI_PrimaryManagedSymbol(void)
 {
-   int total = FXAI_ManagedOrdersTotal(_Symbol) + FXAI_ManagedPositionsTotal(_Symbol);
+   string best_symbol = "";
+   double best_volume = -1.0;
+
+   for(int i=PositionsTotal() - 1; i>=0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(!PositionSelectByTicket(ticket)) continue;
+      if((ulong)PositionGetInteger(POSITION_MAGIC) != TradeMagic) continue;
+      double volume = MathMax(PositionGetDouble(POSITION_VOLUME), 0.0);
+      if(volume > best_volume)
+      {
+         best_volume = volume;
+         best_symbol = PositionGetString(POSITION_SYMBOL);
+      }
+   }
+
+   if(StringLen(best_symbol) > 0)
+      return best_symbol;
+
+   for(int i=OrdersTotal() - 1; i>=0; i--)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket == 0) continue;
+      if(!OrderSelect(ticket)) continue;
+      if((ulong)OrderGetInteger(ORDER_MAGIC) != TradeMagic) continue;
+      double volume = MathMax(OrderGetDouble(ORDER_VOLUME_CURRENT), 0.0);
+      if(volume > best_volume)
+      {
+         best_volume = volume;
+         best_symbol = OrderGetString(ORDER_SYMBOL);
+      }
+   }
+
+   if(StringLen(best_symbol) > 0)
+      return best_symbol;
+   return _Symbol;
+}
+
+void FXAI_RecoverManagedCycleState(const string symbol = "")
+{
+   string managed_symbol = (StringLen(symbol) > 0 ? symbol : _Symbol);
+   int total = FXAI_ManagedOrdersTotal(managed_symbol) + FXAI_ManagedPositionsTotal(managed_symbol);
    if(total <= 0)
       return;
 
-   double open_profit = FXAI_ManagedOpenProfit(_Symbol);
+   double open_profit = FXAI_ManagedOpenProfit(managed_symbol);
    CycleActive = true;
    CycleEntryEquity = AccountInfoDouble(ACCOUNT_EQUITY);
    CycleEntryManagedPnl = 0.0;
    CycleEntryRealizedProfit = RealizedManagedProfit;
-   CycleStartTime = FXAI_GetOldestPositionTime();
+   CycleStartTime = FXAI_GetOldestPositionTime(managed_symbol);
+   if(CycleStartTime <= 0) CycleStartTime = FXAI_ServerNow();
    if(CycleStartTime <= 0) CycleStartTime = TimeCurrent();
-   if(CycleStartTime <= 0) CycleStartTime = TimeTradeServer();
    TrailTracking = true;
    TrailPeakProfit = MathMax(open_profit, 0.0);
    Calc_TP();
 }
 
-datetime FXAI_GetOldestPositionTime()
+datetime FXAI_GetOldestPositionTime(const string symbol = "")
 {
    datetime oldest = 0;
    for(int i=PositionsTotal() - 1; i>=0; i--)
@@ -1013,7 +1071,7 @@ datetime FXAI_GetOldestPositionTime()
       if(ticket == 0) continue;
       if(!PositionSelectByTicket(ticket)) continue;
       if((ulong)PositionGetInteger(POSITION_MAGIC) != TradeMagic) continue;
-      if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+      if(StringLen(symbol) > 0 && PositionGetString(POSITION_SYMBOL) != symbol) continue;
 
       datetime t = (datetime)PositionGetInteger(POSITION_TIME);
       if(t <= 0) continue;
@@ -1128,10 +1186,10 @@ bool EAStop()
 
    if((eq / EquiMax) < ((100.0 - maxdd) / 100.0))
    {
-      int managed_total = FXAI_ManagedOrdersTotal(_Symbol) + FXAI_ManagedPositionsTotal(_Symbol);
+      int managed_total = FXAI_ManagedOrdersTotal("") + FXAI_ManagedPositionsTotal("");
       if(managed_total > 0)
       {
-         if(!CloseAll())
+         if(!CloseAll(""))
          {
             Print("FXAI warning: MaxDD stop triggered but managed exposure could not be flattened yet.");
             return true;
@@ -1169,11 +1227,11 @@ void TradeKillerManage()
 
    datetime start_t = CycleStartTime;
    if(start_t <= 0)
-      start_t = FXAI_GetOldestPositionTime();
+      start_t = FXAI_GetOldestPositionTime(_Symbol);
    if(start_t <= 0) return;
 
-   datetime now_t = TimeCurrent();
-   if(now_t <= 0) now_t = TimeTradeServer();
+   datetime now_t = FXAI_ServerNow();
+   if(now_t <= 0) now_t = TimeCurrent();
    if(now_t <= 0) return;
 
    int minutes_limit = TradeKiller;
@@ -1298,7 +1356,7 @@ void SendTrade(const int precomputed_direction = -2)
 
    uint retcode = 0;
    string ret_desc = "";
-   bool exec_ok = FXAI_SendMarketOrderChecked(_Symbol,
+   bool exec_ok = FXAI_SendTradeIntentChecked(_Symbol,
                                               direction,
                                               trade_lot,
                                               trade_reason,
@@ -1314,17 +1372,20 @@ void SendTrade(const int precomputed_direction = -2)
 
    if(exec_ok)
    {
-      ResetCycleState();
-      CycleActive      = true;
-      CycleEntryEquity = AccountInfoDouble(ACCOUNT_EQUITY);
-      CycleEntryManagedPnl = FXAI_ManagedOpenProfit(_Symbol);
-      CycleEntryRealizedProfit = RealizedManagedProfit;
-      CycleStartTime   = TimeCurrent();
-      if(CycleStartTime <= 0) CycleStartTime = TimeTradeServer();
-      if(CycleStartTime <= 0) CycleStartTime = iTime(_Symbol, PERIOD_M1, 0);
+      if(FXAI_ManagedPositionsTotal(_Symbol) > 0)
+      {
+         ResetCycleState();
+         CycleActive      = true;
+         CycleEntryEquity = AccountInfoDouble(ACCOUNT_EQUITY);
+         CycleEntryManagedPnl = FXAI_ManagedOpenProfit(_Symbol);
+         CycleEntryRealizedProfit = RealizedManagedProfit;
+         CycleStartTime   = FXAI_ServerNow();
+         if(CycleStartTime <= 0) CycleStartTime = TimeCurrent();
+         if(CycleStartTime <= 0) CycleStartTime = iTime(_Symbol, PERIOD_M1, 0);
 
-      TrailTracking    = true;
-      TrailPeakProfit  = 0.0;
+         TrailTracking    = true;
+         TrailPeakProfit  = 0.0;
+      }
    }
 }
 
@@ -1332,75 +1393,103 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
                         const MqlTradeRequest &request,
                         const MqlTradeResult &result)
 {
-   if(trans.type != TRADE_TRANSACTION_DEAL_ADD)
-      return;
-
-   ulong deal_ticket = trans.deal;
-   if(deal_ticket == 0 || !HistoryDealSelect(deal_ticket))
-      return;
-
-   if((ulong)HistoryDealGetInteger(deal_ticket, DEAL_MAGIC) != TradeMagic)
-      return;
-   if(HistoryDealGetString(deal_ticket, DEAL_SYMBOL) != _Symbol)
-      return;
-
-   long entry = HistoryDealGetInteger(deal_ticket, DEAL_ENTRY);
-   if(entry == DEAL_ENTRY_IN || entry == DEAL_ENTRY_INOUT)
+   if(trans.type == TRADE_TRANSACTION_DEAL_ADD)
    {
-      if(!g_last_order_request_pending)
+      ulong deal_ticket = trans.deal;
+      if(deal_ticket == 0 || !HistoryDealSelect(deal_ticket))
          return;
 
-      double point_value = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-      if(point_value <= 0.0)
-         point_value = (_Point > 0.0 ? _Point : 1.0);
-      double deal_price = HistoryDealGetDouble(deal_ticket, DEAL_PRICE);
-      double deal_volume = HistoryDealGetDouble(deal_ticket, DEAL_VOLUME);
-      double slippage_points = 0.0;
-      if(g_last_order_request_pending && point_value > 0.0 && g_last_order_request_price > 0.0)
-         slippage_points = MathAbs(deal_price - g_last_order_request_price) / point_value;
-      double elapsed_ms = 0.0;
-      if(g_last_order_request_pending && g_last_order_request_us > 0)
-         elapsed_ms = (double)(GetMicrosecondCount() - g_last_order_request_us) / 1000.0;
-      double latency_points = 0.05 * MathLog(1.0 + MathMax(elapsed_ms, 0.0));
-      double remaining_before = MathMax(g_last_order_request_volume - g_last_order_request_filled_volume, 0.0);
-      bool partial_fill = (g_last_order_request_volume > 0.0 &&
-                           remaining_before > 1e-9 &&
-                           deal_volume + 1e-9 < remaining_before);
-      double fill_ratio = 1.0;
-      if(g_last_order_request_volume > 1e-9)
-         fill_ratio = FXAI_Clamp(deal_volume / g_last_order_request_volume, 0.0, 1.0);
-      FXAI_RecordBrokerExecutionEventEx((g_last_order_request_time > 0 ? g_last_order_request_time : TimeCurrent()),
-                                        _Symbol,
-                                        g_last_order_request_horizon,
-                                        g_last_order_request_side,
-                                        g_last_order_request_type,
-                                        (partial_fill ? 1 : 2),
-                                        slippage_points,
-                                        latency_points,
-                                        false,
-                                        partial_fill,
-                                        fill_ratio);
-      FXAI_MarkRuntimeArtifactsDirty();
-      g_last_order_request_filled_volume += MathMax(deal_volume, 0.0);
-      if(g_last_order_request_volume <= 1e-9 ||
-         g_last_order_request_filled_volume + 1e-9 >= g_last_order_request_volume)
-         FXAI_ClearLastOrderRequestState();
+      if((ulong)HistoryDealGetInteger(deal_ticket, DEAL_MAGIC) != TradeMagic)
+         return;
+
+      string deal_symbol = HistoryDealGetString(deal_ticket, DEAL_SYMBOL);
+      long entry = HistoryDealGetInteger(deal_ticket, DEAL_ENTRY);
+      if(entry == DEAL_ENTRY_IN || entry == DEAL_ENTRY_INOUT)
+      {
+         if(!g_last_order_request_pending)
+            return;
+         if(StringLen(g_last_order_request_symbol) > 0 && deal_symbol != g_last_order_request_symbol)
+            return;
+
+         double point_value = SymbolInfoDouble(deal_symbol, SYMBOL_POINT);
+         if(point_value <= 0.0)
+            point_value = (_Point > 0.0 ? _Point : 1.0);
+         double deal_price = HistoryDealGetDouble(deal_ticket, DEAL_PRICE);
+         double deal_volume = HistoryDealGetDouble(deal_ticket, DEAL_VOLUME);
+         double slippage_points = 0.0;
+         if(point_value > 0.0 && g_last_order_request_price > 0.0)
+            slippage_points = MathAbs(deal_price - g_last_order_request_price) / point_value;
+         double elapsed_ms = 0.0;
+         if(g_last_order_request_us > 0)
+            elapsed_ms = (double)(GetMicrosecondCount() - g_last_order_request_us) / 1000.0;
+         double latency_points = 0.05 * MathLog(1.0 + MathMax(elapsed_ms, 0.0));
+         double remaining_before = MathMax(g_last_order_request_volume - g_last_order_request_filled_volume, 0.0);
+         bool partial_fill = (g_last_order_request_volume > 0.0 &&
+                              remaining_before > 1e-9 &&
+                              deal_volume + 1e-9 < remaining_before);
+         double fill_ratio = 1.0;
+         if(g_last_order_request_volume > 1e-9)
+            fill_ratio = FXAI_Clamp(deal_volume / g_last_order_request_volume, 0.0, 1.0);
+         FXAI_RecordBrokerExecutionEventEx((g_last_order_request_time > 0 ? g_last_order_request_time : FXAI_ServerNow()),
+                                           deal_symbol,
+                                           g_last_order_request_horizon,
+                                           g_last_order_request_side,
+                                           g_last_order_request_type,
+                                           (partial_fill ? 1 : 2),
+                                           slippage_points,
+                                           latency_points,
+                                           false,
+                                           partial_fill,
+                                           fill_ratio);
+         FXAI_MarkRuntimeArtifactsDirty();
+         g_last_order_request_filled_volume += MathMax(deal_volume, 0.0);
+         if(!CycleActive && FXAI_ManagedPositionsTotal(deal_symbol) > 0)
+         {
+            ResetCycleState();
+            CycleActive = true;
+            CycleEntryEquity = AccountInfoDouble(ACCOUNT_EQUITY);
+            CycleEntryManagedPnl = FXAI_ManagedOpenProfit(deal_symbol);
+            CycleEntryRealizedProfit = RealizedManagedProfit;
+            CycleStartTime = FXAI_GetOldestPositionTime(deal_symbol);
+            if(CycleStartTime <= 0) CycleStartTime = FXAI_ServerNow();
+            if(CycleStartTime <= 0) CycleStartTime = TimeCurrent();
+            if(CycleStartTime <= 0) CycleStartTime = iTime(deal_symbol, PERIOD_M1, 0);
+            TrailTracking = true;
+            TrailPeakProfit = MathMax(FXAI_ManagedOpenProfit(deal_symbol), 0.0);
+         }
+         if(g_last_order_request_volume <= 1e-9 ||
+            g_last_order_request_filled_volume + 1e-9 >= g_last_order_request_volume)
+            FXAI_ClearLastOrderRequestState();
+         return;
+      }
+
+      if(entry != DEAL_ENTRY_OUT && entry != DEAL_ENTRY_OUT_BY)
+         return;
+
+      double net = HistoryDealGetDouble(deal_ticket, DEAL_PROFIT) +
+                   HistoryDealGetDouble(deal_ticket, DEAL_SWAP) +
+                   HistoryDealGetDouble(deal_ticket, DEAL_COMMISSION);
+      if(MathIsValidNumber(net))
+         RealizedManagedProfit += net;
       return;
    }
 
-   if(entry != DEAL_ENTRY_OUT && entry != DEAL_ENTRY_OUT_BY)
-      return;
-
-   double net = HistoryDealGetDouble(deal_ticket, DEAL_PROFIT) +
-                HistoryDealGetDouble(deal_ticket, DEAL_SWAP) +
-                HistoryDealGetDouble(deal_ticket, DEAL_COMMISSION);
-   if(MathIsValidNumber(net))
-      RealizedManagedProfit += net;
+   if((trans.type == TRADE_TRANSACTION_ORDER_DELETE ||
+       trans.type == TRADE_TRANSACTION_ORDER_UPDATE) &&
+      g_last_order_request_pending &&
+      g_last_order_request_uses_pending_order)
+   {
+      string request_symbol = (StringLen(g_last_order_request_symbol) > 0 ? g_last_order_request_symbol : _Symbol);
+      bool ticket_match = (g_last_order_request_order_ticket == 0 || trans.order == g_last_order_request_order_ticket);
+      if(ticket_match && FXAI_ManagedOrdersTotal(request_symbol) <= 0)
+         FXAI_ClearLastOrderRequestState();
+   }
 }
 
 //--------------------------- ON TICK --------------------------------
 void OnTick()
 {
+   FXAI_RunRuntimeMaintenance(_Symbol, false);
    static datetime last_ai_bar = 0;
    datetime signal_bar = iTime(_Symbol, PERIOD_M1, 1);
    bool new_m1_bar = false;
@@ -1412,7 +1501,7 @@ void OnTick()
 
    int total = FXAI_ManagedOrdersTotal(_Symbol) + FXAI_ManagedPositionsTotal(_Symbol);
    if(total > 0 && !CycleActive)
-      FXAI_RecoverManagedCycleState();
+      FXAI_RecoverManagedCycleState(_Symbol);
 
    if(total > 0)
    {
