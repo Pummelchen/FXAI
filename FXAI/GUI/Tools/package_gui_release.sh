@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUI_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 OUTPUT_ROOT="${1:-${GUI_ROOT}/Artifacts/Release}"
+VERSION="${2:-${FXAI_GUI_VERSION:-0.7.0}}"
 APP_NAME="FXAI GUI"
 BUNDLE_NAME="FXAIGUI.app"
 BUILD_DIR="${GUI_ROOT}/.build/release"
@@ -49,7 +50,7 @@ cat > "${INFO_PLIST}" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.6.0</string>
+  <string>${VERSION}</string>
   <key>CFBundleVersion</key>
   <string>${GIT_SHA}</string>
   <key>LSMinimumSystemVersion</key>
