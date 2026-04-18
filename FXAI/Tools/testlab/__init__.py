@@ -1,4 +1,5 @@
 from .shared import *
+from .strategy_profiles import *
 from .compile import *
 from .reporting import *
 from .optimize import *

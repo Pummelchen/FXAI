@@ -54,6 +54,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Online Drift Detector + Champion/Challenger Governance docs, config, reports, and audit history for plugin-health monitoring, conservative demotion, and promotion-review workflows.
 - `Tools/OfflineLab/PairNetwork/`
   Pair-Network / Factor Graph + Portfolio Conflict Resolver docs, config, graph reports, and runtime decision history for portfolio-level exposure coordination and conflict resolution.
+- `Tools/OfflineLab/Profiles/`
+  Versioned strategy-profile catalog plus promoted MT5 presets and sibling strategy manifests for audit, champion, top, and distillation workflows.
 - `GUI/`
   Optional SwiftUI operator app for role-based dashboards, plugin-zoo browsing, report exploration, run builders for Audit/Offline/backtest workflows, runtime inspection, promotion review, Research OS control, advanced Metal-backed visual analysis, saved workspace views, onboarding, incident recovery, detached startup, soft reconnect, terminal-first command guidance, and the shared FXAI operator theme system.
 - `Wiki/`
@@ -238,6 +240,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - Macro-event datasets now run under schema version 2 with revision-chain, source-trust, and currency-relevance manifests, and the feature pipeline derives a higher-level macro state for policy, inflation, labor, growth, carry, decay, and quality.
 - The canonical feature vector already includes robust derived filters and volatility estimators such as quadruple-smoothed DEMA, RSI, ATR/NATR, Parkinson, Rogers-Satchell, Garman-Klass, rolling median plus Hampel, Kalman, and a 2-pole Ehlers Super Smoother.
 - Offline Lab now exports exact-window `M1 OHLC + spread` datasets into Turso/libSQL, stores full tuning ledgers and scenario metrics, and promotes ready-to-use MT5 `.set` files under `Tools/OfflineLab/Profiles/`, `MQL5/Profiles/Tester/`, and `FILE_COMMON/FXAI/Offline/Promotions/`.
+- Promoted presets are now compiled from the versioned catalog in `Tools/OfflineLab/Profiles/strategy_profiles.json`, with layered inheritance across `strategy -> symbol -> broker -> runtime` and a sibling `__strategy_profile.json` manifest written next to each promoted artifact.
 - Offline Lab also maintains champion/challenger governance, parameter lineage, family scorecards, distillation artifacts, teacher-factory payloads, live deployment profiles, shadow-fleet telemetry, and learned red-team plans under `Tools/OfflineLab/ResearchOS/` and `Tools/OfflineLab/Distillation/`.
 - Offline Lab now emits foundation-teacher artifacts, portfolio-supervisor profiles, and per-symbol world-simulator plans that are consumed by MT5 runtime control-plane logic and Audit Lab adversarial generation.
 - World-simulator plans now include transition entropy, shock decay, and session-specific sigma/spread scaling learned from exported market windows instead of only coarse global stress factors.

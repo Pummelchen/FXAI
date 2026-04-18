@@ -133,7 +133,10 @@ def write_portfolio_supervisor_profile(conn: libsql.Connection,
         encoding="utf-8",
     )
     json_path = out_dir / "portfolio_supervisor.json"
-    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    json_path.write_text(
+        json.dumps(portableize_payload_paths(payload), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     sha = testlab.sha256_path(tsv_path)
     conn.execute(
         """
@@ -407,7 +410,10 @@ def write_world_simulator_plans(conn: libsql.Connection,
         )
         sha = testlab.sha256_path(tsv_path)
         json_path = out_dir / f"world_simulator_{safe_token(symbol)}.json"
-        json_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        json_path.write_text(
+            json.dumps(portableize_payload_paths(payload), indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
         conn.execute(
             """
             INSERT INTO world_simulator_plans(profile_name, symbol, artifact_path, artifact_sha256,
@@ -473,7 +479,10 @@ def write_world_simulator_plans(conn: libsql.Connection,
 
     commit_db(conn)
     summary_path = out_dir / "world_simulator_plans.json"
-    summary_path.write_text(json.dumps(plans, indent=2, sort_keys=True), encoding="utf-8")
+    summary_path.write_text(
+        json.dumps(portableize_payload_paths(plans), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     return plans
 
 
@@ -562,7 +571,7 @@ def run_autonomous_governance(conn: libsql.Connection,
     }
     json_path = artifact_dir / "autonomous_governance.json"
     md_path = artifact_dir / "autonomous_governance.md"
-    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    json_path.write_text(json.dumps(portableize_payload_paths(payload), indent=2, sort_keys=True), encoding="utf-8")
     md_lines = [
         "# FXAI Autonomous Governance",
         "",

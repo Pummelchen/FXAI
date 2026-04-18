@@ -243,6 +243,9 @@ def build_run_audit_namespace(base_args, run: dict, output_path: Path):
         seed=base_args.seed,
         symbol=symbol,
         symbol_list=("{" + ", ".join(symbols) + "}" if symbols else "{" + symbol + "}"),
+        strategy_profile=getattr(base_args, "strategy_profile", "default"),
+        broker_profile=getattr(base_args, "broker_profile", ""),
+        runtime_mode=getattr(base_args, "runtime_mode", "research"),
         window_start_unix=run.get("window_start_unix", getattr(base_args, "window_start_unix", 0)),
         window_end_unix=run.get("window_end_unix", getattr(base_args, "window_end_unix", 0)),
         execution_profile=run.get("execution_profile", getattr(base_args, "execution_profile", "default")),
@@ -297,5 +300,4 @@ def execute_optimization_campaign(campaign: dict, args) -> int:
     failed = sum(1 for item in results if item["status"] != "ok")
     print(f"failed: {failed}")
     return 0 if failed == 0 else 1
-
 

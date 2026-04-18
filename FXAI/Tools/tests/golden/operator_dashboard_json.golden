@@ -4,89 +4,9 @@
       "generated_at": "2026-01-01T00:00:00Z",
       "hours_back": 72,
       "schema_version": 1,
-      "symbol_count": 1,
+      "symbol_count": 0,
       "symbol_filter": "EURUSD",
-      "symbols": [
-        {
-          "latest": {
-            "generated_at": "2026-01-01T00:00:00Z",
-            "plugins": [
-              {
-                "name": "ai_gha",
-                "reasons": [
-                  "Strong macro/event regime fit"
-                ],
-                "status": "UPWEIGHTED",
-                "suitability": 1.28,
-                "weight": 0.46
-              }
-            ],
-            "regime": {
-              "confidence": 0.82,
-              "probabilities": {
-                "HIGH_VOL_EVENT": 0.82
-              },
-              "reasons": [
-                "NewsPulse event window active"
-              ],
-              "top_label": "HIGH_VOL_EVENT"
-            },
-            "router": {
-              "mode": "WEIGHTED_ENSEMBLE",
-              "reasons": [
-                "NewsPulse event window active"
-              ],
-              "trade_posture": "CAUTION"
-            },
-            "schema_version": 1,
-            "symbol": "EURUSD"
-          },
-          "observations": 2,
-          "posture_counts": {
-            "CAUTION": 1,
-            "NORMAL": 1
-          },
-          "recent_transitions": [
-            {
-              "at": "2026-01-01T00:00:00Z",
-              "from": "BREAKOUT_TRANSITION",
-              "to": "HIGH_VOL_EVENT",
-              "type": "regime_change"
-            },
-            {
-              "at": "2026-01-01T00:00:00Z",
-              "from": "NORMAL",
-              "to": "CAUTION",
-              "type": "posture_change"
-            }
-          ],
-          "regime_counts": {
-            "BREAKOUT_TRANSITION": 1,
-            "HIGH_VOL_EVENT": 1
-          },
-          "symbol": "EURUSD",
-          "top_plugins": [
-            {
-              "count": 1,
-              "plugin": "ai_gha"
-            },
-            {
-              "count": 1,
-              "plugin": "ai_tft"
-            }
-          ],
-          "top_reasons": [
-            {
-              "count": 1,
-              "reason": "NewsPulse event window active"
-            },
-            {
-              "count": 1,
-              "reason": "Volatility expansion detected"
-            }
-          ]
-        }
-      ]
+      "symbols": []
     }
   },
   "champions": [

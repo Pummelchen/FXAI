@@ -1,5 +1,6 @@
 *.ex5
 *.log
 .env
+.DS_Store
 
 Artifacts/Release/

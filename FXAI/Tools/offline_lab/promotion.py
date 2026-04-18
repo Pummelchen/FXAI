@@ -8,6 +8,24 @@ import libsql
 
 from .common import *
 
+
+EA_SET_LINE_DEFAULTS: dict[str, tuple[object, object, object, str]] = {
+    "AI_Type": (0, 0, 31, "N"),
+    "AI_Ensemble": (False, 0, True, "N"),
+    "AI_M1SyncBars": (3, 1, 12, "N"),
+    "PredictionTargetMinutes": (5, 1, 720, "N"),
+    "AI_MultiHorizon": (True, 0, True, "N"),
+    "AI_Horizons": (0, 0, 0, "N"),
+    "AI_FeatureNormalization": (0, 0, 16, "N"),
+    "AI_ExecutionProfile": (0, 0, 4, "N"),
+    "AI_CommissionPerLotSide": (0, 0, 100, "N"),
+    "AI_CostBufferPoints": (2, 0, 100, "N"),
+    "AI_ExecutionSlippageOverride": (-1, -1, 100, "N"),
+    "AI_ExecutionFillPenaltyOverride": (-1, -1, 100, "N"),
+    "TradeKiller": (0, 0, 10000, "N"),
+}
+
+
 def execution_profile_enum(name: str) -> int:
     profile = (name or "default").strip().lower()
     mapping = {
@@ -50,57 +68,58 @@ def _portableize_rows(rows: list[dict], *, path_keys: set[str]) -> list[dict]:
     return portable_rows
 
 
-def write_ea_set(path: Path, row: dict, params: dict) -> None:
-    horizon = int(params.get("horizon", 5))
-    content = "\n".join([
-        f"AI_Type={int(row['ai_id'])}||0||0||31||N",
-        "AI_Ensemble=false||false||0||true||N",
-        f"AI_M1SyncBars={int(params.get('m1sync_bars', 3))}||3||1||12||N",
-        f"PredictionTargetMinutes={horizon}||5||1||720||N",
-        "AI_MultiHorizon=false||true||0||true||N",
-        f"AI_Horizons={{{horizon}}}||0||0||0||N",
-        f"AI_FeatureNormalization={int(params.get('normalization', 0))}||0||0||16||N",
-        f"AI_ExecutionProfile={execution_profile_enum(str(params.get('execution_profile', 'default')))}||0||0||4||N",
-        f"AI_CommissionPerLotSide={float(params.get('commission_per_lot_side', 0.0)):.6f}||0||0||100||N",
-        f"AI_CostBufferPoints={float(params.get('cost_buffer_points', 2.0)):.6f}||2||0||100||N",
-        f"AI_ExecutionSlippageOverride={float(params.get('slippage_points', 0.0)):.6f}||-1||-1||100||N",
-        f"AI_ExecutionFillPenaltyOverride={float(params.get('fill_penalty_points', 0.0)):.6f}||-1||-1||100||N",
-    ]) + "\n"
+def compile_strategy_profile_for_row(row: dict, params: dict) -> dict:
+    return testlab.compile_strategy_profile(
+        strategy_profile=str(params.get("strategy_profile", "default") or "default"),
+        symbol=str(row["symbol"]),
+        broker_profile=str(params.get("broker_profile", "") or ""),
+        server=str(params.get("server", "") or ""),
+        runtime_mode=str(params.get("runtime_mode", "research") or "research"),
+        overrides=params,
+        plugin_name=str(row["plugin_name"]),
+        ai_id=int(row["ai_id"]),
+    )
+
+
+def write_ea_set(path: Path, row: dict, compiled_profile: dict) -> None:
+    content = testlab.render_mt5_set(compiled_profile, line_defaults=EA_SET_LINE_DEFAULTS)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
 
 
-def write_audit_set_generic(path: Path, row: dict, params: dict) -> None:
+def write_audit_set_generic(path: Path, row: dict, compiled_profile: dict) -> None:
+    audit_values = dict(compiled_profile["compiled"]["audit_values"])
+    scenario_items = list(audit_values.get("scenario_list") or parse_csv_tokens(SERIOUS_SCENARIOS))
     ns = argparse.Namespace(
         all_plugins=False,
         plugin_id=int(row["ai_id"]),
         plugin_list="{" + str(row["plugin_name"]) + "}",
-        scenario_list=SERIOUS_SCENARIOS,
-        bars=int(params.get("bars", 20000)),
-        horizon=int(params.get("horizon", 5)),
-        m1sync_bars=int(params.get("m1sync_bars", 3)),
-        normalization=int(params.get("normalization", 0)),
-        sequence_bars=int(params.get("sequence_bars", 0)),
-        schema_id=int(params.get("schema_id", 0)),
-        feature_mask=int(params.get("feature_mask", 0)),
-        commission_per_lot_side=float(params.get("commission_per_lot_side", 0.0)),
-        cost_buffer_points=float(params.get("cost_buffer_points", 2.0)),
-        slippage_points=float(params.get("slippage_points", 0.0)),
-        fill_penalty_points=float(params.get("fill_penalty_points", 0.0)),
-        wf_train_bars=int(params.get("wf_train_bars", 256)),
-        wf_test_bars=int(params.get("wf_test_bars", 64)),
-        wf_purge_bars=int(params.get("wf_purge_bars", 32)),
-        wf_embargo_bars=int(params.get("wf_embargo_bars", 24)),
-        wf_folds=int(params.get("wf_folds", 6)),
-        window_start_unix=0,
-        window_end_unix=0,
-        seed=42,
+        scenario_list="{" + ", ".join(scenario_items) + "}",
+        bars=int(audit_values.get("bars", 20000)),
+        horizon=int(audit_values.get("horizon", 5)),
+        m1sync_bars=int(audit_values.get("m1sync_bars", 3)),
+        normalization=int(audit_values.get("normalization", 0)),
+        sequence_bars=int(audit_values.get("sequence_bars", 0)),
+        schema_id=int(audit_values.get("schema_id", 0)),
+        feature_mask=int(audit_values.get("feature_mask", 0)),
+        commission_per_lot_side=float(audit_values.get("commission_per_lot_side", 0.0)),
+        cost_buffer_points=float(audit_values.get("cost_buffer_points", 2.0)),
+        slippage_points=float(audit_values.get("slippage_points", 0.0)),
+        fill_penalty_points=float(audit_values.get("fill_penalty_points", 0.0)),
+        wf_train_bars=int(audit_values.get("wf_train_bars", 256)),
+        wf_test_bars=int(audit_values.get("wf_test_bars", 64)),
+        wf_purge_bars=int(audit_values.get("wf_purge_bars", 32)),
+        wf_embargo_bars=int(audit_values.get("wf_embargo_bars", 24)),
+        wf_folds=int(audit_values.get("wf_folds", 6)),
+        window_start_unix=int(audit_values.get("window_start_unix", 0)),
+        window_end_unix=int(audit_values.get("window_end_unix", 0)),
+        seed=int(audit_values.get("seed", 42)),
         output="",
         compare_output=None,
         symbol=str(row["symbol"]),
         symbol_list="{" + str(row["symbol"]) + "}",
         symbol_pack="",
-        execution_profile=str(params.get("execution_profile", "default")),
+        execution_profile=str(audit_values.get("execution_profile", "default")),
         login=None,
         server=None,
         password=None,
@@ -417,6 +436,30 @@ def persist_lineage_entry(conn: libsql.Connection,
     )
 
 
+def write_strategy_profile_manifest_file(path: Path,
+                                         compiled_profile: dict,
+                                         *,
+                                         artifact_kind: str,
+                                         artifact_reference: str | Path,
+                                         metadata: dict | None = None) -> tuple[str, str]:
+    payload = testlab.build_strategy_profile_manifest(
+        compiled_profile,
+        artifact_kind=artifact_kind,
+        artifact_path=artifact_reference,
+        metadata=metadata or {},
+    )
+    testlab.write_json(path, payload)
+    return str(path), testlab.sha256_path(path)
+
+
+def copy_artifact_if_exists(src: str | Path, dst: str | Path) -> None:
+    src_path = Path(str(src))
+    if src_path.exists():
+        dst_path = Path(str(dst))
+        dst_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_path, dst_path)
+
+
 def update_champion_registry(conn: libsql.Connection,
                              args,
                              promoted_rows: list[dict]) -> list[dict]:
@@ -444,6 +487,7 @@ def update_champion_registry(conn: libsql.Connection,
         ensure_dir(champion_dir)
         champion_audit = champion_dir / f"{plugin_name}__champion__audit.set"
         champion_ea = champion_dir / f"{plugin_name}__champion__ea.set"
+        champion_strategy_manifest = champion_dir / f"{plugin_name}__champion__strategy_profile.json"
 
         promote = False
         note = ""
@@ -463,6 +507,7 @@ def update_champion_registry(conn: libsql.Connection,
         if promote:
             shutil.copy2(row["audit_set_path"], champion_audit)
             shutil.copy2(row["ea_set_path"], champion_ea)
+            copy_artifact_if_exists(row.get("strategy_profile_manifest_path", ""), champion_strategy_manifest)
             conn.execute(
                 """
                 INSERT INTO champion_registry(profile_name, symbol, plugin_name, family_id, champion_best_config_id, challenger_run_id,
@@ -576,6 +621,7 @@ def update_champion_registry(conn: libsql.Connection,
         top = max(items, key=lambda item: (float(item["champion_score"]), float(item["portfolio_score"])))
         src_ea = Path(str(top["champion_set_path"]))
         src_audit = src_ea.with_name(src_ea.name.replace("__ea.set", "__audit.set"))
+        src_strategy_manifest = src_ea.with_name(src_ea.name.replace("__ea.set", "__strategy_profile.json"))
         dst_dir = profile_dir / safe_token(symbol)
         ensure_dir(dst_dir)
         if src_audit.exists():
@@ -584,8 +630,17 @@ def update_champion_registry(conn: libsql.Connection,
         if src_ea.exists():
             shutil.copy2(src_ea, dst_dir / "__TOP__ea.set")
             shutil.copy2(src_ea, testlab.TESTER_PRESET_DIR / f"fxai_offline_{safe_token(args.profile)}__{safe_token(symbol)}__top__ea.set")
+        copy_artifact_if_exists(src_strategy_manifest, dst_dir / "__TOP__strategy_profile.json")
+        copy_artifact_if_exists(
+            src_strategy_manifest,
+            testlab.TESTER_PRESET_DIR / f"fxai_offline_{safe_token(args.profile)}__{safe_token(symbol)}__top__strategy_profile.json",
+        )
 
-    summary_rows = _portableize_rows(champion_rows_dict, path_keys={"champion_set_path"})
+    for row in champion_rows_dict:
+        champion_set_path = str(row.get("champion_set_path", "") or "")
+        if champion_set_path.endswith("__ea.set"):
+            row["strategy_profile_manifest_path"] = champion_set_path.replace("__ea.set", "__strategy_profile.json")
+    summary_rows = _portableize_rows(champion_rows_dict, path_keys={"champion_set_path", "strategy_profile_manifest_path"})
     summary_path = RESEARCH_DIR / safe_token(args.profile) / "champions.json"
     ensure_dir(summary_path.parent)
     summary_path.write_text(json.dumps(summary_rows, indent=2, sort_keys=True), encoding="utf-8")
@@ -631,6 +686,7 @@ def write_distillation_artifacts(conn: libsql.Connection,
         payload = {
             "teacher_summary": teacher_summary,
             "student_target": student_target,
+            "strategy_profile_manifest_path": _portable_artifact_path(str(row.get("strategy_profile_manifest_path", "") or "")),
         }
         artifact_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         artifact_sha = testlab.sha256_path(artifact_path)
@@ -677,6 +733,7 @@ def write_distillation_artifacts(conn: libsql.Connection,
             "family_id": family_id,
             "artifact_path": _portable_artifact_path(artifact_path),
             "artifact_sha256": artifact_sha,
+            "strategy_profile_manifest_path": _portable_artifact_path(str(row.get("strategy_profile_manifest_path", "") or "")),
         })
     commit_db(conn)
     summary = out_dir / "distillation_artifacts.json"
@@ -696,17 +753,34 @@ def persist_best_configs(conn: libsql.Connection, args, winners: list[dict]) -> 
 
     for winner in sorted(winners, key=lambda item: (item["symbol"], -float(item["ranking_score"]), item["plugin_name"])):
         params = json.loads(winner["parameters_json"])
+        compiled_profile = compile_strategy_profile_for_row(winner, params)
         symbol_dir = profile_dir / safe_token(winner["symbol"])
         ensure_dir(symbol_dir)
         audit_set_path = symbol_dir / f"{winner['plugin_name']}__audit.set"
         ea_set_path = symbol_dir / f"{winner['plugin_name']}__ea.set"
-        write_audit_set_generic(audit_set_path, winner, params)
-        write_ea_set(ea_set_path, winner, params)
+        strategy_manifest_path = symbol_dir / f"{winner['plugin_name']}__strategy_profile.json"
+        write_audit_set_generic(audit_set_path, winner, compiled_profile)
+        write_ea_set(ea_set_path, winner, compiled_profile)
+        manifest_written_path, manifest_sha = write_strategy_profile_manifest_file(
+            strategy_manifest_path,
+            compiled_profile,
+            artifact_kind="promotion_profile",
+            artifact_reference=ea_set_path,
+            metadata={
+                "profile_name": args.profile,
+                "plugin_name": winner["plugin_name"],
+                "symbol": winner["symbol"],
+                "run_id": int(winner["run_id"]),
+                "parameters_json": json.loads(winner["parameters_json"]),
+            },
+        )
 
         tester_audit_path = testlab.TESTER_PRESET_DIR / f"fxai_offline_{safe_token(args.profile)}__{safe_token(winner['symbol'])}__{winner['plugin_name']}__audit.set"
         tester_ea_path = testlab.TESTER_PRESET_DIR / f"fxai_offline_{safe_token(args.profile)}__{safe_token(winner['symbol'])}__{winner['plugin_name']}__ea.set"
+        tester_strategy_manifest_path = testlab.TESTER_PRESET_DIR / f"fxai_offline_{safe_token(args.profile)}__{safe_token(winner['symbol'])}__{winner['plugin_name']}__strategy_profile.json"
         shutil.copy2(audit_set_path, tester_audit_path)
         shutil.copy2(ea_set_path, tester_ea_path)
+        shutil.copy2(strategy_manifest_path, tester_strategy_manifest_path)
 
         conn.execute(
             """
@@ -751,6 +825,11 @@ def persist_best_configs(conn: libsql.Connection, args, winners: list[dict]) -> 
         promoted["ea_set_path"] = str(ea_set_path)
         promoted["tester_audit_set_path"] = str(tester_audit_path)
         promoted["tester_ea_set_path"] = str(tester_ea_path)
+        promoted["strategy_profile_manifest_path"] = manifest_written_path
+        promoted["strategy_profile_manifest_sha256"] = manifest_sha
+        promoted["tester_strategy_profile_manifest_path"] = str(tester_strategy_manifest_path)
+        promoted["strategy_profile_id"] = compiled_profile["strategy_profile_id"]
+        promoted["strategy_profile_version"] = int(compiled_profile["strategy_profile_version"])
         by_symbol[winner["symbol"]].append(promoted)
         promoted_rows.append(promoted)
 
@@ -760,22 +839,38 @@ def persist_best_configs(conn: libsql.Connection, args, winners: list[dict]) -> 
         top = max(rows, key=lambda item: (float(item["ranking_score"]), float(item["score"])))
         top_audit_path = profile_dir / safe_token(symbol) / "__TOP__audit.set"
         top_ea_path = profile_dir / safe_token(symbol) / "__TOP__ea.set"
+        top_strategy_manifest_path = profile_dir / safe_token(symbol) / "__TOP__strategy_profile.json"
         shutil.copy2(top["audit_set_path"], top_audit_path)
         shutil.copy2(top["ea_set_path"], top_ea_path)
+        copy_artifact_if_exists(top.get("strategy_profile_manifest_path", ""), top_strategy_manifest_path)
         shutil.copy2(top["audit_set_path"], testlab.TESTER_PRESET_DIR / f"fxai_offline_{safe_token(args.profile)}__{safe_token(symbol)}__top__audit.set")
         shutil.copy2(top["ea_set_path"], testlab.TESTER_PRESET_DIR / f"fxai_offline_{safe_token(args.profile)}__{safe_token(symbol)}__top__ea.set")
+        copy_artifact_if_exists(
+            top.get("strategy_profile_manifest_path", ""),
+            testlab.TESTER_PRESET_DIR / f"fxai_offline_{safe_token(args.profile)}__{safe_token(symbol)}__top__strategy_profile.json",
+        )
 
     summary_json = profile_dir / "promoted_best.json"
     summary_tsv = profile_dir / "promoted_best.tsv"
     summary_md = profile_dir / "promoted_best.md"
     portable_rows = _portableize_rows(
         promoted_rows,
-        path_keys={"audit_set_path", "ea_set_path", "tester_audit_set_path", "tester_ea_set_path"},
+        path_keys={
+            "audit_set_path",
+            "ea_set_path",
+            "tester_audit_set_path",
+            "tester_ea_set_path",
+            "strategy_profile_manifest_path",
+            "tester_strategy_profile_manifest_path",
+        },
     )
     summary_json.write_text(json.dumps(portable_rows, indent=2, sort_keys=True), encoding="utf-8")
     with summary_tsv.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle, delimiter="\t")
-        writer.writerow(["symbol", "plugin_name", "ai_id", "score", "ranking_score", "support_count", "audit_set_path", "ea_set_path"])
+        writer.writerow([
+            "symbol", "plugin_name", "ai_id", "score", "ranking_score", "support_count",
+            "audit_set_path", "ea_set_path", "strategy_profile_manifest_path",
+        ])
         for row in sorted(portable_rows, key=lambda item: (item["symbol"], -float(item["ranking_score"]), item["plugin_name"])):
             writer.writerow([
                 row["symbol"],
@@ -786,6 +881,7 @@ def persist_best_configs(conn: libsql.Connection, args, winners: list[dict]) -> 
                 int(row["support_count"]),
                 row["audit_set_path"],
                 row["ea_set_path"],
+                row["strategy_profile_manifest_path"],
             ])
     md_lines = ["# FXAI Offline Lab Promoted Best", "", f"profile: {args.profile}", ""]
     for symbol in sorted(by_symbol.keys()):
@@ -797,7 +893,8 @@ def persist_best_configs(conn: libsql.Connection, args, winners: list[dict]) -> 
                 f"- {row['plugin_name']} | score {float(row['score']):.2f} | rank {float(row['ranking_score']):.2f} | "
                 f"H={int(params.get('horizon', 5))} | M1Sync={int(params.get('m1sync_bars', 3))} | "
                 f"Norm={int(params.get('normalization', 0))} | Seq={int(params.get('sequence_bars', 0))} | "
-                f"Schema={int(params.get('schema_id', 0))} | Mask={int(params.get('feature_mask', 0))}"
+                f"Schema={int(params.get('schema_id', 0))} | Mask={int(params.get('feature_mask', 0))} | "
+                f"Strategy={row.get('strategy_profile_id', 'strategy/default')}@v{int(row.get('strategy_profile_version', 1))}"
             )
         md_lines.append("")
     summary_md.write_text("\n".join(md_lines), encoding="utf-8")

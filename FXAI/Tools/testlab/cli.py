@@ -38,6 +38,7 @@ from .shared import (
     sha256_path,
     write_json,
 )
+from .strategy_profiles import build_strategy_profile_manifest, compile_strategy_profile
 from .verify import run_verify_all
 
 def cmd_compile(_args):
@@ -109,6 +110,11 @@ def cmd_run_audit(args):
         "symbols": symbols,
         "symbol_pack": getattr(args, "symbol_pack", "") or "",
         "symbol_count": len(symbols),
+        "strategy_profile": {
+            "requested_profile": getattr(args, "strategy_profile", "default"),
+            "broker_profile": getattr(args, "broker_profile", ""),
+            "runtime_mode": getattr(args, "runtime_mode", "research"),
+        },
         "plugin_list": args.plugin_list,
         "scenario_list": args.scenario_list,
         "execution_profile": args.execution_profile,
@@ -150,6 +156,41 @@ def cmd_run_audit(args):
                 "runtime_feature_manifest": str(runtime_feature_manifest_path(run["symbol"])),
                 "runtime_macro_manifest": str(runtime_macro_manifest_path(run["symbol"])),
                 "runtime_performance_manifest": str(runtime_performance_manifest_path(run["symbol"])),
+                "strategy_profile": build_strategy_profile_manifest(
+                    compile_strategy_profile(
+                        strategy_profile=getattr(args, "strategy_profile", "default"),
+                        symbol=run["symbol"],
+                        broker_profile=getattr(args, "broker_profile", ""),
+                        server=getattr(args, "server", None),
+                        runtime_mode=getattr(args, "runtime_mode", "research"),
+                        overrides={
+                            "bars": getattr(args, "bars", None),
+                            "horizon": getattr(args, "horizon", None),
+                            "m1sync_bars": getattr(args, "m1sync_bars", None),
+                            "normalization": getattr(args, "normalization", None),
+                            "sequence_bars": getattr(args, "sequence_bars", None),
+                            "schema_id": getattr(args, "schema_id", None),
+                            "feature_mask": getattr(args, "feature_mask", None),
+                            "commission_per_lot_side": getattr(args, "commission_per_lot_side", None),
+                            "cost_buffer_points": getattr(args, "cost_buffer_points", None),
+                            "slippage_points": getattr(args, "slippage_points", None),
+                            "fill_penalty_points": getattr(args, "fill_penalty_points", None),
+                            "wf_train_bars": getattr(args, "wf_train_bars", None),
+                            "wf_test_bars": getattr(args, "wf_test_bars", None),
+                            "wf_purge_bars": getattr(args, "wf_purge_bars", None),
+                            "wf_embargo_bars": getattr(args, "wf_embargo_bars", None),
+                            "wf_folds": getattr(args, "wf_folds", None),
+                            "seed": getattr(args, "seed", None),
+                            "window_start_unix": getattr(args, "window_start_unix", None),
+                            "window_end_unix": getattr(args, "window_end_unix", None),
+                            "execution_profile": getattr(args, "execution_profile", None),
+                        },
+                        ai_id=getattr(args, "plugin_id", 28),
+                    ),
+                    artifact_kind="audit_run",
+                    artifact_path=output_path,
+                    metadata={"symbol": run["symbol"]},
+                ),
             }
             for run in symbol_runs
         ],
@@ -302,6 +343,9 @@ def main():
     ra.add_argument("--symbol", default="EURUSD")
     ra.add_argument("--symbol-list", default="")
     ra.add_argument("--symbol-pack", default="", choices=[""] + sorted(SYMBOL_PACKS.keys()))
+    ra.add_argument("--strategy-profile", default="default")
+    ra.add_argument("--broker-profile", default="")
+    ra.add_argument("--runtime-mode", default="research")
     ra.add_argument("--execution-profile", default="default", choices=sorted(EXECUTION_PROFILES.keys()))
     ra.add_argument("--login")
     ra.add_argument("--server")
@@ -369,6 +413,9 @@ def main():
     oa.add_argument("--symbol", default="EURUSD")
     oa.add_argument("--symbol-list", default="")
     oa.add_argument("--symbol-pack", default="", choices=[""] + sorted(SYMBOL_PACKS.keys()))
+    oa.add_argument("--strategy-profile", default="default")
+    oa.add_argument("--broker-profile", default="")
+    oa.add_argument("--runtime-mode", default="research")
     oa.add_argument("--execution-profile", default="default", choices=sorted(EXECUTION_PROFILES.keys()))
     oa.add_argument("--login")
     oa.add_argument("--server")

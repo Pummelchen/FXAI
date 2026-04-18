@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 from .toolchain import FXAIToolchainConfig, SUPPORTED_TOOLCHAIN_PROFILES, load_toolchain_config
+from .strategy_profiles import compile_strategy_profile
 
 
 ACTIVE_TOOLCHAIN: FXAIToolchainConfig = load_toolchain_config()
@@ -244,6 +245,9 @@ def clone_args(args):
 
 def build_effective_audit_args(args):
     out = clone_args(args)
+    out.strategy_profile = (getattr(args, "strategy_profile", None) or "default").strip() or "default"
+    out.broker_profile = (getattr(args, "broker_profile", None) or "").strip()
+    out.runtime_mode = (getattr(args, "runtime_mode", None) or "research").strip().lower() or "research"
     out.execution_profile = (getattr(args, "execution_profile", None) or "default").strip().lower()
     profile = resolve_execution_profile(out.execution_profile)
     if getattr(args, "commission_per_lot_side", None) is None:
@@ -256,6 +260,38 @@ def build_effective_audit_args(args):
         out.fill_penalty_points = float(profile["fill_penalty_points"])
     if not getattr(args, "symbol_list", None):
         out.symbol_list = "{" + str(getattr(args, "symbol", "EURUSD")) + "}"
+    out.strategy_profile_compiled = compile_strategy_profile(
+        strategy_profile=out.strategy_profile,
+        symbol=str(getattr(out, "symbol", "EURUSD") or "EURUSD"),
+        broker_profile=out.broker_profile,
+        server=getattr(out, "server", None),
+        runtime_mode=out.runtime_mode,
+        overrides={
+            "bars": getattr(out, "bars", None),
+            "horizon": getattr(out, "horizon", None),
+            "m1sync_bars": getattr(out, "m1sync_bars", None),
+            "normalization": getattr(out, "normalization", None),
+            "sequence_bars": getattr(out, "sequence_bars", None),
+            "schema_id": getattr(out, "schema_id", None),
+            "feature_mask": getattr(out, "feature_mask", None),
+            "commission_per_lot_side": getattr(out, "commission_per_lot_side", None),
+            "cost_buffer_points": getattr(out, "cost_buffer_points", None),
+            "slippage_points": getattr(out, "slippage_points", None),
+            "fill_penalty_points": getattr(out, "fill_penalty_points", None),
+            "wf_train_bars": getattr(out, "wf_train_bars", None),
+            "wf_test_bars": getattr(out, "wf_test_bars", None),
+            "wf_purge_bars": getattr(out, "wf_purge_bars", None),
+            "wf_embargo_bars": getattr(out, "wf_embargo_bars", None),
+            "wf_folds": getattr(out, "wf_folds", None),
+            "seed": getattr(out, "seed", None),
+            "window_start_unix": getattr(out, "window_start_unix", None),
+            "window_end_unix": getattr(out, "window_end_unix", None),
+            "execution_profile": getattr(out, "execution_profile", None),
+            "scenario_list": parse_brace_list(getattr(out, "scenario_list", "")),
+        },
+        plugin_name="",
+        ai_id=getattr(out, "plugin_id", 28),
+    )
     return out
 
 

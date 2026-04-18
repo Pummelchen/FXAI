@@ -372,7 +372,10 @@ def write_world_model_artifacts(conn: libsql.Connection,
     for symbol in sorted({str(s).upper() for s in symbols if str(s).strip()}):
         payload = build_symbol_world_model(conn, args.profile, symbol)
         artifact_path = out_dir / f"world_model_{safe_token(symbol)}.json"
-        artifact_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        artifact_path.write_text(
+            json.dumps(portableize_payload_paths(payload), indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
         artifacts.append({
             "symbol": symbol,
             "artifact_path": str(artifact_path),
@@ -380,5 +383,8 @@ def write_world_model_artifacts(conn: libsql.Connection,
             "payload": payload,
         })
     summary_path = out_dir / "world_models.json"
-    summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
+    summary_path.write_text(
+        json.dumps(portableize_payload_paths(artifacts), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     return artifacts

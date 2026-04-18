@@ -644,5 +644,5 @@ def write_adaptive_router_profiles(conn: libsql.Connection,
 
     commit_db(conn)
     summary_path = out_dir / "adaptive_router_profiles.json"
-    json_dump(summary_path, artifacts)
+    json_dump(summary_path, portableize_payload_paths(artifacts))
     return artifacts

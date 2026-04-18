@@ -29,6 +29,13 @@ Offline Lab is the research, promotion, and artifact-recovery engine behind FXAI
 - emit promoted runtime bundles, operator dashboards, lineage, and minimal bundles
 - recover artifacts when runtime or research outputs go stale
 
+## Strategy Profiles
+
+- promoted audit and EA presets are compiled from `Tools/OfflineLab/Profiles/strategy_profiles.json`
+- the compiler layers `strategy -> symbol -> broker -> runtime` before applying run-specific overrides
+- each promoted preset now carries a sibling `__strategy_profile.json` manifest so operators can see exactly which profile version and inheritance chain produced the artifact
+- if you need a new deployment posture, change the catalog and regenerate artifacts instead of hand-editing dozens of MT5 input fields
+
 ## Core Commands
 
 ```bash

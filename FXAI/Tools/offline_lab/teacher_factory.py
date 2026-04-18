@@ -374,7 +374,7 @@ def write_foundation_teacher_artifacts(conn: libsql.Connection,
 
     commit_db(conn)
     summary_path = out_dir / "foundation_teachers.json"
-    summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
+    summary_path.write_text(json.dumps(portableize_payload_paths(artifacts), indent=2, sort_keys=True), encoding="utf-8")
     return artifacts
 
 
@@ -513,7 +513,7 @@ def write_teacher_factory_artifacts(conn: libsql.Connection,
 
     commit_db(conn)
     summary_path = out_dir / "teacher_factories.json"
-    summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
+    summary_path.write_text(json.dumps(portableize_payload_paths(artifacts), indent=2, sort_keys=True), encoding="utf-8")
     return artifacts
 
 
@@ -1112,5 +1112,5 @@ def write_live_deployment_profiles(conn: libsql.Connection,
 
     commit_db(conn)
     summary_path = out_dir / "live_deployments.json"
-    summary_path.write_text(json.dumps(deployments, indent=2, sort_keys=True), encoding="utf-8")
+    summary_path.write_text(json.dumps(portableize_payload_paths(deployments), indent=2, sort_keys=True), encoding="utf-8")
     return deployments

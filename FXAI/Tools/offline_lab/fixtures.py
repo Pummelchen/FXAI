@@ -11,6 +11,7 @@ from .common import commit_db, ensure_dir, json_compact, now_unix, query_one, qu
 
 
 PATCH_MODULES = [
+    "fxai_testlab",
     "offline_lab.common",
     "offline_lab.attribution",
     "offline_lab.student_router",
@@ -24,6 +25,7 @@ PATCH_MODULES = [
     "offline_lab.performance",
     "offline_lab.lineage",
     "offline_lab.bundle",
+    "offline_lab.promotion",
     "offline_lab.newspulse_contracts",
     "offline_lab.newspulse_config",
     "offline_lab.newspulse_calendar",
@@ -76,6 +78,7 @@ PATCH_MODULES = [
     "offline_lab.pair_network",
     "offline_lab.market_universe",
     "offline_lab.verification",
+    "testlab.strategy_profiles",
     "testlab.shared",
     "testlab.reporting",
     "testlab.release_gate",
@@ -118,10 +121,12 @@ def patched_paths(base_dir: Path):
     common_promotion_dir = common_dir / "FXAI/Offline/Promotions"
     common_export_dir = common_dir / "FXAI/Offline/Exports"
     runtime_dir = common_dir / "FXAI/Runtime"
+    control_plane_dir = common_dir / "FXAI/ControlPlane"
     tester_dir = base_dir / "MT5/Profiles/Tester"
     research_dir = offline_dir / "ResearchOS"
     distill_dir = offline_dir / "Distillation"
     profiles_dir = offline_dir / "Profiles"
+    strategy_profile_catalog = profiles_dir / "strategy_profiles.json"
     runs_dir = offline_dir / "Runs"
     default_db = offline_dir / "fxai_offline_lab.turso.db"
     for path in [
@@ -157,6 +162,7 @@ def patched_paths(base_dir: Path):
         common_promotion_dir,
         common_export_dir,
         runtime_dir,
+        control_plane_dir,
         tester_dir,
         research_dir,
         distill_dir,
@@ -164,6 +170,9 @@ def patched_paths(base_dir: Path):
         runs_dir,
     ]:
         ensure_dir(path)
+    source_strategy_catalog = Path(__file__).resolve().parents[1] / "OfflineLab" / "Profiles" / "strategy_profiles.json"
+    if source_strategy_catalog.exists():
+        shutil.copy2(source_strategy_catalog, strategy_profile_catalog)
 
     patched = {}
     for mod_name in PATCH_MODULES:
@@ -183,9 +192,13 @@ def patched_paths(base_dir: Path):
             "COMMON_EXPORT_DIR": common_export_dir,
             "RUNTIME_DIR": runtime_dir,
             "COMMON_FILES": common_dir,
+            "CONTROL_PLANE_DIR": control_plane_dir,
+            "SUPERVISOR_GLOBAL_FILE": common_promotion_dir / "fxai_supervisor_service_global.tsv",
+            "SUPERVISOR_COMMAND_GLOBAL_FILE": common_promotion_dir / "fxai_supervisor_command_global.tsv",
             "TESTER_PRESET_DIR": tester_dir,
             "ROOT": base_dir,
             "REPO_ROOT": base_dir.parent,
+            "STRATEGY_PROFILE_CATALOG_PATH": strategy_profile_catalog,
             "NEWSPULSE_DIR": newspulse_dir,
             "NEWSPULSE_STATE_DIR": newspulse_state_dir,
             "NEWSPULSE_REPORT_DIR": newspulse_report_dir,
@@ -362,7 +375,14 @@ def seed_profile_fixture(conn: libsql.Connection,
     )
     dataset_id = int(query_scalar(conn, "SELECT id FROM datasets WHERE dataset_key = ?", (dataset_key,), 0))
 
-    params = {"PredictionTargetMinutes": 5, "M1SyncBars": 3, "FeatureSchema": 6}
+    params = {
+        "horizon": 5,
+        "m1sync_bars": 3,
+        "schema_id": 6,
+        "strategy_profile": "default",
+        "broker_profile": "",
+        "runtime_mode": "research",
+    }
     params_json = json.dumps(params, sort_keys=True)
     audit_set_path = f"/fixture/{safe_token(symbol)}_{plugin_name}_audit.set"
     ea_set_path = f"/fixture/{safe_token(symbol)}_{plugin_name}_ea.set"
@@ -471,6 +491,9 @@ def seed_completed_run_fixture(conn: libsql.Connection,
         "sequence_bars": 16,
         "schema_id": 6,
         "feature_mask": 0,
+        "strategy_profile": "default",
+        "broker_profile": "",
+        "runtime_mode": "research",
         "execution_profile": "default",
         "wf_train_bars": 256,
         "wf_test_bars": 64,

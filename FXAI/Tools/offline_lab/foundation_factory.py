@@ -302,7 +302,7 @@ def write_foundation_model_bundles(conn: libsql.Connection,
 
     commit_db(conn)
     summary_path = out_dir / "foundation_bundles.json"
-    summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
+    summary_path.write_text(json.dumps(portableize_payload_paths(artifacts), indent=2, sort_keys=True), encoding="utf-8")
     return artifacts
 
 
@@ -468,5 +468,5 @@ def write_student_deployment_bundles(conn: libsql.Connection,
 
     commit_db(conn)
     summary_path = out_dir / "student_bundles.json"
-    summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
+    summary_path.write_text(json.dumps(portableize_payload_paths(artifacts), indent=2, sort_keys=True), encoding="utf-8")
     return artifacts

@@ -137,5 +137,5 @@ def test_runtime_artifacts_persist_normalization_fits():
 def test_tooling_accepts_new_normalization_id_range():
     promotion = _read("Tools/offline_lab/promotion.py")
     audit_run = _read("Tools/testlab/audit_run.py")
-    assert "||0||0||16||N" in promotion
+    assert '"AI_FeatureNormalization": (0, 0, 16, "N")' in promotion
     assert "||0||0||16||N" in audit_run

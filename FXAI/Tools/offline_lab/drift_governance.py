@@ -1122,7 +1122,7 @@ def build_drift_governance_report(conn: libsql.Connection,
             "history_path": str(DRIFT_GOVERNANCE_HISTORY_PATH),
         },
     }
-    json_dump(DRIFT_GOVERNANCE_REPORT_PATH, payload)
+    json_dump(DRIFT_GOVERNANCE_REPORT_PATH, portableize_payload_paths(payload))
     return payload
 
 
@@ -1141,8 +1141,9 @@ def run_drift_governance_cycle(conn: libsql.Connection,
             "symbols": [],
             "actions": [],
         }
-        json_dump(DRIFT_GOVERNANCE_STATUS_PATH, payload)
-        json_dump(DRIFT_GOVERNANCE_RUNTIME_SUMMARY_PATH, payload)
+        portable_payload = portableize_payload_paths(payload)
+        json_dump(DRIFT_GOVERNANCE_STATUS_PATH, portable_payload)
+        json_dump(DRIFT_GOVERNANCE_RUNTIME_SUMMARY_PATH, portable_payload)
         return payload
 
     by_scope, by_plugin = _load_shadow_rows(conn, args.profile)
@@ -1390,8 +1391,9 @@ def run_drift_governance_cycle(conn: libsql.Connection,
             "history_path": str(DRIFT_GOVERNANCE_HISTORY_PATH),
         },
     }
-    json_dump(DRIFT_GOVERNANCE_STATUS_PATH, status)
-    json_dump(DRIFT_GOVERNANCE_RUNTIME_SUMMARY_PATH, status)
+    portable_status = portableize_payload_paths(status)
+    json_dump(DRIFT_GOVERNANCE_STATUS_PATH, portable_status)
+    json_dump(DRIFT_GOVERNANCE_RUNTIME_SUMMARY_PATH, portable_status)
     _append_history(
         DRIFT_GOVERNANCE_HISTORY_PATH,
         {

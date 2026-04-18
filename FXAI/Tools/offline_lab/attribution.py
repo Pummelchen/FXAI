@@ -403,5 +403,5 @@ def write_attribution_profiles(conn: libsql.Connection,
 
     commit_db(conn)
     summary_path = out_dir / "attribution_profiles.json"
-    summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
+    summary_path.write_text(json.dumps(portableize_payload_paths(artifacts), indent=2, sort_keys=True), encoding="utf-8")
     return artifacts

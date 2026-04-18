@@ -63,6 +63,9 @@ def serious_base_args(args, dataset: dict, output_path: Path) -> argparse.Namesp
         symbol=str(dataset["symbol"]),
         symbol_list="{" + str(dataset["symbol"]) + "}",
         symbol_pack="",
+        strategy_profile=getattr(args, "strategy_profile", "default"),
+        broker_profile=getattr(args, "broker_profile", ""),
+        runtime_mode=getattr(args, "runtime_mode", "research"),
         window_start_unix=int(dataset["start_unix"]),
         window_end_unix=int(dataset["end_unix"]),
         execution_profile=getattr(args, "execution_profile", "default"),
@@ -394,6 +397,10 @@ def normalize_namespace_parameters(args, plugin_name: str, experiment_name: str,
     return {
         "plugin": plugin_name,
         "experiment": experiment_name,
+        "strategy_profile": str(getattr(args, "strategy_profile", "default") or "default"),
+        "broker_profile": str(getattr(args, "broker_profile", "") or ""),
+        "runtime_mode": str(getattr(args, "runtime_mode", "research") or "research"),
+        "server": str(getattr(args, "server", "") or ""),
         "scenario_list": parse_csv_tokens(getattr(args, "scenario_list", SERIOUS_SCENARIOS)),
         "bars": int(getattr(args, "bars", dataset["bars"])),
         "horizon": int(getattr(args, "horizon", 5)),
@@ -684,5 +691,3 @@ def run_dataset_campaign(conn: libsql.Connection, dataset: dict, profile_name: s
         results.append(result)
         (out_dir / "results.json").write_text(json.dumps(results, indent=2, sort_keys=True), encoding="utf-8")
     return results
-
-

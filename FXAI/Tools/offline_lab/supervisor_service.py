@@ -524,12 +524,12 @@ def write_supervisor_service_artifacts(conn: libsql.Connection,
 
     commit_db(conn)
     summary_path = out_dir / "supervisor_service.json"
-    summary_path.write_text(json.dumps({
+    summary_path.write_text(json.dumps(portableize_payload_paths({
         "profile_name": args.profile,
         "global_artifact_path": str(SUPERVISOR_GLOBAL_FILE),
         "snapshots_seen": len(snapshots),
         "symbols": artifacts,
-    }, indent=2, sort_keys=True), encoding="utf-8")
+    }), indent=2, sort_keys=True), encoding="utf-8")
     return artifacts
 
 
@@ -751,7 +751,7 @@ def write_supervisor_command_artifacts(conn: libsql.Connection,
 
     commit_db(conn)
     summary_path = out_dir / "supervisor_commands.json"
-    summary_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True), encoding="utf-8")
+    summary_path.write_text(json.dumps(portableize_payload_paths(artifacts), indent=2, sort_keys=True), encoding="utf-8")
     return artifacts
 
 
