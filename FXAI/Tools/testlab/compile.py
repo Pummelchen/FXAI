@@ -8,7 +8,25 @@ import tempfile
 import time
 from pathlib import Path
 
-from .shared import COMMON_INI, METAEDITOR, ROOT, TERMINAL, TERMINAL_INI, WINE, read_utf16_or_text, to_wine_path, write_utf16
+from .shared import (
+    COMMON_INI,
+    ROOT,
+    TERMINAL_INI,
+    build_metaeditor_compile_command,
+    read_utf16_or_text,
+    terminal_running,
+    write_utf16,
+)
+
+
+def _stage_copy_ignore(directory: str, names: list[str]) -> set[str]:
+    ignored: set[str] = set()
+    current = Path(directory)
+    if current.name == "GUI":
+        for candidate in (".build", ".swiftpm", "Package.resolved"):
+            if candidate in names:
+                ignored.add(candidate)
+    return ignored
 
 def read_common_account() -> tuple[str, str]:
     text = read_utf16_or_text(COMMON_INI)
@@ -28,17 +46,6 @@ def resolve_credentials(args) -> tuple[str, str, str]:
     server = args.server or os.environ.get("FXAI_MT5_SERVER", "") or common_server
     password = args.password or os.environ.get("FXAI_MT5_PASSWORD", "")
     return login, server, password
-
-
-def terminal_running() -> bool:
-    proc = subprocess.run(
-        ["pgrep", "-f", "terminal64.exe"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        text=True,
-    )
-    return proc.returncode == 0 and bool(proc.stdout.strip())
-
 
 def update_ini_section(path: Path, section_name: str, kv: dict[str, str], encoding: str = "utf-16le") -> None:
     text = read_utf16_or_text(path)
@@ -69,31 +76,16 @@ def compile_target(relative_target: Path, stage_name: str) -> int:
     stage_dir = Path(tempfile.gettempdir()) / f"fxai_testlab_{stage_name}"
     if stage_dir.exists():
         shutil.rmtree(stage_dir)
-    stage_dir.mkdir(parents=True, exist_ok=True)
-
-    rsync_cmd = [
-        "rsync",
-        "-a",
-        "--delete",
-        "--exclude",
-        "GUI/.build/",
-        "--exclude",
-        "GUI/.swiftpm/",
-        "--exclude",
-        "GUI/Package.resolved",
-        f"{ROOT}/",
-        f"{stage_dir}/",
-    ]
-    subprocess.run(rsync_cmd, check=True)
+    shutil.copytree(
+        ROOT,
+        stage_dir,
+        dirs_exist_ok=True,
+        ignore=_stage_copy_ignore,
+    )
 
     stage_target = stage_dir / relative_target
     stage_log = stage_dir / f"compile_{relative_target.stem}.log"
-    cmd = [
-        str(WINE),
-        str(METAEDITOR),
-        f"/compile:{to_wine_path(stage_target)}",
-        f"/log:{to_wine_path(stage_log)}",
-    ]
+    cmd = build_metaeditor_compile_command(stage_target, stage_log)
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     deadline = time.time() + 1200.0
     built_ex5 = stage_target.with_suffix(".ex5")

@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "FXAIGUI",
     platforms: [
-        .macOS("26.0")
+        .macOS("14.0")
     ],
     products: [
         .library(

@@ -1,6 +1,6 @@
 # FXAI GUI
 
-FXAI GUI is an optional macOS 26 operator surface for the FXAI framework.
+FXAI GUI is an optional macOS operator surface for the FXAI framework.
 
 The terminal remains first-class. The GUI exists to make the framework easier to inspect, faster to operate, and less error-prone for humans. Every major GUI workflow is designed to map back to an explicit FXAI command, artifact, or report.
 
@@ -37,7 +37,7 @@ Phase 1 through Phase 6 are implemented here:
 - customizable overview dashboard with draggable categories, movable widgets, 1 cm grid-based resizing, automatic layout persistence, and reset-to-default controls
 - customizable role workspaces with draggable and resizable panels, automatic layout persistence per dashboard, and per-workspace reset controls
 - automatic resource guards that back off glass, Metal, blur, and background polling under memory, thermal, or inactive-app pressure
-- release packaging support for a polished macOS app bundle
+- release packaging support for a polished macOS app bundle with configurable minimum-version metadata
 
 ## Theme Support
 
@@ -75,6 +75,8 @@ cd /path/to/FXAI/GUI
 ./start.sh
 ./Tools/package_gui_release.sh
 ```
+
+The GUI release packager reads `../fxai.toml` for the default macOS minimum version and archive name, and respects `FXAI_GUI_MINIMUM_MACOS` or `FXAI_GUI_RELEASE_ARCHIVE` overrides when you need a different packaging target.
 
 ## GUI Validation
 

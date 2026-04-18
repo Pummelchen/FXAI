@@ -117,6 +117,12 @@ def cmd_validate_env(_args) -> int:
     return 0 if bool(payload.get("ok")) else 1
 
 
+def cmd_doctor(_args) -> int:
+    payload = validate_environment()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if bool(payload.get("ok")) else 1
+
+
 def cmd_newspulse_validate(_args) -> int:
     payload = validate_newspulse_config()
     print(json.dumps(payload, indent=2, sort_keys=True))

@@ -13,14 +13,12 @@ from .shared import (
     COMMON_INI,
     DEFAULT_REPORT,
     MT5_LOG_DIR,
-    TERMINAL,
     TERMINAL_INI,
     TESTER_PRESET_DIR,
-    WINE,
+    build_terminal_launch_command,
     clone_args,
     load_oracles,
     read_utf16_or_text,
-    to_wine_path,
 )
 
 def latest_terminal_log() -> Path | None:
@@ -114,7 +112,7 @@ def write_audit_ini(path: Path, preset_name: str, login: str, symbol: str, serve
 
 
 def run_terminal_audit(config_path: Path, timeout_sec: int) -> None:
-    cmd = [str(WINE), str(TERMINAL), f"/config:{to_wine_path(config_path)}"]
+    cmd = build_terminal_launch_command(config_path=config_path)
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     try:
         proc.communicate(timeout=timeout_sec)
@@ -125,7 +123,7 @@ def run_terminal_audit(config_path: Path, timeout_sec: int) -> None:
 
 
 def run_terminal_profile(timeout_sec: int) -> None:
-    cmd = [str(WINE), str(TERMINAL), "/portable"]
+    cmd = build_terminal_launch_command(portable=True)
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     try:
         proc.communicate(timeout=timeout_sec)

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .compile import compile_target
-from .shared import METAEDITOR, REPO_ROOT, ROOT, git_dirty, git_head_commit, sha256_path, write_json
+from .shared import FXAI_CONFIG_PATH, METAEDITOR, REPO_ROOT, ROOT, TOOLCHAIN_PROFILE, git_dirty, git_head_commit, sha256_path, write_json
 
 
 @dataclass(frozen=True)
@@ -152,6 +152,8 @@ def write_mt5_release_bundle(
             "build_platform": platform.platform(),
             "python": platform.python_version(),
             "metaeditor": str(METAEDITOR),
+            "toolchain_profile": TOOLCHAIN_PROFILE,
+            "toolchain_config": (str(FXAI_CONFIG_PATH) if FXAI_CONFIG_PATH else ""),
         },
         "install": {
             "mt5_root_relative": "MQL5/Experts/FXAI",

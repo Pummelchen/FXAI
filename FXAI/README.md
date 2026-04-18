@@ -22,6 +22,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   External compile, audit, baseline, MT5 release-artifact packaging, and release-gate tool.
 - `Tools/fxai_offline_lab.py`
   Stable CLI wrapper for the Turso/libSQL-backed offline export, tuning, promotion, and control-loop tool.
+- `fxai.toml`
+  Toolchain and GUI config root for portable path overrides, platform profiles, and release metadata. Local `.env` overrides are supported and ignored by git.
 - `Services/FXAI_NewsPulseCalendar.mq5`
   MT5 Service that exports Economic Calendar state for the NewsPulse shared news-risk subsystem.
 - `Services/FXAI_MicrostructureProbe.mq5`
@@ -53,7 +55,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - `Tools/OfflineLab/PairNetwork/`
   Pair-Network / Factor Graph + Portfolio Conflict Resolver docs, config, graph reports, and runtime decision history for portfolio-level exposure coordination and conflict resolution.
 - `GUI/`
-  Optional macOS 26 SwiftUI operator app for role-based dashboards, plugin-zoo browsing, report exploration, run builders for Audit/Offline/backtest workflows, runtime inspection, promotion review, Research OS control, advanced Metal-backed visual analysis, saved workspace views, onboarding, incident recovery, detached startup, soft reconnect, terminal-first command guidance, and the shared FXAI operator theme system.
+  Optional SwiftUI operator app for role-based dashboards, plugin-zoo browsing, report exploration, run builders for Audit/Offline/backtest workflows, runtime inspection, promotion review, Research OS control, advanced Metal-backed visual analysis, saved workspace views, onboarding, incident recovery, detached startup, soft reconnect, terminal-first command guidance, and the shared FXAI operator theme system.
 - `Wiki/`
   Versioned operator handbook with role-based quick starts, getting-started flows, subsystem guides, and scenario-driven examples.
 
@@ -171,6 +173,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 
 - Canonical research data is `M1 OHLC + spread`.
 - The preferred platform verification path is `python3 FXAI/Tools/fxai_testlab.py verify-all`.
+- The preferred environment self-check path is `python3 FXAI/Tools/fxai_testlab.py doctor` or `python3 FXAI/Tools/fxai_offline_lab.py doctor`.
+- Toolchain paths are profile-driven through `fxai.toml`, with optional `.env` overrides for `FXAI_MT5_ROOT`, `FXAI_METAEDITOR`, `FXAI_TERMINAL`, `FXAI_COMMON_FILES`, `FXAI_RUNTIME_DIR`, `FXAI_DEFAULT_DB`, and related operator-machine specifics.
 - The preferred MT5 binary release path is `python3 FXAI/Tools/fxai_testlab.py package-mt5-release --version <tag>` after a clean verification gate. Git tracks `.mq5`/`.mqh` source and manifests only; compiled `.ex5` files must be uploaded to GitHub Releases with the generated manifest and SHA-256 sums instead of being committed.
 - The preferred GUI verification path is `cd FXAI/GUI && swift test && swift build`.
 - GUI release packaging is `cd FXAI/GUI && ./Tools/package_gui_release.sh`.

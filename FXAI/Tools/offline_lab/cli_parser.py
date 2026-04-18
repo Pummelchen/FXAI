@@ -21,6 +21,9 @@ def build_parser() -> argparse.ArgumentParser:
     val = sub.add_parser("validate-env", help="Validate Python, MT5, FILE_COMMON, and Offline Lab path assumptions")
     val.set_defaults(func=cmd_validate_env)
 
+    doctor = sub.add_parser("doctor", help="Run a profile-aware FXAI toolchain and environment self-check")
+    doctor.set_defaults(func=cmd_doctor)
+
     npv = sub.add_parser("newspulse-validate", help="Validate NewsPulse config, whitelist, and query scaffolding")
     npv.set_defaults(func=cmd_newspulse_validate)
 

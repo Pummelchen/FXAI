@@ -12,7 +12,7 @@ from .newspulse_contracts import (
     TERMINAL_SERVICE_BINARY,
     TERMINAL_SERVICE_SOURCE,
 )
-from testlab.shared import METAEDITOR, TERMINAL_ROOT, WINE, read_utf16_or_text, to_wine_path
+from testlab.shared import TERMINAL_ROOT, build_metaeditor_compile_command, read_utf16_or_text
 
 
 def install_calendar_service(compile_service: bool = True) -> dict[str, object]:
@@ -44,12 +44,7 @@ def compile_calendar_service(timeout_sec: int = 600) -> dict[str, object]:
         stage_log = stage_root / "compile_newspulse_service.log"
         shutil.copy2(TERMINAL_SERVICE_SOURCE, stage_source)
 
-        cmd = [
-            str(WINE),
-            str(METAEDITOR),
-            f"/compile:{to_wine_path(stage_source)}",
-            f"/log:{to_wine_path(stage_log)}",
-        ]
+        cmd = build_metaeditor_compile_command(stage_source, stage_log)
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         deadline = time.time() + float(timeout_sec)
         built_ex5 = stage_source.with_suffix(".ex5")

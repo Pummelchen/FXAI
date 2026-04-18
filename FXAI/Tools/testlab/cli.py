@@ -54,6 +54,14 @@ def cmd_verify_all(args):
     return 0 if bool(payload.get("ok")) else 1
 
 
+def cmd_doctor(_args):
+    from offline_lab.environment import doctor_report
+
+    payload = doctor_report()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if bool(payload.get("ok")) else 1
+
+
 def cmd_run_audit(args):
     args = build_effective_audit_args(args)
     if not getattr(args, "skip_compile", False) and cmd_compile(args) != 0:
@@ -251,6 +259,9 @@ def main():
 
     cm = sub.add_parser("compile-main", help="Compile the main FXAI EA")
     cm.set_defaults(func=cmd_compile_main)
+
+    doctor = sub.add_parser("doctor", help="Run a profile-aware FXAI toolchain and environment self-check")
+    doctor.set_defaults(func=cmd_doctor)
 
     pkg = sub.add_parser("package-mt5-release", help="Compile and package MT5 .ex5 binaries for GitHub Releases")
     pkg.add_argument("--version", required=True, help="Release version or tag used in artifact metadata")

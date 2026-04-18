@@ -32,7 +32,8 @@ Audit Lab is where FXAI proves whether a candidate or runtime assumption survive
 Compile and run the standard release gate:
 
 ```bash
-cd /Users/andreborchert/FXAI-main2/FXAI
+cd /path/to/FXAI
+python3 Tools/fxai_testlab.py doctor
 python3 Tools/fxai_testlab.py verify-all
 ```
 

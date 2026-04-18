@@ -1,0 +1,15 @@
+[toolchain]
+profile = "auto"
+
+[paths]
+project_root = "."
+default_db = "Tools/OfflineLab/fxai_offline_lab.turso.db"
+
+[gui]
+minimum_macos = "14.0"
+release_archive = "FXAIGUI-macos.zip"
+
+[profiles.headless_ci.paths]
+common_files = "FILE_COMMON"
+runtime_dir = "FILE_COMMON/FXAI/Runtime"
+tester_preset_dir = "MT5/MQL5/Profiles/Tester"

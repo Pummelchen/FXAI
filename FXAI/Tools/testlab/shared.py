@@ -7,23 +7,32 @@ import math
 import subprocess
 from pathlib import Path
 
-ROOT = Path("/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI")
-REPO_ROOT = Path(__file__).resolve().parents[3]
-TERMINAL_ROOT = Path("/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5")
-METAEDITOR = TERMINAL_ROOT / "MetaEditor64.exe"
-TERMINAL = TERMINAL_ROOT / "terminal64.exe"
-WINE = Path("/Applications/MetaTrader 5.app/Contents/SharedSupport/wine/bin/wine64")
-COMMON_FILES = Path("/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/andreborchert/AppData/Roaming/MetaQuotes/Terminal/Common/Files")
-RUNTIME_DIR = COMMON_FILES / "FXAI/Runtime"
+from .toolchain import FXAIToolchainConfig, SUPPORTED_TOOLCHAIN_PROFILES, load_toolchain_config
+
+
+ACTIVE_TOOLCHAIN: FXAIToolchainConfig = load_toolchain_config()
+TOOLCHAIN_PROFILE = ACTIVE_TOOLCHAIN.profile
+FXAI_CONFIG_PATH = ACTIVE_TOOLCHAIN.config_path
+FXAI_ENV_PATH = ACTIVE_TOOLCHAIN.env_path
+
+ROOT = ACTIVE_TOOLCHAIN.project_root
+REPO_ROOT = ACTIVE_TOOLCHAIN.repo_root
+TERMINAL_ROOT = ACTIVE_TOOLCHAIN.mt5_root
+METAEDITOR = ACTIVE_TOOLCHAIN.metaeditor
+TERMINAL = ACTIVE_TOOLCHAIN.terminal
+WINE = ACTIVE_TOOLCHAIN.wine or (ROOT / ".fxai/wine-not-required")
+COMMON_FILES = ACTIVE_TOOLCHAIN.common_files
+RUNTIME_DIR = ACTIVE_TOOLCHAIN.runtime_dir
+DEFAULT_DB_PATH = ACTIVE_TOOLCHAIN.default_db
 DEFAULT_REPORT = COMMON_FILES / "FXAI/Audit/fxai_audit_report.tsv"
 DEFAULT_TEXT_REPORT = ROOT / "Tools/latest_drill_report.md"
 ORACLES_PATH = ROOT / "Tools/plugin_oracles.json"
 BASELINES_DIR = ROOT / "Tools/Baselines"
 EXPERIMENTS_DIR = ROOT / "Tools/Experiments"
-TESTER_PRESET_DIR = TERMINAL_ROOT / "MQL5/Profiles/Tester"
-COMMON_INI = TERMINAL_ROOT / "config/common.ini"
-TERMINAL_INI = TERMINAL_ROOT / "config/terminal.ini"
-MT5_LOG_DIR = TERMINAL_ROOT / "logs"
+TESTER_PRESET_DIR = ACTIVE_TOOLCHAIN.tester_preset_dir
+COMMON_INI = ACTIVE_TOOLCHAIN.common_ini
+TERMINAL_INI = ACTIVE_TOOLCHAIN.terminal_ini
+MT5_LOG_DIR = ACTIVE_TOOLCHAIN.mt5_log_dir
 
 ISSUE = {
     1: "invalid predictions",
@@ -89,8 +98,60 @@ class AuditRunError(RuntimeError):
     pass
 
 
+def active_toolchain() -> FXAIToolchainConfig:
+    return ACTIVE_TOOLCHAIN
+
+
+def toolchain_profile() -> str:
+    return TOOLCHAIN_PROFILE
+
+
+def supported_toolchain_profiles() -> tuple[str, ...]:
+    return SUPPORTED_TOOLCHAIN_PROFILES
+
+
+def toolchain_summary() -> dict[str, object]:
+    return ACTIVE_TOOLCHAIN.describe()
+
+
 def to_wine_path(path: Path) -> str:
-    return "Z:\\" + str(path).replace("/", "\\").lstrip("\\")
+    return ACTIVE_TOOLCHAIN.path_argument(path)
+
+
+def build_metaeditor_compile_command(source_path: Path, log_path: Path) -> list[str]:
+    return ACTIVE_TOOLCHAIN.metaeditor_compile_command(source_path, log_path)
+
+
+def build_terminal_launch_command(*, config_path: Path | None = None, portable: bool = False) -> list[str]:
+    return ACTIVE_TOOLCHAIN.terminal_launch_command(config_path=config_path, portable=portable)
+
+
+def terminal_process_name() -> str:
+    return TERMINAL.name or "terminal64.exe"
+
+
+def terminal_running() -> bool:
+    token = terminal_process_name()
+    if ACTIVE_TOOLCHAIN.profile == "windows_native":
+        try:
+            proc = subprocess.run(
+                ["tasklist", "/FI", f"IMAGENAME eq {token}"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                check=False,
+            )
+            return proc.returncode == 0 and token.lower() in proc.stdout.lower()
+        except Exception:
+            return False
+    proc = subprocess.run(
+        ["pgrep", "-f", token],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        check=False,
+    )
+    return proc.returncode == 0 and bool(proc.stdout.strip())
 
 
 def read_utf16_or_text(path: Path) -> str:
@@ -172,7 +233,6 @@ def mean_std_ci(values: list[float]) -> tuple[float, float, float]:
     return mean, std, ci
 
 
-
 def resolve_execution_profile(name: str | None) -> dict:
     profile = (name or "default").strip().lower()
     return dict(EXECUTION_PROFILES.get(profile, EXECUTION_PROFILES["default"]))
@@ -211,6 +271,8 @@ def resolve_symbol_list(args) -> list[str]:
 
 def render_summary_report(summary: dict, execution_profile: str = "default", manifest_path: Path | None = None) -> str:
     if summary.get("_aggregate", {}).get("type") == "multi_symbol":
+        from .reporting import render_multisymbol_report
+
         return render_multisymbol_report(summary, execution_profile, manifest_path)
 
     out = ["# FXAI Audit Summary", ""]
@@ -276,4 +338,3 @@ def get_oracle(plugin_name: str, family: int, oracles: dict) -> dict:
     fam = oracles.get("family_defaults", {}).get(str(family), {})
     plug = oracles.get("plugins", {}).get(plugin_name, {})
     return deep_merge(deep_merge(base, fam), plug)
-

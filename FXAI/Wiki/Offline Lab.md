@@ -32,7 +32,8 @@ Offline Lab is the research, promotion, and artifact-recovery engine behind FXAI
 ## Core Commands
 
 ```bash
-cd /Users/andreborchert/FXAI-main2/FXAI
+cd /path/to/FXAI
+python3 Tools/fxai_offline_lab.py doctor
 python3 Tools/fxai_offline_lab.py bootstrap --seed-demo
 python3 Tools/fxai_offline_lab.py verify-deterministic
 python3 Tools/fxai_offline_lab.py recover-artifacts

@@ -26,21 +26,61 @@ from .common import (
     ensure_dir,
     turso_environment_status,
 )
-from testlab.shared import COMMON_FILES, METAEDITOR, MT5_LOG_DIR, ROOT, TERMINAL, TERMINAL_ROOT, TESTER_PRESET_DIR, WINE
+from testlab.shared import (
+    COMMON_FILES,
+    METAEDITOR,
+    MT5_LOG_DIR,
+    ROOT,
+    TERMINAL,
+    TERMINAL_ROOT,
+    TESTER_PRESET_DIR,
+    TOOLCHAIN_PROFILE,
+    WINE,
+    supported_toolchain_profiles,
+    toolchain_summary,
+)
 
 
-def _path_state(path: Path) -> dict[str, object]:
+def _path_state(path: Path, *, required: bool) -> dict[str, object]:
     parent = path if path.is_dir() else path.parent
-    return {
+    exists = path.exists()
+    parent_exists = parent.exists()
+    state = {
         "path": str(path),
-        "exists": path.exists(),
+        "exists": exists,
         "is_dir": path.is_dir(),
-        "parent_exists": parent.exists(),
+        "parent_exists": parent_exists,
         "writable_parent": os.access(parent if parent.exists() else parent.parent, os.W_OK),
+        "required": required,
     }
+    state["ok"] = bool(parent_exists and (exists or not required))
+    return state
 
 
-def validate_environment() -> dict[str, object]:
+def _required_path_names(profile: str) -> set[str]:
+    required = {
+        "root",
+        "common_files",
+        "offline_dir",
+        "profiles_dir",
+        "research_dir",
+        "distill_dir",
+        "runs_dir",
+        "common_promotion_dir",
+        "common_export_dir",
+        "tester_preset_dir",
+    }
+    if profile in {"macos_wine", "windows_native"}:
+        required.update({"terminal_root", "metaeditor", "terminal", "mt5_log_dir"})
+    if profile == "macos_wine":
+        required.add("wine")
+    return required
+
+
+def doctor_report() -> dict[str, object]:
+    profile = TOOLCHAIN_PROFILE
+    required_paths = _required_path_names(profile)
+
     python_ok = sys.version_info >= (3, 11)
     pytest_ok = bool(importlib.util.find_spec("pytest"))
     libsql_ok = bool(importlib.util.find_spec("libsql"))
@@ -68,30 +108,52 @@ def validate_environment() -> dict[str, object]:
             "expected_macro_schema_min": OFFLINE_MACRO_SCHEMA_MIN,
         },
         "paths": {
-            "root": _path_state(ROOT),
-            "terminal_root": _path_state(TERMINAL_ROOT),
-            "metaeditor": _path_state(METAEDITOR),
-            "terminal": _path_state(TERMINAL),
-            "wine": _path_state(WINE),
-            "common_files": _path_state(COMMON_FILES),
-            "offline_dir": _path_state(OFFLINE_DIR),
-            "profiles_dir": _path_state(PROFILES_DIR),
-            "research_dir": _path_state(RESEARCH_DIR),
-            "distill_dir": _path_state(DISTILL_DIR),
-            "runs_dir": _path_state(RUNS_DIR),
-            "common_promotion_dir": _path_state(COMMON_PROMOTION_DIR),
-            "common_export_dir": _path_state(COMMON_EXPORT_DIR),
-            "tester_preset_dir": _path_state(TESTER_PRESET_DIR),
-            "mt5_log_dir": _path_state(MT5_LOG_DIR),
+            "root": _path_state(ROOT, required="root" in required_paths),
+            "terminal_root": _path_state(TERMINAL_ROOT, required="terminal_root" in required_paths),
+            "metaeditor": _path_state(METAEDITOR, required="metaeditor" in required_paths),
+            "terminal": _path_state(TERMINAL, required="terminal" in required_paths),
+            "wine": _path_state(WINE, required="wine" in required_paths),
+            "common_files": _path_state(COMMON_FILES, required="common_files" in required_paths),
+            "offline_dir": _path_state(OFFLINE_DIR, required="offline_dir" in required_paths),
+            "profiles_dir": _path_state(PROFILES_DIR, required="profiles_dir" in required_paths),
+            "research_dir": _path_state(RESEARCH_DIR, required="research_dir" in required_paths),
+            "distill_dir": _path_state(DISTILL_DIR, required="distill_dir" in required_paths),
+            "runs_dir": _path_state(RUNS_DIR, required="runs_dir" in required_paths),
+            "common_promotion_dir": _path_state(COMMON_PROMOTION_DIR, required="common_promotion_dir" in required_paths),
+            "common_export_dir": _path_state(COMMON_EXPORT_DIR, required="common_export_dir" in required_paths),
+            "tester_preset_dir": _path_state(TESTER_PRESET_DIR, required="tester_preset_dir" in required_paths),
+            "mt5_log_dir": _path_state(MT5_LOG_DIR, required="mt5_log_dir" in required_paths),
+        },
+        "toolchain": {
+            **toolchain_summary(),
+            "supported_profiles": list(supported_toolchain_profiles()),
         },
     }
-    ok = python_ok and pytest_ok and libsql_ok and not partial_sync_config
-    for item in report["paths"].values():
-        ok = ok and bool(item["parent_exists"])
+    required_paths_ok = all(bool(item["ok"]) for item in report["paths"].values() if item.get("required"))
+    mt5_compile_ready = (
+        bool(report["paths"]["metaeditor"]["exists"]) and
+        (profile != "macos_wine" or bool(report["paths"]["wine"]["exists"]))
+    )
+    mt5_runtime_ready = (
+        bool(report["paths"]["terminal"]["exists"]) and
+        (profile != "macos_wine" or bool(report["paths"]["wine"]["exists"]))
+    )
+    ok = python_ok and pytest_ok and libsql_ok and not partial_sync_config and required_paths_ok
     if report["database"].get("platform_api_enabled"):
         ok = ok and bool(report["database"].get("organization_slug")) and bool(report["database"].get("api_token_configured"))
+    report["checks"] = {
+        "required_paths_ok": required_paths_ok,
+        "mt5_compile_ready": mt5_compile_ready,
+        "mt5_runtime_ready": mt5_runtime_ready,
+        "profile": profile,
+        "profile_requires_wine": profile == "macos_wine",
+    }
     report["ok"] = bool(ok)
     return report
+
+
+def validate_environment() -> dict[str, object]:
+    return doctor_report()
 
 
 def bootstrap_environment(db_path: Path = DEFAULT_DB,

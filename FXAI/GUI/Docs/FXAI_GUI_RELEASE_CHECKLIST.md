@@ -1,6 +1,6 @@
 # FXAI GUI Release Checklist
 
-Use this checklist when packaging the macOS 26 FXAI GUI for operator use.
+Use this checklist when packaging the FXAI GUI for operator use.
 
 ## Verification
 
@@ -18,17 +18,17 @@ Use this checklist when packaging the macOS 26 FXAI GUI for operator use.
 ## Packaging
 
 ```bash
-cd /Users/andreborchert/FXAI-main2/FXAI/GUI
+cd /path/to/FXAI/GUI
 ./Tools/package_gui_release.sh
 ```
 
 Outputs:
 - `FXAI/GUI/Artifacts/Release/FXAIGUI.app`
-- `FXAI/GUI/Artifacts/Release/FXAIGUI-macos26.zip`
+- `FXAI/GUI/Artifacts/Release/FXAIGUI-macos.zip` by default, or the archive name configured in `../fxai.toml`
 
 ## Operator Checks
 
-- app launches cleanly on macOS 26
+- app launches cleanly on the configured minimum macOS target
 - project-root switching works
 - command previews still match the terminal workflows
 - incident center opens generated recovery commands

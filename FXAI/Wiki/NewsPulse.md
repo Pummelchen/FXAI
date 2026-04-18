@@ -31,7 +31,8 @@ NewsPulse is FXAI's shared news-risk layer. It turns macro-event timing and sour
 ## Core Commands
 
 ```bash
-cd /Users/andreborchert/FXAI-main2/FXAI
+cd /path/to/FXAI
+python3 Tools/fxai_offline_lab.py doctor
 python3 Tools/fxai_offline_lab.py newspulse-health
 python3 Tools/fxai_offline_lab.py newspulse-once
 python3 Tools/fxai_offline_lab.py newspulse-install-service

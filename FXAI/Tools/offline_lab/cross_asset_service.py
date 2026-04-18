@@ -24,7 +24,7 @@ from .cross_asset_contracts import (
     sanitize_utc_timestamp,
     utc_now,
 )
-from testlab.shared import METAEDITOR, TERMINAL_ROOT, WINE, read_utf16_or_text, to_wine_path
+from testlab.shared import TERMINAL_ROOT, build_metaeditor_compile_command, read_utf16_or_text
 
 
 def cross_asset_probe_health_snapshot() -> dict[str, Any]:
@@ -93,12 +93,7 @@ def compile_cross_asset_service(timeout_sec: int = 600) -> dict[str, object]:
         stage_source = stage_root / TERMINAL_CROSS_ASSET_SERVICE_SOURCE.name
         stage_log = stage_root / "compile_cross_asset_service.log"
         shutil.copy2(TERMINAL_CROSS_ASSET_SERVICE_SOURCE, stage_source)
-        cmd = [
-            str(WINE),
-            str(METAEDITOR),
-            f"/compile:{to_wine_path(stage_source)}",
-            f"/log:{to_wine_path(stage_log)}",
-        ]
+        cmd = build_metaeditor_compile_command(stage_source, stage_log)
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         deadline = time.time() + float(timeout_sec)
         built_ex5 = stage_source.with_suffix(".ex5")

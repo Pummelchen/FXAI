@@ -29,13 +29,15 @@ This page is the practical first-run guide for new FXAI users.
 Example:
 
 ```bash
-cd /Users/andreborchert/FXAI-main2/FXAI
+cd /path/to/FXAI
+python3 Tools/fxai_testlab.py doctor
 python3 Tools/fxai_testlab.py verify-all
 ```
 
 ## First Commands To Know
 
 ```bash
+python3 Tools/fxai_testlab.py doctor
 python3 Tools/fxai_testlab.py compile-main
 python3 Tools/fxai_testlab.py verify-all
 python3 Tools/fxai_offline_lab.py newspulse-health
@@ -46,10 +48,27 @@ python3 Tools/fxai_offline_lab.py live-state --symbol EURUSD
 ```
 
 What they do:
+- `doctor`: verifies the active toolchain profile, path overrides from `fxai.toml` or `.env`, and whether MT5 compile or terminal launch prerequisites are actually present.
 - `compile-main`: checks that the EA still compiles cleanly.
 - `verify-all`: runs the broader release gate.
 - `*-health`: tells you whether the shared runtime layers are fresh enough to trust.
 - `live-state --symbol ...`: shows what the live decision stack currently believes for one pair.
+
+## Toolchain Profiles
+
+FXAI no longer assumes one operator machine layout. The Python toolchain auto-detects one of these profiles and can be overridden in `fxai.toml` or `.env`:
+
+- `macos_wine`: MT5 under Wine on macOS.
+- `windows_native`: MT5 and MetaEditor running directly on Windows.
+- `headless_ci`: no local MT5 install required, with runtime/common-file outputs rooted under `FILE_COMMON`.
+
+Useful overrides include:
+- `FXAI_MT5_ROOT`
+- `FXAI_METAEDITOR`
+- `FXAI_TERMINAL`
+- `FXAI_COMMON_FILES`
+- `FXAI_RUNTIME_DIR`
+- `FXAI_DEFAULT_DB`
 
 ## Choose The Right First Workflow
 

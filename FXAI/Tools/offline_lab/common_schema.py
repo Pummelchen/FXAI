@@ -6,7 +6,7 @@ from pathlib import Path
 import fxai_testlab as testlab
 
 OFFLINE_DIR = Path(__file__).resolve().parent.parent / "OfflineLab"
-DEFAULT_DB = OFFLINE_DIR / "fxai_offline_lab.turso.db"
+DEFAULT_DB = testlab.DEFAULT_DB_PATH
 RUNS_DIR = OFFLINE_DIR / "Runs"
 PROFILES_DIR = OFFLINE_DIR / "Profiles"
 RESEARCH_DIR = OFFLINE_DIR / "ResearchOS"
