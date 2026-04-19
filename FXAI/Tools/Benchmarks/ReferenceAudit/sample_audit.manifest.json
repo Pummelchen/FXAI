@@ -1,0 +1,64 @@
+{
+  "artifact_type": "fxai_reference_audit_bundle",
+  "benchmark_context": {
+    "broker_profile": "default",
+    "execution_profile": "default",
+    "horizon_minutes": 5,
+    "runtime_mode": "research",
+    "strategy_profile_id": "reference/legacy-audit",
+    "strategy_profile_version": 0,
+    "symbol": "EURUSD",
+    "symbol_pack": "single:EURUSD"
+  },
+  "benchmark_row": {
+    "adversarial_score": null,
+    "artifacts": {
+      "manifest_json": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit.manifest.json",
+      "report_tsv": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit.tsv",
+      "summary_json": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit.summary.json",
+      "summary_report_md": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit_summary.md"
+    },
+    "audit_score": 73.5,
+    "benchmark_source": "reference_audit",
+    "broker_profile": "default",
+    "execution_profile": "default",
+    "grade": "D",
+    "horizon_minutes": 5,
+    "issue_count": 4,
+    "plugin_name": "rule_m1sync",
+    "profile_name": "reference",
+    "promotion_tier": "reference-only",
+    "ranking_score": null,
+    "runtime_mode": "research",
+    "scenario_count": 2,
+    "strategy_profile_id": "reference/legacy-audit",
+    "strategy_profile_label": "reference/legacy-audit@v0",
+    "strategy_profile_version": 0,
+    "support_count": 0,
+    "symbol": "EURUSD",
+    "symbol_pack": "single:EURUSD",
+    "walkforward_score": null
+  },
+  "generated_at_utc": "2026-04-19T02:21:00Z",
+  "hashes": {
+    "report_tsv": "092feed67482700831daa4fd8eb2998d36748969cdee36ed91de801ccd584328",
+    "summary_json": "abfdef508bb0d9cfbf35e0348237c165ba2885028d1a2efc8fb8ac5b9a0bbc69",
+    "summary_report_md": "6cb6c6cbe98fcdcc1d0a527b60aafa0a3ddfcd15974ba5c80111b2d48ee2fd52"
+  },
+  "published_artifacts": {
+    "manifest_json": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit.manifest.json",
+    "report_tsv": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit.tsv",
+    "summary_json": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit.summary.json",
+    "summary_report_md": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit_summary.md"
+  },
+  "reproducibility": {
+    "repo_dirty": false,
+    "repo_head": "",
+    "repo_root": "/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI"
+  },
+  "schema_version": 1,
+  "source_artifacts": {
+    "report_tsv": "<FXAI_ROOT>/Tools/Baselines/sample_baseline.tsv",
+    "summary_json": "<FXAI_ROOT>/Tools/Baselines/sample_baseline.summary.json"
+  }
+}

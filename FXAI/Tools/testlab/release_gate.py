@@ -7,18 +7,71 @@ from .baseline import compare_summaries, compare_summary_data, load_baseline_sum
 from .reporting import load_current_summary, load_tsv_rows, manifest_path, summary_has_market_replay, fnum, inum
 from .shared import COMMON_FILES, DEFAULT_REPORT, load_json, load_oracles, runtime_artifact_safe_symbol, runtime_performance_manifest_path
 
+DEFAULT_RELEASE_GATE_MIN_SCORE = 70.0
+DEFAULT_RELEASE_GATE_MIN_STABILITY = 0.55
+
+ARTIFACT_SIZE_BUDGETS: dict[str, int] = {
+    "fxai_live_deploy": 24 * 1024,
+    "fxai_student_router": 24 * 1024,
+    "fxai_attribution": 32 * 1024,
+    "fxai_world_plan": 32 * 1024,
+    "fxai_supervisor_service": 24 * 1024,
+    "fxai_supervisor_command": 16 * 1024,
+    "fxai_perf": 128 * 1024,
+}
+
+PERFORMANCE_THRESHOLDS: dict[str, float] = {
+    "predict_mean_ms_max": 1.60,
+    "update_mean_ms_max": 1.25,
+    "working_set_kb_max": 4096.0,
+    "runtime_total_mean_ms_max": 12.0,
+}
+
+WALKFORWARD_THRESHOLDS: dict[str, float] = {
+    "pbo_max": 0.45,
+    "dsr_min": 0.35,
+    "pass_rate_min": 0.55,
+}
+
+ADVERSARIAL_THRESHOLDS: dict[str, float] = {
+    "score_min": 68.0,
+    "calibration_error_max": 0.26,
+    "path_quality_error_max": 0.50,
+}
+
+MACRO_DATASET_THRESHOLDS: dict[str, float] = {
+    "schema_version_min": 2.0,
+    "avg_source_trust_min": 0.60,
+    "coverage_min": 0.60,
+    "event_rate_min": 0.06,
+    "provenance_trust_min": 0.55,
+    "currency_relevance_min": 0.45,
+    "distinct_revision_chains_min": 1.0,
+}
+
+
+def release_gate_policy_snapshot(*,
+                                 min_score: float = DEFAULT_RELEASE_GATE_MIN_SCORE,
+                                 min_stability: float = DEFAULT_RELEASE_GATE_MIN_STABILITY,
+                                 fail_on_issues: bool = False,
+                                 require_market_replay: bool = False) -> dict[str, object]:
+    return {
+        "defaults": {
+            "min_score": float(min_score),
+            "min_stability": float(min_stability),
+            "fail_on_issues": bool(fail_on_issues),
+            "require_market_replay": bool(require_market_replay),
+        },
+        "artifact_size_budgets_bytes": dict(ARTIFACT_SIZE_BUDGETS),
+        "performance_thresholds": dict(PERFORMANCE_THRESHOLDS),
+        "walkforward_thresholds": dict(WALKFORWARD_THRESHOLDS),
+        "adversarial_thresholds": dict(ADVERSARIAL_THRESHOLDS),
+        "macro_dataset_thresholds": dict(MACRO_DATASET_THRESHOLDS),
+    }
+
 
 def _build_symbol_artifact_report(symbol: str) -> dict[str, object]:
     token = runtime_artifact_safe_symbol(symbol)
-    budgets = {
-        "fxai_live_deploy": 24 * 1024,
-        "fxai_student_router": 24 * 1024,
-        "fxai_attribution": 32 * 1024,
-        "fxai_world_plan": 32 * 1024,
-        "fxai_supervisor_service": 24 * 1024,
-        "fxai_supervisor_command": 16 * 1024,
-        "fxai_perf": 128 * 1024,
-    }
     files = {
         "fxai_live_deploy": COMMON_FILES / f"FXAI/Offline/Promotions/fxai_live_deploy_{token}.tsv",
         "fxai_student_router": COMMON_FILES / f"FXAI/Offline/Promotions/fxai_student_router_{token}.tsv",
@@ -31,7 +84,7 @@ def _build_symbol_artifact_report(symbol: str) -> dict[str, object]:
     failures = []
     for key, path in files.items():
         size_bytes = int(path.stat().st_size) if path.exists() and path.is_file() else 0
-        budget = int(budgets[key])
+        budget = int(ARTIFACT_SIZE_BUDGETS[key])
         if size_bytes > budget:
             failures.append(f"{key} {size_bytes} > {budget}")
     return {"budget_failures": failures}
@@ -95,20 +148,20 @@ def cmd_release_gate(args):
         row = rows[0]
         if inum(row, "record_count") > 0:
             macro_dataset_present = True
-        if inum(row, "record_count") > 0 and inum(row, "schema_version") < 2:
+        if inum(row, "record_count") > 0 and inum(row, "schema_version") < int(MACRO_DATASET_THRESHOLDS["schema_version_min"]):
             gate_failures.append(
-                f"{item.get('symbol', 'unknown')}: macro dataset schema {inum(row, 'schema_version')} is below required version 2"
+                f"{item.get('symbol', 'unknown')}: macro dataset schema {inum(row, 'schema_version')} is below required version {int(MACRO_DATASET_THRESHOLDS['schema_version_min'])}"
             )
         if inum(row, "record_count") > 0 and inum(row, "leakage_safe") <= 0:
             gate_failures.append(
                 f"{item.get('symbol', 'unknown')}: macro dataset failed leakage guard "
                 f"(score={fnum(row, 'leakage_guard_score'):.2f}, parse_errors={inum(row, 'parse_errors')})"
             )
-        if inum(row, "record_count") > 0 and fnum(row, "avg_source_trust") < 0.60:
+        if inum(row, "record_count") > 0 and fnum(row, "avg_source_trust") < float(MACRO_DATASET_THRESHOLDS["avg_source_trust_min"]):
             gate_failures.append(
-                f"{item.get('symbol', 'unknown')}: macro dataset source trust {fnum(row, 'avg_source_trust'):.2f} below minimum 0.60"
+                f"{item.get('symbol', 'unknown')}: macro dataset source trust {fnum(row, 'avg_source_trust'):.2f} below minimum {float(MACRO_DATASET_THRESHOLDS['avg_source_trust_min']):.2f}"
             )
-        if inum(row, "record_count") > 0 and inum(row, "distinct_revision_chains") <= 0:
+        if inum(row, "record_count") > 0 and inum(row, "distinct_revision_chains") < int(MACRO_DATASET_THRESHOLDS["distinct_revision_chains_min"]):
             gate_failures.append(
                 f"{item.get('symbol', 'unknown')}: macro dataset has no revision-chain coverage"
             )
@@ -127,21 +180,21 @@ def cmd_release_gate(args):
                 predict_ms = fnum(row_perf, "predict_mean_ms")
                 update_ms = fnum(row_perf, "update_mean_ms")
                 working_set = fnum(row_perf, "working_set_kb")
-                if predict_ms > 1.60:
+                if predict_ms > float(PERFORMANCE_THRESHOLDS["predict_mean_ms_max"]):
                     gate_failures.append(
-                        f"{row_perf.get('ai_name', 'unknown')}: predict mean {predict_ms:.3f}ms above maximum 1.600ms"
+                        f"{row_perf.get('ai_name', 'unknown')}: predict mean {predict_ms:.3f}ms above maximum {float(PERFORMANCE_THRESHOLDS['predict_mean_ms_max']):.3f}ms"
                     )
-                if update_ms > 1.25:
+                if update_ms > float(PERFORMANCE_THRESHOLDS["update_mean_ms_max"]):
                     gate_failures.append(
-                        f"{row_perf.get('ai_name', 'unknown')}: update mean {update_ms:.3f}ms above maximum 1.250ms"
+                        f"{row_perf.get('ai_name', 'unknown')}: update mean {update_ms:.3f}ms above maximum {float(PERFORMANCE_THRESHOLDS['update_mean_ms_max']):.3f}ms"
                     )
-                if working_set > 4096.0:
+                if working_set > float(PERFORMANCE_THRESHOLDS["working_set_kb_max"]):
                     gate_failures.append(
-                        f"{row_perf.get('ai_name', 'unknown')}: working set {working_set:.1f}KB above maximum 4096.0KB"
+                        f"{row_perf.get('ai_name', 'unknown')}: working set {working_set:.1f}KB above maximum {float(PERFORMANCE_THRESHOLDS['working_set_kb_max']):.1f}KB"
                     )
-        if runtime_total > 12.0:
+        if runtime_total > float(PERFORMANCE_THRESHOLDS["runtime_total_mean_ms_max"]):
             gate_failures.append(
-                f"{item.get('symbol', 'unknown')}: runtime total mean {runtime_total:.3f}ms above maximum 12.000ms"
+                f"{item.get('symbol', 'unknown')}: runtime total mean {runtime_total:.3f}ms above maximum {float(PERFORMANCE_THRESHOLDS['runtime_total_mean_ms_max']):.3f}ms"
             )
         artifact_report = _build_symbol_artifact_report(str(item.get("symbol", "")))
         for failure in artifact_report.get("budget_failures", []):
@@ -155,12 +208,12 @@ def cmd_release_gate(args):
             gate_failures.append(f"{name}: cross-symbol stability {float(info.get('stability', 0.0)):.2f} below minimum {args.min_stability:.2f}")
         wf = info.get("scenarios", {}).get("market_walkforward", {})
         if wf:
-            if float(wf.get("wf_pbo", 0.0)) > 0.45:
-                gate_failures.append(f"{name}: walkforward PBO {float(wf.get('wf_pbo', 0.0)):.2f} above maximum 0.45")
-            if float(wf.get("wf_dsr", 1.0)) < 0.35:
-                gate_failures.append(f"{name}: walkforward DSR(proxy) {float(wf.get('wf_dsr', 0.0)):.2f} below minimum 0.35")
-            if float(wf.get("wf_pass_rate", 1.0)) < 0.55:
-                gate_failures.append(f"{name}: walkforward pass rate {float(wf.get('wf_pass_rate', 0.0)):.2f} below minimum 0.55")
+            if float(wf.get("wf_pbo", 0.0)) > float(WALKFORWARD_THRESHOLDS["pbo_max"]):
+                gate_failures.append(f"{name}: walkforward PBO {float(wf.get('wf_pbo', 0.0)):.2f} above maximum {float(WALKFORWARD_THRESHOLDS['pbo_max']):.2f}")
+            if float(wf.get("wf_dsr", 1.0)) < float(WALKFORWARD_THRESHOLDS["dsr_min"]):
+                gate_failures.append(f"{name}: walkforward DSR(proxy) {float(wf.get('wf_dsr', 0.0)):.2f} below minimum {float(WALKFORWARD_THRESHOLDS['dsr_min']):.2f}")
+            if float(wf.get("wf_pass_rate", 1.0)) < float(WALKFORWARD_THRESHOLDS["pass_rate_min"]):
+                gate_failures.append(f"{name}: walkforward pass rate {float(wf.get('wf_pass_rate', 0.0)):.2f} below minimum {float(WALKFORWARD_THRESHOLDS['pass_rate_min']):.2f}")
         if args.fail_on_issues:
             issues = list(info.get("issues", []))
             findings = list(info.get("findings", []))
@@ -170,12 +223,12 @@ def cmd_release_gate(args):
         if not adversarial:
             gate_failures.append(f"{name}: missing market_adversarial certification")
         else:
-            if float(adversarial.get("score", 0.0)) < 68.0:
-                gate_failures.append(f"{name}: adversarial score {float(adversarial.get('score', 0.0)):.1f} below minimum 68.0")
-            if float(adversarial.get("calibration_error", 0.0)) > 0.26:
-                gate_failures.append(f"{name}: adversarial calibration error {float(adversarial.get('calibration_error', 0.0)):.3f} above maximum 0.260")
-            if float(adversarial.get("path_quality_error", 0.0)) > 0.50:
-                gate_failures.append(f"{name}: adversarial path-quality error {float(adversarial.get('path_quality_error', 0.0)):.3f} above maximum 0.500")
+            if float(adversarial.get("score", 0.0)) < float(ADVERSARIAL_THRESHOLDS["score_min"]):
+                gate_failures.append(f"{name}: adversarial score {float(adversarial.get('score', 0.0)):.1f} below minimum {float(ADVERSARIAL_THRESHOLDS['score_min']):.1f}")
+            if float(adversarial.get("calibration_error", 0.0)) > float(ADVERSARIAL_THRESHOLDS["calibration_error_max"]):
+                gate_failures.append(f"{name}: adversarial calibration error {float(adversarial.get('calibration_error', 0.0)):.3f} above maximum {float(ADVERSARIAL_THRESHOLDS['calibration_error_max']):.3f}")
+            if float(adversarial.get("path_quality_error", 0.0)) > float(ADVERSARIAL_THRESHOLDS["path_quality_error_max"]):
+                gate_failures.append(f"{name}: adversarial path-quality error {float(adversarial.get('path_quality_error', 0.0)):.3f} above maximum {float(ADVERSARIAL_THRESHOLDS['path_quality_error_max']):.3f}")
             if "adversarial audit weak" in set(info.get("issues", [])):
                 gate_failures.append(f"{name}: adversarial certification issues present")
         if macro_dataset_present:
@@ -183,21 +236,21 @@ def cmd_release_gate(args):
             if not macro:
                 gate_failures.append(f"{name}: missing market_macro_event certification while macro dataset is active")
             else:
-                if float(macro.get("macro_data_coverage", 0.0)) < 0.60:
+                if float(macro.get("macro_data_coverage", 0.0)) < float(MACRO_DATASET_THRESHOLDS["coverage_min"]):
                     gate_failures.append(
-                        f"{name}: macro-event coverage {float(macro.get('macro_data_coverage', 0.0)):.2f} below minimum 0.60"
+                        f"{name}: macro-event coverage {float(macro.get('macro_data_coverage', 0.0)):.2f} below minimum {float(MACRO_DATASET_THRESHOLDS['coverage_min']):.2f}"
                     )
-                if float(macro.get("macro_event_rate", 0.0)) < 0.06:
+                if float(macro.get("macro_event_rate", 0.0)) < float(MACRO_DATASET_THRESHOLDS["event_rate_min"]):
                     gate_failures.append(
-                        f"{name}: macro-event activity {float(macro.get('macro_event_rate', 0.0)):.2f} below minimum 0.06"
+                        f"{name}: macro-event activity {float(macro.get('macro_event_rate', 0.0)):.2f} below minimum {float(MACRO_DATASET_THRESHOLDS['event_rate_min']):.2f}"
                     )
-                if float(macro.get("macro_provenance_trust_mean", 0.0)) < 0.55:
+                if float(macro.get("macro_provenance_trust_mean", 0.0)) < float(MACRO_DATASET_THRESHOLDS["provenance_trust_min"]):
                     gate_failures.append(
-                        f"{name}: macro provenance trust {float(macro.get('macro_provenance_trust_mean', 0.0)):.2f} below minimum 0.55"
+                        f"{name}: macro provenance trust {float(macro.get('macro_provenance_trust_mean', 0.0)):.2f} below minimum {float(MACRO_DATASET_THRESHOLDS['provenance_trust_min']):.2f}"
                     )
-                if float(macro.get("macro_currency_relevance_mean", 0.0)) < 0.45:
+                if float(macro.get("macro_currency_relevance_mean", 0.0)) < float(MACRO_DATASET_THRESHOLDS["currency_relevance_min"]):
                     gate_failures.append(
-                        f"{name}: macro currency relevance {float(macro.get('macro_currency_relevance_mean', 0.0)):.2f} below minimum 0.45"
+                        f"{name}: macro currency relevance {float(macro.get('macro_currency_relevance_mean', 0.0)):.2f} below minimum {float(MACRO_DATASET_THRESHOLDS['currency_relevance_min']):.2f}"
                     )
                 issues = set(info.get("issues", []))
                 if {"macro-event blind", "macro-event overreaction", "macro-event data gap"} & issues:

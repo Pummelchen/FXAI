@@ -40,6 +40,7 @@ python3 Tools/fxai_testlab.py verify-all
 python3 Tools/fxai_testlab.py doctor
 python3 Tools/fxai_testlab.py compile-main
 python3 Tools/fxai_testlab.py verify-all
+python3 Tools/fxai_testlab.py publish-benchmarks --profile bestparams
 python3 Tools/fxai_offline_lab.py newspulse-health
 python3 Tools/fxai_offline_lab.py rates-engine-health
 python3 Tools/fxai_offline_lab.py cross-asset-health
@@ -51,6 +52,7 @@ What they do:
 - `doctor`: verifies the active toolchain profile, path overrides from `fxai.toml` or `.env`, and whether MT5 compile or terminal launch prerequisites are actually present.
 - `compile-main`: checks that the EA still compiles cleanly.
 - `verify-all`: runs the broader release gate.
+- `publish-benchmarks`: writes the public benchmark matrix, reference audit bundle, promotion criteria, and release-note delta artifacts.
 - `*-health`: tells you whether the shared runtime layers are fresh enough to trust.
 - `live-state --symbol ...`: shows what the live decision stack currently believes for one pair.
 
@@ -144,6 +146,9 @@ What to do:
 ## Next Pages
 
 - [Quick Start By Role](Quick%20Start%20By%20Role.md)
+- [Benchmarks](Benchmarks.md)
+- [Promotion Criteria](Promotion%20Criteria.md)
+- [Release Notes](Release%20Notes.md)
 - [Audit Lab](Audit%20Lab.md)
 - [Offline Lab](Offline%20Lab.md)
 - [NewsPulse](NewsPulse.md)

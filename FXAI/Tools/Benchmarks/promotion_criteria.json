@@ -1,0 +1,42 @@
+{
+  "adversarial_thresholds": {
+    "calibration_error_max": 0.26,
+    "path_quality_error_max": 0.5,
+    "score_min": 68.0
+  },
+  "artifact_size_budgets_bytes": {
+    "fxai_attribution": 32768,
+    "fxai_live_deploy": 24576,
+    "fxai_perf": 131072,
+    "fxai_student_router": 24576,
+    "fxai_supervisor_command": 16384,
+    "fxai_supervisor_service": 24576,
+    "fxai_world_plan": 32768
+  },
+  "defaults": {
+    "fail_on_issues": false,
+    "min_score": 70.0,
+    "min_stability": 0.55,
+    "require_market_replay": false
+  },
+  "macro_dataset_thresholds": {
+    "avg_source_trust_min": 0.6,
+    "coverage_min": 0.6,
+    "currency_relevance_min": 0.45,
+    "distinct_revision_chains_min": 1.0,
+    "event_rate_min": 0.06,
+    "provenance_trust_min": 0.55,
+    "schema_version_min": 2.0
+  },
+  "performance_thresholds": {
+    "predict_mean_ms_max": 1.6,
+    "runtime_total_mean_ms_max": 12.0,
+    "update_mean_ms_max": 1.25,
+    "working_set_kb_max": 4096.0
+  },
+  "walkforward_thresholds": {
+    "dsr_min": 0.35,
+    "pass_rate_min": 0.55,
+    "pbo_max": 0.45
+  }
+}

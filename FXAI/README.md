@@ -10,6 +10,9 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - [`Home`](Wiki/Home.md)
 - [`Quick Start By Role`](Wiki/Quick%20Start%20By%20Role.md)
 - [`Getting Started`](Wiki/Getting%20Started.md)
+- [`Benchmarks`](Wiki/Benchmarks.md)
+- [`Promotion Criteria`](Wiki/Promotion%20Criteria.md)
+- [`Release Notes`](Wiki/Release%20Notes.md)
 - then the subsystem page you actually need first, such as [`Audit Lab`](Wiki/Audit%20Lab.md), [`Offline Lab`](Wiki/Offline%20Lab.md), [`NewsPulse`](Wiki/NewsPulse.md), [`Runtime Control Plane`](Wiki/Runtime%20Control%20Plane.md), or [`GUI`](Wiki/GUI.md)
 
 ## Main Entry Points
@@ -56,6 +59,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Pair-Network / Factor Graph + Portfolio Conflict Resolver docs, config, graph reports, and runtime decision history for portfolio-level exposure coordination and conflict resolution.
 - `Tools/OfflineLab/Profiles/`
   Versioned strategy-profile catalog plus promoted MT5 presets and sibling strategy manifests for audit, champion, top, and distillation workflows.
+- `Tools/Benchmarks/`
+  Public benchmark matrix, reference audit bundle, exported promotion criteria, and release-note deltas generated from committed audit and promotion artifacts.
 - `GUI/`
   Optional SwiftUI operator app for role-based dashboards, plugin-zoo browsing, report exploration, run builders for Audit/Offline/backtest workflows, runtime inspection, promotion review, Research OS control, advanced Metal-backed visual analysis, saved workspace views, onboarding, incident recovery, detached startup, soft reconnect, terminal-first command guidance, and the shared FXAI operator theme system.
 - `Wiki/`
@@ -176,6 +181,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - Canonical research data is `M1 OHLC + spread`.
 - The preferred platform verification path is `python3 FXAI/Tools/fxai_testlab.py verify-all`.
 - The preferred environment self-check path is `python3 FXAI/Tools/fxai_testlab.py doctor` or `python3 FXAI/Tools/fxai_offline_lab.py doctor`.
+- The preferred public benchmark publishing path is `python3 FXAI/Tools/fxai_testlab.py publish-benchmarks --profile bestparams`, which writes the benchmark matrix, reference audit bundle, promotion criteria, and release-note delta artifacts under `Tools/Benchmarks/`.
 - Toolchain paths are profile-driven through `fxai.toml`, with optional `.env` overrides for `FXAI_MT5_ROOT`, `FXAI_METAEDITOR`, `FXAI_TERMINAL`, `FXAI_COMMON_FILES`, `FXAI_RUNTIME_DIR`, `FXAI_DEFAULT_DB`, and related operator-machine specifics.
 - The preferred MT5 binary release path is `python3 FXAI/Tools/fxai_testlab.py package-mt5-release --version <tag>` after a clean verification gate. Git tracks `.mq5`/`.mqh` source and manifests only; compiled `.ex5` files must be uploaded to GitHub Releases with the generated manifest and SHA-256 sums instead of being committed.
 - The preferred GUI verification path is `cd FXAI/GUI && swift test && swift build`.

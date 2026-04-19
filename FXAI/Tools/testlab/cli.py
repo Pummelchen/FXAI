@@ -9,9 +9,21 @@ from pathlib import Path
 
 from .audit_run import latest_terminal_log, run_single_symbol_audit
 from .baseline import compare_summaries, load_baseline_summary, resolve_baseline_path
+from .benchmarks import (
+    DEFAULT_REFERENCE_BROKER_PROFILE,
+    DEFAULT_REFERENCE_EXECUTION_PROFILE,
+    DEFAULT_REFERENCE_HORIZON,
+    DEFAULT_REFERENCE_REPORT,
+    DEFAULT_REFERENCE_RUNTIME_MODE,
+    DEFAULT_REFERENCE_STRATEGY_PROFILE_ID,
+    DEFAULT_REFERENCE_STRATEGY_PROFILE_VERSION,
+    DEFAULT_REFERENCE_SUMMARY,
+    DEFAULT_REFERENCE_SYMBOL,
+    cmd_publish_benchmarks,
+)
 from .compile import compile_target
 from .optimize import build_optimization_campaign, execute_optimization_campaign, render_optimization_campaign
-from .release_gate import cmd_release_gate
+from .release_gate import cmd_release_gate, DEFAULT_RELEASE_GATE_MIN_SCORE, DEFAULT_RELEASE_GATE_MIN_STABILITY
 from .release_artifacts import cmd_package_mt5_release
 from .reporting import build_multisymbol_summary, load_current_summary, load_rows, render_multisymbol_report, render_report, render_summary_report
 from .shared import (
@@ -316,6 +328,22 @@ def main():
     va.add_argument("--refresh-golden", action="store_true")
     va.set_defaults(func=cmd_verify_all)
 
+    pb = sub.add_parser("publish-benchmarks", help="Publish benchmark cards, reference audit artifacts, promotion criteria, and release-note benchmark deltas")
+    pb.add_argument("--profile", default="bestparams")
+    pb.add_argument("--output-dir", default="")
+    pb.add_argument("--release-tag", default="reference")
+    pb.add_argument("--reference-report", default=str(DEFAULT_REFERENCE_REPORT))
+    pb.add_argument("--reference-summary", default=str(DEFAULT_REFERENCE_SUMMARY))
+    pb.add_argument("--reference-symbol", default=DEFAULT_REFERENCE_SYMBOL)
+    pb.add_argument("--reference-symbol-pack", default="")
+    pb.add_argument("--reference-broker-profile", default=DEFAULT_REFERENCE_BROKER_PROFILE)
+    pb.add_argument("--reference-execution-profile", default=DEFAULT_REFERENCE_EXECUTION_PROFILE, choices=sorted(EXECUTION_PROFILES.keys()))
+    pb.add_argument("--reference-runtime-mode", default=DEFAULT_REFERENCE_RUNTIME_MODE)
+    pb.add_argument("--reference-horizon", type=int, default=DEFAULT_REFERENCE_HORIZON)
+    pb.add_argument("--reference-strategy-profile-id", default=DEFAULT_REFERENCE_STRATEGY_PROFILE_ID)
+    pb.add_argument("--reference-strategy-profile-version", type=int, default=DEFAULT_REFERENCE_STRATEGY_PROFILE_VERSION)
+    pb.set_defaults(func=cmd_publish_benchmarks)
+
     ra = sub.add_parser("run-audit", help="Compile and attempt to run the MT5 audit runner, then analyze the report")
     ra.add_argument("--all-plugins", action="store_true")
     ra.add_argument("--plugin-id", type=int, default=28)
@@ -376,8 +404,8 @@ def main():
     rg = sub.add_parser("release-gate", help="Fail if the current audit regresses against a baseline")
     rg.add_argument("--report", default=str(DEFAULT_REPORT))
     rg.add_argument("--baseline", required=True)
-    rg.add_argument("--min-score", type=float, default=70.0)
-    rg.add_argument("--min-stability", type=float, default=0.55)
+    rg.add_argument("--min-score", type=float, default=DEFAULT_RELEASE_GATE_MIN_SCORE)
+    rg.add_argument("--min-stability", type=float, default=DEFAULT_RELEASE_GATE_MIN_STABILITY)
     rg.add_argument("--fail-on-issues", action="store_true")
     rg.add_argument("--require-market-replay", action="store_true")
     rg.add_argument("--output")

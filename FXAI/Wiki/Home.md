@@ -33,6 +33,9 @@ FXAI is a live-trading and research framework for FX. It combines a modular MT5 
 1. Read [Quick Start By Role](Quick%20Start%20By%20Role.md).
 2. Read [Getting Started](Getting%20Started.md).
 3. Go to the page that matches the job you want to do next:
+   - [Benchmarks](Benchmarks.md)
+   - [Promotion Criteria](Promotion%20Criteria.md)
+   - [Release Notes](Release%20Notes.md)
    - [Audit Lab](Audit%20Lab.md)
    - [Offline Lab](Offline%20Lab.md)
    - [NewsPulse](NewsPulse.md)

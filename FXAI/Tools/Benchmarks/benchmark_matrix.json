@@ -1,0 +1,67 @@
+{
+  "artifact_type": "fxai_public_benchmark_matrix",
+  "generated_at_utc": "2026-04-19T02:21:00Z",
+  "profile_name": "bestparams",
+  "rows": [
+    {
+      "adversarial_score": null,
+      "artifacts": {
+        "manifest_json": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit.manifest.json",
+        "report_tsv": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit.tsv",
+        "summary_json": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit.summary.json",
+        "summary_report_md": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit_summary.md"
+      },
+      "audit_score": 73.5,
+      "benchmark_source": "reference_audit",
+      "broker_profile": "default",
+      "execution_profile": "default",
+      "grade": "D",
+      "horizon_minutes": 5,
+      "issue_count": 4,
+      "plugin_name": "rule_m1sync",
+      "profile_name": "reference",
+      "promotion_tier": "reference-only",
+      "ranking_score": null,
+      "runtime_mode": "research",
+      "scenario_count": 2,
+      "strategy_profile_id": "reference/legacy-audit",
+      "strategy_profile_label": "reference/legacy-audit@v0",
+      "strategy_profile_version": 0,
+      "support_count": 0,
+      "symbol": "EURUSD",
+      "symbol_pack": "single:EURUSD",
+      "walkforward_score": null
+    },
+    {
+      "adversarial_score": 77.5,
+      "artifacts": {
+        "audit_set": "<FXAI_ROOT>/Tools/OfflineLab/Profiles/bestparams/EURUSD/ai_mlp__audit.set",
+        "ea_set": "<FXAI_ROOT>/Tools/OfflineLab/Profiles/bestparams/EURUSD/ai_mlp__ea.set",
+        "live_deploy_json": "<FXAI_ROOT>/Tools/OfflineLab/ResearchOS/bestparams/live_deploy_EURUSD.json",
+        "promoted_best_json": "<FXAI_ROOT>/Tools/OfflineLab/Profiles/bestparams/promoted_best.json",
+        "strategy_profile_manifest": "<FXAI_ROOT>/Tools/OfflineLab/Profiles/bestparams/EURUSD/ai_mlp__strategy_profile.json"
+      },
+      "audit_score": 83.5,
+      "benchmark_source": "promoted_profile",
+      "broker_profile": "default",
+      "execution_profile": "default",
+      "grade": "C",
+      "horizon_minutes": 5,
+      "issue_count": 0,
+      "plugin_name": "ai_mlp",
+      "profile_name": "bestparams",
+      "promotion_tier": "audit-approved",
+      "ranking_score": 82.71000000000001,
+      "runtime_mode": "research",
+      "scenario_count": 8,
+      "strategy_profile_id": "strategy/default",
+      "strategy_profile_label": "strategy/default@v1",
+      "strategy_profile_version": 1,
+      "support_count": 1,
+      "symbol": "EURUSD",
+      "symbol_pack": "single:EURUSD",
+      "walkforward_score": 79.5
+    }
+  ],
+  "schema_version": 1
+}

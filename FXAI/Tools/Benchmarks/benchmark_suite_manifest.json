@@ -1,0 +1,31 @@
+{
+  "artifact_type": "fxai_benchmark_suite",
+  "artifacts": {
+    "benchmark_matrix_json": "<FXAI_ROOT>/Tools/Benchmarks/benchmark_matrix.json",
+    "benchmark_matrix_md": "<FXAI_ROOT>/Tools/Benchmarks/benchmark_matrix.md",
+    "benchmark_matrix_tsv": "<FXAI_ROOT>/Tools/Benchmarks/benchmark_matrix.tsv",
+    "promotion_criteria_json": "<FXAI_ROOT>/Tools/Benchmarks/promotion_criteria.json",
+    "promotion_criteria_md": "<FXAI_ROOT>/Tools/Benchmarks/promotion_criteria.md",
+    "release_notes_json": "<FXAI_ROOT>/Tools/Benchmarks/ReleaseNotes/reference_release_notes.json",
+    "release_notes_md": "<FXAI_ROOT>/Tools/Benchmarks/ReleaseNotes/reference_release_notes.md"
+  },
+  "generated_at_utc": "2026-04-19T02:21:00Z",
+  "hashes": {
+    "benchmark_matrix_json": "182d960ea9524da7e3639fd66f45538b1e5739c1c23db4099d31e9bf4c54c9e6",
+    "benchmark_matrix_md": "625d52310d82122c17d2cdc312e28375af3c61d509e18eca2dbf09fd9bbe3c99",
+    "benchmark_matrix_tsv": "2c2641700fcf81e740f4e7b5151676e3091b7e755780c27b00fd43c12f9631ee",
+    "promotion_criteria_json": "1247318ce5a68ef9d66266688d819a2f5f8cebf60d52a63f24008b43b603a1ed",
+    "promotion_criteria_md": "5eaeb64a04a0b0a973b22989cfa9447b693ff164e77f12476df8103e46afe341",
+    "release_notes_json": "88dd999dc7b6cf165410763336b75f4e788755e22360657134f5c658d45172d1",
+    "release_notes_md": "62a5a8e49c30547058b8d4879d628db3b62e1cd00ad20ec6c53c34da72159c85"
+  },
+  "profile_name": "bestparams",
+  "reference_bundle": {
+    "manifest_json": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit.manifest.json",
+    "report_tsv": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit.tsv",
+    "summary_json": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit.summary.json",
+    "summary_report_md": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit_summary.md"
+  },
+  "release_tag": "reference",
+  "schema_version": 1
+}

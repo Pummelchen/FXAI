@@ -46,6 +46,7 @@ python3 Tools/fxai_offline_lab.py verify-deterministic
 python3 Tools/fxai_offline_lab.py recover-artifacts
 python3 Tools/fxai_offline_lab.py pair-network-build --profile continuous
 python3 Tools/fxai_offline_lab.py dashboard --profile continuous
+python3 Tools/fxai_testlab.py publish-benchmarks --profile bestparams
 ```
 
 ## Practical Workflows
