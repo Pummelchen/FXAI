@@ -39,6 +39,7 @@ python3 Tools/fxai_testlab.py verify-all
 ```bash
 python3 Tools/fxai_testlab.py doctor
 python3 Tools/fxai_testlab.py compile-main
+python3 Tools/fxai_testlab.py compile-tensorcore
 python3 Tools/fxai_testlab.py verify-all
 python3 Tools/fxai_testlab.py publish-benchmarks --profile bestparams
 python3 Tools/fxai_offline_lab.py newspulse-health
@@ -51,6 +52,7 @@ python3 Tools/fxai_offline_lab.py live-state --symbol EURUSD
 What they do:
 - `doctor`: verifies the active toolchain profile, path overrides from `fxai.toml` or `.env`, and whether MT5 compile or terminal launch prerequisites are actually present.
 - `compile-main`: checks that the EA still compiles cleanly.
+- `compile-tensorcore`: checks that the dedicated TensorCore and plugin-contract MT5 runner still compiles cleanly.
 - `verify-all`: runs the broader release gate.
 - `publish-benchmarks`: writes the public benchmark matrix, reference audit bundle, promotion criteria, and release-note delta artifacts.
 - `*-health`: tells you whether the shared runtime layers are fresh enough to trust.
@@ -89,8 +91,9 @@ Useful overrides include:
 ### If You Are Testing
 
 1. Compile first.
-2. Run `verify-all`.
-3. Launch the specific Audit Lab or backtest workflow you need.
+2. Compile the dedicated core-runtime test runner if you touched TensorCore or plugin contracts.
+3. Run `verify-all`.
+4. Launch the specific Audit Lab or backtest workflow you need.
 
 ### If You Are Researching
 

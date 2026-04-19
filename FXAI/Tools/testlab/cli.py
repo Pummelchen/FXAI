@@ -57,6 +57,10 @@ def cmd_compile(_args):
     return compile_target(Path("Tests/FXAI_AuditRunner.mq5"), "audit_runner")
 
 
+def cmd_compile_tensorcore(_args):
+    return compile_target(Path("Tests/FXAI_TensorCoreRunner.mq5"), "tensorcore_runner")
+
+
 def cmd_compile_main(_args):
     return compile_target(Path("FXAI.mq5"), "main_ea")
 
@@ -309,6 +313,9 @@ def main():
 
     c = sub.add_parser("compile-audit", help="Compile the MT5 audit runner")
     c.set_defaults(func=cmd_compile)
+
+    ct = sub.add_parser("compile-tensorcore", help="Compile the dedicated MT5 TensorCore and plugin-contract runner")
+    ct.set_defaults(func=cmd_compile_tensorcore)
 
     cm = sub.add_parser("compile-main", help="Compile the main FXAI EA")
     cm.set_defaults(func=cmd_compile_main)

@@ -27,6 +27,7 @@ input long   Audit_WindowStartUnix = 0;
 input long   Audit_WindowEndUnix = 0;
 input int    Audit_Seed = 42;
 input bool   Audit_RunTensorKernelSanity = true;
+input bool   Audit_RunPluginContractSanity = true;
 input bool   Audit_ResetOutput = true;
 input bool   Audit_StopOnFailure = false;
 input int    TradeKiller = 0;
@@ -312,6 +313,16 @@ int OnInit()
       if(!FXAI_AuditTensorKernelSelfTest(sanity_reason))
       {
          Print("FXAI audit tensor sanity failed: ", sanity_reason);
+         return INIT_FAILED;
+      }
+   }
+
+   if(Audit_RunPluginContractSanity)
+   {
+      string contract_reason = "";
+      if(!FXAI_AuditPluginContractSelfTest(contract_reason))
+      {
+         Print("FXAI audit plugin contract sanity failed: ", contract_reason);
          return INIT_FAILED;
       }
    }

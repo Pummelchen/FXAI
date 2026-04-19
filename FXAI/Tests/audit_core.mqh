@@ -613,5 +613,6 @@ void FXAI_MaybeSaveRuntimeArtifacts(const string symbol,
 #include "audit_scoring.mqh"
 #include "audit_report.mqh"
 #include "audit_tensor.mqh"
+#include "audit_plugin_contracts.mqh"
 
 #endif // __FXAI_AUDIT_CORE_MQH__

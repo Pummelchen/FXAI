@@ -21,6 +21,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Main Expert Advisor entry point for live trading and Strategy Tester runs.
 - `Tests/FXAI_AuditRunner.mq5`
   MT5-side Audit Lab runner.
+- `Tests/FXAI_TensorCoreRunner.mq5`
+  Dedicated MT5-side TensorCore and plugin-contract runner for focused core-runtime verification.
 - `Tools/fxai_testlab.py`
   External compile, audit, baseline, MT5 release-artifact packaging, and release-gate tool.
 - `Tools/fxai_offline_lab.py`
@@ -129,7 +131,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - `Plugins/Tree/tree_catboost/`, `Plugins/Tree/tree_lgbm/`
   Internal split class sections for the largest tree-model plugins.
 - `Tests/`
-  Audit Lab scenarios, scoring, reports, and TensorCore sanity checks.
+  Audit Lab scenarios, scoring, reports, the dedicated TensorCore suite, plugin-contract suite, and focused MT5 test runners.
 - `Tests/Scoring/`
   Split Audit Lab scoring internals for core helpers, adversarial packs, metrics, and scenario execution.
 - `Tools/testlab/`
@@ -180,6 +182,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 
 - Canonical research data is `M1 OHLC + spread`.
 - The preferred platform verification path is `python3 FXAI/Tools/fxai_testlab.py verify-all`.
+- The preferred focused core-runtime verification path is `python3 FXAI/Tools/fxai_testlab.py compile-tensorcore`, which compiles the dedicated `FXAI_TensorCoreRunner.mq5` test surface used for TensorCore math, optimizer convergence, and plugin-contract checks.
 - The preferred environment self-check path is `python3 FXAI/Tools/fxai_testlab.py doctor` or `python3 FXAI/Tools/fxai_offline_lab.py doctor`.
 - The preferred public benchmark publishing path is `python3 FXAI/Tools/fxai_testlab.py publish-benchmarks --profile bestparams`, which writes the benchmark matrix, reference audit bundle, promotion criteria, and release-note delta artifacts under `Tools/Benchmarks/`.
 - Toolchain paths are profile-driven through `fxai.toml`, with optional `.env` overrides for `FXAI_MT5_ROOT`, `FXAI_METAEDITOR`, `FXAI_TERMINAL`, `FXAI_COMMON_FILES`, `FXAI_RUNTIME_DIR`, `FXAI_DEFAULT_DB`, and related operator-machine specifics.

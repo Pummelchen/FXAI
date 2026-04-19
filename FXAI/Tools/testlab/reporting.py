@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+from collections import defaultdict
 from pathlib import Path
 
 from .shared import ISSUE, get_oracle, load_json
@@ -453,4 +455,3 @@ def render_report(rows, oracles: dict):
             out.append(f"- {s}")
         out.append("")
     return "\n".join(out)
-

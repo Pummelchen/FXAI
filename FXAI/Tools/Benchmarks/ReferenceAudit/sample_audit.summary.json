@@ -3,42 +3,69 @@
     "rule_m1sync": {
       "family": 10,
       "findings": [
-        "missing required scenario: drift_up",
         "missing required scenario: drift_down",
+        "missing required scenario: drift_up",
+        "missing required scenario: market_chop",
+        "missing required scenario: market_trend",
+        "missing required scenario: market_session_edges",
+        "missing required scenario: market_spread_shock",
+        "missing required scenario: market_walkforward",
         "missing required scenario: vol_cluster",
         "missing required scenario: monotonic_down"
       ],
-      "grade": "D",
+      "grade": "F",
       "issues": [],
       "scenarios": {
         "monotonic_up": {
           "active_ratio": 0.877778,
           "avg_move": 4.6,
           "bias_abs": 1.0,
+          "brier_score": 0.0,
+          "calibration_error": 0.0,
           "conf_drift": 0.04,
           "invalid_preds": 0,
           "issue_flags": 0,
+          "path_quality_error": 0.0,
           "reset_delta": 0.0,
           "score": 98.0,
           "sequence_delta": -1.0,
           "skip_ratio": 0.122222,
-          "trend_align": 1.0
+          "trend_align": 1.0,
+          "wf_dsr": 0.0,
+          "wf_folds": 0,
+          "wf_gap": 0.0,
+          "wf_pass_rate": 0.0,
+          "wf_pbo": 0.0,
+          "wf_test_score": 0.0,
+          "wf_test_score_std": 0.0,
+          "wf_train_score": 0.0
         },
         "random_walk": {
           "active_ratio": 0.042222,
           "avg_move": 2.1,
           "bias_abs": 0.052632,
+          "brier_score": 0.0,
+          "calibration_error": 0.0,
           "conf_drift": 0.05,
           "invalid_preds": 0,
           "issue_flags": 0,
+          "path_quality_error": 0.0,
           "reset_delta": 0.0,
           "score": 97.0,
           "sequence_delta": -1.0,
           "skip_ratio": 0.957778,
-          "trend_align": 0.0
+          "trend_align": 0.0,
+          "wf_dsr": 0.0,
+          "wf_folds": 0,
+          "wf_gap": 0.0,
+          "wf_pass_rate": 0.0,
+          "wf_pbo": 0.0,
+          "wf_test_score": 0.0,
+          "wf_test_score_std": 0.0,
+          "wf_train_score": 0.0
         }
       },
-      "score": 73.5
+      "score": 43.5
     }
   }
 }
