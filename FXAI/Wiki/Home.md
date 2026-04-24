@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/fxai-overview.png" alt="FXAI architecture overview">
+</p>
+
 # FXAI Handbook
 
 FXAI is a live-trading and research framework for FX. It combines a modular MT5 Expert Advisor, offline research and promotion workflows, shared runtime risk layers, and an optional macOS GUI so different users can work from the same source of truth without guessing what the system is doing.

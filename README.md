@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="FXAI/Wiki/assets/fxai-overview.png" alt="FXAI architecture overview">
+</p>
+
 # FXAI
 
 FXAI is an MT5-native framework for researching, testing, auditing, and operating AI-assisted FX trading systems. Live trading stays inside MetaTrader 5 and MQL5; offline Python tooling is used for research, calibration, export, audit, and release evidence.
