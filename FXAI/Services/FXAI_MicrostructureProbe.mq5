@@ -6,6 +6,8 @@
 #property strict
 #property service
 
+#include "..\Engine\market_data_gateway.mqh"
+
 #define FXAI_MS_RUNTIME_DIR                 "FXAI\\Runtime"
 #define FXAI_MS_CONFIG_FILE                 "FXAI\\Runtime\\microstructure_service_config.tsv"
 #define FXAI_MS_SNAPSHOT_FILE               "FXAI\\Runtime\\microstructure_snapshot.json"
@@ -654,10 +656,8 @@ bool FXAI_MS_LoadTicks(const string symbol,
    datetime now_time = FXAI_MS_Now();
    long to_msc = (long)now_time * 1000;
    long from_msc = to_msc - (long)lookback_sec * 1000;
-   int copied = CopyTicksRange(symbol, ticks, COPY_TICKS_ALL, from_msc, to_msc);
-   if(copied <= 0)
-      copied = CopyTicks(symbol, ticks, COPY_TICKS_ALL, 0, 8192);
-   if(copied <= 0)
+   if(!FXAI_MarketDataCopyTicksRange(symbol, COPY_TICKS_ALL, (ulong)from_msc, (ulong)to_msc, ticks) &&
+      !FXAI_MarketDataCopyTicksLatest(symbol, COPY_TICKS_ALL, 0, 8192, ticks))
    {
       ArrayResize(ticks, 0);
       return false;

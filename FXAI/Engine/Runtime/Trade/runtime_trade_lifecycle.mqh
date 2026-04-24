@@ -312,7 +312,7 @@ int TradePossible(const string symbol, string &reason)
    }
 
    MqlTick last_tick;
-   if(!SymbolInfoTick(symbol, last_tick))
+   if(!FXAI_MarketDataGetLatestTick(symbol, last_tick))
    {
       reason = "symbol_tick_failed";
       return 0;

@@ -109,7 +109,9 @@
       if(ctx_time > 0)
          return (datetime)(ctx_time - (ctx_time % 60));
 
-      datetime t = iTime(Symbol(), PERIOD_M1, 0);
+      datetime t = 0;
+      if(!FXAI_MarketDataBarTime(Symbol(), PERIOD_M1, 0, t))
+         t = 0;
       if(t <= 0)
       {
          datetime now = TimeCurrent();
@@ -1209,4 +1211,3 @@ double att[FXAI_TFM_D_MODEL];
                   FXAI_Clamp(1.0 - skip_prob, 0.0, 1.0);
       return ev;
    }
-

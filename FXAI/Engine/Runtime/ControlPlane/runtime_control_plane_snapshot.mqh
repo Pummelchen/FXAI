@@ -132,7 +132,9 @@ bool FXAI_WriteControlPlaneLocalSnapshot(const string symbol,
    if(handle == INVALID_HANDLE)
       return false;
 
-   datetime bar_time = iTime(symbol, PERIOD_M1, 1);
+   datetime bar_time = 0;
+   if(!FXAI_MarketDataBarTime(symbol, PERIOD_M1, 1, bar_time))
+      bar_time = 0;
    if(bar_time <= 0)
       bar_time = TimeCurrent();
    if(bar_time <= 0)
@@ -209,7 +211,8 @@ void FXAI_ReadControlPlaneAggregate(const string symbol,
    if(now <= 0)
       now = TimeTradeServer();
    if(now <= 0)
-      now = iTime(symbol, PERIOD_M1, 1);
+      if(!FXAI_MarketDataBarTime(symbol, PERIOD_M1, 1, now))
+         now = 0;
 
    long login = (long)AccountInfoInteger(ACCOUNT_LOGIN);
    ulong magic = TradeMagic;

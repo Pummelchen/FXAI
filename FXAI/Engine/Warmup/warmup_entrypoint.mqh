@@ -167,7 +167,9 @@ bool FXAI_WarmupTrainAndTune(const string symbol)
                                      base_buy_thr,
                                      base_sell_thr);
 
-   datetime bar_time = iTime(symbol, PERIOD_M1, 1);
+   datetime bar_time = 0;
+   if(!FXAI_MarketDataBarTime(symbol, PERIOD_M1, 1, bar_time))
+      bar_time = 0;
    if(bar_time <= 0) bar_time = TimeCurrent();
    int seed = AI_WarmupSeed;
    if(seed < 0) seed = -seed;

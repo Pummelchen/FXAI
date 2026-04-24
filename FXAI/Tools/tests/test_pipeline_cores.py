@@ -14,6 +14,7 @@ def test_data_pipeline_exposes_dedicated_cores_and_contracts():
     data_pipeline = _read("Engine/data_pipeline.mqh")
     required_includes = [
         '#include "Core\\core_pipeline_contracts.mqh"',
+        '#include "market_data_gateway.mqh"',
         '#include "Core\\core_data_core.mqh"',
         '#include "Core\\core_feature_core.mqh"',
         '#include "Core\\core_normalization_core.mqh"',

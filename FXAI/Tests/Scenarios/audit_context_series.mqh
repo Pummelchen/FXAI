@@ -15,9 +15,13 @@ int FXAI_AuditCopyMarketRates(const int fallback_search_bars,
    {
       datetime start_time = FXAI_AuditGetWindowStartTime();
       datetime end_time = FXAI_AuditGetWindowEndTime();
-      return CopyRates(_Symbol, PERIOD_M1, start_time, end_time, rates_m1);
+      if(!FXAI_MarketDataCopyRatesByTime(_Symbol, PERIOD_M1, start_time, end_time, rates_m1))
+         return 0;
+      return ArraySize(rates_m1);
    }
-   return CopyRates(_Symbol, PERIOD_M1, 1, fallback_search_bars, rates_m1);
+   if(!FXAI_MarketDataCopyRatesByPos(_Symbol, PERIOD_M1, 1, fallback_search_bars, rates_m1))
+      return 0;
+   return ArraySize(rates_m1);
 }
 
 int FXAI_AuditDecisionFromPred(const FXAIAIPredictionV4 &pred)
@@ -434,16 +438,24 @@ bool FXAI_AuditBuildSeriesFromMarketRates(const MqlRates &sel_m1[],
    MqlRates rates_tf[];
    ArraySetAsSeries(rates_tf, true);
 
-   int got5 = CopyRates(_Symbol, PERIOD_M5, 1, need_m5, rates_tf);
+   int got5 = 0;
+   if(FXAI_MarketDataCopyRatesByPos(_Symbol, PERIOD_M5, 1, need_m5, rates_tf))
+      got5 = ArraySize(rates_tf);
    if(got5 > 0) FXAI_ExtractRatesCloseTime(rates_tf, close_m5, time_m5);
    else { ArrayResize(close_m5, 0); ArrayResize(time_m5, 0); }
-   int got15 = CopyRates(_Symbol, PERIOD_M15, 1, need_m15, rates_tf);
+   int got15 = 0;
+   if(FXAI_MarketDataCopyRatesByPos(_Symbol, PERIOD_M15, 1, need_m15, rates_tf))
+      got15 = ArraySize(rates_tf);
    if(got15 > 0) FXAI_ExtractRatesCloseTime(rates_tf, close_m15, time_m15);
    else { ArrayResize(close_m15, 0); ArrayResize(time_m15, 0); }
-   int got30 = CopyRates(_Symbol, PERIOD_M30, 1, need_m30, rates_tf);
+   int got30 = 0;
+   if(FXAI_MarketDataCopyRatesByPos(_Symbol, PERIOD_M30, 1, need_m30, rates_tf))
+      got30 = ArraySize(rates_tf);
    if(got30 > 0) FXAI_ExtractRatesCloseTime(rates_tf, close_m30, time_m30);
    else { ArrayResize(close_m30, 0); ArrayResize(time_m30, 0); }
-   int got60 = CopyRates(_Symbol, PERIOD_H1, 1, need_h1, rates_tf);
+   int got60 = 0;
+   if(FXAI_MarketDataCopyRatesByPos(_Symbol, PERIOD_H1, 1, need_h1, rates_tf))
+      got60 = ArraySize(rates_tf);
    if(got60 > 0) FXAI_ExtractRatesCloseTime(rates_tf, close_h1, time_h1);
    else { ArrayResize(close_h1, 0); ArrayResize(time_h1, 0); }
 

@@ -1312,7 +1312,9 @@ void EquityTrailManage()
 //-------------------------- SEND TRADE ------------------------------
 void SendTrade(const int precomputed_direction = -2)
 {
-   datetime bar_t = iTime(_Symbol, PERIOD_M1, 1);
+   datetime bar_t = 0;
+   if(!FXAI_MarketDataBarTime(_Symbol, PERIOD_M1, 1, bar_t))
+      bar_t = 0;
    bool emit_debug = (AI_DebugFlow && bar_t > 0 && bar_t != g_last_debug_bar);
    if(emit_debug) g_last_debug_bar = bar_t;
 
@@ -1381,7 +1383,8 @@ void SendTrade(const int precomputed_direction = -2)
          CycleEntryRealizedProfit = RealizedManagedProfit;
          CycleStartTime   = FXAI_ServerNow();
          if(CycleStartTime <= 0) CycleStartTime = TimeCurrent();
-         if(CycleStartTime <= 0) CycleStartTime = iTime(_Symbol, PERIOD_M1, 0);
+         if(CycleStartTime <= 0 && !FXAI_MarketDataBarTime(_Symbol, PERIOD_M1, 0, CycleStartTime))
+            CycleStartTime = 0;
 
          TrailTracking    = true;
          TrailPeakProfit  = 0.0;
@@ -1453,7 +1456,8 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
             CycleStartTime = FXAI_GetOldestPositionTime(deal_symbol);
             if(CycleStartTime <= 0) CycleStartTime = FXAI_ServerNow();
             if(CycleStartTime <= 0) CycleStartTime = TimeCurrent();
-            if(CycleStartTime <= 0) CycleStartTime = iTime(deal_symbol, PERIOD_M1, 0);
+            if(CycleStartTime <= 0 && !FXAI_MarketDataBarTime(deal_symbol, PERIOD_M1, 0, CycleStartTime))
+               CycleStartTime = 0;
             TrailTracking = true;
             TrailPeakProfit = MathMax(FXAI_ManagedOpenProfit(deal_symbol), 0.0);
          }
@@ -1491,7 +1495,9 @@ void OnTick()
 {
    FXAI_RunRuntimeMaintenance(_Symbol, false);
    static datetime last_ai_bar = 0;
-   datetime signal_bar = iTime(_Symbol, PERIOD_M1, 1);
+   datetime signal_bar = 0;
+   if(!FXAI_MarketDataBarTime(_Symbol, PERIOD_M1, 1, signal_bar))
+      signal_bar = 0;
    bool new_m1_bar = false;
    if(signal_bar > 0 && signal_bar != last_ai_bar)
    {

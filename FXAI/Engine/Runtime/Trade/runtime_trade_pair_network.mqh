@@ -710,7 +710,8 @@ int FXAI_PairNetworkCollectPeerCandidates(const FXAIPairNetworkConfig &cfg,
    if(now_time <= 0)
       now_time = TimeTradeServer();
    if(now_time <= 0)
-      now_time = iTime(candidate_symbol, PERIOD_M1, 0);
+      if(!FXAI_MarketDataBarTime(candidate_symbol, PERIOD_M1, 0, now_time))
+         now_time = 0;
    long login = (long)AccountInfoInteger(ACCOUNT_LOGIN);
    ulong magic = TradeMagic;
    long self_chart = (long)ChartID();

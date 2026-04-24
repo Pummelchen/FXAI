@@ -1,5 +1,7 @@
 #property strict
 
+#include "..\Engine\market_data_gateway.mqh"
+
 input string Export_OutputKey = "default";
 input long   Export_WindowStartUnix = 0;
 input long   Export_WindowEndUnix = 0;
@@ -79,14 +81,14 @@ bool FXAI_RunOfflineExport(void)
 
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
-   int got = CopyRates(_Symbol, PERIOD_M1, start_time, end_time, rates);
-   if(got <= 0)
+   if(!FXAI_MarketDataCopyRatesByTime(_Symbol, PERIOD_M1, start_time, end_time, rates) || ArraySize(rates) <= 0)
    {
       Print("FXAI offline export: CopyRates failed symbol=", _Symbol,
             " start=", (long)start_time,
             " end=", (long)end_time);
       return false;
    }
+   int got = ArraySize(rates);
 
    int max_bars = Export_MaxBars;
    if(max_bars < 1)

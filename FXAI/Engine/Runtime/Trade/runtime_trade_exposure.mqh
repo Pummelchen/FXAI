@@ -12,7 +12,9 @@ int      g_lifecycle_last_action_code = -1;
 
 datetime FXAI_CurrentLifecycleBarTime(const string symbol)
 {
-   datetime bar_time = iTime(symbol, PERIOD_M1, 0);
+   datetime bar_time = 0;
+   if(!FXAI_MarketDataBarTime(symbol, PERIOD_M1, 0, bar_time))
+      bar_time = 0;
    if(bar_time > 0)
       return bar_time;
    bar_time = TimeCurrent();
@@ -402,7 +404,7 @@ bool FXAI_ReadManagedPositionState(const string symbol,
                                          1.0);
 
    MqlTick tick;
-   if(SymbolInfoTick(symbol, tick))
+   if(FXAI_MarketDataGetLatestTick(symbol, tick))
    {
       double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
       if(point <= 0.0)

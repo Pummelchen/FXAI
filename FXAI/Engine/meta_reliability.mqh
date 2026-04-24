@@ -390,7 +390,9 @@ void FXAI_ProcessReliabilityBar(const string symbol)
    H = FXAI_GetMaxConfiguredHorizon(H);
    H = FXAI_GetMaxPendingHorizon(H);
 
-   datetime signal_bar = iTime(symbol, PERIOD_M1, 1);
+   datetime signal_bar = 0;
+   if(!FXAI_MarketDataBarTime(symbol, PERIOD_M1, 1, signal_bar))
+      signal_bar = 0;
    if(signal_bar <= 0) return;
 
    static string rel_symbol = "";

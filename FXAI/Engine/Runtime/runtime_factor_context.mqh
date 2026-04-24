@@ -75,8 +75,12 @@ double FXAI_FactorD1Return(const string symbol,
                            const int shift_now,
                            const int shift_then)
 {
-   double now_close = iClose(symbol, PERIOD_D1, shift_now);
-   double then_close = iClose(symbol, PERIOD_D1, shift_then);
+   double now_close = 0.0;
+   double then_close = 0.0;
+   if(!FXAI_MarketDataBarClose(symbol, PERIOD_D1, shift_now, now_close))
+      now_close = 0.0;
+   if(!FXAI_MarketDataBarClose(symbol, PERIOD_D1, shift_then, then_close))
+      then_close = 0.0;
    if(now_close <= 0.0 || then_close <= 0.0)
       return 0.0;
    return ((now_close / then_close) - 1.0);
@@ -106,9 +110,15 @@ double FXAI_FactorCarryDirectional(const string symbol,
 
 double FXAI_FactorValueScore(const string symbol)
 {
-   double close_now = iClose(symbol, PERIOD_D1, 1);
-   double close_63 = iClose(symbol, PERIOD_D1, 63);
-   double close_252 = iClose(symbol, PERIOD_D1, 252);
+   double close_now = 0.0;
+   double close_63 = 0.0;
+   double close_252 = 0.0;
+   if(!FXAI_MarketDataBarClose(symbol, PERIOD_D1, 1, close_now))
+      close_now = 0.0;
+   if(!FXAI_MarketDataBarClose(symbol, PERIOD_D1, 63, close_63))
+      close_63 = 0.0;
+   if(!FXAI_MarketDataBarClose(symbol, PERIOD_D1, 252, close_252))
+      close_252 = 0.0;
    if(close_now <= 0.0 || close_63 <= 0.0 || close_252 <= 0.0)
       return 0.0;
 
@@ -195,12 +205,17 @@ bool FXAI_BuildCurrencyFactorState(const string currency,
    string anchor_rev = "USD" + currency;
    string pair_symbol = "";
    bool inverted = false;
-   if(SymbolSelect(anchor_usd, true) && iClose(anchor_usd, PERIOD_D1, 1) > 0.0)
+   double anchor_close = 0.0;
+   if(SymbolSelect(anchor_usd, true) &&
+      FXAI_MarketDataBarClose(anchor_usd, PERIOD_D1, 1, anchor_close) &&
+      anchor_close > 0.0)
    {
       pair_symbol = anchor_usd;
       inverted = false;
    }
-   else if(SymbolSelect(anchor_rev, true) && iClose(anchor_rev, PERIOD_D1, 1) > 0.0)
+   else if(SymbolSelect(anchor_rev, true) &&
+           FXAI_MarketDataBarClose(anchor_rev, PERIOD_D1, 1, anchor_close) &&
+           anchor_close > 0.0)
    {
       pair_symbol = anchor_rev;
       inverted = true;

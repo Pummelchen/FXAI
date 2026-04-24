@@ -84,7 +84,9 @@
       }
 
       // Prefer chart/time-series open time in live mode; fall back to minute-rounded server time.
-      datetime bt = iTime(_Symbol, PERIOD_M1, 0);
+      datetime bt = 0;
+      if(!FXAI_MarketDataBarTime(_Symbol, PERIOD_M1, 0, bt))
+         bt = 0;
       if(bt > 0) return bt;
 
       datetime now = TimeCurrent();
@@ -848,4 +850,3 @@ for(int c=0; c<FXAI_PTST_CLASS_COUNT; c++)
       double ev = (0.68 * MathAbs(mu) + 0.22 * sigma + 0.10 * iqr) * FXAI_Clamp(1.0 - skip_prob, 0.0, 1.0);
       return ev;
    }
-

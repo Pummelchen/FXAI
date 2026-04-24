@@ -191,8 +191,8 @@ bool FXAI_ControlPlaneArtifactFresh(const datetime generated_at,
    datetime now = TimeCurrent();
    if(now <= 0)
       now = TimeTradeServer();
-   if(now <= 0)
-      now = iTime(_Symbol, PERIOD_M1, 0);
+   if(now <= 0 && !FXAI_MarketDataBarTime(_Symbol, PERIOD_M1, 0, now))
+      now = 0;
    if(now <= 0)
       return true;
    if(expires_at > 0 && now > expires_at)
@@ -214,8 +214,8 @@ bool FXAI_LoadLiveDeploymentProfile(const string symbol,
    datetime now = TimeCurrent();
    if(now <= 0)
       now = TimeTradeServer();
-   if(now <= 0)
-      now = iTime(_Symbol, PERIOD_M1, 0);
+   if(now <= 0 && !FXAI_MarketDataBarTime(_Symbol, PERIOD_M1, 0, now))
+      now = 0;
 
    if(!force_reload &&
       cache.ready &&
@@ -385,8 +385,8 @@ bool FXAI_LoadPortfolioSupervisorProfile(FXAIPortfolioSupervisorProfile &out,
    datetime now = TimeCurrent();
    if(now <= 0)
       now = TimeTradeServer();
-   if(now <= 0)
-      now = iTime(_Symbol, PERIOD_M1, 0);
+   if(now <= 0 && !FXAI_MarketDataBarTime(_Symbol, PERIOD_M1, 0, now))
+      now = 0;
 
    if(!force_reload &&
       cache.ready &&
@@ -577,8 +577,8 @@ bool FXAI_LoadSupervisorServiceState(const string symbol,
    datetime now = TimeCurrent();
    if(now <= 0)
       now = TimeTradeServer();
-   if(now <= 0)
-      now = iTime(_Symbol, PERIOD_M1, 0);
+   if(now <= 0 && !FXAI_MarketDataBarTime(_Symbol, PERIOD_M1, 0, now))
+      now = 0;
 
    if(!force_reload &&
       cache_symbol.ready &&
@@ -636,8 +636,8 @@ bool FXAI_LoadStudentRouterProfile(const string symbol,
    datetime now = TimeCurrent();
    if(now <= 0)
       now = TimeTradeServer();
-   if(now <= 0)
-      now = iTime(_Symbol, PERIOD_M1, 0);
+   if(now <= 0 && !FXAI_MarketDataBarTime(_Symbol, PERIOD_M1, 0, now))
+      now = 0;
 
    if(!force_reload &&
       cache.ready &&
@@ -748,8 +748,8 @@ bool FXAI_LoadAdaptiveRouterProfile(const string symbol,
    datetime now = TimeCurrent();
    if(now <= 0)
       now = TimeTradeServer();
-   if(now <= 0)
-      now = iTime(_Symbol, PERIOD_M1, 0);
+   if(now <= 0 && !FXAI_MarketDataBarTime(_Symbol, PERIOD_M1, 0, now))
+      now = 0;
 
    if(!force_reload &&
       cache.ready &&
@@ -967,8 +967,8 @@ bool FXAI_LoadSupervisorCommandState(const string symbol,
    datetime now = TimeCurrent();
    if(now <= 0)
       now = TimeTradeServer();
-   if(now <= 0)
-      now = iTime(_Symbol, PERIOD_M1, 0);
+   if(now <= 0 && !FXAI_MarketDataBarTime(_Symbol, PERIOD_M1, 0, now))
+      now = 0;
 
    if(!force_reload &&
       cache_symbol.ready &&

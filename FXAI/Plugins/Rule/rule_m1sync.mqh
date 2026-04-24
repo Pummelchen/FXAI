@@ -44,12 +44,14 @@ private:
          return 0.0;
       }
 
-      datetime latest_closed = iTime(symbol, PERIOD_M1, 1);
+      datetime latest_closed = 0;
+      if(!FXAI_MarketDataBarTime(symbol, PERIOD_M1, 1, latest_closed))
+         latest_closed = 0;
       bool use_live = (ctx_time <= 0 || latest_closed <= 0 || MathAbs((double)(latest_closed - ctx_time)) <= 1.0);
       if(use_live)
       {
          MqlTick tick;
-         if(SymbolInfoTick(symbol, tick))
+         if(FXAI_MarketDataGetLatestTick(symbol, tick))
          {
             if(tick.bid > 0.0 && tick.ask > 0.0) return 0.5 * (tick.bid + tick.ask);
             if(tick.last > 0.0) return tick.last;
@@ -58,11 +60,15 @@ private:
 
       if(shift > 0)
       {
-         double op = iOpen(symbol, PERIOD_M1, shift - 1);
+         double op = 0.0;
+         if(!FXAI_MarketDataBarOpen(symbol, PERIOD_M1, shift - 1, op))
+            op = 0.0;
          if(op > 0.0) return op;
       }
 
-      double fallback = iClose(symbol, PERIOD_M1, MathMax(shift - 1, 0));
+      double fallback = 0.0;
+      if(!FXAI_MarketDataBarClose(symbol, PERIOD_M1, MathMax(shift - 1, 0), fallback))
+         fallback = 0.0;
       if(fallback > 0.0) return fallback;
       return 0.0;
    }
@@ -96,13 +102,27 @@ private:
       if(m_has_synth)
          shift = FindSyntheticShift(ctx_time);
       else if(ctx_time > 0)
-         shift = iBarShift(symbol, PERIOD_M1, ctx_time, true);
-      if(!m_has_synth && shift < 1 && ctx_time > 0) shift = iBarShift(symbol, PERIOD_M1, ctx_time, false);
+      {
+         if(!FXAI_MarketDataBarShift(symbol, PERIOD_M1, ctx_time, true, shift))
+            shift = -1;
+      }
+      if(!m_has_synth && shift < 1 && ctx_time > 0)
+      {
+         if(!FXAI_MarketDataBarShift(symbol, PERIOD_M1, ctx_time, false, shift))
+            shift = -1;
+      }
       if(shift < 1) shift = 1;
       int bars = FXAI_GetM1SyncBars();
 
       double closes[];
       ArrayResize(closes, bars);
+      MqlRates live_rates[];
+      if(!m_has_synth)
+      {
+         if(!FXAI_MarketDataCopyRatesByPos(symbol, PERIOD_M1, shift, bars, live_rates) ||
+            ArraySize(live_rates) < bars)
+            return (int)FXAI_LABEL_SKIP;
+      }
       for(int i=0; i<bars; i++)
       {
          int bar_shift = shift + (bars - 1 - i);
@@ -114,7 +134,10 @@ private:
          }
          else
          {
-            closes[i] = iClose(symbol, PERIOD_M1, bar_shift);
+            int source_idx = bars - 1 - i;
+            if(source_idx < 0 || source_idx >= ArraySize(live_rates))
+               return (int)FXAI_LABEL_SKIP;
+            closes[i] = live_rates[source_idx].close;
          }
          if(closes[i] <= 0.0)
             return (int)FXAI_LABEL_SKIP;

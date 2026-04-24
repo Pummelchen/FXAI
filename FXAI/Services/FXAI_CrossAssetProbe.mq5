@@ -6,6 +6,8 @@
 #property strict
 #property service
 
+#include "..\Engine\market_data_gateway.mqh"
+
 #define FXAI_CA_RUNTIME_DIR                 "FXAI\\Runtime"
 #define FXAI_CA_CONFIG_FILE                 "FXAI\\Runtime\\cross_asset_probe_config.tsv"
 #define FXAI_CA_SNAPSHOT_FILE               "FXAI\\Runtime\\cross_asset_probe_snapshot.json"
@@ -143,7 +145,7 @@ bool FXAI_CA_LoadConfig(FXAICrossAssetConfig &cfg)
 double FXAI_CA_LastPrice(const string symbol)
 {
    MqlTick tick;
-   if(!SymbolInfoTick(symbol, tick))
+   if(!FXAI_MarketDataGetLatestTick(symbol, tick))
       return 0.0;
    if(tick.bid > 0.0 && tick.ask > 0.0)
       return 0.5 * (tick.bid + tick.ask);
@@ -163,9 +165,8 @@ double FXAI_CA_ChangePct(const string symbol,
    if(lookback_bars < 1)
       return 0.0;
    double close_arr[];
-   ArraySetAsSeries(close_arr, true);
-   int copied = CopyClose(symbol, timeframe, 0, lookback_bars + 2, close_arr);
-   if(copied <= lookback_bars)
+   if(!FXAI_MarketDataCopyCloseByPos(symbol, timeframe, 0, lookback_bars + 2, close_arr) ||
+      ArraySize(close_arr) <= lookback_bars)
       return 0.0;
    double current = close_arr[0];
    double past = close_arr[lookback_bars];
@@ -177,10 +178,9 @@ double FXAI_CA_ChangePct(const string symbol,
 double FXAI_CA_RangeRatio1D(const string symbol)
 {
    MqlRates rates[];
-   ArraySetAsSeries(rates, true);
-   int copied = CopyRates(symbol, PERIOD_H1, 0, 24, rates);
-   if(copied <= 0)
+   if(!FXAI_MarketDataCopyRatesByPos(symbol, PERIOD_H1, 0, 24, rates) || ArraySize(rates) <= 0)
       return 0.0;
+   int copied = ArraySize(rates);
    double hi = rates[0].high;
    double lo = rates[0].low;
    double close_sum = 0.0;

@@ -40,7 +40,8 @@ datetime FXAI_RawServerNow(void)
    now_time = TimeCurrent();
    if(now_time > 0)
       return now_time;
-   now_time = iTime(_Symbol, PERIOD_M1, 0);
+   if(!FXAI_MarketDataBarTime(_Symbol, PERIOD_M1, 0, now_time))
+      now_time = 0;
    if(now_time > 0)
       return now_time;
    return TimeLocal();

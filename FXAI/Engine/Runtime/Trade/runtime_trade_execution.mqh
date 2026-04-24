@@ -84,7 +84,7 @@ bool FXAI_BuildExecutionPlan(const string symbol,
       return false;
 
    MqlTick tick;
-   if(!SymbolInfoTick(symbol, tick))
+   if(!FXAI_MarketDataGetLatestTick(symbol, tick))
       return false;
 
    double point = FXAI_SymbolPointValue(symbol);
@@ -198,7 +198,7 @@ bool FXAI_SendExecutionPlanChecked(const string symbol,
    }
 
    MqlTick tick;
-   if(!SymbolInfoTick(symbol, tick))
+   if(!FXAI_MarketDataGetLatestTick(symbol, tick))
    {
       reason = "symbol_tick_failed";
       return false;
@@ -345,7 +345,7 @@ bool FXAI_SendMarketOrderChecked(const string symbol,
    plan.use_pending = false;
    plan.order_type = (direction == 1 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL);
    MqlTick tick;
-   if(!SymbolInfoTick(symbol, tick))
+   if(!FXAI_MarketDataGetLatestTick(symbol, tick))
    {
       reason = "symbol_tick_failed";
       retcode = 0;
@@ -497,7 +497,7 @@ bool FXAI_TightenManagedStops(const string symbol,
       return false;
 
    MqlTick tick;
-   if(!SymbolInfoTick(symbol, tick))
+   if(!FXAI_MarketDataGetLatestTick(symbol, tick))
       return false;
 
    double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
@@ -576,8 +576,8 @@ bool FXAI_SendLifecycleAddOrder(const string symbol,
          CycleStartTime = FXAI_ServerNow();
       if(CycleStartTime <= 0)
          CycleStartTime = TimeCurrent();
-      if(CycleStartTime <= 0)
-         CycleStartTime = iTime(symbol, PERIOD_M1, 0);
+      if(CycleStartTime <= 0 && !FXAI_MarketDataBarTime(symbol, PERIOD_M1, 0, CycleStartTime))
+         CycleStartTime = 0;
    }
    return true;
 }

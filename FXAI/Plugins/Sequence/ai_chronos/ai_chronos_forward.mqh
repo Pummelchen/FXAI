@@ -171,7 +171,9 @@
       if(ctx_time > 0)
          return (datetime)(ctx_time - (ctx_time % 60));
 
-      datetime bt = iTime(Symbol(), PERIOD_M1, 0);
+      datetime bt = 0;
+      if(!FXAI_MarketDataBarTime(Symbol(), PERIOD_M1, 0, bt))
+         bt = 0;
       if(bt <= 0)
       {
          datetime tc = TimeCurrent();
@@ -1384,4 +1386,3 @@
                   FXAI_Clamp(1.0 - skip_prob, 0.0, 1.0);
       return ev;
    }
-

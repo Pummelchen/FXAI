@@ -71,7 +71,9 @@ int SpecialDirectionAI(const string symbol)
       }
    }
 
-   datetime signal_bar = iTime(symbol, PERIOD_M1, 1);
+   datetime signal_bar = 0;
+   if(!FXAI_MarketDataBarTime(symbol, PERIOD_M1, 1, signal_bar))
+      signal_bar = 0;
    if(signal_bar == 0)
    {
       g_ai_last_reason = "bar_time_failed";

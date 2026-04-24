@@ -37,7 +37,9 @@ bool FXAI_ExportDataSnapshot(const string symbol,
                             FXAIDataSnapshot &snapshot)
 {
    snapshot.symbol = symbol;
-   snapshot.bar_time = iTime(symbol, PERIOD_M1, 1);
+   snapshot.bar_time = 0;
+   if(!FXAI_MarketDataBarTime(symbol, PERIOD_M1, 1, snapshot.bar_time))
+      snapshot.bar_time = 0;
    snapshot.point = SymbolInfoDouble(symbol, SYMBOL_POINT);
    if(snapshot.bar_time == 0 || snapshot.point <= 0.0) return false;
 
@@ -152,24 +154,7 @@ bool FXAI_LoadRatesOptional(const string symbol,
 {
    if(needed <= 0) return false;
    if(StringLen(symbol) <= 0) return false;
-   if(!SymbolSelect(symbol, true)) return false;
-
-   int cur = ArraySize(rates_arr);
-   if(cur != needed)
-      ArrayResize(rates_arr, needed);
-   ArraySetAsSeries(rates_arr, true);
-
-   int got = CopyRates(symbol, tf, 1, needed, rates_arr);
-   if(got <= 0)
-   {
-      ArrayResize(rates_arr, 0);
-      return false;
-   }
-
-   if(got < needed)
-      ArrayResize(rates_arr, got);
-
-   return true;
+   return FXAI_MarketDataCopyRatesByPos(symbol, tf, 1, needed, rates_arr);
 }
 
 bool FXAI_UpdateRatesRolling(const string symbol,
@@ -180,9 +165,10 @@ bool FXAI_UpdateRatesRolling(const string symbol,
 {
    if(needed <= 0) return false;
    if(StringLen(symbol) <= 0) return false;
-   if(!SymbolSelect(symbol, true)) return false;
 
-   datetime cur_bar_time = iTime(symbol, tf, 1);
+   datetime cur_bar_time = 0;
+   if(!FXAI_MarketDataBarTime(symbol, tf, 1, cur_bar_time))
+      cur_bar_time = 0;
    if(cur_bar_time <= 0) return false;
 
    int cur = ArraySize(rates_arr);
@@ -199,8 +185,8 @@ bool FXAI_UpdateRatesRolling(const string symbol,
 
    if(last_bar_time == 0)
    {
-      int got0 = CopyRates(symbol, tf, 1, needed, rates_arr);
-      if(got0 < needed)
+      if(!FXAI_MarketDataCopyRatesByPos(symbol, tf, 1, needed, rates_arr) ||
+         ArraySize(rates_arr) < needed)
       {
          ArrayResize(rates_arr, 0);
          return false;
@@ -212,11 +198,13 @@ bool FXAI_UpdateRatesRolling(const string symbol,
    if(cur_bar_time == last_bar_time)
       return true;
 
-   int shift = iBarShift(symbol, tf, last_bar_time, true);
+   int shift = -1;
+   if(!FXAI_MarketDataBarShift(symbol, tf, last_bar_time, true, shift))
+      shift = -1;
    if(shift < 1)
    {
-      int got1 = CopyRates(symbol, tf, 1, needed, rates_arr);
-      if(got1 < needed)
+      if(!FXAI_MarketDataCopyRatesByPos(symbol, tf, 1, needed, rates_arr) ||
+         ArraySize(rates_arr) < needed)
       {
          ArrayResize(rates_arr, 0);
          return false;
@@ -234,8 +222,8 @@ bool FXAI_UpdateRatesRolling(const string symbol,
 
    if(new_count >= needed)
    {
-      int got1b = CopyRates(symbol, tf, 1, needed, rates_arr);
-      if(got1b < needed)
+      if(!FXAI_MarketDataCopyRatesByPos(symbol, tf, 1, needed, rates_arr) ||
+         ArraySize(rates_arr) < needed)
       {
          ArrayResize(rates_arr, 0);
          return false;
@@ -249,11 +237,11 @@ bool FXAI_UpdateRatesRolling(const string symbol,
    ArrayResize(fresh, copy_n);
    ArraySetAsSeries(fresh, true);
 
-   int got_fresh = CopyRates(symbol, tf, 1, copy_n, fresh);
-   if(got_fresh != copy_n)
+   if(!FXAI_MarketDataCopyRatesByPos(symbol, tf, 1, copy_n, fresh) ||
+      ArraySize(fresh) != copy_n)
    {
-      int got2 = CopyRates(symbol, tf, 1, needed, rates_arr);
-      if(got2 < needed)
+      if(!FXAI_MarketDataCopyRatesByPos(symbol, tf, 1, needed, rates_arr) ||
+         ArraySize(rates_arr) < needed)
       {
          ArrayResize(rates_arr, 0);
          return false;

@@ -602,7 +602,7 @@ double FXAI_ExecutionQualityCurrentSpreadPoints(const string symbol,
                                                 const double fallback_spread_points)
 {
    MqlTick tick;
-   if(SymbolInfoTick(symbol, tick) && tick.ask > 0.0 && tick.bid > 0.0)
+   if(FXAI_MarketDataGetLatestTick(symbol, tick) && tick.ask > 0.0 && tick.bid > 0.0)
    {
       double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
       if(point <= 0.0)

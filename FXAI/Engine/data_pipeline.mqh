@@ -3,6 +3,7 @@
 
 #include "core.mqh"
 #include "Core\core_pipeline_contracts.mqh"
+#include "market_data_gateway.mqh"
 #include "data_norm_windows.mqh"
 #include "data_io.mqh"
 #include "data_align.mqh"

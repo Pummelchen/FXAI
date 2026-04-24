@@ -101,7 +101,7 @@ double FXAI_ContextLiquidityScore(const string symbol)
       return -1.0;
 
    MqlTick tick;
-   if(!SymbolInfoTick(symbol, tick))
+   if(!FXAI_MarketDataGetLatestTick(symbol, tick))
       return 0.20;
 
    double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
@@ -121,9 +121,7 @@ double FXAI_ContextDataHealthScore(const string symbol)
       return -1.0;
 
    MqlRates rates[];
-   ArraySetAsSeries(rates, true);
-   int copied = CopyRates(symbol, PERIOD_M1, 0, 4, rates);
-   if(copied <= 0)
+   if(!FXAI_MarketDataCopyRatesByPos(symbol, PERIOD_M1, 0, 4, rates) || ArraySize(rates) <= 0)
       return 0.10;
 
    datetime last_bar = rates[0].time;
