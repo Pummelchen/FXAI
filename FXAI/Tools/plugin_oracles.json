@@ -657,6 +657,228 @@
           "conf_drift_max": 0.2
         }
       }
+    },
+    "stat_msgarch": {
+      "identity": "Markov-switching GARCH volatility-regime plugin. It should add regime probability, positive variance forecasts, and abstain when regime confidence is weak.",
+      "recommendations": [
+        "MS-GARCH outputs should reduce active trading during volatility clusters and weak filtered-state separation.",
+        "Check transition rows, filtered probabilities, and variance positivity after every refactor."
+      ],
+      "scenario_rules": {
+        "random_walk": {
+          "active_ratio_max": 0.30,
+          "skip_ratio_min": 0.66
+        },
+        "vol_cluster": {
+          "conf_drift_max": 0.22
+        }
+      }
+    },
+    "stat_arimax_garch": {
+      "identity": "ARIMAX mean model with GARCH residual-risk gating. It should convert past-only exogenous structure into probability only when mean edge beats volatility and cost.",
+      "recommendations": [
+        "Mean forecasts and variance forecasts must both be valid before active signals are trusted.",
+        "Exogenous inputs must remain past-only and cost-aware."
+      ]
+    },
+    "tree_rf": {
+      "identity": "Bagged random-forest tree ensemble distinct from boosting. It should use deterministic tree diversity, feature subsampling, and probability voting.",
+      "recommendations": [
+        "Random-forest votes should stay deterministic for a fixed seed and state snapshot.",
+        "It should not collapse into the XGB/LGBM boosted-tree behavior under random-walk stress."
+      ]
+    },
+    "stat_coint_vecm": {
+      "identity": "Cointegration/VECM equilibrium plugin. It should trade only stable spread dislocations and abstain when relationship confidence decays.",
+      "recommendations": [
+        "Stationarity and half-life diagnostics should dominate raw spread sign.",
+        "Broken relationships must fail safe into skip rather than forced mean reversion."
+      ],
+      "scenario_rules": {
+        "mean_revert": {
+          "trend_align_min": 0.20
+        },
+        "random_walk": {
+          "active_ratio_max": 0.28,
+          "skip_ratio_min": 0.68
+        }
+      }
+    },
+    "stat_ou_spread": {
+      "identity": "OU spread mean-reversion plugin. It should expose half-life-style speed, z-score confidence, and skip unstable spreads.",
+      "recommendations": [
+        "OU speed and variance must remain bounded and positive.",
+        "Wide z-score without stable speed should not produce high confidence."
+      ]
+    },
+    "rl_ppo": {
+      "identity": "Offline-policy-style PPO plugin with short/flat/long action probabilities and value-aware safety gates.",
+      "recommendations": [
+        "PPO must never override risk management; weak value or confidence should map to FLAT/skip.",
+        "Reward updates must remain net-of-cost and penalize churn."
+      ],
+      "scenario_rules": {
+        "random_walk": {
+          "active_ratio_max": 0.25,
+          "skip_ratio_min": 0.72
+        }
+      }
+    },
+    "stat_microflow_proxy": {
+      "identity": "Broker-visible microstructure proxy plugin. It must remain explicitly labeled as proxy order-flow, not true centralized FX tape or DOM.",
+      "recommendations": [
+        "Missing or stale microstructure proxies must reduce confidence and increase execution caution.",
+        "Keep this model as context/gating support, not a false institutional order-flow claim."
+      ],
+      "scenario_rules": {
+        "market_spread_shock": {
+          "active_ratio_max": 0.36,
+          "skip_ratio_min": 0.62
+        }
+      }
+    },
+    "stat_hmm_regime": {
+      "identity": "Gaussian HMM regime plugin that contributes filtered state probabilities and transition instability to routing.",
+      "recommendations": [
+        "Forward probabilities must normalize and Viterbi/state confidence should be deterministic.",
+        "Regime shifts should lower confidence before the model adapts."
+      ],
+      "scenario_rules": {
+        "regime_shift": {
+          "conf_drift_max": 0.22
+        }
+      }
+    },
+    "lin_elastic_logit": {
+      "identity": "Elastic-net logistic classifier with sparse cost-aware probabilities.",
+      "recommendations": [
+        "L1/L2 shrinkage should preserve stable features and suppress noise-only features.",
+        "Probability outputs must remain calibrated and abstain-compatible."
+      ]
+    },
+    "lin_profit_logit": {
+      "identity": "Profit-aware logistic classifier that weights updates by realized move after cost.",
+      "recommendations": [
+        "Cost-aware update weighting must not double-count costs at execution gates.",
+        "Weak net edge should increase skip probability."
+      ]
+    },
+    "ai_cnn_lstm": {
+      "identity": "1D-CNN plus LSTM sequence hybrid over already available historical windows.",
+      "recommendations": [
+        "Convolutional shape extraction and recurrent state must reset cleanly and never read future bars.",
+        "Flat/random-walk windows should produce low active ratios."
+      ],
+      "sequence_delta_min": 0.012
+    },
+    "ai_attn_cnn_bilstm": {
+      "identity": "Attention-style CNN/BiLSTM hybrid constrained to the already available lookback window.",
+      "recommendations": [
+        "Bidirectional processing is allowed only inside the past lookback window.",
+        "No cross-symbol hidden-state bleed is acceptable."
+      ],
+      "sequence_delta_min": 0.012
+    },
+    "stat_emd_hht": {
+      "identity": "EMD/Hilbert-Huang-style decomposition plugin that separates trend, cycle, and noise before scoring.",
+      "recommendations": [
+        "Unstable decomposition should lower confidence and abstain.",
+        "Do not replace decomposition with raw trend sign only."
+      ]
+    },
+    "stat_vmd": {
+      "identity": "VMD-style decomposition plugin using separated slow/fast components for direction and uncertainty.",
+      "recommendations": [
+        "Component confidence should drop during noisy mode mixing.",
+        "Runtime decomposition must use past-window values only."
+      ]
+    },
+    "stat_tvp_kalman": {
+      "identity": "Time-varying-parameter Kalman/state-space plugin with covariance diagnostics.",
+      "recommendations": [
+        "Kalman covariance must stay positive and increase caution under unstable measurements.",
+        "State updates must be symbol-local and replay-stable."
+      ]
+    },
+    "factor_pca_panel": {
+      "identity": "PCA/latent-factor panel plugin exposing factor scores and explained-variance confidence.",
+      "recommendations": [
+        "Projection loadings must be fitted from past data only.",
+        "Low explained variance or loading drift should reduce confidence."
+      ]
+    },
+    "factor_ppp_value": {
+      "identity": "PPP/value plugin that uses trusted fundamental metadata when available and falls back to neutral confidence without it.",
+      "recommendations": [
+        "PPP/value should be weak at short horizons and stronger only when horizon and metadata support it.",
+        "Metadata date guards must prevent macro leakage."
+      ]
+    },
+    "factor_carry": {
+      "identity": "Carry/rate-differential plugin with crash-risk and cost-aware abstention.",
+      "recommendations": [
+        "Carry direction must map coherently across currency legs.",
+        "Hostile volatility or regime posture should suppress carry signals."
+      ]
+    },
+    "factor_cmv_panel": {
+      "identity": "Cross-sectional carry/momentum/value ranking plugin for panel-level FX relative-value signals.",
+      "recommendations": [
+        "Middle ranks should be no-trade zones.",
+        "Currency exposure aggregation should avoid contradictory pair-level bets."
+      ]
+    },
+    "trend_tsmom_vol": {
+      "identity": "Time-series momentum plugin with volatility scaling and random-walk suppression.",
+      "recommendations": [
+        "Trend strength should be scaled by realized volatility and cost.",
+        "Random walks should mostly skip even when short lookbacks wiggle."
+      ]
+    },
+    "trend_xsmom_rank": {
+      "identity": "Cross-sectional momentum/relative-strength ranking plugin with concentration controls.",
+      "recommendations": [
+        "Signals should be strongest for top/bottom ranks and neutral in the middle.",
+        "Pair-level outputs should remain coherent with currency exposure."
+      ]
+    },
+    "trend_vol_breakout": {
+      "identity": "Volatility breakout plugin with range compression, expansion, and false-breakout caution.",
+      "recommendations": [
+        "Breakout confidence should require expansion after compression.",
+        "False-breakout and high-cost states should map to skip."
+      ]
+    },
+    "stat_xrate_consistency": {
+      "identity": "Cross-rate consistency plugin using pair-network residual pressure without overclaiming executable triangular arbitrage.",
+      "recommendations": [
+        "Residuals must be cost-adjusted before confidence rises.",
+        "Call this consistency pressure unless spread/cost assumptions prove executable arbitrage."
+      ]
+    },
+    "ai_gru": {
+      "identity": "True GRU sequence plugin with reset/update gates over past lookback windows.",
+      "recommendations": [
+        "GRU reset/update gates should produce sequence sensitivity without hidden-state leakage.",
+        "Reset behavior must be deterministic across symbol/session changes."
+      ],
+      "sequence_delta_min": 0.012
+    },
+    "ai_bilstm": {
+      "identity": "Bidirectional LSTM plugin constrained to the already available historical lookback window.",
+      "recommendations": [
+        "Backward pass must never include future bars beyond the current decision point.",
+        "State must reset on symbol/session changes."
+      ],
+      "sequence_delta_min": 0.012
+    },
+    "ai_lstm_tcn": {
+      "identity": "LSTM-TCN hybrid plugin combining dilated/local convolutional context with recurrent memory.",
+      "recommendations": [
+        "TCN-style local features and LSTM memory should both affect predictions.",
+        "Window shape checks and state resets must remain strict."
+      ],
+      "sequence_delta_min": 0.012
     }
   }
 }

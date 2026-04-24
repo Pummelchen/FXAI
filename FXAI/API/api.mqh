@@ -275,6 +275,32 @@ bool FXAI_PredictViaV4(CFXAIAIPlugin &plugin,
 #include "..\Plugins\Rule\rule_buyonly.mqh"
 #include "..\Plugins\Rule\rule_sellonly.mqh"
 #include "..\Plugins\Rule\rule_random.mqh"
+#include "..\Plugins\Stat\stat_msgarch.mqh"
+#include "..\Plugins\Stat\stat_arimax_garch.mqh"
+#include "..\Plugins\Tree\tree_rf.mqh"
+#include "..\Plugins\Stat\stat_coint_vecm.mqh"
+#include "..\Plugins\Stat\stat_ou_spread.mqh"
+#include "..\Plugins\RL\rl_ppo.mqh"
+#include "..\Plugins\Stat\stat_microflow_proxy.mqh"
+#include "..\Plugins\Stat\stat_hmm_regime.mqh"
+#include "..\Plugins\Linear\lin_elastic_logit.mqh"
+#include "..\Plugins\Linear\lin_profit_logit.mqh"
+#include "..\Plugins\Sequence\ai_cnn_lstm.mqh"
+#include "..\Plugins\Sequence\ai_attn_cnn_bilstm.mqh"
+#include "..\Plugins\Stat\stat_emd_hht.mqh"
+#include "..\Plugins\Stat\stat_vmd.mqh"
+#include "..\Plugins\Stat\stat_tvp_kalman.mqh"
+#include "..\Plugins\Factor\factor_pca_panel.mqh"
+#include "..\Plugins\Factor\factor_ppp_value.mqh"
+#include "..\Plugins\Factor\factor_carry.mqh"
+#include "..\Plugins\Factor\factor_cmv_panel.mqh"
+#include "..\Plugins\Trend\trend_tsmom_vol.mqh"
+#include "..\Plugins\Trend\trend_xsmom_rank.mqh"
+#include "..\Plugins\Trend\trend_vol_breakout.mqh"
+#include "..\Plugins\Stat\stat_xrate_consistency.mqh"
+#include "..\Plugins\Sequence\ai_gru.mqh"
+#include "..\Plugins\Sequence\ai_bilstm.mqh"
+#include "..\Plugins\Sequence\ai_lstm_tcn.mqh"
 
 class CFXAIAIRegistry
 {
@@ -377,6 +403,32 @@ public:
          case (int)AI_FEWC: return new CFXAIAIFEWC();
          case (int)AI_GHA: return new CFXAIAIGHA();
          case (int)AI_TESSERACT: return new CFXAIAITesseract();
+         case (int)AI_STAT_MSGARCH: return new CFXAIAIStatMSGARCH();
+         case (int)AI_STAT_ARIMAX_GARCH: return new CFXAIAIStatARIMAXGARCH();
+         case (int)AI_TREE_RF: return new CFXAIAITreeRF();
+         case (int)AI_STAT_COINT_VECM: return new CFXAIAIStatCointVECM();
+         case (int)AI_STAT_OU_SPREAD: return new CFXAIAIStatOUSpread();
+         case (int)AI_RL_PPO: return new CFXAIAIRLPPO();
+         case (int)AI_STAT_MICROFLOW_PROXY: return new CFXAIAIStatMicroflowProxy();
+         case (int)AI_STAT_HMM_REGIME: return new CFXAIAIStatHMMRegime();
+         case (int)AI_LIN_ELASTIC_LOGIT: return new CFXAIAILinElasticLogit();
+         case (int)AI_LIN_PROFIT_LOGIT: return new CFXAIAILinProfitLogit();
+         case (int)AI_CNN_LSTM: return new CFXAIAICNNLSTM();
+         case (int)AI_ATTN_CNN_BILSTM: return new CFXAIAIAttnCNNBiLSTM();
+         case (int)AI_STAT_EMD_HHT: return new CFXAIAIStatEMDHHT();
+         case (int)AI_STAT_VMD: return new CFXAIAIStatVMD();
+         case (int)AI_STAT_TVP_KALMAN: return new CFXAIAIStatTVPKalman();
+         case (int)AI_FACTOR_PCA_PANEL: return new CFXAIAIFactorPCAPanel();
+         case (int)AI_FACTOR_PPP_VALUE: return new CFXAIAIFactorPPPValue();
+         case (int)AI_FACTOR_CARRY: return new CFXAIAIFactorCarry();
+         case (int)AI_FACTOR_CMV_PANEL: return new CFXAIAIFactorCMVPanel();
+         case (int)AI_TREND_TSMOM_VOL: return new CFXAIAITrendTSMOMVol();
+         case (int)AI_TREND_XSMOM_RANK: return new CFXAIAITrendXSMOMRank();
+         case (int)AI_TREND_VOL_BREAKOUT: return new CFXAIAITrendVolBreakout();
+         case (int)AI_STAT_XRATE_CONSISTENCY: return new CFXAIAIStatXRateConsistency();
+         case (int)AI_GRU: return new CFXAIAIGRU();
+         case (int)AI_BILSTM: return new CFXAIAIBiLSTM();
+         case (int)AI_LSTM_TCN: return new CFXAIAILSTMTCN();
          default: return NULL;
       }
    }

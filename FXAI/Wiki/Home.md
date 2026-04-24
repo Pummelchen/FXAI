@@ -24,6 +24,7 @@ FXAI is a live-trading and research framework for FX. It combines a modular MT5 
 
 - Run the live EA with shared control-plane layers such as NewsPulse, Rates Engine, Cross Asset, Microstructure, Adaptive Router, Dynamic Ensemble, Probabilistic Calibration, Execution Quality, and Pair Network.
 - Run Audit Lab to see how a strategy or promotion behaves in standard, walk-forward, macro-event, and hostile-market scenarios.
+- Inspect the Model Zoo to understand which plugin families contribute regime, volatility, sequence, factor, trend, equilibrium, policy, and proxy-microstructure views.
 - Use Offline Lab to export data, run campaigns, compare candidates, promote profiles, rebuild artifacts, and recover a clean runtime bundle.
 - Use NewsPulse and related control-plane services to detect event risk, stale source conditions, policy divergence, liquidity stress, and pair-specific trading posture changes.
 - Use the GUI as an operator shell for role-based workflows, runtime inspection, report browsing, recovery guidance, and command generation.
@@ -34,6 +35,7 @@ FXAI is a live-trading and research framework for FX. It combines a modular MT5 
 2. Read [Getting Started](Getting%20Started.md).
 3. Go to the page that matches the job you want to do next:
    - [Benchmarks](Benchmarks.md)
+   - [Model Zoo](Model%20Zoo.md)
    - [Promotion Criteria](Promotion%20Criteria.md)
    - [Release Notes](Release%20Notes.md)
    - [Audit Lab](Audit%20Lab.md)

@@ -315,6 +315,61 @@
         "HIGH_VOL_EVENT": 1.06,
         "TREND_PERSISTENT": 1.1
       }
+    },
+    "stat_msgarch": {
+      "liquidity_robustness": 0.92,
+      "news_compatibility": 1.12,
+      "regime_weights": {
+        "HIGH_VOL_EVENT": 1.16,
+        "LIQUIDITY_STRESS": 1.08,
+        "RISK_ON_OFF_MACRO": 1.08
+      }
+    },
+    "stat_hmm_regime": {
+      "news_compatibility": 1.08,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.1,
+        "HIGH_VOL_EVENT": 1.08,
+        "TREND_PERSISTENT": 1.08
+      }
+    },
+    "stat_microflow_proxy": {
+      "liquidity_robustness": 1.18,
+      "regime_weights": {
+        "LIQUIDITY_STRESS": 1.18,
+        "SESSION_FLOW": 1.12
+      }
+    },
+    "stat_coint_vecm": {
+      "news_compatibility": 0.82,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 0.78,
+        "HIGH_VOL_EVENT": 0.74,
+        "RANGE_MEAN_REVERTING": 1.16
+      }
+    },
+    "stat_ou_spread": {
+      "news_compatibility": 0.82,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 0.78,
+        "HIGH_VOL_EVENT": 0.76,
+        "RANGE_MEAN_REVERTING": 1.16
+      }
+    },
+    "trend_vol_breakout": {
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.18,
+        "RANGE_MEAN_REVERTING": 0.82,
+        "TREND_PERSISTENT": 1.06
+      }
+    },
+    "factor_carry": {
+      "news_compatibility": 1.08,
+      "regime_weights": {
+        "HIGH_VOL_EVENT": 0.82,
+        "RISK_ON_OFF_MACRO": 1.12,
+        "TREND_PERSISTENT": 1.06
+      }
     }
   },
   "plugin_patterns": [
@@ -325,10 +380,15 @@
       "match_any": [
         "gha",
         "stmn",
-        "macro",
-        "world",
-        "memory",
-        "tesseract"
+          "macro",
+          "world",
+          "memory",
+          "tesseract",
+          "msgarch",
+          "hmm",
+          "kalman",
+          "carry",
+          "ppp"
       ],
       "news_compatibility": 1.14,
       "regime_weights": {
@@ -344,11 +404,14 @@
       "match_any": [
         "tft",
         "patch",
-        "trend",
-        "momentum",
-        "state",
-        "qcew",
-        "tesseract"
+          "trend",
+          "momentum",
+          "state",
+          "qcew",
+          "tesseract",
+          "tsmom",
+          "breakout",
+          "xsmom"
       ],
       "news_compatibility": 1.04,
       "regime_weights": {
@@ -362,12 +425,14 @@
       "id": "mean_reversion_models",
       "liquidity_robustness": 0.92,
       "match_any": [
-        "mean",
-        "revert",
-        "ou",
-        "pa",
-        "kalman",
-        "fewc"
+          "mean",
+          "revert",
+          "ou",
+          "coint",
+          "vecm",
+          "pa",
+          "kalman",
+          "fewc"
       ],
       "news_compatibility": 0.76,
       "regime_weights": {

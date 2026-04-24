@@ -11,6 +11,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - [`Quick Start By Role`](Wiki/Quick%20Start%20By%20Role.md)
 - [`Getting Started`](Wiki/Getting%20Started.md)
 - [`Benchmarks`](Wiki/Benchmarks.md)
+- [`Model Zoo`](Wiki/Model%20Zoo.md)
 - [`Promotion Criteria`](Wiki/Promotion%20Criteria.md)
 - [`Release Notes`](Wiki/Release%20Notes.md)
 - then the subsystem page you actually need first, such as [`Audit Lab`](Wiki/Audit%20Lab.md), [`Offline Lab`](Wiki/Offline%20Lab.md), [`NewsPulse`](Wiki/NewsPulse.md), [`Runtime Control Plane`](Wiki/Runtime%20Control%20Plane.md), or [`GUI`](Wiki/GUI.md)
@@ -120,8 +121,12 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Split shared transfer-backbone internals for globals, temporal pooling, feature encoding, and model heads behind `tensor_transfer.mqh`.
 - `Plugins/`
   Model families and plugin implementations.
+- `Plugins/Common/fxai_framework_model.mqh`
+  Shared MT5-native framework layer for the newly expanded model zoo. It provides probability/abstention-compatible implementations for regime volatility, ARIMAX-GARCH, random forest, cointegration/OU spread, PPO-style policy scoring, microstructure proxies, HMM regimes, elastic/profit logistic, decomposition, Kalman/PCA/factor, trend, cross-rate, GRU, BiLSTM, LSTM-TCN, and CNN-LSTM variants without adding live external inference services.
 - `Plugins/Sequence/ai_*/`
-  Internal split state and public sections for the largest sequence-model plugins, including `ai_tcn/`, `ai_s4/`, and `ai_stmn/`. The sequence zoo also now includes the new native research plugins `ai_qcew`, `ai_fewc`, `ai_gha`, and `ai_tesseract`.
+  Internal split state and public sections for the largest sequence-model plugins, including `ai_tcn/`, `ai_s4/`, and `ai_stmn/`. The sequence zoo also now includes the native research plugins `ai_qcew`, `ai_fewc`, `ai_gha`, `ai_tesseract`, `ai_gru`, `ai_bilstm`, `ai_lstm_tcn`, `ai_cnn_lstm`, and `ai_attn_cnn_bilstm`.
+- `Plugins/Stat/`, `Plugins/Factor/`, `Plugins/Trend/`, `Plugins/RL/`
+  Native statistical, factor, trend, and policy plugins added for model-family coverage. These modules consume only FXAI plugin-context payloads and avoid direct MT5 data pulls, preserving the DataCore/FeatureCore/NormalizationCore boundary.
 - `Plugins/Sequence/ai_tft/Forward/`
   Split TFT forward-pass helpers into utility, sequence, and head-specific modules.
 - `Plugins/Sequence/ai_patchtst/`
