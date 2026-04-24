@@ -37,6 +37,12 @@ def test_microstructure_validate_creates_default_files_and_required_windows():
             assert Path(payload["config_path"]).exists()
             assert Path(payload["service_config_path"]).exists()
             assert payload["windows_sec"] == [10, 30, 60, 300, 900]
+            status_payload = json.loads(Path(payload["status_path"]).read_text(encoding="utf-8"))
+            artifact_paths = status_payload.get("artifacts", {})
+            assert artifact_paths
+            for artifact_path in artifact_paths.values():
+                assert not str(artifact_path).startswith("/")
+                assert "/Users/" not in str(artifact_path)
 
 
 def test_microstructure_validate_rejects_missing_required_windows():

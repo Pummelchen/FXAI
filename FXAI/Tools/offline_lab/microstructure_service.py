@@ -18,6 +18,7 @@ from .microstructure_contracts import (
     MICROSTRUCTURE_LOCAL_HISTORY_PATH,
     MICROSTRUCTURE_SERVICE_SOURCE,
     MICROSTRUCTURE_STATUS_PATH,
+    REPO_ROOT,
     TERMINAL_SERVICE_BINARY,
     TERMINAL_SERVICE_SOURCE,
     ensure_microstructure_dirs,
@@ -28,6 +29,20 @@ from .microstructure_contracts import (
     utc_now,
 )
 from testlab.shared import TERMINAL_ROOT, build_metaeditor_compile_command, read_utf16_or_text
+
+
+def _portable_artifact_path(path: Path) -> str:
+    resolved = path.resolve()
+    repo_root = REPO_ROOT.resolve()
+    runtime_dir = COMMON_MICROSTRUCTURE_JSON.parent.resolve()
+    try:
+        return str(resolved.relative_to(repo_root))
+    except ValueError:
+        pass
+    try:
+        return "FILE_COMMON/FXAI/Runtime/" + str(resolved.relative_to(runtime_dir))
+    except ValueError:
+        return path.name
 
 
 def _status_payload_from_runtime(now_dt=None) -> dict[str, Any]:
@@ -53,10 +68,10 @@ def _status_payload_from_runtime(now_dt=None) -> dict[str, Any]:
             "symbols": {},
             "health": {"snapshot_stale_after_sec": int(config.get("snapshot_stale_after_sec", 45) or 45)},
             "artifacts": {
-                "snapshot_json": str(COMMON_MICROSTRUCTURE_JSON),
-                "service_config_tsv": str(COMMON_MICROSTRUCTURE_CONFIG),
-                "status_json": str(COMMON_MICROSTRUCTURE_STATUS),
-                "history_ndjson": str(MICROSTRUCTURE_LOCAL_HISTORY_PATH),
+                "snapshot_json": _portable_artifact_path(COMMON_MICROSTRUCTURE_JSON),
+                "service_config_tsv": _portable_artifact_path(COMMON_MICROSTRUCTURE_CONFIG),
+                "status_json": _portable_artifact_path(COMMON_MICROSTRUCTURE_STATUS),
+                "history_ndjson": _portable_artifact_path(MICROSTRUCTURE_LOCAL_HISTORY_PATH),
             },
         }
 
@@ -73,10 +88,10 @@ def _status_payload_from_runtime(now_dt=None) -> dict[str, Any]:
     service.setdefault("collector_mode", str(config.get("collector_mode", "mt5_service")))
     service.setdefault("configured_pairs", len(list(dict(config.get("symbol_universe", {})).get("canonical_pairs", []))))
     payload["artifacts"] = {
-        "snapshot_json": str(COMMON_MICROSTRUCTURE_JSON),
-        "service_config_tsv": str(COMMON_MICROSTRUCTURE_CONFIG),
-        "status_json": str(COMMON_MICROSTRUCTURE_STATUS),
-        "history_ndjson": str(MICROSTRUCTURE_LOCAL_HISTORY_PATH),
+        "snapshot_json": _portable_artifact_path(COMMON_MICROSTRUCTURE_JSON),
+        "service_config_tsv": _portable_artifact_path(COMMON_MICROSTRUCTURE_CONFIG),
+        "status_json": _portable_artifact_path(COMMON_MICROSTRUCTURE_STATUS),
+        "history_ndjson": _portable_artifact_path(MICROSTRUCTURE_LOCAL_HISTORY_PATH),
     }
     return payload
 

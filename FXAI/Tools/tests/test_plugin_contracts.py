@@ -40,8 +40,9 @@ def test_registry_create_instance_covers_every_top_level_plugin_source():
     for path in sources:
         assert path.exists(), f"missing plugin source: {path}"
 
-    create_cases = re.findall(r"case \(int\)AI_[A-Z0-9_]+: return new [A-Za-z0-9_]+\(\);", api_text)
+    create_cases = re.findall(r"case \(int\)AI_[A-Z0-9_]+: plugin = new [A-Za-z0-9_]+\(\); break;", api_text)
     assert len(create_cases) == len(sources)
+    assert "plugin.Reset();" in api_text
 
 
 def test_every_top_level_plugin_exposes_required_public_contract_methods():

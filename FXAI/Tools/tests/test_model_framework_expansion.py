@@ -48,11 +48,12 @@ def test_ai_count_matches_registry_expansion() -> None:
     count = int(re.search(r"#define FXAI_AI_COUNT\s+(\d+)", core).group(1))
     enum_names = re.findall(r"\bAI_[A-Z0-9_]+\b", core.split("enum ENUM_AI_TYPE", 1)[1].split("};", 1)[0])
     include_paths = re.findall(r'#include "\.\.\\(Plugins\\[^"]+\.mqh)"', api)
-    create_cases = re.findall(r"case \(int\)AI_[A-Z0-9_]+: return new [A-Za-z0-9_]+\(\);", api)
+    create_cases = re.findall(r"case \(int\)AI_[A-Z0-9_]+: plugin = new [A-Za-z0-9_]+\(\); break;", api)
     assert count == 62
     assert len(enum_names) == count
     assert len(include_paths) == count
     assert len(create_cases) == count
+    assert "plugin.Reset();" in api
 
 
 def test_new_plugins_are_registered_and_expose_contract_methods() -> None:
@@ -65,7 +66,7 @@ def test_new_plugins_are_registered_and_expose_contract_methods() -> None:
         include_path = rel_path.replace("/", "\\")
         assert enum_name in core
         assert f'#include "..\\{include_path}"' in api
-        assert f"case (int){enum_name}: return new " in api
+        assert f"case (int){enum_name}: plugin = new " in api
         assert f'return "{plugin_name}";' in text
         for token in ("AIId(", "AIName(", "Describe("):
             assert token in text, f"{rel_path} missing {token}"
