@@ -28,6 +28,34 @@ struct ProjectScannerTests {
         #expect(snapshot.pluginFamilies.contains(where: { $0.family == "Sequence" && $0.pluginCount == 1 }))
     }
 
+    @Test
+    func scanHonorsDotEnvDatabaseAndReplicaSettings() throws {
+        let tempRoot = try makeProjectFixture()
+        let configuredDB = tempRoot
+            .appendingPathComponent("Data", isDirectory: true)
+            .appendingPathComponent("custom-replica.db", isDirectory: false)
+        try FileManager.default.createDirectory(
+            at: configuredDB.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data().write(to: configuredDB)
+        try Data(
+            """
+            FXAI_DEFAULT_DB=Data/custom-replica.db
+            TURSO_DATABASE_URL=libsql://fxai.example.turso.io
+            TURSO_AUTH_TOKEN=test-token
+            TURSO_ENCRYPTION_KEY=test-key
+            """.utf8
+        ).write(to: tempRoot.appendingPathComponent(".env"))
+
+        let snapshot = try ProjectScanner().scan(projectRoot: tempRoot)
+
+        #expect(snapshot.tursoSummary.localDatabasePresent)
+        #expect(snapshot.tursoSummary.localDatabasePath == configuredDB)
+        #expect(snapshot.tursoSummary.embeddedReplicaConfigured)
+        #expect(snapshot.tursoSummary.encryptionConfigured)
+    }
+
     private func makeProjectFixture() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

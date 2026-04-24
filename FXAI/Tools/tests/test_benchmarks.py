@@ -151,6 +151,7 @@ def test_publish_benchmark_suite_writes_matrix_reference_bundle_and_release_note
     matrix = json.loads(matrix_json.read_text(encoding="utf-8"))
     assert len(matrix["rows"]) == 2
     assert {row["benchmark_source"] for row in matrix["rows"]} == {"reference_audit", "promoted_profile"}
+    reference_row = next(row for row in matrix["rows"] if row["benchmark_source"] == "reference_audit")
     current_row = next(row for row in matrix["rows"] if row["benchmark_source"] == "promoted_profile")
     assert current_row["strategy_profile_label"] == "strategy/default@v1"
     assert current_row["walkforward_score"] == 79.5
@@ -159,7 +160,15 @@ def test_publish_benchmark_suite_writes_matrix_reference_bundle_and_release_note
     release_notes = release_notes_md.read_text(encoding="utf-8")
     assert "Model change: rule_m1sync -> ai_mlp" in release_notes
     assert "Strategy profile change: reference/legacy-audit@v0 -> strategy/default@v1" in release_notes
-    assert "Audit score: 73.5 -> 83.5 (+10.0)" in release_notes
+    expected_delta = float(current_row["audit_score"]) - float(reference_row["audit_score"])
+    expected_audit_line = (
+        f"Audit score: {float(reference_row['audit_score']):.1f} -> "
+        f"{float(current_row['audit_score']):.1f} ({expected_delta:+.1f})"
+    )
+    assert expected_audit_line in release_notes
 
     promotion_criteria = json.loads(promotion_criteria_json.read_text(encoding="utf-8"))
     assert promotion_criteria["walkforward_thresholds"]["pbo_max"] == 0.45
+
+    reference_bundle = json.loads(reference_manifest.read_text(encoding="utf-8"))
+    assert reference_bundle["reproducibility"]["repo_root"] == "<FXAI_ROOT>"

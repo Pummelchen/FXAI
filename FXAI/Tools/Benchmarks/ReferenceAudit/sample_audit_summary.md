@@ -1,6 +1,7 @@
 # FXAI Audit Summary
 
 execution_profile: default
+manifest: <FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit.manifest.json
 
 ## rule_m1sync | 43.5/100 | Grade F
 Issues: missing required scenario: drift_down; missing required scenario: drift_up; missing required scenario: market_chop; missing required scenario: market_trend; missing required scenario: market_session_edges; missing required scenario: market_spread_shock; missing required scenario: market_walkforward; missing required scenario: vol_cluster

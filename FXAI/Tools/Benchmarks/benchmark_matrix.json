@@ -1,6 +1,6 @@
 {
   "artifact_type": "fxai_public_benchmark_matrix",
-  "generated_at_utc": "2026-04-19T02:21:00Z",
+  "generated_at_utc": "2026-04-24T07:48:22Z",
   "profile_name": "bestparams",
   "rows": [
     {
@@ -11,13 +11,13 @@
         "summary_json": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit.summary.json",
         "summary_report_md": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit_summary.md"
       },
-      "audit_score": 73.5,
+      "audit_score": 43.5,
       "benchmark_source": "reference_audit",
       "broker_profile": "default",
       "execution_profile": "default",
-      "grade": "D",
+      "grade": "F",
       "horizon_minutes": 5,
-      "issue_count": 4,
+      "issue_count": 9,
       "plugin_name": "rule_m1sync",
       "profile_name": "reference",
       "promotion_tier": "reference-only",

@@ -13,7 +13,7 @@ from .release_gate import (
     DEFAULT_RELEASE_GATE_MIN_STABILITY,
     release_gate_policy_snapshot,
 )
-from .reporting import grade, load_current_summary, render_summary_report
+from .reporting import build_summary, grade, load_current_summary, render_summary_report
 from .shared import (
     BASELINES_DIR,
     ROOT,
@@ -113,11 +113,15 @@ def _portable_path(path: str | Path, *, root: Path = ROOT) -> str:
     raw = str(path or "").strip()
     if not raw:
         return ""
+    if raw == FXAI_ROOT_TOKEN or raw.startswith(f"{FXAI_ROOT_TOKEN}/"):
+        return raw
     candidate = Path(raw)
     try:
-        relative = candidate.relative_to(root)
+        relative = candidate.resolve().relative_to(root.resolve())
     except ValueError:
         return raw
+    if relative == Path("."):
+        return FXAI_ROOT_TOKEN
     return f"{FXAI_ROOT_TOKEN}/{relative.as_posix()}"
 
 
@@ -232,7 +236,12 @@ def _render_benchmark_markdown_rows(rows: list[dict], matrix_path: Path) -> str:
 def _write_benchmark_tsv(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=BENCHMARK_TSV_FIELDS, delimiter="\t")
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=BENCHMARK_TSV_FIELDS,
+            delimiter="\t",
+            lineterminator="\n",
+        )
         writer.writeheader()
         for row in rows:
             writer.writerow({field: row.get(field, "") for field in BENCHMARK_TSV_FIELDS})
@@ -489,8 +498,9 @@ def _build_reference_audit_bundle(*,
     summary_report_md = output_dir / "sample_audit_summary.md"
 
     shutil.copy2(reference_report, report_tsv)
-    shutil.copy2(reference_summary, summary_json)
-    summary = load_current_summary(summary_json, load_oracles())
+    rows = _load_rows(report_tsv)
+    summary = build_summary(rows, load_oracles())
+    write_json(summary_json, summary)
     summary_report_md.write_text(
         render_summary_report(summary, execution_profile, Path(_portable_path(manifest_json, root=root))),
         encoding="utf-8",
@@ -526,7 +536,7 @@ def _build_reference_audit_bundle(*,
             "summary_report_md": sha256_path(summary_report_md),
         },
         "reproducibility": {
-            "repo_root": str(root),
+            "repo_root": _portable_path(root, root=root),
             "repo_head": git_head_commit(root),
             "repo_dirty": git_dirty(root),
         },

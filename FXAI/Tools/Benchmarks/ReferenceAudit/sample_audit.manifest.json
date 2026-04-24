@@ -18,13 +18,13 @@
       "summary_json": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit.summary.json",
       "summary_report_md": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit_summary.md"
     },
-    "audit_score": 73.5,
+    "audit_score": 43.5,
     "benchmark_source": "reference_audit",
     "broker_profile": "default",
     "execution_profile": "default",
-    "grade": "D",
+    "grade": "F",
     "horizon_minutes": 5,
-    "issue_count": 4,
+    "issue_count": 9,
     "plugin_name": "rule_m1sync",
     "profile_name": "reference",
     "promotion_tier": "reference-only",
@@ -39,11 +39,11 @@
     "symbol_pack": "single:EURUSD",
     "walkforward_score": null
   },
-  "generated_at_utc": "2026-04-19T02:21:00Z",
+  "generated_at_utc": "2026-04-24T07:48:22Z",
   "hashes": {
     "report_tsv": "092feed67482700831daa4fd8eb2998d36748969cdee36ed91de801ccd584328",
-    "summary_json": "abfdef508bb0d9cfbf35e0348237c165ba2885028d1a2efc8fb8ac5b9a0bbc69",
-    "summary_report_md": "6cb6c6cbe98fcdcc1d0a527b60aafa0a3ddfcd15974ba5c80111b2d48ee2fd52"
+    "summary_json": "4fb856ba8d4425b090a3fccb81941ec58db53be8feed8cfa3ddef0a892028dc4",
+    "summary_report_md": "c11fe5c2bb50ea57ed5a4bb055d0cfe91d66f8d8bac14ecbbd742f96f7f6a994"
   },
   "published_artifacts": {
     "manifest_json": "<FXAI_ROOT>/Tools/Benchmarks/ReferenceAudit/sample_audit.manifest.json",
@@ -54,7 +54,7 @@
   "reproducibility": {
     "repo_dirty": false,
     "repo_head": "",
-    "repo_root": "/Users/andreborchert/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXAI"
+    "repo_root": "<FXAI_ROOT>"
   },
   "schema_version": 1,
   "source_artifacts": {

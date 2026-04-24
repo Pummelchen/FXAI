@@ -276,8 +276,14 @@ public struct ProjectScanner {
     }
 
     private func scanTursoSummary(projectRoot: URL) -> TursoSummary {
-        let environment = ProcessInfo.processInfo.environment
-        let dbURL = projectRoot.appendingPathComponent("Tools/OfflineLab/fxai_offline_lab.turso.db")
+        let configuration = FXAIProjectConfigurationResolver.load(projectRoot: projectRoot)
+        let environment = configuration.environment
+        let dbURL = FXAIProjectConfigurationResolver.resolvedPathURL(
+            rawValue: environment["FXAI_DEFAULT_DB"]
+                ?? FXAIProjectConfigurationResolver.configuredValue(configuration: configuration, key: "default_db"),
+            baseDirectory: projectRoot,
+            environment: environment
+        ) ?? projectRoot.appendingPathComponent("Tools/OfflineLab/fxai_offline_lab.turso.db")
         let fm = FileManager.default
 
         return TursoSummary(

@@ -21,6 +21,7 @@ TEXT_EXTENSIONS = {
 def test_repository_artifacts_do_not_embed_operator_paths():
     root = Path(__file__).resolve().parents[2]
     scan_roots = [
+        root / "Tools/Benchmarks",
         root / "Tools/OfflineLab",
         root / "Tools/tests/golden",
     ]
