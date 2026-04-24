@@ -35,7 +35,7 @@ This page is the fastest way to choose the right FXAI workflow for the job you a
 3. Inspect the final trade posture, confidence, expected edge after costs, and pair-network decision.
 4. If the runtime is healthy, align your discretionary action with the system's posture instead of overriding it blindly.
 
-### Example Scenario
+### Example Case Scenarios
 
 You see a strong `EURUSD` directional score during a central-bank day.
 
@@ -59,7 +59,7 @@ What to do:
 3. Compare what the runtime blocked with what Audit Lab says would have happened.
 4. Keep notes on why trades were avoided, not only on which ones won.
 
-### Example Scenario
+### Example Case Scenarios
 
 You want to understand what happens during Asia session liquidity gaps.
 
@@ -83,7 +83,7 @@ What to do:
 3. Review metrics together with scenario labels, not in isolation.
 4. Compare against baselines and recent promoted state.
 
-### Example Scenario
+### Example Case Scenarios
 
 You want to compare `USDJPY` behavior in macro-event weeks versus quiet weeks.
 
@@ -107,7 +107,7 @@ What to do:
 3. Improve the weak layer first, not only the headline model.
 4. Rebuild artifacts and verify the promoted runtime view before trusting the candidate.
 
-### Example Scenario
+### Example Case Scenarios
 
 A new challenger improves raw direction but worsens post-cost tradability.
 
@@ -131,7 +131,7 @@ What to do:
 3. If artifacts are stale or missing, use the documented recovery or rebuild commands.
 4. Re-run verification before handing the system back to traders or researchers.
 
-### Example Scenario
+### Example Case Scenarios
 
 The live runtime starts blocking everything after a terminal restart.
 

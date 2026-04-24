@@ -1,63 +1,70 @@
 # FXAI
 
-FXAI is a professional MetaTrader 5 framework for building, testing, and operating AI-driven FX trading systems fully inside MT5 and MQL5.
+FXAI is an MT5-native framework for researching, testing, auditing, and operating AI-assisted FX trading systems. Live trading stays inside MetaTrader 5 and MQL5; offline Python tooling is used for research, calibration, export, audit, and release evidence.
 
-It is not a single strategy EA. It is a research and deployment framework with:
-- a plugin-based prediction layer
-- a shared `M1 OHLC + spread` data contract
-- an internal `TensorCore` runtime for stronger neural and sequence models
-- an Audit Lab for certification, regression checks, and release gating
-- a Turso-backed Offline Lab for export, tuning, promotion, champion-challenger control loops, branch/PITR workflows, audit-log ingestion, and vector-backed analog retrieval
-- a NewsPulse subsystem for MT5-calendar, official-feed, and GDELT-based news-risk gating, replay timelines, append-only history, and operator visibility
-- a Rates / Term-Structure / Policy-Path Engine for rates-aware macro state, NewsPulse enrichment, runtime trade filtering, GUI visibility, and replayable policy-path context
-- a Market Microstructure and Order-Flow Proxy Layer for MT5 tick-flow, liquidity-stress, spread-dynamics, stop-run proxy detection, runtime trade gating, GUI visibility, and replayable short-horizon execution context
-- an Adaptive Regime Classifier + Plugin Router that classifies live regime state, weights or suppresses plugin-zoo members dynamically, and adds auditable abstention posture without forcing immediate retraining
-- an FX-only tradable universe policy with MT5 cross-asset symbols stored separately as indicator-only context configuration inside the Offline Lab database
-- foundation-teacher and student-deployment bundles, autonomous governance, supervisor-service artifacts, and live deployment profiles for promoted MT5 runtime behavior
-- one workflow for research, backtesting, audit, and live operation
+FXAI is not a single black-box strategy. It is a governed decision framework: shared data contracts, model plugins, runtime risk layers, audit gates, promotion artifacts, and an optional GUI all work from the same source of truth.
 
-FXAI stays MT5-native. There are no external inference services and no DLL dependency in live trading.
+## User Matrix Benefits
 
-An optional macOS 26 operator GUI now lives under [FXAI/GUI](/Users/andreborchert/FXAI-main2/FXAI/GUI). It is an FXAI-focused helper app for operators who want a visual control and reporting surface, while the terminal remains the primary control path.
+| User | Core Benefit | Start Here |
+|---|---|---|
+| Live Trader | See whether a trade is allowed, cautioned, blocked, or abstained before trusting a signal. | [Quick Start By Role](FXAI/Wiki/Quick%20Start%20By%20Role.md) |
+| Demo Trader | Learn how the full control plane behaves under real market conditions without risking capital. | [Getting Started](FXAI/Wiki/Getting%20Started.md) |
+| Backtester | Run scenario-aware evaluations instead of comparing isolated MT5 tester runs by headline score only. | [Audit Lab](FXAI/Wiki/Audit%20Lab.md) |
+| EA Researcher | Improve models, labels, calibration, routing, and promotion decisions with lineage and evidence. | [Offline Lab](FXAI/Wiki/Offline%20Lab.md) |
+| System Architect | Operate services, artifacts, release gates, recovery, and platform health without hidden machine assumptions. | [Project Structure](FXAI/Wiki/Project%20Structure.md) |
 
-## Why It Matters
+## Core Benefits
 
-### For Traders
-- Compare many model families under one execution shell instead of running isolated EA experiments.
-- Test under realistic FX costs, skip logic, and execution stress instead of optimistic toy assumptions.
-- Use Audit Lab and release gates to reject weak models before cloud optimization or live deployment.
-- Keep live behavior closer to research with shared persistence, broker replay, macro-data guards, portfolio-aware control-plane signals, policy-driven lifecycle control, and promoted supervisor-service constraints.
-- Promote stronger parameter packs, router-pruning profiles, supervisor-service budgets, and live deployment profiles from the Offline Lab without manual copy and paste.
+- MT5-native live runtime: no external live inference service and no DLL dependency for trade decisions.
+- One canonical market contract: `M1 OHLC + spread`, with raw MT5 data access isolated behind the FXAI data pipeline.
+- Plugin-based model layer: statistical, tree, linear, sequence, factor, trend, regime, policy, and ensemble families share one prediction contract.
+- Runtime control plane: NewsPulse, Rates Engine, Cross Asset, Microstructure, Adaptive Router, Dynamic Ensemble, Probabilistic Calibration, Execution Quality, Drift Governance, and Pair Network layers can explain or suppress unsafe trades.
+- Audit and promotion discipline: candidates are checked through repeatable compile, deterministic, pytest, audit, benchmark, and release-gate workflows before promotion.
+- Practical operator surfaces: terminal commands remain first-class, and the optional GUI provides role-based dashboards, report browsing, run builders, promotion review, and recovery guidance.
 
-### For Trade System Architects
-- One codebase for data, features, normalization, model plugins, routing, audit, and live execution.
-- Clear contracts for plugins, persistence, checkpoint depth, and promotion readiness.
-- Shared TensorCore, transfer backbone, contextual routing, policy-first gating, and portfolio-aware meta scoring reduce duplicated model infrastructure.
-- Runtime manifests, feature governance, and macro-data leakage guards make the framework auditable and reproducible.
-- Turso/libSQL experiment ledgers, teacher-factory artifacts, fitted deployment models, shadow-fleet telemetry, and deployment profiles provide a serious research OS around MT5 instead of ad hoc backtest folders.
-- Portfolio-supervisor artifacts, supervisor-service snapshots, causal attribution and pruning profiles, world-simulator plans, and foundation or student payloads let the research OS steer live gating, peer-pressure handling, lifecycle actions, and future distillation without manual copy and paste.
-- The Offline Lab can run local-only through libSQL or as a Turso embedded replica when `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are configured, with optional local database encryption, sync interval control, branch workflows, and audit-log ingestion.
+## What Users Can Do With FXAI
+
+- Check the live state of a symbol and understand the reason behind `ALLOW`, `CAUTION`, `BLOCK`, or `ABSTAIN`.
+- Run backtests and Audit Lab scenarios with shared assumptions instead of manually comparing inconsistent settings.
+- Research and promote better candidates with Offline Lab, benchmark cards, model-family scorecards, and strategy-profile manifests.
+- Inspect service health for news, rates, cross-asset, microstructure, calibration, execution, drift, and portfolio-conflict layers.
+- Use the GUI to arrange dashboards, save layouts, start common workflows, and recover from missing or stale artifacts.
 
 ## Documentation
 
-If you are new to FXAI, start with the role-based matrix first:
-- [Quick Start By Role](https://github.com/Pummelchen/FXAI/wiki/Quick-Start-By-Role)
+Use the versioned handbook in [FXAI/Wiki](FXAI/Wiki/Home.md). The public GitHub wiki should mirror these pages.
 
-Detailed documentation is kept in the wiki:
-- [Home](https://github.com/Pummelchen/FXAI/wiki)
-- [Quick Start By Role](https://github.com/Pummelchen/FXAI/wiki/Quick-Start-By-Role)
-- [Getting Started](https://github.com/Pummelchen/FXAI/wiki/Getting-Started)
-- [FXAI Framework](https://github.com/Pummelchen/FXAI/wiki/FXAI-Framework)
-- [Audit Lab](https://github.com/Pummelchen/FXAI/wiki/Audit-Lab)
-- [Offline Lab](https://github.com/Pummelchen/FXAI/wiki/Offline-Lab)
-- [NewsPulse](https://github.com/Pummelchen/FXAI/wiki/NewsPulse)
-- [Rates Engine](https://github.com/Pummelchen/FXAI/wiki/Rates-Engine)
-- [Microstructure](https://github.com/Pummelchen/FXAI/wiki/Microstructure)
-- [Adaptive Router](https://github.com/Pummelchen/FXAI/wiki/Adaptive-Router)
-- [GUI](https://github.com/Pummelchen/FXAI/wiki/GUI)
-- [Project Structure](https://github.com/Pummelchen/FXAI/wiki/Project-Structure)
-- [Data Policy](https://github.com/Pummelchen/FXAI/wiki/Data-Policy)
+Recommended first pages:
 
-Quick start instructions and current architecture highlights now live in the wiki so the repo front page can stay focused on project value and positioning.
+- [Home](FXAI/Wiki/Home.md)
+- [Quick Start By Role](FXAI/Wiki/Quick%20Start%20By%20Role.md)
+- [Getting Started](FXAI/Wiki/Getting%20Started.md)
+- [Runtime Control Plane](FXAI/Wiki/Runtime%20Control%20Plane.md)
+- [GUI](FXAI/Wiki/GUI.md)
+- [Data Policy](FXAI/Wiki/Data%20Policy.md)
+- [Project Structure](FXAI/Wiki/Project%20Structure.md)
 
-The synced MT5 subtree also includes its own local operator guide at [FXAI/README.md](/Users/andreborchert/FXAI-main2/FXAI/README.md).
+Subsystem guides:
+
+- [Audit Lab](FXAI/Wiki/Audit%20Lab.md)
+- [Offline Lab](FXAI/Wiki/Offline%20Lab.md)
+- [Benchmarks](FXAI/Wiki/Benchmarks.md)
+- [Model Zoo](FXAI/Wiki/Model%20Zoo.md)
+- [Promotion Criteria](FXAI/Wiki/Promotion%20Criteria.md)
+- [Release Notes](FXAI/Wiki/Release%20Notes.md)
+- [NewsPulse](FXAI/Wiki/NewsPulse.md)
+- [Rates Engine](FXAI/Wiki/Rates%20Engine.md)
+- [Cross Asset](FXAI/Wiki/Cross%20Asset.md)
+- [Microstructure](FXAI/Wiki/Microstructure.md)
+- [Adaptive Router](FXAI/Wiki/Adaptive%20Router.md)
+- [Dynamic Ensemble](FXAI/Wiki/Dynamic%20Ensemble.md)
+- [Probabilistic Calibration](FXAI/Wiki/Probabilistic%20Calibration.md)
+- [Execution Quality](FXAI/Wiki/Execution%20Quality.md)
+- [Label Engine](FXAI/Wiki/Label%20Engine.md)
+- [Drift Governance](FXAI/Wiki/Drift%20Governance.md)
+- [Pair Network](FXAI/Wiki/Pair%20Network.md)
+
+## Operating Boundary
+
+FXAI can improve decision quality, auditability, and operational discipline. It does not guarantee profit. A model score is not a trade by itself; FXAI is designed to evaluate the score against costs, uncertainty, event risk, liquidity, regime, execution quality, drift, and portfolio conflict before action.

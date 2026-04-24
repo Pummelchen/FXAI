@@ -43,7 +43,7 @@ The expanded zoo adds these MT5-native plugin modules:
 4. Let Adaptive Router and Dynamic Ensemble decide live weights; do not manually force all plugins to vote equally.
 5. Treat `stat_microflow_proxy` as a broker-visible proxy layer only. It is not centralized FX order flow or a true institutional order book.
 
-## Example Scenarios
+## Example Case Scenarios
 
 ### Scenario: Random walk overtrading
 
@@ -68,3 +68,10 @@ Compare `ai_lstm`, `ai_tcn`, `ai_gru`, `ai_bilstm`, `ai_lstm_tcn`, and `ai_cnn_l
 - The canonical market-training contract remains `M1 OHLC + spread`.
 - Microstructure features remain MT5-visible broker-side proxies and must fail safe when stale or missing.
 - All plugin outputs must remain probability, confidence, and abstention compatible.
+
+## Next Pages
+
+- [Adaptive Router](Adaptive%20Router.md)
+- [Dynamic Ensemble](Dynamic%20Ensemble.md)
+- [Audit Lab](Audit%20Lab.md)
+- [Data Policy](Data%20Policy.md)

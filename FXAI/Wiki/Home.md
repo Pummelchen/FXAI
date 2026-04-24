@@ -34,6 +34,9 @@ FXAI is a live-trading and research framework for FX. It combines a modular MT5 
 1. Read [Quick Start By Role](Quick%20Start%20By%20Role.md).
 2. Read [Getting Started](Getting%20Started.md).
 3. Go to the page that matches the job you want to do next:
+   - [FXAI Framework](FXAI%20Framework.md)
+   - [Data Policy](Data%20Policy.md)
+   - [Project Structure](Project%20Structure.md)
    - [Benchmarks](Benchmarks.md)
    - [Model Zoo](Model%20Zoo.md)
    - [Promotion Criteria](Promotion%20Criteria.md)
@@ -41,6 +44,16 @@ FXAI is a live-trading and research framework for FX. It combines a modular MT5 
    - [Audit Lab](Audit%20Lab.md)
    - [Offline Lab](Offline%20Lab.md)
    - [NewsPulse](NewsPulse.md)
+   - [Rates Engine](Rates%20Engine.md)
+   - [Cross Asset](Cross%20Asset.md)
+   - [Microstructure](Microstructure.md)
+   - [Adaptive Router](Adaptive%20Router.md)
+   - [Dynamic Ensemble](Dynamic%20Ensemble.md)
+   - [Probabilistic Calibration](Probabilistic%20Calibration.md)
+   - [Execution Quality](Execution%20Quality.md)
+   - [Label Engine](Label%20Engine.md)
+   - [Drift Governance](Drift%20Governance.md)
+   - [Pair Network](Pair%20Network.md)
    - [Runtime Control Plane](Runtime%20Control%20Plane.md)
    - [GUI](GUI.md)
 

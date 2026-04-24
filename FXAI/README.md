@@ -10,11 +10,14 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - [`Home`](Wiki/Home.md)
 - [`Quick Start By Role`](Wiki/Quick%20Start%20By%20Role.md)
 - [`Getting Started`](Wiki/Getting%20Started.md)
+- [`FXAI Framework`](Wiki/FXAI%20Framework.md)
+- [`Data Policy`](Wiki/Data%20Policy.md)
+- [`Project Structure`](Wiki/Project%20Structure.md)
 - [`Benchmarks`](Wiki/Benchmarks.md)
 - [`Model Zoo`](Wiki/Model%20Zoo.md)
 - [`Promotion Criteria`](Wiki/Promotion%20Criteria.md)
 - [`Release Notes`](Wiki/Release%20Notes.md)
-- then the subsystem page you actually need first, such as [`Audit Lab`](Wiki/Audit%20Lab.md), [`Offline Lab`](Wiki/Offline%20Lab.md), [`NewsPulse`](Wiki/NewsPulse.md), [`Runtime Control Plane`](Wiki/Runtime%20Control%20Plane.md), or [`GUI`](Wiki/GUI.md)
+- then the subsystem page you actually need first, such as [`Audit Lab`](Wiki/Audit%20Lab.md), [`Offline Lab`](Wiki/Offline%20Lab.md), [`NewsPulse`](Wiki/NewsPulse.md), [`Rates Engine`](Wiki/Rates%20Engine.md), [`Microstructure`](Wiki/Microstructure.md), [`Runtime Control Plane`](Wiki/Runtime%20Control%20Plane.md), or [`GUI`](Wiki/GUI.md)
 
 ## Main Entry Points
 
