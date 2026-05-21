@@ -5,21 +5,21 @@ import XCTest
 
 final class OperationalAgentsTests: XCTestCase {
     func testFXDatabaseConnectivityAcceptsMatchingAPIVersion() async throws {
-        let agent = FXExportConnectivityAgent(statusLoader: { _ in
+        let agent = FXDatabaseConnectivityAgent(statusLoader: { _ in
             FXBacktestAPIStatusResponse(apiVersion: FXBacktestAPIV1.version, service: "FXDatabase", status: "ok")
         })
 
-        let outcome = try await agent.check(connection: FXExportConnectionSettings())
+        let outcome = try await agent.check(connection: FXDatabaseConnectionSettings())
 
         XCTAssertEqual(outcome.status, .ok)
     }
 
     func testFXDatabaseConnectivityRejectsWrongAPIVersion() async throws {
-        let agent = FXExportConnectivityAgent(statusLoader: { _ in
+        let agent = FXDatabaseConnectivityAgent(statusLoader: { _ in
             FXBacktestAPIStatusResponse(apiVersion: "wrong.version", service: "FXDatabase", status: "ok")
         })
 
-        let outcome = try await agent.check(connection: FXExportConnectionSettings())
+        let outcome = try await agent.check(connection: FXDatabaseConnectionSettings())
 
         XCTAssertEqual(outcome.status, .failed)
         XCTAssertTrue(outcome.message.contains("version mismatch"))
@@ -27,8 +27,8 @@ final class OperationalAgentsTests: XCTestCase {
 
     func testMarketReadinessRejectsMixedDemoAndFXDatabaseData() throws {
         let demo = try market(symbol: "EURUSD", brokerSourceId: "demo")
-        let exported = try market(symbol: "USDJPY", brokerSourceId: "icmarkets-sc-mt5-4", mt5Symbol: "USDJPY", digits: 3)
-        let universe = try OhlcMarketUniverse(primarySymbol: "EURUSD", series: [demo, exported])
+        let databaseBacked = try market(symbol: "USDJPY", brokerSourceId: "icmarkets-sc-mt5-4", mt5Symbol: "USDJPY", digits: 3)
+        let universe = try OhlcMarketUniverse(primarySymbol: "EURUSD", series: [demo, databaseBacked])
 
         let outcome = MarketReadinessAgent().evaluate(universe: universe)
 

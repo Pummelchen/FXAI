@@ -137,7 +137,7 @@ final class AppModel: ObservableObject, @unchecked Sendable {
         }
     }
 
-    func loadFXExportData() {
+    func loadFXDatabaseData() {
         guard !isLoadingData else {
             updateStatus("FXDatabase data load is already running", log: .warning)
             return
@@ -161,13 +161,13 @@ final class AppModel: ObservableObject, @unchecked Sendable {
         }
         isLoadingData = true
         updateStatus("Loading verified M1 OHLC through FXDatabase API v1...")
-        let connection = FXExportConnectionSettings(
+        let connection = FXDatabaseConnectionSettings(
             apiBaseURL: url,
             requestTimeoutSeconds: 120
         )
         let symbols = parseSymbols()
         let requests = symbols.map { symbol in
-            FXExportHistoryRequest(
+            FXDatabaseHistoryRequest(
                 brokerSourceId: brokerSourceId,
                 logicalSymbol: symbol,
                 expectedMT5Symbol: symbols.count == 1 ? expectedMT5Symbol : nil,
@@ -181,14 +181,14 @@ final class AppModel: ObservableObject, @unchecked Sendable {
 
         dataLoadTask = Task.detached { [connection, requests, primarySymbol] in
             do {
-                let connectivity = try await FXExportConnectivityAgent().check(connection: connection)
+                let connectivity = try await FXDatabaseConnectivityAgent().check(connection: connection)
                 await MainActor.run {
                     self.recordAgentOutcome(connectivity)
                 }
                 guard !connectivity.isBlockingFailure else {
                     throw FXBacktestError.dataLoadFailed(connectivity.message)
                 }
-                let loadedUniverse = try await FXExportHistoryLoader().loadUniverse(
+                let loadedUniverse = try await FXDatabaseHistoryLoader().loadUniverse(
                     connection: connection,
                     requests: requests,
                     primarySymbol: primarySymbol
@@ -647,8 +647,8 @@ extension AppModel {
             case "load-demo", "demo":
                 await stopActiveWorkAndWait(reason: "load demo data")
                 loadDemoData()
-            case "load-fxdatabase", "load-fxexport", "load-data", "load":
-                try await loadFXExportFromTerminal(arguments)
+            case "load-fxdatabase", "load-data", "load":
+                try await loadFXDatabaseFromTerminal(arguments)
             case "run", "optimize":
                 try await runFromTerminal(arguments)
             case "save-results", "persist-results":
@@ -696,7 +696,6 @@ extension AppModel {
           set-param <key> --input 12 --min 6 --step 2 --max 40
           load-demo
           load-fxdatabase [--api-url URL] [--broker ID] [--symbol EURUSD] [--symbols EURUSD,USDJPY] [--mt5-symbol EURUSD] [--digits 5] [--from UTC] [--to UTC] [--max-rows N]
-          load-fxexport  # compatibility alias for load-fxdatabase
           run [cpu|gpu|metal|both] [--workers N] [--chunk N] [--initial-deposit N] [--contract-size N] [--lot N]
           save-results [--run-id ID] [--note TEXT]
           clean-backtest-data --older-than-days 30
@@ -727,7 +726,7 @@ extension AppModel {
         selectPlugin(plugin.id)
     }
 
-    private func loadFXExportFromTerminal(_ arguments: ArraySlice<String>) async throws {
+    private func loadFXDatabaseFromTerminal(_ arguments: ArraySlice<String>) async throws {
         let parsed = try ParsedTerminalOptions(tokens: arguments)
         guard parsed.positionals.isEmpty else {
             throw TerminalCommandError.invalidValue("load-fxdatabase accepts options only; unexpected \(parsed.positionals.joined(separator: " ")).")
@@ -735,7 +734,7 @@ extension AppModel {
         try validateConfigurationOptions(parsed.options, allowedGroup: .data)
         await stopActiveWorkAndWait(reason: "load FXDatabase data")
         try applyConfigurationOptions(parsed.options, allowedGroup: .data)
-        loadFXExportData()
+        loadFXDatabaseData()
     }
 
     private func runFromTerminal(_ arguments: ArraySlice<String>) async throws {
@@ -1061,7 +1060,7 @@ extension AppModel {
 
     private func canonicalKey(_ key: String) -> String {
         switch key.lowercased() {
-        case "api", "url", "api-url", "api_url", "fxdatabase-api", "fxdatabase-api-url", "fxexport-api", "fxexport-api-url":
+        case "api", "url", "api-url", "api_url", "fxdatabase-api", "fxdatabase-api-url":
             return "api-url"
         case "broker", "broker-source", "broker-source-id", "broker_source_id":
             return "broker"
@@ -1261,8 +1260,8 @@ extension AppModel {
 
     private static func agentDisplayName(for kind: FXBacktestAgentKind) -> String {
         switch kind {
-        case .fxExportConnectivity:
-            return FXExportConnectivityAgent.descriptor.displayName
+        case .fxDatabaseConnectivity:
+            return FXDatabaseConnectivityAgent.descriptor.displayName
         case .marketReadiness:
             return MarketReadinessAgent.descriptor.displayName
         case .optimizationRunCoordinator:

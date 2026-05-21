@@ -5,11 +5,11 @@ import FXBacktestAPI
 import Metal
 #endif
 
-public struct FXExportConnectivityAgent: Sendable {
-    public typealias StatusLoader = @Sendable (FXExportConnectionSettings) async throws -> FXBacktestAPIStatusResponse
+public struct FXDatabaseConnectivityAgent: Sendable {
+    public typealias StatusLoader = @Sendable (FXDatabaseConnectionSettings) async throws -> FXBacktestAPIStatusResponse
 
     public static let descriptor = FXBacktestAgentDescriptor(
-        id: .fxExportConnectivity,
+        id: .fxDatabaseConnectivity,
         displayName: "FXDatabase Connectivity",
         responsibility: "Verify FXDatabase API v1 availability before FXBacktest pulls Forex history."
     )
@@ -20,7 +20,7 @@ public struct FXExportConnectivityAgent: Sendable {
         self.statusLoader = statusLoader
     }
 
-    public func check(connection: FXExportConnectionSettings) async throws -> FXBacktestAgentOutcome {
+    public func check(connection: FXDatabaseConnectionSettings) async throws -> FXBacktestAgentOutcome {
         let started = Date()
         do {
             let response = try await statusLoader(connection)
@@ -58,7 +58,7 @@ public struct FXExportConnectivityAgent: Sendable {
         }
     }
 
-    public static func defaultStatusLoader(connection: FXExportConnectionSettings) async throws -> FXBacktestAPIStatusResponse {
+    public static func defaultStatusLoader(connection: FXDatabaseConnectionSettings) async throws -> FXBacktestAPIStatusResponse {
         try await FXBacktestAPIClient(
             baseURL: connection.apiBaseURL,
             requestTimeoutSeconds: connection.requestTimeoutSeconds
@@ -110,7 +110,7 @@ public struct MarketReadinessAgent: Sendable {
         series.reserveCapacity(universe.symbols.count)
         var brokerIds = Set<String>()
         var hasDemo = false
-        var hasFXExport = false
+        var hasFXDatabase = false
 
         for symbol in universe.symbols {
             guard let item = universe[symbol] else {
@@ -131,7 +131,7 @@ public struct MarketReadinessAgent: Sendable {
             if item.metadata.brokerSourceId == "demo" {
                 hasDemo = true
             } else {
-                hasFXExport = true
+                hasFXDatabase = true
                 let mt5Symbol = item.metadata.mt5Symbol?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 guard !mt5Symbol.isEmpty else {
                     throw FXBacktestError.invalidMarketData("\(symbol) is missing FXDatabase MT5 symbol metadata.")
@@ -147,10 +147,10 @@ public struct MarketReadinessAgent: Sendable {
             series.append(item)
         }
 
-        guard !(hasDemo && hasFXExport) else {
+        guard !(hasDemo && hasFXDatabase) else {
             throw FXBacktestError.invalidMarketData("Cannot mix demo and FXDatabase market data in one backtest run.")
         }
-        if hasFXExport, brokerIds.count != 1 {
+        if hasFXDatabase, brokerIds.count != 1 {
             throw FXBacktestError.invalidMarketData("All FXDatabase symbols in one run must use the same broker source.")
         }
 

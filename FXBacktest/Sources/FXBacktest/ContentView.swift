@@ -129,7 +129,7 @@ struct ContentView: View {
 
                 HStack {
                     Button {
-                        model.loadFXExportData()
+                        model.loadFXDatabaseData()
                     } label: {
                         Label("Load FXDatabase", systemImage: "externaldrive.connected.to.line.below")
                     }

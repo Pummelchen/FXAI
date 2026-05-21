@@ -2,8 +2,8 @@ import FXBacktestAPI
 import FXBacktestCore
 import XCTest
 
-final class FXExportAPIDataSeriesTests: XCTestCase {
-    func testOhlcDataSeriesBuildsFromFXExportAPIResponse() throws {
+final class FXDatabaseAPIDataSeriesTests: XCTestCase {
+    func testOhlcDataSeriesBuildsFromFXDatabaseAPIResponse() throws {
         let response = FXBacktestM1HistoryResponse(
             metadata: FXBacktestM1HistoryMetadata(
                 brokerSourceId: "demo",

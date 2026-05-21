@@ -1,7 +1,7 @@
 import Foundation
 import FXBacktestAPI
 
-public struct FXExportConnectionSettings: Codable, Hashable, Sendable {
+public struct FXDatabaseConnectionSettings: Codable, Hashable, Sendable {
     public var apiBaseURL: URL
     public var requestTimeoutSeconds: Double
 
@@ -14,7 +14,7 @@ public struct FXExportConnectionSettings: Codable, Hashable, Sendable {
     }
 }
 
-public struct FXExportHistoryRequest: Codable, Hashable, Sendable {
+public struct FXDatabaseHistoryRequest: Codable, Hashable, Sendable {
     public var brokerSourceId: String
     public var logicalSymbol: String
     public var expectedMT5Symbol: String?
@@ -42,12 +42,12 @@ public struct FXExportHistoryRequest: Codable, Hashable, Sendable {
     }
 }
 
-public struct FXExportHistoryLoader: Sendable {
+public struct FXDatabaseHistoryLoader: Sendable {
     public init() {}
 
     public func load(
-        connection: FXExportConnectionSettings,
-        request: FXExportHistoryRequest
+        connection: FXDatabaseConnectionSettings,
+        request: FXDatabaseHistoryRequest
     ) async throws -> OhlcDataSeries {
         do {
             let apiRequest = FXBacktestM1HistoryRequest(
@@ -76,8 +76,8 @@ public struct FXExportHistoryLoader: Sendable {
     }
 
     public func loadUniverse(
-        connection: FXExportConnectionSettings,
-        requests: [FXExportHistoryRequest],
+        connection: FXDatabaseConnectionSettings,
+        requests: [FXDatabaseHistoryRequest],
         primarySymbol: String
     ) async throws -> OhlcMarketUniverse {
         guard !requests.isEmpty else {

@@ -45,7 +45,7 @@ Important files:
 - `Sources/FXBacktestCore/HybridBacktestExecutor.swift`: shared CPU+Metal pass scheduling.
 - `Sources/FXBacktestCore/ExecutionModel.swift`: pure M1 OHLC broker model and deterministic ledger simulator.
 - `Sources/FXBacktestCore/OhlcMarketUniverse.swift`: aligned multi-symbol OHLC universe.
-- `Sources/FXBacktestCore/FXExportHistoryLoader.swift`: FXDatabase FXBacktest API v1 client bridge.
+- `Sources/FXBacktestCore/FXDatabaseHistoryLoader.swift`: FXDatabase FXBacktest API v1 client bridge.
 - `Sources/FXBacktestCore/BacktestResultStore.swift`: ClickHouse result-store API and purge support.
 - `Sources/FXBacktestCore/PluginAcceleration.swift`: plugin acceleration descriptor and IR v1.
 - `Sources/FXBacktestPlugins/FX7.swift`: converted FX7 OHLC-only plugin with MQL5-style closed signal-bar feature timing, CPU universe support, and a Metal kernel for single-symbol sweeps.

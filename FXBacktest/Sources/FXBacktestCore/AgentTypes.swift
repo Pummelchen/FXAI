@@ -1,7 +1,7 @@
 import Foundation
 
 public enum FXBacktestAgentKind: String, Codable, CaseIterable, Hashable, Identifiable, Sendable {
-    case fxExportConnectivity
+    case fxDatabaseConnectivity
     case marketReadiness
     case optimizationRunCoordinator
     case resultPersistence
