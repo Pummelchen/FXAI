@@ -1,0 +1,3 @@
+[submodule "FXBacktest"]
+	path = FXBacktest
+	url = https://github.com/Pummelchen/FXBacktest.git

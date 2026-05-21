@@ -37,10 +37,12 @@ This page maps common user goals to the repository areas that matter.
 | `Tools/Benchmarks/` | Published benchmark and promotion evidence. |
 | `GUI/` | Optional SwiftUI operator app. |
 | `Wiki/` | Versioned user handbook that mirrors the GitHub wiki. |
+| repo root `FXBacktest/` | Git subproject for the Swift optimizer/backtester. Clone FXAI with submodules or run `git submodule update --init --recursive FXBacktest`. |
 
 ## Source And Generated Boundaries
 
 - Track source code, manifests, configs, docs, and benchmark reference artifacts.
+- Track `FXBacktest/` as a Git submodule/gitlink, not as flattened source inside the FXAI repository.
 - Do not commit compiled MT5 `.ex5` binaries.
 - Do not commit local `.env`, SQLite databases, cache folders, or machine-specific runtime outputs.
 - Publish release binaries through GitHub Releases with SHA-256 and metadata.
