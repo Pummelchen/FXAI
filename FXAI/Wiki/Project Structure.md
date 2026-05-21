@@ -34,6 +34,8 @@ This page maps common user goals to the repository areas that matter.
 | repo root `FXBacktestAgent/` | Offline backtest agent source root. |
 | repo root `FXDemoAgent/` | Demo-trading agent source root. |
 | repo root `FXLiveAgent/` | Live-trading agent source root. |
+| repo root `FXDataEngine/` | Repository-root shared data-engine source area. |
+| repo root `FXPlugins/` | Repository-root shared plugin source area. |
 | `Tools/fxai_testlab.py` | Compile, audit, benchmark, package, and release-gate CLI. |
 | `Tools/fxai_offline_lab.py` | Offline Lab, subsystem validation, promotion, and recovery CLI. |
 | `Tools/OfflineLab/` | Generated or configured research, report, and subsystem artifacts. |
