@@ -35,6 +35,7 @@ NEW_PLUGINS = {
     "ai_gru": ("AI_GRU", "Plugins/Sequence/ai_gru.mqh"),
     "ai_bilstm": ("AI_BILSTM", "Plugins/Sequence/ai_bilstm.mqh"),
     "ai_lstm_tcn": ("AI_LSTM_TCN", "Plugins/Sequence/ai_lstm_tcn.mqh"),
+    "ai_mythos_rdt": ("AI_MYTHOS_RDT", "Plugins/Sequence/ai_mythos_rdt.mqh"),
 }
 
 
@@ -49,7 +50,7 @@ def test_ai_count_matches_registry_expansion() -> None:
     enum_names = re.findall(r"\bAI_[A-Z0-9_]+\b", core.split("enum ENUM_AI_TYPE", 1)[1].split("};", 1)[0])
     include_paths = re.findall(r'#include "\.\.\\(Plugins\\[^"]+\.mqh)"', api)
     create_cases = re.findall(r"case \(int\)AI_[A-Z0-9_]+: plugin = new [A-Za-z0-9_]+\(\); break;", api)
-    assert count == 62
+    assert count == 63
     assert len(enum_names) == count
     assert len(include_paths) == count
     assert len(create_cases) == count

@@ -301,6 +301,7 @@ bool FXAI_PredictViaV4(CFXAIAIPlugin &plugin,
 #include "..\Plugins\Sequence\ai_gru.mqh"
 #include "..\Plugins\Sequence\ai_bilstm.mqh"
 #include "..\Plugins\Sequence\ai_lstm_tcn.mqh"
+#include "..\Plugins\Sequence\ai_mythos_rdt.mqh"
 
 class CFXAIAIRegistry
 {
@@ -430,6 +431,7 @@ public:
          case (int)AI_GRU: plugin = new CFXAIAIGRU(); break;
          case (int)AI_BILSTM: plugin = new CFXAIAIBiLSTM(); break;
          case (int)AI_LSTM_TCN: plugin = new CFXAIAILSTMTCN(); break;
+         case (int)AI_MYTHOS_RDT: plugin = new CFXAIAIMythosRDT(); break;
          default: return NULL;
       }
       if(plugin != NULL)

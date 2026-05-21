@@ -879,6 +879,32 @@
         "Window shape checks and state resets must remain strict."
       ],
       "sequence_delta_min": 0.012
+    },
+    "ai_mythos_rdt": {
+      "identity": "Mythos-inspired recurrent-depth transformer surrogate using looped latent refinement, stable input reinjection, MoE routing, and adaptive halting.",
+      "recommendations": [
+        "Loop depth must change outputs on hard contexts while easy or noisy contexts should halt into higher skip probability.",
+        "Expert routing should specialize by trend, volatility, and macro/session posture instead of averaging every setup into the same vote."
+      ],
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.36
+        },
+        "drift_up": {
+          "trend_align_min": 0.36
+        },
+        "random_walk": {
+          "active_ratio_max": 0.24,
+          "skip_ratio_min": 0.74
+        },
+        "regime_shift": {
+          "conf_drift_max": 0.2
+        },
+        "vol_cluster": {
+          "conf_drift_max": 0.18
+        }
+      },
+      "sequence_delta_min": 0.024
     }
   }
 }

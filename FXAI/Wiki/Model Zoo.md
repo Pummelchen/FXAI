@@ -30,6 +30,7 @@ The expanded zoo adds these MT5-native plugin modules:
 | Econometric mean/variance | `stat_arimax_garch`, `stat_coint_vecm`, `stat_ou_spread` | mean forecast, residual risk, equilibrium dislocation |
 | Trees and linear | `tree_rf`, `lin_elastic_logit`, `lin_profit_logit` | bagged voting, sparse classification, cost-aware direction |
 | Sequence hybrids | `ai_gru`, `ai_bilstm`, `ai_lstm_tcn`, `ai_cnn_lstm`, `ai_attn_cnn_bilstm` | historical-window sequence patterns without future leakage |
+| Looped transformer reasoning | `ai_mythos_rdt` | recurrent latent refinement, adaptive loop halting, and expert routing for hard context states |
 | Decomposition | `stat_emd_hht`, `stat_vmd` | trend/cycle/noise separation and unstable-decomposition abstention |
 | Factor and value | `factor_pca_panel`, `factor_ppp_value`, `factor_carry`, `factor_cmv_panel` | panel factors, value, carry, cross-sectional ranking |
 | Trend and breakout | `trend_tsmom_vol`, `trend_xsmom_rank`, `trend_vol_breakout` | volatility-scaled trend, relative strength, range expansion |
@@ -59,7 +60,7 @@ Use `stat_coint_vecm` and `stat_ou_spread` as the first inspection points, then 
 
 ### Scenario: Sequence model upgrade
 
-Compare `ai_lstm`, `ai_tcn`, `ai_gru`, `ai_bilstm`, `ai_lstm_tcn`, and `ai_cnn_lstm` on the same audit window. Directional improvement is not enough; reset stability, skip behavior, and post-cost quality must also hold.
+Compare `ai_lstm`, `ai_tcn`, `ai_gru`, `ai_bilstm`, `ai_lstm_tcn`, `ai_cnn_lstm`, and `ai_mythos_rdt` on the same audit window. Directional improvement is not enough; reset stability, skip behavior, loop-depth sensitivity, and post-cost quality must also hold.
 
 ## Engineering Rules
 

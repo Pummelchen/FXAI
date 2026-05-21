@@ -316,6 +316,16 @@
         "TREND_PERSISTENT": 1.1
       }
     },
+    "ai_mythos_rdt": {
+      "liquidity_robustness": 0.84,
+      "news_compatibility": 1.12,
+      "regime_weights": {
+        "BREAKOUT_TRANSITION": 1.12,
+        "HIGH_VOL_EVENT": 1.08,
+        "RISK_ON_OFF_MACRO": 1.08,
+        "TREND_PERSISTENT": 1.12
+      }
+    },
     "stat_msgarch": {
       "liquidity_robustness": 0.92,
       "news_compatibility": 1.12,
@@ -383,6 +393,7 @@
           "macro",
           "world",
           "memory",
+          "mythos",
           "tesseract",
           "msgarch",
           "hmm",
@@ -404,6 +415,7 @@
       "match_any": [
         "tft",
         "patch",
+          "mythos",
           "trend",
           "momentum",
           "state",

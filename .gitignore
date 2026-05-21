@@ -1,6 +1,8 @@
 FXAI/Tools/OfflineLab/fxai_offline_lab.turso.db
 FXAI/Tools/OfflineLab/offline_lab.sqlite
-FXAI/Tools/OfflineLab/Profiles/
+FXAI/Tools/OfflineLab/Profiles/*
+!FXAI/Tools/OfflineLab/Profiles/
+!FXAI/Tools/OfflineLab/Profiles/strategy_profiles.json
 FXAI/Tools/OfflineLab/ResearchOS/
 FXAI/Tools/OfflineLab/Distillation/
 FXAI/Tools/OfflineLab/Runs/

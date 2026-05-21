@@ -127,7 +127,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - `Plugins/Common/fxai_framework_model.mqh`
   Shared MT5-native framework layer for the newly expanded model zoo. It provides probability/abstention-compatible implementations for regime volatility, ARIMAX-GARCH, random forest, cointegration/OU spread, PPO-style policy scoring, microstructure proxies, HMM regimes, elastic/profit logistic, decomposition, Kalman/PCA/factor, trend, cross-rate, GRU, BiLSTM, LSTM-TCN, and CNN-LSTM variants without adding live external inference services.
 - `Plugins/Sequence/ai_*/`
-  Internal split state and public sections for the largest sequence-model plugins, including `ai_tcn/`, `ai_s4/`, and `ai_stmn/`. The sequence zoo also now includes the native research plugins `ai_qcew`, `ai_fewc`, `ai_gha`, `ai_tesseract`, `ai_gru`, `ai_bilstm`, `ai_lstm_tcn`, `ai_cnn_lstm`, and `ai_attn_cnn_bilstm`.
+  Internal split state and public sections for the largest sequence-model plugins, including `ai_tcn/`, `ai_s4/`, and `ai_stmn/`. The sequence zoo also now includes the native research plugins `ai_qcew`, `ai_fewc`, `ai_gha`, `ai_tesseract`, `ai_mythos_rdt`, `ai_gru`, `ai_bilstm`, `ai_lstm_tcn`, `ai_cnn_lstm`, and `ai_attn_cnn_bilstm`.
 - `Plugins/Stat/`, `Plugins/Factor/`, `Plugins/Trend/`, `Plugins/RL/`
   Native statistical, factor, trend, and policy plugins added for model-family coverage. These modules consume only FXAI plugin-context payloads and avoid direct MT5 data pulls, preserving the DataCore/FeatureCore/NormalizationCore boundary.
 - `Plugins/Sequence/ai_tft/Forward/`

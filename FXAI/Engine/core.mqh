@@ -12,7 +12,7 @@
 #define FXAI_AI_FEATURES (FXAI_MACRO_EVENT_FEATURE_OFFSET + FXAI_MACRO_EVENT_FEATURES)
 #define FXAI_AI_WEIGHTS (FXAI_AI_FEATURES + 1)
 #define FXAI_AI_MLP_HIDDEN 12
-#define FXAI_AI_COUNT 62
+#define FXAI_AI_COUNT 63
 #define FXAI_CONFORMAL_DEPTH 96
 #define FXAI_NORM_METHOD_COUNT 17
 #ifndef FXAI_MAX_HORIZONS
@@ -138,7 +138,8 @@ enum ENUM_AI_TYPE
    AI_STAT_XRATE_CONSISTENCY,
    AI_GRU,
    AI_BILSTM,
-   AI_LSTM_TCN
+   AI_LSTM_TCN,
+   AI_MYTHOS_RDT
 };
 
 
@@ -699,6 +700,7 @@ int FXAI_DefaultReferenceTierForAI(const int ai_id)
       case AI_GRU:
       case AI_BILSTM:
       case AI_LSTM_TCN:
+      case AI_MYTHOS_RDT:
          return (int)FXAI_REFERENCE_COMPRESSED_NATIVE;
 
       case AI_FTRL_LOGIT:

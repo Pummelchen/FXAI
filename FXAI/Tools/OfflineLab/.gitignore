@@ -1,7 +1,9 @@
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
-Profiles/
+Profiles/*
+!Profiles/
+!Profiles/strategy_profiles.json
 Reports/
 Runs/
 __pycache__/

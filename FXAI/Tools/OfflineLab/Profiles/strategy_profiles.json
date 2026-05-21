@@ -1,0 +1,202 @@
+{
+  "aliases": {
+    "default": "strategy/default"
+  },
+  "catalog_version": "2026.05.22",
+  "defaults": {
+    "runtime_profiles": {
+      "demo": "runtime/research",
+      "production": "runtime/production",
+      "research": "runtime/research"
+    },
+    "strategy_profile": "strategy/default"
+  },
+  "profiles": {
+    "broker/default": {
+      "description": "Generic broker execution defaults.",
+      "execution": {
+        "commission_per_lot_side": 0.0,
+        "cost_buffer_points": 2.0,
+        "execution_profile": "default",
+        "fill_penalty_points": -1.0,
+        "slippage_points": -1.0
+      },
+      "profile_version": 1
+    },
+    "broker/retail-fx": {
+      "description": "Retail FX profile with conservative cost handling.",
+      "execution": {
+        "cost_buffer_points": 2.5,
+        "execution_profile": "retail-fx",
+        "fill_penalty_points": -1.0,
+        "slippage_points": -1.0
+      },
+      "profile_version": 1
+    },
+    "runtime/default": {
+      "description": "Shared runtime defaults.",
+      "model": {
+        "compliance_harness": false,
+        "debug_flow": false,
+        "warmup_enabled": false
+      },
+      "profile_version": 1
+    },
+    "runtime/production": {
+      "description": "Production runtime posture with trading enabled.",
+      "model": {
+        "debug_flow": false,
+        "warmup_enabled": true
+      },
+      "profile_version": 1,
+      "risk": {
+        "trade_killer": 0
+      }
+    },
+    "runtime/research": {
+      "audit": {
+        "bars": 20000,
+        "seed": 42,
+        "wf_embargo_bars": 24,
+        "wf_folds": 6,
+        "wf_purge_bars": 32,
+        "wf_test_bars": 64,
+        "wf_train_bars": 256
+      },
+      "description": "Research runtime posture for audit and promotion workflows.",
+      "model": {
+        "debug_flow": false,
+        "warmup_enabled": false
+      },
+      "profile_version": 1
+    },
+    "strategy/default": {
+      "audit": {
+        "bars": 20000,
+        "scenario_list": []
+      },
+      "description": "Default FXAI strategy profile for offline promotion and live deployment manifests.",
+      "execution": {
+        "commission_per_lot_side": 0.0,
+        "cost_buffer_points": 2.0,
+        "execution_profile": "default",
+        "fill_penalty_points": -1.0,
+        "slippage_points": -1.0
+      },
+      "features": {
+        "context_symbols": [
+          "EURUSD",
+          "USDJPY",
+          "AUDUSD",
+          "EURAUD",
+          "EURGBP",
+          "GBPUSD"
+        ],
+        "feature_mask": 0,
+        "horizon": 5,
+        "m1sync_bars": 3,
+        "normalization": 0,
+        "schema_id": 0,
+        "sequence_bars": 0
+      },
+      "model": {
+        "buy_threshold": 0.6,
+        "ensemble_agree_pct": 70.0,
+        "ensemble_enabled": false,
+        "ensemble_explore_pct": 12.0,
+        "ensemble_shadow_epochs": 1,
+        "ensemble_shadow_every_bars": 3,
+        "ensemble_shadow_samples": 20,
+        "epochs": 8,
+        "ev_lookback_samples": 80,
+        "ev_threshold_points": 0.3,
+        "horizon_penalty_per_minute": 0.0015,
+        "horizons": [
+          3,
+          5,
+          8,
+          13
+        ],
+        "l2": 0.01,
+        "learning_rate": 0.01,
+        "multi_horizon": true,
+        "online_epochs": 1,
+        "online_samples": 60,
+        "sell_threshold": 0.4,
+        "warmup_enabled": false,
+        "warmup_folds": 3,
+        "warmup_loops": 100,
+        "warmup_min_trades": 120,
+        "warmup_samples": 10000,
+        "warmup_seed": 42,
+        "window": 60
+      },
+      "mt5_inputs": {},
+      "profile_version": 1,
+      "risk": {
+        "lot": 0.01,
+        "max_correlated_exposure_lots": 0.2,
+        "max_dd": 50.0,
+        "max_directional_cluster_lots": 0.18,
+        "max_portfolio_exposure_lots": 0.3,
+        "position_sizing": "conviction",
+        "risk_kill_fill_risk": 0.9,
+        "risk_kill_path_risk": 0.92,
+        "risk_kill_trade_gate": 0.24,
+        "risk_max_fill_risk": 0.68,
+        "risk_max_path_risk": 0.72,
+        "risk_max_portfolio_pressure": 0.78,
+        "risk_min_confidence": 0.52,
+        "risk_min_hierarchy_consistency": 0.4,
+        "risk_min_hierarchy_execution": 0.34,
+        "risk_min_hierarchy_score": 0.46,
+        "risk_min_hierarchy_tradability": 0.38,
+        "risk_min_macro_state_quality": 0.24,
+        "risk_min_reliability": 0.48,
+        "risk_min_trade_gate": 0.52,
+        "risk_per_trade_pct": 0.35,
+        "risk_target_move_points": 12.0,
+        "session_filter_enabled": false,
+        "session_min_after_open_minutes": 60,
+        "session_min_before_close_minutes": 60,
+        "sl_usd": 5.0,
+        "tp_usd": 100.0,
+        "trade_killer": 0,
+        "trade_magic": 6206001,
+        "trail_enabled": true,
+        "trail_giveback_pct": 30.0,
+        "trail_start_usd": 5.0,
+        "trail_tp_breath_usd": 5.0
+      }
+    },
+    "symbol/EURUSD": {
+      "description": "EURUSD context layer.",
+      "features": {
+        "context_symbols": [
+          "EURUSD",
+          "USDJPY",
+          "AUDUSD",
+          "EURAUD",
+          "EURGBP",
+          "GBPUSD"
+        ]
+      },
+      "profile_version": 1
+    },
+    "symbol/default": {
+      "description": "Default symbol layer.",
+      "features": {
+        "context_symbols": [
+          "EURUSD",
+          "USDJPY",
+          "AUDUSD",
+          "EURAUD",
+          "EURGBP",
+          "GBPUSD"
+        ]
+      },
+      "profile_version": 1
+    }
+  },
+  "schema_version": 1
+}
