@@ -39,12 +39,6 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   MT5 Service that exports live tick-flow, spread, liquidity-stress, stop-run proxy, and session-handoff state for the shared microstructure subsystem.
 - `FXDataEngine/Services/FXAI_CrossAssetProbe.mq5`
   MT5 Service that exports configured indicator-only MT5 symbols for the shared cross-asset macro/liquidity subsystem.
-- `FXBacktestAgent/`
-  Source root for the offline backtest agent that will orchestrate FXAI backtest workflows.
-- `FXDemoAgent/`
-  Source root for the demo-trading agent that will run FXAI safely against demo environments.
-- `FXLiveAgent/`
-  Source root for the live-trading agent that will coordinate production FXAI runtime workflows.
 - `Tools/offline_lab/`
   Internal Python package for Offline Lab database, export, campaign, promotion, shadow-fleet ingest, foundation and student bundling, supervisor-service generation, teacher-factory modules, world simulation, and autonomous governance.
 - `Tools/OfflineLab/NewsPulse/`
