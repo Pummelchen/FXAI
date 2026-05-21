@@ -1,0 +1,476 @@
+# FXBacktest
+
+FXBacktest is a native Swift macOS backtesting application for running converted MQL5 Expert Advisors as high-performance Swift plugins. It lives as ordinary tracked source in the `FXBacktest/` folder inside [FXAI](https://github.com/Pummelchen/FXAI). It is designed to work with [FXExport](https://github.com/Pummelchen/FXExport) as the historical Forex data provider: FXExport ingests and verifies M1 OHLC data from MetaTrader 5, and FXBacktest consumes that verified data for optimization runs.
+
+The goal is similar to the MT5 Strategy Tester optimization view: define a matrix of input/min/step/max parameters, run many complete backtest passes on CPU or Metal, and watch the live table of pass results.
+
+## Current Capabilities
+
+- Native SwiftPM macOS app with SwiftUI interface.
+- Plugin API v1 for converted MQL5 EAs stored as optimized single-file Swift plugins.
+- Pure M1 OHLC close-price broker model with position lifecycle and trade ledger types.
+- Multi-symbol market universe support for plugins that need more than one loaded Forex pair.
+- CPU optimizer that splits work by complete backtest pass across workers.
+- Optional GPU execution through Metal for plugins that provide a matching compute kernel.
+- Hybrid CPU+GPU execution that shares the pass matrix across CPU workers and Metal for maximum throughput.
+- Plugin acceleration descriptor/IR scaffold for future generated Swift SIMD and Metal kernels.
+- Six operational agents for FXExport connectivity, market readiness, run coordination, result persistence, plugin validation, and resource health.
+- Read-only FXExport data loading through the dedicated FXBacktest API v1.
+- ClickHouse-backed FXBacktest result-store API for optimization results only, including explicit purge commands.
+- Live pass table with MT5-style result, profit, trade count, drawdown, recovery, Sharpe placeholder, and tested input columns.
+- Resident terminal command shell with `>` prompt for loading data, changing settings, starting runs, stopping active work, and checking status without relaunching.
+- Demo data mode for UI and engine testing when the FXExport API is not running.
+
+## Repository Layout
+
+```text
+Package.swift
+Sources/
+  FXBacktest/                 SwiftUI macOS app
+  FXBacktestCore/             engine, data model, FXExport loader, plugin API
+  FXBacktestPlugins/          converted EA plugins
+    FX7.swift                 FX7 OHLC signal-timeframe CPU plugin and single-symbol Metal kernel
+    FXStupid/                 first converted EA plugin and config
+Tests/
+  FXBacktestCoreTests/        engine, sweep, and Metal smoke tests
+```
+
+Important files:
+
+- `Sources/FXBacktestCore/PluginAPI.swift`: Plugin API v1.
+- `Sources/FXBacktestCore/AgentTypes.swift`: shared operational-agent status/outcome types.
+- `Sources/FXBacktestCore/OperationalAgents.swift`: six production agents used by the resident app lifecycle.
+- `Sources/FXBacktestCore/CPUBacktestExecutor.swift`: whole-pass CPU optimization.
+- `Sources/FXBacktestCore/MetalBacktestExecutor.swift`: plugin-provided Metal kernel runner.
+- `Sources/FXBacktestCore/HybridBacktestExecutor.swift`: shared CPU+Metal pass scheduling.
+- `Sources/FXBacktestCore/ExecutionModel.swift`: pure M1 OHLC broker model and deterministic ledger simulator.
+- `Sources/FXBacktestCore/OhlcMarketUniverse.swift`: aligned multi-symbol OHLC universe.
+- `Sources/FXBacktestCore/FXExportHistoryLoader.swift`: FXExport FXBacktest API v1 client bridge.
+- `Sources/FXBacktestCore/BacktestResultStore.swift`: ClickHouse result-store API and purge support.
+- `Sources/FXBacktestCore/PluginAcceleration.swift`: plugin acceleration descriptor and IR v1.
+- `Sources/FXBacktestPlugins/FX7.swift`: converted FX7 OHLC-only plugin with MQL5-style closed signal-bar feature timing, CPU universe support, and a Metal kernel for single-symbol sweeps.
+- `Sources/FXBacktestPlugins/MovingAverageCross.swift`: reference EA plugin.
+- `Sources/FXBacktestPlugins/FXStupid/FXStupid.swift`: converted `FX_Stupid_Original_Min.mq5` plugin.
+- `Sources/FXBacktestPlugins/FXStupid/FXStupid.config.json`: FXStupid input/config defaults.
+
+## Requirements
+
+- macOS 13 or newer.
+- Apple Silicon Mac recommended, especially M2/M3 for the intended performance target.
+- Swift 6 toolchain.
+- FXAI and FXExport checked out next to each other, with FXBacktest inside FXAI:
+
+```text
+FX/
+  FXAI/
+    FXBacktest/
+  FXExport/
+    FXDatabase/
+```
+
+The Swift package dependency is local:
+
+```swift
+.package(path: "../../FXExport/FXDatabase")
+```
+
+## Quickstart
+
+### 1. Clone FXAI
+
+```bash
+git clone https://github.com/Pummelchen/FXAI.git
+cd FXAI/FXBacktest
+```
+
+Make sure FXExport exists next to FXAI:
+
+```bash
+cd ../..
+git clone https://github.com/Pummelchen/FXExport.git
+cd FXAI/FXBacktest
+```
+
+### 2. Build And Test
+
+```bash
+swift test
+swift build -c release
+```
+
+Release builds are the relevant performance baseline because SwiftPM uses whole-module optimization in release mode.
+
+### 3. Run The App From Source
+
+```bash
+swift run FXBacktest
+```
+
+Do not pass launch-time parameters. FXBacktest starts the SwiftUI backtester and a resident terminal prompt:
+
+```text
+>
+```
+
+Paste commands into that prompt while the app keeps running. Status messages continue to print to the terminal, and the SwiftUI live table updates at the same time.
+The `status` command includes an agent count summary; `agents` prints the latest outcome for each operational agent.
+
+FXBacktest has no supported executable flags. Extra text after `swift run FXBacktest` is ignored and cannot change app settings, data selection, plugin selection, run settings, or parameter ranges. All operator input belongs in commands typed after the resident `>` prompt.
+
+The first screen is the working backtester, not a setup wizard. It includes:
+
+- EA plugin picker.
+- Data controls.
+- CPU, GPU (Metal), and Both engine selector.
+- Parameter matrix editor.
+- Run/Stop buttons.
+- Live MT5-style optimization table.
+
+### 4. Run A Demo Backtest
+
+Use this when the FXExport API is not running.
+
+1. Launch FXBacktest.
+2. Select `Moving Average Cross`.
+3. Click `Demo`.
+4. Keep `CPU` selected.
+5. Adjust parameter ranges if needed.
+6. Click `Run`.
+
+The same flow from the terminal prompt is:
+
+```text
+> load-demo
+> run cpu
+```
+
+The pass table updates live and sorts the best results by net profit.
+
+### 5. Run A Backtest With FXExport Data
+
+FXExport is responsible for historical data ingestion, broker UTC mapping, verification, repair, and internal storage. FXBacktest only reads verified data through FXExport's dedicated FXBacktest API v1. FXBacktest must not connect to ClickHouse directly.
+
+In FXExport, prepare the data first:
+
+```bash
+cd ../../FXExport/FXDatabase
+swift build -c release
+.build/release/FXDatabase
+```
+
+At the FXExport `>` prompt, run:
+
+```text
+> startcheck --config-dir Config --migrations-dir Migrations
+> backfill --config-dir Config --symbols all
+> verify --config-dir Config --random-ranges 20
+> fxbacktest-api --config-dir Config --api-host 127.0.0.1 --api-port 5066
+```
+
+Leave FXExport running while FXBacktest loads data. FXBacktest uses FXExport only as a historical M1 OHLC provider; backtests run on pure open/high/low/close bars and do not request spread, swap, commission, margin, bid/ask, tick, or volume data.
+
+Then in FXBacktest:
+
+1. Set FXExport API URL, usually `http://127.0.0.1:5066`.
+2. Set broker source id, for example `icmarkets-sc-mt5-4`.
+3. Set logical symbol, for example `EURUSD`.
+4. Set expected MT5 symbol and digits.
+5. Set UTC start/end epoch seconds, minute-aligned.
+6. Click `Load FXExport`.
+7. Select CPU, GPU (Metal), or Both.
+8. Edit the parameter matrix.
+9. Click `Run`.
+
+Before the first optimization pass starts, FXBacktest validates the loaded market universe and then uses the M1 OHLC close price as the execution price for the simplified broker model.
+
+The same flow from the FXBacktest terminal prompt is:
+
+```text
+> load-fxexport --api-url http://127.0.0.1:5066 --broker icmarkets-sc-mt5-4 --symbol EURUSD --mt5-symbol EURUSD --digits 5 --from 1704067200 --to 1707177600 --max-rows 5000000
+> set-param fast_period --input 12 --min 6 --step 2 --max 40
+> set-param slow_period --input 48 --min 24 --step 4 --max 120
+> run both --workers 8 --chunk 128
+```
+
+For multi-symbol EAs such as FX7 or FXStupid, load an aligned market universe in one command. FXBacktest requests each symbol from FXExport API v1 and rejects the universe if timestamps do not line up exactly:
+
+```text
+> load-fxexport --api-url http://127.0.0.1:5066 --broker icmarkets-sc-mt5-4 --symbols EURUSD,USDJPY,EURGBP --from 1704067200 --to 1707177600 --max-rows 5000000
+> plugin FX7
+> set-param signal_stride_bars --input 15 --min 15 --step 15 --max 15
+> run cpu --workers 8 --chunk 128
+```
+
+Single-symbol `--symbol`, `--mt5-symbol`, and `--digits` validation remains available for strict one-pair loads. For multi-symbol loads, FXBacktest stores the MT5 symbol and digits returned by FXExport for metadata validation and price scaling only.
+
+If FXExport reports missing verified coverage, bad hashes, mixed digits, duplicate timestamps, invalid OHLC rows, or unsafe ingestion state, FXBacktest fails closed instead of running against questionable data.
+
+## Terminal Command Shell
+
+FXBacktest is intended to stay open. If no backtest is active, it waits at the `>` prompt for the next command. State-changing commands gracefully stop active data loads or optimization runs before changing the app state.
+
+The `--api-url`, `--workers`, `--input`, and similar `--...` tokens below are command options typed inside the running app. They are not launch-time parameters. Options may be entered as `--key value` or `--key=value`.
+FXExport and ClickHouse URLs must be absolute `http` or `https` URLs. CPU-only plugins reject `gpu`, `metal`, and `both` targets; select a Metal-capable plugin before choosing those paths.
+
+Useful commands:
+
+```text
+status
+agents
+config
+plugins
+plugin <plugin-id-or-display-name>
+params
+set <field> <value>
+set --api-url http://127.0.0.1:5066 --target both --workers 8
+set --clickhouse-url http://127.0.0.1:8123 --clickhouse-db fxbacktest --persist-results true
+set-param <key> --input 12 --min 6 --step 2 --max 40
+load-demo
+load-fxexport [--api-url URL] [--broker ID] [--symbol EURUSD] [--symbols EURUSD,USDJPY] [--mt5-symbol EURUSD] [--digits 5] [--from UTC] [--to UTC] [--max-rows N]
+run [cpu|gpu|metal|both] [--workers N] [--chunk N] [--initial-deposit N] [--contract-size N] [--lot N]
+save-results [--run-id ID] [--note TEXT]
+clean-backtest-data --older-than-days 30
+clean-backtest-data --all true
+stop
+reset-params
+help
+exit
+```
+
+`set --persist-results true` streams future optimization rows into ClickHouse through `BacktestResultStore`. `save-results` persists a point-in-time snapshot of the currently retained in-memory result rows. `clean-backtest-data` is the purge command for old or unwanted optimization result data.
+
+## Operational Agents
+
+FXBacktest now runs six small production agents at app boundaries where correctness matters. They are preflight and lifecycle checks, not per-pass hot-loop work:
+
+- `FXExport Connectivity`: verifies `GET /v1/status` and the API version before FXExport-backed loads.
+- `Market Readiness`: validates aligned, non-empty M1 OHLC universes and rejects demo/FXExport mixes.
+- `Optimization Run Coordinator`: validates the target, sweep, workers, chunk size, deposit, lot size, and immutable run settings.
+- `Result Persistence`: owns ClickHouse result run start, buffered writes, finalization, snapshot saves, and purge commands.
+- `Plugin Validation`: validates Plugin API v1 descriptors, parameters, acceleration descriptors, and Metal declarations.
+- `Resource Health`: checks CPU worker pressure, Metal availability, thermal state, memory, and disk headroom.
+
+Use `agents` in the resident prompt to inspect the latest outcome:
+
+```text
+> agents
+```
+
+## FXExport Data Contract
+
+FXBacktest consumes FXExport only through the dedicated FXBacktest API v1:
+
+- API version: `fxexport.fxbacktest.history.v1`
+- Status endpoint: `GET /v1/status`
+- M1 history endpoint: `POST /v1/history/m1`
+
+FXBacktest imports the small `FXDatabaseFXBacktestAPI` SwiftPM product for v1 DTOs and the HTTP client. That module does not expose ClickHouse, FXExport internals, or the old direct history provider.
+
+The data path is:
+
+```text
+MT5 + FXExport EA
+  -> FXExport Swift ingestion
+  -> FXExport internal canonical M1 OHLC storage
+  -> FXExport FXBacktest API v1
+  -> FXBacktest OhlcDataSeries
+  -> CPU or Metal optimization
+```
+
+FXBacktest expects:
+
+- M1 closed bars only.
+- UTC timestamps, not MT5 server timestamps.
+- Scaled integer OHLC prices.
+- Strictly increasing timestamps.
+- Complete verified coverage for the requested UTC range.
+- Matching broker source, logical symbol, MT5 symbol, and digits.
+
+FXBacktest does not call FXExport for execution side data. Spread, swap, commission, margin, bid/ask quotes, tick data, and volume are intentionally outside the current backtest model.
+
+Direct ClickHouse access is forbidden for historical Forex OHLC data. The only ClickHouse exception in FXBacktest is the local optimization result-store API, which writes and purges FXBacktest result tables:
+
+- `fxbacktest_runs`
+- `fxbacktest_pass_results`
+
+That result-store API is separate from FXExport history storage and must not be used as a shortcut to read broker OHLC data.
+
+## Pure OHLC Execution Model
+
+`BacktestBrokerV2` is the deterministic broker surface for converted plugins that need position lifecycle and a closed-trade ledger while staying on the simplified data model. It models:
+
+- Per-symbol digits and scaled integer prices.
+- Open and close execution directly at the M1 OHLC close price supplied by the plugin.
+- Positive lot sizes from the run settings or plugin logic.
+- Position lifecycle and closed-trade ledger.
+
+There is no execution profile in `BacktestRunSettings`. PnL uses close-price delta, symbol digits, configured contract size, and lots. The older `BacktestBroker` remains available for simple single-position plugins. FXStupid uses its plugin-local broker to preserve the converted EA flow while applying the same pure close-price PnL calculation.
+
+## Multi-Symbol Backtests
+
+`OhlcMarketUniverse` holds multiple `OhlcDataSeries` instances keyed by logical symbol. FXBacktest validates that all series have identical timestamps before a multi-symbol run starts. This keeps each pass deterministic and avoids plugins silently reading mismatched bars.
+
+Plugins can implement:
+
+```swift
+func runPass(
+    marketUniverse: OhlcMarketUniverse,
+    parameters: ParameterVector,
+    context: BacktestContext
+) throws -> BacktestPassResult
+```
+
+Existing single-symbol plugins still compile because the default implementation runs against the universe primary series.
+
+## Result Store And Purge
+
+Optimization results can be persisted to ClickHouse through FXBacktest's result-store API:
+
+```text
+> set --clickhouse-url http://127.0.0.1:8123 --clickhouse-db fxbacktest --persist-results true
+> run cpu
+```
+
+For a manual snapshot of retained rows:
+
+```text
+> save-results --note current-best-window
+```
+
+To clean old result data:
+
+```text
+> clean-backtest-data --older-than-days 30
+```
+
+To remove all stored optimization result data:
+
+```text
+> clean-backtest-data --all true
+```
+
+## Plugin API v1
+
+Converted EAs implement `FXBacktestPluginV1`:
+
+```swift
+public protocol FXBacktestPluginV1: Sendable {
+    var descriptor: FXBacktestPluginDescriptor { get }
+    var parameterDefinitions: [ParameterDefinition] { get }
+    var metalKernel: MetalKernelV1? { get }
+    var accelerationDescriptor: PluginAccelerationDescriptor { get }
+
+    func runPass(
+        market: OhlcDataSeries,
+        parameters: ParameterVector,
+        context: BacktestContext
+    ) throws -> BacktestPassResult
+
+    func runPass(
+        marketUniverse: OhlcMarketUniverse,
+        parameters: ParameterVector,
+        context: BacktestContext
+    ) throws -> BacktestPassResult
+}
+```
+
+Plugin rules:
+
+- Keep all mutable EA state local to `runPass`.
+- Do not share mutable globals across passes.
+- Treat OHLC arrays as read-only.
+- Return aggregate metrics for each pass.
+- Store each converted EA plugin in its own subfolder under `Sources/FXBacktestPlugins/`, for example `Sources/FXBacktestPlugins/FXStupid/`.
+- Register plugins in `FXBacktestPluginRegistry`.
+
+Single-pass reports are intentionally not implemented yet. The current product focus is maximum optimizer throughput and a live pass table.
+
+The live optimization table follows the MT5 tester shape: fixed metric columns first (`Pass`, `Result`, `Profit`, `Total trades`, `Drawdown %`, `Recovery factor`, `Sharpe ratio`), followed by one column per tested plugin input parameter.
+
+### FXStupid
+
+`FXStupid` is the first converted MQL5 EA plugin. Its Swift file keeps the original EA flow close to the source:
+
+```text
+OnInit -> OnTick -> EAStop -> TPCheck -> SLCheck -> AdjustLotSizes -> RefreshTraded -> OrderScan
+```
+
+The original MQL5 `input` values are stored in `FXStupid.config.json` beside the plugin file and become FXBacktest parameter definitions. The plugin is CPU-only for now because preserving the EA control flow is more important than immediately rewriting it as a Metal kernel.
+
+FXStupid now uses `OhlcMarketUniverse`, so loaded symbols from `FXPairs` can participate in the original scan loop. Symbols not loaded from FXExport behave like unavailable MT5 symbols and are skipped. Its pass-local broker uses pure M1 close prices with the configured contract size and lot values.
+
+### FX7
+
+`FX7` is the OHLC-only conversion of the FX7 MQL5 EA core. The CPU path keeps the EA's closed-bar feature flow where possible while intentionally omitting non-OHLC dependencies such as carry, value, macro data, spread, swap, commission, margin, bid/ask, tick data, and volume.
+
+Key conversion details:
+
+- `signal_stride_bars` is the signal timeframe in M1 bars. The default `15` matches the EA's `PERIOD_M15` signal timeframe.
+- M1 bars are aggregated into fixed UTC signal buckets before FX7 features are calculated.
+- Features use the last fully closed signal bar, and trades execute at the next M1 close.
+- Signal warmup follows the EA's `SignalBarsNeeded()` logic, including the extra 100 signal bars used by the MQL5 version.
+- MQL5 trend weights and windows are exposed as plugin inputs: `trend_weight_1`, `trend_weight_2`, `trend_weight_3`, `er_window`, `breakout_window`, and `short_reversal_window`.
+- `allow_long` and `allow_short` mirror the EA direction gates.
+- CPU runs support aligned multi-symbol universes for panic, correlation, novelty, crowding, and portfolio target selection.
+- Metal runs are single-symbol only because the current Metal executor ABI passes one OHLC series. The FX7 Metal kernel uses the same signal-timeframe OHLC timing and core trend/regime/risk gates, but it is not a full multi-symbol correlation/novelty replacement for the CPU path.
+
+## Plugin Acceleration API
+
+`PluginAccelerationDescriptor` and `PluginAccelerationIR` define the v1 scaffold for converting suitable plugins into generated Swift SIMD or Metal kernels while keeping the hand-converted Swift plugin as the fidelity reference. The reference Moving Average Cross plugin declares a Metal entry point and IR operation. FX7 provides both a CPU reference path and a single-symbol Metal kernel. FXStupid deliberately stays scalar CPU until its EA flow is validated against MT5 results.
+
+## CPU, GPU, And Hybrid Execution Model
+
+CPU optimization splits the parameter matrix into chunks. Each worker receives complete passes and each pass owns its strategy state. FXBacktest does not split one pass across multiple threads because that risks state corruption in converted EA logic.
+
+GPU optimization is available through Metal only for plugins that provide `MetalKernelV1`. Swift plugin code does not automatically run on the GPU. A Metal plugin kernel receives immutable OHLC buffers, a flattened parameter buffer, job records, and a result buffer. Each GPU thread owns one complete parameter combination and writes one result row.
+
+`Both` is the hybrid mode. It requires a Metal-capable plugin and runs CPU workers plus a Metal command-buffer loop at the same time. A shared allocator hands out disjoint pass ranges, so each parameter combination is executed exactly once by either CPU or GPU. Result rows still record the engine that produced the pass as `cpu` or `metal`; the stored run target is `both`.
+
+## Metal Kernel ABI v1
+
+FXBacktest binds Metal buffers as:
+
+| Index | Type | Meaning |
+| --- | --- | --- |
+| 0 | `const device long *` | UTC epoch seconds |
+| 1 | `const device long *` | Open prices, scaled integers |
+| 2 | `const device long *` | High prices, scaled integers |
+| 3 | `const device long *` | Low prices, scaled integers |
+| 4 | `const device long *` | Close prices, scaled integers |
+| 5 | `constant uint &` | Bar count |
+| 6 | `const device FXBTMetalJob *` | Jobs, one per parameter combination |
+| 7 | `const device float *` | Flattened parameter values |
+| 8 | `device FXBTMetalResult *` | Output rows, one per job |
+| 9 | `constant FXBTMetalRunConfig &` | Initial deposit, contract-lot value, price scale, digits |
+
+The kernel must assign exactly one independent pass to each `thread_position_in_grid` and write only `results[id]`.
+
+## Testing
+
+```bash
+swift test
+swift test -c release
+swift build -c release
+```
+
+The test suite includes:
+
+- Lazy parameter-matrix indexing.
+- CPU whole-pass chunk execution.
+- Metal kernel compile and dispatch smoke test when Metal is available.
+- FX7 signal-timeframe warmup, direction gates, CPU flow, multi-symbol flow, and single-symbol Metal kernel smoke tests.
+- Hybrid CPU+Metal scheduling without duplicate pass indexes.
+- Pure OHLC broker and ledger behavior.
+- Multi-symbol universe alignment validation.
+- FXStupid multi-symbol universe behavior.
+- ClickHouse result-store SQL/purge API behavior with a mock executor.
+- Plugin acceleration descriptor validation.
+- Operational-agent validation for FXExport connectivity, market readiness, plugin metadata, run coordination, resource health, and result persistence.
+
+## Documentation
+
+FXBacktest documentation now lives in this README and the FXAI handbook. The former standalone FXBacktest GitHub Wiki should be treated as historical once the standalone repository is retired.
+
+## Status
+
+FXBacktest is in the first functional engine/app stage. It can load demo data, load single-symbol or aligned multi-symbol verified FXExport data, supervise runs through six operational agents, run CPU, Metal, or hybrid CPU+Metal optimizations for plugins that provide a kernel, and persist optimization results to ClickHouse through its own result-store API. Future work should add more converted EA plugins, fuller generated-kernel acceleration, and optional single-pass reporting.

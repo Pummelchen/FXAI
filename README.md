@@ -8,10 +8,10 @@ FXAI is an MT5-native framework for researching, testing, auditing, and operatin
 
 FXAI is not a single black-box strategy. It is a governed decision framework: shared data contracts, model plugins, runtime risk layers, audit gates, promotion artifacts, and an optional GUI all work from the same source of truth.
 
-FXBacktest is included as the `FXBacktest/` Git subproject. Clone FXAI with submodules when you need the Swift optimizer:
+FXBacktest is included as ordinary tracked source in `FXBacktest/`. Clone FXAI normally; no submodule initialization is required for the Swift optimizer:
 
 ```bash
-git clone --recurse-submodules https://github.com/Pummelchen/FXAI.git
+git clone https://github.com/Pummelchen/FXAI.git
 ```
 
 ## User Matrix Benefits
