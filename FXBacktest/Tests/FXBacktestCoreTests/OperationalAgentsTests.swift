@@ -4,9 +4,9 @@ import FXBacktestPlugins
 import XCTest
 
 final class OperationalAgentsTests: XCTestCase {
-    func testFXExportConnectivityAcceptsMatchingAPIVersion() async throws {
+    func testFXDatabaseConnectivityAcceptsMatchingAPIVersion() async throws {
         let agent = FXExportConnectivityAgent(statusLoader: { _ in
-            FXBacktestAPIStatusResponse(apiVersion: FXBacktestAPIV1.version, service: "FXExport", status: "ok")
+            FXBacktestAPIStatusResponse(apiVersion: FXBacktestAPIV1.version, service: "FXDatabase", status: "ok")
         })
 
         let outcome = try await agent.check(connection: FXExportConnectionSettings())
@@ -14,9 +14,9 @@ final class OperationalAgentsTests: XCTestCase {
         XCTAssertEqual(outcome.status, .ok)
     }
 
-    func testFXExportConnectivityRejectsWrongAPIVersion() async throws {
+    func testFXDatabaseConnectivityRejectsWrongAPIVersion() async throws {
         let agent = FXExportConnectivityAgent(statusLoader: { _ in
-            FXBacktestAPIStatusResponse(apiVersion: "wrong.version", service: "FXExport", status: "ok")
+            FXBacktestAPIStatusResponse(apiVersion: "wrong.version", service: "FXDatabase", status: "ok")
         })
 
         let outcome = try await agent.check(connection: FXExportConnectionSettings())
@@ -25,7 +25,7 @@ final class OperationalAgentsTests: XCTestCase {
         XCTAssertTrue(outcome.message.contains("version mismatch"))
     }
 
-    func testMarketReadinessRejectsMixedDemoAndFXExportData() throws {
+    func testMarketReadinessRejectsMixedDemoAndFXDatabaseData() throws {
         let demo = try market(symbol: "EURUSD", brokerSourceId: "demo")
         let exported = try market(symbol: "USDJPY", brokerSourceId: "icmarkets-sc-mt5-4", mt5Symbol: "USDJPY", digits: 3)
         let universe = try OhlcMarketUniverse(primarySymbol: "EURUSD", series: [demo, exported])
@@ -33,7 +33,7 @@ final class OperationalAgentsTests: XCTestCase {
         let outcome = MarketReadinessAgent().evaluate(universe: universe)
 
         XCTAssertEqual(outcome.status, .failed)
-        XCTAssertTrue(outcome.message.contains("Cannot mix demo and FXExport"))
+        XCTAssertTrue(outcome.message.contains("Cannot mix demo and FXDatabase"))
     }
 
     func testPluginValidationAcceptsBundledPlugins() {

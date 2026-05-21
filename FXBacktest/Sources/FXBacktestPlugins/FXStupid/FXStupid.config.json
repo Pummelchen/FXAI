@@ -3,7 +3,7 @@
     "id": "com.fxbacktest.plugins.fxstupid.v1",
     "display_name": "FXStupid",
     "version": "1.0.0",
-    "summary": "Converted FX_Stupid_Original_Min MQL5 EA with pass-local state and FXExport M1 OHLC data.",
+    "summary": "Converted FX_Stupid_Original_Min MQL5 EA with pass-local state and FXDatabase M1 OHLC data.",
     "author": "FXBacktest"
   },
   "fxpairs": "EURAUD,EURCAD,EURCHF,EURDKK,EURGBP,EURJPY,EURNOK,EURNZD,EURPLN,EURSEK,EURSGD,EURUSD,EURZAR,USDCAD,USDCHF,USDCZK,USDDKK,USDHUF,USDJPY,USDMXN,USDNOK,USDPLN,USDSEK,USDSGD,USDTHB,USDZAR",

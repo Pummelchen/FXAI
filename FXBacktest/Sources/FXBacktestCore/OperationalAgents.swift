@@ -10,8 +10,8 @@ public struct FXExportConnectivityAgent: Sendable {
 
     public static let descriptor = FXBacktestAgentDescriptor(
         id: .fxExportConnectivity,
-        displayName: "FXExport Connectivity",
-        responsibility: "Verify FXExport API v1 availability before FXBacktest pulls Forex history."
+        displayName: "FXDatabase Connectivity",
+        responsibility: "Verify FXDatabase API v1 availability before FXBacktest pulls Forex history."
     )
 
     private let statusLoader: StatusLoader
@@ -27,7 +27,7 @@ public struct FXExportConnectivityAgent: Sendable {
             guard response.apiVersion == FXBacktestAPIV1.version else {
                 return Self.descriptor.outcome(
                     status: .failed,
-                    message: "FXExport API version mismatch: got \(response.apiVersion), expected \(FXBacktestAPIV1.version).",
+                    message: "FXDatabase API version mismatch: got \(response.apiVersion), expected \(FXBacktestAPIV1.version).",
                     details: ["service=\(response.service)", "status=\(response.status)"],
                     startedAtUtc: started
                 )
@@ -35,14 +35,14 @@ public struct FXExportConnectivityAgent: Sendable {
             guard response.status.lowercased() == "ok" else {
                 return Self.descriptor.outcome(
                     status: .failed,
-                    message: "FXExport reported non-ok status '\(response.status)'.",
+                    message: "FXDatabase reported non-ok status '\(response.status)'.",
                     details: ["service=\(response.service)", "api_version=\(response.apiVersion)"],
                     startedAtUtc: started
                 )
             }
             return Self.descriptor.outcome(
                 status: .ok,
-                message: "FXExport API v1 is reachable at \(connection.apiBaseURL.absoluteString).",
+                message: "FXDatabase API v1 is reachable at \(connection.apiBaseURL.absoluteString).",
                 details: ["service=\(response.service)", "api_version=\(response.apiVersion)"],
                 startedAtUtc: started
             )
@@ -51,7 +51,7 @@ public struct FXExportConnectivityAgent: Sendable {
         } catch {
             return Self.descriptor.outcome(
                 status: .failed,
-                message: "FXExport API v1 connectivity failed: \(error).",
+                message: "FXDatabase API v1 connectivity failed: \(error).",
                 details: ["url=\(connection.apiBaseURL.absoluteString)"],
                 startedAtUtc: started
             )
@@ -134,7 +134,7 @@ public struct MarketReadinessAgent: Sendable {
                 hasFXExport = true
                 let mt5Symbol = item.metadata.mt5Symbol?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 guard !mt5Symbol.isEmpty else {
-                    throw FXBacktestError.invalidMarketData("\(symbol) is missing FXExport MT5 symbol metadata.")
+                    throw FXBacktestError.invalidMarketData("\(symbol) is missing FXDatabase MT5 symbol metadata.")
                 }
             }
             if let firstUtc = item.metadata.firstUtc, firstUtc != item.utcTimestamps.first {
@@ -148,10 +148,10 @@ public struct MarketReadinessAgent: Sendable {
         }
 
         guard !(hasDemo && hasFXExport) else {
-            throw FXBacktestError.invalidMarketData("Cannot mix demo and FXExport market data in one backtest run.")
+            throw FXBacktestError.invalidMarketData("Cannot mix demo and FXDatabase market data in one backtest run.")
         }
         if hasFXExport, brokerIds.count != 1 {
-            throw FXBacktestError.invalidMarketData("All FXExport symbols in one run must use the same broker source.")
+            throw FXBacktestError.invalidMarketData("All FXDatabase symbols in one run must use the same broker source.")
         }
 
         _ = try OhlcMarketUniverse(primarySymbol: universe.primarySymbol, series: series, requireAlignedTimestamps: true)

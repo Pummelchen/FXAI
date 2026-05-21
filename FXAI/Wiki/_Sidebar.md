@@ -6,6 +6,7 @@
 - [FXAI Framework](FXAI%20Framework.md)
 - [Data Policy](Data%20Policy.md)
 - [Project Structure](Project%20Structure.md)
+- [FXBacktest](../../FXBacktest/README.md)
 - [FXDatabase](../../FXDatabase/README.md)
 - [Benchmarks](Benchmarks.md)
 - [Model Zoo](Model%20Zoo.md)

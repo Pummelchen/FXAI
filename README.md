@@ -4,11 +4,11 @@
 
 # FXAI
 
-FXAI is an MT5-native framework for researching, testing, auditing, and operating AI-assisted FX trading systems. Live trading stays inside MetaTrader 5 and MQL5; offline Python tooling is used for research, calibration, export, audit, and release evidence.
+FXAI is a trading-system framework in transition from its original MT5/MQL5 runtime toward a native Swift and Metal research and backtest stack. Live trading currently remains inside MetaTrader 5 and MQL5, while the new repo-root Swift projects provide the historical data source and accelerated offline backtest path.
 
 FXAI is not a single black-box strategy. It is a governed decision framework: shared data contracts, model plugins, runtime risk layers, audit gates, promotion artifacts, and an optional GUI all work from the same source of truth.
 
-FXBacktest and FXDatabase are included as ordinary tracked source in `FXBacktest/` and `FXDatabase/`. Clone FXAI normally; no submodule initialization is required for the Swift projects:
+FXBacktest and FXDatabase are now first-class FXAI subprojects included as ordinary tracked source in `FXBacktest/` and `FXDatabase/`. Clone FXAI normally; no submodule initialization is required for the Swift projects:
 
 ```bash
 git clone https://github.com/Pummelchen/FXAI.git
@@ -26,8 +26,9 @@ git clone https://github.com/Pummelchen/FXAI.git
 
 ## Core Benefits
 
-- MT5-native live runtime: no external live inference service and no DLL dependency for trade decisions.
+- Transitional MT5 live runtime: no external live inference service and no DLL dependency for current trade decisions while the Swift/Metal architecture is built out.
 - One canonical historical market contract: verified `M1 OHLCV` from FXDatabase, with MT5 raw data access isolated behind the FXDatabase bridge and FXAI data pipeline.
+- Native Swift backtesting: FXBacktest consumes FXDatabase history and can run CPU, Metal, or hybrid CPU+Metal optimization paths for converted plugins.
 - Plugin-based model layer: statistical, tree, linear, sequence, factor, trend, regime, policy, and ensemble families share one prediction contract.
 - Runtime control plane: NewsPulse, Rates Engine, Cross Asset, Microstructure, Adaptive Router, Dynamic Ensemble, Probabilistic Calibration, Execution Quality, Drift Governance, and Pair Network layers can explain or suppress unsafe trades.
 - Audit and promotion discipline: candidates are checked through repeatable compile, deterministic, pytest, audit, benchmark, and release-gate workflows before promotion.
@@ -36,7 +37,7 @@ git clone https://github.com/Pummelchen/FXAI.git
 ## What Users Can Do With FXAI
 
 - Check the live state of a symbol and understand the reason behind `ALLOW`, `CAUTION`, `BLOCK`, or `ABSTAIN`.
-- Run backtests and Audit Lab scenarios with shared assumptions instead of manually comparing inconsistent settings.
+- Run Swift-native FXBacktest jobs and MQL5 Audit Lab scenarios with shared assumptions instead of manually comparing inconsistent settings.
 - Research and promote better candidates with Offline Lab, benchmark cards, model-family scorecards, and strategy-profile manifests.
 - Inspect service health for news, rates, cross-asset, microstructure, calibration, execution, drift, and portfolio-conflict layers.
 - Use the GUI to arrange dashboards, save layouts, start common workflows, and recover from missing or stale artifacts.
@@ -56,6 +57,10 @@ Recommended first pages:
 - [Project Structure](FXAI/Wiki/Project%20Structure.md)
 - [FXBacktest Subproject](FXBacktest/README.md)
 - [FXDatabase Subproject](FXDatabase/README.md)
+
+## Swift And Metal Migration
+
+FXBacktest and FXDatabase are the foundation for moving the old FXAI MQL5 backtest workflow into a pure Swift stack. FXDatabase owns verified historical M1 OHLCV data and the MT5 bridge. FXBacktest owns strategy simulation, optimization, plugin conversion, and Metal acceleration. The MQL5 source under `FXAI/` remains the current live EA and reference implementation until each data-engine, plugin, and runtime layer is ported and verified.
 
 Subsystem guides:
 

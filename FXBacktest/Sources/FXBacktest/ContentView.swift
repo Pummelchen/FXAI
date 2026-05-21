@@ -87,7 +87,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                     GridRow {
-                        Text("FXExport API")
+                        Text("FXDatabase API")
                         TextField("URL", text: $model.apiURLText)
                             .textFieldStyle(.roundedBorder)
                     }
@@ -131,7 +131,7 @@ struct ContentView: View {
                     Button {
                         model.loadFXExportData()
                     } label: {
-                        Label("Load FXExport", systemImage: "externaldrive.connected.to.line.below")
+                        Label("Load FXDatabase", systemImage: "externaldrive.connected.to.line.below")
                     }
                     .disabled(model.isLoadingData || model.isRunning)
 

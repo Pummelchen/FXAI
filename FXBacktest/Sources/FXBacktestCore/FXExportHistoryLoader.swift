@@ -81,7 +81,7 @@ public struct FXExportHistoryLoader: Sendable {
         primarySymbol: String
     ) async throws -> OhlcMarketUniverse {
         guard !requests.isEmpty else {
-            throw FXBacktestError.invalidParameter("At least one FXExport history request is required.")
+            throw FXBacktestError.invalidParameter("At least one FXDatabase history request is required.")
         }
 
         var loaded: [OhlcDataSeries] = []

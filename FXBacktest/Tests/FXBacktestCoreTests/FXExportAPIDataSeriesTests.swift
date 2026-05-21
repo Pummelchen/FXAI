@@ -20,7 +20,8 @@ final class FXExportAPIDataSeriesTests: XCTestCase {
             open: [108_000, 108_010],
             high: [108_020, 108_030],
             low: [107_990, 108_000],
-            close: [108_010, 108_020]
+            close: [108_010, 108_020],
+            volume: [0, 0]
         )
 
         let series = try OhlcDataSeries(response: response)

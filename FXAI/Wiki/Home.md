@@ -4,7 +4,7 @@
 
 # FXAI Handbook
 
-FXAI is a live-trading and research framework for FX. It combines a modular MT5 Expert Advisor, offline research and promotion workflows, shared runtime risk layers, and an optional macOS GUI so different users can work from the same source of truth without guessing what the system is doing.
+FXAI is a live-trading and research framework for FX, now expanding from its original MT5/MQL5 runtime into native Swift and Metal backtesting. It combines a modular MT5 Expert Advisor, repo-root Swift subprojects for verified data and accelerated backtests, offline research and promotion workflows, shared runtime risk layers, and an optional macOS GUI so different users can work from the same source of truth without guessing what the system is doing.
 
 ## User Matrix
 
@@ -29,6 +29,7 @@ FXAI is a live-trading and research framework for FX. It combines a modular MT5 
 - Run the live EA with shared control-plane layers such as NewsPulse, Rates Engine, Cross Asset, Microstructure, Adaptive Router, Dynamic Ensemble, Probabilistic Calibration, Execution Quality, and Pair Network.
 - Run Audit Lab to see how a strategy or promotion behaves in standard, walk-forward, macro-event, and hostile-market scenarios.
 - Serve verified M1 OHLCV history from the repo-root `FXDatabase/` Swift package for external backtest and research apps.
+- Run Swift-native FXBacktest jobs that consume FXDatabase history and use CPU, Metal, or hybrid CPU+Metal optimization paths.
 - Inspect the Model Zoo to understand which plugin families contribute regime, volatility, sequence, factor, trend, equilibrium, policy, and proxy-microstructure views.
 - Use Offline Lab to export data, run campaigns, compare candidates, promote profiles, rebuild artifacts, and recover a clean runtime bundle.
 - Use NewsPulse and related control-plane services to detect event risk, stale source conditions, policy divergence, liquidity stress, and pair-specific trading posture changes.
@@ -100,4 +101,5 @@ Why this matters:
 - The terminal remains first-class.
 - Generated artifacts are the source of truth for operator interpretation.
 - Live safety layers should fail closed when the required state is unknown.
+- The MQL5 EA remains the reference live runtime while data-engine, plugin, and backtest responsibilities migrate into Swift and Metal.
 - The best FXAI workflow is role-based: live users inspect, researchers improve, architects recover, and everyone works from the same artifacts.

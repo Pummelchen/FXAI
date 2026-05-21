@@ -12,7 +12,7 @@ let package = Package(
         .library(name: "FXBacktestPlugins", targets: ["FXBacktestPlugins"])
     ],
     dependencies: [
-        .package(path: "../../FXExport/FXDatabase")
+        .package(path: "../FXDatabase")
     ],
     targets: [
         .target(

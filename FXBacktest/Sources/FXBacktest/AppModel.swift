@@ -139,11 +139,11 @@ final class AppModel: ObservableObject, @unchecked Sendable {
 
     func loadFXExportData() {
         guard !isLoadingData else {
-            updateStatus("FXExport data load is already running", log: .warning)
+            updateStatus("FXDatabase data load is already running", log: .warning)
             return
         }
         guard !isRunning else {
-            updateStatus("Stop active optimization before loading FXExport data", log: .warning)
+            updateStatus("Stop active optimization before loading FXDatabase data", log: .warning)
             return
         }
         do {
@@ -154,13 +154,13 @@ final class AppModel: ObservableObject, @unchecked Sendable {
         }
         let url: URL
         do {
-            url = try Self.validatedHTTPURL(apiURLText, fieldName: "FXExport API URL")
+            url = try Self.validatedHTTPURL(apiURLText, fieldName: "FXDatabase API URL")
         } catch {
             updateStatus(String(describing: error), log: .error)
             return
         }
         isLoadingData = true
-        updateStatus("Loading verified M1 OHLC through FXExport API v1...")
+        updateStatus("Loading verified M1 OHLC through FXDatabase API v1...")
         let connection = FXExportConnectionSettings(
             apiBaseURL: url,
             requestTimeoutSeconds: 120
@@ -204,7 +204,7 @@ final class AppModel: ObservableObject, @unchecked Sendable {
                 let wasCancelled = Task.isCancelled
                 await MainActor.run {
                     if wasCancelled {
-                        self.updateStatus("FXExport data load cancelled", log: .warning)
+                        self.updateStatus("FXDatabase data load cancelled", log: .warning)
                     } else {
                         self.market = loaded
                         self.marketUniverse = loadedUniverse
@@ -220,7 +220,7 @@ final class AppModel: ObservableObject, @unchecked Sendable {
                 let wasCancelled = Task.isCancelled || error is CancellationError
                 await MainActor.run {
                     if wasCancelled {
-                        self.updateStatus("FXExport data load cancelled", log: .warning)
+                        self.updateStatus("FXDatabase data load cancelled", log: .warning)
                     } else {
                         self.updateStatus(String(describing: error), log: .error)
                     }
@@ -237,7 +237,7 @@ final class AppModel: ObservableObject, @unchecked Sendable {
             return
         }
         guard !isLoadingData else {
-            updateStatus("Wait for FXExport data loading to finish before running", log: .warning)
+            updateStatus("Wait for FXDatabase data loading to finish before running", log: .warning)
             return
         }
         guard let marketUniverse else {
@@ -405,7 +405,7 @@ final class AppModel: ObservableObject, @unchecked Sendable {
             runTask?.cancel()
         }
         if isLoadingData {
-            updateStatus("Stopping active FXExport data load before \(reason)...")
+            updateStatus("Stopping active FXDatabase data load before \(reason)...")
             dataLoadTask?.cancel()
         }
         while isRunning || isLoadingData {
@@ -473,7 +473,7 @@ final class AppModel: ObservableObject, @unchecked Sendable {
     }
 
     private func validateCurrentDataRequest() throws {
-        _ = try Self.validatedHTTPURL(apiURLText, fieldName: "FXExport API URL")
+        _ = try Self.validatedHTTPURL(apiURLText, fieldName: "FXDatabase API URL")
         guard !brokerSourceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw FXBacktestError.invalidParameter("Broker source id must not be empty.")
         }
@@ -647,7 +647,7 @@ extension AppModel {
             case "load-demo", "demo":
                 await stopActiveWorkAndWait(reason: "load demo data")
                 loadDemoData()
-            case "load-fxexport", "load-data", "load":
+            case "load-fxdatabase", "load-fxexport", "load-data", "load":
                 try await loadFXExportFromTerminal(arguments)
             case "run", "optimize":
                 try await runFromTerminal(arguments)
@@ -695,7 +695,8 @@ extension AppModel {
           set --clickhouse-url http://127.0.0.1:8123 --clickhouse-db fxbacktest --persist-results true
           set-param <key> --input 12 --min 6 --step 2 --max 40
           load-demo
-          load-fxexport [--api-url URL] [--broker ID] [--symbol EURUSD] [--symbols EURUSD,USDJPY] [--mt5-symbol EURUSD] [--digits 5] [--from UTC] [--to UTC] [--max-rows N]
+          load-fxdatabase [--api-url URL] [--broker ID] [--symbol EURUSD] [--symbols EURUSD,USDJPY] [--mt5-symbol EURUSD] [--digits 5] [--from UTC] [--to UTC] [--max-rows N]
+          load-fxexport  # compatibility alias for load-fxdatabase
           run [cpu|gpu|metal|both] [--workers N] [--chunk N] [--initial-deposit N] [--contract-size N] [--lot N]
           save-results [--run-id ID] [--note TEXT]
           clean-backtest-data --older-than-days 30
@@ -707,7 +708,7 @@ extension AppModel {
 
         State-changing commands gracefully stop active work before changing the app state.
         FXBacktest has no launch-time options; use this resident command shell after startup.
-        FXBacktest must load Forex history only through FXExport API v1, never ClickHouse directly.
+        FXBacktest must load Forex history only through FXDatabase API v1, never ClickHouse directly.
         ClickHouse access is allowed only through FXBacktest's result-store API for optimization results.
         """
     }
@@ -729,10 +730,10 @@ extension AppModel {
     private func loadFXExportFromTerminal(_ arguments: ArraySlice<String>) async throws {
         let parsed = try ParsedTerminalOptions(tokens: arguments)
         guard parsed.positionals.isEmpty else {
-            throw TerminalCommandError.invalidValue("load-fxexport accepts options only; unexpected \(parsed.positionals.joined(separator: " ")).")
+            throw TerminalCommandError.invalidValue("load-fxdatabase accepts options only; unexpected \(parsed.positionals.joined(separator: " ")).")
         }
         try validateConfigurationOptions(parsed.options, allowedGroup: .data)
-        await stopActiveWorkAndWait(reason: "load FXExport data")
+        await stopActiveWorkAndWait(reason: "load FXDatabase data")
         try applyConfigurationOptions(parsed.options, allowedGroup: .data)
         loadFXExportData()
     }
@@ -1060,7 +1061,7 @@ extension AppModel {
 
     private func canonicalKey(_ key: String) -> String {
         switch key.lowercased() {
-        case "api", "url", "api-url", "api_url", "fxexport-api", "fxexport-api-url":
+        case "api", "url", "api-url", "api_url", "fxdatabase-api", "fxdatabase-api-url", "fxexport-api", "fxexport-api-url":
             return "api-url"
         case "broker", "broker-source", "broker-source-id", "broker_source_id":
             return "broker"
@@ -1222,7 +1223,7 @@ extension AppModel {
     private func configurationSummary() -> String {
         """
         FXBacktest settings
-          FXExport API: \(apiURLText)
+          FXDatabase API: \(apiURLText)
           Broker: \(brokerSourceId)
           Symbols: \(logicalSymbolsText)
           Single-symbol validation: MT5 \(expectedMT5Symbol), digits \(expectedDigits)

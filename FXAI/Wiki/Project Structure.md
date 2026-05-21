@@ -43,14 +43,23 @@ This page maps common user goals to the repository areas that matter.
 | `GUI/` | Optional SwiftUI operator app. |
 | `Wiki/` | Versioned user handbook that mirrors the GitHub wiki. |
 | repo root `FXBacktest/` | Swift optimizer/backtester source, tracked directly in FXAI. |
+| repo root `FXDatabase/` | Swift historical M1 OHLCV database service and MT5 bridge, tracked directly in FXAI. |
 
 ## Source And Generated Boundaries
 
 - Track source code, manifests, configs, docs, and benchmark reference artifacts.
 - Track `FXBacktest/` as normal FXAI source. Do not recreate it as a Git submodule or nested repository.
+- Track `FXDatabase/` as normal FXAI source. Local `FXDatabase/Config/`, `FXDatabase/Logs/`, and SwiftPM build output stay ignored.
 - Do not commit compiled MT5 `.ex5` binaries.
 - Do not commit local `.env`, SQLite databases, cache folders, or machine-specific runtime outputs.
 - Publish release binaries through GitHub Releases with SHA-256 and metadata.
+
+## Swift And Metal Migration Boundary
+
+- `FXDatabase/` is the canonical Swift history-data source for offline backtests and research consumers.
+- `FXBacktest/` is the native Swift and Metal backtest runtime for converted FXAI strategies and plugins.
+- `FXAI/FXDataEngine/` and `FXAI/FXPlugins/` remain the MQL5 reference implementation until their contracts are ported, tested, and promoted into the root Swift-oriented source areas.
+- Root `FXDataEngine/` and `FXPlugins/` are reserved for the shared Swift-era data-engine and plugin implementations that will replace the old MQL5 backtest path.
 
 ## Example Case Scenarios
 
