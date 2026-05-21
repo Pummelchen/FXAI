@@ -16,9 +16,9 @@
   - `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/runtime_trade_helpers.mqh`
   - `<FXAI_ROOT>/FXDataEngine/FXAI.mq5`
 - GUI ingestion and display are in:
-  - `<FXAI_ROOT>/GUI/Sources/FXAIGUICore/Models/PairNetworkModels.swift`
-  - `<FXAI_ROOT>/GUI/Sources/FXAIGUICore/Services/PairNetworkArtifactReader.swift`
-  - `<FXAI_ROOT>/GUI/Sources/FXAIGUIApp/Features/PairNetwork/PairNetworkView.swift`
+  - `<FXAI_ROOT>/FXDataEngineGUI/Sources/FXAIGUICore/Models/PairNetworkModels.swift`
+  - `<FXAI_ROOT>/FXDataEngineGUI/Sources/FXAIGUICore/Services/PairNetworkArtifactReader.swift`
+  - `<FXAI_ROOT>/FXDataEngineGUI/Sources/FXAIGUIApp/Features/PairNetwork/PairNetworkView.swift`
 
 ## Phase-1 Scope
 
@@ -43,5 +43,5 @@
 - `python3 Tools/fxai_offline_lab.py pair-network-build --profile continuous`
 - `python3 Tools/fxai_offline_lab.py pair-network-report --profile continuous`
 - `PYTHONPATH=Tools python3 -m pytest Tools/tests/test_pair_network.py Tools/tests/test_dashboard.py -q`
-- `cd GUI && swift test && swift build`
+- `cd FXDataEngineGUI && swift test && swift build`
 - `python3 Tools/fxai_testlab.py compile-main`

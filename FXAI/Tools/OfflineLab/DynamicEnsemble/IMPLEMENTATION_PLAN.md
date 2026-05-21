@@ -47,9 +47,9 @@ The Dynamic Ensemble must consume these outputs, not rebuild them.
 ### Existing Offline Lab / GUI patterns to reuse
 - contracts/config/replay helpers under `Tools/offline_lab/*`
 - local docs/config under `Tools/OfflineLab/<Subsystem>/`
-- GUI reader in `GUI/Sources/FXAIGUICore/Services/*ArtifactReader.swift`
-- GUI models in `GUI/Sources/FXAIGUICore/Models/*`
-- GUI view in `GUI/Sources/FXAIGUIApp/Features/*`
+- GUI reader in `FXDataEngineGUI/Sources/FXAIGUICore/Services/*ArtifactReader.swift`
+- GUI models in `FXDataEngineGUI/Sources/FXAIGUICore/Models/*`
+- GUI view in `FXDataEngineGUI/Sources/FXAIGUIApp/Features/*`
 
 ## Phase-1 Scope
 
@@ -265,7 +265,7 @@ GUI should show:
 Update:
 - repo `README.md`
 - `FXAI/README.md`
-- `FXAI/GUI/README.md`
+- `FXAI/FXDataEngineGUI/README.md`
 - `FXAI/Tools/OfflineLab/README.md`
 - wiki page `Dynamic-Ensemble.md`
 - `Home.md`, `GUI.md`, `Offline-Lab.md`, `Project-Structure.md`, `FXAI-Framework.md`, `_Sidebar.md`

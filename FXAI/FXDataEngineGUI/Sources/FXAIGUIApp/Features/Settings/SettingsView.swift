@@ -221,7 +221,7 @@ struct SettingsView: View {
 
                 if let projectRoot = model.projectRoot {
                     let packageCommand = [
-                        "cd '\(projectRoot.appendingPathComponent("GUI").path.replacingOccurrences(of: "'", with: "'\"'\"'"))'",
+                        "cd '\(projectRoot.appendingPathComponent("FXDataEngineGUI").path.replacingOccurrences(of: "'", with: "'\"'\"'"))'",
                         "./Tools/package_gui_release.sh"
                     ].joined(separator: "\n")
 

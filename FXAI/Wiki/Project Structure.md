@@ -40,7 +40,7 @@ This page maps common user goals to the repository areas that matter.
 | `Tools/fxai_offline_lab.py` | Offline Lab, subsystem validation, promotion, and recovery CLI. |
 | `Tools/OfflineLab/` | Generated or configured research, report, and subsystem artifacts. |
 | `Tools/Benchmarks/` | Published benchmark and promotion evidence. |
-| `GUI/` | Optional SwiftUI operator app. |
+| `FXDataEngineGUI/` | Optional SwiftUI operator app. |
 | `Wiki/` | Versioned user handbook that mirrors the GitHub wiki. |
 | repo root `FXBacktest/` | Swift optimizer/backtester source, tracked directly in FXAI. |
 | repo root `FXDatabase/` | Swift historical M1 OHLCV database service and MT5 bridge, tracked directly in FXAI. |

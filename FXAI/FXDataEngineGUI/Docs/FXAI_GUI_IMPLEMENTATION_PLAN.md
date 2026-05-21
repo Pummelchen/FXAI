@@ -74,7 +74,7 @@ The GUI should be built around FXAI’s actual artifact surfaces:
 
 ### Package Layout
 
-`FXAI/GUI`
+`FXAI/FXDataEngineGUI`
 - `Package.swift`
 - `Docs/`
 - `Sources/FXAIGUICore/`
@@ -254,8 +254,8 @@ Implemented in the current package as:
 - `FXAIGUICore/Services/SavedWorkspaceStore.swift`
 - `FXAIGUICore/Services/IncidentBuilder.swift`
 - `FXAIGUICore/Services/OnboardingGuideFactory.swift`
-- `GUI/Tools/package_gui_release.sh`
-- `GUI/Docs/FXAI_GUI_RELEASE_CHECKLIST.md`
+- `FXDataEngineGUI/Tools/package_gui_release.sh`
+- `FXDataEngineGUI/Docs/FXAI_GUI_RELEASE_CHECKLIST.md`
 
 ## Screen Plan
 

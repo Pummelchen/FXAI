@@ -33,7 +33,7 @@ FXAI GUI is the optional operator shell for users who want faster inspection, gu
 ## How To Launch It
 
 ```bash
-cd /path/to/FXAI/GUI
+cd /path/to/FXAI/FXDataEngineGUI
 ./start.sh
 ```
 

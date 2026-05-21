@@ -33,10 +33,10 @@ This note maps the NewsPulse design onto the actual FXAI repository structure.
   - Pulls replay timelines into the existing macro-event audit scenario instead of inventing a parallel audit flow.
 
 - GUI operator surface:
-  - `<FXAI_ROOT>/GUI/Sources/FXAIGUICore/Models/NewsPulseModels.swift`
-  - `<FXAI_ROOT>/GUI/Sources/FXAIGUICore/Services/NewsPulseArtifactReader.swift`
-  - `<FXAI_ROOT>/GUI/Sources/FXAIGUIApp/Features/NewsPulse/NewsPulseView.swift`
-  - `<FXAI_ROOT>/GUI/Sources/FXAIGUICore/Services/IncidentBuilder.swift`
+  - `<FXAI_ROOT>/FXDataEngineGUI/Sources/FXAIGUICore/Models/NewsPulseModels.swift`
+  - `<FXAI_ROOT>/FXDataEngineGUI/Sources/FXAIGUICore/Services/NewsPulseArtifactReader.swift`
+  - `<FXAI_ROOT>/FXDataEngineGUI/Sources/FXAIGUIApp/Features/NewsPulse/NewsPulseView.swift`
+  - `<FXAI_ROOT>/FXDataEngineGUI/Sources/FXAIGUICore/Services/IncidentBuilder.swift`
 
 ## Why This Structure
 
@@ -49,7 +49,7 @@ The actual repo already has:
 - `FXDataEngine/Services/` for MT5 background work
 - `Tools/offline_lab/` for machine-local daemons and shared research/runtime artifacts
 - `FXDataEngine/Engine/Runtime/Trade/` for execution overlays
-- `GUI/` for operator surfaces
+- `FXDataEngineGUI/` for operator surfaces
 
 So NewsPulse was added at those seams instead of inventing new top-level systems.
 

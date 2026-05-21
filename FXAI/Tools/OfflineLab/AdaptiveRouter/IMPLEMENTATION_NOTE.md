@@ -15,7 +15,7 @@ This note maps the subsystem design onto the actual FXAI codebase.
 - Existing shadow-fleet / research telemetry: `<FXAI_ROOT>/Tools/offline_lab/shadow_fleet.py`
 - Existing student-router artifact generation: `<FXAI_ROOT>/Tools/offline_lab/student_router.py`
 - Existing operator dashboard export: `<FXAI_ROOT>/Tools/offline_lab/dashboard.py`
-- Existing GUI runtime reader and monitor: `<FXAI_ROOT>/GUI/Sources/FXAIGUICore/Services/RuntimeArtifactReader.swift` and `<FXAI_ROOT>/GUI/Sources/FXAIGUIApp/Features/Runtime/RuntimeMonitorView.swift`
+- Existing GUI runtime reader and monitor: `<FXAI_ROOT>/FXDataEngineGUI/Sources/FXAIGUICore/Services/RuntimeArtifactReader.swift` and `<FXAI_ROOT>/FXDataEngineGUI/Sources/FXAIGUIApp/Features/Runtime/RuntimeMonitorView.swift`
 
 ## Repo-Aware Design Choice
 

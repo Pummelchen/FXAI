@@ -11,7 +11,7 @@
   - `<FXAI_ROOT>/Tools/offline_lab/execution_quality_math.py`
 - Existing operator/reporting surfaces extended:
   - `<FXAI_ROOT>/Tools/offline_lab/dashboard.py`
-  - `<FXAI_ROOT>/GUI/Sources/FXAIGUIApp`
+  - `<FXAI_ROOT>/FXDataEngineGUI/Sources/FXAIGUIApp`
 
 ## What Was Added
 

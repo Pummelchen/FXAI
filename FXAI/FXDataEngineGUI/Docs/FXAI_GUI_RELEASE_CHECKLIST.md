@@ -18,13 +18,13 @@ Use this checklist when packaging the FXAI GUI for operator use.
 ## Packaging
 
 ```bash
-cd /path/to/FXAI/GUI
+cd /path/to/FXAI/FXDataEngineGUI
 ./Tools/package_gui_release.sh
 ```
 
 Outputs:
-- `FXAI/GUI/Artifacts/Release/FXAIGUI.app`
-- `FXAI/GUI/Artifacts/Release/FXAIGUI-macos.zip` by default, or the archive name configured in `../fxai.toml`
+- `FXAI/FXDataEngineGUI/Artifacts/Release/FXAIGUI.app`
+- `FXAI/FXDataEngineGUI/Artifacts/Release/FXAIGUI-macos.zip` by default, or the archive name configured in `../fxai.toml`
 
 ## Operator Checks
 

@@ -71,7 +71,7 @@ The phased implementation reference is stored in:
 ## Build
 
 ```bash
-cd /path/to/FXAI/GUI
+cd /path/to/FXAI/FXDataEngineGUI
 ./start.sh
 ./Tools/package_gui_release.sh
 ```
@@ -85,7 +85,7 @@ The GUI includes a dedicated validation suite for layout quality, resize behavio
 - `swift test` runs the core layout and GUI snapshot tests, including the `FXAIGUIAppTests` target
 - `./Tools/run_gui_validation_suite.sh` reruns the full GUI test suite and exports real screenshots for the operator shell
 - validation scenarios cover compact desktop, MacBook 14, standard desktop, wide desktop, 4K-like ultra-wide, and 8K-like ultra-wide sizes
-- the exported screenshots are written to `FXAI/GUI/Artifacts/GUISnapshots/` and are ignored by git
+- the exported screenshots are written to `FXAI/FXDataEngineGUI/Artifacts/GUISnapshots/` and are ignored by git
 
 The validation suite is intended to catch:
 - spacing regressions

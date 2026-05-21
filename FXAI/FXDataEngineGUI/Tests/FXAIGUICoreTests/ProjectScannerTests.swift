@@ -4,9 +4,9 @@ import Testing
 
 struct ProjectScannerTests {
     @Test
-    func resolvesProjectRootFromGUISubdirectory() throws {
+    func resolvesProjectRootFromFXDataEngineGUISubdirectory() throws {
         let tempRoot = try makeProjectFixture()
-        let guiPath = tempRoot.appendingPathComponent("GUI", isDirectory: true)
+        let guiPath = tempRoot.appendingPathComponent("FXDataEngineGUI", isDirectory: true)
         try FileManager.default.createDirectory(at: guiPath, withIntermediateDirectories: true)
 
         #expect(ProjectPathResolver.resolveProjectRoot(from: guiPath) == tempRoot)

@@ -67,7 +67,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Versioned strategy-profile catalog plus promoted MT5 presets and sibling strategy manifests for audit, champion, top, and distillation workflows.
 - `Tools/Benchmarks/`
   Public benchmark matrix, reference audit bundle, exported promotion criteria, and release-note deltas generated from committed audit and promotion artifacts.
-- `GUI/`
+- `FXDataEngineGUI/`
   Optional SwiftUI operator app for role-based dashboards, plugin-zoo browsing, report exploration, run builders for Audit/Offline/backtest workflows, runtime inspection, promotion review, Research OS control, advanced Metal-backed visual analysis, saved workspace views, onboarding, incident recovery, detached startup, soft reconnect, terminal-first command guidance, and the shared FXAI operator theme system.
 - `Wiki/`
   Versioned operator handbook with role-based quick starts, getting-started flows, subsystem guides, and scenario-driven examples.
@@ -172,7 +172,7 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Drift-governance contracts, config, deterministic drift math, DB persistence, report builders, challenger evaluation, and CLI helpers for plugin-health monitoring and champion/challenger policy.
 - `Tools/offline_lab/pair_network*.py`
   Pair-network contracts, config, deterministic dependency math, structural exposure decomposition, report builders, and CLI helpers for portfolio conflict resolution.
-- `GUI/Sources/FXAIGUICore`, `GUI/Sources/FXAIGUIApp`
+- `FXDataEngineGUI/Sources/FXAIGUICore`, `FXDataEngineGUI/Sources/FXAIGUIApp`
   Swift package targets for the GUI’s project scanner, runtime and Research OS artifact readers, advanced visualization builders, saved-workspace persistence, onboarding guides, incident builders, design system, navigation shell, operator-theme token/layout/rendering stack, reference-asset parsing, adaptive dashboard components, Phase 2 run builders, Phase 3 runtime/promotion views, Phase 4 Turso/Research OS control surfaces, Phase 5 Metal-backed visualization surfaces, and Phase 6 operator-polish features.
   The GUI also includes an integrated NewsPulse surface for source health, currency heatmap, pair risk, and recent tape visibility.
   It now also includes a Rates Engine surface for provider health, currency policy state, pair divergence, policy tape, and rates-aware trade gates.
@@ -195,8 +195,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - The preferred public benchmark publishing path is `python3 FXAI/Tools/fxai_testlab.py publish-benchmarks --profile bestparams`, which writes the benchmark matrix, reference audit bundle, promotion criteria, and release-note delta artifacts under `Tools/Benchmarks/`.
 - Toolchain paths are profile-driven through `fxai.toml`, with optional `.env` overrides for `FXAI_MT5_ROOT`, `FXAI_METAEDITOR`, `FXAI_TERMINAL`, `FXAI_COMMON_FILES`, `FXAI_RUNTIME_DIR`, `FXAI_DEFAULT_DB`, and related operator-machine specifics.
 - The preferred MT5 binary release path is `python3 FXAI/Tools/fxai_testlab.py package-mt5-release --version <tag>` after a clean verification gate. Git tracks `.mq5`/`.mqh` source and manifests only; compiled `.ex5` files must be uploaded to GitHub Releases with the generated manifest and SHA-256 sums instead of being committed.
-- The preferred GUI verification path is `cd FXAI/GUI && swift test && swift build`.
-- GUI release packaging is `cd FXAI/GUI && ./Tools/package_gui_release.sh`.
+- The preferred GUI verification path is `cd FXAI/FXDataEngineGUI && swift test && swift build`.
+- GUI release packaging is `cd FXAI/FXDataEngineGUI && ./Tools/package_gui_release.sh`.
 - The preferred Offline Lab bootstrap path is `python3 FXAI/Tools/fxai_offline_lab.py bootstrap --seed-demo`.
 - The preferred market-universe inspection path is `python3 FXAI/Tools/fxai_offline_lab.py market-universe-show`.
 - The preferred market-universe export path is `python3 FXAI/Tools/fxai_offline_lab.py market-universe-export`.
@@ -286,6 +286,6 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - Versioned mirror: the git repo copy that is synchronized into the MT5 tree after clean verification
 - Research source of truth: the Offline Lab Turso/libSQL database
 - MT5 runtime artifact source of truth: `FILE_COMMON/FXAI/Offline/Promotions/`
-- GUI source of truth: `FXAI/GUI/` inside the versioned repo and synced MT5 subtree
+- GUI source of truth: `FXAI/FXDataEngineGUI/` inside the versioned repo and synced MT5 subtree
 
 For broader framework usage and workflow details, see the repo-root README and the GitHub wiki.

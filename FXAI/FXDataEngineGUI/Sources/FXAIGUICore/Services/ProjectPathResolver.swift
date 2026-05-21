@@ -40,7 +40,7 @@ public enum ProjectPathResolver {
                 return current
             }
 
-            if current.lastPathComponent == "GUI" {
+            if current.lastPathComponent == "FXDataEngineGUI" {
                 let parent = current.deletingLastPathComponent()
                 if isProjectRoot(parent) {
                     return parent

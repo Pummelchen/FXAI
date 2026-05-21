@@ -37,7 +37,7 @@ It does not replace plugins, the Adaptive Router, or the Dynamic Ensemble. It co
 python3 FXAI/Tools/fxai_offline_lab.py prob-calibration-validate
 python3 FXAI/Tools/fxai_offline_lab.py prob-calibration-replay-report --symbol EURUSD --hours-back 72
 python3 FXAI/Tools/fxai_testlab.py compile-main
-cd FXAI/GUI && swift test && swift build
+cd FXAI/FXDataEngineGUI && swift test && swift build
 ```
 
 ## Runtime Position
