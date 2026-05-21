@@ -92,7 +92,7 @@ def write_audit_ini(path: Path, preset_name: str, login: str, symbol: str, serve
         "NewsEnable=0",
         "",
         "[Tester]",
-        "Expert=FXAI\\Tests\\FXAI_AuditRunner.ex5",
+        "Expert=FXAI\\FXDataEngine\\Tests\\FXAI_AuditRunner.ex5",
         f"ExpertParameters={preset_name}",
         f"Symbol={symbol}",
         "Period=M1",
@@ -135,14 +135,14 @@ def run_terminal_profile(timeout_sec: int) -> None:
 
 def build_profile_tester_section(preset_name: str, symbol: str, login: str = "", server: str = "") -> dict[str, str]:
     return {
-        "LastExpert": r"FXAI\Tests\FXAI_AuditRunner.ex5",
+        "LastExpert": r"FXAI\FXDataEngine\Tests\FXAI_AuditRunner.ex5",
         "LastIndicator": r"Indicators\Examples\Accelerator.ex5",
         "LastTicksMode": "1",
         "LastCriterion": "0",
         "LastForward": "0",
         "LastDelay": "100",
         "LastOptimization": "0",
-        "Expert": r"FXAI\Tests\FXAI_AuditRunner.ex5",
+        "Expert": r"FXAI\FXDataEngine\Tests\FXAI_AuditRunner.ex5",
         "ExpertParameters": preset_name,
         "Login": login,
         "Server": server,

@@ -169,7 +169,7 @@ def attempt_expert_launch(expert_rel_path: str,
 
 
 def compile_export_runner() -> int:
-    return testlab.compile_target(Path("Tests/FXAI_OfflineExportRunner.mq5"), "offline_export")
+    return testlab.compile_target(Path("FXDataEngine/Tests/FXAI_OfflineExportRunner.mq5"), "offline_export")
 
 
 def compile_audit_runner() -> int:

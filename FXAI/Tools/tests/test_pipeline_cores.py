@@ -11,7 +11,7 @@ def _read(rel_path: str) -> str:
 
 
 def test_data_pipeline_exposes_dedicated_cores_and_contracts():
-    data_pipeline = _read("Engine/data_pipeline.mqh")
+    data_pipeline = _read("FXDataEngine/Engine/data_pipeline.mqh")
     required_includes = [
         '#include "Core\\core_pipeline_contracts.mqh"',
         '#include "market_data_gateway.mqh"',
@@ -24,7 +24,7 @@ def test_data_pipeline_exposes_dedicated_cores_and_contracts():
 
 
 def test_core_pipeline_contracts_define_stage_structures():
-    contracts = _read("Engine/Core/core_pipeline_contracts.mqh")
+    contracts = _read("FXDataEngine/Engine/Core/core_pipeline_contracts.mqh")
     required_tokens = [
         "struct FXAIDataCoreRequest",
         "struct FXAIDataCoreBundle",
@@ -41,9 +41,9 @@ def test_core_pipeline_contracts_define_stage_structures():
 
 
 def test_core_stage_files_expose_unified_api():
-    data_core = _read("Engine/Core/core_data_core.mqh")
-    feature_core = _read("Engine/Core/core_feature_core.mqh")
-    normalization_core = _read("Engine/Core/core_normalization_core.mqh")
+    data_core = _read("FXDataEngine/Engine/Core/core_data_core.mqh")
+    feature_core = _read("FXDataEngine/Engine/Core/core_feature_core.mqh")
+    normalization_core = _read("FXDataEngine/Engine/Core/core_normalization_core.mqh")
 
     for token in [
         "void FXAI_DataCoreResetRequest(",
@@ -67,11 +67,11 @@ def test_core_stage_files_expose_unified_api():
 
 
 def test_runtime_training_and_audit_paths_use_pipeline_cores():
-    runtime_block = _read("Engine/Runtime/runtime_feature_pipeline_block.mqh")
-    engine_samples = _read("Engine/engine_samples.mqh")
-    engine_training = _read("Engine/engine_training.mqh")
-    audit_samples = _read("Tests/audit_samples.mqh")
-    warmup_entry = _read("Engine/Warmup/warmup_entrypoint.mqh")
+    runtime_block = _read("FXDataEngine/Engine/Runtime/runtime_feature_pipeline_block.mqh")
+    engine_samples = _read("FXDataEngine/Engine/engine_samples.mqh")
+    engine_training = _read("FXDataEngine/Engine/engine_training.mqh")
+    audit_samples = _read("FXDataEngine/Tests/audit_samples.mqh")
+    warmup_entry = _read("FXDataEngine/Engine/Warmup/warmup_entrypoint.mqh")
 
     runtime_tokens = [
         "static FXAIDataCoreBundle live_bundle;",
@@ -112,20 +112,20 @@ def test_runtime_training_and_audit_paths_use_pipeline_cores():
 
 
 def test_shortcut_paths_are_removed_from_pipeline_callers():
-    warmup_transfer = _read("Engine/Warmup/warmup_transfer.mqh")
-    meta_reliability = _read("Engine/meta_reliability.mqh")
-    feature_norm = _read("Engine/feature_norm.mqh")
+    warmup_transfer = _read("FXDataEngine/Engine/Warmup/warmup_transfer.mqh")
+    meta_reliability = _read("FXDataEngine/Engine/meta_reliability.mqh")
+    feature_norm = _read("FXDataEngine/Engine/feature_norm.mqh")
     direct_payload_callers = [
-        "Engine/engine_training.mqh",
-        "Engine/Runtime/runtime_model_stage_block.mqh",
-        "Engine/Warmup/warmup_scoring.mqh",
-        "Engine/Warmup/warmup_transfer.mqh",
-        "Engine/Warmup/warmup_normalization.mqh",
-        "Engine/Warmup/warmup_portfolio.mqh",
-        "Engine/Lifecycle/lifecycle_bootstrap.mqh",
-        "Engine/Lifecycle/lifecycle_compliance.mqh",
-        "Tests/Scoring/audit_scoring_run.mqh",
-        "Tests/Scoring/audit_scoring_adversarial.mqh",
+        "FXDataEngine/Engine/engine_training.mqh",
+        "FXDataEngine/Engine/Runtime/runtime_model_stage_block.mqh",
+        "FXDataEngine/Engine/Warmup/warmup_scoring.mqh",
+        "FXDataEngine/Engine/Warmup/warmup_transfer.mqh",
+        "FXDataEngine/Engine/Warmup/warmup_normalization.mqh",
+        "FXDataEngine/Engine/Warmup/warmup_portfolio.mqh",
+        "FXDataEngine/Engine/Lifecycle/lifecycle_bootstrap.mqh",
+        "FXDataEngine/Engine/Lifecycle/lifecycle_compliance.mqh",
+        "FXDataEngine/Tests/Scoring/audit_scoring_run.mqh",
+        "FXDataEngine/Tests/Scoring/audit_scoring_adversarial.mqh",
     ]
 
     assert "FXAI_LoadSeriesOptionalCached(" not in warmup_transfer
@@ -138,8 +138,8 @@ def test_shortcut_paths_are_removed_from_pipeline_callers():
 
 
 def test_audit_harness_provides_context_shim_for_pipeline_cores():
-    audit_core = _read("Tests/audit_core.mqh")
-    audit_utils = _read("Tests/audit_utils.mqh")
+    audit_core = _read("FXDataEngine/Tests/audit_core.mqh")
+    audit_utils = _read("FXDataEngine/Tests/audit_utils.mqh")
 
     assert '#include "audit_utils.mqh"' in audit_core
     assert '#include "..\\Engine\\data_pipeline.mqh"' in audit_core

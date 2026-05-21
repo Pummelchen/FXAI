@@ -54,15 +54,15 @@ from .strategy_profiles import build_strategy_profile_manifest, compile_strategy
 from .verify import run_verify_all
 
 def cmd_compile(_args):
-    return compile_target(Path("Tests/FXAI_AuditRunner.mq5"), "audit_runner")
+    return compile_target(Path("FXDataEngine/Tests/FXAI_AuditRunner.mq5"), "audit_runner")
 
 
 def cmd_compile_tensorcore(_args):
-    return compile_target(Path("Tests/FXAI_TensorCoreRunner.mq5"), "tensorcore_runner")
+    return compile_target(Path("FXDataEngine/Tests/FXAI_TensorCoreRunner.mq5"), "tensorcore_runner")
 
 
 def cmd_compile_main(_args):
-    return compile_target(Path("FXAI.mq5"), "main_ea")
+    return compile_target(Path("FXDataEngine/FXAI.mq5"), "main_ea")
 
 
 def cmd_verify_all(args):

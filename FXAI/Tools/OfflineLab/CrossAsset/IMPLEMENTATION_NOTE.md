@@ -4,17 +4,17 @@
 
 - `Tools/offline_lab/rates_engine*.py`
   Existing rates / term-structure subsystem. This is reused as the authoritative FXAI-native rates context instead of rebuilding front-end or curve logic.
-- `Tools/offline_lab/microstructure_*.py` and `Services/FXAI_MicrostructureProbe.mq5`
+- `Tools/offline_lab/microstructure_*.py` and `FXDataEngine/Services/FXAI_MicrostructureProbe.mq5`
   Existing shared-subsystem pattern for MT5 service export, FILE_COMMON artifacts, local status mirroring, replay, and service installation.
-- `Engine/Runtime/Trade/runtime_trade_rates_engine.mqh`
+- `FXDataEngine/Engine/Runtime/Trade/runtime_trade_rates_engine.mqh`
   Existing shared flat-snapshot reader pattern for pair-level runtime state.
-- `Engine/Runtime/runtime_adaptive_router_stage.mqh`
+- `FXDataEngine/Engine/Runtime/runtime_adaptive_router_stage.mqh`
   Existing regime/router layer that already computes `macro_pressure` and `liquidity_stress`. Cross-asset state is integrated here as a higher-quality shared macro/liquidity input.
-- `Engine/Runtime/runtime_dynamic_ensemble_stage.mqh`
+- `FXDataEngine/Engine/Runtime/runtime_dynamic_ensemble_stage.mqh`
   Existing post-inference meta-layer. Cross-asset state is added as additional context for trust penalties and posture escalation.
-- `Engine/Runtime/runtime_prob_calibration_stage.mqh`
+- `FXDataEngine/Engine/Runtime/runtime_prob_calibration_stage.mqh`
   Existing calibrated final-decision layer. Cross-asset state is added as uncertainty/risk context, not as fresh alpha logic.
-- `Engine/Runtime/runtime_execution_quality_stage.mqh`
+- `FXDataEngine/Engine/Runtime/runtime_execution_quality_stage.mqh`
   Existing execution-condition forecaster. Cross-asset stress is added as a global execution-context modifier.
 - `GUI/Sources/FXAIGUICore/Services/*ArtifactReader.swift`
   Existing operator-artifact ingestion pattern.
@@ -22,14 +22,14 @@
   Existing GUI surface pattern for subsystem-specific operator views.
 - `Tools/offline_lab/market_universe.py`
   Existing FX-only tradable universe plus indicator-only context symbol inventory. This is reused to seed the cross-asset proxy universe.
-- `Engine/Lifecycle/lifecycle_context_symbols.mqh`
+- `FXDataEngine/Engine/Lifecycle/lifecycle_context_symbols.mqh`
   Existing broader MT5 context-symbol conventions. The new subsystem borrows those proxy expectations for DXY, yields, volatility, and equity/commodity proxies.
 
 ### Implementation Decisions
 
 1. The subsystem is implemented as a hybrid:
    - MT5 service:
-     `Services/FXAI_CrossAssetProbe.mq5`
+     `FXDataEngine/Services/FXAI_CrossAssetProbe.mq5`
      exports live context-symbol proxy state into `FILE_COMMON/FXAI/Runtime`.
    - Python engine:
      `Tools/offline_lab/cross_asset_*.py`
@@ -86,8 +86,8 @@
   - `Tools/offline_lab/cross_asset_engine.py`
   - `Tools/offline_lab/cross_asset_service.py`
   - `Tools/offline_lab/cross_asset_replay.py`
-  - `Services/FXAI_CrossAssetProbe.mq5`
-  - `Engine/Runtime/Trade/runtime_trade_cross_asset_state.mqh`
+  - `FXDataEngine/Services/FXAI_CrossAssetProbe.mq5`
+  - `FXDataEngine/Engine/Runtime/Trade/runtime_trade_cross_asset_state.mqh`
   - `GUI/Sources/FXAIGUICore/Models/CrossAssetModels.swift`
   - `GUI/Sources/FXAIGUICore/Services/CrossAssetArtifactReader.swift`
   - `GUI/Sources/FXAIGUIApp/Features/CrossAsset/CrossAssetView.swift`

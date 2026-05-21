@@ -11,7 +11,7 @@ def _read(rel_path: str) -> str:
 
 
 def test_tensorcore_suite_is_promoted_to_dedicated_test_surface():
-    suite = _read("Tests/TensorCore/tensorcore_suite.mqh")
+    suite = _read("FXDataEngine/Tests/TensorCore/tensorcore_suite.mqh")
     required_tokens = [
         "void FXAI_TensorCoreRunSuite(FXAITestSuiteResult &suite)",
         "FXAI_TensorCoreTestKernelBlocks(",
@@ -26,10 +26,10 @@ def test_tensorcore_suite_is_promoted_to_dedicated_test_surface():
 
 
 def test_tensorcore_runner_and_audit_runner_wire_the_suite():
-    runner = _read("Tests/FXAI_TensorCoreRunner.mq5")
-    audit = _read("Tests/FXAI_AuditRunner.mq5")
-    audit_wrapper = _read("Tests/audit_tensor.mqh")
-    harness = _read("Tests/TestHarness/test_harness.mqh")
+    runner = _read("FXDataEngine/Tests/FXAI_TensorCoreRunner.mq5")
+    audit = _read("FXDataEngine/Tests/FXAI_AuditRunner.mq5")
+    audit_wrapper = _read("FXDataEngine/Tests/audit_tensor.mqh")
+    harness = _read("FXDataEngine/Tests/TestHarness/test_harness.mqh")
 
     assert '#include "audit_core.mqh"' in runner
     assert "FXAI_TestWriteCombinedReport(" in runner
@@ -45,6 +45,6 @@ def test_testlab_exposes_tensorcore_compile_gate():
     verify = _read("Tools/testlab/verify.py")
 
     assert 'compile-tensorcore' in cli
-    assert 'Path("Tests/FXAI_TensorCoreRunner.mq5")' in cli
+    assert 'Path("FXDataEngine/Tests/FXAI_TensorCoreRunner.mq5")' in cli
     assert '"compile_tensorcore"' in verify
-    assert 'Path("Tests/FXAI_TensorCoreRunner.mq5")' in verify
+    assert 'Path("FXDataEngine/Tests/FXAI_TensorCoreRunner.mq5")' in verify

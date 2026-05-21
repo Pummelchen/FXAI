@@ -11,7 +11,7 @@ def _read(rel_path: str) -> str:
 
 
 def test_normalization_enum_exposes_exact_buffer_variants():
-    core = _read("Engine/core.mqh")
+    core = _read("FXDataEngine/Engine/core.mqh")
     assert "#define FXAI_NORM_METHOD_COUNT 17" in core
     assert "FXAI_NORM_MINMAX_BUFFER2" in core
     assert "FXAI_NORM_MINMAX_BUFFER3" in core
@@ -24,7 +24,7 @@ def test_normalization_enum_exposes_exact_buffer_variants():
 
 
 def test_feature_norm_implements_fitted_and_adaptive_layers():
-    feature_norm = _read("Engine/feature_norm.mqh")
+    feature_norm = _read("FXDataEngine/Engine/feature_norm.mqh")
     required_tokens = [
         "#define FXAI_NORM_QUANTILE_KNOTS 17",
         "bool g_fxai_norm_fit_ready[FXAI_MAX_HORIZONS][FXAI_NORM_METHOD_COUNT];",
@@ -42,9 +42,9 @@ def test_feature_norm_implements_fitted_and_adaptive_layers():
 
 
 def test_bounded_feature_emitters_use_open_interval_clamps():
-    feature_math = _read("Engine/feature_math.mqh")
-    feature_build = _read("Engine/feature_build.mqh")
-    event_macro = _read("Engine/event_macro.mqh")
+    feature_math = _read("FXDataEngine/Engine/feature_math.mqh")
+    feature_build = _read("FXDataEngine/Engine/feature_build.mqh")
+    event_macro = _read("FXDataEngine/Engine/event_macro.mqh")
 
     math_tokens = [
         "upper_wick_norm = FXAI_ClampUnitOpen(upper_wick / den_range);",
@@ -107,8 +107,8 @@ def test_bounded_feature_emitters_use_open_interval_clamps():
 
 
 def test_training_pipeline_uses_horizon_aware_fit_and_payload_transform():
-    engine_training = _read("Engine/engine_training.mqh")
-    normalization_core = _read("Engine/Core/core_normalization_core.mqh")
+    engine_training = _read("FXDataEngine/Engine/engine_training.mqh")
+    normalization_core = _read("FXDataEngine/Engine/Core/core_normalization_core.mqh")
     assert "FXAI_FitFeatureNormalizationMethodForRange(method_id," in engine_training
     assert "FXAI_DataCoreBindArrayBundle(predict_snapshot," in engine_training
     assert "FXAI_FeatureCoreBuildFrameFromBundle(bundle, 0, horizon_minutes, norm_method, feature_frame)" in engine_training
@@ -121,14 +121,14 @@ def test_training_pipeline_uses_horizon_aware_fit_and_payload_transform():
 
 
 def test_warmup_normalization_fits_candidates_on_train_only_split():
-    warmup_norm = _read("Engine/Warmup/warmup_normalization.mqh")
+    warmup_norm = _read("FXDataEngine/Engine/Warmup/warmup_normalization.mqh")
     assert "bool FXAI_DeriveNormCandidateSplit(" in warmup_norm
     assert "train_start,\n                                                    train_end," in warmup_norm
     assert "FXAI_ScoreNormMethodCandidate(ai_idx,\n                                                      method_id," in warmup_norm
 
 
 def test_runtime_artifacts_persist_normalization_fits():
-    runtime_artifacts = _read("Engine/runtime_artifacts.mqh")
+    runtime_artifacts = _read("FXDataEngine/Engine/runtime_artifacts.mqh")
     assert "#define FXAI_RUNTIME_ARTIFACT_VERSION 15" in runtime_artifacts
     assert "FileWriteInteger(handle, (g_fxai_norm_fit_inited ? 1 : 0));" in runtime_artifacts
     assert "g_fxai_norm_fit_inited = (FileReadInteger(handle) != 0);" in runtime_artifacts

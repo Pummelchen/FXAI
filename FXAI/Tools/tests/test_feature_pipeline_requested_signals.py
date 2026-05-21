@@ -12,7 +12,7 @@ def _read(rel_path: str) -> str:
 
 
 def test_requested_signal_math_helpers_exist():
-    feature_math = _read("Engine/feature_math.mqh")
+    feature_math = _read("FXDataEngine/Engine/feature_math.mqh")
     required_helpers = [
         "double FXAI_QSDEMAAt(",
         "double FXAI_RSIAt(",
@@ -31,7 +31,7 @@ def test_requested_signal_math_helpers_exist():
 
 
 def test_requested_signals_are_registered_in_feature_schema():
-    registry = _read("Engine/feature_registry.mqh")
+    registry = _read("FXDataEngine/Engine/feature_registry.mqh")
     expected_names = {
         38: "qsdema100_edge",
         39: "qsdema200_edge",
@@ -53,7 +53,7 @@ def test_requested_signals_are_registered_in_feature_schema():
 
 
 def test_requested_signals_are_emitted_by_canonical_feature_builder():
-    feature_build = _read("Engine/feature_build.mqh")
+    feature_build = _read("FXDataEngine/Engine/feature_build.mqh")
     expected_assignments = {
         38: r"features\[38\]\s*=\s*FXAI_MAEdgeFeature\(c,\s*qsdema_100,\s*vol_unit\);",
         39: r"features\[39\]\s*=\s*FXAI_MAEdgeFeature\(c,\s*qsdema_200,\s*vol_unit\);",

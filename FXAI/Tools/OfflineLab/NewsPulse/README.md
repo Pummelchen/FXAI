@@ -19,13 +19,13 @@ Phase 1 is intentionally gating-first:
 
 NewsPulse has four parts:
 
-1. `Services/FXAI_NewsPulseCalendar.mq5`
+1. `FXDataEngine/Services/FXAI_NewsPulseCalendar.mq5`
    MT5 Service that exports Economic Calendar changes into `FILE_COMMON`.
 
 2. `Tools/offline_lab/newspulse_*.py`
    Python collector, GDELT query layer, optional official-feed rail, fusion logic, daemon loop, replay helpers, and service install helpers.
 
-3. `Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
+3. `FXDataEngine/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
    MT5 runtime adapter that reads the flat snapshot and applies pair-level gates.
 
 4. `GUI/Sources/.../NewsPulse*.swift`

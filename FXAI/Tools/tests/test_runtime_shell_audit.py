@@ -10,16 +10,16 @@ def _read(relpath: str) -> str:
 
 
 def test_cycle_recovery_stays_symbol_scoped():
-    fxai = _read("FXAI.mq5")
+    fxai = _read("FXDataEngine/FXAI.mq5")
     assert "FXAI_RecoverManagedCycleState(_Symbol);" in fxai
     assert "CycleStartTime = FXAI_GetOldestPositionTime(managed_symbol);" in fxai
     assert re.search(r"datetime FXAI_GetOldestPositionTime\(const string symbol = \"\"\)", fxai)
 
 
 def test_last_order_request_tracks_symbol_and_pending_order_lifecycle():
-    fxai = _read("FXAI.mq5")
-    execution = _read("Engine/Runtime/Trade/runtime_trade_execution.mqh")
-    health = _read("Engine/Runtime/runtime_system_health.mqh")
+    fxai = _read("FXDataEngine/FXAI.mq5")
+    execution = _read("FXDataEngine/Engine/Runtime/Trade/runtime_trade_execution.mqh")
+    health = _read("FXDataEngine/Engine/Runtime/runtime_system_health.mqh")
 
     assert 'string   g_last_order_request_symbol = "";' in fxai
     assert "g_last_order_request_order_ticket = result.order;" in execution

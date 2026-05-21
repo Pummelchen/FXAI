@@ -24,13 +24,13 @@ This page maps common user goals to the repository areas that matter.
 
 | Area | Purpose |
 |---|---|
-| `FXAI.mq5` | Main MT5 Expert Advisor entry point. |
-| `API/` | Plugin contracts, context helpers, and TensorCore bridge surface. |
-| `Engine/Core/` | DataCore, FeatureCore, NormalizationCore, and market-data gateway boundaries. |
-| `Engine/Runtime/` | Live control-plane stages and trade gating. |
-| `Plugins/` | Model and framework plugin implementations. |
-| `TensorCore/` | MT5-native neural runtime support. |
-| `Tests/` | MT5-side audit and core-runtime runners. |
+| `FXDataEngine/FXAI.mq5` | Main MT5 Expert Advisor entry point. |
+| `FXDataEngine/API/` | Plugin contracts, context helpers, and TensorCore bridge surface. |
+| `FXDataEngine/Engine/Core/` | DataCore, FeatureCore, NormalizationCore, and market-data gateway boundaries. |
+| `FXDataEngine/Engine/Runtime/` | Live control-plane stages and trade gating. |
+| `FXPlugins/` | Model and framework plugin implementations. |
+| `FXDataEngine/TensorCore/` | MT5-native neural runtime support. |
+| `FXDataEngine/Tests/` | MT5-side audit and core-runtime runners. |
 | `Tools/fxai_testlab.py` | Compile, audit, benchmark, package, and release-gate CLI. |
 | `Tools/fxai_offline_lab.py` | Offline Lab, subsystem validation, promotion, and recovery CLI. |
 | `Tools/OfflineLab/` | Generated or configured research, report, and subsystem artifacts. |
@@ -59,8 +59,8 @@ Start with:
 ### Scenario: A researcher wants to add a model
 
 Start with:
-1. `API/plugin_contract.mqh`
-2. `Plugins/`
+1. `FXDataEngine/API/plugin_contract.mqh`
+2. `FXPlugins/`
 3. `Tools/plugin_oracles.json`
 4. relevant `Tools/tests/`
 

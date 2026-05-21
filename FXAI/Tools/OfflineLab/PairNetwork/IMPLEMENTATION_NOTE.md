@@ -11,10 +11,10 @@
   - `<FXAI_ROOT>/Tools/offline_lab/cli_parser.py`
   - `<FXAI_ROOT>/Tools/offline_lab/cli_commands.py`
 - Runtime integration is in:
-  - `<FXAI_ROOT>/Engine/Runtime/Trade/runtime_trade_pair_network.mqh`
-  - `<FXAI_ROOT>/Engine/Runtime/Trade/runtime_trade_risk.mqh`
-  - `<FXAI_ROOT>/Engine/Runtime/runtime_trade_helpers.mqh`
-  - `<FXAI_ROOT>/FXAI.mq5`
+  - `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/Trade/runtime_trade_pair_network.mqh`
+  - `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/Trade/runtime_trade_risk.mqh`
+  - `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/runtime_trade_helpers.mqh`
+  - `<FXAI_ROOT>/FXDataEngine/FXAI.mq5`
 - GUI ingestion and display are in:
   - `<FXAI_ROOT>/GUI/Sources/FXAIGUICore/Models/PairNetworkModels.swift`
   - `<FXAI_ROOT>/GUI/Sources/FXAIGUICore/Services/PairNetworkArtifactReader.swift`

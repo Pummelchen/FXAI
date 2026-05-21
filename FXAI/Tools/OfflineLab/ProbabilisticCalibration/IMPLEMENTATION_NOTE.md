@@ -7,16 +7,16 @@ This subsystem is integrated as a final decision-quality layer in the existing F
 ### Runtime boundary
 
 - Existing upstream decision sources already present in repo:
-  - `Engine/Runtime/runtime_model_stage_block.mqh`
-  - `Engine/Runtime/runtime_policy_stage_block.mqh`
-  - `Engine/Runtime/runtime_dynamic_ensemble_stage.mqh`
-  - `Engine/Runtime/runtime_adaptive_router_stage.mqh`
+  - `FXDataEngine/Engine/Runtime/runtime_model_stage_block.mqh`
+  - `FXDataEngine/Engine/Runtime/runtime_policy_stage_block.mqh`
+  - `FXDataEngine/Engine/Runtime/runtime_dynamic_ensemble_stage.mqh`
+  - `FXDataEngine/Engine/Runtime/runtime_adaptive_router_stage.mqh`
 - Existing cost/execution path reused:
-  - `Engine/Core/core_broker_execution.mqh`
+  - `FXDataEngine/Engine/Core/core_broker_execution.mqh`
 - Existing shared context sources consumed, not duplicated:
-  - `Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
-  - `Engine/Runtime/Trade/runtime_trade_rates_engine.mqh`
-  - `Engine/Runtime/Trade/runtime_trade_microstructure.mqh`
+  - `FXDataEngine/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
+  - `FXDataEngine/Engine/Runtime/Trade/runtime_trade_rates_engine.mqh`
+  - `FXDataEngine/Engine/Runtime/Trade/runtime_trade_microstructure.mqh`
 
 ### Chosen insertion point
 

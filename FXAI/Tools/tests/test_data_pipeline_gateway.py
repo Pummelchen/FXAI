@@ -6,7 +6,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[2]
 ALLOWED_RAW_MARKET_DATA_FILES = {
-    "Engine/market_data_gateway.mqh",
+    "FXDataEngine/Engine/market_data_gateway.mqh",
 }
 FORBIDDEN_RAW_PATTERNS = (
     r"\bCopyRates\s*\(",
@@ -27,13 +27,13 @@ def _read(rel_path: str) -> str:
 
 def _iter_code_files() -> list[str]:
     rel_paths: list[str] = []
-    for rel_root in ("Engine", "Plugins", "Services", "Tests", "API"):
+    for rel_root in ("FXDataEngine/Engine", "FXPlugins", "FXDataEngine/Services", "FXDataEngine/Tests", "FXDataEngine/API"):
         root = ROOT / rel_root
         for path in root.rglob("*"):
             if path.suffix.lower() not in {".mq5", ".mqh"}:
                 continue
             rel_paths.append(path.relative_to(ROOT).as_posix())
-    rel_paths.append("FXAI.mq5")
+    rel_paths.append("FXDataEngine/FXAI.mq5")
     return sorted(set(rel_paths))
 
 
@@ -50,9 +50,9 @@ def test_raw_market_data_apis_are_isolated_to_gateway():
 
 
 def test_data_pipeline_includes_single_market_data_gateway():
-    data_pipeline = _read("Engine/data_pipeline.mqh")
-    gateway = _read("Engine/market_data_gateway.mqh")
-    data_io = _read("Engine/data_io.mqh")
+    data_pipeline = _read("FXDataEngine/Engine/data_pipeline.mqh")
+    gateway = _read("FXDataEngine/Engine/market_data_gateway.mqh")
+    data_io = _read("FXDataEngine/Engine/data_io.mqh")
 
     assert '#include "market_data_gateway.mqh"' in data_pipeline
     assert "bool FXAI_MarketDataPull(" in gateway
@@ -64,11 +64,11 @@ def test_data_pipeline_includes_single_market_data_gateway():
 
 
 def test_prediction_path_consumers_use_gateway_and_core_pipeline_only():
-    runtime = _read("Engine/Runtime/runtime_feature_pipeline_block.mqh")
-    rule_m1sync = _read("Plugins/Rule/rule_m1sync.mqh")
-    factor_context = _read("Engine/Runtime/runtime_factor_context.mqh")
-    feature_norm = _read("Engine/feature_norm.mqh")
-    feature_build = _read("Engine/feature_build.mqh")
+    runtime = _read("FXDataEngine/Engine/Runtime/runtime_feature_pipeline_block.mqh")
+    rule_m1sync = _read("FXPlugins/Rule/rule_m1sync.mqh")
+    factor_context = _read("FXDataEngine/Engine/Runtime/runtime_factor_context.mqh")
+    feature_norm = _read("FXDataEngine/Engine/feature_norm.mqh")
+    feature_build = _read("FXDataEngine/Engine/feature_build.mqh")
 
     assert "FXAI_DataCoreRefreshLiveBundle(" in runtime
     assert "FXAI_MarketDataCopyRatesByPos(symbol, PERIOD_M1, shift, bars, live_rates)" in rule_m1sync
@@ -81,8 +81,8 @@ def test_prediction_path_consumers_use_gateway_and_core_pipeline_only():
 
 
 def test_normalization_pipeline_remains_causal_and_train_split_safe():
-    feature_norm = _read("Engine/feature_norm.mqh")
-    warmup_norm = _read("Engine/Warmup/warmup_normalization.mqh")
+    feature_norm = _read("FXDataEngine/Engine/feature_norm.mqh")
+    warmup_norm = _read("FXDataEngine/Engine/Warmup/warmup_normalization.mqh")
     build_loop = "for(int i=end; i>=start; i--)"
     out_assign = "out_features[f] = out_v;"
     hist_write = "g_fxai_norm_hist[method_idx][f][h] = cur;"

@@ -4,13 +4,13 @@
 
 - Live broker-side tick access already exists only on the MT5 side, primarily through `SymbolInfoTick()` and the `MqlTick` / `CopyTicksRange()` APIs.
 - Existing shared control-plane subsystems already follow a consistent FXAI pattern:
-  - producer under `Tools/offline_lab/*` or `Services/*`
+  - producer under `Tools/offline_lab/*` or `FXDataEngine/Services/*`
   - runtime artifact in `FILE_COMMON/FXAI/Runtime`
-  - MQL runtime adapter under `Engine/Runtime/Trade/*`
+  - MQL runtime adapter under `FXDataEngine/Engine/Runtime/Trade/*`
   - GUI reader under `GUI/Sources/FXAIGUICore/Services/*`
   - GUI surface under `GUI/Sources/FXAIGUIApp/Features/*`
-- Trade gating composition already lives in `Engine/Runtime/Trade/runtime_trade_risk.mqh`.
-- Adaptive regime routing already computes a coarse `liquidity_stress` heuristic in `Engine/Runtime/runtime_adaptive_router_stage.mqh`, so the new microstructure layer can upgrade that context instead of inventing a parallel risk concept.
+- Trade gating composition already lives in `FXDataEngine/Engine/Runtime/Trade/runtime_trade_risk.mqh`.
+- Adaptive regime routing already computes a coarse `liquidity_stress` heuristic in `FXDataEngine/Engine/Runtime/runtime_adaptive_router_stage.mqh`, so the new microstructure layer can upgrade that context instead of inventing a parallel risk concept.
 - The FX-only tradable universe is already stored in Offline Lab metadata and modeled in `Tools/offline_lab/market_universe.py`.
 
 ## Phase-1 Design Choice
@@ -24,7 +24,7 @@ The microstructure engine is implemented as an **MT5 Service** instead of a Pyth
 
 ## Files Added / Changed
 
-- `Services/FXAI_MicrostructureProbe.mq5`
+- `FXDataEngine/Services/FXAI_MicrostructureProbe.mq5`
   Terminal-wide MT5 collector that samples tradable FX symbols, computes rolling proxy features, and writes shared runtime artifacts.
 - `Tools/offline_lab/microstructure_contracts.py`
   Paths, schema constants, runtime artifact locations, and status/report paths.
@@ -34,7 +34,7 @@ The microstructure engine is implemented as an **MT5 Service** instead of a Pyth
   Config validation, local status sync, and MT5 service install/compile automation.
 - `Tools/offline_lab/microstructure_replay.py`
   History replay summarizer for operator review and audit alignment.
-- `Engine/Runtime/Trade/runtime_trade_microstructure.mqh`
+- `FXDataEngine/Engine/Runtime/Trade/runtime_trade_microstructure.mqh`
   MQL runtime reader for the shared microstructure flat artifact plus risk-side globals.
 - GUI reader/model/view additions under `GUI/Sources/.../Microstructure*`
   Operator-visible microstructure diagnostics integrated into the existing GUI shell.

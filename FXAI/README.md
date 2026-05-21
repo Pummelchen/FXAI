@@ -21,11 +21,11 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 
 ## Main Entry Points
 
-- `FXAI.mq5`
+- `FXDataEngine/FXAI.mq5`
   Main Expert Advisor entry point for live trading and Strategy Tester runs.
-- `Tests/FXAI_AuditRunner.mq5`
+- `FXDataEngine/Tests/FXAI_AuditRunner.mq5`
   MT5-side Audit Lab runner.
-- `Tests/FXAI_TensorCoreRunner.mq5`
+- `FXDataEngine/Tests/FXAI_TensorCoreRunner.mq5`
   Dedicated MT5-side TensorCore and plugin-contract runner for focused core-runtime verification.
 - `Tools/fxai_testlab.py`
   External compile, audit, baseline, MT5 release-artifact packaging, and release-gate tool.
@@ -33,11 +33,11 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   Stable CLI wrapper for the Turso/libSQL-backed offline export, tuning, promotion, and control-loop tool.
 - `fxai.toml`
   Toolchain and GUI config root for portable path overrides, platform profiles, and release metadata. Local `.env` overrides are supported and ignored by git.
-- `Services/FXAI_NewsPulseCalendar.mq5`
+- `FXDataEngine/Services/FXAI_NewsPulseCalendar.mq5`
   MT5 Service that exports Economic Calendar state for the NewsPulse shared news-risk subsystem.
-- `Services/FXAI_MicrostructureProbe.mq5`
+- `FXDataEngine/Services/FXAI_MicrostructureProbe.mq5`
   MT5 Service that exports live tick-flow, spread, liquidity-stress, stop-run proxy, and session-handoff state for the shared microstructure subsystem.
-- `Services/FXAI_CrossAssetProbe.mq5`
+- `FXDataEngine/Services/FXAI_CrossAssetProbe.mq5`
   MT5 Service that exports configured indicator-only MT5 symbols for the shared cross-asset macro/liquidity subsystem.
 - `Tools/offline_lab/`
   Internal Python package for Offline Lab database, export, campaign, promotion, shadow-fleet ingest, foundation and student bundling, supervisor-service generation, teacher-factory modules, world simulation, and autonomous governance.
@@ -74,73 +74,73 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 
 ## Key Runtime Areas
 
-- `API/`
+- `FXDataEngine/API/`
   Plugin contracts, runtime context helpers, and TensorCore bridges.
-- `API/Contract/`
+- `FXDataEngine/API/Contract/`
   Split plugin-contract internals for support types, public API surface, and persistence wiring behind `plugin_contract.mqh`.
-- `API/Context/`
+- `FXDataEngine/API/Context/`
   Split plugin-context internals for state, payload, transfer, quality, replay, and runtime projection helpers.
-- `Engine/`
+- `FXDataEngine/Engine/`
   Data loading, feature building, normalization, warmup, runtime orchestration, persistence, and meta layers.
-- `Engine/Core/`
-  Shared core helpers split out from `Engine/core.mqh` for analog memory, broker replay, model context, schema handling, request validation, and the dedicated pipeline cores. `market_data_gateway.mqh` is now the only raw MT5 market-data ingress in the repo, `core_data_core.mqh` is the only pipeline bundle ingress, `core_feature_core.mqh` is the only raw-feature builder, and `core_normalization_core.mqh` owns both feature normalization and final payload/schema shaping before requests reach plugins.
-- `Engine/Lifecycle/`
+- `FXDataEngine/Engine/Core/`
+  Shared core helpers split out from `FXDataEngine/Engine/core.mqh` for analog memory, broker replay, model context, schema handling, request validation, and the dedicated pipeline cores. `market_data_gateway.mqh` is now the only raw MT5 market-data ingress in the repo, `core_data_core.mqh` is the only pipeline bundle ingress, `core_feature_core.mqh` is the only raw-feature builder, and `core_normalization_core.mqh` owns both feature normalization and final payload/schema shaping before requests reach plugins.
+- `FXDataEngine/Engine/Lifecycle/`
   Split lifecycle internals for context-symbol discovery, reset and recovery, bootstrap, and compliance or promotion-readiness checks.
-- `Engine/Warmup/`
+- `FXDataEngine/Engine/Warmup/`
   Warmup modules split by normalization search, scoring, transfer, portfolio diagnostics, and entrypoint orchestration.
-- `Engine/Runtime/`
+- `FXDataEngine/Engine/Runtime/`
   Extracted live-trading helpers used by the EA entrypoint, including the live control-plane snapshot and peer-pressure logic.
-- `Engine/Runtime/runtime_time_service.mqh`
+- `FXDataEngine/Engine/Runtime/runtime_time_service.mqh`
   Canonical trade-server-first time context used by the EA runtime for server, UTC, and local conversions, session labeling, and timer-driven maintenance.
-- `Engine/Runtime/runtime_calendar_cache.mqh`
+- `FXDataEngine/Engine/Runtime/runtime_calendar_cache.mqh`
   MT5-native calendar cache reader that turns the NewsPulse calendar service feed into pair-level fallback event-risk state for live runtime and Strategy Tester-safe operation.
-- `Engine/Runtime/runtime_factor_context.mqh`
+- `FXDataEngine/Engine/Runtime/runtime_factor_context.mqh`
   Deterministic MT5-native currency-factor context that scores slow trend, carry proxy, policy/event pressure, value proxy, and commodity sensitivity as an interpretable runtime overlay.
-- `Engine/Runtime/runtime_system_health.mqh`
+- `FXDataEngine/Engine/Runtime/runtime_system_health.mqh`
   Unified runtime health and invariant layer that aggregates subsystem freshness, degraded-mode posture, and cycle or pending-order reconciliation before new entries are allowed.
-- `Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
+- `FXDataEngine/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
   NewsPulse runtime adapter that consumes the merged flat snapshot and, when needed, falls back to the MT5 calendar cache before applying pair-level news gating.
-- `Engine/Runtime/Trade/runtime_trade_rates_engine.mqh`
+- `FXDataEngine/Engine/Runtime/Trade/runtime_trade_rates_engine.mqh`
   Rates Engine runtime adapter that consumes the pair-level flat snapshot and applies rates-aware caution or block posture without changing the canonical model input.
-- `Engine/Runtime/Trade/runtime_trade_microstructure.mqh`
+- `FXDataEngine/Engine/Runtime/Trade/runtime_trade_microstructure.mqh`
   Microstructure runtime adapter that consumes per-pair MT5 tick-flow and liquidity-stress proxy state and applies execution-aware caution or block posture without changing the canonical model input.
-- `Engine/Runtime/Trade/runtime_trade_cross_asset_state.mqh`
+- `FXDataEngine/Engine/Runtime/Trade/runtime_trade_cross_asset_state.mqh`
   Cross-asset runtime adapter that consumes shared pair-level macro/liquidity posture and applies deterministic caution or block state without changing canonical model inputs.
-- `Engine/Runtime/Trade/runtime_trade_pair_network.mqh`
+- `FXDataEngine/Engine/Runtime/Trade/runtime_trade_pair_network.mqh`
   Pair-network runtime adapter that decomposes current and candidate pair exposure, scores redundancy or contradiction, and suppresses or resizes trades before final order approval.
-- `Engine/Runtime/runtime_adaptive_router_stage.mqh`
+- `FXDataEngine/Engine/Runtime/runtime_adaptive_router_stage.mqh`
   Adaptive regime classification, plugin suitability scoring, routed posture logic, and append-only runtime history for the state-aware plugin-zoo control plane.
-- `Engine/Runtime/runtime_dynamic_ensemble_stage.mqh`
+- `FXDataEngine/Engine/Runtime/runtime_dynamic_ensemble_stage.mqh`
   Dynamic Ensemble runtime stage that scores plugin trust after inference, normalizes participation weights, escalates abstention posture, and writes replayable runtime artifacts for the meta-learner layer.
-- `Engine/Runtime/runtime_prob_calibration_stage.mqh`
+- `FXDataEngine/Engine/Runtime/runtime_prob_calibration_stage.mqh`
   Probabilistic calibration runtime stage that maps ensemble output into calibrated probabilities, expected-move estimates, edge after costs, explicit abstention reasons, and replayable decision artifacts.
-- `Engine/Runtime/runtime_execution_quality_stage.mqh`
+- `FXDataEngine/Engine/Runtime/runtime_execution_quality_stage.mqh`
   Execution-Quality runtime stage that forecasts spread widening, slippage, fill quality, latency sensitivity, liquidity fragility, and replayable execution-state artifacts per symbol.
-- `Engine/Runtime/runtime_*_block.mqh`
+- `FXDataEngine/Engine/Runtime/runtime_*_block.mqh`
   Split feature, transfer, model, and policy stages behind `engine_runtime.mqh` so the main runtime entrypoint stays readable.
-- `TensorCore/`
+- `FXDataEngine/TensorCore/`
   Internal neural runtime shared by the stronger sequence and tensor-heavy plugins.
-- `TensorCore/Transfer/`
+- `FXDataEngine/TensorCore/Transfer/`
   Split shared transfer-backbone internals for globals, temporal pooling, feature encoding, and model heads behind `tensor_transfer.mqh`.
-- `Plugins/`
+- `FXPlugins/`
   Model families and plugin implementations.
-- `Plugins/Common/fxai_framework_model.mqh`
+- `FXPlugins/Common/fxai_framework_model.mqh`
   Shared MT5-native framework layer for the newly expanded model zoo. It provides probability/abstention-compatible implementations for regime volatility, ARIMAX-GARCH, random forest, cointegration/OU spread, PPO-style policy scoring, microstructure proxies, HMM regimes, elastic/profit logistic, decomposition, Kalman/PCA/factor, trend, cross-rate, GRU, BiLSTM, LSTM-TCN, and CNN-LSTM variants without adding live external inference services.
-- `Plugins/Sequence/ai_*/`
+- `FXPlugins/Sequence/ai_*/`
   Internal split state and public sections for the largest sequence-model plugins, including `ai_tcn/`, `ai_s4/`, and `ai_stmn/`. The sequence zoo also now includes the native research plugins `ai_qcew`, `ai_fewc`, `ai_gha`, `ai_tesseract`, `ai_mythos_rdt`, `ai_gru`, `ai_bilstm`, `ai_lstm_tcn`, `ai_cnn_lstm`, and `ai_attn_cnn_bilstm`.
-- `Plugins/Stat/`, `Plugins/Factor/`, `Plugins/Trend/`, `Plugins/RL/`
+- `FXPlugins/Stat/`, `FXPlugins/Factor/`, `FXPlugins/Trend/`, `FXPlugins/RL/`
   Native statistical, factor, trend, and policy plugins added for model-family coverage. These modules consume only FXAI plugin-context payloads and avoid direct MT5 data pulls, preserving the DataCore/FeatureCore/NormalizationCore boundary.
-- `Plugins/Sequence/ai_tft/Forward/`
+- `FXPlugins/Sequence/ai_tft/Forward/`
   Split TFT forward-pass helpers into utility, sequence, and head-specific modules.
-- `Plugins/Sequence/ai_patchtst/`
+- `FXPlugins/Sequence/ai_patchtst/`
   Split PatchTST private, public, and training sections behind `ai_patchtst.mqh`.
-- `Plugins/Linear/lin_pa/`
+- `FXPlugins/Linear/lin_pa/`
   Split passive-aggressive plugin internals into private, public, and training sections.
-- `Plugins/Tree/tree_catboost/`, `Plugins/Tree/tree_lgbm/`
+- `FXPlugins/Tree/tree_catboost/`, `FXPlugins/Tree/tree_lgbm/`
   Internal split class sections for the largest tree-model plugins.
-- `Tests/`
+- `FXDataEngine/Tests/`
   Audit Lab scenarios, scoring, reports, the dedicated TensorCore suite, plugin-contract suite, and focused MT5 test runners.
-- `Tests/Scoring/`
+- `FXDataEngine/Tests/Scoring/`
   Split Audit Lab scoring internals for core helpers, adversarial packs, metrics, and scenario execution.
 - `Tools/testlab/`
   Internal Python package behind `fxai_testlab.py`, split into compile, audit-run, reporting, baseline, optimization, release-gate, and CLI modules.

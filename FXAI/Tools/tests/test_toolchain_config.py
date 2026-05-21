@@ -51,7 +51,7 @@ def test_toolchain_config_builds_wine_compile_arguments(tmp_path: Path):
         },
     )
 
-    cmd = config.metaeditor_compile_command(project_root / "FXAI.mq5", project_root / "compile.log")
+    cmd = config.metaeditor_compile_command(project_root / "FXDataEngine/FXAI.mq5", project_root / "compile.log")
 
     assert cmd[0] == str(project_root / "wine64")
     assert cmd[1] == str(project_root / "mt5" / "MetaEditor64.exe")

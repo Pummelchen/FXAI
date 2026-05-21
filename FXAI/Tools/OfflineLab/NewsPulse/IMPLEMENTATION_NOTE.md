@@ -5,7 +5,7 @@ This note maps the NewsPulse design onto the actual FXAI repository structure.
 ## Real Integration Points
 
 - MT5 scheduled macro collector:
-  - `<FXAI_ROOT>/Services/FXAI_NewsPulseCalendar.mq5`
+  - `<FXAI_ROOT>/FXDataEngine/Services/FXAI_NewsPulseCalendar.mq5`
   - Runs as an MT5 Service, not a chart EA.
   - Exports calendar feed and state into `FILE_COMMON/FXAI/Runtime/`.
 
@@ -23,13 +23,13 @@ This note maps the NewsPulse design onto the actual FXAI repository structure.
   - `<FXAI_ROOT>/Tools/offline_lab/newspulse_service.py`
 
 - Runtime gating adapter:
-  - `<FXAI_ROOT>/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
-  - `<FXAI_ROOT>/Engine/Runtime/Trade/runtime_trade_risk.mqh`
+  - `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
+  - `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/Trade/runtime_trade_risk.mqh`
   - Consumes flat, file-backed pair state without changing the canonical model vector.
 
 - Audit and replay seam:
-  - `<FXAI_ROOT>/Tests/Scenarios/audit_newspulse_replay.mqh`
-  - `<FXAI_ROOT>/Tests/Scenarios/audit_context_series.mqh`
+  - `<FXAI_ROOT>/FXDataEngine/Tests/Scenarios/audit_newspulse_replay.mqh`
+  - `<FXAI_ROOT>/FXDataEngine/Tests/Scenarios/audit_context_series.mqh`
   - Pulls replay timelines into the existing macro-event audit scenario instead of inventing a parallel audit flow.
 
 - GUI operator surface:
@@ -46,9 +46,9 @@ NewsPulse is shared execution and observability infrastructure. It does not belo
 - a per-symbol collector path
 
 The actual repo already has:
-- `Services/` for MT5 background work
+- `FXDataEngine/Services/` for MT5 background work
 - `Tools/offline_lab/` for machine-local daemons and shared research/runtime artifacts
-- `Engine/Runtime/Trade/` for execution overlays
+- `FXDataEngine/Engine/Runtime/Trade/` for execution overlays
 - `GUI/` for operator surfaces
 
 So NewsPulse was added at those seams instead of inventing new top-level systems.
