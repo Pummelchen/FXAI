@@ -24,16 +24,17 @@ This page explains what data FXAI trusts and where data is allowed to enter the 
 
 FXAI's core market-training contract is:
 
-- `M1 OHLC + spread`
+- verified `M1 OHLCV` from `FXDatabase/`
 - past-only transformations
 - no future labels in feature or normalization windows
 - no direct plugin access to MT5 market APIs
 
-Tick, DOM, and centralized order-book data are not core model-training inputs. MT5-visible microstructure proxies are allowed as runtime context and gates, but they must not be described as true interdealer order flow or institutional book depth.
+Tick, DOM, spread, swap, commission, and centralized order-book data are not part of the canonical historical database contract. MT5-visible microstructure proxies and execution-cost estimates are allowed as runtime context and gates, but they must not be described as true interdealer order flow or institutional book depth.
 
 ## Pipeline Boundary
 
 - DataCore is the only place that should request raw market bundles.
+- FXDatabase is the only approved long-running historical M1 OHLCV source for Swift backtest and research consumers.
 - FeatureCore is the only place that should build raw feature vectors.
 - NormalizationCore is the only place that should normalize features or shape final model payloads.
 - Plugins consume prepared context and payloads; they must not call MT5 market data functions directly.

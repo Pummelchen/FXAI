@@ -1,0 +1,163 @@
+import Domain
+import XCTest
+
+final class DomainTests: XCTestCase {
+    func testPriceScaledConversion() throws {
+        let digits = try Digits(5)
+        let price = try PriceScaled.fromDecimalString("1.08342", digits: digits)
+        XCTAssertEqual(price.rawValue, 108342)
+        XCTAssertEqual(price.description, "1.08342")
+    }
+
+    func testJPYPriceScaledConversion() throws {
+        let digits = try Digits(3)
+        let price = try PriceScaled.fromDecimalString("154.721", digits: digits)
+        XCTAssertEqual(price.rawValue, 154721)
+    }
+
+    func testPriceScaledRejectsExcessPrecision() throws {
+        XCTAssertThrowsError(try PriceScaled.fromDecimalString("1.083429", digits: try Digits(5)))
+    }
+
+    func testPriceScaledRejectsInt64OverflowAfterFractionIsAdded() throws {
+        XCTAssertThrowsError(try PriceScaled.fromDecimalString("922337203685477580.8", digits: try Digits(1))) { error in
+            XCTAssertEqual(error as? DomainError, .priceScaleOverflow("922337203685477580.8"))
+        }
+    }
+
+    func testDigitsRejectsOutOfRangeValues() {
+        XCTAssertThrowsError(try Digits(-1))
+        XCTAssertThrowsError(try Digits(11))
+    }
+
+    func testTimestampTypeSeparation() {
+        let mt5 = MT5ServerSecond(rawValue: 1_700_000_000)
+        let utc = UtcSecond(rawValue: 1_700_000_000)
+        XCTAssertEqual(mt5.rawValue, utc.rawValue)
+    }
+
+    func testSHA256ChunkHasherIsDeterministicAndLengthChecked() {
+        var first = SHA256ChunkHasher(namespace: "test")
+        first.appendField("symbol", "EURUSD")
+        first.appendField("count", 2)
+
+        var second = SHA256ChunkHasher(namespace: "test")
+        second.appendField("symbol", "EURUSD")
+        second.appendField("count", 2)
+
+        let digest = first.finalize()
+        XCTAssertEqual(digest, second.finalize())
+        XCTAssertEqual(digest.rawValue.count, 64)
+        XCTAssertNotNil(SHA256DigestHex(rawValue: digest.rawValue.uppercased()))
+        XCTAssertNil(SHA256DigestHex(rawValue: "bad"))
+    }
+
+    func testRawRepresentableSymbolInitializersDoNotBypassValidation() {
+        XCTAssertNil(LogicalSymbol(rawValue: "eurusd"))
+        XCTAssertNil(MT5Symbol(rawValue: ""))
+        XCTAssertNil(BrokerSourceId(rawValue: ""))
+    }
+
+    func testBrokerServerIdentityRejectsEmptyIdentityParts() throws {
+        XCTAssertThrowsError(try BrokerServerIdentity(company: "", server: "Broker-Demo", accountLogin: 1))
+        XCTAssertThrowsError(try BrokerServerIdentity(company: "Broker", server: "", accountLogin: 1))
+        XCTAssertThrowsError(try BrokerServerIdentity(company: "Broker", server: "Broker-Demo", accountLogin: 0))
+    }
+
+    func testBarHashDeterminism() throws {
+        let broker = try BrokerSourceId("demo")
+        let symbol = try LogicalSymbol("EURUSD")
+        let mt5Symbol = try MT5Symbol("EURUSD")
+        let digits = try Digits(5)
+        let open = try PriceScaled.fromDecimalString("1.10000", digits: digits)
+        let hash1 = BarHash.compute(
+            sourceOrigin: .mt5,
+            brokerSourceId: broker,
+            logicalSymbol: symbol,
+            mt5Symbol: mt5Symbol,
+            timeframe: .m1,
+            utcTime: UtcSecond(rawValue: 1_700_000_000),
+            mt5ServerTime: MT5ServerSecond(rawValue: 1_700_007_200),
+            open: open,
+            high: open,
+            low: open,
+            close: open,
+            volume: .zero,
+            digits: digits
+        )
+        let hash2 = BarHash.compute(
+            sourceOrigin: .mt5,
+            brokerSourceId: broker,
+            logicalSymbol: symbol,
+            mt5Symbol: mt5Symbol,
+            timeframe: .m1,
+            utcTime: UtcSecond(rawValue: 1_700_000_000),
+            mt5ServerTime: MT5ServerSecond(rawValue: 1_700_007_200),
+            open: open,
+            high: open,
+            low: open,
+            close: open,
+            volume: .zero,
+            digits: digits
+        )
+        XCTAssertEqual(hash1, hash2)
+
+        let suffixHash = BarHash.compute(
+            sourceOrigin: .mt5,
+            brokerSourceId: broker,
+            logicalSymbol: symbol,
+            mt5Symbol: try MT5Symbol("EURUSD.a"),
+            timeframe: .m1,
+            utcTime: UtcSecond(rawValue: 1_700_000_000),
+            mt5ServerTime: MT5ServerSecond(rawValue: 1_700_007_200),
+            open: open,
+            high: open,
+            low: open,
+            close: open,
+            volume: .zero,
+            digits: digits
+        )
+        XCTAssertNotEqual(hash1, suffixHash)
+
+        let otherSourceHash = BarHash.compute(
+            sourceOrigin: try DataSourceOrigin("VENDOR_1"),
+            brokerSourceId: broker,
+            logicalSymbol: symbol,
+            mt5Symbol: mt5Symbol,
+            timeframe: .m1,
+            utcTime: UtcSecond(rawValue: 1_700_000_000),
+            mt5ServerTime: MT5ServerSecond(rawValue: 1_700_007_200),
+            open: open,
+            high: open,
+            low: open,
+            close: open,
+            volume: .zero,
+            digits: digits
+        )
+        let volumeHash = BarHash.compute(
+            sourceOrigin: .mt5,
+            brokerSourceId: broker,
+            logicalSymbol: symbol,
+            mt5Symbol: mt5Symbol,
+            timeframe: .m1,
+            utcTime: UtcSecond(rawValue: 1_700_000_000),
+            mt5ServerTime: MT5ServerSecond(rawValue: 1_700_007_200),
+            open: open,
+            high: open,
+            low: open,
+            close: open,
+            volume: M1Volume(rawValue: 10),
+            digits: digits
+        )
+        XCTAssertNotEqual(hash1, otherSourceHash)
+        XCTAssertNotEqual(hash1, volumeHash)
+    }
+
+    func testDataSourceOriginAllowsFutureUppercaseSourcesButRejectsLooseValues() throws {
+        XCTAssertEqual(try DataSourceOrigin("VENDOR_1").rawValue, "VENDOR_1")
+        XCTAssertEqual(try DataSourceOrigin("ALT-SOURCE").rawValue, "ALT-SOURCE")
+        XCTAssertThrowsError(try DataSourceOrigin("vendor_1"))
+        XCTAssertThrowsError(try DataSourceOrigin("VENDOR 1"))
+        XCTAssertThrowsError(try DataSourceOrigin(""))
+    }
+}

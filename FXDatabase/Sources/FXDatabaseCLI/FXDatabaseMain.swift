@@ -1,0 +1,1166 @@
+import AppCore
+import BacktestCore
+import ClickHouse
+import Config
+import Domain
+import Foundation
+import FXBacktestAPIServer
+import Ingestion
+import MetalAccel
+import MT5Bridge
+import Operations
+import TimeMapping
+import Verification
+
+@main
+struct FXDatabaseCLI {
+    static func main() async {
+        let arguments = Array(CommandLine.arguments.dropFirst())
+        let result = await InteractiveCommandSession(ignoredLaunchArguments: arguments).run()
+        Darwin.exit(result.rawValue)
+    }
+
+    static func run(arguments: [String]) async -> ExitCode {
+        var activeLogger: Logger?
+        do {
+            let options = try CLIOptions(arguments: arguments)
+            if options.command == .help {
+                printUsage()
+                return .success
+            }
+            if options.command == .failureGuide {
+                print(OperationalFailureGuide.catalogText())
+                return .success
+            }
+            if let reason = options.command.unavailableReason {
+                throw CLIError.commandUnavailable(reason)
+            }
+
+            let loader = ConfigLoader()
+            let config = try loader.loadBundle(configDirectory: options.configDirectory)
+            let logger = makeLogger(config: config, options: options)
+            activeLogger = logger
+            let clickHouse = ClickHouseHTTPClient(config: config.clickHouse, logger: logger)
+            if options.command.requiresClickHouseStartupCheck {
+                try await ClickHouseStartupManager(
+                    config: config.clickHouse,
+                    client: clickHouse,
+                    logger: logger
+                ).ensureReady()
+            }
+
+            switch options.command {
+            case .failureGuide:
+                print(OperationalFailureGuide.catalogText())
+                return .success
+
+            case .migrate:
+                logger.db("Connecting to ClickHouse at \(config.clickHouse.url.absoluteString)")
+                _ = try await clickHouse.execute(.select("SELECT 1", databaseOverride: "default"))
+                logger.ok("ClickHouse connection verified")
+                try await ClickHouseMigrator(client: clickHouse, config: config.clickHouse, logger: logger)
+                    .migrate(migrationsDirectory: options.migrationsDirectory)
+                return .success
+
+            case .bridgeCheck:
+                let bridge = try connectBridge(config: config, logger: logger)
+                let hello = try bridge.hello()
+                logger.ok("MT5 bridge connected: \(hello.bridgeName) \(hello.bridgeVersion)")
+                let terminal = try bridge.terminalInfo()
+                let config = try await resolveBrokerConfigurationIfNeeded(
+                    config: config,
+                    clickHouse: clickHouse,
+                    terminal: terminal,
+                    logger: logger
+                )
+                logger.ok("MT5 terminal: \(terminal.terminalName), server \(terminal.server), account \(terminal.accountLogin)")
+                _ = try await verifyLiveBrokerOffset(
+                    bridge: bridge,
+                    clickHouse: clickHouse,
+                    config: config,
+                    terminal: terminal,
+                    logger: logger
+                )
+                return .success
+
+            case .symbolCheck:
+                let bridge = try connectBridge(config: config, logger: logger)
+                var failureCount = 0
+                for mapping in config.symbols.symbols {
+                    do {
+                        let info = try bridge.prepareSymbol(mapping.mt5Symbol)
+                        if info.selected && info.digits == mapping.digits.rawValue {
+                            logger.ok("\(mapping.logicalSymbol.rawValue): \(mapping.mt5Symbol.rawValue) selected, digits \(info.digits)")
+                        } else if info.selected {
+                            failureCount += 1
+                            logger.warn("\(mapping.logicalSymbol.rawValue): digits mismatch, config \(mapping.digits.rawValue), MT5 \(info.digits)")
+                        } else {
+                            failureCount += 1
+                            logger.error("\(mapping.logicalSymbol.rawValue): symbol \(mapping.mt5Symbol.rawValue) not selected in MT5")
+                        }
+                    } catch {
+                        failureCount += 1
+                        logger.error("\(mapping.logicalSymbol.rawValue): \(error)")
+                    }
+                }
+                return failureCount == 0 ? .success : .validation
+
+            case .backfill:
+                let originalConfig = config
+                let initialLock = try acquireInitialRuntimeLock(config: config, owner: "backfill")
+                logger.ok("Initial broker runtime lock acquired: \(initialLock.path)")
+                let bridge = try connectBridge(config: config, logger: logger)
+                let terminal = try bridge.terminalInfo()
+                let config = try await resolveBrokerConfigurationIfNeeded(
+                    config: config,
+                    clickHouse: clickHouse,
+                    terminal: terminal,
+                    logger: logger
+                )
+                let lock = try acquireResolvedRuntimeLockIfNeeded(
+                    initialLock: initialLock,
+                    originalConfig: originalConfig,
+                    resolvedConfig: config,
+                    owner: "backfill"
+                )
+                logger.ok("Broker runtime lock acquired: \(lock.path)")
+                let checkpointStore = ClickHouseCheckpointStore(
+                    client: clickHouse,
+                    insertBuilder: ClickHouseInsertBuilder(database: config.clickHouse.database),
+                    database: config.clickHouse.database
+                )
+                let offsetStore = ClickHouseBrokerOffsetStore(client: clickHouse, database: config.clickHouse.database)
+                let agent = BackfillAgent(
+                    config: config,
+                    bridge: bridge,
+                    clickHouse: clickHouse,
+                    checkpointStore: checkpointStore,
+                    offsetStore: offsetStore,
+                    logger: logger
+                )
+                let symbols = try selectedSymbols(from: options.symbolsArgument)
+                try await agent.run(selectedSymbols: symbols)
+                _ = initialLock
+                _ = lock
+                return .success
+
+            case .live:
+                let originalConfig = config
+                let initialLock = try acquireInitialRuntimeLock(config: config, owner: "live")
+                logger.ok("Initial broker runtime lock acquired: \(initialLock.path)")
+                let bridge = try connectBridge(config: config, logger: logger)
+                let terminal = try bridge.terminalInfo()
+                let config = try await resolveBrokerConfigurationIfNeeded(
+                    config: config,
+                    clickHouse: clickHouse,
+                    terminal: terminal,
+                    logger: logger
+                )
+                bridge.close()
+                let lock = try acquireResolvedRuntimeLockIfNeeded(
+                    initialLock: initialLock,
+                    originalConfig: originalConfig,
+                    resolvedConfig: config,
+                    owner: "live"
+                )
+                logger.ok("Broker runtime lock acquired: \(lock.path)")
+                try await runLiveWithRecovery(
+                    config: config,
+                    clickHouse: clickHouse,
+                    logger: logger
+                )
+                _ = initialLock
+                _ = lock
+                return .success
+
+            case .supervise:
+                let originalConfig = config
+                let initialLock = try acquireInitialRuntimeLock(config: config, owner: "supervise")
+                logger.ok("Initial broker runtime lock acquired: \(initialLock.path)")
+                let bridge = try connectBridge(config: config, logger: logger)
+                let terminal = try bridge.terminalInfo()
+                let config = try await resolveBrokerConfigurationIfNeeded(
+                    config: config,
+                    clickHouse: clickHouse,
+                    terminal: terminal,
+                    logger: logger
+                )
+                bridge.close()
+                let lock = try acquireResolvedRuntimeLockIfNeeded(
+                    initialLock: initialLock,
+                    originalConfig: originalConfig,
+                    resolvedConfig: config,
+                    owner: "supervise"
+                )
+                logger.ok("Broker runtime lock acquired: \(lock.path)")
+                let eventStore = ClickHouseAgentEventStore(
+                    clickHouse: clickHouse,
+                    database: config.clickHouse.database
+                )
+                let supervisor = ProductionSupervisor(
+                    config: config,
+                    clickHouse: clickHouse,
+                    eventStore: eventStore,
+                    logger: logger,
+                    bridgeConnector: {
+                        try connectBridge(config: config, logger: logger)
+                    },
+                    runBackfillOnStart: options.runBackfillOnStart ?? config.app.supervisor.runBackfillOnStart
+                )
+                try await supervisor.run(maxCycles: options.supervisorCycles)
+                _ = initialLock
+                _ = lock
+                return .success
+
+            case .startcheck:
+                let runner = StartCheckRunner(
+                    config: config,
+                    clickHouse: clickHouse,
+                    logger: logger,
+                    bridgeConnector: {
+                        try connectBridge(config: config, logger: logger)
+                    },
+                    options: StartCheckOptions(
+                        migrationsDirectory: options.migrationsDirectory,
+                        workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+                        compileEA: options.compileEA,
+                        bridgeChecks: options.bridgeChecks,
+                        compileTimeoutSeconds: options.compileTimeoutSeconds
+                    )
+                )
+                return await runner.run() ? .success : .verification
+
+            case .verify:
+                let randomRangeCount = options.randomRanges ?? config.app.verifierRandomRanges
+                let bridge: MT5BridgeClient?
+                var verifyConfig = config
+                if options.shouldConnectBridgeForVerify(randomRangeCount: randomRangeCount) {
+                    let connectedBridge = try connectBridge(config: config, logger: logger)
+                    let terminal = try connectedBridge.terminalInfo()
+                    verifyConfig = try await resolveBrokerConfigurationIfNeeded(
+                        config: config,
+                        clickHouse: clickHouse,
+                        terminal: terminal,
+                        logger: logger
+                    )
+                    bridge = connectedBridge
+                } else {
+                    bridge = nil
+                }
+                try await VerificationAgent(config: verifyConfig, bridge: bridge, clickHouse: clickHouse, logger: logger)
+                    .startupChecks(randomRanges: randomRangeCount)
+                return .success
+
+            case .repair:
+                try await runRepair(options: options, config: config, clickHouse: clickHouse, logger: logger)
+                return .success
+
+            case .exportCache:
+                throw CLIError.commandUnavailable(options.command.unavailableReason ?? "Command unavailable.")
+
+            case .dataCheck:
+                guard let commandConfigPath = options.commandConfigPath else {
+                    throw CLIError.missingValue("--config")
+                }
+                guard FileManager.default.fileExists(atPath: commandConfigPath.path) else {
+                    throw CLIError.invalidValue("--config")
+                }
+                let historyConfig = try loadHistoryDataConfig(commandConfigPath)
+                try await BacktestReadinessGate(config: config, clickHouse: clickHouse)
+                    .assertReady(BacktestReadinessRequest(config: historyConfig))
+                logger.ok("History data-readiness gate passed for \(historyConfig.logicalSymbol.rawValue)")
+                let request = try makeHistoryDataRequest(historyConfig, config: config)
+                let series = try await ClickHouseHistoricalOhlcDataProvider(
+                    client: clickHouse,
+                    database: config.clickHouse.database
+                ).loadM1Ohlc(request)
+                let first = series.metadata.firstUtc?.rawValue.description ?? "n/a"
+                let last = series.metadata.lastUtc?.rawValue.description ?? "n/a"
+                logger.ok("\(historyConfig.logicalSymbol.rawValue): loaded \(series.count) verified canonical M1 bars from ClickHouse")
+                logger.info("\(historyConfig.logicalSymbol.rawValue): UTC range loaded first=\(first), last=\(last), digits=\(series.metadata.digits.rawValue)")
+                if historyConfig.useMetal {
+                    #if canImport(Metal)
+                    let availability = MetalAvailability()
+                    guard availability.isAvailable else {
+                        logger.warn("Metal data buffers requested, but Metal is unavailable on this machine")
+                        return .success
+                    }
+                    let buffers = try MetalBufferManager().makeReadOnlyBuffers(series: series)
+                    logger.ok("Metal read-only OHLC buffers prepared on \(buffers.deviceName) with \(buffers.count) rows")
+                    #else
+                    logger.warn("Metal data buffers requested, but this Swift toolchain cannot import Metal")
+                    #endif
+                }
+                return .success
+
+            case .fxBacktestAPI:
+                let service = FXDatabaseBacktestHistoryService(config: config, clickHouse: clickHouse)
+                let handler = FXBacktestAPIHTTPHandler(historyProvider: service)
+                try await FXBacktestAPIServer(
+                    host: options.apiHost,
+                    port: options.apiPort,
+                    handler: handler,
+                    logger: logger
+                ).run()
+                return .success
+
+            case .healthAPI:
+                let service = OperationalHealthService(config: config, clickHouse: clickHouse)
+                try await OperationalHealthServer(
+                    host: options.apiHost,
+                    port: options.apiPort,
+                    service: service,
+                    logger: logger
+                ).run()
+                return .success
+
+            case .backtest:
+                throw CLIError.commandUnavailable(options.command.unavailableReason ?? "Command unavailable.")
+
+            case .optimize:
+                throw CLIError.commandUnavailable(options.command.unavailableReason ?? "Command unavailable.")
+
+            case .help:
+                printUsage()
+                return .success
+
+            case .interactive:
+                print("FXDatabase is already running in the interactive command shell.")
+                return .success
+            }
+        } catch let error as CLIError {
+            print("[ERROR] \(error.description)")
+            printUsage()
+            return .usage
+        } catch let error as ConfigError {
+            print("[ERROR] Configuration problem")
+            print(OperationalFailureGuide.advice(for: error).formatted)
+            return .configuration
+        } catch let error as TerminalIdentityPolicyError {
+            print("[ERROR] MT5 terminal identity problem")
+            print(OperationalFailureGuide.advice(for: error).formatted)
+            activeLogger?.alert("MT5 terminal identity problem", details: error.description)
+            return .configuration
+        } catch let error as BrokerOffsetRuntimeError {
+            print("[ERROR] Broker UTC offset problem")
+            print(OperationalFailureGuide.advice(for: error).formatted)
+            activeLogger?.alert("Broker UTC offset problem", details: error.description)
+            return .configuration
+        } catch let error as ClickHouseStartupError {
+            print("[ERROR] ClickHouse startup check failed")
+            print(OperationalFailureGuide.advice(for: error).formatted)
+            activeLogger?.alert("ClickHouse startup check failed", details: error.description)
+            return .clickHouse
+        } catch let error as SupervisorError {
+            print("[ERROR] Runtime lock: \(error.description)")
+            print(OperationalFailureGuide.advice(for: error).formatted)
+            activeLogger?.alert("Runtime lock unavailable", details: error.description)
+            return .configuration
+        } catch let error as BacktestReadinessError {
+            print("[ERROR] History data readiness blocked")
+            print(OperationalFailureGuide.advice(for: error).formatted)
+            activeLogger?.alert("History data readiness blocked", details: error.description)
+            return .backtest
+        } catch let error as HistoryDataError {
+            print("[ERROR] History data load failed")
+            print(error.description)
+            activeLogger?.alert("History data load failed", details: error.description)
+            return .backtest
+        } catch let error as TimeMappingError {
+            print("[ERROR] Broker UTC offset problem")
+            print(OperationalFailureGuide.advice(for: error).formatted)
+            activeLogger?.alert("Broker UTC offset problem", details: error.description)
+            return .configuration
+        } catch let error as VerificationError {
+            print("[ERROR] Verification failed")
+            print(OperationalFailureGuide.advice(for: error).formatted)
+            activeLogger?.alert("Verification failed", details: error.description)
+            return .verification
+        } catch let error as MT5BridgeStartupError {
+            print("[ERROR] MT5 bridge startup check failed")
+            print(error.description)
+            activeLogger?.alert("MT5 bridge startup check failed", details: error.description)
+            return .mt5Bridge
+        } catch let error as ProtocolError {
+            print("[ERROR] MT5 bridge protocol check failed")
+            print(OperationalFailureGuide.advice(for: error).formatted)
+            activeLogger?.alert("MT5 bridge protocol check failed", details: error.description)
+            return .mt5Bridge
+        } catch let error as MT5BridgeError {
+            print("[ERROR] MT5 bridge is not ready")
+            print(OperationalFailureGuide.advice(for: error).formatted)
+            activeLogger?.alert("MT5 bridge is not ready", details: error.description)
+            return .mt5Bridge
+        } catch let error as ClickHouseError {
+            print("[ERROR] ClickHouse operation failed")
+            print(OperationalFailureGuide.advice(for: error).formatted)
+            activeLogger?.alert("ClickHouse operation failed", details: error.description)
+            return .clickHouse
+        } catch is CancellationError {
+            activeLogger?.info("Command cancelled gracefully")
+            return .success
+        } catch {
+            print("[ERROR] \(error)")
+            activeLogger?.alert("Unexpected command failure", details: String(describing: error))
+            return .unknown
+        }
+    }
+
+    private static func connectBridge(config: ConfigBundle, logger: Logger) throws -> MT5BridgeClient {
+        do {
+            switch config.mt5Bridge.mode {
+            case .listen:
+                logger.db("Waiting for MT5 EA bridge at \(config.mt5Bridge.host):\(config.mt5Bridge.port)")
+                return try MT5BridgeClient.listen(
+                    host: config.mt5Bridge.host,
+                    port: config.mt5Bridge.port,
+                    connectTimeoutSeconds: config.mt5Bridge.connectTimeoutSeconds,
+                    requestTimeoutSeconds: config.mt5Bridge.requestTimeoutSeconds
+                )
+            case .connect:
+                logger.db("Connecting to MT5 bridge at \(config.mt5Bridge.host):\(config.mt5Bridge.port)")
+                return try MT5BridgeClient.connect(
+                    host: config.mt5Bridge.host,
+                    port: config.mt5Bridge.port,
+                    connectTimeoutSeconds: config.mt5Bridge.connectTimeoutSeconds,
+                    requestTimeoutSeconds: config.mt5Bridge.requestTimeoutSeconds
+                )
+            }
+        } catch let error as MT5BridgeError {
+            throw MT5BridgeStartupError(error: error, config: config.mt5Bridge)
+        }
+    }
+
+    private static func makeLogger(config: ConfigBundle, options: CLIOptions) -> Logger {
+        let level = options.overrideLogLevel ?? config.app.logLevel
+        guard config.app.logging.fileLoggingEnabled else {
+            return Logger(level: level)
+        }
+
+        let baseDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        var startupWarnings: [String] = []
+        let logSink = makePersistentSink(
+            path: config.app.logging.logFilePath,
+            baseDirectory: baseDirectory,
+            maxFileBytes: config.app.logging.maxFileBytes,
+            maxRotatedFiles: config.app.logging.maxRotatedFiles,
+            warnings: &startupWarnings
+        )
+        let alertSink = makePersistentSink(
+            path: config.app.logging.alertFilePath,
+            baseDirectory: baseDirectory,
+            maxFileBytes: config.app.logging.maxFileBytes,
+            maxRotatedFiles: config.app.logging.maxRotatedFiles,
+            warnings: &startupWarnings
+        )
+        let logger = Logger(level: level, persistentLogSink: logSink, alertSink: alertSink)
+        if logSink != nil {
+            logger.info("Persistent log file enabled: \(config.app.logging.logFilePath)")
+        }
+        if alertSink != nil {
+            logger.info("Persistent alert file enabled: \(config.app.logging.alertFilePath)")
+        }
+        for warning in startupWarnings {
+            logger.warn(warning)
+        }
+        return logger
+    }
+
+    private static func makePersistentSink(
+        path: String,
+        baseDirectory: URL,
+        maxFileBytes: UInt64,
+        maxRotatedFiles: Int,
+        warnings: inout [String]
+    ) -> PersistentLogSink? {
+        do {
+            let url = try PersistentLogSink.resolvedURL(path: path, baseDirectory: baseDirectory)
+            return try PersistentLogSink(
+                fileURL: url,
+                maxFileBytes: maxFileBytes,
+                maxRotatedFiles: maxRotatedFiles
+            )
+        } catch {
+            warnings.append("Persistent logging path '\(path)' is disabled: \(error)")
+            return nil
+        }
+    }
+
+    private static func selectedSymbols(from argument: String?) throws -> [LogicalSymbol]? {
+        guard let argument, argument.lowercased() != "all" else { return nil }
+        return try argument.split(separator: ",").map { try LogicalSymbol(String($0)) }
+    }
+
+    private static func loadHistoryDataConfig(_ url: URL) throws -> HistoryDataConfigFile {
+        do {
+            let data = try Data(contentsOf: url)
+            return try JSONDecoder().decode(HistoryDataConfigFile.self, from: data)
+        } catch {
+            throw ConfigError.invalidFile(url, error.localizedDescription)
+        }
+    }
+
+    private static func makeHistoryDataRequest(
+        _ historyConfig: HistoryDataConfigFile,
+        config: ConfigBundle
+    ) throws -> HistoricalOhlcRequest {
+        guard let mapping = config.symbols.mapping(for: historyConfig.logicalSymbol, sourceOrigin: historyConfig.sourceOrigin) else {
+            throw CLIError.invalidValue("logical_symbol")
+        }
+        return try HistoricalOhlcRequest(
+            brokerSourceId: historyConfig.brokerSourceId,
+            sourceOrigin: historyConfig.sourceOrigin,
+            logicalSymbol: historyConfig.logicalSymbol,
+            utcStartInclusive: historyConfig.fromUtc,
+            utcEndExclusive: historyConfig.toUtc,
+            expectedMT5Symbol: mapping.mt5Symbol,
+            expectedDigits: mapping.digits
+        )
+    }
+
+    private static func runLiveWithRecovery(
+        config: ConfigBundle,
+        clickHouse: ClickHouseClientProtocol,
+        logger: Logger
+    ) async throws {
+        let checkpointStore = ClickHouseCheckpointStore(
+            client: clickHouse,
+            insertBuilder: ClickHouseInsertBuilder(database: config.clickHouse.database),
+            database: config.clickHouse.database
+        )
+        let offsetStore = ClickHouseBrokerOffsetStore(client: clickHouse, database: config.clickHouse.database)
+        let scanNanoseconds = UInt64(config.app.liveScanIntervalSeconds) * 1_000_000_000
+        var bridgeBackoffSeconds: UInt64 = 5
+        var clickHouseBackoffSeconds = UInt64(max(10, config.app.liveScanIntervalSeconds))
+
+        logger.info("Starting resilient live updater; scan interval \(config.app.liveScanIntervalSeconds)s")
+        while !Task.isCancelled {
+            do {
+                let bridge = try connectBridge(config: config, logger: logger)
+                bridgeBackoffSeconds = 5
+                clickHouseBackoffSeconds = UInt64(max(10, config.app.liveScanIntervalSeconds))
+                let agent = LiveUpdateAgent(
+                    config: config,
+                    bridge: bridge,
+                    clickHouse: clickHouse,
+                    checkpointStore: checkpointStore,
+                    offsetStore: offsetStore,
+                    logger: logger
+                )
+                while !Task.isCancelled {
+                    do {
+                        try await agent.runOnce()
+                        try await Task.sleep(nanoseconds: scanNanoseconds)
+                    } catch let error as MT5BridgeError {
+                        logger.alert("MT5 bridge disconnected; live updater will reconnect", details: error.description)
+                        break
+                    } catch let error as ProtocolError {
+                        logger.alert("MT5 bridge protocol failed; live updater will reconnect after EA check", details: error.description)
+                        logger.verbose(OperationalFailureGuide.advice(for: error).formatted)
+                        break
+                    } catch let error as ClickHouseError {
+                        logger.alert("ClickHouse failed during live update; attempting local recovery", details: error.description)
+                        logger.verbose(OperationalFailureGuide.advice(for: error).formatted)
+                        if await recoverClickHouse(config: config, clickHouse: clickHouse, logger: logger) {
+                            clickHouseBackoffSeconds = UInt64(max(10, config.app.liveScanIntervalSeconds))
+                            try await Task.sleep(nanoseconds: scanNanoseconds)
+                        } else {
+                            logger.alert("ClickHouse is still unavailable; retrying database recovery in \(clickHouseBackoffSeconds)s")
+                            try await Task.sleep(nanoseconds: clickHouseBackoffSeconds * 1_000_000_000)
+                            clickHouseBackoffSeconds = min(300, clickHouseBackoffSeconds * 2)
+                        }
+                    } catch {
+                        logger.warn("Live update cycle failed safely; checkpoint was not advanced unless readback verification already passed")
+                        logger.verbose(OperationalFailureGuide.advice(for: error).formatted)
+                        try await Task.sleep(nanoseconds: scanNanoseconds)
+                    }
+                }
+            } catch let error as MT5BridgeStartupError {
+                logger.alert("MT5 bridge unavailable; retrying in \(bridgeBackoffSeconds)s", details: error.description)
+                logger.verbose(error.description)
+            } catch let error as MT5BridgeError {
+                logger.alert("MT5 bridge unavailable; retrying in \(bridgeBackoffSeconds)s", details: error.description)
+                logger.verbose(OperationalFailureGuide.advice(for: error).formatted)
+            }
+
+            try await Task.sleep(nanoseconds: bridgeBackoffSeconds * 1_000_000_000)
+            bridgeBackoffSeconds = min(300, bridgeBackoffSeconds * 2)
+        }
+    }
+
+    private static func recoverClickHouse(
+        config: ConfigBundle,
+        clickHouse: ClickHouseClientProtocol,
+        logger: Logger
+    ) async -> Bool {
+        do {
+            try await ClickHouseStartupManager(
+                config: config.clickHouse,
+                client: clickHouse,
+                logger: logger
+            ).ensureReady()
+            return true
+        } catch {
+            logger.warn("ClickHouse automatic recovery did not complete")
+            logger.verbose(OperationalFailureGuide.advice(for: error).formatted)
+            return false
+        }
+    }
+
+    private static func verifyLiveBrokerOffset(
+        bridge: MT5BridgeClient,
+        clickHouse: ClickHouseClientProtocol,
+        config: ConfigBundle,
+        terminal: TerminalInfoDTO,
+        logger: Logger
+    ) async throws -> BrokerOffsetMap {
+        let terminalIdentity = try TerminalIdentityPolicy().resolve(
+            actual: terminal,
+            brokerSourceId: config.brokerTime.brokerSourceId,
+            expected: config.brokerTime.expectedTerminalIdentity,
+            logger: logger
+        )
+        let liveSnapshot = try bridge.serverTimeSnapshot()
+        try await BrokerOffsetAutoAuthority(
+            clickHouse: clickHouse,
+            database: config.clickHouse.database,
+            logger: logger
+        ).ensureLiveSegmentIfMissing(
+            brokerSourceId: config.brokerTime.brokerSourceId,
+            terminalIdentity: terminalIdentity,
+            snapshot: liveSnapshot
+        )
+        let offsetMap = try await ClickHouseBrokerOffsetStore(
+            client: clickHouse,
+            database: config.clickHouse.database
+        ).loadVerifiedOffsetMap(
+            brokerSourceId: config.brokerTime.brokerSourceId,
+            terminalIdentity: terminalIdentity
+        )
+        logger.ok("Loaded \(offsetMap.segments.count) verified broker UTC offset segment(s) from ClickHouse for \(terminalIdentity)")
+        try BrokerOffsetRuntimeVerifier().verify(
+            snapshot: liveSnapshot,
+            offsetMap: offsetMap,
+            acceptedLiveOffsetSeconds: config.brokerTime.acceptedLiveOffsetSeconds,
+            logger: logger
+        )
+        return offsetMap
+    }
+
+    private static func resolveBrokerConfigurationIfNeeded(
+        config: ConfigBundle,
+        clickHouse: ClickHouseClientProtocol,
+        terminal: TerminalInfoDTO,
+        logger: Logger
+    ) async throws -> ConfigBundle {
+        guard config.brokerTime.isAutomatic else {
+            return config
+        }
+        let resolution = try await BrokerSourceRegistry(
+            client: clickHouse,
+            database: config.clickHouse.database
+        ).resolve(terminalInfo: terminal)
+        let action = resolution.wasCreated ? "auto-discovered" : "auto-resolved"
+        logger.ok("Broker source \(action): \(resolution.brokerSourceId.rawValue) for \(resolution.terminalIdentity)")
+        return config.resolvingBrokerSourceId(resolution.brokerSourceId)
+    }
+
+    private static func acquireInitialRuntimeLock(config: ConfigBundle, owner: String) throws -> SupervisorLock {
+        let lockId = config.brokerTime.isAutomatic ? "auto-resolution" : config.brokerTime.brokerSourceId.rawValue
+        return try SupervisorLock.acquireRuntime(brokerSourceId: lockId, owner: "\(owner)-resolution")
+    }
+
+    private static func acquireResolvedRuntimeLockIfNeeded(
+        initialLock: SupervisorLock,
+        originalConfig: ConfigBundle,
+        resolvedConfig: ConfigBundle,
+        owner: String
+    ) throws -> SupervisorLock {
+        guard originalConfig.brokerTime.isAutomatic else {
+            return initialLock
+        }
+        return try SupervisorLock.acquireRuntime(
+            brokerSourceId: resolvedConfig.brokerTime.brokerSourceId.rawValue,
+            owner: owner
+        )
+    }
+
+    private static func runRepair(
+        options: CLIOptions,
+        config: ConfigBundle,
+        clickHouse: ClickHouseClientProtocol,
+        logger: Logger
+    ) async throws {
+        guard let symbol = options.repairSymbol else {
+            throw CLIError.missingValue("--symbol")
+        }
+        guard let from = options.fromUtcDay else {
+            throw CLIError.missingValue("--from")
+        }
+        guard let to = options.toUtcDay else {
+            throw CLIError.missingValue("--to")
+        }
+        guard config.symbols.mapping(for: symbol, sourceOrigin: .mt5) != nil else {
+            throw CLIError.invalidValue("--symbol")
+        }
+
+        let originalConfig = config
+        let initialLock = try acquireInitialRuntimeLock(config: config, owner: "repair")
+        logger.ok("Initial broker runtime lock acquired: \(initialLock.path)")
+        let bridge = try connectBridge(config: config, logger: logger)
+        let terminal = try bridge.terminalInfo()
+        let config = try await resolveBrokerConfigurationIfNeeded(
+            config: config,
+            clickHouse: clickHouse,
+            terminal: terminal,
+            logger: logger
+        )
+        let lock = try acquireResolvedRuntimeLockIfNeeded(
+            initialLock: initialLock,
+            originalConfig: originalConfig,
+            resolvedConfig: config,
+            owner: "repair"
+        )
+        logger.ok("Broker runtime lock acquired: \(lock.path)")
+        let offsetMap = try await verifyLiveBrokerOffset(
+            bridge: bridge,
+            clickHouse: clickHouse,
+            config: config,
+            terminal: terminal,
+            logger: logger
+        )
+        let ranges = try RepairRangePlanner().mt5Ranges(
+            brokerSourceId: config.brokerTime.brokerSourceId,
+            logicalSymbol: symbol,
+            utcStart: from,
+            utcEndExclusive: to,
+            offsetMap: offsetMap
+        )
+        let verifier = HistoricalRangeVerifier(
+            config: config,
+            bridge: bridge,
+            clickHouse: clickHouse,
+            offsetMap: offsetMap,
+            logger: logger
+        )
+        let repairAgent = RepairAgent(
+            clickHouse: clickHouse,
+            database: config.clickHouse.database,
+            logger: logger
+        )
+        let policy = RepairPolicy()
+        for range in ranges {
+            let outcome = try await verifier.verify(range: range)
+            let decision = policy.decide(
+                verification: outcome.result,
+                mt5Available: !outcome.mt5Bars.isEmpty,
+                sourceComplete: outcome.sourceComplete,
+                utcMappingAmbiguous: false
+            )
+            try await repairAgent.repairCanonicalRange(
+                range: range,
+                replacementBars: outcome.mt5Bars,
+                decision: decision,
+                sourceComplete: outcome.sourceComplete,
+                verifiedCoverage: outcome.verifiedCoverage
+            )
+            if case .noRepairNeeded = decision {
+                continue
+            } else {
+                let recheck = try await verifier.verify(range: range)
+                guard recheck.result.isClean else {
+                    throw RepairError.refused("post-repair verification still reports \(recheck.result.mismatches.count) mismatch(es)")
+                }
+            }
+        }
+        logger.ok("\(symbol.rawValue): repair command completed for UTC range \(from.rawValue)..<\(to.rawValue)")
+        _ = initialLock
+        _ = lock
+    }
+
+    fileprivate static func parseUtcDay(_ value: String) throws -> UtcSecond {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let date = formatter.date(from: value) else {
+            throw CLIError.invalidValue(value)
+        }
+        return UtcSecond(rawValue: Int64(date.timeIntervalSince1970))
+    }
+
+    private static func printUsage() {
+        print("""
+        FXDatabase
+
+        Start FXDatabase without launch-time input, then type commands at the `>` prompt.
+
+        Interactive commands:
+          migrate
+          bridge-check
+          symbol-check
+          backfill --symbols all
+          backfill --symbols EURUSD,USDJPY
+          live
+          supervise [--with-backfill] [--supervisor-cycles N]
+          startcheck
+          failure-guide
+          verify
+          verify --random-ranges 20
+          repair --symbol EURUSD --from 2020-01-01 --to 2020-02-01
+          data-check --config Config/history_data.json
+          fxbacktest-api [--api-host 127.0.0.1] [--api-port 5066]
+          health-api [--api-host 127.0.0.1] [--api-port 5067]
+
+        Command options:
+          --config-dir Config
+          --migrations-dir Migrations
+          --config Config/history_data.json   # data-check only
+          --api-host 127.0.0.1                # fxbacktest-api / health-api
+          --api-port 5066                     # fxbacktest-api / health-api
+          --verbose
+          --debug
+
+        Shell control commands:
+          status
+          stop
+          wait
+          help
+          exit
+        """)
+    }
+}
+
+enum Command: Equatable {
+    case interactive
+    case migrate
+    case bridgeCheck
+    case symbolCheck
+    case backfill
+    case live
+    case supervise
+    case startcheck
+    case failureGuide
+    case verify
+    case repair
+    case exportCache
+    case dataCheck
+    case fxBacktestAPI
+    case healthAPI
+    case backtest
+    case optimize
+    case help
+}
+
+private extension Command {
+    var requiresClickHouseStartupCheck: Bool {
+        switch self {
+        case .help, .interactive, .failureGuide, .symbolCheck, .exportCache, .backtest, .optimize:
+            return false
+        case .migrate, .bridgeCheck, .backfill, .live, .supervise, .startcheck, .verify, .repair, .dataCheck, .fxBacktestAPI, .healthAPI:
+            return true
+        }
+    }
+
+    var unavailableReason: String? {
+        switch self {
+        case .exportCache:
+            return "export-cache is intentionally disabled. FXDatabase reads verified canonical bars directly from ClickHouse so stale local caches cannot survive verifier repairs."
+        case .backtest:
+            return "backtest has been removed from FXDatabase. Use fxbacktest-api to serve verified history, then run strategies in FXBacktest or another external Swift app through FXBacktest API v1."
+        case .optimize:
+            return "optimize has been removed from FXDatabase. Long-running optimization belongs in an external Swift app with its own durable job model; FXDatabase only serves verified OHLC data."
+        case .interactive, .migrate, .bridgeCheck, .symbolCheck, .backfill, .live, .supervise, .startcheck, .failureGuide, .verify, .repair, .dataCheck, .fxBacktestAPI, .healthAPI, .help:
+            return nil
+        }
+    }
+}
+
+private struct MT5BridgeStartupError: Error, CustomStringConvertible {
+    let error: MT5BridgeError
+    let config: MT5BridgeConfig
+
+    var description: String {
+        switch error {
+        case .bindFailed:
+            return """
+            Swift could not open the MT5 bridge listener on \(config.host):\(config.port).
+            Reason: \(error.description)
+            Next steps:
+              1. Check what owns the port: lsof -nP -iTCP:\(config.port) -sTCP:LISTEN
+              2. Stop the other FXDatabase process, or change Config/mt5_bridge.json to another free port.
+              3. Reattach FXDatabase with the same SwiftHost/SwiftPort values.
+              4. At the FXDatabase prompt run: startcheck --config-dir Config --migrations-dir Migrations
+            """
+        case .acceptTimedOut:
+            return listenModeGuidance(reason: error.description)
+        case .connectFailed:
+            return connectModeGuidance(reason: error.description)
+        case .invalidHost:
+            return """
+            The MT5 bridge host in Config/mt5_bridge.json is invalid.
+            Reason: \(error.description)
+            Next steps:
+              1. For local MT5/Wine, set host to 127.0.0.1.
+              2. Keep the EA input SwiftHost exactly the same.
+              3. At the FXDatabase prompt run: startcheck --config-dir Config --migrations-dir Migrations
+            """
+        default:
+            switch config.mode {
+            case .listen:
+                return listenModeGuidance(reason: error.description)
+            case .connect:
+                return connectModeGuidance(reason: error.description)
+            }
+        }
+    }
+
+    private func listenModeGuidance(reason: String) -> String {
+        """
+        MT5 did not connect to the Swift listener at \(config.host):\(config.port).
+        Reason: \(reason)
+        Next steps:
+          1. Start MetaTrader 5 under Wine.
+          2. Attach the compiled FXDatabase EA to any chart.
+          3. In the EA inputs set SwiftHost=\(config.host) and SwiftPort=\(config.port).
+          4. Enable Algo Trading and allow localhost/socket access in MT5/Wine when prompted.
+          5. Leave this FXDatabase session running while the EA connects, or run at the prompt: startcheck --config-dir Config --migrations-dir Migrations
+        """
+    }
+
+    private func connectModeGuidance(reason: String) -> String {
+        """
+        Swift could not connect to the MT5 bridge at \(config.host):\(config.port).
+        Reason: \(reason)
+        Next steps:
+          1. Confirm the MT5 EA bridge is already listening on \(config.host):\(config.port), or switch Config/mt5_bridge.json mode to "listen".
+          2. Check the port: lsof -nP -iTCP:\(config.port)
+          3. Confirm macOS/Wine firewall prompts are allowed.
+          4. At the FXDatabase prompt run: startcheck --config-dir Config --migrations-dir Migrations
+        """
+    }
+}
+
+struct CLIOptions {
+    let command: Command
+    let configDirectory: URL
+    let migrationsDirectory: URL
+    let overrideLogLevel: LogLevel?
+    let symbolsArgument: String?
+    let randomRanges: Int?
+    let repairSymbol: LogicalSymbol?
+    let fromUtcDay: UtcSecond?
+    let toUtcDay: UtcSecond?
+    let noBridgeRequested: Bool
+    let runBackfillOnStart: Bool?
+    let supervisorCycles: Int?
+    let compileEA: Bool
+    let bridgeChecks: Bool
+    let compileTimeoutSeconds: TimeInterval
+    let commandConfigPath: URL?
+    let apiHost: String
+    let apiPort: UInt16
+
+    init(arguments: [String]) throws {
+        guard let first = arguments.first else {
+            self.command = .help
+            self.configDirectory = URL(fileURLWithPath: "Config")
+            self.migrationsDirectory = URL(fileURLWithPath: "Migrations")
+            self.overrideLogLevel = nil
+            self.symbolsArgument = nil
+            self.randomRanges = nil
+            self.repairSymbol = nil
+            self.fromUtcDay = nil
+            self.toUtcDay = nil
+            self.noBridgeRequested = false
+            self.runBackfillOnStart = nil
+            self.supervisorCycles = nil
+            self.compileEA = true
+            self.bridgeChecks = true
+            self.compileTimeoutSeconds = 120
+            self.commandConfigPath = nil
+            self.apiHost = "127.0.0.1"
+            self.apiPort = 5066
+            return
+        }
+
+        self.command = try Self.parseCommand(first)
+        var configDirectory = URL(fileURLWithPath: "Config")
+        var migrationsDirectory = URL(fileURLWithPath: "Migrations")
+        var overrideLogLevel: LogLevel?
+        var symbolsArgument: String?
+        var randomRanges: Int?
+        var repairSymbol: LogicalSymbol?
+        var fromUtcDay: UtcSecond?
+        var toUtcDay: UtcSecond?
+        var noBridgeRequested = false
+        var runBackfillOnStart: Bool?
+        var supervisorCycles: Int?
+        var compileEA = true
+        var bridgeChecks = true
+        var compileTimeoutSeconds: TimeInterval = 120
+        var commandConfigPath: URL?
+        var apiHost = "127.0.0.1"
+        var apiPort: UInt16 = 5066
+
+        var index = 1
+        while index < arguments.count {
+            let arg = arguments[index]
+            switch arg {
+            case "--config-dir":
+                index += 1
+                guard index < arguments.count else { throw CLIError.missingValue(arg) }
+                configDirectory = URL(fileURLWithPath: arguments[index])
+            case "--migrations-dir":
+                index += 1
+                guard index < arguments.count else { throw CLIError.missingValue(arg) }
+                migrationsDirectory = URL(fileURLWithPath: arguments[index])
+            case "--symbols":
+                index += 1
+                guard index < arguments.count else { throw CLIError.missingValue(arg) }
+                symbolsArgument = arguments[index]
+            case "--random-ranges":
+                index += 1
+                guard index < arguments.count, let value = Int(arguments[index]), value >= 0 else {
+                    throw CLIError.invalidValue(arg)
+                }
+                randomRanges = value
+            case "--symbol":
+                index += 1
+                guard index < arguments.count else { throw CLIError.missingValue(arg) }
+                repairSymbol = try LogicalSymbol(arguments[index])
+            case "--from":
+                index += 1
+                guard index < arguments.count else { throw CLIError.missingValue(arg) }
+                fromUtcDay = try FXDatabaseCLI.parseUtcDay(arguments[index])
+            case "--to":
+                index += 1
+                guard index < arguments.count else { throw CLIError.missingValue(arg) }
+                toUtcDay = try FXDatabaseCLI.parseUtcDay(arguments[index])
+            case "--no-bridge":
+                noBridgeRequested = true
+            case "--with-backfill":
+                runBackfillOnStart = true
+            case "--without-backfill":
+                runBackfillOnStart = false
+            case "--supervisor-cycles":
+                index += 1
+                guard index < arguments.count, let value = Int(arguments[index]), value > 0 else {
+                    throw CLIError.invalidValue(arg)
+                }
+                supervisorCycles = value
+            case "--skip-ea-compile":
+                compileEA = false
+            case "--skip-bridge":
+                bridgeChecks = false
+            case "--compile-timeout-seconds":
+                index += 1
+                guard index < arguments.count, let value = TimeInterval(arguments[index]), value > 0, value <= 1800 else {
+                    throw CLIError.invalidValue(arg)
+                }
+                compileTimeoutSeconds = value
+            case "--verbose":
+                overrideLogLevel = .verbose
+            case "--debug":
+                overrideLogLevel = .debug
+            case "--config":
+                index += 1
+                guard index < arguments.count else { throw CLIError.missingValue(arg) }
+                commandConfigPath = URL(fileURLWithPath: arguments[index])
+            case "--api-host":
+                index += 1
+                guard index < arguments.count else { throw CLIError.missingValue(arg) }
+                apiHost = arguments[index]
+            case "--api-port":
+                index += 1
+                guard index < arguments.count, let value = UInt16(arguments[index]), value > 0 else {
+                    throw CLIError.invalidValue(arg)
+                }
+                apiPort = value
+            default:
+                throw CLIError.unknownOption(arg)
+            }
+            index += 1
+        }
+
+        if command == .repair, let fromUtcDay, let toUtcDay, fromUtcDay.rawValue >= toUtcDay.rawValue {
+            throw CLIError.invalidValue("--from/--to")
+        }
+        if commandConfigPath != nil && command != .dataCheck && command != .backtest && command != .optimize {
+            throw CLIError.invalidValue("--config")
+        }
+        if (apiHost != "127.0.0.1" || apiPort != 5066) && command != .fxBacktestAPI && command != .healthAPI {
+            throw CLIError.invalidValue("--api-host/--api-port")
+        }
+
+        self.configDirectory = configDirectory
+        self.migrationsDirectory = migrationsDirectory
+        self.overrideLogLevel = overrideLogLevel
+        self.symbolsArgument = symbolsArgument
+        self.randomRanges = randomRanges
+        self.repairSymbol = repairSymbol
+        self.fromUtcDay = fromUtcDay
+        self.toUtcDay = toUtcDay
+        self.noBridgeRequested = noBridgeRequested
+        self.runBackfillOnStart = runBackfillOnStart
+        self.supervisorCycles = supervisorCycles
+        self.compileEA = compileEA
+        self.bridgeChecks = bridgeChecks
+        self.compileTimeoutSeconds = compileTimeoutSeconds
+        self.commandConfigPath = commandConfigPath
+        self.apiHost = apiHost
+        self.apiPort = apiPort
+    }
+
+    private static func parseCommand(_ value: String) throws -> Command {
+        switch value {
+        case "shell", "interactive", "console": return .interactive
+        case "migrate": return .migrate
+        case "bridge-check": return .bridgeCheck
+        case "symbol-check": return .symbolCheck
+        case "backfill": return .backfill
+        case "live": return .live
+        case "supervise": return .supervise
+        case "startcheck", "-startcheck", "--startcheck": return .startcheck
+        case "failure-guide": return .failureGuide
+        case "verify": return .verify
+        case "repair": return .repair
+        case "export-cache": return .exportCache
+        case "data-check": return .dataCheck
+        case "fxbacktest-api": return .fxBacktestAPI
+        case "health-api": return .healthAPI
+        case "backtest": return .backtest
+        case "optimize": return .optimize
+        case "help", "--help", "-h": return .help
+        default: throw CLIError.unknownCommand(value)
+        }
+    }
+
+    func shouldConnectBridgeForVerify(randomRangeCount: Int) -> Bool {
+        !noBridgeRequested && randomRangeCount > 0
+    }
+}
+
+enum CLIError: Error, CustomStringConvertible {
+    case unknownCommand(String)
+    case unknownOption(String)
+    case missingValue(String)
+    case invalidValue(String)
+    case commandUnavailable(String)
+
+    var description: String {
+        switch self {
+        case .unknownCommand(let value):
+            return "Unknown command '\(value)'."
+        case .unknownOption(let value):
+            return "Unknown option '\(value)'."
+        case .missingValue(let option):
+            return "Missing value for \(option)."
+        case .invalidValue(let option):
+            return "Invalid value for \(option)."
+        case .commandUnavailable(let reason):
+            return reason
+        }
+    }
+}

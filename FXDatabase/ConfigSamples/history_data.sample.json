@@ -1,0 +1,8 @@
+{
+  "broker_source_id": "raw-trading-ltd-icmarkets-sc-mt5-4-account-12345678",
+  "source_origin": "MT5",
+  "logical_symbol": "EURUSD",
+  "from_utc": 1577836800,
+  "to_utc": 1735689600,
+  "use_metal": false
+}

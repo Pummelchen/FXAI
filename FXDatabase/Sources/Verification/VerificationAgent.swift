@@ -1,0 +1,194 @@
+import AppCore
+import ClickHouse
+import Config
+import Domain
+import Foundation
+import Ingestion
+import MT5Bridge
+import TimeMapping
+import Validation
+
+public struct VerificationAgent: Sendable {
+    private let config: ConfigBundle
+    private let bridge: MT5BridgeClient?
+    private let clickHouse: ClickHouseClientProtocol
+    private let logger: Logger
+
+    public init(config: ConfigBundle, bridge: MT5BridgeClient?, clickHouse: ClickHouseClientProtocol, logger: Logger) {
+        self.config = config
+        self.bridge = bridge
+        self.clickHouse = clickHouse
+        self.logger = logger
+    }
+
+    public func startupChecks(randomRanges: Int) async throws {
+        guard randomRanges >= 0 else {
+            throw VerificationError.invalidRandomRangeCount(randomRanges)
+        }
+        var integrityIssues: [String] = []
+
+        let brokerWhere = config.brokerTime.isAutomatic
+            ? "1 = 1"
+            : "broker_source_id = '\(sqlLiteral(config.brokerTime.brokerSourceId.rawValue))'"
+
+        logger.verify("Running duplicate-key check")
+        let duplicateRows = try await clickHouse.execute(.select("""
+        SELECT broker_source_id, source_origin, logical_symbol, ts_utc, count()
+        FROM \(config.clickHouse.database).ohlc_m1_canonical
+        WHERE \(brokerWhere)
+        GROUP BY broker_source_id, source_origin, logical_symbol, ts_utc
+        HAVING count() > 1
+        LIMIT 20
+        FORMAT TabSeparated
+        """))
+        if !duplicateRows.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let issue = "Duplicate canonical keys found:\n\(duplicateRows)"
+            integrityIssues.append(issue)
+            logger.warn(issue)
+        }
+
+        logger.verify("Running OHLC invariant check")
+        let invariantCount = try await clickHouse.execute(.select("""
+        SELECT count()
+        FROM \(config.clickHouse.database).ohlc_m1_canonical
+        WHERE \(brokerWhere)
+          AND (open_scaled <= 0 OR high_scaled < open_scaled OR high_scaled < close_scaled OR high_scaled < low_scaled OR low_scaled > open_scaled OR low_scaled > close_scaled)
+        FORMAT TabSeparated
+        """))
+        if invariantCount.trimmingCharacters(in: .whitespacesAndNewlines) != "0" {
+            let issue = "OHLC invariant violations found: \(invariantCount.trimmingCharacters(in: .whitespacesAndNewlines))"
+            integrityIssues.append(issue)
+            logger.warn(issue)
+        }
+
+        logger.verify("Running canonical UTC offset confidence check")
+        let unverifiedCount = try await clickHouse.execute(.select("""
+        SELECT count()
+        FROM \(config.clickHouse.database).ohlc_m1_canonical
+        WHERE \(brokerWhere)
+          AND offset_confidence != 'verified'
+        FORMAT TabSeparated
+        """))
+        if unverifiedCount.trimmingCharacters(in: .whitespacesAndNewlines) != "0" {
+            let issue = "Canonical rows with non-verified UTC offsets found: \(unverifiedCount.trimmingCharacters(in: .whitespacesAndNewlines))"
+            integrityIssues.append(issue)
+            logger.warn(issue)
+        }
+
+        logger.verify("Running unfinished ingest operation check")
+        let unfinishedIngestCount = try await clickHouse.execute(.select("""
+        SELECT count()
+        FROM (
+            SELECT source_origin, operation_type, batch_id, argMax(status, tuple(event_at_utc, status_rank)) AS latest_status
+            FROM \(config.clickHouse.database).ingest_operations
+            WHERE \(brokerWhere)
+            GROUP BY source_origin, operation_type, batch_id
+        )
+        WHERE NOT (
+            (operation_type IN ('backfill', 'live') AND latest_status IN ('checkpointed', 'empty_coverage_verified'))
+            OR (operation_type = 'repair' AND latest_status = 'repair_verified')
+        )
+        FORMAT TabSeparated
+        """))
+        if unfinishedIngestCount.trimmingCharacters(in: .whitespacesAndNewlines) != "0" {
+            let issue = "Unfinished ingest operation batches found: \(unfinishedIngestCount.trimmingCharacters(in: .whitespacesAndNewlines))"
+            integrityIssues.append(issue)
+            logger.warn(issue)
+        }
+
+        guard integrityIssues.isEmpty else {
+            throw VerificationError.databaseIntegrityFailed(integrityIssues)
+        }
+
+        guard randomRanges > 0 else {
+            logger.verify("Random historical cross-check disabled for this run")
+            return
+        }
+        guard let bridge else {
+            logger.warn("Random MT5 cross-check skipped because no MT5 bridge connection is active")
+            return
+        }
+        let terminal = try bridge.terminalInfo()
+        let terminalIdentity = try TerminalIdentityPolicy().resolve(
+            actual: terminal,
+            brokerSourceId: config.brokerTime.brokerSourceId,
+            expected: config.brokerTime.expectedTerminalIdentity,
+            logger: logger
+        )
+        let offsetStore = ClickHouseBrokerOffsetStore(client: clickHouse, database: config.clickHouse.database)
+        let offsetMap = try await offsetStore.loadVerifiedOffsetMap(
+            brokerSourceId: config.brokerTime.brokerSourceId,
+            terminalIdentity: terminalIdentity
+        )
+        try BrokerOffsetRuntimeVerifier().verify(
+            snapshot: bridge.serverTimeSnapshot(),
+            offsetMap: offsetMap,
+            acceptedLiveOffsetSeconds: config.brokerTime.acceptedLiveOffsetSeconds,
+            logger: logger
+        )
+        let verifier = HistoricalRangeVerifier(
+            config: config,
+            bridge: bridge,
+            clickHouse: clickHouse,
+            offsetMap: offsetMap,
+            logger: logger
+        )
+        let checkpointStore = ClickHouseCheckpointStore(
+            client: clickHouse,
+            insertBuilder: ClickHouseInsertBuilder(database: config.clickHouse.database),
+            database: config.clickHouse.database
+        )
+        var generator = SystemRandomNumberGenerator()
+        let selector = RandomRangeSelector()
+        let mt5Mappings = config.symbols.symbols.filter { $0.sourceOrigin == .mt5 }
+        for index in 1...randomRanges {
+            guard let mapping = mt5Mappings.randomElement(using: &generator) else { return }
+            guard let state = try await checkpointStore.latestState(
+                brokerSourceId: config.brokerTime.brokerSourceId,
+                sourceOrigin: mapping.sourceOrigin,
+                logicalSymbol: mapping.logicalSymbol
+            ) else {
+                logger.warn("\(mapping.logicalSymbol.rawValue): random verification skipped because no checkpoint exists")
+                continue
+            }
+            let range = try selector.selectMonth(
+                brokerSourceId: config.brokerTime.brokerSourceId,
+                sourceOrigin: mapping.sourceOrigin,
+                logicalSymbol: mapping.logicalSymbol,
+                oldest: state.oldestMT5ServerTime,
+                latestClosed: state.latestIngestedClosedMT5ServerTime,
+                random: &generator
+            )
+            let rangeLabel = OperatorStatusText.monthRangeLabel(start: range.mt5Start, endExclusive: range.mt5EndExclusive)
+            logger.verify("Random MT5 cross-check \(index)/\(randomRanges): \(range.logicalSymbol.rawValue) - checking \(rangeLabel)")
+            let outcome = try await verifier.verify(range: range)
+            guard outcome.result.isClean else {
+                throw VerificationError.randomCrossCheckFailed(
+                    symbol: range.logicalSymbol,
+                    mismatchCount: outcome.result.mismatches.count
+                )
+            }
+        }
+    }
+
+    private func sqlLiteral(_ value: String) -> String {
+        value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "\\'")
+    }
+}
+
+public enum VerificationError: Error, CustomStringConvertible, Sendable {
+    case invalidRandomRangeCount(Int)
+    case databaseIntegrityFailed([String])
+    case randomCrossCheckFailed(symbol: LogicalSymbol, mismatchCount: Int)
+
+    public var description: String {
+        switch self {
+        case .invalidRandomRangeCount(let count):
+            return "Random verification range count must not be negative; got \(count)."
+        case .databaseIntegrityFailed(let issues):
+            return "Database integrity checks failed: \(issues.joined(separator: " | "))"
+        case .randomCrossCheckFailed(let symbol, let mismatchCount):
+            return "\(symbol.rawValue): random MT5 cross-check found \(mismatchCount) mismatch(es)."
+        }
+    }
+}

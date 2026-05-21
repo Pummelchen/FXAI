@@ -1,0 +1,13 @@
+{
+  "url": "http://localhost:8123",
+  "database": "fxdatabase",
+  "username": null,
+  "password": null,
+  "passwordEnvironmentVariable": null,
+  "allowPlaintextRemotePassword": false,
+  "requestTimeoutSeconds": 60,
+  "retryCount": 2,
+  "allowInsecureRemoteHTTP": false,
+  "waitEndOfQuery": true,
+  "queryIdPrefix": "fxdatabase"
+}

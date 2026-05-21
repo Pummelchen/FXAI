@@ -8,7 +8,7 @@ FXAI is an MT5-native framework for researching, testing, auditing, and operatin
 
 FXAI is not a single black-box strategy. It is a governed decision framework: shared data contracts, model plugins, runtime risk layers, audit gates, promotion artifacts, and an optional GUI all work from the same source of truth.
 
-FXBacktest is included as ordinary tracked source in `FXBacktest/`. Clone FXAI normally; no submodule initialization is required for the Swift optimizer:
+FXBacktest and FXDatabase are included as ordinary tracked source in `FXBacktest/` and `FXDatabase/`. Clone FXAI normally; no submodule initialization is required for the Swift projects:
 
 ```bash
 git clone https://github.com/Pummelchen/FXAI.git
@@ -27,7 +27,7 @@ git clone https://github.com/Pummelchen/FXAI.git
 ## Core Benefits
 
 - MT5-native live runtime: no external live inference service and no DLL dependency for trade decisions.
-- One canonical market contract: `M1 OHLC + spread`, with raw MT5 data access isolated behind the FXAI data pipeline.
+- One canonical historical market contract: verified `M1 OHLCV` from FXDatabase, with MT5 raw data access isolated behind the FXDatabase bridge and FXAI data pipeline.
 - Plugin-based model layer: statistical, tree, linear, sequence, factor, trend, regime, policy, and ensemble families share one prediction contract.
 - Runtime control plane: NewsPulse, Rates Engine, Cross Asset, Microstructure, Adaptive Router, Dynamic Ensemble, Probabilistic Calibration, Execution Quality, Drift Governance, and Pair Network layers can explain or suppress unsafe trades.
 - Audit and promotion discipline: candidates are checked through repeatable compile, deterministic, pytest, audit, benchmark, and release-gate workflows before promotion.
@@ -55,6 +55,7 @@ Recommended first pages:
 - [Data Policy](FXAI/Wiki/Data%20Policy.md)
 - [Project Structure](FXAI/Wiki/Project%20Structure.md)
 - [FXBacktest Subproject](FXBacktest/README.md)
+- [FXDatabase Subproject](FXDatabase/README.md)
 
 Subsystem guides:
 

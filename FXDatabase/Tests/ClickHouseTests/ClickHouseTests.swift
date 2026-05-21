@@ -1,0 +1,169 @@
+@testable import ClickHouse
+import Config
+import Domain
+import XCTest
+
+final class ClickHouseTests: XCTestCase {
+    func testClickHouseExceptionParsing() {
+        let parser = ClickHouseErrorParser()
+        XCTAssertNotNil(parser.parseException(in: "Code: 62. DB::Exception: Syntax error"))
+        XCTAssertNil(parser.parseException(in: "1\n"))
+    }
+
+    func testClickHouseBasicAuthorizationHeader() {
+        let header = ClickHouseHTTPClient.basicAuthorization(username: "default", password: "secret")
+        XCTAssertEqual(header, "Basic ZGVmYXVsdDpzZWNyZXQ=")
+        XCTAssertNil(ClickHouseHTTPClient.basicAuthorization(username: nil, password: "secret"))
+        XCTAssertNil(ClickHouseHTTPClient.basicAuthorization(username: "", password: "secret"))
+    }
+
+    func testClickHouseQueryIdIsTraceableAndSanitized() throws {
+        let id = ClickHouseHTTPClient.queryId(
+            prefix: "fx database!å",
+            attempt: 2,
+            uuid: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
+        )
+        XCTAssertEqual(id, "fxdatabase-00000000-0000-0000-0000-000000000001-a2")
+    }
+
+    func testClickHouseRequestURLIncludesSafetySettings() throws {
+        let config = ClickHouseConfig(
+            url: try XCTUnwrap(URL(string: "https://clickhouse.example.com:8443")),
+            database: "fxdatabase",
+            username: "default",
+            password: nil,
+            requestTimeoutSeconds: 60,
+            retryCount: 2,
+            allowInsecureRemoteHTTP: false,
+            waitEndOfQuery: true,
+            queryIdPrefix: "fxdatabase"
+        )
+        let url = try ClickHouseHTTPClient.requestURL(
+            config: config,
+            query: .select("SELECT 1"),
+            queryID: "fxdatabase-test-a1"
+        )
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let queryItems = try XCTUnwrap(components.queryItems)
+        let items = Dictionary(uniqueKeysWithValues: queryItems.map { ($0.name, $0.value ?? "") })
+        XCTAssertEqual(items["database"], "fxdatabase")
+        XCTAssertEqual(items["wait_end_of_query"], "1")
+        XCTAssertEqual(items["send_progress_in_http_headers"], "0")
+        XCTAssertEqual(items["query_id"], "fxdatabase-test-a1")
+    }
+
+    func testCanonicalRangeDeleteIsBrokerScopedAndSynchronous() throws {
+        let bars = [try makeBar(mt5: 120, utc: 60), try makeBar(mt5: 180, utc: 120)]
+        let query = try ClickHouseInsertBuilder(database: "db").canonicalRangeDelete(bars)
+        XCTAssertTrue(query.sql.contains("broker_source_id = 'demo'"))
+        XCTAssertTrue(query.sql.contains("logical_symbol = 'EURUSD'"))
+        XCTAssertTrue(query.sql.contains("mt5_server_ts_raw >= 120"))
+        XCTAssertTrue(query.sql.contains("mt5_server_ts_raw <= 180"))
+        XCTAssertTrue(query.sql.contains("ts_utc >= 60"))
+        XCTAssertTrue(query.sql.contains("ts_utc <= 120"))
+        XCTAssertTrue(query.sql.contains("mutations_sync = 1"))
+        XCTAssertTrue(query.isIdempotent)
+    }
+
+    func testCanonicalRangeDeleteRejectsMixedSymbols() throws {
+        let eurusd = try makeBar(mt5: 120, utc: 60)
+        let usdjpy = try makeBar(mt5: 180, utc: 120, logicalSymbol: "USDJPY")
+        XCTAssertThrowsError(try ClickHouseInsertBuilder(database: "db").canonicalRangeDelete([eurusd, usdjpy]))
+    }
+
+    func testCanonicalRangeRejectsMixedMT5SymbolForSameLogicalSymbol() throws {
+        let first = try makeBar(mt5: 120, utc: 60, logicalSymbol: "EURUSD", mt5Symbol: "EURUSD")
+        let second = try makeBar(mt5: 180, utc: 120, logicalSymbol: "EURUSD", mt5Symbol: "EURUSD.a")
+        XCTAssertThrowsError(try ClickHouseInsertBuilder(database: "db").canonicalRangeDelete([first, second]))
+    }
+
+    func testCanonicalRangeRejectsMixedDigits() throws {
+        let first = try makeBar(mt5: 120, utc: 60, digits: 5)
+        let second = try makeBar(mt5: 180, utc: 120, digits: 3)
+        XCTAssertThrowsError(try ClickHouseInsertBuilder(database: "db").canonicalBarsInsert([first, second]))
+    }
+
+    func testCanonicalRangeDeleteRejectsDuplicateTimestamps() throws {
+        let first = try makeBar(mt5: 120, utc: 60)
+        let duplicate = try makeBar(mt5: 120, utc: 60)
+        XCTAssertThrowsError(try ClickHouseInsertBuilder(database: "db").canonicalRangeDelete([first, duplicate]))
+    }
+
+    func testCanonicalRangeDeleteRejectsUnverifiedOffsets() throws {
+        let bar = try makeBar(mt5: 120, utc: 60, offsetConfidence: .inferred)
+        XCTAssertThrowsError(try ClickHouseInsertBuilder(database: "db").canonicalRangeDelete([bar]))
+        XCTAssertThrowsError(try ClickHouseInsertBuilder(database: "db").canonicalBarsInsert([bar]))
+    }
+
+    func testCanonicalRangeIntegrityCheckIsBrokerScoped() throws {
+        let bars = [try makeBar(mt5: 120, utc: 60), try makeBar(mt5: 180, utc: 120)]
+        let query = try ClickHouseInsertBuilder(database: "db").canonicalRangeIntegrityCheck(bars)
+        XCTAssertTrue(query.sql.contains("broker_source_id = 'demo'"))
+        XCTAssertTrue(query.sql.contains("logical_symbol = 'EURUSD'"))
+        XCTAssertTrue(query.sql.contains("ts_utc >= 60"))
+        XCTAssertTrue(query.sql.contains("ts_utc <= 120"))
+        XCTAssertTrue(query.sql.contains("uniqExact(mt5_server_ts_raw)"))
+        XCTAssertTrue(query.sql.contains("uniqExact(ts_utc)"))
+        XCTAssertTrue(query.sql.contains("uniqExact(mt5_symbol)"))
+        XCTAssertTrue(query.sql.contains("countIf(offset_confidence != 'verified')"))
+    }
+
+    func testCanonicalRangeReadbackRowsAreBrokerScopedAndOrdered() throws {
+        let bars = [try makeBar(mt5: 120, utc: 60), try makeBar(mt5: 180, utc: 120)]
+        let query = try ClickHouseInsertBuilder(database: "db").canonicalRangeReadbackRows(bars)
+        XCTAssertTrue(query.sql.contains("SELECT source_origin, mt5_symbol, timeframe, mt5_server_ts_raw, ts_utc"))
+        XCTAssertTrue(query.sql.contains("server_utc_offset_seconds, offset_source, offset_confidence"))
+        XCTAssertTrue(query.sql.contains("open_scaled, high_scaled, low_scaled, close_scaled, volume, digits, bar_hash"))
+        XCTAssertTrue(query.sql.contains("broker_source_id = 'demo'"))
+        XCTAssertTrue(query.sql.contains("logical_symbol = 'EURUSD'"))
+        XCTAssertTrue(query.sql.contains("ts_utc >= 60"))
+        XCTAssertTrue(query.sql.contains("ts_utc <= 120"))
+        XCTAssertTrue(query.sql.contains("ORDER BY mt5_server_ts_raw ASC, ts_utc ASC"))
+    }
+
+    func testCanonicalConflictCandidateQueryIsBrokerScoped() throws {
+        let bars = [try makeBar(mt5: 120, utc: 60), try makeBar(mt5: 180, utc: 120)]
+        let query = try ClickHouseInsertBuilder(database: "db").canonicalConflictCandidates(bars)
+        XCTAssertTrue(query.sql.contains("SELECT ts_utc, bar_hash, open_scaled, high_scaled, low_scaled, close_scaled"))
+        XCTAssertTrue(query.sql.contains("FROM db.ohlc_m1_canonical"))
+        XCTAssertTrue(query.sql.contains("broker_source_id = 'demo'"))
+        XCTAssertTrue(query.sql.contains("logical_symbol = 'EURUSD'"))
+        XCTAssertTrue(query.sql.contains("ts_utc >= 60"))
+        XCTAssertTrue(query.sql.contains("ts_utc <= 120"))
+    }
+
+    private func makeBar(
+        mt5: Int64,
+        utc: Int64,
+        logicalSymbol: String = "EURUSD",
+        mt5Symbol mt5SymbolValue: String? = nil,
+        digits digitsValue: Int = 5,
+        offsetConfidence: OffsetConfidence = .verified
+    ) throws -> ValidatedBar {
+        let broker = try BrokerSourceId("demo")
+        let logical = try LogicalSymbol(logicalSymbol)
+        let mt5Symbol = try MT5Symbol(mt5SymbolValue ?? logicalSymbol)
+        let digits = try Digits(digitsValue)
+        let priceText = digitsValue == 3 ? "1.100" : "1.10000"
+        let open = try PriceScaled.fromDecimalString(priceText, digits: digits)
+        return ValidatedBar(
+            brokerSourceId: broker,
+            logicalSymbol: logical,
+            mt5Symbol: mt5Symbol,
+            timeframe: .m1,
+            mt5ServerTime: MT5ServerSecond(rawValue: mt5),
+            utcTime: UtcSecond(rawValue: utc),
+            serverUtcOffset: OffsetSeconds(rawValue: 60),
+            offsetSource: .configured,
+            offsetConfidence: offsetConfidence,
+            open: open,
+            high: open,
+            low: open,
+            close: open,
+            digits: digits,
+            batchId: BatchId(rawValue: "batch"),
+            sourceStatus: .mt5ClosedBar,
+            ingestedAtUtc: UtcSecond(rawValue: 1)
+        )
+    }
+}
