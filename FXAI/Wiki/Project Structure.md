@@ -31,6 +31,9 @@ This page maps common user goals to the repository areas that matter.
 | `FXPlugins/` | Model and framework plugin implementations. |
 | `FXDataEngine/TensorCore/` | MT5-native neural runtime support. |
 | `FXDataEngine/Tests/` | MT5-side audit and core-runtime runners. |
+| `FXBacktestAgent/` | Offline backtest agent source root. |
+| `FXDemoAgent/` | Demo-trading agent source root. |
+| `FXLiveAgent/` | Live-trading agent source root. |
 | `Tools/fxai_testlab.py` | Compile, audit, benchmark, package, and release-gate CLI. |
 | `Tools/fxai_offline_lab.py` | Offline Lab, subsystem validation, promotion, and recovery CLI. |
 | `Tools/OfflineLab/` | Generated or configured research, report, and subsystem artifacts. |
