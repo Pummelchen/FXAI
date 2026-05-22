@@ -7,7 +7,7 @@ final class BacktestResultStoreTests: XCTestCase {
         let executor = RecordingClickHouseExecutor()
         let config = FXBacktestClickHouseConfiguration(database: "fxbacktest_test")
         let store = ClickHouseBacktestResultStore(configuration: config, executor: executor)
-        let plugin = MovingAverageCross()
+        let plugin = FX7()
         let sweep = try ParameterSweep.singlePass(definitions: plugin.parameterDefinitions)
         let run = BacktestStoredRun(
             runID: "test-run",
@@ -24,7 +24,7 @@ final class BacktestResultStoreTests: XCTestCase {
             passIndex: 0,
             pluginIdentifier: plugin.descriptor.id,
             engine: .cpu,
-            parameters: [BacktestParameterValue(key: "fast_period", value: 8)],
+            parameters: [BacktestParameterValue(key: "signal_stride_bars", value: 15)],
             netProfit: 12,
             grossProfit: 20,
             grossLoss: -8,

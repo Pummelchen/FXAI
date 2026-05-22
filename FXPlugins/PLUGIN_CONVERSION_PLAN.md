@@ -196,8 +196,8 @@ Each plugin step:
 | trend_xsmom_rank | Trend | Trend/trend_xsmom_rank.mqh | Cross-sectional momentum rank plugin | Accelerate sorting/reductions, Metal not first | No |
 | wm_cfx | World | World/wm_cfx.mqh | Currency factor world model | Accelerate graph/matrix ops; Metal later | Maybe after model stabilization |
 | wm_graph | World | World/wm_graph.mqh | Graph world model | Accelerate graph ops; PyTorch Geometric alternative if needed | Maybe after model stabilization |
-| MovingAverageCross | FXBacktest demo | FXBacktest/Sources/FXBacktestPlugins/MovingAverageCross.swift | FXDataEngine adapter over existing Swift backtest plugin | Already has Metal kernel for backtest sweeps; adapter remains Swift scalar | No |
-| FXStupid | FXBacktest demo | FXBacktest/Sources/FXBacktestPlugins/FXStupid/FXStupid.swift | FXDataEngine adapter over existing Swift backtest plugin | Existing scalar control-flow EA; no Metal until parity complete | No |
+| MovingAverageCross | FXBacktest demo | FXPlugins/Sources/FXAIPlugins/FXBacktestDemo/MovingAverageCrossFXDataEnginePlugin.swift | FXDataEngine adapter now independent of FXBacktest-local plugin code | Metal candidate for future FXDataEngine batch/sweep work; Swift scalar adapter now active | No |
+| FXStupid | FXBacktest demo | FXPlugins/Sources/FXAIPlugins/FXBacktestDemo/FXStupidFXDataEnginePlugin.swift | FXDataEngine adapter now independent of FXBacktest-local plugin code | Stateful scalar adapter; no Metal until its order-control flow is redesigned | No |
 
 ## Review Pass 1
 
@@ -298,14 +298,15 @@ reference file.
 Completed first Swift wave on 2026-05-23:
 
 - Root `FXPlugins` now contains the copied legacy MQL5 plugin reference tree.
-- Added a SwiftPM `FXAIPlugins` package wired to `FXDataEngine` and
-  `FXBacktest`.
+- Added a SwiftPM `FXAIPlugins` package wired to `FXDataEngine`.
 - Added `PluginAccelerationPlan` metadata for backend suitability.
 - Added `FXAIPluginRegistry` for converted plugin discovery.
 - Converted and tested `rule_buyonly`, `rule_sellonly`, `rule_random`, and
   `rule_m1sync`.
 - Added and tested FXDataEngine adapters for the two FXBacktest demo plugins:
   `MovingAverageCross` and `FXStupid`.
+- Removed the now-duplicated FXBacktest-local demo plugin implementations after
+  the adapters became independent; FXBacktest keeps only backtest-native FX7.
 - Extended `AIModelID` and the FXDataEngine model count from 63 to 65 so the two
   demo adapters have stable model identifiers.
 

@@ -23,10 +23,7 @@ let package = Package(
         ),
         .target(
             name: "FXBacktestPlugins",
-            dependencies: ["FXBacktestCore"],
-            resources: [
-                .copy("FXStupid/FXStupid.config.json")
-            ]
+            dependencies: ["FXBacktestCore"]
         ),
         .executableTarget(
             name: "FXBacktest",

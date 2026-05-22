@@ -14,14 +14,15 @@ final class HybridBacktestExecutorTests: XCTestCase {
         }
 
         let market = try OhlcDataSeries.demoEURUSD(barCount: 500)
-        let plugin = AnyFXBacktestPlugin(MovingAverageCross())
-        let sweep = try ParameterSweep(dimensions: plugin.parameterDefinitions.map {
-            try ParameterSweepDimension(
-                definition: $0,
-                input: $0.defaultValue,
-                minimum: $0.defaultMinimum,
-                step: $0.defaultStep,
-                maximum: $0.defaultMaximum
+        let plugin = AnyFXBacktestPlugin(FX7())
+        let sweep = try ParameterSweep(dimensions: plugin.parameterDefinitions.enumerated().map { index, definition in
+            let maximum = index == 0 ? definition.defaultValue + definition.defaultStep : definition.defaultValue
+            return try ParameterSweepDimension(
+                definition: definition,
+                input: definition.defaultValue,
+                minimum: definition.defaultValue,
+                step: max(definition.defaultStep, 1),
+                maximum: maximum
             )
         })
         let settings = BacktestRunSettings(target: .both, maxWorkers: 2, chunkSize: 8)

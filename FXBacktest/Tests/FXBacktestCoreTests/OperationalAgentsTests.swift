@@ -46,7 +46,7 @@ final class OperationalAgentsTests: XCTestCase {
     }
 
     func testOptimizationCoordinatorRejectsMetalForCPUOnlyPlugin() throws {
-        let plugin = try XCTUnwrap(FXBacktestPluginRegistry.availablePlugins.first { $0.id == "com.fxbacktest.plugins.fxstupid.v1" })
+        let plugin = AnyFXBacktestPlugin(CPUOnlyTestPlugin())
         let market = try market(symbol: "EURUSD", brokerSourceId: "demo")
         let sweep = try ParameterSweep.singlePass(definitions: plugin.parameterDefinitions)
 
@@ -77,7 +77,7 @@ final class OperationalAgentsTests: XCTestCase {
             configuration: FXBacktestClickHouseConfiguration(database: "fxbacktest_agent_test"),
             executor: executor
         )
-        let plugin = MovingAverageCross()
+        let plugin = FX7()
         let sweep = try ParameterSweep.singlePass(definitions: plugin.parameterDefinitions)
         let run = BacktestStoredRun(
             runID: "agent-run",
@@ -94,7 +94,7 @@ final class OperationalAgentsTests: XCTestCase {
             passIndex: 0,
             pluginIdentifier: plugin.descriptor.id,
             engine: .cpu,
-            parameters: [BacktestParameterValue(key: "fast_period", value: 8)],
+            parameters: [BacktestParameterValue(key: "signal_stride_bars", value: 15)],
             netProfit: 1,
             grossProfit: 1,
             grossLoss: 0,
@@ -163,5 +163,52 @@ private actor AgentRecordingClickHouseExecutor: FXBacktestClickHouseExecuting {
 
     func statements() -> [String] {
         recordedStatements
+    }
+}
+
+private struct CPUOnlyTestPlugin: FXBacktestPluginV1 {
+    let descriptor = FXBacktestPluginDescriptor(
+        id: "com.fxbacktest.tests.cpu-only.v1",
+        displayName: "CPU Only Test",
+        version: "1.0.0",
+        summary: "CPU-only test plugin for operational-agent target validation.",
+        author: "FXBacktestTests",
+        supportsCPU: true,
+        supportsMetal: false
+    )
+
+    let parameterDefinitions: [ParameterDefinition] = [
+        try! ParameterDefinition(
+            key: "dummy",
+            displayName: "Dummy",
+            defaultValue: 1,
+            defaultMinimum: 1,
+            defaultStep: 1,
+            defaultMaximum: 1,
+            valueKind: .integer
+        )
+    ]
+
+    func runPass(
+        market: OhlcDataSeries,
+        parameters: ParameterVector,
+        context: BacktestContext
+    ) throws -> BacktestPassResult {
+        BacktestPassResult(
+            passIndex: parameters.combinationIndex,
+            pluginIdentifier: descriptor.id,
+            engine: context.settings.target,
+            parameters: parameters.snapshots,
+            netProfit: 0,
+            grossProfit: 0,
+            grossLoss: 0,
+            maxDrawdown: 0,
+            totalTrades: 0,
+            winningTrades: 0,
+            losingTrades: 0,
+            winRate: 0,
+            profitFactor: 0,
+            barsProcessed: market.count
+        )
     }
 }

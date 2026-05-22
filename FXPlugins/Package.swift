@@ -10,16 +10,13 @@ let package = Package(
         .library(name: "FXAIPlugins", targets: ["FXAIPlugins"])
     ],
     dependencies: [
-        .package(path: "../FXDataEngine"),
-        .package(path: "../FXBacktest")
+        .package(path: "../FXDataEngine")
     ],
     targets: [
         .target(
             name: "FXAIPlugins",
             dependencies: [
-                .product(name: "FXDataEngine", package: "FXDataEngine"),
-                .product(name: "FXBacktestCore", package: "FXBacktest"),
-                .product(name: "FXBacktestPlugins", package: "FXBacktest")
+                .product(name: "FXDataEngine", package: "FXDataEngine")
             ],
             path: "Sources/FXAIPlugins"
         ),

@@ -30,7 +30,6 @@ Sources/
   FXBacktestCore/             engine, data model, FXDatabase loader, plugin API
   FXBacktestPlugins/          converted EA plugins
     FX7.swift                 FX7 OHLC signal-timeframe CPU plugin and single-symbol Metal kernel
-    FXStupid/                 first converted EA plugin and config
 Tests/
   FXBacktestCoreTests/        engine, sweep, and Metal smoke tests
 ```
@@ -49,9 +48,6 @@ Important files:
 - `Sources/FXBacktestCore/BacktestResultStore.swift`: ClickHouse result-store API and purge support.
 - `Sources/FXBacktestCore/PluginAcceleration.swift`: plugin acceleration descriptor and IR v1.
 - `Sources/FXBacktestPlugins/FX7.swift`: converted FX7 OHLC-only plugin with MQL5-style closed signal-bar feature timing, CPU universe support, and a Metal kernel for single-symbol sweeps.
-- `Sources/FXBacktestPlugins/MovingAverageCross.swift`: reference EA plugin.
-- `Sources/FXBacktestPlugins/FXStupid/FXStupid.swift`: converted `FX_Stupid_Original_Min.mq5` plugin.
-- `Sources/FXBacktestPlugins/FXStupid/FXStupid.config.json`: FXStupid input/config defaults.
 
 ## Requirements
 
@@ -178,12 +174,12 @@ The same flow from the FXBacktest terminal prompt is:
 
 ```text
 > load-fxdatabase --api-url http://127.0.0.1:5066 --broker icmarkets-sc-mt5-4 --symbol EURUSD --mt5-symbol EURUSD --digits 5 --from 1704067200 --to 1707177600 --max-rows 5000000
-> set-param fast_period --input 12 --min 6 --step 2 --max 40
-> set-param slow_period --input 48 --min 24 --step 4 --max 120
+> set-param signal_stride_bars --input 15 --min 1 --step 1 --max 60
+> set-param base_entry_threshold --input 0.02 --min 0.005 --step 0.005 --max 0.12
 > run both --workers 8 --chunk 128
 ```
 
-For multi-symbol EAs such as FX7 or FXStupid, load an aligned market universe in one command. FXBacktest requests each symbol from FXDatabase API v1 and rejects the universe if timestamps do not line up exactly:
+For multi-symbol EAs such as FX7, load an aligned market universe in one command. FXBacktest requests each symbol from FXDatabase API v1 and rejects the universe if timestamps do not line up exactly:
 
 ```text
 > load-fxdatabase --api-url http://127.0.0.1:5066 --broker icmarkets-sc-mt5-4 --symbols EURUSD,USDJPY,EURGBP --from 1704067200 --to 1707177600 --max-rows 5000000
@@ -296,7 +292,7 @@ That result-store API is separate from FXDatabase history storage and must not b
 - Positive lot sizes from the run settings or plugin logic.
 - Position lifecycle and closed-trade ledger.
 
-There is no execution profile in `BacktestRunSettings`. PnL uses close-price delta, symbol digits, configured contract size, and lots. The older `BacktestBroker` remains available for simple single-position plugins. FXStupid uses its plugin-local broker to preserve the converted EA flow while applying the same pure close-price PnL calculation.
+There is no execution profile in `BacktestRunSettings`. PnL uses close-price delta, symbol digits, configured contract size, and lots. The older `BacktestBroker` remains available for simple single-position plugins.
 
 ## Multi-Symbol Backtests
 
@@ -372,24 +368,16 @@ Plugin rules:
 - Do not share mutable globals across passes.
 - Treat OHLC arrays as read-only.
 - Return aggregate metrics for each pass.
-- Store each converted EA plugin in its own subfolder under `Sources/FXBacktestPlugins/`, for example `Sources/FXBacktestPlugins/FXStupid/`.
+- Store only backtest-native plugins under `Sources/FXBacktestPlugins/`. FXAI prediction plugins live in the repo-root `FXPlugins/` package.
 - Register plugins in `FXBacktestPluginRegistry`.
 
 Single-pass reports are intentionally not implemented yet. The current product focus is maximum optimizer throughput and a live pass table.
 
 The live optimization table follows the MT5 tester shape: fixed metric columns first (`Pass`, `Result`, `Profit`, `Total trades`, `Drawdown %`, `Recovery factor`, `Sharpe ratio`), followed by one column per tested plugin input parameter.
 
-### FXStupid
+### Retired Demo Plugins
 
-`FXStupid` is the first converted MQL5 EA plugin. Its Swift file keeps the original EA flow close to the source:
-
-```text
-OnInit -> OnTick -> EAStop -> TPCheck -> SLCheck -> AdjustLotSizes -> RefreshTraded -> OrderScan
-```
-
-The original MQL5 `input` values are stored in `FXStupid.config.json` beside the plugin file and become FXBacktest parameter definitions. The plugin is CPU-only for now because preserving the EA control flow is more important than immediately rewriting it as a Metal kernel.
-
-FXStupid now uses `OhlcMarketUniverse`, so loaded symbols from `FXPairs` can participate in the original scan loop. Symbols not loaded from FXDatabase behave like unavailable MT5 symbols and are skipped. Its pass-local broker uses pure M1 close prices with the configured contract size and lot values.
+The former FXBacktest-local `MovingAverageCross` and `FXStupid` demo plugins have been moved into the repo-root `FXPlugins` package as FXDataEngine adapters. FXBacktest now keeps only backtest-native plugins, currently FX7.
 
 ### FX7
 
@@ -408,7 +396,7 @@ Key conversion details:
 
 ## Plugin Acceleration API
 
-`PluginAccelerationDescriptor` and `PluginAccelerationIR` define the v1 scaffold for converting suitable plugins into generated Swift SIMD or Metal kernels while keeping the hand-converted Swift plugin as the fidelity reference. The reference Moving Average Cross plugin declares a Metal entry point and IR operation. FX7 provides both a CPU reference path and a single-symbol Metal kernel. FXStupid deliberately stays scalar CPU until its EA flow is validated against MT5 results.
+`PluginAccelerationDescriptor` and `PluginAccelerationIR` define the v1 scaffold for converting suitable plugins into generated Swift SIMD or Metal kernels while keeping the hand-converted Swift plugin as the fidelity reference. FX7 provides both a CPU reference path and a single-symbol Metal kernel.
 
 ## CPU, GPU, And Hybrid Execution Model
 
@@ -454,7 +442,6 @@ The test suite includes:
 - Hybrid CPU+Metal scheduling without duplicate pass indexes.
 - Pure OHLC broker and ledger behavior.
 - Multi-symbol universe alignment validation.
-- FXStupid multi-symbol universe behavior.
 - ClickHouse result-store SQL/purge API behavior with a mock executor.
 - Plugin acceleration descriptor validation.
 - Operational-agent validation for FXDatabase connectivity, market readiness, plugin metadata, run coordination, resource health, and result persistence.

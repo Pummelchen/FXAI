@@ -1,11 +1,7 @@
-import FXBacktestCore
-import FXBacktestPlugins
 import FXDataEngine
 import Foundation
 
 public struct MovingAverageCrossFXDataEnginePlugin: FXAIPlannedPlugin {
-    private let backtestPlugin = MovingAverageCross()
-
     public var manifest: PluginManifestV4 {
         PluginManifestV4(
             aiID: AIModelID.demoMovingAverageCross.rawValue,
@@ -37,7 +33,7 @@ public struct MovingAverageCrossFXDataEnginePlugin: FXAIPlannedPlugin {
     public mutating func reset() {}
 
     public func selfTest() -> Bool {
-        backtestPlugin.descriptor.supportsMetal && backtestPlugin.metalKernel != nil && (try? manifest.validate()) != nil
+        (try? manifest.validate()) != nil && accelerationPlan.declaresHardwareAcceleration
     }
 
     public mutating func train(_ request: TrainRequestV4, hyperParameters: HyperParameters) throws {

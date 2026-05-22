@@ -1,11 +1,7 @@
-import FXBacktestCore
-import FXBacktestPlugins
 import FXDataEngine
 import Foundation
 
 public struct FXStupidFXDataEnginePlugin: FXAIPlannedPlugin {
-    private let backtestPlugin = FXStupid()
-
     public var manifest: PluginManifestV4 {
         PluginManifestV4(
             aiID: AIModelID.demoFXStupid.rawValue,
@@ -36,7 +32,7 @@ public struct FXStupidFXDataEnginePlugin: FXAIPlannedPlugin {
     public mutating func reset() {}
 
     public func selfTest() -> Bool {
-        !backtestPlugin.descriptor.id.isEmpty && (try? manifest.validate()) != nil
+        (try? manifest.validate()) != nil
     }
 
     public mutating func train(_ request: TrainRequestV4, hyperParameters: HyperParameters) throws {

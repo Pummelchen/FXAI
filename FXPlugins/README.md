@@ -21,7 +21,7 @@ Root `FXPlugins` now exposes all 65 FXAI model IDs through Swift `FXAIPluginV4`
 contracts:
 
 - 4 hand-ported legacy rule plugins.
-- 2 FXBacktest demo adapters: `fxbacktest_moving_average_cross` and `fxbacktest_fxstupid`.
+- 2 former FXBacktest demo adapters: `fxbacktest_moving_average_cross` and `fxbacktest_fxstupid`.
 - 59 generated Swift adapters for the remaining legacy plugins, each with
   volume-aware online centroid learning, deterministic fallback prediction, and explicit Apple Silicon
   backend metadata for Swift SIMD, Accelerate, Metal, PyTorch MPS,

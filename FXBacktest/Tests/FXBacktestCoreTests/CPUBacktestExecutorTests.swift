@@ -5,16 +5,8 @@ import XCTest
 final class CPUBacktestExecutorTests: XCTestCase {
     func testCPUExecutorRunsWholePassChunksAndEmitsResults() async throws {
         let market = try OhlcDataSeries.demoEURUSD(barCount: 500)
-        let plugin = AnyFXBacktestPlugin(MovingAverageCross())
-        let sweep = try ParameterSweep(dimensions: plugin.parameterDefinitions.map {
-            try ParameterSweepDimension(
-                definition: $0,
-                input: $0.defaultValue,
-                minimum: $0.defaultMinimum,
-                step: $0.defaultStep,
-                maximum: max($0.defaultValue, $0.defaultMinimum + $0.defaultStep)
-            )
-        })
+        let plugin = AnyFXBacktestPlugin(FX7())
+        let sweep = try ParameterSweep.singlePass(definitions: plugin.parameterDefinitions)
         let settings = BacktestRunSettings(target: .cpu, maxWorkers: 2, chunkSize: 2)
 
         var passResults: [BacktestPassResult] = []
