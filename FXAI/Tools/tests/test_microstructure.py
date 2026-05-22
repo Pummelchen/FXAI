@@ -12,8 +12,8 @@ from offline_lab.microstructure_reference import (
     classify_microstructure_state,
     detect_sweep_and_reject,
     directional_efficiency_from_changes,
+    price_cost_metrics,
     resolve_session,
-    spread_metrics,
     tick_imbalance_from_changes,
 )
 from offline_lab.microstructure_replay import build_microstructure_replay_report
@@ -37,6 +37,9 @@ def test_microstructure_validate_creates_default_files_and_required_windows():
             assert Path(payload["config_path"]).exists()
             assert Path(payload["service_config_path"]).exists()
             assert payload["windows_sec"] == [10, 30, 60, 300, 900]
+            service_config = Path(payload["service_config_path"]).read_text(encoding="utf-8")
+            assert "threshold_wide_price_cost_zscore" in service_config
+            assert "threshold_wide_spread_zscore" not in service_config
             status_payload = json.loads(Path(payload["status_path"]).read_text(encoding="utf-8"))
             artifact_paths = status_payload.get("artifacts", {})
             assert artifact_paths
@@ -56,15 +59,37 @@ def test_microstructure_validate_rejects_missing_required_windows():
         raise AssertionError("missing required windows should fail validation")
 
 
+def test_microstructure_config_migrates_legacy_spread_thresholds():
+    payload = default_config()
+    thresholds = payload["thresholds"]
+    thresholds["wide_spread_zscore"] = 1.75
+    thresholds["wide_spread_absolute_points_floor"] = 2.6
+    thresholds["spread_instability_caution"] = 0.61
+    thresholds["spread_instability_block"] = 0.91
+    thresholds.pop("wide_price_cost_zscore", None)
+    thresholds.pop("wide_price_cost_absolute_points_floor", None)
+    thresholds.pop("price_cost_instability_caution", None)
+    thresholds.pop("price_cost_instability_block", None)
+
+    validated = validate_config_payload(payload)
+
+    assert validated["thresholds"]["wide_price_cost_zscore"] == 1.75
+    assert validated["thresholds"]["wide_price_cost_absolute_points_floor"] == 2.6
+    assert validated["thresholds"]["price_cost_instability_caution"] == 0.61
+    assert validated["thresholds"]["price_cost_instability_block"] == 0.91
+    assert "wide_spread_zscore" not in validated["thresholds"]
+    assert "spread_instability_block" not in validated["thresholds"]
+
+
 def test_microstructure_reference_identifies_clean_trend_state():
     changes = [1.2, 0.9, 1.1, 1.0, -0.2, 0.8, 1.1]
     imbalance = tick_imbalance_from_changes(changes)
     efficiency = directional_efficiency_from_changes(changes)
     state = classify_microstructure_state(
-        spread_instability=0.18,
-        spread_zscore_60s=0.44,
-        wide_spread_fraction_60s=0.02,
-        session_spread_behavior_score=0.12,
+        price_cost_instability=0.18,
+        price_cost_zscore_60s=0.44,
+        wide_price_cost_fraction_60s=0.02,
+        session_price_cost_behavior_score=0.12,
         vol_burst_score_5m=1.08,
         intensity_burst_score_30s=1.14,
         silent_gap_seconds_current=0.4,
@@ -84,17 +109,17 @@ def test_microstructure_reference_identifies_clean_trend_state():
 
 
 def test_microstructure_reference_detects_thin_and_wide_regime():
-    spreads = [1.1, 1.2, 1.1, 1.4, 3.6, 4.1, 4.5]
-    spread_state = spread_metrics(
-        spreads,
-        wide_spread_zscore=default_config()["thresholds"]["wide_spread_zscore"],
-        wide_spread_absolute_points_floor=default_config()["thresholds"]["wide_spread_absolute_points_floor"],
+    price_costs = [1.1, 1.2, 1.1, 1.4, 3.6, 4.1, 4.5]
+    price_cost_state = price_cost_metrics(
+        price_costs,
+        wide_price_cost_zscore=default_config()["thresholds"]["wide_price_cost_zscore"],
+        wide_price_cost_absolute_points_floor=default_config()["thresholds"]["wide_price_cost_absolute_points_floor"],
     )
     state = classify_microstructure_state(
-        spread_instability=spread_state["spread_instability"],
-        spread_zscore_60s=spread_state["spread_zscore"],
-        wide_spread_fraction_60s=max(spread_state["wide_spread_fraction"], 0.14),
-        session_spread_behavior_score=0.62,
+        price_cost_instability=price_cost_state["price_cost_instability"],
+        price_cost_zscore_60s=price_cost_state["price_cost_zscore"],
+        wide_price_cost_fraction_60s=max(price_cost_state["wide_price_cost_fraction"], 0.14),
+        session_price_cost_behavior_score=0.62,
         vol_burst_score_5m=1.55,
         intensity_burst_score_30s=1.72,
         silent_gap_seconds_current=8.0,
@@ -107,17 +132,17 @@ def test_microstructure_reference_detects_thin_and_wide_regime():
         session_open_burst_score=0.66,
         thresholds=default_config()["thresholds"],
     )
-    assert spread_state["spread_zscore"] > 1.0
+    assert price_cost_state["price_cost_zscore"] > 1.0
     assert state["microstructure_regime"] == "THIN_AND_WIDE"
     assert state["trade_gate"] in {"CAUTION", "BLOCK"}
-    assert "current spread regime is abnormally wide" in state["reasons"]
+    assert "current price-cost/liquidity regime is abnormally high" in state["reasons"]
 
 
 def test_microstructure_reference_detects_sweep_and_reject_pattern():
     sweep = detect_sweep_and_reject(
         [100.0, 100.2, 100.4, 100.5, 101.4, 101.0, 100.7],
         point_value=0.1,
-        spread_current=1.2,
+        price_cost_current=1.2,
         shock_move_points_factor=1.8,
         stop_run_reversal_fraction=0.45,
         directional_efficiency=0.34,

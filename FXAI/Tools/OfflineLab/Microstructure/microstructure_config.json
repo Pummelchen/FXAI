@@ -104,16 +104,16 @@
     "liquidity_stress_block": 0.86,
     "liquidity_stress_caution": 0.58,
     "shock_move_points_factor": 1.8,
-    "spread_instability_block": 0.82,
-    "spread_instability_caution": 0.56,
+    "price_cost_instability_block": 0.82,
+    "price_cost_instability_caution": 0.56,
     "stop_run_rejection_score_flag": 0.58,
     "stop_run_reversal_fraction": 0.45,
     "tick_burst_ratio_block": 1.85,
     "tick_burst_ratio_caution": 1.35,
     "vol_burst_ratio_block": 1.9,
     "vol_burst_ratio_caution": 1.4,
-    "wide_spread_absolute_points_floor": 2.0,
-    "wide_spread_zscore": 1.45
+    "wide_price_cost_absolute_points_floor": 2.0,
+    "wide_price_cost_zscore": 1.45
   },
   "windows_sec": [
     10,

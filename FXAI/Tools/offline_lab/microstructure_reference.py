@@ -24,49 +24,49 @@ def directional_efficiency_from_changes(changes_points: Sequence[float]) -> floa
     return clamp(abs(sum(changes_points)) / total_abs, 0.0, 1.0)
 
 
-def spread_metrics(
-    spreads: Sequence[float],
+def price_cost_metrics(
+    price_costs: Sequence[float],
     *,
-    wide_spread_zscore: float,
-    wide_spread_absolute_points_floor: float,
+    wide_price_cost_zscore: float,
+    wide_price_cost_absolute_points_floor: float,
 ) -> dict[str, float]:
-    if not spreads:
+    if not price_costs:
         return {
-            "spread_current": 0.0,
-            "spread_mean": 0.0,
-            "spread_std": 0.0,
-            "spread_zscore": 0.0,
-            "spread_widen_events": 0.0,
-            "wide_spread_fraction": 0.0,
-            "spread_instability": 0.0,
+            "price_cost_current": 0.0,
+            "price_cost_mean": 0.0,
+            "price_cost_std": 0.0,
+            "price_cost_zscore": 0.0,
+            "price_cost_widen_events": 0.0,
+            "wide_price_cost_fraction": 0.0,
+            "price_cost_instability": 0.0,
         }
 
-    mean = sum(spreads) / len(spreads)
-    variance = max(sum(value * value for value in spreads) / len(spreads) - mean * mean, 0.0)
+    mean = sum(price_costs) / len(price_costs)
+    variance = max(sum(value * value for value in price_costs) / len(price_costs) - mean * mean, 0.0)
     std = math.sqrt(variance)
-    current = float(spreads[-1])
+    current = float(price_costs[-1])
     zscore = (current - mean) / std if std > 1e-9 else 0.0
     widen_events = 0
-    for previous, current_value in zip(spreads, spreads[1:]):
+    for previous, current_value in zip(price_costs, price_costs[1:]):
         if (current_value - previous) > max(0.35 * max(previous, 1.0), 0.5):
             widen_events += 1
-    wide_threshold = max(mean + wide_spread_zscore * std, wide_spread_absolute_points_floor)
-    wide_fraction = sum(1 for value in spreads if value >= wide_threshold) / max(len(spreads), 1)
+    wide_threshold = max(mean + wide_price_cost_zscore * std, wide_price_cost_absolute_points_floor)
+    wide_fraction = sum(1 for value in price_costs if value >= wide_threshold) / max(len(price_costs), 1)
     instability = clamp(
         0.38 * clamp((std / max(mean, 0.25)) / 2.0, 0.0, 4.0)
         + 0.34 * wide_fraction
-        + 0.28 * clamp(widen_events / max(len(spreads) - 1, 1), 0.0, 1.0),
+        + 0.28 * clamp(widen_events / max(len(price_costs) - 1, 1), 0.0, 1.0),
         0.0,
         1.0,
     )
     return {
-        "spread_current": current,
-        "spread_mean": mean,
-        "spread_std": std,
-        "spread_zscore": zscore,
-        "spread_widen_events": float(widen_events),
-        "wide_spread_fraction": wide_fraction,
-        "spread_instability": instability,
+        "price_cost_current": current,
+        "price_cost_mean": mean,
+        "price_cost_std": std,
+        "price_cost_zscore": zscore,
+        "price_cost_widen_events": float(widen_events),
+        "wide_price_cost_fraction": wide_fraction,
+        "price_cost_instability": instability,
     }
 
 
@@ -90,7 +90,7 @@ def detect_sweep_and_reject(
     midpoints: Sequence[float],
     *,
     point_value: float,
-    spread_current: float,
+    price_cost_current: float,
     shock_move_points_factor: float,
     stop_run_reversal_fraction: float,
     directional_efficiency: float,
@@ -119,7 +119,7 @@ def detect_sweep_and_reject(
     rejection_score = 0.0
     rejection_flag = False
     snapback = clamp(stop_run_reversal_fraction, 0.10, 0.90)
-    threshold = max(shock_move_points_factor * max(spread_current, 1.0), 2.0)
+    threshold = max(shock_move_points_factor * max(price_cost_current, 1.0), 2.0)
 
     if breach_up > threshold:
         rejection = max(0.0, (maximum - last) / point_value)
@@ -187,10 +187,10 @@ def resolve_session(now_dt: datetime, session_model: dict[str, Any]) -> dict[str
 
 def classify_microstructure_state(
     *,
-    spread_instability: float,
-    spread_zscore_60s: float,
-    wide_spread_fraction_60s: float,
-    session_spread_behavior_score: float,
+    price_cost_instability: float,
+    price_cost_zscore_60s: float,
+    wide_price_cost_fraction_60s: float,
+    session_price_cost_behavior_score: float,
     vol_burst_score_5m: float,
     intensity_burst_score_30s: float,
     silent_gap_seconds_current: float,
@@ -204,16 +204,16 @@ def classify_microstructure_state(
     thresholds: dict[str, float],
 ) -> dict[str, Any]:
     sweep_risk = max(breakout_reversal_score_60s, exhaustion_proxy_30s)
-    spread_level_stress = clamp(max(spread_zscore_60s, 0.0) / 3.0, 0.0, 1.0)
+    price_cost_level_stress = clamp(max(price_cost_zscore_60s, 0.0) / 3.0, 0.0, 1.0)
     thin_and_wide_flag = (
-        spread_instability >= thresholds["spread_instability_block"]
-        or (spread_level_stress >= 0.45 and wide_spread_fraction_60s >= 0.10)
-        or (silent_gap_seconds_current >= 8.0 and spread_level_stress >= 0.35)
+        price_cost_instability >= thresholds["price_cost_instability_block"]
+        or (price_cost_level_stress >= 0.45 and wide_price_cost_fraction_60s >= 0.10)
+        or (silent_gap_seconds_current >= 8.0 and price_cost_level_stress >= 0.35)
     )
     liquidity_stress_score = clamp(
-        0.24 * spread_instability
-        + 0.18 * spread_level_stress
-        + 0.20 * session_spread_behavior_score
+        0.24 * price_cost_instability
+        + 0.18 * price_cost_level_stress
+        + 0.20 * session_price_cost_behavior_score
         + 0.15 * clamp(vol_burst_score_5m - 1.0, 0.0, 3.0) / 3.0
         + 0.13 * clamp(intensity_burst_score_30s - 1.0, 0.0, 3.0) / 3.0
         + 0.10 * clamp(silent_gap_seconds_current / 10.0, 0.0, 1.0),
@@ -222,8 +222,8 @@ def classify_microstructure_state(
     )
     hostile_execution_score = clamp(
         0.34 * liquidity_stress_score
-        + 0.18 * spread_instability
-        + 0.12 * spread_level_stress
+        + 0.18 * price_cost_instability
+        + 0.12 * price_cost_level_stress
         + 0.18 * sweep_risk
         + 0.10 * (1.0 if handoff_flag else 0.0)
         + 0.08 * clamp(vol_burst_score_5m - 1.0, 0.0, 3.0) / 3.0,
@@ -274,10 +274,10 @@ def classify_microstructure_state(
         reasons.append("hostile execution block threshold exceeded")
     elif trade_gate == "CAUTION":
         reasons.append("hostile execution caution threshold exceeded")
-    if spread_instability >= thresholds["spread_instability_caution"]:
-        reasons.append("spread instability elevated")
+    if price_cost_instability >= thresholds["price_cost_instability_caution"]:
+        reasons.append("price-cost instability elevated")
     if thin_and_wide_flag:
-        reasons.append("current spread regime is abnormally wide")
+        reasons.append("current price-cost/liquidity regime is abnormally high")
     if intensity_burst_score_30s >= thresholds["tick_burst_ratio_caution"]:
         reasons.append("tick intensity burst above baseline")
     if vol_burst_score_5m >= thresholds["vol_burst_ratio_caution"]:

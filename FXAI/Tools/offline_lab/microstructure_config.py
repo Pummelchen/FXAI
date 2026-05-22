@@ -48,10 +48,10 @@ def default_config() -> dict[str, Any]:
             },
         },
         "thresholds": {
-            "wide_spread_zscore": 1.45,
-            "wide_spread_absolute_points_floor": 2.0,
-            "spread_instability_caution": 0.56,
-            "spread_instability_block": 0.82,
+            "wide_price_cost_zscore": 1.45,
+            "wide_price_cost_absolute_points_floor": 2.0,
+            "price_cost_instability_caution": 0.56,
+            "price_cost_instability_block": 0.82,
             "tick_burst_ratio_caution": 1.35,
             "tick_burst_ratio_block": 1.85,
             "vol_burst_ratio_caution": 1.40,
@@ -121,6 +121,38 @@ def validate_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
     thresholds = payload.get("thresholds")
     if not isinstance(thresholds, dict) or not thresholds:
         raise OfflineLabError("microstructure thresholds must be a JSON object")
+    threshold_aliases = {
+        "wide_price_cost_zscore": "wide_spread_zscore",
+        "wide_price_cost_absolute_points_floor": "wide_spread_absolute_points_floor",
+        "price_cost_instability_caution": "spread_instability_caution",
+        "price_cost_instability_block": "spread_instability_block",
+    }
+    for canonical, legacy in threshold_aliases.items():
+        if canonical not in thresholds and legacy in thresholds:
+            thresholds[canonical] = thresholds[legacy]
+        thresholds.pop(legacy, None)
+    required_thresholds = {
+        "wide_price_cost_zscore",
+        "wide_price_cost_absolute_points_floor",
+        "price_cost_instability_caution",
+        "price_cost_instability_block",
+        "tick_burst_ratio_caution",
+        "tick_burst_ratio_block",
+        "vol_burst_ratio_caution",
+        "vol_burst_ratio_block",
+        "shock_move_points_factor",
+        "stop_run_reversal_fraction",
+        "stop_run_rejection_score_flag",
+        "liquidity_stress_caution",
+        "liquidity_stress_block",
+        "hostile_execution_caution",
+        "hostile_execution_block",
+        "clean_trend_efficiency_floor",
+        "clean_trend_imbalance_floor",
+    }
+    missing_thresholds = sorted(required_thresholds.difference(thresholds))
+    if missing_thresholds:
+        raise OfflineLabError(f"microstructure thresholds missing required keys: {missing_thresholds}")
     runtime_policy = payload.get("runtime_policy")
     if not isinstance(runtime_policy, dict) or not runtime_policy:
         raise OfflineLabError("microstructure runtime_policy must be a JSON object")

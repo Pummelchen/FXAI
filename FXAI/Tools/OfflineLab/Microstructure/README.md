@@ -6,7 +6,7 @@ It measures what the broker-visible market is doing **right now** using MT5 tick
 
 - tick imbalance
 - directional efficiency
-- spread stress and instability
+- price-cost/liquidity stress and instability
 - quote activity bursts
 - realized volatility bursts
 - session handoff behavior
@@ -79,7 +79,7 @@ If the probe has been installed but not started from MT5 `Services`, the health 
 Per tradable FX symbol, the layer exposes:
 
 - tick imbalance over `10s`, `30s`, `60s`, `5m`, `15m`
-- spread mean/std/z-score
+- price-cost mean/std/z-score
 - tick-rate bursts
 - realized-volatility bursts
 - sweep / rejection proxies

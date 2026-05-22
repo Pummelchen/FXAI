@@ -15,7 +15,7 @@
 
 ## Phase-1 Design Choice
 
-The microstructure engine is implemented as an **MT5 Service** instead of a Python daemon because only MT5 has direct, low-latency access to broker-visible tick and spread behavior. Python is used for:
+The microstructure engine is implemented as an **MT5 Service** during the legacy transition because only MT5 currently has direct, low-latency access to broker-visible tick and price-cost behavior. Python is used for:
 
 - config generation and validation
 - service installation / compile automation
