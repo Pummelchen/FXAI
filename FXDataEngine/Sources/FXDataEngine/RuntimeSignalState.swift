@@ -324,9 +324,9 @@ public struct RuntimeSignalCache: Codable, Hashable, Sendable {
         executionQualityTierKey = state.selectedTierKey
         executionQualitySupport = state.selectedSupport
         executionQualityQuality = state.selectedQuality
-        executionQualityPriceCostNowPoints = state.spreadNowPoints
-        executionQualityPriceCostExpectedPoints = state.spreadExpectedPoints
-        executionQualityPriceCostWideningRisk = state.spreadWideningRisk
+        executionQualityPriceCostNowPoints = state.priceCostNowPoints
+        executionQualityPriceCostExpectedPoints = state.priceCostExpectedPoints
+        executionQualityPriceCostWideningRisk = state.priceCostWideningRisk
         executionQualityExpectedSlippagePoints = state.expectedSlippagePoints
         executionQualitySlippageRisk = state.slippageRisk
         executionQualityFillQuality = state.fillQualityScore

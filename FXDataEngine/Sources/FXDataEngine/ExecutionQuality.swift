@@ -320,9 +320,9 @@ public struct ExecutionQualityPairState: Codable, Hashable, Sendable {
     public var brokerCoverage: Double
     public var brokerRejectProbability: Double
     public var brokerPartialFillProbability: Double
-    public var spreadNowPoints: Double
-    public var spreadExpectedPoints: Double
-    public var spreadWideningRisk: Double
+    public var priceCostNowPoints: Double
+    public var priceCostExpectedPoints: Double
+    public var priceCostWideningRisk: Double
     public var expectedSlippagePoints: Double
     public var slippageRisk: Double
     public var fillQualityScore: Double
@@ -334,6 +334,47 @@ public struct ExecutionQualityPairState: Codable, Hashable, Sendable {
     public var cautionEnterProbabilityBuffer: Double
     public var executionState: String
     public var reasons: [String]
+
+    private enum CodingKeys: String, CodingKey {
+        case ready
+        case available
+        case stale
+        case fallbackUsed
+        case memoryStale
+        case dataStale
+        case supportUsable
+        case newsWindowActive
+        case ratesRepricingActive
+        case generatedAt
+        case symbol
+        case method
+        case sessionLabel
+        case regimeLabel
+        case selectedTierKind
+        case selectedTierKey
+        case selectedSupport
+        case selectedQuality
+        case brokerCoverage
+        case brokerRejectProbability
+        case brokerPartialFillProbability
+        case priceCostNowPoints
+        case priceCostExpectedPoints
+        case priceCostWideningRisk
+        case legacySpreadNowPoints = "spreadNowPoints"
+        case legacySpreadExpectedPoints = "spreadExpectedPoints"
+        case legacySpreadWideningRisk = "spreadWideningRisk"
+        case expectedSlippagePoints
+        case slippageRisk
+        case fillQualityScore
+        case latencySensitivityScore
+        case liquidityFragilityScore
+        case executionQualityScore
+        case allowedDeviationPoints
+        case cautionLotScale
+        case cautionEnterProbabilityBuffer
+        case executionState
+        case reasons
+    }
 
     public init(
         ready: Bool = false,
@@ -357,9 +398,9 @@ public struct ExecutionQualityPairState: Codable, Hashable, Sendable {
         brokerCoverage: Double = 0.0,
         brokerRejectProbability: Double = 0.0,
         brokerPartialFillProbability: Double = 0.0,
-        spreadNowPoints: Double = 0.0,
-        spreadExpectedPoints: Double = 0.0,
-        spreadWideningRisk: Double = 0.0,
+        priceCostNowPoints: Double = 0.0,
+        priceCostExpectedPoints: Double = 0.0,
+        priceCostWideningRisk: Double = 0.0,
         expectedSlippagePoints: Double = 0.0,
         slippageRisk: Double = 0.0,
         fillQualityScore: Double = 0.0,
@@ -393,9 +434,9 @@ public struct ExecutionQualityPairState: Codable, Hashable, Sendable {
         self.brokerCoverage = fxClamp(brokerCoverage, 0.0, 1.0)
         self.brokerRejectProbability = fxClamp(brokerRejectProbability, 0.0, 1.0)
         self.brokerPartialFillProbability = fxClamp(brokerPartialFillProbability, 0.0, 1.0)
-        self.spreadNowPoints = spreadNowPoints
-        self.spreadExpectedPoints = spreadExpectedPoints
-        self.spreadWideningRisk = spreadWideningRisk
+        self.priceCostNowPoints = priceCostNowPoints
+        self.priceCostExpectedPoints = priceCostExpectedPoints
+        self.priceCostWideningRisk = priceCostWideningRisk
         self.expectedSlippagePoints = expectedSlippagePoints
         self.slippageRisk = slippageRisk
         self.fillQualityScore = fillQualityScore
@@ -409,8 +450,109 @@ public struct ExecutionQualityPairState: Codable, Hashable, Sendable {
         self.reasons = Self.uniqueReasons(reasons)
     }
 
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            ready: try container.decodeIfPresent(Bool.self, forKey: .ready) ?? false,
+            available: try container.decodeIfPresent(Bool.self, forKey: .available) ?? false,
+            stale: try container.decodeIfPresent(Bool.self, forKey: .stale) ?? true,
+            fallbackUsed: try container.decodeIfPresent(Bool.self, forKey: .fallbackUsed) ?? false,
+            memoryStale: try container.decodeIfPresent(Bool.self, forKey: .memoryStale) ?? true,
+            dataStale: try container.decodeIfPresent(Bool.self, forKey: .dataStale) ?? true,
+            supportUsable: try container.decodeIfPresent(Bool.self, forKey: .supportUsable) ?? false,
+            newsWindowActive: try container.decodeIfPresent(Bool.self, forKey: .newsWindowActive) ?? false,
+            ratesRepricingActive: try container.decodeIfPresent(Bool.self, forKey: .ratesRepricingActive) ?? false,
+            generatedAt: try container.decodeIfPresent(Int64.self, forKey: .generatedAt) ?? 0,
+            symbol: try container.decodeIfPresent(String.self, forKey: .symbol) ?? "",
+            method: try container.decodeIfPresent(String.self, forKey: .method) ?? "SCORECARD_V1",
+            sessionLabel: try container.decodeIfPresent(String.self, forKey: .sessionLabel) ?? "UNKNOWN",
+            regimeLabel: try container.decodeIfPresent(String.self, forKey: .regimeLabel) ?? "UNKNOWN",
+            selectedTierKind: try container.decodeIfPresent(String.self, forKey: .selectedTierKind) ?? "GLOBAL",
+            selectedTierKey: try container.decodeIfPresent(String.self, forKey: .selectedTierKey) ?? "GLOBAL|*|*|*",
+            selectedSupport: try container.decodeIfPresent(Int.self, forKey: .selectedSupport) ?? 0,
+            selectedQuality: try container.decodeIfPresent(Double.self, forKey: .selectedQuality) ?? 0.0,
+            brokerCoverage: try container.decodeIfPresent(Double.self, forKey: .brokerCoverage) ?? 0.0,
+            brokerRejectProbability: try container.decodeIfPresent(Double.self, forKey: .brokerRejectProbability) ?? 0.0,
+            brokerPartialFillProbability: try container.decodeIfPresent(Double.self, forKey: .brokerPartialFillProbability) ?? 0.0,
+            priceCostNowPoints: try container.decodeIfPresent(Double.self, forKey: .priceCostNowPoints) ??
+                container.decodeIfPresent(Double.self, forKey: .legacySpreadNowPoints) ?? 0.0,
+            priceCostExpectedPoints: try container.decodeIfPresent(Double.self, forKey: .priceCostExpectedPoints) ??
+                container.decodeIfPresent(Double.self, forKey: .legacySpreadExpectedPoints) ?? 0.0,
+            priceCostWideningRisk: try container.decodeIfPresent(Double.self, forKey: .priceCostWideningRisk) ??
+                container.decodeIfPresent(Double.self, forKey: .legacySpreadWideningRisk) ?? 0.0,
+            expectedSlippagePoints: try container.decodeIfPresent(Double.self, forKey: .expectedSlippagePoints) ?? 0.0,
+            slippageRisk: try container.decodeIfPresent(Double.self, forKey: .slippageRisk) ?? 0.0,
+            fillQualityScore: try container.decodeIfPresent(Double.self, forKey: .fillQualityScore) ?? 0.0,
+            latencySensitivityScore: try container.decodeIfPresent(Double.self, forKey: .latencySensitivityScore) ?? 0.0,
+            liquidityFragilityScore: try container.decodeIfPresent(Double.self, forKey: .liquidityFragilityScore) ?? 0.0,
+            executionQualityScore: try container.decodeIfPresent(Double.self, forKey: .executionQualityScore) ?? 0.0,
+            allowedDeviationPoints: try container.decodeIfPresent(Double.self, forKey: .allowedDeviationPoints) ?? 0.0,
+            cautionLotScale: try container.decodeIfPresent(Double.self, forKey: .cautionLotScale) ?? 1.0,
+            cautionEnterProbabilityBuffer: try container.decodeIfPresent(Double.self, forKey: .cautionEnterProbabilityBuffer) ?? 0.0,
+            executionState: try container.decodeIfPresent(String.self, forKey: .executionState) ?? "UNKNOWN",
+            reasons: try container.decodeIfPresent([String].self, forKey: .reasons) ?? []
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(ready, forKey: .ready)
+        try container.encode(available, forKey: .available)
+        try container.encode(stale, forKey: .stale)
+        try container.encode(fallbackUsed, forKey: .fallbackUsed)
+        try container.encode(memoryStale, forKey: .memoryStale)
+        try container.encode(dataStale, forKey: .dataStale)
+        try container.encode(supportUsable, forKey: .supportUsable)
+        try container.encode(newsWindowActive, forKey: .newsWindowActive)
+        try container.encode(ratesRepricingActive, forKey: .ratesRepricingActive)
+        try container.encode(generatedAt, forKey: .generatedAt)
+        try container.encode(symbol, forKey: .symbol)
+        try container.encode(method, forKey: .method)
+        try container.encode(sessionLabel, forKey: .sessionLabel)
+        try container.encode(regimeLabel, forKey: .regimeLabel)
+        try container.encode(selectedTierKind, forKey: .selectedTierKind)
+        try container.encode(selectedTierKey, forKey: .selectedTierKey)
+        try container.encode(selectedSupport, forKey: .selectedSupport)
+        try container.encode(selectedQuality, forKey: .selectedQuality)
+        try container.encode(brokerCoverage, forKey: .brokerCoverage)
+        try container.encode(brokerRejectProbability, forKey: .brokerRejectProbability)
+        try container.encode(brokerPartialFillProbability, forKey: .brokerPartialFillProbability)
+        try container.encode(priceCostNowPoints, forKey: .priceCostNowPoints)
+        try container.encode(priceCostExpectedPoints, forKey: .priceCostExpectedPoints)
+        try container.encode(priceCostWideningRisk, forKey: .priceCostWideningRisk)
+        try container.encode(expectedSlippagePoints, forKey: .expectedSlippagePoints)
+        try container.encode(slippageRisk, forKey: .slippageRisk)
+        try container.encode(fillQualityScore, forKey: .fillQualityScore)
+        try container.encode(latencySensitivityScore, forKey: .latencySensitivityScore)
+        try container.encode(liquidityFragilityScore, forKey: .liquidityFragilityScore)
+        try container.encode(executionQualityScore, forKey: .executionQualityScore)
+        try container.encode(allowedDeviationPoints, forKey: .allowedDeviationPoints)
+        try container.encode(cautionLotScale, forKey: .cautionLotScale)
+        try container.encode(cautionEnterProbabilityBuffer, forKey: .cautionEnterProbabilityBuffer)
+        try container.encode(executionState, forKey: .executionState)
+        try container.encode(reasons, forKey: .reasons)
+    }
+
     public static var reset: ExecutionQualityPairState {
         ExecutionQualityPairState()
+    }
+
+    @available(*, deprecated, renamed: "priceCostNowPoints")
+    public var spreadNowPoints: Double {
+        get { priceCostNowPoints }
+        set { priceCostNowPoints = newValue }
+    }
+
+    @available(*, deprecated, renamed: "priceCostExpectedPoints")
+    public var spreadExpectedPoints: Double {
+        get { priceCostExpectedPoints }
+        set { priceCostExpectedPoints = newValue }
+    }
+
+    @available(*, deprecated, renamed: "priceCostWideningRisk")
+    public var spreadWideningRisk: Double {
+        get { priceCostWideningRisk }
+        set { priceCostWideningRisk = newValue }
     }
 
     public var reasonCount: Int {
@@ -505,9 +647,9 @@ public enum ExecutionQualityTools {
             "\"broker_coverage\":\(RuntimeArtifactTSV.double(state.brokerCoverage))," +
             "\"broker_reject_prob\":\(RuntimeArtifactTSV.double(state.brokerRejectProbability))," +
             "\"broker_partial_fill_prob\":\(RuntimeArtifactTSV.double(state.brokerPartialFillProbability))," +
-            "\"spread_now_points\":\(RuntimeArtifactTSV.double(state.spreadNowPoints))," +
-            "\"spread_expected_points\":\(RuntimeArtifactTSV.double(state.spreadExpectedPoints))," +
-            "\"spread_widening_risk\":\(RuntimeArtifactTSV.double(state.spreadWideningRisk))," +
+            "\"spread_now_points\":\(RuntimeArtifactTSV.double(state.priceCostNowPoints))," +
+            "\"spread_expected_points\":\(RuntimeArtifactTSV.double(state.priceCostExpectedPoints))," +
+            "\"spread_widening_risk\":\(RuntimeArtifactTSV.double(state.priceCostWideningRisk))," +
             "\"expected_slippage_points\":\(RuntimeArtifactTSV.double(state.expectedSlippagePoints))," +
             "\"slippage_risk\":\(RuntimeArtifactTSV.double(state.slippageRisk))," +
             "\"fill_quality_score\":\(RuntimeArtifactTSV.double(state.fillQualityScore))," +
@@ -584,12 +726,12 @@ public enum ExecutionQualityTools {
                 state.brokerRejectProbability = Double(value) ?? 0.0
             case "broker_partial_fill_prob":
                 state.brokerPartialFillProbability = Double(value) ?? 0.0
-            case "spread_now_points":
-                state.spreadNowPoints = Double(value) ?? 0.0
-            case "spread_expected_points":
-                state.spreadExpectedPoints = Double(value) ?? 0.0
-            case "spread_widening_risk":
-                state.spreadWideningRisk = Double(value) ?? 0.0
+            case "spread_now_points", "price_cost_now_points":
+                state.priceCostNowPoints = Double(value) ?? 0.0
+            case "spread_expected_points", "price_cost_expected_points":
+                state.priceCostExpectedPoints = Double(value) ?? 0.0
+            case "spread_widening_risk", "price_cost_widening_risk":
+                state.priceCostWideningRisk = Double(value) ?? 0.0
             case "expected_slippage_points":
                 state.expectedSlippagePoints = Double(value) ?? 0.0
             case "slippage_risk":
@@ -812,7 +954,7 @@ public enum ExecutionQualityTools {
             (config.memoryStaleAfterHours > 0 &&
                 state.generatedAt > 0 &&
                 (state.generatedAt - memory.generatedAt) > Int64(config.memoryStaleAfterHours * 3_600))
-        state.spreadNowPoints = max(inputs.priceCostPredictedPoints, 0.0)
+        state.priceCostNowPoints = max(inputs.priceCostPredictedPoints, 0.0)
         state.brokerCoverage = fxClamp(inputs.brokerStats.coverage, 0.0, 1.0)
         state.brokerRejectProbability = fxClamp(inputs.brokerStats.rejectProbability, 0.0, 1.0)
         state.brokerPartialFillProbability = fxClamp(
@@ -825,7 +967,7 @@ public enum ExecutionQualityTools {
         )
         state.supportUsable = selection.supportUsable && state.brokerCoverage >= 0.05
         state.dataStale = state.memoryStale ||
-            state.spreadNowPoints <= 0.0 ||
+            state.priceCostNowPoints <= 0.0 ||
             (config.blockOnUnknown && staleContextCount > 0)
 
         let newsRisk = inputs.newsState.ready && inputs.newsState.available
@@ -880,7 +1022,7 @@ public enum ExecutionQualityTools {
         let brokerBurst = fxClamp(inputs.brokerStats.eventBurstPenalty, 0.0, 1.0)
         let brokerLatencyNorm = fxClamp(inputs.brokerStats.latencyPoints / 5.0, 0.0, 1.0)
 
-        state.spreadWideningRisk = fxClamp(
+        state.priceCostWideningRisk = fxClamp(
             0.10 +
                 config.weightPriceCostZScore * priceCostZNorm +
                 config.weightNewsRisk * newsRisk +
@@ -903,21 +1045,21 @@ public enum ExecutionQualityTools {
         let expectedCostMultiplier = fxClamp(
             0.96 +
                 0.38 * tier.priceCostMultiplier +
-                0.64 * state.spreadWideningRisk +
+                0.64 * state.priceCostWideningRisk +
                 0.14 * priceCostZNorm +
                 0.06 * thinness,
             1.0,
             config.capExpectedPriceCostMultiplier
         )
-        state.spreadExpectedPoints = max(
-            state.spreadNowPoints,
-            state.spreadNowPoints * expectedCostMultiplier +
+        state.priceCostExpectedPoints = max(
+            state.priceCostNowPoints,
+            state.priceCostNowPoints * expectedCostMultiplier +
                 0.12 * max(inputs.brokerStats.slippagePoints, 0.0)
         )
 
         state.expectedSlippagePoints = fxClamp(
             max(inputs.brokerStats.slippagePoints, 0.0) * tier.slippageMultiplier +
-                0.16 * state.spreadExpectedPoints +
+                0.16 * state.priceCostExpectedPoints +
                 0.55 * microHostile +
                 0.38 * volatilityBurstNorm +
                 0.26 * thinness +
@@ -935,7 +1077,7 @@ public enum ExecutionQualityTools {
         state.slippageRisk = fxClamp(
             0.12 +
                 0.24 * fxClamp(
-                    state.expectedSlippagePoints / max(state.spreadExpectedPoints + 0.5, 1.0),
+                    state.expectedSlippagePoints / max(state.priceCostExpectedPoints + 0.5, 1.0),
                     0.0,
                     3.0
                 ) / 3.0 +
@@ -997,7 +1139,7 @@ public enum ExecutionQualityTools {
 
         state.executionQualityScore = fxClamp(
             0.40 * state.fillQualityScore +
-                0.18 * (1.0 - state.spreadWideningRisk) +
+                0.18 * (1.0 - state.priceCostWideningRisk) +
                 0.18 * (1.0 - state.slippageRisk) +
                 0.12 * (1.0 - state.latencySensitivityScore) +
                 0.12 * (1.0 - state.liquidityFragilityScore) -
@@ -1012,7 +1154,7 @@ public enum ExecutionQualityTools {
             state.executionState = "BLOCKED"
         } else if config.allowBlockState &&
             (state.executionQualityScore < blockThreshold ||
-                state.spreadWideningRisk >= 0.90 ||
+                state.priceCostWideningRisk >= 0.90 ||
                 state.slippageRisk >= 0.90 ||
                 state.fillQualityScore <= 0.20) {
             state.executionState = "BLOCKED"
@@ -1033,7 +1175,7 @@ public enum ExecutionQualityTools {
             baseDeviation *
                 tier.deviationMultiplier *
                 (1.0 +
-                    0.14 * state.spreadWideningRisk +
+                    0.14 * state.priceCostWideningRisk +
                     0.18 * state.slippageRisk +
                     0.10 * state.latencySensitivityScore),
             config.capAllowedDeviationPointsMin,
@@ -1226,7 +1368,7 @@ public enum ExecutionQualityTools {
             state.appendReason("CROSS_ASSET_STRESS_ELEVATED")
         }
         if priceCostZNorm >= 0.55 {
-            state.appendReason("SPREAD_ALREADY_ELEVATED")
+            state.appendReason("PRICE_COST_ALREADY_ELEVATED")
         }
         if microHostile >= 0.62 {
             state.appendReason("MICROSTRUCTURE_HOSTILE")
@@ -1389,9 +1531,9 @@ public enum ExecutionQualityTools {
             ("broker_coverage", RuntimeArtifactTSV.double(state.brokerCoverage)),
             ("broker_reject_prob", RuntimeArtifactTSV.double(state.brokerRejectProbability)),
             ("broker_partial_fill_prob", RuntimeArtifactTSV.double(state.brokerPartialFillProbability)),
-            ("spread_now_points", RuntimeArtifactTSV.double(state.spreadNowPoints)),
-            ("spread_expected_points", RuntimeArtifactTSV.double(state.spreadExpectedPoints)),
-            ("spread_widening_risk", RuntimeArtifactTSV.double(state.spreadWideningRisk)),
+            ("spread_now_points", RuntimeArtifactTSV.double(state.priceCostNowPoints)),
+            ("spread_expected_points", RuntimeArtifactTSV.double(state.priceCostExpectedPoints)),
+            ("spread_widening_risk", RuntimeArtifactTSV.double(state.priceCostWideningRisk)),
             ("expected_slippage_points", RuntimeArtifactTSV.double(state.expectedSlippagePoints)),
             ("slippage_risk", RuntimeArtifactTSV.double(state.slippageRisk)),
             ("fill_quality_score", RuntimeArtifactTSV.double(state.fillQualityScore)),

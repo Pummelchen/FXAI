@@ -213,8 +213,8 @@ final class ExecutionQualityTests: XCTestCase {
         XCTAssertEqual(state.brokerCoverage, 0.80, accuracy: 0.0)
         XCTAssertEqual(state.brokerRejectProbability, 0.25, accuracy: 0.0)
         XCTAssertEqual(state.brokerPartialFillProbability, 0.35, accuracy: 0.0)
-        XCTAssertEqual(state.spreadWideningRisk, 0.6656, accuracy: 1e-12)
-        XCTAssertEqual(state.spreadExpectedPoints, 2.9747760000000003, accuracy: 1e-12)
+        XCTAssertEqual(state.priceCostWideningRisk, 0.6656, accuracy: 1e-12)
+        XCTAssertEqual(state.priceCostExpectedPoints, 2.9747760000000003, accuracy: 1e-12)
         XCTAssertEqual(state.expectedSlippagePoints, 3.0147641600000004, accuracy: 1e-12)
         XCTAssertEqual(state.slippageRisk, 0.5084091166739958, accuracy: 1e-12)
         XCTAssertEqual(state.latencySensitivityScore, 0.628, accuracy: 1e-12)
@@ -251,9 +251,9 @@ final class ExecutionQualityTests: XCTestCase {
             brokerCoverage: 0.90,
             brokerRejectProbability: 0.20,
             brokerPartialFillProbability: 0.30,
-            spreadNowPoints: 1.25,
-            spreadExpectedPoints: 2.50,
-            spreadWideningRisk: 0.60,
+            priceCostNowPoints: 1.25,
+            priceCostExpectedPoints: 2.50,
+            priceCostWideningRisk: 0.60,
             expectedSlippagePoints: 3.75,
             slippageRisk: 0.40,
             fillQualityScore: 0.55,
@@ -279,6 +279,7 @@ final class ExecutionQualityTests: XCTestCase {
         let parsed = try XCTUnwrap(ExecutionQualityTools.readPairState(symbol: "EUR/USD live", stateTSV: tsv, nowUTC: 1_704_067_201))
         XCTAssertEqual(parsed.symbol, "EUR/USD live")
         XCTAssertEqual(parsed.executionState, "CAUTION")
+        XCTAssertEqual(parsed.priceCostExpectedPoints, 2.50)
         XCTAssertEqual(parsed.reasonsCSV, "DATA_STALE; EXECUTION_STATE_CAUTION")
 
         let line = try XCTUnwrap(ExecutionQualityTools.runtimeHistoryNDJSONLine(symbol: "EUR/USD live", state: state))
@@ -386,9 +387,9 @@ final class ExecutionQualityTests: XCTestCase {
         XCTAssertEqual(state?.brokerCoverage, 0.9)
         XCTAssertEqual(state?.brokerRejectProbability, 0.2)
         XCTAssertEqual(state?.brokerPartialFillProbability, 0.3)
-        XCTAssertEqual(state?.spreadNowPoints, 1.2)
-        XCTAssertEqual(state?.spreadExpectedPoints, 0.8)
-        XCTAssertEqual(state?.spreadWideningRisk, 1.4)
+        XCTAssertEqual(state?.priceCostNowPoints, 1.2)
+        XCTAssertEqual(state?.priceCostExpectedPoints, 0.8)
+        XCTAssertEqual(state?.priceCostWideningRisk, 1.4)
         XCTAssertEqual(state?.expectedSlippagePoints, 0.6)
         XCTAssertEqual(state?.slippageRisk, 0.7)
         XCTAssertEqual(state?.fillQualityScore, 0.75)
@@ -400,6 +401,59 @@ final class ExecutionQualityTests: XCTestCase {
         XCTAssertEqual(state?.cautionEnterProbabilityBuffer, 0.4)
         XCTAssertEqual(state?.executionState, "STRESSED")
         XCTAssertEqual(state?.reasonsCSV, "DATA_STALE; MEMORY_STALE; SUPPORT_TOO_LOW")
+    }
+
+    func testExecutionQualityParsesPriceCostStateKeys() {
+        let state = ExecutionQualityTools.readPairState(
+            symbol: "EURUSD",
+            stateTSV: """
+            symbol\tEURUSD
+            generated_at\t1000
+            price_cost_now_points\t1.3
+            price_cost_expected_points\t2.4
+            price_cost_widening_risk\t0.6
+            execution_state\tNORMAL
+            """,
+            nowUTC: 1_100,
+            freshnessMaxSeconds: 180
+        )
+
+        XCTAssertNotNil(state)
+        XCTAssertEqual(state?.priceCostNowPoints, 1.3)
+        XCTAssertEqual(state?.priceCostExpectedPoints, 2.4)
+        XCTAssertEqual(state?.priceCostWideningRisk, 0.6)
+        XCTAssertEqual(state?.executionState, "NORMAL")
+    }
+
+    func testExecutionQualityPairStateCodableDecodesLegacySpreadKeysAndEncodesPriceCostKeys() throws {
+        let legacyJSON = """
+        {
+          "ready": true,
+          "available": true,
+          "stale": false,
+          "generatedAt": 1704067200,
+          "symbol": "eurusd",
+          "spreadNowPoints": 1.1,
+          "spreadExpectedPoints": 2.2,
+          "spreadWideningRisk": 0.3,
+          "reasons": ["DATA_STALE", "DATA_STALE", " SUPPORT_TOO_LOW "]
+        }
+        """
+        let decoded = try JSONDecoder().decode(
+            ExecutionQualityPairState.self,
+            from: try XCTUnwrap(legacyJSON.data(using: .utf8))
+        )
+
+        XCTAssertEqual(decoded.symbol, "EURUSD")
+        XCTAssertEqual(decoded.priceCostNowPoints, 1.1)
+        XCTAssertEqual(decoded.priceCostExpectedPoints, 2.2)
+        XCTAssertEqual(decoded.priceCostWideningRisk, 0.3)
+        XCTAssertEqual(decoded.reasonsCSV, "DATA_STALE; SUPPORT_TOO_LOW")
+
+        let encoded = try JSONEncoder().encode(decoded)
+        let encodedText = try XCTUnwrap(String(data: encoded, encoding: .utf8))
+        XCTAssertTrue(encodedText.contains("\"priceCostExpectedPoints\":2.2"))
+        XCTAssertFalse(encodedText.contains("spreadExpectedPoints"))
     }
 
     func testExecutionQualityFreshnessOverwritesStaleAndMissingClockFailsStale() {

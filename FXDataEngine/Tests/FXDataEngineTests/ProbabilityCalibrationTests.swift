@@ -138,7 +138,7 @@ final class ProbabilityCalibrationTests: XCTestCase {
         let executionQuality = ExecutionQualityPairState(
             ready: true,
             dataStale: false,
-            spreadExpectedPoints: 2.20,
+            priceCostExpectedPoints: 2.20,
             expectedSlippagePoints: 1.40,
             fillQualityScore: 0.70,
             latencySensitivityScore: 0.20,

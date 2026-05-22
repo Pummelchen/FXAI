@@ -1064,9 +1064,9 @@ public enum ProbabilityCalibrationTools {
         )
         let executionQualityUsable = inputs.executionQualityState.ready &&
             !inputs.executionQualityState.dataStale &&
-            inputs.executionQualityState.spreadExpectedPoints >= 0.0
+            inputs.executionQualityState.priceCostExpectedPoints >= 0.0
         if executionQualityUsable {
-            priceCost = max(max(inputs.executionQualityState.spreadExpectedPoints, inputs.priceCostPoints), 0.0) +
+            priceCost = max(max(inputs.executionQualityState.priceCostExpectedPoints, inputs.priceCostPoints), 0.0) +
                 max(inputs.commissionPoints, 0.0) +
                 max(inputs.costBufferPoints, 0.0) +
                 max(profile.costBufferPoints, 0.0)
