@@ -417,6 +417,47 @@ final class PluginContractTests: XCTestCase {
         XCTAssertEqual(fallback.reliability, 0.95, accuracy: 1e-12)
     }
 
+    func testPluginTernaryCalibratorMatchesLegacyUpdateAndCalibrationRules() {
+        var calibrator = PluginTernaryCalibrator()
+        let initial = calibrator.calibrated([0.20, 0.30, 0.50])
+        XCTAssertEqual(initial[0], 0.20, accuracy: 1e-12)
+        XCTAssertEqual(initial[1], 0.30, accuracy: 1e-12)
+        XCTAssertEqual(initial[2], 0.50, accuracy: 1e-12)
+
+        calibrator.update(
+            rawProbabilities: [0.20, 0.30, 0.50],
+            labelClass: .buy,
+            sampleWeight: 2.0,
+            learningRate: 0.10
+        )
+
+        XCTAssertEqual(calibrator.steps, 1)
+        XCTAssertEqual(calibrator.biases[0], -0.004, accuracy: 1e-12)
+        XCTAssertEqual(calibrator.biases[1], 0.014, accuracy: 1e-12)
+        XCTAssertEqual(calibrator.biases[2], -0.010, accuracy: 1e-12)
+        XCTAssertEqual(calibrator.weights[0][0], 1.0 + 0.02 * (-0.20 * log(0.20)), accuracy: 1e-12)
+        XCTAssertEqual(calibrator.weights[1][1], 1.0 + 0.02 * (0.70 * log(0.30)), accuracy: 1e-12)
+        XCTAssertEqual(calibrator.weights[2][2], 1.0 + 0.02 * (-0.50 * log(0.50)), accuracy: 1e-12)
+        XCTAssertEqual(calibrator.isotonicCount[0][2], 2.0, accuracy: 0.0)
+        XCTAssertEqual(calibrator.isotonicPositive[1][3], 2.0, accuracy: 0.0)
+        XCTAssertEqual(calibrator.isotonicCount[2][6], 2.0, accuracy: 0.0)
+
+        for _ in 0..<29 {
+            calibrator.update(
+                rawProbabilities: [0.20, 0.30, 0.50],
+                labelClass: .buy,
+                sampleWeight: 2.0,
+                learningRate: 0.10
+            )
+        }
+
+        let learned = calibrator.calibrated([0.20, 0.30, 0.50])
+        XCTAssertEqual(calibrator.steps, 30)
+        XCTAssertEqual(learned.reduce(0.0, +), 1.0, accuracy: 1e-12)
+        XCTAssertGreaterThan(learned[LabelClass.buy.rawValue], 0.30)
+        XCTAssertTrue(learned.allSatisfy { $0 >= 0.0005 && $0 <= 0.9990 })
+    }
+
     func testMLPayloadCarriesVolumeAvailability() {
         let x = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
         let context = PluginContextV4(priceCostPoints: 1.25, minMovePoints: 2.5, dataHasVolume: true)
