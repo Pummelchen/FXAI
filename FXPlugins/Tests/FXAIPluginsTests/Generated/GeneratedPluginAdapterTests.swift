@@ -71,6 +71,33 @@ final class GeneratedPluginAdapterTests: XCTestCase {
         }
     }
 
+    func testGeneratedAdaptersLearnFromTrainingSamples() throws {
+        let buyRequest = Self.predictRequest(dataHasVolume: true)
+        var sellFeatures = buyRequest.x
+        sellFeatures[0] = -sellFeatures[0]
+        sellFeatures[3] = -sellFeatures[3]
+        sellFeatures[7] = -sellFeatures[7]
+        sellFeatures[8] = abs(sellFeatures[8])
+        let sellRequest = PredictRequestV4(valid: true, context: buyRequest.context, x: sellFeatures)
+
+        for definition in FXAIGeneratedPluginDefinition.all {
+            var adapter = FXAIGeneratedPluginAdapter(definition: definition)
+            let before = try adapter.predict(buyRequest, hyperParameters: HyperParameters())
+            for _ in 0..<16 {
+                try adapter.train(Self.trainRequest(from: buyRequest, label: .buy, movePoints: 2.5), hyperParameters: HyperParameters())
+                try adapter.train(Self.trainRequest(from: sellRequest, label: .sell, movePoints: 2.0), hyperParameters: HyperParameters())
+            }
+            let after = try adapter.predict(buyRequest, hyperParameters: HyperParameters())
+
+            XCTAssertGreaterThan(
+                after.classProbabilities[LabelClass.buy.rawValue],
+                before.classProbabilities[LabelClass.buy.rawValue],
+                "training did not improve buy similarity for \(definition.aiName)"
+            )
+            XCTAssertNoThrow(try after.validate(), definition.aiName)
+        }
+    }
+
     func testAccelerationPlansClassifyAppleSiliconBackends() throws {
         let plans = Dictionary(uniqueKeysWithValues: FXAIPluginRegistry.accelerationPlans().map { ($0.pluginName, $0) })
 
@@ -103,6 +130,18 @@ final class GeneratedPluginAdapterTests: XCTestCase {
                 dataHasVolume: dataHasVolume
             ),
             x: features
+        )
+    }
+
+    private static func trainRequest(from request: PredictRequestV4, label: LabelClass, movePoints: Double) -> TrainRequestV4 {
+        TrainRequestV4(
+            valid: true,
+            context: request.context,
+            labelClass: label,
+            movePoints: movePoints,
+            sampleWeight: 1.0,
+            nextVolumeTarget: request.context.dataHasVolume ? 1.0 : 0.0,
+            x: request.x
         )
     }
 }

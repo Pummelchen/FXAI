@@ -39,6 +39,10 @@ public struct MLInferencePayload: Codable, Hashable, Sendable {
     public let modelIdentifier: String
     public let framework: MLFramework
     public let dataHasVolume: Bool
+    public let horizonMinutes: Int
+    public let sequenceBars: Int
+    public let priceCostPoints: Double
+    public let minMovePoints: Double
     public let x: [Double]
     public let xWindow: [[Double]]
 
@@ -47,6 +51,10 @@ public struct MLInferencePayload: Codable, Hashable, Sendable {
         modelIdentifier: String,
         framework: MLFramework,
         dataHasVolume: Bool,
+        horizonMinutes: Int = 1,
+        sequenceBars: Int = 1,
+        priceCostPoints: Double = 0.0,
+        minMovePoints: Double = 0.0,
         x: [Double],
         xWindow: [[Double]]
     ) {
@@ -54,8 +62,41 @@ public struct MLInferencePayload: Codable, Hashable, Sendable {
         self.modelIdentifier = modelIdentifier
         self.framework = framework
         self.dataHasVolume = dataHasVolume
+        self.horizonMinutes = max(1, horizonMinutes)
+        self.sequenceBars = min(max(1, sequenceBars), FXDataEngineConstants.maxSequenceBars)
+        self.priceCostPoints = max(0.0, fxSafeFinite(priceCostPoints))
+        self.minMovePoints = max(0.0, fxSafeFinite(minMovePoints))
         self.x = x
         self.xWindow = xWindow
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case apiVersion
+        case modelIdentifier
+        case framework
+        case dataHasVolume
+        case horizonMinutes
+        case sequenceBars
+        case priceCostPoints
+        case minMovePoints
+        case x
+        case xWindow
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            apiVersion: try container.decodeIfPresent(Int.self, forKey: .apiVersion) ?? FXDataEngineConstants.apiVersionV4,
+            modelIdentifier: try container.decode(String.self, forKey: .modelIdentifier),
+            framework: try container.decode(MLFramework.self, forKey: .framework),
+            dataHasVolume: try container.decodeIfPresent(Bool.self, forKey: .dataHasVolume) ?? false,
+            horizonMinutes: try container.decodeIfPresent(Int.self, forKey: .horizonMinutes) ?? 1,
+            sequenceBars: try container.decodeIfPresent(Int.self, forKey: .sequenceBars) ?? 1,
+            priceCostPoints: try container.decodeIfPresent(Double.self, forKey: .priceCostPoints) ?? 0.0,
+            minMovePoints: try container.decodeIfPresent(Double.self, forKey: .minMovePoints) ?? 0.0,
+            x: try container.decode([Double].self, forKey: .x),
+            xWindow: try container.decodeIfPresent([[Double]].self, forKey: .xWindow) ?? []
+        )
     }
 }
 
@@ -218,9 +259,13 @@ public protocol ExternalMLBackend: Sendable {
 
 public struct PythonMLBackendBridge: ExternalMLBackend {
     public let descriptor: MLBackendDescriptor
+    private let executable: String
+    private let module: String
 
     public init(framework: MLFramework, executable: String = "python3", module: String, modelIdentifier: String) {
         precondition(framework == .pyTorch || framework == .tensorFlow, "Python bridge supports PyTorch or TensorFlow")
+        self.executable = executable
+        self.module = module
         self.descriptor = MLBackendDescriptor(
             mode: .externalPython(framework: framework, executable: executable, module: module),
             modelIdentifier: modelIdentifier
@@ -228,12 +273,76 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
     }
 
     public func predict(_ payload: MLInferencePayload) async throws -> PredictionV4 {
-        throw FXDataEngineError.externalBackend("Python \(payload.framework.rawValue) bridge is declared but not wired to a process runner yet")
+        let command = PythonMLBackendCommand(operation: "predict", inference: payload, training: nil)
+        let response = try await run(command)
+        guard response.ok else {
+            throw FXDataEngineError.externalBackend(response.error ?? "Python backend returned failure")
+        }
+        if let error = response.error {
+            throw FXDataEngineError.externalBackend(error)
+        }
+        guard let prediction = response.prediction else {
+            throw FXDataEngineError.externalBackend("Python backend did not return a prediction")
+        }
+        try prediction.validate()
+        return prediction
     }
 
     public func train(_ payload: MLTrainingPayload) async throws {
-        throw FXDataEngineError.externalBackend("Python \(payload.inference.framework.rawValue) bridge is declared but not wired to a process runner yet")
+        let command = PythonMLBackendCommand(operation: "train", inference: nil, training: payload)
+        let response = try await run(command)
+        guard response.ok else {
+            throw FXDataEngineError.externalBackend(response.error ?? "Python backend returned failure")
+        }
+        if let error = response.error {
+            throw FXDataEngineError.externalBackend(error)
+        }
     }
+
+    private func run(_ command: PythonMLBackendCommand) async throws -> PythonMLBackendResponse {
+        try await Task.detached(priority: .utility) {
+            let input = try JSONEncoder().encode(command)
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            if self.module.contains("/") || self.module.hasSuffix(".py") {
+                process.arguments = [self.executable, self.module, command.operation]
+            } else {
+                process.arguments = [self.executable, "-m", self.module, command.operation]
+            }
+
+            let stdin = Pipe()
+            let stdout = Pipe()
+            let stderr = Pipe()
+            process.standardInput = stdin
+            process.standardOutput = stdout
+            process.standardError = stderr
+
+            try process.run()
+            stdin.fileHandleForWriting.write(input)
+            try stdin.fileHandleForWriting.close()
+            process.waitUntilExit()
+
+            let output = stdout.fileHandleForReading.readDataToEndOfFile()
+            let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
+            guard process.terminationStatus == 0 else {
+                let message = String(data: errorData, encoding: .utf8) ?? "Python backend failed"
+                throw FXDataEngineError.externalBackend(message.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            return try JSONDecoder().decode(PythonMLBackendResponse.self, from: output)
+        }.value
+    }
+}
+
+private struct PythonMLBackendCommand: Codable, Sendable {
+    let operation: String
+    let inference: MLInferencePayload?
+    let training: MLTrainingPayload?
+}
+
+private struct PythonMLBackendResponse: Codable, Sendable {
+    let ok: Bool
+    let prediction: PredictionV4?
+    let error: String?
 }
 
 public enum MLBackendFactory {
@@ -252,6 +361,10 @@ public enum MLBackendFactory {
             modelIdentifier: descriptor.modelIdentifier,
             framework: framework,
             dataHasVolume: request.context.dataHasVolume,
+            horizonMinutes: request.context.horizonMinutes,
+            sequenceBars: request.context.sequenceBars,
+            priceCostPoints: request.context.priceCostPoints,
+            minMovePoints: request.context.minMovePoints,
             x: request.x,
             xWindow: request.xWindow
         )

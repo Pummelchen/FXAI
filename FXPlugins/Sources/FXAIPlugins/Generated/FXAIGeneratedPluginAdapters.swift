@@ -3,6 +3,10 @@ import Foundation
 
 public struct FXAIGeneratedPluginAdapter: FXAIPlannedPlugin {
     public let definition: FXAIGeneratedPluginDefinition
+    private var classCentroids: [[Double]]
+    private var classMass: [Double]
+    private var moveEMA: Double
+    private var trainedSteps: Int
 
     public var manifest: PluginManifestV4 {
         PluginManifestV4(
@@ -33,9 +37,24 @@ public struct FXAIGeneratedPluginAdapter: FXAIPlannedPlugin {
 
     public init(definition: FXAIGeneratedPluginDefinition) {
         self.definition = definition
+        self.classCentroids = Array(
+            repeating: Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights),
+            count: LabelClass.allCases.count
+        )
+        self.classMass = Array(repeating: 1.0e-6, count: LabelClass.allCases.count)
+        self.moveEMA = 1.0
+        self.trainedSteps = 0
     }
 
-    public mutating func reset() {}
+    public mutating func reset() {
+        classCentroids = Array(
+            repeating: Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights),
+            count: LabelClass.allCases.count
+        )
+        classMass = Array(repeating: 1.0e-6, count: LabelClass.allCases.count)
+        moveEMA = 1.0
+        trainedSteps = 0
+    }
 
     public func selfTest() -> Bool {
         (try? manifest.validate()) != nil && definition.primaryBackends.isEmpty == false
@@ -44,13 +63,28 @@ public struct FXAIGeneratedPluginAdapter: FXAIPlannedPlugin {
     public mutating func train(_ request: TrainRequestV4, hyperParameters: HyperParameters) throws {
         try request.validate()
         try PluginContractTools.validateCompatibility(manifest: manifest, context: request.context)
+        let labelIndex = request.labelClass.rawValue
+        let sampleWeight = fxClamp(request.sampleWeight, 0.0, 8.0)
+        guard sampleWeight > 0.0 else { return }
+
+        let features = Self.clippedFeatures(request.x)
+        let existingMass = max(classMass[labelIndex], 1.0e-6)
+        let alpha = fxClamp(sampleWeight / (existingMass + sampleWeight), 0.005, 0.25)
+        for index in 0..<features.count {
+            classCentroids[labelIndex][index] = (1.0 - alpha) * classCentroids[labelIndex][index] + alpha * features[index]
+        }
+        classMass[labelIndex] = min(existingMass + sampleWeight, 1_000_000.0)
+        let moveTarget = max(abs(fxSafeFinite(request.movePoints)), request.context.minMovePoints, 1.0)
+        let moveAlpha = fxClamp(0.02 * sampleWeight, 0.005, 0.20)
+        moveEMA = (1.0 - moveAlpha) * moveEMA + moveAlpha * moveTarget
+        trainedSteps += 1
     }
 
     public func predict(_ request: PredictRequestV4, hyperParameters: HyperParameters) throws -> PredictionV4 {
         try request.validate()
         try PluginContractTools.validateCompatibility(manifest: manifest, context: request.context)
 
-        let edge = definition.profile.edge(request)
+        let edge = definition.profile.edge(request) + learnedEdge(request)
         let volumeSignal = request.context.dataHasVolume ? FXAIGeneratedPluginAdapter.feature(request, 6) : 0.0
         let volumeLift = request.context.dataHasVolume ? 0.10 * fxClamp(abs(volumeSignal), 0.0, 1.0) : 0.0
         let rawStrength = abs(edge) * definition.profile.strengthScale + volumeLift
@@ -69,7 +103,7 @@ public struct FXAIGeneratedPluginAdapter: FXAIPlannedPlugin {
         let moveSeed = max(
             request.context.minMovePoints,
             request.context.priceCostPoints,
-            abs(edge) * definition.profile.moveScale
+            max(abs(edge) * definition.profile.moveScale, moveEMA)
         )
         return FXAIGeneratedPluginAdapter.prediction(
             label: label,
@@ -121,6 +155,38 @@ public struct FXAIGeneratedPluginAdapter: FXAIPlannedPlugin {
             confidence: max(probabilities[LabelClass.buy.rawValue], probabilities[LabelClass.sell.rawValue]),
             reliability: fxClamp(reliability, 0.0, 1.0)
         )
+    }
+
+    private static func clippedFeatures(_ x: [Double]) -> [Double] {
+        var output = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
+        for index in 0..<output.count {
+            let value = index < x.count ? fxSafeFinite(x[index]) : 0.0
+            output[index] = fxClamp(value, -8.0, 8.0)
+        }
+        return output
+    }
+
+    private func learnedEdge(_ request: PredictRequestV4) -> Double {
+        guard trainedSteps > 0 else { return 0.0 }
+        let features = Self.clippedFeatures(request.x)
+        let sellSimilarity = cosine(features, classCentroids[LabelClass.sell.rawValue])
+        let buySimilarity = cosine(features, classCentroids[LabelClass.buy.rawValue])
+        let skipSimilarity = max(cosine(features, classCentroids[LabelClass.skip.rawValue]), 0.0)
+        let directional = buySimilarity - sellSimilarity
+        return fxClamp(0.25 * directional * (1.0 - 0.35 * skipSimilarity), -0.35, 0.35)
+    }
+
+    private func cosine(_ lhs: [Double], _ rhs: [Double]) -> Double {
+        var dot = 0.0
+        var lhsNorm = 0.0
+        var rhsNorm = 0.0
+        for index in 0..<min(lhs.count, rhs.count) {
+            dot += lhs[index] * rhs[index]
+            lhsNorm += lhs[index] * lhs[index]
+            rhsNorm += rhs[index] * rhs[index]
+        }
+        guard lhsNorm > 1.0e-12, rhsNorm > 1.0e-12 else { return 0.0 }
+        return fxClamp(dot / sqrt(lhsNorm * rhsNorm), -1.0, 1.0)
     }
 
     private static func normalize(_ values: [Double]) -> [Double] {

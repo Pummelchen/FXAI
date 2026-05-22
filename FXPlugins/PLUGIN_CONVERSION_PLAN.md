@@ -262,6 +262,31 @@ Revision from pass 2:
 6. Review `rule_buyonly` for logic and API integration before converting the
    next plugin.
 
+## Implemented Migration Wave
+
+- Root `FXPlugins` is now a SwiftPM package depending on `FXDataEngine` and
+  `FXBacktest`.
+- The four legacy rule plugins are Swift-native and contract-tested.
+- The two FXBacktest demo plugins are exposed through `FXDataEngine`
+  adapters.
+- The remaining 59 legacy plugin identifiers are exposed through generated
+  Swift adapters with volume-aware online centroid learning and deterministic
+  fallback prediction.
+- Every Swift-era plugin has acceleration metadata covering Swift scalar/SIMD,
+  Accelerate, Metal, PyTorch MPS, TensorFlow Metal, and Core ML / Neural Engine
+  suitability where applicable.
+- `PythonMLBackendBridge` now runs plugin-local Python backends through a JSON
+  process contract and sends OHLCV feature vectors, sequence windows, volume
+  availability, horizon, min-move, and price-cost context.
+- `Python/fxai_plugin_backend.py` provides the generic PyTorch/TensorFlow
+  backend entrypoint, including PyTorch MPS / TensorFlow Metal dispatch when the
+  frameworks are installed and a pure-Python fallback for local contract tests.
+
+Remaining parity work after this wave is plugin-specific: replace generated
+surrogate bodies with direct Swift, Metal, PyTorch, or TensorFlow implementations
+and add per-plugin MQL5 parity fixtures before deleting the matching legacy
+reference file.
+
 ## Implementation Status
 
 Completed first Swift wave on 2026-05-23:
@@ -284,15 +309,19 @@ Completed full Swift adapter wave on 2026-05-23:
   plugins.
 - `FXAIPluginRegistry` now exposes all 65 model IDs: 63 legacy FXAI plugins plus
   the 2 FXBacktest demo adapters.
-- Every generated adapter has a validated manifest, volume-aware deterministic
-  fallback prediction, and explicit Apple Silicon backend metadata.
+- Every generated adapter has a validated manifest, volume-aware online
+  centroid learning, deterministic fallback prediction, and explicit Apple
+  Silicon backend metadata.
 - Sequence and RL plugins now have Swift contract adapters and declared
   PyTorch MPS, TensorFlow Metal, and/or Core ML inference candidates.
+- `PythonMLBackendBridge` and `Python/fxai_plugin_backend.py` provide the
+  process-level PyTorch/TensorFlow execution path for backend-owned plugins.
 
 Remaining work:
 
-- Replace generated fallback prediction with full per-plugin native logic or
-  external PyTorch/TensorFlow model execution as each backend is implemented.
+- Replace generated surrogate prediction with full per-plugin native logic or
+  model-specific PyTorch/TensorFlow training/inference as each backend is
+  implemented.
 - Add parity fixtures for every non-generated algorithm body before removing
   its MQL5 reference file.
 - Remove or retire MQL5 reference files only after each corresponding Swift or

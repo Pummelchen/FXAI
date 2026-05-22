@@ -628,8 +628,10 @@ final class PluginContractTests: XCTestCase {
 
         XCTAssertEqual(payload.framework, .metal)
         XCTAssertTrue(payload.dataHasVolume)
-        XCTAssertEqual(request.context.priceCostPoints, 1.25, accuracy: 0.0)
-        XCTAssertEqual(request.context.minMovePoints, 2.5, accuracy: 0.0)
+        XCTAssertEqual(payload.priceCostPoints, 1.25, accuracy: 0.0)
+        XCTAssertEqual(payload.minMovePoints, 2.5, accuracy: 0.0)
+        XCTAssertEqual(payload.horizonMinutes, 1)
+        XCTAssertEqual(payload.sequenceBars, 1)
         XCTAssertTrue(descriptor.usesVolumeFeatures)
     }
 }
