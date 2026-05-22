@@ -168,10 +168,28 @@ public struct PluginContextV4: Codable, Hashable, Sendable {
     public var featureSchema: FeatureSchema
     public var normalizationMethod: FeatureNormalizationMethod
     public var sequenceBars: Int
+    public var priceCostPoints: Double
+    public var minMovePoints: Double
     public var pointValue: Double
     public var domainHash: Double
     public var sampleTimeUTC: Int64
     public var dataHasVolume: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case apiVersion
+        case regimeID
+        case sessionBucket
+        case horizonMinutes
+        case featureSchema
+        case normalizationMethod
+        case sequenceBars
+        case priceCostPoints
+        case minMovePoints
+        case pointValue
+        case domainHash
+        case sampleTimeUTC
+        case dataHasVolume
+    }
 
     public init(
         apiVersion: Int = FXDataEngineConstants.apiVersionV4,
@@ -181,6 +199,8 @@ public struct PluginContextV4: Codable, Hashable, Sendable {
         featureSchema: FeatureSchema = .full,
         normalizationMethod: FeatureNormalizationMethod = .existing,
         sequenceBars: Int = 1,
+        priceCostPoints: Double = 0.0,
+        minMovePoints: Double = 0.0,
         pointValue: Double = 1.0,
         domainHash: Double = 0.0,
         sampleTimeUTC: Int64 = 0,
@@ -193,10 +213,31 @@ public struct PluginContextV4: Codable, Hashable, Sendable {
         self.featureSchema = featureSchema
         self.normalizationMethod = normalizationMethod
         self.sequenceBars = min(max(1, sequenceBars), FXDataEngineConstants.maxSequenceBars)
+        self.priceCostPoints = max(0.0, fxSafeFinite(priceCostPoints))
+        self.minMovePoints = max(0.0, fxSafeFinite(minMovePoints))
         self.pointValue = pointValue
         self.domainHash = fxClamp(domainHash, 0.0, 1.0)
         self.sampleTimeUTC = sampleTimeUTC
         self.dataHasVolume = dataHasVolume
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            apiVersion: try container.decodeIfPresent(Int.self, forKey: .apiVersion) ?? FXDataEngineConstants.apiVersionV4,
+            regimeID: try container.decodeIfPresent(Int.self, forKey: .regimeID) ?? 0,
+            sessionBucket: try container.decodeIfPresent(Int.self, forKey: .sessionBucket) ?? 0,
+            horizonMinutes: try container.decodeIfPresent(Int.self, forKey: .horizonMinutes) ?? 1,
+            featureSchema: try container.decodeIfPresent(FeatureSchema.self, forKey: .featureSchema) ?? .full,
+            normalizationMethod: try container.decodeIfPresent(FeatureNormalizationMethod.self, forKey: .normalizationMethod) ?? .existing,
+            sequenceBars: try container.decodeIfPresent(Int.self, forKey: .sequenceBars) ?? 1,
+            priceCostPoints: try container.decodeIfPresent(Double.self, forKey: .priceCostPoints) ?? 0.0,
+            minMovePoints: try container.decodeIfPresent(Double.self, forKey: .minMovePoints) ?? 0.0,
+            pointValue: try container.decodeIfPresent(Double.self, forKey: .pointValue) ?? 1.0,
+            domainHash: try container.decodeIfPresent(Double.self, forKey: .domainHash) ?? 0.0,
+            sampleTimeUTC: try container.decodeIfPresent(Int64.self, forKey: .sampleTimeUTC) ?? 0,
+            dataHasVolume: try container.decodeIfPresent(Bool.self, forKey: .dataHasVolume) ?? false
+        )
     }
 
     public func validate() throws {
@@ -214,6 +255,12 @@ public struct PluginContextV4: Codable, Hashable, Sendable {
         }
         guard (1...FXDataEngineConstants.maxSequenceBars).contains(sequenceBars) else {
             throw FXDataEngineError.validation("ctx.sequenceBars")
+        }
+        guard priceCostPoints.isFinite, priceCostPoints >= 0 else {
+            throw FXDataEngineError.validation("ctx.priceCostPoints")
+        }
+        guard minMovePoints.isFinite, minMovePoints >= 0 else {
+            throw FXDataEngineError.validation("ctx.minMovePoints")
         }
         guard pointValue.isFinite, pointValue > 0 else {
             throw FXDataEngineError.validation("ctx.pointValue")

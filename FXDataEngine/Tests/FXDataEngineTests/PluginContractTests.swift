@@ -285,15 +285,149 @@ final class PluginContractTests: XCTestCase {
         XCTAssertTrue(nativeRow.promotionReady)
     }
 
+    func testPluginContextRuntimeWindowHelpersMatchLegacyIndexing() {
+        func row(_ feature0: Double, _ feature1: Double, _ cost: Double = 0.0) -> [Double] {
+            var values = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
+            values[1] = feature0
+            values[2] = feature1
+            values[7] = cost
+            return values
+        }
+        let window = [
+            row(10.0, 1.0, 0.35),
+            row(8.0, 3.0),
+            row(4.0, 5.0),
+            row(2.0, 7.0)
+        ]
+
+        XCTAssertEqual(PluginContextRuntimeTools.effectiveWindowSize(window, declaredSize: 99), 4)
+        XCTAssertEqual(PluginContextRuntimeTools.windowValue(window, barIndex: 0, inputIndex: 1), 10.0, accuracy: 0.0)
+        XCTAssertEqual(
+            PluginContextRuntimeTools.windowSliceMean(window, inputIndex: 1, startBar: 1, count: 2),
+            6.0,
+            accuracy: 0.0
+        )
+        XCTAssertEqual(PluginContextRuntimeTools.currentWindowFeatureMean(window, featureIndex: 0), 3.95, accuracy: 1e-12)
+        XCTAssertEqual(PluginContextRuntimeTools.currentWindowFeatureRecentMean(window, featureIndex: 0, recentBars: 2), 9.0, accuracy: 0.0)
+        XCTAssertEqual(PluginContextRuntimeTools.currentWindowFeatureStd(window, featureIndex: 0), sqrt(10.0), accuracy: 1e-12)
+        XCTAssertEqual(PluginContextRuntimeTools.currentWindowFeatureRange(window, featureIndex: 0, recentBars: 2), 2.0, accuracy: 0.0)
+        XCTAssertEqual(PluginContextRuntimeTools.currentWindowFeatureSlope(window, featureIndex: 0), 8.0 / 3.0, accuracy: 1e-12)
+        XCTAssertEqual(PluginContextRuntimeTools.currentWindowFeatureRecentDelta(window, featureIndex: 0, recentBars: 3), 6.0, accuracy: 0.0)
+        XCTAssertEqual(PluginContextRuntimeTools.currentWindowFeatureEMAMean(window, featureIndex: 0, decay: 0.5), 8.133333333333333, accuracy: 1e-12)
+    }
+
+    func testPluginContextRuntimeClassAndPredictionHelpersMatchLegacyRules() throws {
+        var x = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
+        x[7] = 0.35
+
+        XCTAssertEqual(PluginContextRuntimeTools.contextHorizonBucket(horizonMinutes: 1), 0)
+        XCTAssertEqual(PluginContextRuntimeTools.contextHorizonBucket(horizonMinutes: 34), 6)
+        XCTAssertEqual(PluginContextRuntimeTools.contextHorizonBucket(horizonMinutes: 35), 7)
+        XCTAssertEqual(
+            PluginContextRuntimeTools.normalizeClassLabel(rawLabel: 99, x: x, movePoints: 0.20),
+            .skip
+        )
+        XCTAssertEqual(
+            PluginContextRuntimeTools.normalizeClassLabel(rawLabel: 3, x: x, movePoints: 2.0, priceCostPoints: 0.0),
+            .buy
+        )
+        XCTAssertEqual(
+            PluginContextRuntimeTools.normalizeClassLabel(rawLabel: -1, x: x, movePoints: -2.0, priceCostPoints: 0.0),
+            .sell
+        )
+        XCTAssertEqual(
+            PluginContextRuntimeTools.normalizeClassDistribution([Double.nan, -1.0, 0.0]),
+            [1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0]
+        )
+
+        let context = PluginContextV4(
+            horizonMinutes: 5,
+            priceCostPoints: 0.60,
+            minMovePoints: 1.40,
+            dataHasVolume: true
+        )
+        try context.validate()
+        let legacyContextJSON = """
+        {
+          "apiVersion": 4,
+          "regimeID": 2,
+          "sessionBucket": 3,
+          "horizonMinutes": 5,
+          "featureSchema": 1,
+          "normalizationMethod": 0,
+          "sequenceBars": 1,
+          "pointValue": 1.0,
+          "domainHash": 0.25,
+          "sampleTimeUTC": 1800020000,
+          "dataHasVolume": true
+        }
+        """.data(using: .utf8)!
+        let decodedLegacyContext = try JSONDecoder().decode(PluginContextV4.self, from: legacyContextJSON)
+        XCTAssertEqual(decodedLegacyContext.priceCostPoints, 0.0, accuracy: 0.0)
+        XCTAssertEqual(decodedLegacyContext.minMovePoints, 0.0, accuracy: 0.0)
+        XCTAssertTrue(decodedLegacyContext.dataHasVolume)
+        XCTAssertTrue(String(data: try JSONEncoder().encode(context), encoding: .utf8)!.contains("priceCostPoints"))
+
+        let nativeShape = PluginModelOutputV4(
+            classProbabilities: [0.20, 0.50, 0.30],
+            moveMeanPoints: 4.0,
+            moveQ25Points: 1.0,
+            moveQ50Points: 2.0,
+            moveQ75Points: 6.0,
+            mfeMeanPoints: 8.0,
+            maeMeanPoints: 2.0,
+            hitTimeFraction: 0.40,
+            pathRisk: 0.30,
+            fillRisk: 0.20,
+            confidence: 0.70,
+            reliability: 0.60,
+            hasQuantiles: true,
+            hasConfidence: true,
+            hasPathQuality: true
+        )
+        let prediction = PluginContextRuntimeTools.fillPrediction(
+            modelOutput: nativeShape,
+            calibratedMoveMeanPoints: 6.0,
+            context: context
+        )
+        try prediction.validate()
+        XCTAssertEqual(prediction.moveQ25Points, 1.5, accuracy: 1e-12)
+        XCTAssertEqual(prediction.moveQ50Points, 3.0, accuracy: 1e-12)
+        XCTAssertEqual(prediction.moveQ75Points, 9.0, accuracy: 1e-12)
+        XCTAssertEqual(prediction.mfeMeanPoints, 12.0, accuracy: 1e-12)
+        XCTAssertEqual(prediction.maeMeanPoints, 3.0, accuracy: 1e-12)
+        XCTAssertEqual(prediction.pathRisk, 0.30, accuracy: 1e-12)
+        XCTAssertEqual(prediction.fillRisk, 0.20, accuracy: 1e-12)
+
+        let fallback = PluginContextRuntimeTools.fillPrediction(
+            modelOutput: PluginModelOutputV4(classProbabilities: [0.80, 0.10, 0.10]),
+            calibratedMoveMeanPoints: 2.0,
+            context: context
+        )
+        try fallback.validate()
+        XCTAssertEqual(fallback.moveQ25Points, 1.775, accuracy: 1e-12)
+        XCTAssertEqual(fallback.moveQ50Points, 2.0, accuracy: 1e-12)
+        XCTAssertEqual(fallback.moveQ75Points, 2.225, accuracy: 1e-12)
+        XCTAssertEqual(fallback.mfeMeanPoints, 2.225, accuracy: 1e-12)
+        XCTAssertEqual(fallback.maeMeanPoints, 0.70, accuracy: 1e-12)
+        XCTAssertEqual(fallback.hitTimeFraction, 0.46, accuracy: 1e-12)
+        XCTAssertEqual(fallback.pathRisk, 0.201, accuracy: 1e-12)
+        XCTAssertEqual(fallback.fillRisk, 0.27941176470588236, accuracy: 1e-12)
+        XCTAssertEqual(fallback.confidence, 0.80, accuracy: 1e-12)
+        XCTAssertEqual(fallback.reliability, 0.95, accuracy: 1e-12)
+    }
+
     func testMLPayloadCarriesVolumeAvailability() {
         let x = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
-        let context = PluginContextV4(dataHasVolume: true)
+        let context = PluginContextV4(priceCostPoints: 1.25, minMovePoints: 2.5, dataHasVolume: true)
         let request = PredictRequestV4(valid: true, context: context, x: x)
         let descriptor = MLBackendDescriptor(mode: .inProcess(.metal), modelIdentifier: "model")
         let payload = MLBackendFactory.inferencePayload(descriptor: descriptor, request: request)
 
         XCTAssertEqual(payload.framework, .metal)
         XCTAssertTrue(payload.dataHasVolume)
+        XCTAssertEqual(request.context.priceCostPoints, 1.25, accuracy: 0.0)
+        XCTAssertEqual(request.context.minMovePoints, 2.5, accuracy: 0.0)
         XCTAssertTrue(descriptor.usesVolumeFeatures)
     }
 }
