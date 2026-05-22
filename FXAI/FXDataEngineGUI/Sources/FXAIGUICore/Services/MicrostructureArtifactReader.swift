@@ -72,21 +72,27 @@ public struct MicrostructureArtifactReader {
                 available: parseBool(spec["available"]) ?? true,
                 stale: parseBool(spec["stale"]) ?? true,
                 generatedAt: parseDate(spec["generated_at"]),
-                spreadCurrent: parseDouble(spec["spread_current"]) ?? 0,
+                priceCostCurrent: parseDouble(spec["price_cost_current"])
+                    ?? parseDouble(spec["spread_current"])
+                    ?? 0,
                 silentGapSecondsCurrent: parseDouble(spec["silent_gap_seconds_current"]) ?? 0,
                 sessionTag: spec["session_tag"] as? String ?? "UNKNOWN",
                 handoffFlag: parseBool(spec["handoff_flag"]) ?? false,
                 minutesSinceSessionOpen: parseInt(spec["minutes_since_session_open"]),
                 minutesToSessionClose: parseInt(spec["minutes_to_session_close"]),
                 sessionOpenBurstScore: parseDouble(spec["session_open_burst_score"]) ?? 0,
-                sessionSpreadBehaviorScore: parseDouble(spec["session_spread_behavior_score"]) ?? 0,
+                sessionPriceCostBehaviorScore: parseDouble(spec["session_price_cost_behavior_score"])
+                    ?? parseDouble(spec["session_spread_behavior_score"])
+                    ?? 0,
                 liquidityStressScore: parseDouble(spec["liquidity_stress_score"]) ?? 0,
                 hostileExecutionScore: parseDouble(spec["hostile_execution_score"]) ?? 0,
                 microstructureRegime: spec["microstructure_regime"] as? String ?? "UNKNOWN",
                 tradeGate: spec["trade_gate"] as? String ?? "UNKNOWN",
                 tickImbalance30s: parseDouble(spec["tick_imbalance_30s"]) ?? 0,
                 directionalEfficiency60s: parseDouble(spec["directional_efficiency_60s"]) ?? 0,
-                spreadZScore60s: parseDouble(spec["spread_zscore_60s"]) ?? 0,
+                priceCostZScore60s: parseDouble(spec["price_cost_zscore_60s"])
+                    ?? parseDouble(spec["spread_zscore_60s"])
+                    ?? 0,
                 tickRate60s: parseDouble(spec["tick_rate_60s"]) ?? 0,
                 tickRateZScore60s: parseDouble(spec["tick_rate_zscore_60s"]) ?? 0,
                 realizedVol5m: parseDouble(spec["realized_vol_5m"]) ?? 0,
@@ -95,7 +101,7 @@ public struct MicrostructureArtifactReader {
                 sweepAndRejectFlag60s: parseBool(spec["sweep_and_reject_flag_60s"]) ?? false,
                 breakoutReversalScore60s: parseDouble(spec["breakout_reversal_score_60s"]) ?? 0,
                 exhaustionProxy60s: parseDouble(spec["exhaustion_proxy_60s"]) ?? 0,
-                reasons: spec["reasons"] as? [String] ?? []
+                reasons: uniqueMicrostructureReasons(spec["reasons"] as? [String] ?? [])
             )
         }
         .sorted { lhs, rhs in
@@ -179,6 +185,28 @@ public struct MicrostructureArtifactReader {
         case "CAUTION": 2
         case "ALLOW": 1
         default: 0
+        }
+    }
+
+    private func uniqueMicrostructureReasons(_ raw: [String]) -> [String] {
+        var output: [String] = []
+        for reason in raw {
+            let normalized = normalizedMicrostructureReason(reason)
+            guard !normalized.isEmpty, !output.contains(normalized) else { continue }
+            output.append(normalized)
+        }
+        return output
+    }
+
+    private func normalizedMicrostructureReason(_ reason: String) -> String {
+        let value = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch value {
+        case "wide_spread":
+            return "wide_price_cost"
+        case "Spread instability elevated":
+            return "Price-cost instability elevated"
+        default:
+            return value
         }
     }
 

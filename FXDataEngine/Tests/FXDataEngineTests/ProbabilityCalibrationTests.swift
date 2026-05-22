@@ -204,7 +204,7 @@ final class ProbabilityCalibrationTests: XCTestCase {
                 available: true,
                 stale: false,
                 generatedAt: 1_704_067_100,
-                spreadZscore60s: 0.4,
+                priceCostZscore60s: 0.4,
                 liquidityStressScore: 0.14,
                 hostileExecutionScore: 0.10,
                 sessionTag: "EU_US_OVERLAP",

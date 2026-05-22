@@ -175,7 +175,7 @@ final class ExecutionQualityTests: XCTestCase {
                 stale: false,
                 generatedAt: 1_704_067_100,
                 tickImbalance30s: -0.40,
-                spreadZscore60s: 2.0,
+                priceCostZscore60s: 2.0,
                 tickRateZscore60s: 1.5,
                 volBurstScore5m: 1.5,
                 liquidityStressScore: 0.40,

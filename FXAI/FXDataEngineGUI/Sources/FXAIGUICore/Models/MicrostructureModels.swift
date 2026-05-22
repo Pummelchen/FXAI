@@ -44,21 +44,21 @@ public struct MicrostructureSymbolState: Identifiable, Hashable, Sendable {
     public let available: Bool
     public let stale: Bool
     public let generatedAt: Date?
-    public let spreadCurrent: Double
+    public let priceCostCurrent: Double
     public let silentGapSecondsCurrent: Double
     public let sessionTag: String
     public let handoffFlag: Bool
     public let minutesSinceSessionOpen: Int?
     public let minutesToSessionClose: Int?
     public let sessionOpenBurstScore: Double
-    public let sessionSpreadBehaviorScore: Double
+    public let sessionPriceCostBehaviorScore: Double
     public let liquidityStressScore: Double
     public let hostileExecutionScore: Double
     public let microstructureRegime: String
     public let tradeGate: String
     public let tickImbalance30s: Double
     public let directionalEfficiency60s: Double
-    public let spreadZScore60s: Double
+    public let priceCostZScore60s: Double
     public let tickRate60s: Double
     public let tickRateZScore60s: Double
     public let realizedVol5m: Double
@@ -75,21 +75,21 @@ public struct MicrostructureSymbolState: Identifiable, Hashable, Sendable {
         available: Bool,
         stale: Bool,
         generatedAt: Date?,
-        spreadCurrent: Double,
+        priceCostCurrent: Double,
         silentGapSecondsCurrent: Double,
         sessionTag: String,
         handoffFlag: Bool,
         minutesSinceSessionOpen: Int?,
         minutesToSessionClose: Int?,
         sessionOpenBurstScore: Double,
-        sessionSpreadBehaviorScore: Double,
+        sessionPriceCostBehaviorScore: Double,
         liquidityStressScore: Double,
         hostileExecutionScore: Double,
         microstructureRegime: String,
         tradeGate: String,
         tickImbalance30s: Double,
         directionalEfficiency60s: Double,
-        spreadZScore60s: Double,
+        priceCostZScore60s: Double,
         tickRate60s: Double,
         tickRateZScore60s: Double,
         realizedVol5m: Double,
@@ -106,21 +106,21 @@ public struct MicrostructureSymbolState: Identifiable, Hashable, Sendable {
         self.available = available
         self.stale = stale
         self.generatedAt = generatedAt
-        self.spreadCurrent = spreadCurrent
+        self.priceCostCurrent = priceCostCurrent
         self.silentGapSecondsCurrent = silentGapSecondsCurrent
         self.sessionTag = sessionTag
         self.handoffFlag = handoffFlag
         self.minutesSinceSessionOpen = minutesSinceSessionOpen
         self.minutesToSessionClose = minutesToSessionClose
         self.sessionOpenBurstScore = sessionOpenBurstScore
-        self.sessionSpreadBehaviorScore = sessionSpreadBehaviorScore
+        self.sessionPriceCostBehaviorScore = sessionPriceCostBehaviorScore
         self.liquidityStressScore = liquidityStressScore
         self.hostileExecutionScore = hostileExecutionScore
         self.microstructureRegime = microstructureRegime
         self.tradeGate = tradeGate
         self.tickImbalance30s = tickImbalance30s
         self.directionalEfficiency60s = directionalEfficiency60s
-        self.spreadZScore60s = spreadZScore60s
+        self.priceCostZScore60s = priceCostZScore60s
         self.tickRate60s = tickRate60s
         self.tickRateZScore60s = tickRateZScore60s
         self.realizedVol5m = realizedVol5m
@@ -131,6 +131,15 @@ public struct MicrostructureSymbolState: Identifiable, Hashable, Sendable {
         self.exhaustionProxy60s = exhaustionProxy60s
         self.reasons = reasons
     }
+
+    @available(*, deprecated, renamed: "priceCostCurrent")
+    public var spreadCurrent: Double { priceCostCurrent }
+
+    @available(*, deprecated, renamed: "sessionPriceCostBehaviorScore")
+    public var sessionSpreadBehaviorScore: Double { sessionPriceCostBehaviorScore }
+
+    @available(*, deprecated, renamed: "priceCostZScore60s")
+    public var spreadZScore60s: Double { priceCostZScore60s }
 }
 
 public struct MicrostructureSnapshot: Sendable {

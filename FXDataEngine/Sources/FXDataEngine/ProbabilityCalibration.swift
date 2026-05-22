@@ -1048,7 +1048,7 @@ public enum ProbabilityCalibrationTools {
             max(inputs.costBufferPoints, 0.0) +
             max(profile.costBufferPoints, 0.0)
         let liquidityStress = inputs.microstructureState.ready && inputs.microstructureState.available
-            ? fxClamp(max(inputs.microstructureState.spreadZscore60s, 0.0), 0.0, 4.0)
+            ? fxClamp(max(inputs.microstructureState.priceCostZscore60s, 0.0), 0.0, 4.0)
             : 0.0
         let pathFlags = pathFlags(
             state: state,

@@ -75,7 +75,7 @@ final class AdaptiveRouterRuntimeTests: XCTestCase {
                 generatedAt: 1_704_156_900,
                 tickImbalance30s: -0.40,
                 directionalEfficiency60s: 0.65,
-                spreadZscore60s: 2.0,
+                priceCostZscore60s: 2.0,
                 volBurstScore5m: 1.7,
                 localExtremaBreachScore60s: 0.62,
                 breakoutReversalScore60s: 0.30,
@@ -84,7 +84,7 @@ final class AdaptiveRouterRuntimeTests: XCTestCase {
                 hostileExecutionScore: 0.25,
                 sessionTag: "LONDON_NY_OVERLAP",
                 sessionOpenBurstScore: 0.55,
-                sessionSpreadBehaviorScore: 0.40,
+                sessionPriceCostBehaviorScore: 0.40,
                 tradeGate: "OPEN"
             )
         ))

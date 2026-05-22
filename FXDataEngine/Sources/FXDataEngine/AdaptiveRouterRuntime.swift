@@ -296,7 +296,11 @@ public enum AdaptiveRouterRuntimeTools {
             : 0.0
         let microHandoff = microReady && inputs.microstructureState.handoffFlag
         let microSessionBurst = microReady
-            ? fxClamp(max(inputs.microstructureState.sessionOpenBurstScore, inputs.microstructureState.sessionSpreadBehaviorScore), 0.0, 1.0)
+            ? fxClamp(
+                max(inputs.microstructureState.sessionOpenBurstScore, inputs.microstructureState.sessionPriceCostBehaviorScore),
+                0.0,
+                1.0
+            )
             : 0.0
 
         let priceCostReference = max(inputs.priceCostReferencePoints ?? max(inputs.priceCostPoints, 0.10), 0.10)
@@ -304,7 +308,7 @@ public enum AdaptiveRouterRuntimeTools {
         var priceCostRatio = fxClamp(inputs.priceCostPoints / priceCostReference, 0.25, 4.0)
         var volatilityRatio = fxClamp(abs(inputs.volatilityProxyAbs) / volatilityReference, 0.25, 4.0)
         if microReady {
-            let microCostRatio = fxClamp(1.0 + max(inputs.microstructureState.spreadZscore60s, 0.0) / 2.0, 0.60, 4.0)
+            let microCostRatio = fxClamp(1.0 + max(inputs.microstructureState.priceCostZscore60s, 0.0) / 2.0, 0.60, 4.0)
             let microVolatilityRatio = fxClamp(1.0 + max(inputs.microstructureState.volBurstScore5m - 1.0, 0.0), 0.60, 4.0)
             priceCostRatio = fxClamp(0.72 * priceCostRatio + 0.28 * microCostRatio, 0.25, 4.0)
             volatilityRatio = fxClamp(0.70 * volatilityRatio + 0.30 * microVolatilityRatio, 0.25, 4.0)

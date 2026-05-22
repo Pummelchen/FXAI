@@ -34,21 +34,24 @@ struct MicrostructureArtifactReaderTests {
                     "available": 1,
                     "stale": 0,
                     "generated_at": "2026-04-09T09:30:00Z",
-                    "spread_current": 0.8,
+                    "spread_current": 0.1,
+                    "price_cost_current": 0.8,
                     "silent_gap_seconds_current": 0.4,
                     "session_tag": "LONDON_NEWYORK_OVERLAP",
                     "handoff_flag": 0,
                     "minutes_since_session_open": 75,
                     "minutes_to_session_close": 165,
                     "session_open_burst_score": 0.22,
-                    "session_spread_behavior_score": 0.18,
+                    "session_spread_behavior_score": 0.03,
+                    "session_price_cost_behavior_score": 0.18,
                     "liquidity_stress_score": 0.34,
                     "hostile_execution_score": 0.29,
                     "microstructure_regime": "TRENDING_CLEAN",
                     "trade_gate": "ALLOW",
                     "tick_imbalance_30s": 0.31,
                     "directional_efficiency_60s": 0.71,
-                    "spread_zscore_60s": 0.48,
+                    "spread_zscore_60s": 0.05,
+                    "price_cost_zscore_60s": 0.48,
                     "tick_rate_60s": 129,
                     "tick_rate_zscore_60s": 1.21,
                     "realized_vol_5m": 0.62,
@@ -87,7 +90,11 @@ struct MicrostructureArtifactReaderTests {
                     "sweep_and_reject_flag_60s": 1,
                     "breakout_reversal_score_60s": 0.81,
                     "exhaustion_proxy_60s": 0.73,
-                    "reasons": ["Recent breakout rejection detected", "Spread instability elevated"],
+                    "reasons": [
+                        "Recent breakout rejection detected",
+                        "Spread instability elevated",
+                        "Price-cost instability elevated",
+                    ],
                 ],
             ],
             "health": [
@@ -108,6 +115,11 @@ struct MicrostructureArtifactReaderTests {
         #expect(snapshot.symbols.first?.symbol == "GBPJPY")
         #expect(snapshot.symbols.first?.tradeGate == "CAUTION")
         #expect(snapshot.symbols.first?.sweepAndRejectFlag60s == true)
+        #expect(snapshot.symbols.first?.reasons.contains("Price-cost instability elevated") == true)
+        #expect(snapshot.symbols.first?.reasons.filter { $0 == "Price-cost instability elevated" }.count == 1)
+        #expect(snapshot.symbols.last?.priceCostCurrent == 0.8)
+        #expect(snapshot.symbols.last?.sessionPriceCostBehaviorScore == 0.18)
+        #expect(snapshot.symbols.last?.priceCostZScore60s == 0.48)
         #expect(snapshot.healthSummary.contains(where: { $0.key == "active_symbol_count" }))
         #expect(snapshot.artifactPaths.contains(where: { $0.key == "snapshot_json" }))
     }

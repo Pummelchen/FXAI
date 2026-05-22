@@ -996,7 +996,7 @@ public enum ExecutionQualityTools {
             ? fxClamp(inputs.microstructureState.liquidityStressScore, 0.0, 1.0)
             : (microStale ? 0.44 : 0.12)
         let priceCostZNorm = inputs.microstructureState.ready && inputs.microstructureState.available
-            ? fxClamp(inputs.microstructureState.spreadZscore60s / 4.0, 0.0, 1.0)
+            ? fxClamp(inputs.microstructureState.priceCostZscore60s / 4.0, 0.0, 1.0)
             : 0.0
         let volatilityBurstNorm = inputs.microstructureState.ready && inputs.microstructureState.available
             ? fxClamp(inputs.microstructureState.volBurstScore5m / 3.0, 0.0, 1.0)

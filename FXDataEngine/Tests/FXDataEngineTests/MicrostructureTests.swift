@@ -22,7 +22,7 @@ final class MicrostructureTests: XCTestCase {
             meta\tglobal\tgenerated_at_unix\t1000
             pair\tEURUSD\ttick_imbalance_30s\t2.0
             pair\tEURUSD\tdirectional_efficiency_60s\t-0.5
-            pair\tEURUSD\tspread_current\t-3.0
+            pair\tEURUSD\tprice_cost_current\t-3.0
             pair\tEURUSD\tspread_zscore_60s\t9.0
             pair\tEURUSD\ttick_rate_60s\t-1.0
             pair\tEURUSD\ttick_rate_zscore_60s\t-9.0
@@ -38,7 +38,7 @@ final class MicrostructureTests: XCTestCase {
             pair\tEURUSD\tsession_tag\tNY
             pair\tEURUSD\thandoff_flag\t1
             pair\tEURUSD\tsession_open_burst_score\t1.3
-            pair\tEURUSD\tsession_spread_behavior_score\t-0.2
+            pair\tEURUSD\tsession_price_cost_behavior_score\t-0.2
             pair\tEURUSD\ttrade_gate\tCAUTION
             pair\tEURUSD\tstale\t0
             pair\tEURUSD\tcaution_lot_scale\t1.5
@@ -59,8 +59,8 @@ final class MicrostructureTests: XCTestCase {
         XCTAssertEqual(state?.generatedAt, 1_000)
         XCTAssertEqual(state?.tickImbalance30s, 1.0)
         XCTAssertEqual(state?.directionalEfficiency60s, 0.0)
-        XCTAssertEqual(state?.spreadCurrent, 0.0)
-        XCTAssertEqual(state?.spreadZscore60s, 8.0)
+        XCTAssertEqual(state?.priceCostCurrent, 0.0)
+        XCTAssertEqual(state?.priceCostZscore60s, 8.0)
         XCTAssertEqual(state?.tickRate60s, 0.0)
         XCTAssertEqual(state?.tickRateZscore60s, -8.0)
         XCTAssertEqual(state?.realizedVol5m, 0.0)
@@ -75,11 +75,40 @@ final class MicrostructureTests: XCTestCase {
         XCTAssertEqual(state?.sessionTag, "NY")
         XCTAssertTrue(state?.handoffFlag ?? false)
         XCTAssertEqual(state?.sessionOpenBurstScore, 1.0)
-        XCTAssertEqual(state?.sessionSpreadBehaviorScore, 0.0)
+        XCTAssertEqual(state?.sessionPriceCostBehaviorScore, 0.0)
         XCTAssertEqual(state?.tradeGate, "CAUTION")
         XCTAssertEqual(state?.cautionLotScale, 1.5)
         XCTAssertEqual(state?.cautionEnterProbabilityBuffer, 0.4)
-        XCTAssertEqual(state?.reasonsCSV, "wide_spread; sweep_reject")
+        XCTAssertEqual(state?.reasonsCSV, "wide_price_cost; sweep_reject")
+    }
+
+    func testMicrostructurePairStateCodableDecodesLegacySpreadKeysAndEncodesPriceCostKeys() throws {
+        let legacyJSON = """
+        {
+          "ready": true,
+          "available": true,
+          "stale": false,
+          "spreadCurrent": 1.2,
+          "spreadZscore60s": 2.4,
+          "sessionSpreadBehaviorScore": 0.7,
+          "reasons": ["wide_spread", "Spread instability elevated"]
+        }
+        """.data(using: .utf8)!
+
+        let state = try JSONDecoder().decode(MicrostructurePairState.self, from: legacyJSON)
+        XCTAssertEqual(state.priceCostCurrent, 1.2, accuracy: 0.0)
+        XCTAssertEqual(state.priceCostZscore60s, 2.4, accuracy: 0.0)
+        XCTAssertEqual(state.sessionPriceCostBehaviorScore, 0.7, accuracy: 0.0)
+        XCTAssertEqual(state.reasonsCSV, "wide_price_cost; Price-cost instability elevated")
+
+        let encoded = try JSONEncoder().encode(state)
+        let encodedText = String(data: encoded, encoding: .utf8) ?? ""
+        XCTAssertTrue(encodedText.contains("priceCostCurrent"))
+        XCTAssertTrue(encodedText.contains("priceCostZscore60s"))
+        XCTAssertTrue(encodedText.contains("sessionPriceCostBehaviorScore"))
+        XCTAssertFalse(encodedText.contains("spreadCurrent"))
+        XCTAssertFalse(encodedText.contains("spreadZscore60s"))
+        XCTAssertFalse(encodedText.contains("sessionSpreadBehaviorScore"))
     }
 
     func testMicrostructureMarksStaleAndAppliesStringDefaults() {
