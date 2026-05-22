@@ -67,7 +67,7 @@ public struct AdaptiveRouterSymbolSnapshot: Identifiable, Hashable, Sendable {
     public let tradePosture: String
     public let abstainBias: Double
     public let sessionLabel: String
-    public let spreadRegime: String
+    public let priceCostRegime: String
     public let volatilityRegime: String
     public let newsRiskScore: Double
     public let newsPressure: Double
@@ -105,7 +105,7 @@ public struct AdaptiveRouterSymbolSnapshot: Identifiable, Hashable, Sendable {
         tradePosture: String,
         abstainBias: Double,
         sessionLabel: String,
-        spreadRegime: String,
+        priceCostRegime: String,
         volatilityRegime: String,
         newsRiskScore: Double,
         newsPressure: Double,
@@ -143,7 +143,7 @@ public struct AdaptiveRouterSymbolSnapshot: Identifiable, Hashable, Sendable {
         self.tradePosture = tradePosture
         self.abstainBias = abstainBias
         self.sessionLabel = sessionLabel
-        self.spreadRegime = spreadRegime
+        self.priceCostRegime = priceCostRegime
         self.volatilityRegime = volatilityRegime
         self.newsRiskScore = newsRiskScore
         self.newsPressure = newsPressure
@@ -172,6 +172,9 @@ public struct AdaptiveRouterSymbolSnapshot: Identifiable, Hashable, Sendable {
         self.recentTransitions = recentTransitions
         self.observationCount = observationCount
     }
+
+    @available(*, deprecated, renamed: "priceCostRegime")
+    public var spreadRegime: String { priceCostRegime }
 }
 
 public struct AdaptiveRouterSnapshot: Sendable {

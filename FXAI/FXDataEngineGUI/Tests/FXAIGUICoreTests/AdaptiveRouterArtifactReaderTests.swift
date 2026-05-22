@@ -38,7 +38,8 @@ struct AdaptiveRouterArtifactReaderTests {
                             "trade_posture": "CAUTION",
                             "abstain_bias": "0.180000",
                             "session_label": "LONDON_NY_OVERLAP",
-                            "spread_regime": "ELEVATED",
+                            "spread_regime": "CALM",
+                            "price_cost_regime": "ELEVATED",
                             "volatility_regime": "HIGH",
                             "news_risk_score": "0.760000",
                             "news_pressure": "-0.140000",
@@ -97,7 +98,11 @@ struct AdaptiveRouterArtifactReaderTests {
                     ],
                     "regime_counts": ["HIGH_VOL_EVENT": 9, "BREAKOUT_TRANSITION": 3],
                     "posture_counts": ["CAUTION": 8, "ABSTAIN_BIAS": 2],
-                    "top_reasons": [["reason": "NewsPulse event window active", "count": 9]],
+                    "top_reasons": [
+                        ["reason": "NewsPulse event window active", "count": 9],
+                        ["reason": "Spread regime elevated", "count": 4],
+                        ["reason": "Price-cost regime elevated", "count": 8],
+                    ],
                     "top_plugins": [["plugin": "ai_gha", "count": 7]],
                     "recent_transitions": [
                         ["type": "regime_change", "from": "BREAKOUT_TRANSITION", "to": "HIGH_VOL_EVENT", "at": "2026-04-09T09:16:00Z"],
@@ -114,11 +119,16 @@ struct AdaptiveRouterArtifactReaderTests {
         #expect(snapshot.profileName == "continuous")
         #expect(snapshot.replayHoursBack == 48)
         #expect(snapshot.symbols.count == 1)
-        #expect(snapshot.symbols.first?.topRegime == "HIGH_VOL_EVENT")
-        #expect(snapshot.symbols.first?.activePlugins.first?.name == "ai_gha")
-        #expect(snapshot.symbols.first?.suppressedPlugins.first?.name == "lin_pa")
-        #expect(snapshot.symbols.first?.pairTags.contains("dollar_core") == true)
-        #expect(snapshot.symbols.first?.recentTransitions.first?.toValue == "HIGH_VOL_EVENT")
+        let symbol = try #require(snapshot.symbols.first)
+        #expect(symbol.topRegime == "HIGH_VOL_EVENT")
+        #expect(symbol.priceCostRegime == "ELEVATED")
+        #expect(symbol.reasons.contains("Price-cost regime elevated") == true)
+        let mergedPriceCostReason = try #require(symbol.replayTopReasons.first { $0.key == "Price-cost regime elevated" })
+        #expect(mergedPriceCostReason.value == "12")
+        #expect(symbol.activePlugins.first?.name == "ai_gha")
+        #expect(symbol.suppressedPlugins.first?.name == "lin_pa")
+        #expect(symbol.pairTags.contains("dollar_core") == true)
+        #expect(symbol.recentTransitions.first?.toValue == "HIGH_VOL_EVENT")
     }
 
     @Test

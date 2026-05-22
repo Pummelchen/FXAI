@@ -119,8 +119,10 @@ public struct AdaptiveRouterArtifactReader {
         )
         let pairTags = splitCSV(profileValues["pair_tags_csv"])
         let topProfilePlugins = ((profileJSON["summary"] as? [String: Any])?["top_plugins"] as? [String]) ?? []
+        let latestReasons = (latestReplayRouter["reasons"] as? [String] ?? latestReplayRegime["reasons"] as? [String] ?? [])
+            .map(normalizedAdaptiveRouterReason)
         let reasons = splitSemicolonSeparated(runtimeValues["reasons_csv"])
-            .ifEmpty(latestReplayRouter["reasons"] as? [String] ?? latestReplayRegime["reasons"] as? [String] ?? [])
+            .ifEmpty(latestReasons)
 
         return AdaptiveRouterSymbolSnapshot(
             symbol: symbol,
@@ -143,7 +145,11 @@ public struct AdaptiveRouterArtifactReader {
                 ?? (latestReplayRouter["abstain_bias"] as? Double)
                 ?? 0,
             sessionLabel: runtimeValues["session_label"] ?? (latestReplayRegime["session"] as? String) ?? "UNKNOWN",
-            spreadRegime: runtimeValues["spread_regime"] ?? (latestReplayRegime["spread_regime"] as? String) ?? "UNKNOWN",
+            priceCostRegime: runtimeValues["price_cost_regime"]
+                ?? runtimeValues["spread_regime"]
+                ?? (latestReplayRegime["price_cost_regime"] as? String)
+                ?? (latestReplayRegime["spread_regime"] as? String)
+                ?? "UNKNOWN",
             volatilityRegime: runtimeValues["volatility_regime"] ?? (latestReplayRegime["volatility_regime"] as? String) ?? "UNKNOWN",
             newsRiskScore: parseDouble(runtimeValues["news_risk_score"])
                 ?? (latestReplayRegime["news_risk_score"] as? Double)
@@ -268,10 +274,18 @@ public struct AdaptiveRouterArtifactReader {
     }
 
     private func namedCounts(_ raw: [[String: Any]], nameKey: String) -> [KeyValueRecord] {
-        raw.compactMap { item in
-            guard let name = item[nameKey] as? String, !name.isEmpty else { return nil }
-            let count = item["count"] as? Int ?? 0
-            return KeyValueRecord(key: name, value: "\(count)")
+        var counts: [String: Int] = [:]
+        var orderedKeys: [String] = []
+        for item in raw {
+            guard let name = item[nameKey] as? String, !name.isEmpty else { continue }
+            let key = nameKey == "reason" ? normalizedAdaptiveRouterReason(name) : name
+            if counts[key] == nil {
+                orderedKeys.append(key)
+            }
+            counts[key, default: 0] += item["count"] as? Int ?? 0
+        }
+        return orderedKeys.map { key in
+            KeyValueRecord(key: key, value: "\(counts[key] ?? 0)")
         }
     }
 
@@ -386,6 +400,11 @@ public struct AdaptiveRouterArtifactReader {
             .split(separator: ";", omittingEmptySubsequences: false)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+            .map(normalizedAdaptiveRouterReason)
+    }
+
+    private func normalizedAdaptiveRouterReason(_ reason: String) -> String {
+        reason == "Spread regime elevated" ? "Price-cost regime elevated" : reason
     }
 
     private func defaultReason(for status: String) -> String {

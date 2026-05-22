@@ -288,7 +288,7 @@ public enum GUIValidationFixtures {
             tradePosture: "CAUTION",
             abstainBias: 0.18,
             sessionLabel: "LONDON_NY_OVERLAP",
-            spreadRegime: "ELEVATED",
+            priceCostRegime: "ELEVATED",
             volatilityRegime: "HIGH",
             newsRiskScore: 0.76,
             newsPressure: -0.14,
@@ -303,7 +303,7 @@ public enum GUIValidationFixtures {
             profileGeneratedAt: now.addingTimeInterval(-600),
             reasons: [
                 "NewsPulse event window active",
-                "Spread regime elevated",
+                "Price-cost regime elevated",
                 "Volatility expansion detected",
             ],
             probabilities: [
@@ -344,7 +344,7 @@ public enum GUIValidationFixtures {
             ],
             replayTopReasons: [
                 KeyValueRecord(key: "NewsPulse event window active", value: "18"),
-                KeyValueRecord(key: "Spread regime elevated", value: "12"),
+                KeyValueRecord(key: "Price-cost regime elevated", value: "12"),
             ],
             replayTopPlugins: [
                 KeyValueRecord(key: "ai_gha", value: "14"),
@@ -366,7 +366,7 @@ public enum GUIValidationFixtures {
             tradePosture: "NORMAL",
             abstainBias: 0.06,
             sessionLabel: "LONDON",
-            spreadRegime: "NORMAL",
+            priceCostRegime: "NORMAL",
             volatilityRegime: "NORMAL",
             newsRiskScore: 0.22,
             newsPressure: 0.18,

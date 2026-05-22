@@ -90,7 +90,7 @@ struct AdaptiveRouterView: View {
             )
             MetricCard(
                 title: "Execution",
-                value: detail.spreadRegime.capitalized,
+                value: detail.priceCostRegime.capitalized,
                 footnote: executionFootnote,
                 symbolName: "arrow.left.and.line.vertical.and.arrow.right",
                 tint: FXAITheme.accentSoft

@@ -106,7 +106,7 @@ final class AdaptiveRouterRuntimeTests: XCTestCase {
         XCTAssertEqual(state.liquidityStress, 0.41830000000000006, accuracy: 1e-12)
         XCTAssertEqual(
             state.reasonsCSV,
-            "NewsPulse event window active; Spread regime elevated; Volatility expansion detected; Directional persistence elevated; Cross-asset macro regime active"
+            "NewsPulse event window active; Price-cost regime elevated; Volatility expansion detected; Directional persistence elevated; Cross-asset macro regime active"
         )
     }
 
@@ -218,7 +218,7 @@ final class AdaptiveRouterRuntimeTests: XCTestCase {
             trendStrength: 0.49,
             rangePressure: 0.50,
             macroPressure: 0.53,
-            reasons: ["NewsPulse event window active", "Spread regime elevated"]
+            reasons: ["NewsPulse event window active", "Price-cost regime elevated"]
         )
         let profile = AdaptiveRouterProfile.parse(symbol: "EURUSD", tsv: """
         enabled\t1
@@ -268,8 +268,12 @@ final class AdaptiveRouterRuntimeTests: XCTestCase {
         let parsed = try XCTUnwrap(AdaptiveRouterRuntimeTools.readRegimeState(symbol: "EUR/USD live", stateTSV: tsv))
         XCTAssertEqual(parsed.topLabel, "HIGH_VOL_EVENT")
         XCTAssertEqual(parsed.priceCostRegime, "ELEVATED")
-        XCTAssertEqual(parsed.reasonsCSV, "NewsPulse event window active; Spread regime elevated")
+        XCTAssertEqual(parsed.reasonsCSV, "NewsPulse event window active; Price-cost regime elevated")
         XCTAssertEqual(parsed.probabilities[3], 0.55, accuracy: 0.0)
+        XCTAssertEqual(
+            AdaptiveRouterRuntimeTools.parseState(tsv: "reasons_csv\tSpread regime elevated\n").reasonsCSV,
+            "Price-cost regime elevated"
+        )
 
         let line = try XCTUnwrap(AdaptiveRouterRuntimeTools.runtimeHistoryNDJSONLine(
             symbol: "EUR/USD live",

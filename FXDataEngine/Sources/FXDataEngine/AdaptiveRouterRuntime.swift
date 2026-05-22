@@ -93,7 +93,7 @@ public struct AdaptiveRegimeState: Codable, Hashable, Sendable {
     }
 
     public mutating func appendReason(_ reason: String) {
-        let value = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = Self.normalizedReason(reason)
         guard !value.isEmpty,
               !reasons.contains(value),
               reasons.count < AdaptiveRouterRuntimeConstants.maxReasons else {
@@ -115,7 +115,7 @@ public struct AdaptiveRegimeState: Codable, Hashable, Sendable {
         var output: [String] = []
         output.reserveCapacity(min(input.count, AdaptiveRouterRuntimeConstants.maxReasons))
         for raw in input {
-            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = normalizedReason(raw)
             guard !value.isEmpty,
                   !output.contains(value),
                   output.count < AdaptiveRouterRuntimeConstants.maxReasons else {
@@ -124,6 +124,11 @@ public struct AdaptiveRegimeState: Codable, Hashable, Sendable {
             output.append(value)
         }
         return output
+    }
+
+    private static func normalizedReason(_ raw: String) -> String {
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value == "Spread regime elevated" ? "Price-cost regime elevated" : value
     }
 }
 
@@ -434,7 +439,7 @@ public enum AdaptiveRouterRuntimeTools {
             state.appendReason("NewsPulse stale or unavailable")
         }
         if priceCostRatio >= 1.35 {
-            state.appendReason("Spread regime elevated")
+            state.appendReason("Price-cost regime elevated")
         }
         if volatilityRatio >= 1.25 {
             state.appendReason("Volatility expansion detected")
