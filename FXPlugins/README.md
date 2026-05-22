@@ -19,7 +19,9 @@ contracts:
 
 - 4 hand-ported legacy rule plugins.
 - 2 former FXBacktest demo adapters: `fxbacktest_moving_average_cross` and `fxbacktest_fxstupid`.
-- 59 Swift reference adapters for the remaining legacy plugins, each in its own plugin folder with
+- 1 full plugin-owned native conversion: `lin_sgd`, with Swift CPU code under `lin_sgd/CPU`
+  and a Metal batch-logit kernel source under `lin_sgd/Metal`.
+- 58 Swift reference adapters for the remaining legacy plugins, each in its own plugin folder with
   volume-aware online centroid learning, deterministic fallback prediction, and explicit Apple Silicon
   backend metadata for Swift SIMD, Accelerate, Metal, PyTorch MPS,
   TensorFlow Metal, or Core ML / Neural Engine candidates.
@@ -39,4 +41,4 @@ Run the local verification gate with:
 swift test
 ```
 
-The legacy MQL5 plugin reference files have been removed from the repository. The current source of truth is this plugin-owned Swift zoo plus the conversion plan in `API/Docs/PLUGIN_CONVERSION_PLAN.md`.
+The legacy MQL5 plugin reference files have been removed from the repository. The current source of truth is this plugin-owned Swift zoo plus the full conversion plan in `API/Docs/FULL_PLUGIN_CONVERSION_PLAN.md`.

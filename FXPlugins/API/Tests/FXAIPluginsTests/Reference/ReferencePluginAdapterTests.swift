@@ -7,10 +7,10 @@ final class ReferencePluginAdapterTests: XCTestCase {
         let plugins = Self.referencePlugins()
         let pluginIDs = Set(plugins.map(\.manifest.aiID))
 
-        XCTAssertEqual(plugins.count, FXDataEngineConstants.aiCount - Self.handwrittenIDs.count)
+        XCTAssertEqual(plugins.count, FXDataEngineConstants.aiCount - Self.nonReferenceIDs.count)
         XCTAssertEqual(pluginIDs.count, plugins.count)
 
-        for modelID in AIModelID.allCases where !Self.handwrittenIDs.contains(modelID.rawValue) {
+        for modelID in AIModelID.allCases where !Self.nonReferenceIDs.contains(modelID.rawValue) {
             XCTAssertTrue(pluginIDs.contains(modelID.rawValue), "missing plugin folder adapter for \(modelID)")
         }
     }
@@ -143,19 +143,20 @@ final class ReferencePluginAdapterTests: XCTestCase {
         XCTAssertTrue(plans["rl_ppo"]?.candidateBackends.contains(.coreMLNeuralEngine) ?? false)
     }
 
-    private static let handwrittenIDs: Set<Int> = [
+    private static let nonReferenceIDs: Set<Int> = [
         AIModelID.m1Sync.rawValue,
         AIModelID.buyOnly.rawValue,
         AIModelID.sellOnly.rawValue,
         AIModelID.randomNoSkip.rawValue,
         AIModelID.demoMovingAverageCross.rawValue,
-        AIModelID.demoFXStupid.rawValue
+        AIModelID.demoFXStupid.rawValue,
+        AIModelID.sgdLogit.rawValue
     ]
 
     private static func referencePlugins() -> [any FXAIPlannedPlugin] {
         FXAIPluginRegistry.availablePlugins()
             .compactMap { $0 as? any FXAIPlannedPlugin }
-            .filter { !handwrittenIDs.contains($0.manifest.aiID) }
+            .filter { !nonReferenceIDs.contains($0.manifest.aiID) }
     }
 
     private static func predictRequest(
