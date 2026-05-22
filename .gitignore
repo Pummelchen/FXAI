@@ -33,9 +33,9 @@ FXAI/Tools/OfflineLab/PairNetwork/pair_network_status.json
 FXAI/Tools/OfflineLab/PairNetwork/pair_network_history.ndjson
 FXAI/Tools/Runtime/drift_governance_summary.json
 FXAI/FILE_COMMON/
-FXAI/FXDataEngineGUI/.build/
-FXAI/FXDataEngineGUI/.swiftpm/
-FXAI/FXDataEngineGUI/Artifacts/
+FXDataEngineGUI/.build/
+FXDataEngineGUI/.swiftpm/
+FXDataEngineGUI/Artifacts/
 FXDataEngine/.build/
 FXDataEngine/.swiftpm/
 FXDatabase/.build/

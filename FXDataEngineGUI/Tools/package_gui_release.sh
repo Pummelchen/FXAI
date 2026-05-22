@@ -14,7 +14,7 @@ BUNDLE_ROOT="${OUTPUT_ROOT}/${BUNDLE_NAME}"
 MACOS_DIR="${BUNDLE_ROOT}/Contents/MacOS"
 RESOURCES_DIR="${BUNDLE_ROOT}/Contents/Resources"
 INFO_PLIST="${BUNDLE_ROOT}/Contents/Info.plist"
-GIT_SHA="$(git -C "${GUI_ROOT}/../.." rev-parse --short HEAD 2>/dev/null || printf 'unknown')"
+GIT_SHA="$(git -C "${FXAI_ROOT}" rev-parse --short HEAD 2>/dev/null || printf 'unknown')"
 
 mapfile -t GUI_CONFIG < <(FXAI_ROOT="${FXAI_ROOT}" python3 - <<'PY'
 from __future__ import annotations
@@ -23,7 +23,10 @@ from pathlib import Path
 import sys
 
 root = Path(os.environ["FXAI_ROOT"])
-sys.path.insert(0, str(root / "Tools"))
+tools_root = root / "Tools"
+if not tools_root.exists():
+    tools_root = root / "FXAI" / "Tools"
+sys.path.insert(0, str(tools_root))
 from testlab.toolchain import load_toolchain_config
 
 config = load_toolchain_config(project_root_hint=root)

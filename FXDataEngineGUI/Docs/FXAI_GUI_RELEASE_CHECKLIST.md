@@ -6,7 +6,7 @@ Use this checklist when packaging the FXAI GUI for operator use.
 
 - `swift test`
 - `swift build`
-- `python3 ../Tools/fxai_testlab.py verify-all`
+- `python3 ../FXAI/Tools/fxai_testlab.py verify-all`
 - confirm the latest GUI state renders:
   - saved views
   - onboarding
@@ -23,8 +23,8 @@ cd /path/to/FXAI/FXDataEngineGUI
 ```
 
 Outputs:
-- `FXAI/FXDataEngineGUI/Artifacts/Release/FXAIGUI.app`
-- `FXAI/FXDataEngineGUI/Artifacts/Release/FXAIGUI-macos.zip` by default, or the archive name configured in `../fxai.toml`
+- `FXDataEngineGUI/Artifacts/Release/FXAIGUI.app`
+- `FXDataEngineGUI/Artifacts/Release/FXAIGUI-macos.zip` by default, or the archive name configured in the repo-root toolchain config
 
 ## Operator Checks
 

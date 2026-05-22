@@ -74,7 +74,7 @@ The GUI should be built around FXAI’s actual artifact surfaces:
 
 ### Package Layout
 
-`FXAI/FXDataEngineGUI`
+`FXDataEngineGUI`
 - `Package.swift`
 - `Docs/`
 - `Sources/FXAIGUICore/`

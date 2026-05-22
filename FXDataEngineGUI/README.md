@@ -76,7 +76,7 @@ cd /path/to/FXAI/FXDataEngineGUI
 ./Tools/package_gui_release.sh
 ```
 
-The GUI release packager reads `../fxai.toml` for the default macOS minimum version and archive name, and respects `FXAI_GUI_MINIMUM_MACOS` or `FXAI_GUI_RELEASE_ARCHIVE` overrides when you need a different packaging target.
+The GUI release packager reads the repo-root toolchain config, falling back to `../FXAI/fxai.toml` when no root `fxai.toml` exists. It respects `FXAI_GUI_MINIMUM_MACOS` or `FXAI_GUI_RELEASE_ARCHIVE` overrides when you need a different packaging target.
 
 ## GUI Validation
 
@@ -85,7 +85,7 @@ The GUI includes a dedicated validation suite for layout quality, resize behavio
 - `swift test` runs the core layout and GUI snapshot tests, including the `FXAIGUIAppTests` target
 - `./Tools/run_gui_validation_suite.sh` reruns the full GUI test suite and exports real screenshots for the operator shell
 - validation scenarios cover compact desktop, MacBook 14, standard desktop, wide desktop, 4K-like ultra-wide, and 8K-like ultra-wide sizes
-- the exported screenshots are written to `FXAI/FXDataEngineGUI/Artifacts/GUISnapshots/` and are ignored by git
+- the exported screenshots are written to `FXDataEngineGUI/Artifacts/GUISnapshots/` and are ignored by git
 
 The validation suite is intended to catch:
 - spacing regressions
