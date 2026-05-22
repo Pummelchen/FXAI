@@ -8,6 +8,10 @@ final class AuditSuiteTests: XCTestCase {
             [1, 12, 14]
         )
         XCTAssertEqual(
+            AuditSuiteTools.parseScenarioList("{market_spread_shock}"),
+            [12]
+        )
+        XCTAssertEqual(
             AuditSuiteTools.parseScenarioList("{unknown, }"),
             AuditSuiteTools.fallbackScenarioIDs
         )

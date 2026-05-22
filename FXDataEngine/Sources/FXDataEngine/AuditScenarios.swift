@@ -270,7 +270,7 @@ public enum AuditScenarioTools {
             spec.name = "market_session_edges"
             spec.fillRiskPoints = 1.6
         case 12:
-            spec.name = "market_spread_shock"
+            spec.name = "market_liquidity_shock"
             spec.fillRiskPoints = 2.2
         case 13:
             spec.name = "market_walkforward"

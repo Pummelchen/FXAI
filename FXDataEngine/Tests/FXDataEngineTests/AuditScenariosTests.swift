@@ -20,6 +20,10 @@ final class AuditScenariosTests: XCTestCase {
         XCTAssertEqual(macro.name, "market_macro_event")
         XCTAssertEqual(macro.fillRiskPoints, 1.7, accuracy: 0.0)
         XCTAssertEqual(macro.macroFocus, 1.0, accuracy: 0.0)
+
+        let liquidityShock = AuditScenarioTools.scenarioSpec(scenarioID: 12)
+        XCTAssertEqual(liquidityShock.name, "market_liquidity_shock")
+        XCTAssertEqual(liquidityShock.fillRiskPoints, 2.2, accuracy: 0.0)
     }
 
     func testWorldPlanParsesLegacyKeysIntoFillRiskAndClampsValues() {

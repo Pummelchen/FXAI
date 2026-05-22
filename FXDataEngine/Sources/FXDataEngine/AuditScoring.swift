@@ -663,7 +663,7 @@ public enum AuditScoringTools {
             }
         }
 
-        if ["market_session_edges", "market_spread_shock", "market_walkforward"].contains(output.scenario),
+        if ["market_session_edges", "market_liquidity_shock", "market_spread_shock", "market_walkforward"].contains(output.scenario),
            averageNet < 0.0 {
             score -= 8.0 * fxClamp(-averageNet / 4.0, 0.0, 1.0)
         }
@@ -718,7 +718,7 @@ public enum AuditScoringTools {
     }
 
     private static func noisyScenario(_ scenario: String) -> Bool {
-        ["random_walk", "market_chop", "market_spread_shock"].contains(scenario)
+        ["random_walk", "market_chop", "market_liquidity_shock", "market_spread_shock"].contains(scenario)
     }
 
     private static func trendScenario(_ scenario: String) -> Bool {
