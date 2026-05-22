@@ -107,6 +107,51 @@ final class AuditScoringTests: XCTestCase {
         XCTAssertEqual(AuditScoringTools.deflatedSharpeProxy(scores: [70.0, 70.0], pbo: 0.0), 1.0, accuracy: 0.0)
     }
 
+    func testAuditDecisionSessionEdgeAndAdversarialWeaknessMatchLegacyFormula() {
+        XCTAssertEqual(
+            AuditScoringTools.decision(from: PredictionV4(classProbabilities: [0.40, 0.40, 0.20])),
+            .buy
+        )
+        XCTAssertEqual(
+            AuditScoringTools.decision(from: PredictionV4(classProbabilities: [0.40, 0.39, 0.40])),
+            .skip
+        )
+        XCTAssertEqual(
+            AuditScoringTools.sessionEdgePressure(sampleTimeUTC: 1_779_438_600),
+            0.875,
+            accuracy: 1e-12
+        )
+        XCTAssertEqual(
+            AuditScoringTools.sessionEdgePressure(sampleTimeUTC: 1_779_451_200),
+            0.0,
+            accuracy: 1e-12
+        )
+
+        let prediction = PredictionV4(
+            classProbabilities: [0.22, 0.58, 0.20],
+            moveMeanPoints: 7.0,
+            mfeMeanPoints: 10.0,
+            maeMeanPoints: 5.5,
+            hitTimeFraction: 0.50,
+            pathRisk: 0.42,
+            fillRisk: 0.18
+        )
+        let weakness = AuditScoringTools.adversarialWeaknessScore(
+            labelClass: .buy,
+            movePoints: 9.5,
+            minMovePoints: 3.0,
+            mfePoints: 12.0,
+            maePoints: 4.0,
+            timeToHitFraction: 0.35,
+            pathFlags: [.dualHit, .slowHit],
+            fillRisk: 0.30,
+            macroActivity: 0.60,
+            sampleTimeUTC: 1_779_438_600,
+            prediction: prediction
+        )
+        XCTAssertEqual(weakness, 1.0442940350877192, accuracy: 1e-12)
+    }
+
     func testAuditWalkForwardAggregationMatchesLegacyRules() {
         let trainFolds = [
             fold(20, 17, 3, 10, 4, 3, 14, 9, 11.9, 10.2, 72.0, 4.25, 2.8, 3.6, 12, 34.0),

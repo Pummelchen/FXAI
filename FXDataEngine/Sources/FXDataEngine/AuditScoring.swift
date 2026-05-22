@@ -175,6 +175,95 @@ public enum AuditScoringTools {
         return fxSafeFinite(delta)
     }
 
+    public static func decision(from prediction: PredictionV4) -> LabelClass {
+        var best: LabelClass = .skip
+        var bestProbability = probability(prediction, index: LabelClass.skip.rawValue)
+        if probability(prediction, index: LabelClass.buy.rawValue) > bestProbability {
+            best = .buy
+            bestProbability = probability(prediction, index: LabelClass.buy.rawValue)
+        }
+        if probability(prediction, index: LabelClass.sell.rawValue) > bestProbability {
+            best = .sell
+        }
+        return best
+    }
+
+    public static func sessionEdgePressure(sampleTimeUTC: Int64) -> Double {
+        let date = Date(timeIntervalSince1970: TimeInterval(sampleTimeUTC))
+        let calendar = Calendar(identifier: .gregorian)
+        let components = calendar.dateComponents(in: TimeZone(secondsFromGMT: 0)!, from: date)
+        let hour = Double(components.hour ?? 0) + Double(components.minute ?? 0) / 60.0
+        let tokyoDistance = min(abs(hour - 0.0), abs(hour - 24.0))
+        let londonDistance = abs(hour - 8.0)
+        let newYorkDistance = abs(hour - 16.0)
+        let best = min(tokyoDistance, min(londonDistance, newYorkDistance))
+        return fxClamp(1.0 - best / 4.0, 0.0, 1.0)
+    }
+
+    public static func adversarialWeaknessScore(
+        labelClass: LabelClass?,
+        movePoints: Double,
+        minMovePoints: Double,
+        mfePoints: Double,
+        maePoints: Double,
+        timeToHitFraction: Double,
+        pathFlags: SamplePathFlags,
+        fillRisk: Double,
+        macroActivity: Double,
+        sampleTimeUTC: Int64,
+        prediction: PredictionV4
+    ) -> Double {
+        let resolvedLabel = labelClass ?? (movePoints >= 0.0 ? .buy : .sell)
+        var target = [0.0, 0.0, 0.0]
+        target[resolvedLabel.rawValue] = 1.0
+
+        var brier = 0.0
+        for index in 0..<3 {
+            let delta = probability(prediction, index: index) - target[index]
+            brier += delta * delta
+        }
+
+        let predictionDecision = decision(from: prediction)
+        let directionalEvaluation = predictionDecision != .skip
+        let directionalCorrect = predictionDecision == resolvedLabel
+        let directionalConfidence = max(
+            probability(prediction, index: LabelClass.buy.rawValue),
+            probability(prediction, index: LabelClass.sell.rawValue)
+        )
+        let calibrationAbs = directionalEvaluation
+            ? abs(directionalConfidence - (directionalCorrect ? 1.0 : 0.0))
+            : abs(probability(prediction, index: LabelClass.skip.rawValue) - target[LabelClass.skip.rawValue])
+        let moveScale = max(abs(movePoints), max(abs(prediction.moveMeanPoints), max(minMovePoints, 0.50)))
+        let fillTarget = fxClamp(fillRisk + (pathFlags.contains(.dualHit) ? 0.25 : 0.0), 0.0, 1.0)
+        let pathQuality =
+            0.25 * fxClamp(abs(prediction.mfeMeanPoints - mfePoints) / moveScale, 0.0, 3.0) +
+            0.20 * fxClamp(abs(prediction.maeMeanPoints - maePoints) / moveScale, 0.0, 3.0) +
+            0.20 * abs(prediction.hitTimeFraction - timeToHitFraction) +
+            0.20 * abs(prediction.pathRisk - fillRisk) +
+            0.15 * abs(prediction.fillRisk - fillTarget)
+
+        let wrongDirection = directionalEvaluation && !directionalCorrect ? 1.0 : 0.0
+        let noiseOvertrade = resolvedLabel == .skip && directionalEvaluation ? directionalConfidence : 0.0
+        let missedTrade = resolvedLabel != .skip && predictionDecision == .skip
+            ? 1.0 - probability(prediction, index: LabelClass.skip.rawValue)
+            : 0.0
+        let stress =
+            0.18 * fxClamp(fillRisk, 0.0, 4.0) +
+            0.10 * (pathFlags.contains(.dualHit) ? 1.0 : 0.0) +
+            0.08 * (pathFlags.contains(.slowHit) ? 1.0 : 0.0) +
+            0.08 * fxClamp(macroActivity, 0.0, 1.0) +
+            0.08 * sessionEdgePressure(sampleTimeUTC: sampleTimeUTC) +
+            0.10 * fxClamp(abs(movePoints) / max(minMovePoints, 0.50), 0.0, 4.0)
+
+        return 0.55 * brier +
+            0.40 * calibrationAbs +
+            0.32 * pathQuality +
+            0.38 * wrongDirection * directionalConfidence +
+            0.24 * noiseOvertrade +
+            0.18 * missedTrade +
+            stress
+    }
+
     public static func scoreFold(_ metrics: AuditFoldMetrics) -> Double {
         if metrics.samplesTotal < 12 || metrics.validPredictions <= 0 {
             return invalidFoldScore
