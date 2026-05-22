@@ -304,6 +304,39 @@ public enum PairNetworkTools {
         "FXAI/Runtime/fxai_pair_network_history_\(ControlPlanePaths.safeToken(symbol)).ndjson"
     }
 
+    public static func runtimeStateTSV(symbol: String, state: PairNetworkDecisionState) -> String {
+        runtimeStateRows(symbol: symbol, state: state)
+            .map { key, value in
+                "\(RuntimeArtifactTSV.field(key))\t\(RuntimeArtifactTSV.field(value))"
+            }
+            .joined(separator: "\r\n") + "\r\n"
+    }
+
+    public static func runtimeHistoryNDJSONLine(symbol: String, state: PairNetworkDecisionState) -> String {
+        let reasons = state.reasons
+            .map(jsonQuoted)
+            .joined(separator: ",")
+        return "{" +
+            "\"generated_at\":\"\(iso8601UTC(state.generatedAt))\"," +
+            "\"symbol\":\(jsonQuoted(symbol))," +
+            "\"decision\":\(jsonQuoted(state.decision))," +
+            "\"fallback_graph_used\":\(state.fallbackGraphUsed ? 1 : 0)," +
+            "\"partial_dependency_data\":\(state.partialDependencyData ? 1 : 0)," +
+            "\"graph_stale\":\(state.graphStale ? 1 : 0)," +
+            "\"conflict_score\":\(RuntimeArtifactTSV.double(state.conflictScore))," +
+            "\"redundancy_score\":\(RuntimeArtifactTSV.double(state.redundancyScore))," +
+            "\"contradiction_score\":\(RuntimeArtifactTSV.double(state.contradictionScore))," +
+            "\"concentration_score\":\(RuntimeArtifactTSV.double(state.concentrationScore))," +
+            "\"currency_concentration\":\(RuntimeArtifactTSV.double(state.currencyConcentration))," +
+            "\"factor_concentration\":\(RuntimeArtifactTSV.double(state.factorConcentration))," +
+            "\"recommended_size_multiplier\":\(RuntimeArtifactTSV.double(state.recommendedSizeMultiplier))," +
+            "\"preferred_expression\":\(jsonQuoted(state.preferredExpression))," +
+            "\"currency_exposure_csv\":\(jsonQuoted(state.currencyExposureCSV))," +
+            "\"factor_exposure_csv\":\(jsonQuoted(state.factorExposureCSV))," +
+            "\"reason_codes\":[\(reasons)]" +
+            "}"
+    }
+
     public static func decisionLabel(_ code: PairNetworkDecisionCode) -> String {
         switch code {
         case .allow: "ALLOW"
@@ -689,5 +722,89 @@ public enum PairNetworkTools {
 
     private static func containsSafeHavenBloc(_ symbol: String) -> Bool {
         symbol.contains("JPY") || symbol.contains("CHF")
+    }
+
+    private static func runtimeStateRows(
+        symbol: String,
+        state: PairNetworkDecisionState
+    ) -> [(String, String)] {
+        [
+            ("symbol", symbol),
+            ("generated_at", "\(state.generatedAt)"),
+            ("decision", state.decision),
+            ("fallback_graph_used", RuntimeArtifactTSV.bool(state.fallbackGraphUsed)),
+            ("partial_dependency_data", RuntimeArtifactTSV.bool(state.partialDependencyData)),
+            ("graph_stale", RuntimeArtifactTSV.bool(state.graphStale)),
+            ("conflict_score", RuntimeArtifactTSV.double(state.conflictScore)),
+            ("redundancy_score", RuntimeArtifactTSV.double(state.redundancyScore)),
+            ("contradiction_score", RuntimeArtifactTSV.double(state.contradictionScore)),
+            ("concentration_score", RuntimeArtifactTSV.double(state.concentrationScore)),
+            ("currency_concentration", RuntimeArtifactTSV.double(state.currencyConcentration)),
+            ("factor_concentration", RuntimeArtifactTSV.double(state.factorConcentration)),
+            ("recommended_size_multiplier", RuntimeArtifactTSV.double(state.recommendedSizeMultiplier)),
+            ("preferred_expression", state.preferredExpression),
+            ("currency_exposure_csv", state.currencyExposureCSV),
+            ("factor_exposure_csv", state.factorExposureCSV),
+            ("reasons_csv", state.reasonsCSV)
+        ]
+    }
+
+    private static func iso8601UTC(_ timestamp: Int64) -> String {
+        guard timestamp > 0 else { return "" }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        let components = calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: Date(timeIntervalSince1970: TimeInterval(timestamp))
+        )
+        return String(
+            format: "%04d-%02d-%02dT%02d:%02d:%02dZ",
+            locale: Locale(identifier: "en_US_POSIX"),
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0,
+            components.hour ?? 0,
+            components.minute ?? 0,
+            components.second ?? 0
+        )
+    }
+
+    private static func jsonQuoted(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+        return "\"\(escaped)\""
+    }
+}
+
+public extension RuntimeArtifactFileRepository {
+    func writePairNetworkRuntimeArtifacts(
+        symbol: String,
+        state: PairNetworkDecisionState
+    ) throws {
+        let stateURL = url(for: PairNetworkTools.runtimeStatePath(symbol: symbol))
+        try fileManager.createDirectory(
+            at: stateURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let stateTSV = PairNetworkTools.runtimeStateTSV(symbol: symbol, state: state)
+        try stateTSV.write(to: stateURL, atomically: true, encoding: .utf8)
+
+        let historyURL = url(for: PairNetworkTools.runtimeHistoryPath(symbol: symbol))
+        try fileManager.createDirectory(
+            at: historyURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let historyData = Data((PairNetworkTools.runtimeHistoryNDJSONLine(symbol: symbol, state: state) + "\r\n").utf8)
+        if fileManager.fileExists(atPath: historyURL.path) {
+            let handle = try FileHandle(forWritingTo: historyURL)
+            defer { try? handle.close() }
+            try handle.seekToEnd()
+            try handle.write(contentsOf: historyData)
+        } else {
+            try historyData.write(to: historyURL, options: .atomic)
+        }
     }
 }

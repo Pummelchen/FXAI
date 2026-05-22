@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import FXDataEngine
 
@@ -168,6 +169,78 @@ final class PairNetworkTests: XCTestCase {
 
         XCTAssertEqual(state.reasonCount, PairNetworkConstants.maxReasons)
         XCTAssertEqual(state.reasonsCSV, "A; B; R1; R2; R3; R4; R5; R6; R7; R8; R9; R10")
+    }
+
+    func testPairNetworkRuntimeArtifactsMatchLegacyTSVAndNDJSONShape() throws {
+        let state = PairNetworkDecisionState(
+            ready: true,
+            fallbackGraphUsed: true,
+            partialDependencyData: true,
+            graphStale: false,
+            generatedAt: 1_704_067_200,
+            symbol: "EURUSD",
+            direction: 1,
+            decision: "ALLOW_REDUCED",
+            conflictScore: 0.12,
+            redundancyScore: 0.23,
+            contradictionScore: 0.34,
+            concentrationScore: 0.45,
+            currencyConcentration: 0.56,
+            factorConcentration: 0.67,
+            recommendedSizeMultiplier: 0.78,
+            preferredExpression: "GBPUSD",
+            currencyExposureCSV: "EUR:1.0000; USD:-1.0000",
+            factorExposureCSV: "eur_rates:0.5000",
+            reasons: ["PAIR_NETWORK_REDUCE", "GRAPH_FALLBACK"]
+        )
+
+        let tsv = PairNetworkTools.runtimeStateTSV(symbol: "EUR/USD live", state: state)
+        XCTAssertTrue(tsv.hasSuffix("\r\n"))
+        XCTAssertTrue(tsv.contains("symbol\tEUR/USD live\r\n"))
+        XCTAssertTrue(tsv.contains("decision\tALLOW_REDUCED\r\n"))
+        XCTAssertTrue(tsv.contains("fallback_graph_used\t1\r\n"))
+        XCTAssertTrue(tsv.contains("graph_stale\t0\r\n"))
+        XCTAssertTrue(tsv.contains("recommended_size_multiplier\t0.780000\r\n"))
+        XCTAssertTrue(tsv.contains("currency_exposure_csv\tEUR:1.0000; USD:-1.0000\r\n"))
+        XCTAssertTrue(tsv.contains("reasons_csv\tPAIR_NETWORK_REDUCE; GRAPH_FALLBACK\r\n"))
+
+        let line = PairNetworkTools.runtimeHistoryNDJSONLine(symbol: "EUR/USD live", state: state)
+        let data = try XCTUnwrap(line.data(using: .utf8))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(object["generated_at"] as? String, "2024-01-01T00:00:00Z")
+        XCTAssertEqual(object["symbol"] as? String, "EUR/USD live")
+        XCTAssertEqual(object["decision"] as? String, "ALLOW_REDUCED")
+        XCTAssertEqual(object["fallback_graph_used"] as? Int, 1)
+        XCTAssertEqual(try XCTUnwrap(object["recommended_size_multiplier"] as? Double), 0.78, accuracy: 0.0)
+        XCTAssertEqual(object["reason_codes"] as? [String], ["PAIR_NETWORK_REDUCE", "GRAPH_FALLBACK"])
+    }
+
+    func testPairNetworkRepositoryWritesStateAndAppendsHistory() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PairNetworkTests-\(UUID().uuidString)", isDirectory: true)
+        let repository = RuntimeArtifactFileRepository(rootURL: root)
+        var state = PairNetworkDecisionState(
+            ready: true,
+            generatedAt: 1_704_067_200,
+            decision: "ALLOW",
+            reasons: ["ALLOW"]
+        )
+
+        try repository.writePairNetworkRuntimeArtifacts(symbol: "EUR/USD live", state: state)
+        state.generatedAt = 1_704_067_260
+        state.decision = "BLOCK_CONCENTRATION"
+        try repository.writePairNetworkRuntimeArtifacts(symbol: "EUR/USD live", state: state)
+
+        let statePath = PairNetworkTools.runtimeStatePath(symbol: "EUR/USD live")
+        let historyPath = PairNetworkTools.runtimeHistoryPath(symbol: "EUR/USD live")
+        let stateText = try String(contentsOf: root.appendingPathComponent(statePath), encoding: .utf8)
+        let historyText = try String(contentsOf: root.appendingPathComponent(historyPath), encoding: .utf8)
+
+        XCTAssertTrue(stateText.contains("generated_at\t1704067260\r\n"))
+        XCTAssertTrue(stateText.contains("decision\tBLOCK_CONCENTRATION\r\n"))
+        XCTAssertEqual(historyText.components(separatedBy: .newlines).filter { !$0.isEmpty }.count, 2)
+        XCTAssertTrue(historyText.contains("\"generated_at\":\"2024-01-01T00:00:00Z\""))
+        XCTAssertTrue(historyText.contains("\"generated_at\":\"2024-01-01T00:01:00Z\""))
     }
 
     func testPairNetworkConcentrationAndCSVHelpersMatchLegacyMath() {
