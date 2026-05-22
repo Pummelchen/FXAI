@@ -1,0 +1,143 @@
+import XCTest
+@testable import FXDataEngine
+
+final class AuditScenariosTests: XCTestCase {
+    func testScenarioSpecDefaultsMatchLegacyAuditCasesWithoutPublicSpreadFields() {
+        let randomWalk = AuditScenarioTools.scenarioSpec(scenarioID: 0)
+        XCTAssertEqual(randomWalk.name, "random_walk")
+        XCTAssertEqual(randomWalk.driftPerBar, 0.0, accuracy: 0.0)
+        XCTAssertEqual(randomWalk.sigmaPerBar, 0.00018, accuracy: 0.0)
+        XCTAssertEqual(randomWalk.fillRiskPoints, 1.2, accuracy: 0.0)
+        XCTAssertEqual(randomWalk.worldTrendPersistence, 0.5, accuracy: 0.0)
+
+        let monotonicUp = AuditScenarioTools.scenarioSpec(scenarioID: 5)
+        XCTAssertEqual(monotonicUp.name, "monotonic_up")
+        XCTAssertEqual(monotonicUp.driftPerBar, 0.00022, accuracy: 0.0)
+        XCTAssertEqual(monotonicUp.sigmaPerBar, 0.00003, accuracy: 0.0)
+        XCTAssertEqual(monotonicUp.fillRiskPoints, 0.8, accuracy: 0.0)
+
+        let macro = AuditScenarioTools.scenarioSpec(scenarioID: 14)
+        XCTAssertEqual(macro.name, "market_macro_event")
+        XCTAssertEqual(macro.fillRiskPoints, 1.7, accuracy: 0.0)
+        XCTAssertEqual(macro.macroFocus, 1.0, accuracy: 0.0)
+    }
+
+    func testWorldPlanParsesLegacyKeysIntoFillRiskAndClampsValues() {
+        let plan = [
+            "sigma_scale\t9",
+            "drift_bias\t0.009",
+            "spread_scale\t9",
+            "gap_prob\t0.99",
+            "gap_scale\t99",
+            "flip_prob\t0.99",
+            "context_corr_bias\t-9",
+            "liquidity_stress\t9",
+            "session_edge_focus\t9",
+            "trend_persistence\t-1",
+            "shock_memory\t9",
+            "recovery_bias\t-9",
+            "spread_shock_prob\t9",
+            "spread_shock_scale\t99",
+            "regime_transition_burst\t9",
+            "transition_entropy\t9",
+            "mean_revert_bias\t9",
+            "vol_cluster_bias\t9",
+            "shock_decay\t9",
+            "asia_sigma_scale\t0.1",
+            "london_sigma_scale\t9",
+            "newyork_sigma_scale\t2.2",
+            "asia_spread_scale\t0.1",
+            "london_spread_scale\t9",
+            "newyork_spread_scale\t2.5",
+            "macro_focus\t9"
+        ].joined(separator: "\n")
+
+        let spec = AuditScenarioTools.scenarioSpec(scenarioID: 14, worldPlanTSV: plan)
+        XCTAssertEqual(spec.worldSigmaScale, 3.0, accuracy: 0.0)
+        XCTAssertEqual(spec.worldDriftBias, 0.00054, accuracy: 1e-12)
+        XCTAssertEqual(spec.worldFillRiskScale, 4.0, accuracy: 0.0)
+        XCTAssertEqual(spec.worldGapProbability, 0.30, accuracy: 0.0)
+        XCTAssertEqual(spec.worldGapScale, 8.0, accuracy: 0.0)
+        XCTAssertEqual(spec.worldFlipProbability, 0.50, accuracy: 0.0)
+        XCTAssertEqual(spec.worldContextCorrelationBias, -1.0, accuracy: 0.0)
+        XCTAssertEqual(spec.worldLiquidityStress, 3.0, accuracy: 0.0)
+        XCTAssertEqual(spec.worldSessionEdgeFocus, 1.5, accuracy: 0.0)
+        XCTAssertEqual(spec.worldTrendPersistence, 0.0, accuracy: 0.0)
+        XCTAssertEqual(spec.worldShockMemory, 1.0, accuracy: 0.0)
+        XCTAssertEqual(spec.worldRecoveryBias, -1.0, accuracy: 0.0)
+        XCTAssertEqual(spec.worldLiquidityShockProbability, 0.50, accuracy: 0.0)
+        XCTAssertEqual(spec.worldLiquidityShockScale, 8.0, accuracy: 0.0)
+        XCTAssertEqual(spec.worldRegimeTransitionBurst, 1.0, accuracy: 0.0)
+        XCTAssertEqual(spec.worldTransitionEntropy, 1.0, accuracy: 0.0)
+        XCTAssertEqual(spec.worldMeanRevertBias, 1.0, accuracy: 0.0)
+        XCTAssertEqual(spec.worldVolatilityClusterBias, 1.0, accuracy: 0.0)
+        XCTAssertEqual(spec.worldShockDecay, 1.5, accuracy: 0.0)
+        XCTAssertEqual(spec.worldAsiaSigmaScale, 0.50, accuracy: 0.0)
+        XCTAssertEqual(spec.worldLondonSigmaScale, 3.0, accuracy: 0.0)
+        XCTAssertEqual(spec.worldNewYorkSigmaScale, 2.2, accuracy: 0.0)
+        XCTAssertEqual(spec.worldAsiaFillRiskScale, 0.50, accuracy: 0.0)
+        XCTAssertEqual(spec.worldLondonFillRiskScale, 4.0, accuracy: 0.0)
+        XCTAssertEqual(spec.worldNewYorkFillRiskScale, 2.5, accuracy: 0.0)
+        XCTAssertEqual(spec.macroFocus, 1.5, accuracy: 0.0)
+    }
+
+    func testWorldPlanPathSessionHelpersAndSyntheticBarNormalization() {
+        XCTAssertEqual(
+            AuditScenarioTools.worldPlanFile(symbol: "EUR/USD?"),
+            "FXAI/Offline/Promotions/fxai_world_plan_EUR_USD_.tsv"
+        )
+
+        let janFirst2024UTC = Int64(1_704_067_200)
+        XCTAssertEqual(AuditScenarioTools.hourOf(timestampUTC: janFirst2024UTC + 8 * 3_600), 8)
+        XCTAssertEqual(
+            AuditScenarioTools.sessionEdgeStrength(timestampUTC: janFirst2024UTC + 8 * 3_600),
+            1.0,
+            accuracy: 0.0
+        )
+        XCTAssertEqual(
+            AuditScenarioTools.sessionEdgeStrength(timestampUTC: janFirst2024UTC + 10 * 3_600),
+            0.5,
+            accuracy: 0.0
+        )
+        XCTAssertEqual(
+            AuditScenarioTools.worldHashUnit(timestampUTC: janFirst2024UTC, salt: 5),
+            0.164332,
+            accuracy: 1e-12
+        )
+        XCTAssertEqual(AuditScenarioTools.worldSign(timestampUTC: janFirst2024UTC, salt: 5), -1.0, accuracy: 0.0)
+
+        let spec = AuditScenarioSpec(
+            worldAsiaSigmaScale: 0.1,
+            worldLondonSigmaScale: 2.5,
+            worldNewYorkSigmaScale: 9.0,
+            worldAsiaFillRiskScale: 0.1,
+            worldLondonFillRiskScale: 2.8,
+            worldNewYorkFillRiskScale: 9.0
+        )
+        XCTAssertEqual(AuditScenarioTools.sessionSigmaScale(spec: spec, hour: 2), 0.5, accuracy: 0.0)
+        XCTAssertEqual(AuditScenarioTools.sessionSigmaScale(spec: spec, hour: 8), 2.5, accuracy: 0.0)
+        XCTAssertEqual(AuditScenarioTools.sessionSigmaScale(spec: spec, hour: 16), 3.0, accuracy: 0.0)
+        XCTAssertEqual(AuditScenarioTools.sessionFillRiskScale(spec: spec, hour: 2), 0.5, accuracy: 0.0)
+        XCTAssertEqual(AuditScenarioTools.sessionFillRiskScale(spec: spec, hour: 8), 2.8, accuracy: 0.0)
+        XCTAssertEqual(AuditScenarioTools.sessionFillRiskScale(spec: spec, hour: 16), 4.0, accuracy: 0.0)
+
+        let normalized = AuditScenarioTools.normalizeSyntheticBar(
+            AuditScenarioDoubleBar(
+                timestampUTC: janFirst2024UTC,
+                open: 0.0,
+                high: 0.5,
+                low: 2.0,
+                close: 1.1,
+                volume: 125.0,
+                fillRiskPoints: -2.0
+            ),
+            point: 0.0001
+        )
+        XCTAssertGreaterThan(normalized.open, 0.0)
+        XCTAssertGreaterThanOrEqual(normalized.high, max(normalized.open, normalized.close))
+        XCTAssertLessThanOrEqual(normalized.low, min(normalized.open, normalized.close))
+        XCTAssertEqual(normalized.high - normalized.low, 0.0002, accuracy: 1e-12)
+        XCTAssertEqual(normalized.volume, 125.0, accuracy: 0.0)
+        XCTAssertEqual(normalized.fillRiskPoints, 0.0, accuracy: 0.0)
+    }
+}
