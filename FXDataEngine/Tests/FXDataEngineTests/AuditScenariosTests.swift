@@ -255,6 +255,44 @@ final class AuditScenariosTests: XCTestCase {
         )
     }
 
+    func testGenerateMarketScenarioSeriesUsesRecentFXDatabaseM1OHLCVWindow() throws {
+        let series = try makeAuditMarketSeries(count: 1_024)
+        let generated = try XCTUnwrap(AuditScenarioTools.generateMarketScenarioSeries(
+            spec: AuditScenarioTools.scenarioSpec(scenarioID: 8),
+            marketSeries: series,
+            bars: 512,
+            point: 0.0001,
+            applyWorldPlan: false
+        ))
+
+        XCTAssertEqual(generated.primary.count, 512)
+        XCTAssertTrue(generated.primary.isConsistent)
+        XCTAssertEqual(generated.primary.timeUTC[0], series.utcTimestamps[1_023])
+        XCTAssertEqual(generated.primary.timeUTC[511], series.utcTimestamps[512])
+        XCTAssertTrue(generated.primary.volume.allSatisfy { $0 > 0.0 })
+        XCTAssertTrue(generated.primary.fillRiskPoints.allSatisfy { $0 > 0.0 })
+        XCTAssertEqual(generated.m5.close.count, 102)
+        XCTAssertEqual(generated.h1.close.count, 8)
+        XCTAssertEqual(generated.contexts.count, 3)
+        XCTAssertTrue(generated.contexts.allSatisfy(\.isConsistent))
+        XCTAssertEqual(generated.contextFeatures.count, 512)
+    }
+
+    func testGenerateMarketScenarioSeriesScoresTrendWindowWithLegacyWindowRules() throws {
+        let series = try makeAuditMarketSeries(count: 1_024)
+        let generated = try XCTUnwrap(AuditScenarioTools.generateMarketScenarioSeries(
+            spec: AuditScenarioTools.scenarioSpec(scenarioID: 9),
+            marketSeries: series,
+            bars: 512,
+            point: 0.0001,
+            applyWorldPlan: false
+        ))
+
+        XCTAssertEqual(generated.primary.timeUTC[0], series.utcTimestamps[511])
+        XCTAssertEqual(generated.primary.timeUTC[511], series.utcTimestamps[0])
+        XCTAssertGreaterThan(generated.primary.close[0], generated.primary.close[511])
+    }
+
     func testGenerateSyntheticScenarioSeriesRejectsUnsupportedInputs() {
         XCTAssertNil(AuditScenarioTools.generateSyntheticScenarioSeries(
             spec: AuditScenarioTools.scenarioSpec(scenarioID: 0),
@@ -274,5 +312,89 @@ final class AuditScenariosTests: XCTestCase {
             seed: 1,
             point: 0.0001
         ))
+    }
+
+    func testGenerateMarketScenarioSeriesRejectsUnsupportedInputs() throws {
+        let series = try makeAuditMarketSeries(count: 1_024)
+        XCTAssertNil(AuditScenarioTools.generateMarketScenarioSeries(
+            spec: AuditScenarioTools.scenarioSpec(scenarioID: 7),
+            marketSeries: series,
+            bars: 512,
+            point: 0.0001
+        ))
+        XCTAssertNil(AuditScenarioTools.generateMarketScenarioSeries(
+            spec: AuditScenarioTools.scenarioSpec(scenarioID: 8),
+            marketSeries: series,
+            bars: 511,
+            point: 0.0001
+        ))
+        XCTAssertNil(AuditScenarioTools.generateMarketScenarioSeries(
+            spec: AuditScenarioTools.scenarioSpec(scenarioID: 8),
+            marketSeries: try makeAuditMarketSeries(count: 575),
+            bars: 512,
+            point: 0.0001
+        ))
+        XCTAssertNil(AuditScenarioTools.generateMarketScenarioSeries(
+            spec: AuditScenarioTools.scenarioSpec(scenarioID: 8),
+            marketSeries: series,
+            bars: 512,
+            point: 0.0
+        ))
+    }
+
+    private func makeAuditMarketSeries(count: Int) throws -> M1OHLCVSeries {
+        let safeCount = max(1, count)
+        let start = Int64(1_704_067_200)
+        var utc = ContiguousArray<Int64>()
+        var open = ContiguousArray<Int64>()
+        var high = ContiguousArray<Int64>()
+        var low = ContiguousArray<Int64>()
+        var close = ContiguousArray<Int64>()
+        var volume = ContiguousArray<UInt64>()
+        utc.reserveCapacity(safeCount)
+        open.reserveCapacity(safeCount)
+        high.reserveCapacity(safeCount)
+        low.reserveCapacity(safeCount)
+        close.reserveCapacity(safeCount)
+        volume.reserveCapacity(safeCount)
+
+        var price = Int64(110_000)
+        for index in 0..<safeCount {
+            let move: Int64
+            if index < 512 {
+                move = 20
+            } else if index == 512 {
+                move = -8_000
+            } else {
+                move = index % 2 == 0 ? 4 : -3
+            }
+            let barOpen = price
+            let barClose = max(90_000, price + move)
+            utc.append(start + Int64(index * 60))
+            open.append(barOpen)
+            high.append(max(barOpen, barClose) + Int64(8 + index % 5))
+            low.append(min(barOpen, barClose) - Int64(8 + index % 3))
+            close.append(barClose)
+            volume.append(UInt64(index == 700 ? 10_000 : 100 + index % 17))
+            price = barClose
+        }
+
+        return try M1OHLCVSeries(
+            metadata: FXMarketMetadata(
+                brokerSourceId: "demo",
+                sourceOrigin: "DUKASCOPY",
+                logicalSymbol: "EURUSD",
+                providerSymbol: "EUR/USD",
+                digits: 5,
+                firstUTC: utc.first,
+                lastUTC: utc.last
+            ),
+            utcTimestamps: utc,
+            open: open,
+            high: high,
+            low: low,
+            close: close,
+            volume: volume
+        )
     }
 }

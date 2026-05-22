@@ -122,6 +122,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 - Done: Audit report slice: `audit_report.mqh` report header order, row field order, fixed-decimal formatting, average confidence/reliability/move/trend fields, issue-flag output, and TSV document rendering are ported. Scenario generation, plugin execution, and audit runner file orchestration still remain phase-10 work.
 - Done: Audit world-plan application slice: deterministic `FXAI_AuditApplyWorldPlanToMarketRates` OHLC transformation logic is ported for reverse-chronological Swift scenario bars. Legacy spread scaling is replaced with fill-risk scaling, and volume is reduced under liquidity stress when source volume is present.
 - Done: Audit synthetic scenario generation slice: non-market `FXAI_AuditGenerateScenarioSeries` paths now build deterministic Swift as-series OHLCV, M5/M15/M30/H1 close aggregates and maps, derived context series, and context feature arrays. Market-backed scenario selection, plugin execution, and runner orchestration remain phase-10 work.
+- Done: Audit market scenario generation slice: market-backed audit scenarios now accept FXDatabase-style ascending M1 OHLCV, select legacy recent/trend/chop/session/liquidity/macro-proxy windows, apply no-spread world-plan transforms, derive MTF closes from M1, and build volume/fill-risk context features. Plugin execution, adversarial scenario generation, and runner orchestration remain phase-10 work.
 
 ## Start Order
 

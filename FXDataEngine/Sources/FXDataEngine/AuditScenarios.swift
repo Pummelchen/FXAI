@@ -618,6 +618,55 @@ public enum AuditScenarioTools {
         return output
     }
 
+    public static func generateMarketScenarioSeries(
+        spec: AuditScenarioSpec,
+        marketSeries: M1OHLCVSeries,
+        bars: Int,
+        point: Double,
+        applyWorldPlan: Bool = true
+    ) -> AuditGeneratedScenarioSeries? {
+        guard spec.id >= 8,
+              bars >= 512,
+              point > 0.0,
+              marketSeries.count >= bars + 64,
+              let startIndex = selectMarketScenarioStart(
+                spec: spec,
+                marketSeries: marketSeries,
+                bars: bars,
+                point: point
+              ) else {
+            return nil
+        }
+
+        let selectedChronological = marketScenarioBars(
+            from: marketSeries,
+            range: startIndex..<(startIndex + bars),
+            point: point
+        )
+        guard selectedChronological.count == bars else { return nil }
+
+        var asSeriesBars = Array(selectedChronological.reversed())
+        if applyWorldPlan {
+            asSeriesBars = applyWorldPlanToAsSeriesBars(asSeriesBars, spec: spec, point: point)
+        }
+        let transformedChronological = Array(asSeriesBars.reversed())
+        let primary = asSeriesOHLCV(fromAsSeriesBars: asSeriesBars)
+        guard primary.isConsistent, primary.count == bars else { return nil }
+
+        let contexts = [
+            AuditContextSeriesTools.deriveContextSeriesFromBase(point: point, base: primary, transformID: 0),
+            AuditContextSeriesTools.deriveContextSeriesFromBase(point: point, base: primary, transformID: 1),
+            AuditContextSeriesTools.deriveContextSeriesFromBase(point: point, base: primary, transformID: 2)
+        ]
+
+        return buildGeneratedScenarioSeries(
+            primary: primary,
+            chronologicalBars: transformedChronological,
+            point: point,
+            contexts: contexts
+        )
+    }
+
     public static func generateSyntheticScenarioSeries(
         spec: AuditScenarioSpec,
         bars: Int,
@@ -855,6 +904,222 @@ public enum AuditScenarioTools {
             AuditContextSeriesTools.reverseChronologicalBarsToSeries(context2Bars),
             AuditContextSeriesTools.reverseChronologicalBarsToSeries(context3Bars)
         ]
+
+        return buildGeneratedScenarioSeries(
+            primary: primary,
+            chronologicalBars: chronologicalBars,
+            point: point,
+            contexts: contextSeries
+        )
+    }
+
+    private static func selectMarketScenarioStart(
+        spec: AuditScenarioSpec,
+        marketSeries: M1OHLCVSeries,
+        bars: Int,
+        point: Double
+    ) -> Int? {
+        let maxStart = marketSeries.count - bars
+        guard maxStart >= 0 else { return nil }
+
+        var bestStart = maxStart
+        var bestScore = -Double.greatestFiniteMagnitude
+        var start = maxStart
+        while start >= 0 {
+            let recencyOffset = maxStart - start
+            let score = marketScenarioScore(
+                spec: spec,
+                marketSeries: marketSeries,
+                start: start,
+                bars: bars,
+                point: point,
+                recencyOffset: recencyOffset
+            )
+            if score > bestScore {
+                bestScore = score
+                bestStart = start
+            }
+            start -= 1
+        }
+        return bestStart
+    }
+
+    private static func marketScenarioScore(
+        spec: AuditScenarioSpec,
+        marketSeries: M1OHLCVSeries,
+        start: Int,
+        bars: Int,
+        point: Double,
+        recencyOffset: Int
+    ) -> Double {
+        let pt = max(point, 1e-6)
+        let lastIndex = start + bars - 1
+        let net = abs(marketSeries.price(marketSeries.close[lastIndex]) - marketSeries.price(marketSeries.close[start]))
+        var absoluteMoveSum = 0.0
+        var rangeSum = 0.0
+        for index in start..<lastIndex {
+            let closeA = marketSeries.price(marketSeries.close[index])
+            let closeB = marketSeries.price(marketSeries.close[index + 1])
+            absoluteMoveSum += abs(closeB - closeA)
+            rangeSum += abs(marketSeries.price(marketSeries.high[index]) - marketSeries.price(marketSeries.low[index]))
+        }
+        absoluteMoveSum = max(absoluteMoveSum, pt)
+        let trendiness = net / absoluteMoveSum
+        let averageRangePoints = (rangeSum / max(Double(bars - 1), 1.0)) / pt
+        let volumeShock = marketVolumeShockScore(marketSeries: marketSeries, start: start, bars: bars)
+
+        switch spec.id {
+        case 8:
+            return -0.001 * Double(recencyOffset)
+        case 9:
+            return trendiness + 0.05 * averageRangePoints
+        case 10:
+            return (1.0 - trendiness) + 0.03 * averageRangePoints
+        case 11:
+            let midpointTime = marketSeries.utcTimestamps[start + bars / 2]
+            let hour = Double(hourOf(timestampUTC: midpointTime))
+            let sessionEdge = 1.0 - min(abs(hour - 8.0), abs(hour - 16.0)) / 8.0
+            return 0.60 * sessionEdge + 0.25 * averageRangePoints + 0.15 * (1.0 - trendiness)
+        case 12:
+            return volumeShock + 0.04 * averageRangePoints
+        case 14:
+            let midpointTime = marketSeries.utcTimestamps[start + bars / 2]
+            let macroProxy = fxClamp(
+                0.50 * sessionEdgeStrength(timestampUTC: midpointTime) +
+                    0.30 * volumeShock +
+                    0.20 * fxClamp(averageRangePoints / 8.0, 0.0, 1.0),
+                0.0,
+                1.0
+            )
+            return 0.68 * macroProxy +
+                0.22 * volumeShock +
+                0.06 * trendiness +
+                0.04 * fxClamp(averageRangePoints, 0.0, 8.0)
+        default:
+            let recentA = marketSeries.price(marketSeries.close[lastIndex])
+            let recentB = marketSeries.price(marketSeries.close[max(start, lastIndex - bars / 3)])
+            let olderA = marketSeries.price(marketSeries.close[max(start, lastIndex - (2 * bars) / 3)])
+            let olderB = marketSeries.price(marketSeries.close[start])
+            let recentReturn = recentB > 0.0 ? (recentA - recentB) / recentB : 0.0
+            let olderReturn = olderB > 0.0 ? (olderA - olderB) / olderB : 0.0
+            return (1.0 - abs(recentReturn - olderReturn)) +
+                0.20 * (1.0 - trendiness) +
+                0.03 * averageRangePoints
+        }
+    }
+
+    private static func marketVolumeShockScore(
+        marketSeries: M1OHLCVSeries,
+        start: Int,
+        bars: Int
+    ) -> Double {
+        var positiveCount = 0
+        var sum = 0.0
+        var maxVolume = 0.0
+        var minVolume = Double.greatestFiniteMagnitude
+        for index in start..<(start + bars) {
+            let volume = Double(marketSeries.volume[index])
+            guard volume > 0.0 else { continue }
+            positiveCount += 1
+            sum += volume
+            maxVolume = max(maxVolume, volume)
+            minVolume = min(minVolume, volume)
+        }
+        guard positiveCount > 0 else { return 0.0 }
+        let average = max(sum / Double(positiveCount), 1.0)
+        let highShock = (maxVolume - average) / average
+        let lowShock = (average - minVolume) / average
+        return fxClamp(max(highShock, lowShock), 0.0, 12.0)
+    }
+
+    private static func marketScenarioBars(
+        from marketSeries: M1OHLCVSeries,
+        range: Range<Int>,
+        point: Double
+    ) -> [AuditScenarioDoubleBar] {
+        guard range.lowerBound >= 0, range.upperBound <= marketSeries.count else { return [] }
+        var averagePositiveVolume = 0.0
+        var positiveVolumeCount = 0
+        for index in range {
+            let volume = Double(marketSeries.volume[index])
+            if volume > 0.0 {
+                averagePositiveVolume += volume
+                positiveVolumeCount += 1
+            }
+        }
+        if positiveVolumeCount > 0 {
+            averagePositiveVolume /= Double(positiveVolumeCount)
+        }
+
+        var output: [AuditScenarioDoubleBar] = []
+        output.reserveCapacity(range.count)
+        for index in range {
+            let open = marketSeries.price(marketSeries.open[index])
+            let high = marketSeries.price(marketSeries.high[index])
+            let low = marketSeries.price(marketSeries.low[index])
+            let close = marketSeries.price(marketSeries.close[index])
+            let volume = Double(marketSeries.volume[index])
+            output.append(normalizeSyntheticBar(
+                AuditScenarioDoubleBar(
+                    timestampUTC: marketSeries.utcTimestamps[index],
+                    open: open,
+                    high: high,
+                    low: low,
+                    close: close,
+                    volume: volume,
+                    fillRiskPoints: marketFillRiskPoints(
+                        high: high,
+                        low: low,
+                        volume: volume,
+                        averagePositiveVolume: averagePositiveVolume,
+                        point: point
+                    )
+                ),
+                point: point
+            ))
+        }
+        return output
+    }
+
+    private static func marketFillRiskPoints(
+        high: Double,
+        low: Double,
+        volume: Double,
+        averagePositiveVolume: Double,
+        point: Double
+    ) -> Double {
+        let pt = max(point, 1e-6)
+        let rangePoints = max(0.0, (high - low) / pt)
+        var liquidityStress = 0.0
+        if averagePositiveVolume > 0.0, volume > 0.0 {
+            let ratio = volume / averagePositiveVolume
+            liquidityStress = ratio < 1.0
+                ? 2.0 * (1.0 - ratio)
+                : 0.25 * fxClamp(ratio - 1.0, 0.0, 4.0)
+        } else {
+            liquidityStress = 0.50
+        }
+        return max(0.25, fxClamp(0.35 + 0.04 * rangePoints + liquidityStress, 0.25, 12.0))
+    }
+
+    private static func asSeriesOHLCV(fromAsSeriesBars bars: [AuditScenarioDoubleBar]) -> AuditAsSeriesOHLCV {
+        AuditAsSeriesOHLCV(
+            timeUTC: bars.map(\.timestampUTC),
+            open: bars.map(\.open),
+            high: bars.map(\.high),
+            low: bars.map(\.low),
+            close: bars.map(\.close),
+            volume: bars.map(\.volume),
+            fillRiskPoints: bars.map(\.fillRiskPoints)
+        )
+    }
+
+    private static func buildGeneratedScenarioSeries(
+        primary: AuditAsSeriesOHLCV,
+        chronologicalBars: [AuditScenarioDoubleBar],
+        point: Double,
+        contexts: [AuditAsSeriesOHLCV]
+    ) -> AuditGeneratedScenarioSeries {
         let m5Aggregate = AuditContextSeriesTools.aggregateCloseTimeframe(chronologicalBars: chronologicalBars, step: 5)
         let m15Aggregate = AuditContextSeriesTools.aggregateCloseTimeframe(chronologicalBars: chronologicalBars, step: 15)
         let m30Aggregate = AuditContextSeriesTools.aggregateCloseTimeframe(chronologicalBars: chronologicalBars, step: 30)
@@ -862,7 +1127,7 @@ public enum AuditScenarioTools {
         let contextFeatures = AuditContextSeriesTools.buildContextFeatures(
             mainClose: primary.close,
             point: point,
-            contexts: contextSeries
+            contexts: contexts
         )
 
         return AuditGeneratedScenarioSeries(
@@ -903,7 +1168,7 @@ public enum AuditScenarioTools {
                     maxLagSeconds: 2 * 60 * 60
                 )
             ),
-            contexts: contextSeries,
+            contexts: contexts,
             contextFeatures: contextFeatures
         )
     }
