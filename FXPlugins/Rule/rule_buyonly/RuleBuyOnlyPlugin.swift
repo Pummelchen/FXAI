@@ -19,8 +19,8 @@ public struct RuleBuyOnlyPlugin: FXAIPlannedPlugin {
     public let accelerationPlan = FXPluginAccelerationPlan(
         pluginName: "rule_buyonly",
         primaryBackends: [.swiftScalar],
-        usesVolumeWhenAvailable: false,
-        notes: "Constant BUY baseline. No tensor or GPU backend is useful; keep as deterministic scalar reference."
+        usesVolumeWhenAvailable: true,
+        notes: "Constant BUY baseline. Accepts the volume-aware plugin contract while preserving legacy deterministic direction; no tensor or GPU backend is useful."
     )
 
     public init() {}
@@ -35,11 +35,42 @@ public struct RuleBuyOnlyPlugin: FXAIPlannedPlugin {
     public func predict(_ request: PredictRequestV4, hyperParameters: HyperParameters) throws -> PredictionV4 {
         try request.validate()
         try PluginContractTools.validateCompatibility(manifest: manifest, context: request.context)
-        return RulePredictionTools.fixedDirectionalPrediction(
+        return Self.fixedDirectionalPrediction(
             request: request,
             buyProbability: 0.999,
             sellProbability: 0.001,
             confidence: 0.999
+        )
+    }
+
+    private static func fixedDirectionalPrediction(
+        request: PredictRequestV4,
+        buyProbability: Double,
+        sellProbability: Double,
+        confidence: Double
+    ) -> PredictionV4 {
+        let minimumMove = request.context.minMovePoints > 0.0
+            ? request.context.minMovePoints
+            : max(request.context.priceCostPoints, 0.10)
+        let meanMove = max(1.0, 3.0 * minimumMove + 0.25)
+        let sigma = max(0.10, 0.30 * meanMove)
+        let q25 = max(0.0, meanMove - 0.50 * sigma)
+        let q50 = max(q25, meanMove)
+        let q75 = max(q50, meanMove + 0.50 * sigma)
+
+        return PredictionV4(
+            classProbabilities: [sellProbability, buyProbability, 0.0],
+            moveMeanPoints: meanMove,
+            moveQ25Points: q25,
+            moveQ50Points: q50,
+            moveQ75Points: q75,
+            mfeMeanPoints: meanMove,
+            maeMeanPoints: max(0.0, 0.35 * meanMove),
+            hitTimeFraction: 1.0,
+            pathRisk: 0.0,
+            fillRisk: 0.0,
+            confidence: confidence,
+            reliability: 0.55
         )
     }
 }

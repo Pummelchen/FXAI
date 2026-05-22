@@ -97,20 +97,20 @@ struct ProjectScannerTests {
             """
             enum LinearPluginDefinitions {
                 static let all = [
-                    FXAIPluginDefinitionFactory.linear(.paLinear, "lin_pa")
+                    FXAIPluginImplementationDescriptor.linear(.paLinear, "lin_pa")
                 ]
             }
             """.utf8
-        ).write(to: root.appendingPathComponent("FXPlugins/Linear/LinearGeneratedFixture.swift"))
+        ).write(to: root.appendingPathComponent("FXPlugins/Linear/LinearPluginFixture.swift"))
         try Data(
             """
             enum SequencePluginDefinitions {
                 static let all = [
-                    FXAIPluginDefinitionFactory.distribution(.qcew, "ai_qcew")
+                    FXAIPluginImplementationDescriptor.distribution(.qcew, "ai_qcew")
                 ]
             }
             """.utf8
-        ).write(to: root.appendingPathComponent("FXPlugins/Sequence/SequenceGeneratedFixture.swift"))
+        ).write(to: root.appendingPathComponent("FXPlugins/Sequence/SequencePluginFixture.swift"))
         try Data("{\"plugins\":{}}".utf8).write(to: root.appendingPathComponent("FXDataEngine/Tools/Baselines/example.summary.json"))
         try Data(
             """

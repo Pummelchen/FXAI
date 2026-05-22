@@ -8,10 +8,9 @@ Converted plugins should consume the Swift FXDataEngine OHLCV contracts and use 
 
 ## Layout
 
-- `Rule/`, `Linear/`, `Tree/`, `Sequence/`, `Distribution/`, `Stat/`, `Factor/`, `Trend/`, `Mixture/`, `Memory/`, `World/`, `RL/`: converted plugin zoo families matching the former MQL5 plugin inventory.
+- `Rule/`, `Linear/`, `Tree/`, `Sequence/`, `Distribution/`, `Stat/`, `Factor/`, `Trend/`, `Mixture/`, `Memory/`, `World/`, `RL/`: converted plugin zoo families matching the former MQL5 plugin inventory. Every plugin now lives in its own folder under its family and owns its manifest, acceleration declaration, and Swift adapter code.
 - `Demo/`: the two FXBacktest demo/reference adapters connected to the same FXDataEngine plugin contract.
-- `Backends/Python/fxai_plugin_backend.py`: generic PyTorch/TensorFlow process backend entrypoint used by Swift adapters until plugin-specific training services are added.
-- `Common/`: shared registry, acceleration metadata, generated adapter runtime, tests, and archived conversion plan.
+- `API/`: non-plugin package surface only: registry, tests, docs, and backend process hooks. Shared implementation primitives live in `FXDataEngine`; plugin folders should not depend on shared plugin-zoo helpers.
 - `Package.swift`: SwiftPM boundary for the zoo. There is no longer a root `Sources/`, `Tests/`, or `Python/` staging layout.
 
 ## Current Swift Coverage
@@ -21,7 +20,7 @@ contracts:
 
 - 4 hand-ported legacy rule plugins.
 - 2 former FXBacktest demo adapters: `fxbacktest_moving_average_cross` and `fxbacktest_fxstupid`.
-- 59 generated Swift adapters for the remaining legacy plugins, each with
+- 59 Swift reference adapters for the remaining legacy plugins, each in its own plugin folder with
   volume-aware online centroid learning, deterministic fallback prediction, and explicit Apple Silicon
   backend metadata for Swift SIMD, Accelerate, Metal, PyTorch MPS,
   TensorFlow Metal, or Core ML / Neural Engine candidates.
@@ -41,4 +40,4 @@ Run the local verification gate with:
 swift test
 ```
 
-The legacy MQL5 plugin reference files have been removed from the repository. The current source of truth is this family-first Swift plugin zoo plus the conversion plan in `Common/Docs/PLUGIN_CONVERSION_PLAN.md`.
+The legacy MQL5 plugin reference files have been removed from the repository. The current source of truth is this plugin-owned Swift zoo plus the conversion plan in `API/Docs/PLUGIN_CONVERSION_PLAN.md`.

@@ -103,13 +103,8 @@ public struct ProjectScanner {
             return true
         }
 
-        if first == "Package.swift" || first == ".build" || first == "Backends" {
+        if first == "Package.swift" || first == ".build" || first == "API" {
             return true
-        }
-
-        if first == "Common" {
-            let supportFolder = components.dropFirst().first
-            return supportFolder == "Docs" || supportFolder == "Tests"
         }
 
         return false
@@ -134,9 +129,9 @@ public struct ProjectScanner {
             PluginDescriptor(name: name, family: sourceFamily, sourcePath: sourceFile, sourceKind: .file)
         })
 
-        let generatedPattern = #"(?m)^\s*(?:FXAIPluginDefinitionFactory\.)?(linear|tree|sequence|distribution|statistical|factor|trend|mixture|memory|world|reinforcement)\(\.[^,]+,\s*"([^"]+)""#
-        for match in regexCapturePairs(pattern: generatedPattern, text: source) {
-            let family = sourceFamily == "Common" ? generatedPluginFamily(match.first) : sourceFamily
+        let descriptorPattern = #"(?m)^\s*(?:FXAIPluginImplementationDescriptor\.)?(linear|tree|sequence|distribution|statistical|factor|trend|mixture|memory|world|reinforcement)\(\.[^,]+,\s*"([^"]+)""#
+        for match in regexCapturePairs(pattern: descriptorPattern, text: source) {
+            let family = sourceFamily == "API" ? descriptorPluginFamily(match.first) : sourceFamily
             descriptors.append(
                 PluginDescriptor(
                     name: match.second,
@@ -165,7 +160,7 @@ public struct ProjectScanner {
         return relativePath.split(separator: "/").map(String.init)
     }
 
-    private func generatedPluginFamily(_ helperName: String) -> String {
+    private func descriptorPluginFamily(_ helperName: String) -> String {
         switch helperName {
         case "linear": return "Linear"
         case "tree": return "Tree"
@@ -178,7 +173,7 @@ public struct ProjectScanner {
         case "memory": return "Memory"
         case "world": return "World"
         case "reinforcement": return "RL"
-        default: return "Generated"
+        default: return "Plugin"
         }
     }
 

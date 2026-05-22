@@ -20,10 +20,9 @@ let package = Package(
             ],
             path: ".",
             exclude: [
-                ".build",
-                "Backends/Python",
-                "Common/Docs",
-                "Common/Tests",
+                "API/Backends/Python",
+                "API/Docs",
+                "API/Tests",
                 "Package.swift",
                 "README.md"
             ]
@@ -31,7 +30,7 @@ let package = Package(
         .testTarget(
             name: "FXAIPluginsTests",
             dependencies: ["FXAIPlugins"],
-            path: "Common/Tests/FXAIPluginsTests"
+            path: "API/Tests/FXAIPluginsTests"
         )
     ],
     swiftLanguageModes: [.v6]
