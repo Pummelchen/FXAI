@@ -59,6 +59,108 @@ public struct FXDatabaseMarketHistoryRequest: Codable, Hashable, Sendable {
     }
 }
 
+public struct FXDatabaseMarketUniverseRequest: Codable, Hashable, Sendable {
+    public var brokerSourceId: String
+    public var sourceOrigin: String
+    public var primarySymbol: String
+    public var contextSymbols: [String]
+    public var expectedProviderSymbolsBySymbol: [String: String]
+    public var expectedDigitsBySymbol: [String: Int]
+    public var utcStartInclusive: Int64
+    public var utcEndExclusive: Int64
+    public var maximumRowsPerSymbol: Int
+    public var requireAlignedTimestamps: Bool
+
+    public init(
+        brokerSourceId: String,
+        sourceOrigin: String = "MT5",
+        primarySymbol: String,
+        contextSymbols: [String] = [],
+        expectedProviderSymbolsBySymbol: [String: String] = [:],
+        expectedDigitsBySymbol: [String: Int] = [:],
+        utcStartInclusive: Int64,
+        utcEndExclusive: Int64,
+        maximumRowsPerSymbol: Int = FXBacktestAPIV1.maximumRowsLimit,
+        requireAlignedTimestamps: Bool = true
+    ) {
+        let normalizedPrimary = DataCoreRequest.normalizedSymbol(primarySymbol)
+        self.brokerSourceId = brokerSourceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.sourceOrigin = sourceOrigin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        self.primarySymbol = normalizedPrimary
+        self.contextSymbols = DataCoreRequest.normalizedContextSymbols(contextSymbols)
+            .filter { $0 != normalizedPrimary }
+        self.expectedProviderSymbolsBySymbol = Self.normalizedProviderSymbols(expectedProviderSymbolsBySymbol)
+        self.expectedDigitsBySymbol = Self.normalizedDigits(expectedDigitsBySymbol)
+        self.utcStartInclusive = utcStartInclusive
+        self.utcEndExclusive = utcEndExclusive
+        self.maximumRowsPerSymbol = max(1, min(maximumRowsPerSymbol, FXBacktestAPIV1.maximumRowsLimit))
+        self.requireAlignedTimestamps = requireAlignedTimestamps
+    }
+
+    public var symbols: [String] {
+        [primarySymbol] + contextSymbols
+    }
+
+    public func validate() throws {
+        guard !brokerSourceId.isEmpty else {
+            throw FXDataEngineError.invalidRequest("brokerSourceId must not be empty")
+        }
+        guard !primarySymbol.isEmpty else {
+            throw FXDataEngineError.invalidRequest("primarySymbol must not be empty")
+        }
+        guard utcStartInclusive < utcEndExclusive else {
+            throw FXDataEngineError.invalidRequest("UTC range start must be before end")
+        }
+        guard utcStartInclusive % 60 == 0, utcEndExclusive % 60 == 0 else {
+            throw FXDataEngineError.invalidRequest("UTC range boundaries must be minute-aligned")
+        }
+        for (symbol, digits) in expectedDigitsBySymbol {
+            guard (0...10).contains(digits) else {
+                throw FXDataEngineError.invalidRequest("expected digits for \(symbol) must be in 0...10")
+            }
+        }
+    }
+
+    public func historyRequests() throws -> [FXDatabaseMarketHistoryRequest] {
+        try validate()
+        return symbols.map { symbol in
+            FXDatabaseMarketHistoryRequest(
+                brokerSourceId: brokerSourceId,
+                sourceOrigin: sourceOrigin,
+                logicalSymbol: symbol,
+                expectedProviderSymbol: expectedProviderSymbolsBySymbol[symbol],
+                expectedDigits: expectedDigitsBySymbol[symbol],
+                utcStartInclusive: utcStartInclusive,
+                utcEndExclusive: utcEndExclusive,
+                maximumRows: maximumRowsPerSymbol
+            )
+        }
+    }
+
+    private static func normalizedProviderSymbols(_ input: [String: String]) -> [String: String] {
+        var output: [String: String] = [:]
+        output.reserveCapacity(input.count)
+        for (rawSymbol, rawProvider) in input {
+            let symbol = DataCoreRequest.normalizedSymbol(rawSymbol)
+            let provider = rawProvider.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !symbol.isEmpty, !provider.isEmpty else { continue }
+            output[symbol] = provider
+        }
+        return output
+    }
+
+    private static func normalizedDigits(_ input: [String: Int]) -> [String: Int] {
+        var output: [String: Int] = [:]
+        output.reserveCapacity(input.count)
+        for (rawSymbol, digits) in input {
+            let symbol = DataCoreRequest.normalizedSymbol(rawSymbol)
+            guard !symbol.isEmpty else { continue }
+            output[symbol] = digits
+        }
+        return output
+    }
+}
+
 public struct MarketOHLCVBar: Codable, Hashable, Sendable {
     public let utcTimestamp: Int64
     public let timeframe: MarketTimeframe
@@ -215,6 +317,18 @@ public struct FXDatabaseMarketDataLoader: Sendable {
             primarySymbol: primarySymbol,
             series: series,
             requireAlignedTimestamps: requireAlignedTimestamps
+        )
+    }
+
+    public func loadUniverse(
+        connection: FXDatabaseMarketConnection,
+        request: FXDatabaseMarketUniverseRequest
+    ) async throws -> MarketUniverse {
+        try await loadUniverse(
+            connection: connection,
+            requests: try request.historyRequests(),
+            primarySymbol: request.primarySymbol,
+            requireAlignedTimestamps: request.requireAlignedTimestamps
         )
     }
 }

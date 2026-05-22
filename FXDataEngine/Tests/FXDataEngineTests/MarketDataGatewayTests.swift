@@ -26,6 +26,64 @@ final class MarketDataGatewayTests: XCTestCase {
         try apiRequest.validate()
     }
 
+    func testFXDatabaseMarketUniverseRequestBuildsPrimaryAndDedupedContextRequests() throws {
+        let request = FXDatabaseMarketUniverseRequest(
+            brokerSourceId: " demo-broker ",
+            sourceOrigin: "dukascopy",
+            primarySymbol: " eurusd ",
+            contextSymbols: ["USDJPY", "eurusd", " gbpusd ", "USDJPY", ""],
+            expectedProviderSymbolsBySymbol: [
+                "eurusd": "EUR/USD",
+                "usdjpy": "USD/JPY",
+                " ": "ignored"
+            ],
+            expectedDigitsBySymbol: [
+                "EURUSD": 5,
+                "USDJPY": 3,
+                "GBPUSD": 5
+            ],
+            utcStartInclusive: 1_704_067_200,
+            utcEndExclusive: 1_704_067_800,
+            maximumRowsPerSymbol: 2_000,
+            requireAlignedTimestamps: false
+        )
+
+        let historyRequests = try request.historyRequests()
+
+        XCTAssertEqual(request.symbols, ["EURUSD", "USDJPY", "GBPUSD"])
+        XCTAssertEqual(historyRequests.map(\.logicalSymbol), ["EURUSD", "USDJPY", "GBPUSD"])
+        XCTAssertEqual(historyRequests.map(\.sourceOrigin), ["DUKASCOPY", "DUKASCOPY", "DUKASCOPY"])
+        XCTAssertEqual(historyRequests[0].expectedProviderSymbol, "EUR/USD")
+        XCTAssertEqual(historyRequests[1].expectedProviderSymbol, "USD/JPY")
+        XCTAssertNil(historyRequests[2].expectedProviderSymbol)
+        XCTAssertEqual(historyRequests[1].expectedDigits, 3)
+        XCTAssertEqual(historyRequests[2].maximumRows, 2_000)
+        XCTAssertFalse(request.requireAlignedTimestamps)
+        for apiRequest in historyRequests.map({ $0.apiRequest() }) {
+            try apiRequest.validate()
+        }
+    }
+
+    func testFXDatabaseMarketUniverseRequestRejectsInvalidRangeAndDigits() {
+        let invalidRange = FXDatabaseMarketUniverseRequest(
+            brokerSourceId: "demo",
+            primarySymbol: "EURUSD",
+            expectedDigitsBySymbol: ["EURUSD": 5],
+            utcStartInclusive: 1_704_067_800,
+            utcEndExclusive: 1_704_067_200
+        )
+        XCTAssertThrowsError(try invalidRange.historyRequests())
+
+        let invalidDigits = FXDatabaseMarketUniverseRequest(
+            brokerSourceId: "demo",
+            primarySymbol: "EURUSD",
+            expectedDigitsBySymbol: ["EURUSD": 11],
+            utcStartInclusive: 1_704_067_200,
+            utcEndExclusive: 1_704_067_800
+        )
+        XCTAssertThrowsError(try invalidDigits.historyRequests())
+    }
+
     func testM1SeriesBuildsFromFXDatabaseResponseWithNonMT5Volume() throws {
         let response = makeResponse(sourceOrigin: "DUKASCOPY", providerSymbol: "EUR/USD", count: 4)
         let series = try M1OHLCVSeries(response: response)
