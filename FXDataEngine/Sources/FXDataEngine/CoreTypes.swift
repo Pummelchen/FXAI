@@ -6,6 +6,84 @@ public enum LabelClass: Int, Codable, Sendable, CaseIterable {
     case skip = 2
 }
 
+public enum AIModelID: Int, Codable, Sendable, CaseIterable {
+    case autoformer = 0
+    case catboost
+    case chronos
+    case enhash
+    case ftrlLogit
+    case geodesicAttention
+    case lightgbm
+    case lstm
+    case lstmg
+    case mlpTiny
+    case paLinear
+    case patchTST
+    case quantile
+    case s4
+    case sgdLogit
+    case stmn
+    case tcn
+    case tft
+    case timesfm
+    case tst
+    case xgbFast
+    case xgboost
+    case cfxWorld
+    case loffm
+    case trr
+    case graphWM
+    case moeConformal
+    case retrDiff
+    case m1Sync
+    case buyOnly
+    case sellOnly
+    case randomNoSkip
+    case qcew
+    case fewc
+    case gha
+    case tesseract
+    case statMSGARCH
+    case statARIMAXGARCH
+    case treeRF
+    case statCointVECM
+    case statOUSpread
+    case rlPPO
+    case statMicroflowProxy
+    case statHMMRegime
+    case linElasticLogit
+    case linProfitLogit
+    case cnnLSTM
+    case attnCNNBiLSTM
+    case statEMDHHT
+    case statVMD
+    case statTVPKalman
+    case factorPCAPanel
+    case factorPPPValue
+    case factorCarry
+    case factorCMVPanel
+    case trendTSMOMVol
+    case trendXSMOMRank
+    case trendVolBreakout
+    case statXRateConsistency
+    case gru
+    case bilstm
+    case lstmTCN
+    case mythosRDT
+
+    public var usesDeepNormalizationCandidates: Bool {
+        switch self {
+        case .lstm, .lstmg, .tcn, .tft, .tst,
+             .autoformer, .patchTST, .stmn, .s4,
+             .chronos, .timesfm, .geodesicAttention,
+             .qcew, .fewc, .gha, .tesseract:
+            true
+        default:
+            false
+        }
+    }
+}
+
 public enum AIFamily: Int, Codable, Sendable, CaseIterable {
     case linear = 0
     case tree

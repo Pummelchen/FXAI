@@ -71,6 +71,97 @@ public enum NormalizationWindowTools {
     }
 }
 
+public enum NormalizationMetaSupportTools {
+    public static let candidateMax = FXDataEngineConstants.normalizationCandidateMax
+
+    public static func barRandom01(barTimeUTC: Int64, salt: Int) -> Double {
+        let maskedTime = UInt64(bitPattern: barTimeUTC) & 0x7fff_ffff
+        var value = UInt32(truncatingIfNeeded: maskedTime)
+        let saltSeed = UInt32(truncatingIfNeeded: salt) &+ 1
+        value ^= saltSeed &* 1_103_515_245 &+ 12_345
+        value ^= value << 13
+        value ^= value >> 17
+        value ^= value << 5
+        return Double(value % 100_000) / 100_000.0
+    }
+
+    public static func shouldSampleByPercent(barTimeUTC: Int64, salt: Int, percent: Double) -> Bool {
+        let clampedPercent = fxClamp(percent, 0.0, 100.0)
+        if clampedPercent <= 0.0 {
+            return false
+        }
+        if clampedPercent >= 100.0 {
+            return true
+        }
+        return barRandom01(barTimeUTC: barTimeUTC, salt: salt) < clampedPercent / 100.0
+    }
+
+    public static func isShadowBar(cadenceBars: Int, barSequence: Int) -> Bool {
+        if cadenceBars <= 0 {
+            return false
+        }
+        if cadenceBars == 1 {
+            return true
+        }
+        if barSequence < 0 {
+            return false
+        }
+        return barSequence % cadenceBars == 0
+    }
+
+    public static func sanitizeNormalizationMethod(_ methodID: Int) -> FeatureNormalizationMethod {
+        FeatureNormalizationMethod(rawValue: methodID) ?? .existing
+    }
+
+    public static func normalizationMethodCandidates(
+        aiID: Int,
+        currentMethod: FeatureNormalizationMethod,
+        maxCandidates: Int = candidateMax
+    ) -> [FeatureNormalizationMethod] {
+        let limit = min(max(0, maxCandidates), candidateMax)
+        guard limit > 0 else { return [] }
+
+        let deepModel = AIModelID(rawValue: aiID)?.usesDeepNormalizationCandidates ?? false
+        let seedMethods: [FeatureNormalizationMethod]
+        if deepModel {
+            seedMethods = [
+                currentMethod,
+                .existing,
+                .volatilityStdReturns,
+                .atrNatrUnit,
+                .zScore,
+                .revin,
+                .dain,
+                .robustMedianIQR,
+                .minMaxBuffer3
+            ]
+        } else {
+            seedMethods = [
+                currentMethod,
+                .existing,
+                .zScore,
+                .robustMedianIQR,
+                .quantileToNormal,
+                .changePercent,
+                .volatilityStdReturns,
+                .atrNatrUnit,
+                .powerYeoJohnson,
+                .minMaxBuffer3
+            ]
+        }
+
+        var methods: [FeatureNormalizationMethod] = []
+        methods.reserveCapacity(min(seedMethods.count, limit))
+        for method in seedMethods where !methods.contains(method) {
+            methods.append(method)
+            if methods.count >= limit {
+                break
+            }
+        }
+        return methods
+    }
+}
+
 public extension FeatureNormalizationMethod {
     var usesAdaptivePayloadNormalization: Bool {
         self == .revin || self == .dain

@@ -64,6 +64,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 - Done: normalization window/config state: target default windows, per-feature group window building, legacy/runtime config mirrors, version bumps, and binary codecs.
 - Done: normalization rolling history state: method policy flags, per-method/per-feature ring buffers, rewind/config-change resets, newest-first history reads, and binary codec.
 - Done: normalization fit state: fallback stats, fitted min/max/mean/std/robust quantiles, Yeo-Johnson grid stats, quantile-to-normal lookup, and binary codec.
+- Done: meta-support normalization helper slice: deterministic bar sampling, percent sampling gates, shadow-cadence checks, canonical AI model IDs, normalization method sanitization, and MQL-style method candidate ordering are ported. Routed model normalization-bank lookup still belongs with runtime/plugin state integration.
 - Remaining in phase 3: no known non-tensor runtime artifact state gaps; tensor/plugin model state remains owned by FXPlugins, and broker execution state moves to FXBacktest.
 - Done: first FXDatabase market gateway slice: async M1 OHLCV loader, source-origin/provider-symbol request mapping for non-MT5 providers, canonical ascending bar index/slice/window helpers, and volume-preserving response conversion.
 - Done: M1-derived MTF bar shaping: strict full-bucket resampling for M5/M15/M30/H1, optional partial buckets, volume summing, OHLC invariant validation, and alignment maps back to canonical M1 time.

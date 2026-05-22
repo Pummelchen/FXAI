@@ -26,6 +26,84 @@ final class NormalizationStateTests: XCTestCase {
         XCTAssertEqual(windows[79], 192)
     }
 
+    func testMetaSupportSamplingAndShadowRulesMatchLegacyHelpers() {
+        XCTAssertEqual(
+            NormalizationMetaSupportTools.barRandom01(barTimeUTC: 0, salt: 0),
+            0.66991,
+            accuracy: 1e-12
+        )
+        XCTAssertEqual(
+            NormalizationMetaSupportTools.barRandom01(barTimeUTC: 1_704_067_200, salt: 3),
+            0.10814,
+            accuracy: 1e-12
+        )
+        XCTAssertEqual(
+            NormalizationMetaSupportTools.barRandom01(barTimeUTC: -1, salt: 0),
+            0.67312,
+            accuracy: 1e-12
+        )
+
+        XCTAssertFalse(NormalizationMetaSupportTools.shouldSampleByPercent(barTimeUTC: 1_704_067_200, salt: 3, percent: 0.0))
+        XCTAssertTrue(NormalizationMetaSupportTools.shouldSampleByPercent(barTimeUTC: 1_704_067_200, salt: 3, percent: 100.0))
+        XCTAssertTrue(NormalizationMetaSupportTools.shouldSampleByPercent(barTimeUTC: 1_704_067_200, salt: 3, percent: 11.0))
+        XCTAssertFalse(NormalizationMetaSupportTools.shouldSampleByPercent(barTimeUTC: 1_704_067_200, salt: 3, percent: 10.8))
+
+        XCTAssertFalse(NormalizationMetaSupportTools.isShadowBar(cadenceBars: 0, barSequence: 10))
+        XCTAssertTrue(NormalizationMetaSupportTools.isShadowBar(cadenceBars: 1, barSequence: -5))
+        XCTAssertFalse(NormalizationMetaSupportTools.isShadowBar(cadenceBars: 4, barSequence: -1))
+        XCTAssertTrue(NormalizationMetaSupportTools.isShadowBar(cadenceBars: 4, barSequence: 12))
+        XCTAssertFalse(NormalizationMetaSupportTools.isShadowBar(cadenceBars: 4, barSequence: 13))
+    }
+
+    func testMetaSupportNormalizationMethodCandidatesMatchLegacyOrdering() {
+        XCTAssertEqual(AIModelID.allCases.count, FXDataEngineConstants.aiCount)
+        XCTAssertEqual(AIModelID.lstm.rawValue, 7)
+        XCTAssertEqual(AIModelID.qcew.rawValue, 32)
+        XCTAssertEqual(AIModelID.mythosRDT.rawValue, 62)
+        XCTAssertTrue(AIModelID.lstm.usesDeepNormalizationCandidates)
+        XCTAssertFalse(AIModelID.gru.usesDeepNormalizationCandidates)
+
+        XCTAssertEqual(NormalizationMetaSupportTools.sanitizeNormalizationMethod(-1), .existing)
+        XCTAssertEqual(NormalizationMetaSupportTools.sanitizeNormalizationMethod(FeatureNormalizationMethod.dain.rawValue), .dain)
+        XCTAssertEqual(NormalizationMetaSupportTools.sanitizeNormalizationMethod(99), .existing)
+
+        XCTAssertEqual(
+            NormalizationMetaSupportTools.normalizationMethodCandidates(aiID: AIModelID.lstm.rawValue, currentMethod: .dain),
+            [
+                .dain,
+                .existing,
+                .volatilityStdReturns,
+                .atrNatrUnit,
+                .zScore,
+                .revin,
+                .robustMedianIQR,
+                .minMaxBuffer3
+            ]
+        )
+        XCTAssertEqual(
+            NormalizationMetaSupportTools.normalizationMethodCandidates(aiID: AIModelID.catboost.rawValue, currentMethod: .existing),
+            [
+                .existing,
+                .zScore,
+                .robustMedianIQR,
+                .quantileToNormal,
+                .changePercent,
+                .volatilityStdReturns,
+                .atrNatrUnit,
+                .powerYeoJohnson,
+                .minMaxBuffer3
+            ]
+        )
+        XCTAssertEqual(
+            NormalizationMetaSupportTools.normalizationMethodCandidates(aiID: AIModelID.qcew.rawValue, currentMethod: .zScore, maxCandidates: 3),
+            [.zScore, .existing, .volatilityStdReturns]
+        )
+        XCTAssertEqual(
+            NormalizationMetaSupportTools.normalizationMethodCandidates(aiID: -1, currentMethod: .revin, maxCandidates: 0),
+            []
+        )
+    }
+
     func testWindowConfigResetAndSetMirrorLegacyVersionBumps() {
         var config = NormalizationWindowConfigState()
         config.reset(defaultWindow: 999)
