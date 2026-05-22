@@ -34,7 +34,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 ## Current Gaps By Module
 
 - `Engine/Core`: partially ported. Core constants, feature groups, plugin families, data request basics, feature schema, and normalization concepts exist in Swift; analog memory, broker execution, regime graph, runtime perf, and model-context details remain.
-- `Engine` root: partially ported. Feature registry/build/norm exist only as a first slice; event macro, data pipeline/sample preparation, meta calibration/reliability/policy/stacker/horizon, and runtime artifacts remain.
+- `Engine` root: partially ported. Feature registry/build/norm exist only as a first slice; runtime artifact text manifests are ported; event macro, data pipeline/sample preparation, meta calibration/reliability/policy/stacker/horizon, and binary runtime state persistence remain.
 - `Runtime/ControlPlane`: partially ported. Swift now has profile/snapshot DTOs, safe path helpers, TSV parsing, adaptive/student router weight helpers, portfolio supervisor defaults, supervisor service/command state parsing, freshness checks, command direction/budget helpers, file-backed profile loaders, peer aggregate scoring, and stale snapshot pruning.
 - `Runtime/Trade`: not ported. Must be split between FXBacktest simulation and FXDataEngine policy/risk DTOs.
 - `Runtime` stages: not ported. Must be rebuilt with plugin mockability before real PyTorch/TensorFlow backends.
@@ -47,7 +47,8 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 - Done: control-plane foundations: deployment, portfolio supervisor, student router, adaptive router, supervisor service, supervisor command, snapshot DTOs, MQL-style TSV parsing, clamping/defaults, safe paths, and direction/budget helper behavior.
 - Done: runtime artifact foundations: runtime artifact paths, version/header contract, runtime stage names, persistence coverage manifest row logic, feature registry manifest rows, feature clip bounds, and stateful checkpoint promotion readiness logic.
 - Done: file-backed control-plane repositories and snapshot aggregation with MQL-style stale snapshot pruning.
-- Remaining in phase 3: full runtime performance/macro/shadow manifest writers and binary runtime artifact persistence.
+- Done: runtime artifact text manifest writers for persistence coverage, feature registry, macro dataset stats, runtime performance rows, and shadow fleet ledger rows.
+- Remaining in phase 3: binary runtime artifact persistence.
 
 ## Start Order
 
