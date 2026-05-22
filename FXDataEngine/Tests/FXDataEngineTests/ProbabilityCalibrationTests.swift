@@ -251,7 +251,7 @@ final class ProbabilityCalibrationTests: XCTestCase {
         XCTAssertEqual(state.reasonsCSV, "MOVE_DISTRIBUTION_TOO_WEAK; COST_TOO_HIGH; EDGE_TOO_SMALL")
     }
 
-    func testProbabilityCalibrationRuntimeArtifactsMatchLegacyTSVAndNDJSONShape() throws {
+    func testProbabilityCalibrationRuntimeArtifactsUsePriceCostKeys() throws {
         let state = ProbabilityCalibrationRuntimeState(
             ready: true,
             available: true,
@@ -299,7 +299,8 @@ final class ProbabilityCalibrationTests: XCTestCase {
         XCTAssertTrue(tsv.contains("schema_version\t1\r\n"))
         XCTAssertTrue(tsv.contains("symbol\tEUR/USD live\r\n"))
         XCTAssertTrue(tsv.contains("selected_quality\t0.800000\r\n"))
-        XCTAssertTrue(tsv.contains("spread_cost_points\t4.700000\r\n"))
+        XCTAssertTrue(tsv.contains("price_cost_points\t4.700000\r\n"))
+        XCTAssertFalse(tsv.contains("spread_cost_points"))
         XCTAssertTrue(tsv.contains("abstain\t1\r\n"))
         XCTAssertTrue(tsv.contains("reasons_csv\tINPUT_STALE; EDGE_TOO_SMALL\r\n"))
 
@@ -317,7 +318,8 @@ final class ProbabilityCalibrationTests: XCTestCase {
         let nested = try XCTUnwrap(object["state"] as? [String: Any])
         XCTAssertEqual(nested["final_action"] as? String, "SKIP")
         XCTAssertEqual(nested["abstain"] as? Bool, true)
-        XCTAssertEqual(try XCTUnwrap(nested["spread_cost_points"] as? Double), 4.7, accuracy: 0.0)
+        XCTAssertEqual(try XCTUnwrap(nested["price_cost_points"] as? Double), 4.7, accuracy: 0.0)
+        XCTAssertNil(nested["spread_cost_points"])
         XCTAssertEqual(nested["reason_codes"] as? [String], ["INPUT_STALE", "EDGE_TOO_SMALL"])
     }
 

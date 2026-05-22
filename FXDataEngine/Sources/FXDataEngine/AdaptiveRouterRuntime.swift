@@ -645,7 +645,7 @@ public enum AdaptiveRouterRuntimeTools {
             "\"probabilities\":{\(probabilities)}," +
             "\"reasons\":[\(reasons)]," +
             "\"session\":\(jsonQuoted(state.sessionLabel))," +
-            "\"spread_regime\":\(jsonQuoted(state.priceCostRegime))," +
+            "\"price_cost_regime\":\(jsonQuoted(state.priceCostRegime))," +
             "\"volatility_regime\":\(jsonQuoted(state.volatilityRegime))," +
             "\"news_risk_score\":\(RuntimeArtifactTSV.double(state.newsRiskScore))," +
             "\"news_pressure\":\(RuntimeArtifactTSV.double(state.newsPressure))," +
@@ -873,7 +873,7 @@ public enum AdaptiveRouterRuntimeTools {
             ("trade_posture", posture),
             ("abstain_bias", RuntimeArtifactTSV.double(abstainBias)),
             ("session_label", state.sessionLabel),
-            ("spread_regime", state.priceCostRegime),
+            ("price_cost_regime", state.priceCostRegime),
             ("volatility_regime", state.volatilityRegime),
             ("news_risk_score", RuntimeArtifactTSV.double(state.newsRiskScore)),
             ("news_pressure", RuntimeArtifactTSV.double(state.newsPressure)),

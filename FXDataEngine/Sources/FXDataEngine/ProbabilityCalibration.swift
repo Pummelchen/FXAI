@@ -1265,7 +1265,7 @@ public enum ProbabilityCalibrationTools {
             "\"expected_move_q25_points\":\(RuntimeArtifactTSV.double(state.expectedMoveQ25Points))," +
             "\"expected_move_q50_points\":\(RuntimeArtifactTSV.double(state.expectedMoveQ50Points))," +
             "\"expected_move_q75_points\":\(RuntimeArtifactTSV.double(state.expectedMoveQ75Points))," +
-            "\"spread_cost_points\":\(RuntimeArtifactTSV.double(state.priceCostPoints))," +
+            "\"price_cost_points\":\(RuntimeArtifactTSV.double(state.priceCostPoints))," +
             "\"slippage_cost_points\":\(RuntimeArtifactTSV.double(state.slippageCostPoints))," +
             "\"uncertainty_score\":\(RuntimeArtifactTSV.double(state.uncertaintyScore))," +
             "\"uncertainty_penalty_points\":\(RuntimeArtifactTSV.double(state.uncertaintyPenaltyPoints))," +
@@ -1526,7 +1526,7 @@ public enum ProbabilityCalibrationTools {
             ("expected_move_q25_points", RuntimeArtifactTSV.double(state.expectedMoveQ25Points)),
             ("expected_move_q50_points", RuntimeArtifactTSV.double(state.expectedMoveQ50Points)),
             ("expected_move_q75_points", RuntimeArtifactTSV.double(state.expectedMoveQ75Points)),
-            ("spread_cost_points", RuntimeArtifactTSV.double(state.priceCostPoints)),
+            ("price_cost_points", RuntimeArtifactTSV.double(state.priceCostPoints)),
             ("slippage_cost_points", RuntimeArtifactTSV.double(state.slippageCostPoints)),
             ("uncertainty_score", RuntimeArtifactTSV.double(state.uncertaintyScore)),
             ("uncertainty_penalty_points", RuntimeArtifactTSV.double(state.uncertaintyPenaltyPoints)),

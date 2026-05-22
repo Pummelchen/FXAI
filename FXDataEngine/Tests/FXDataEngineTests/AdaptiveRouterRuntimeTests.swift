@@ -198,7 +198,7 @@ final class AdaptiveRouterRuntimeTests: XCTestCase {
         )
     }
 
-    func testAdaptiveRouterRuntimeArtifactsMatchLegacyShape() throws {
+    func testAdaptiveRouterRuntimeArtifactsUsePriceCostKeys() throws {
         let state = AdaptiveRegimeState(
             valid: true,
             symbol: "EURUSD",
@@ -260,7 +260,8 @@ final class AdaptiveRouterRuntimeTests: XCTestCase {
         XCTAssertTrue(tsv.contains("schema_version\t1\r\n"))
         XCTAssertTrue(tsv.contains("symbol\tEUR/USD live\r\n"))
         XCTAssertTrue(tsv.contains("top_regime_label\tHIGH_VOL_EVENT\r\n"))
-        XCTAssertTrue(tsv.contains("spread_regime\tELEVATED\r\n"))
+        XCTAssertTrue(tsv.contains("price_cost_regime\tELEVATED\r\n"))
+        XCTAssertFalse(tsv.contains("spread_regime"))
         XCTAssertTrue(tsv.contains("active_plugins_csv\tai_tft:1.0000:1.2000\r\n"))
         XCTAssertTrue(tsv.contains("suppressed_plugins_csv\tlin_pa:0.0000:0.2000\r\n"))
         XCTAssertTrue(tsv.contains("probabilities_csv\tTREND_PERSISTENT=0.050000"))
@@ -288,7 +289,8 @@ final class AdaptiveRouterRuntimeTests: XCTestCase {
         XCTAssertEqual(object["generated_at"] as? String, "2024-01-01T00:00:00Z")
         let regime = try XCTUnwrap(object["regime"] as? [String: Any])
         XCTAssertEqual(regime["top_label"] as? String, "HIGH_VOL_EVENT")
-        XCTAssertEqual(regime["spread_regime"] as? String, "ELEVATED")
+        XCTAssertEqual(regime["price_cost_regime"] as? String, "ELEVATED")
+        XCTAssertNil(regime["spread_regime"])
         let router = try XCTUnwrap(object["router"] as? [String: Any])
         XCTAssertEqual(router["trade_posture"] as? String, "CAUTION")
         let plugins = try XCTUnwrap(object["plugins"] as? [[String: Any]])

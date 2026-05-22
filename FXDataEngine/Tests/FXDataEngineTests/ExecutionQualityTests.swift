@@ -22,15 +22,15 @@ final class ExecutionQualityTests: XCTestCase {
         )
     }
 
-    func testExecutionQualityConfigParsesLegacyTSVWithRenamedCostFields() {
+    func testExecutionQualityConfigParsesPriceCostTSVAndLegacyAliases() {
         let config = ExecutionQualityTools.parseConfig(tsv: """
         enabled\t0
         block_on_unknown\t0
         support_soft_floor\t40
         support_hard_floor\t12
         threshold_caution_min\t0.61
-        cap_spread_expected_mult\t5.50
-        weight_spread_zscore\t0.33
+        cap_price_cost_expected_mult\t5.50
+        weight_price_cost_zscore\t0.33
         weight_broker_event_burst\t0.21
         bucket_count\t2
         bucket_0\tpair_regime
@@ -56,6 +56,13 @@ final class ExecutionQualityTests: XCTestCase {
         XCTAssertEqual(defaults.bucketHierarchy[0], "PAIR_SESSION_REGIME")
         XCTAssertEqual(defaults.lotScaleStressed, 0.58, accuracy: 0.0)
         XCTAssertEqual(defaults.enterProbabilityBufferBlocked, 1.0, accuracy: 0.0)
+
+        let legacyConfig = ExecutionQualityTools.parseConfig(tsv: """
+        cap_spread_expected_mult\t6.25
+        weight_spread_zscore\t0.44
+        """)
+        XCTAssertEqual(legacyConfig.capExpectedPriceCostMultiplier, 6.25, accuracy: 0.0)
+        XCTAssertEqual(legacyConfig.weightPriceCostZScore, 0.44, accuracy: 0.0)
     }
 
     func testExecutionQualityMemoryTierSelectionMatchesLegacySupportPreference() {
@@ -228,7 +235,7 @@ final class ExecutionQualityTests: XCTestCase {
         XCTAssertEqual(state.reasonsCSV, "NEWS_WINDOW_ACTIVE; EXECUTION_STATE_CAUTION")
     }
 
-    func testExecutionQualityRuntimeArtifactsMatchLegacyTSVAndNDJSONShape() throws {
+    func testExecutionQualityRuntimeArtifactsUsePriceCostKeys() throws {
         let state = ExecutionQualityPairState(
             ready: true,
             available: true,
@@ -273,7 +280,8 @@ final class ExecutionQualityTests: XCTestCase {
         XCTAssertTrue(tsv.contains("selected_quality\t0.800000\r\n"))
         XCTAssertTrue(tsv.contains("fallback_used\t1\r\n"))
         XCTAssertTrue(tsv.contains("rates_repricing_active\t0\r\n"))
-        XCTAssertTrue(tsv.contains("spread_expected_points\t2.500000\r\n"))
+        XCTAssertTrue(tsv.contains("price_cost_expected_points\t2.500000\r\n"))
+        XCTAssertFalse(tsv.contains("spread_expected_points"))
         XCTAssertTrue(tsv.contains("reasons_csv\tDATA_STALE; EXECUTION_STATE_CAUTION\r\n"))
 
         let parsed = try XCTUnwrap(ExecutionQualityTools.readPairState(symbol: "EUR/USD live", stateTSV: tsv, nowUTC: 1_704_067_201))
@@ -291,6 +299,8 @@ final class ExecutionQualityTests: XCTestCase {
         XCTAssertEqual(nested["execution_state"] as? String, "CAUTION")
         XCTAssertEqual(nested["fallback_used"] as? Int, 1)
         XCTAssertEqual(try XCTUnwrap(nested["selected_quality"] as? Double), 0.80, accuracy: 0.0)
+        XCTAssertEqual(try XCTUnwrap(nested["price_cost_expected_points"] as? Double), 2.50, accuracy: 0.0)
+        XCTAssertNil(nested["spread_expected_points"])
         XCTAssertEqual(nested["reason_codes"] as? [String], ["DATA_STALE", "EXECUTION_STATE_CAUTION"])
     }
 

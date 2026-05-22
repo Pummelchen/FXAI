@@ -647,9 +647,9 @@ public enum ExecutionQualityTools {
             "\"broker_coverage\":\(RuntimeArtifactTSV.double(state.brokerCoverage))," +
             "\"broker_reject_prob\":\(RuntimeArtifactTSV.double(state.brokerRejectProbability))," +
             "\"broker_partial_fill_prob\":\(RuntimeArtifactTSV.double(state.brokerPartialFillProbability))," +
-            "\"spread_now_points\":\(RuntimeArtifactTSV.double(state.priceCostNowPoints))," +
-            "\"spread_expected_points\":\(RuntimeArtifactTSV.double(state.priceCostExpectedPoints))," +
-            "\"spread_widening_risk\":\(RuntimeArtifactTSV.double(state.priceCostWideningRisk))," +
+            "\"price_cost_now_points\":\(RuntimeArtifactTSV.double(state.priceCostNowPoints))," +
+            "\"price_cost_expected_points\":\(RuntimeArtifactTSV.double(state.priceCostExpectedPoints))," +
+            "\"price_cost_widening_risk\":\(RuntimeArtifactTSV.double(state.priceCostWideningRisk))," +
             "\"expected_slippage_points\":\(RuntimeArtifactTSV.double(state.expectedSlippagePoints))," +
             "\"slippage_risk\":\(RuntimeArtifactTSV.double(state.slippageRisk))," +
             "\"fill_quality_score\":\(RuntimeArtifactTSV.double(state.fillQualityScore))," +
@@ -809,7 +809,7 @@ public enum ExecutionQualityTools {
                 config.enterProbabilityBufferStressed = max(0.0, Double(value) ?? config.enterProbabilityBufferStressed)
             case "enter_prob_buffer_blocked":
                 config.enterProbabilityBufferBlocked = max(0.0, Double(value) ?? config.enterProbabilityBufferBlocked)
-            case "cap_spread_expected_mult":
+            case "cap_price_cost_expected_mult", "cap_spread_expected_mult":
                 config.capExpectedPriceCostMultiplier = max(0.0, Double(value) ?? config.capExpectedPriceCostMultiplier)
             case "cap_expected_slippage_points":
                 config.capExpectedSlippagePoints = max(0.0, Double(value) ?? config.capExpectedSlippagePoints)
@@ -817,7 +817,7 @@ public enum ExecutionQualityTools {
                 config.capAllowedDeviationPointsMin = max(0.0, Double(value) ?? config.capAllowedDeviationPointsMin)
             case "cap_allowed_deviation_points_max":
                 config.capAllowedDeviationPointsMax = max(config.capAllowedDeviationPointsMin, Double(value) ?? config.capAllowedDeviationPointsMax)
-            case "weight_spread_zscore":
+            case "weight_price_cost_zscore", "weight_spread_zscore":
                 config.weightPriceCostZScore = Double(value) ?? config.weightPriceCostZScore
             case "weight_news_risk":
                 config.weightNewsRisk = Double(value) ?? config.weightNewsRisk
@@ -1531,9 +1531,9 @@ public enum ExecutionQualityTools {
             ("broker_coverage", RuntimeArtifactTSV.double(state.brokerCoverage)),
             ("broker_reject_prob", RuntimeArtifactTSV.double(state.brokerRejectProbability)),
             ("broker_partial_fill_prob", RuntimeArtifactTSV.double(state.brokerPartialFillProbability)),
-            ("spread_now_points", RuntimeArtifactTSV.double(state.priceCostNowPoints)),
-            ("spread_expected_points", RuntimeArtifactTSV.double(state.priceCostExpectedPoints)),
-            ("spread_widening_risk", RuntimeArtifactTSV.double(state.priceCostWideningRisk)),
+            ("price_cost_now_points", RuntimeArtifactTSV.double(state.priceCostNowPoints)),
+            ("price_cost_expected_points", RuntimeArtifactTSV.double(state.priceCostExpectedPoints)),
+            ("price_cost_widening_risk", RuntimeArtifactTSV.double(state.priceCostWideningRisk)),
             ("expected_slippage_points", RuntimeArtifactTSV.double(state.expectedSlippagePoints)),
             ("slippage_risk", RuntimeArtifactTSV.double(state.slippageRisk)),
             ("fill_quality_score", RuntimeArtifactTSV.double(state.fillQualityScore)),

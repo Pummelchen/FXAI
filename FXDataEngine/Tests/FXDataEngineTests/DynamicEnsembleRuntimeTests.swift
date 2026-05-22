@@ -3,7 +3,7 @@ import XCTest
 @testable import FXDataEngine
 
 final class DynamicEnsembleRuntimeTests: XCTestCase {
-    func testDynamicEnsemblePathsLabelsAndConfigParsingMatchLegacyRules() {
+    func testDynamicEnsemblePathsLabelsAndConfigParsingUsePriceCostKeys() {
         XCTAssertEqual(
             DynamicEnsembleRuntimeTools.runtimeStatePath(symbol: "EUR/USD live"),
             "FXAI/Runtime/fxai_dynamic_ensemble_EUR_USD_live.tsv"
@@ -30,7 +30,7 @@ final class DynamicEnsembleRuntimeTests: XCTestCase {
         fallback_to_routed_ensemble\t0
         threshold_suppress_trust_threshold\t0.25
         threshold_min_active_plugins\t2
-        penalty_spread_cost_penalty\t0.31
+        penalty_price_cost_penalty\t0.31
         weight_adaptive_upweight_gain\t0.07
         family_news_compat_transformer\t1.12
         family_cost_robustness_linear\t1.04
@@ -45,6 +45,9 @@ final class DynamicEnsembleRuntimeTests: XCTestCase {
         XCTAssertEqual(parsed.familyNewsCompatibility[.transformer], 1.12, accuracy: 0.0)
         XCTAssertEqual(parsed.familyCostRobustness[.linear], 1.04, accuracy: 0.0)
         XCTAssertEqual(parsed.familyConfidenceCap[.ruleBased], 0.74, accuracy: 0.0)
+
+        let legacyParsed = DynamicEnsembleConfig.parse(tsv: "penalty_spread_cost_penalty\t0.36\n")
+        XCTAssertEqual(legacyParsed.penaltyCost, 0.36, accuracy: 0.0)
     }
 
     func testDynamicEnsembleEvaluatesPreparedPluginRecords() throws {

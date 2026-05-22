@@ -884,8 +884,11 @@ public struct DynamicEnsembleConfig: Codable, Hashable, Sendable {
         config.penaltyDisagreement = doc.double("penalty_disagreement_penalty", default: config.penaltyDisagreement)
         config.penaltyDrift = doc.double("penalty_drift_penalty", default: config.penaltyDrift)
         config.penaltyCost = doc.double(
-            "penalty_cost_penalty",
-            default: doc.double("penalty_spread_cost_penalty", default: config.penaltyCost)
+            "penalty_price_cost_penalty",
+            default: doc.double(
+                "penalty_cost_penalty",
+                default: doc.double("penalty_spread_cost_penalty", default: config.penaltyCost)
+            )
         )
         config.penaltyNews = doc.double("penalty_news_penalty", default: config.penaltyNews)
         config.penaltyRates = doc.double("penalty_rates_penalty", default: config.penaltyRates)
