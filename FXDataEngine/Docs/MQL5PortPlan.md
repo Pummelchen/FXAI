@@ -142,6 +142,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 - Done: Plugin contract suite slice: `plugin_contract_suite.mqh` deterministic default hyperparameters, predict-request fixture construction, synthetic M1 OHLCV fixture construction, finite prediction checks, registry/factory validation, manifest/self-test checks, optional state roundtrip, optional synthetic-series support, and suite result assembly are ported over `FXAIPluginV4`. Real backend execution remains FXPlugins work.
 - Done: Audit plugin contract wrapper slice: `audit_plugin_contracts.mqh` suite invocation, pass/fail return, and first-failure legacy reason extraction are ported as Swift wrapper utilities around the plugin contract suite.
 - Done: Audit runtime artifact wrapper slice: deterministic `audit_core.mqh` audit runtime safe-key/path rules, magic/version conformal-state envelope, optional plugin-state byte persistence, load result flags, and dirty-save throttle are ported as Swift repository utilities over existing conformal codecs. Real plugin checkpoint semantics remain FXPlugins responsibilities.
+- Done: Offline export runner replacement slice: deterministic `FXAI_OfflineExportRunner.mq5` safe-token/stem/path rules, UTC window validation, newest-bar cap, ascending data output, metadata output, and reset/write behavior are ported as Swift M1 OHLCV export utilities. The Swift data document uses canonical M1 OHLCV plus volume from FXDatabase/FXDataEngine and intentionally omits old MT5-only cost columns.
 
 ## Start Order
 
