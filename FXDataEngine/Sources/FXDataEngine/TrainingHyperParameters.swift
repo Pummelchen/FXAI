@@ -169,6 +169,81 @@ public struct AIHyperParameters: Codable, Hashable, Sendable {
     }
 }
 
+public struct AIHorizonRoutingKey: Codable, Hashable, Sendable {
+    public var aiID: Int
+    public var horizonSlot: Int
+
+    public init(aiID: Int, horizonSlot: Int) {
+        self.aiID = aiID
+        self.horizonSlot = horizonSlot
+    }
+}
+
+public struct AIRegimeRoutingKey: Codable, Hashable, Sendable {
+    public var aiID: Int
+    public var regimeID: Int
+
+    public init(aiID: Int, regimeID: Int) {
+        self.aiID = aiID
+        self.regimeID = regimeID
+    }
+}
+
+public struct AIRegimeHorizonRoutingKey: Codable, Hashable, Sendable {
+    public var aiID: Int
+    public var regimeID: Int
+    public var horizonSlot: Int
+
+    public init(aiID: Int, regimeID: Int, horizonSlot: Int) {
+        self.aiID = aiID
+        self.regimeID = regimeID
+        self.horizonSlot = horizonSlot
+    }
+}
+
+public struct AITrainingRoutingState: Codable, Hashable, Sendable {
+    public var modelHyperParameters: [Int: AIHyperParameters]
+    public var horizonHyperParameters: [AIHorizonRoutingKey: AIHyperParameters]
+    public var regimeHorizonHyperParameters: [AIRegimeHorizonRoutingKey: AIHyperParameters]
+    public var modelNormalizationMethods: [Int: FeatureNormalizationMethod]
+    public var horizonNormalizationMethods: [AIHorizonRoutingKey: FeatureNormalizationMethod]
+    public var regimeHorizonNormalizationMethods: [AIRegimeHorizonRoutingKey: FeatureNormalizationMethod]
+    public var modelThresholds: [Int: WarmupThresholdPair]
+    public var horizonThresholds: [AIHorizonRoutingKey: WarmupThresholdPair]
+    public var regimeThresholds: [AIRegimeRoutingKey: WarmupThresholdPair]
+    public var regimeHorizonThresholds: [AIRegimeHorizonRoutingKey: WarmupThresholdPair]
+    public var modelGlobalEdges: [Int: Double]
+    public var horizonEdges: [AIHorizonRoutingKey: Double]
+
+    public init(
+        modelHyperParameters: [Int: AIHyperParameters] = [:],
+        horizonHyperParameters: [AIHorizonRoutingKey: AIHyperParameters] = [:],
+        regimeHorizonHyperParameters: [AIRegimeHorizonRoutingKey: AIHyperParameters] = [:],
+        modelNormalizationMethods: [Int: FeatureNormalizationMethod] = [:],
+        horizonNormalizationMethods: [AIHorizonRoutingKey: FeatureNormalizationMethod] = [:],
+        regimeHorizonNormalizationMethods: [AIRegimeHorizonRoutingKey: FeatureNormalizationMethod] = [:],
+        modelThresholds: [Int: WarmupThresholdPair] = [:],
+        horizonThresholds: [AIHorizonRoutingKey: WarmupThresholdPair] = [:],
+        regimeThresholds: [AIRegimeRoutingKey: WarmupThresholdPair] = [:],
+        regimeHorizonThresholds: [AIRegimeHorizonRoutingKey: WarmupThresholdPair] = [:],
+        modelGlobalEdges: [Int: Double] = [:],
+        horizonEdges: [AIHorizonRoutingKey: Double] = [:]
+    ) {
+        self.modelHyperParameters = modelHyperParameters
+        self.horizonHyperParameters = horizonHyperParameters
+        self.regimeHorizonHyperParameters = regimeHorizonHyperParameters
+        self.modelNormalizationMethods = modelNormalizationMethods
+        self.horizonNormalizationMethods = horizonNormalizationMethods
+        self.regimeHorizonNormalizationMethods = regimeHorizonNormalizationMethods
+        self.modelThresholds = modelThresholds
+        self.horizonThresholds = horizonThresholds
+        self.regimeThresholds = regimeThresholds
+        self.regimeHorizonThresholds = regimeHorizonThresholds
+        self.modelGlobalEdges = modelGlobalEdges.mapValues { fxSafeFinite($0) }
+        self.horizonEdges = horizonEdges.mapValues { fxSafeFinite($0) }
+    }
+}
+
 public enum AIHyperParameterTools {
     public static func baseParameters(inputs: AIHyperParameterInputs = AIHyperParameterInputs()) -> AIHyperParameters {
         AIHyperParameters(
@@ -251,6 +326,131 @@ public enum AIHyperParameterTools {
             break
         }
         return parameters
+    }
+
+    public static func routedParameters(
+        aiID: Int,
+        regimeID: Int,
+        horizonMinutes: Int,
+        state: AITrainingRoutingState,
+        inputs: AIHyperParameterInputs = AIHyperParameterInputs(),
+        configuredHorizons: [Int] = HorizonTools.defaultConfiguredHorizons
+    ) -> AIHyperParameters {
+        var parameters = defaultParameters(aiID: aiID, inputs: inputs)
+        guard isValidAIID(aiID) else { return parameters }
+        if let modelParameters = state.modelHyperParameters[aiID] {
+            parameters = modelParameters
+        }
+
+        let horizonSlot = TrainingSampleTools.horizonSlot(
+            horizonMinutes: horizonMinutes,
+            configuredHorizons: configuredHorizons
+        )
+        guard isValidHorizonSlot(horizonSlot) else { return parameters }
+
+        let horizonKey = AIHorizonRoutingKey(aiID: aiID, horizonSlot: horizonSlot)
+        if let horizonParameters = state.horizonHyperParameters[horizonKey] {
+            parameters = horizonParameters
+        }
+
+        if isValidRegimeID(regimeID),
+           let bankParameters = state.regimeHorizonHyperParameters[
+            AIRegimeHorizonRoutingKey(aiID: aiID, regimeID: regimeID, horizonSlot: horizonSlot)
+           ] {
+            parameters = bankParameters
+        }
+
+        return parameters
+    }
+
+    public static func routedNormalizationMethod(
+        aiID: Int,
+        regimeID: Int,
+        horizonMinutes: Int,
+        state: AITrainingRoutingState,
+        currentMethod: FeatureNormalizationMethod,
+        configuredHorizons: [Int] = HorizonTools.defaultConfiguredHorizons
+    ) -> FeatureNormalizationMethod {
+        var method = currentMethod
+        guard isValidAIID(aiID) else { return method }
+
+        if let modelMethod = state.modelNormalizationMethods[aiID] {
+            method = modelMethod
+        }
+
+        let horizonSlot = TrainingSampleTools.horizonSlot(
+            horizonMinutes: horizonMinutes,
+            configuredHorizons: configuredHorizons
+        )
+        guard isValidHorizonSlot(horizonSlot) else { return method }
+
+        let horizonKey = AIHorizonRoutingKey(aiID: aiID, horizonSlot: horizonSlot)
+        if let horizonMethod = state.horizonNormalizationMethods[horizonKey] {
+            method = horizonMethod
+        }
+
+        if isValidRegimeID(regimeID),
+           let bankMethod = state.regimeHorizonNormalizationMethods[
+            AIRegimeHorizonRoutingKey(aiID: aiID, regimeID: regimeID, horizonSlot: horizonSlot)
+           ] {
+            method = bankMethod
+        }
+
+        return method
+    }
+
+    public static func routedThresholdPair(
+        aiID: Int,
+        regimeID: Int,
+        horizonMinutes: Int,
+        baseBuy: Double,
+        baseSell: Double,
+        state: AITrainingRoutingState,
+        configuredHorizons: [Int] = HorizonTools.defaultConfiguredHorizons
+    ) -> WarmupThresholdPair {
+        var thresholds = WarmupTools.sanitizeThresholdPair(buyThreshold: baseBuy, sellThreshold: baseSell)
+        guard isValidAIID(aiID) else { return thresholds }
+
+        if let modelThresholds = state.modelThresholds[aiID] {
+            thresholds = modelThresholds
+        }
+
+        let horizonSlot = TrainingSampleTools.horizonSlot(
+            horizonMinutes: horizonMinutes,
+            configuredHorizons: configuredHorizons
+        )
+        guard isValidHorizonSlot(horizonSlot) else {
+            return WarmupTools.sanitizeThresholdPair(buyThreshold: thresholds.buy, sellThreshold: thresholds.sell)
+        }
+
+        let horizonKey = AIHorizonRoutingKey(aiID: aiID, horizonSlot: horizonSlot)
+        if let horizonThresholds = state.horizonThresholds[horizonKey] {
+            thresholds.buy = 0.55 * thresholds.buy + 0.45 * horizonThresholds.buy
+            thresholds.sell = 0.55 * thresholds.sell + 0.45 * horizonThresholds.sell
+        }
+
+        if isValidRegimeID(regimeID),
+           let regimeThresholds = state.regimeThresholds[AIRegimeRoutingKey(aiID: aiID, regimeID: regimeID)] {
+            thresholds.buy = 0.65 * thresholds.buy + 0.35 * regimeThresholds.buy
+            thresholds.sell = 0.65 * thresholds.sell + 0.35 * regimeThresholds.sell
+        }
+
+        if isValidRegimeID(regimeID),
+           let bankThresholds = state.regimeHorizonThresholds[
+            AIRegimeHorizonRoutingKey(aiID: aiID, regimeID: regimeID, horizonSlot: horizonSlot)
+           ] {
+            thresholds.buy = 0.35 * thresholds.buy + 0.65 * bankThresholds.buy
+            thresholds.sell = 0.35 * thresholds.sell + 0.65 * bankThresholds.sell
+        }
+
+        if let horizonEdge = state.horizonEdges[horizonKey] {
+            let denominator = max(0.50, abs(state.modelGlobalEdges[aiID] ?? 0.0) + 0.50)
+            let adjustment = fxClamp(horizonEdge / denominator, -0.08, 0.08)
+            thresholds.buy = fxClamp(thresholds.buy - (0.35 * adjustment), 0.50, 0.95)
+            thresholds.sell = fxClamp(thresholds.sell + (0.35 * adjustment), 0.05, 0.50)
+        }
+
+        return WarmupTools.sanitizeThresholdPair(buyThreshold: thresholds.buy, sellThreshold: thresholds.sell)
     }
 
     public static func sampleThresholdPair(
@@ -345,5 +545,17 @@ public enum AIHyperParameterTools {
             parameters.l2 = rng.range(0.0000, 0.0300)
         }
         return parameters
+    }
+
+    private static func isValidAIID(_ aiID: Int) -> Bool {
+        AIModelID(rawValue: aiID) != nil
+    }
+
+    private static func isValidRegimeID(_ regimeID: Int) -> Bool {
+        regimeID >= 0 && regimeID < FXDataEngineConstants.pluginRegimeBuckets
+    }
+
+    private static func isValidHorizonSlot(_ horizonSlot: Int) -> Bool {
+        horizonSlot >= 0 && horizonSlot < RuntimeArtifactConstants.maxHorizons
     }
 }

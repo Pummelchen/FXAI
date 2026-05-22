@@ -78,6 +78,146 @@ final class TrainingHyperParametersTests: XCTestCase {
         XCTAssertEqual(m1sync.l2, 0.0, accuracy: 0.0)
     }
 
+    func testRoutedParametersApplyLegacyGlobalHorizonAndBankPrecedence() {
+        let aiID = AIModelID.lstm.rawValue
+        let configuredHorizons = [1, 5, 13, 34]
+        let horizonSlot = TrainingSampleTools.horizonSlot(horizonMinutes: 13, configuredHorizons: configuredHorizons)
+
+        var global = AIHyperParameterTools.defaultParameters(aiID: aiID)
+        global.learningRate = 0.0200
+        var horizon = global
+        horizon.learningRate = 0.0300
+        var bank = global
+        bank.learningRate = 0.0400
+        var invalidOverride = global
+        invalidOverride.learningRate = 0.9900
+
+        let state = AITrainingRoutingState(
+            modelHyperParameters: [aiID: global, -1: invalidOverride],
+            horizonHyperParameters: [AIHorizonRoutingKey(aiID: aiID, horizonSlot: horizonSlot): horizon],
+            regimeHorizonHyperParameters: [
+                AIRegimeHorizonRoutingKey(aiID: aiID, regimeID: 2, horizonSlot: horizonSlot): bank
+            ]
+        )
+
+        XCTAssertEqual(
+            AIHyperParameterTools.routedParameters(
+                aiID: aiID,
+                regimeID: 2,
+                horizonMinutes: 13,
+                state: state,
+                configuredHorizons: configuredHorizons
+            ).learningRate,
+            0.0400,
+            accuracy: 0.0
+        )
+        XCTAssertEqual(
+            AIHyperParameterTools.routedParameters(
+                aiID: aiID,
+                regimeID: 1,
+                horizonMinutes: 13,
+                state: state,
+                configuredHorizons: configuredHorizons
+            ).learningRate,
+            0.0300,
+            accuracy: 0.0
+        )
+        XCTAssertEqual(
+            AIHyperParameterTools.routedParameters(aiID: -1, regimeID: 2, horizonMinutes: 13, state: state).learningRate,
+            AIHyperParameterTools.baseParameters().learningRate,
+            accuracy: 0.0
+        )
+    }
+
+    func testRoutedNormalizationMethodAppliesLegacyOverrideOrder() {
+        let aiID = AIModelID.tcn.rawValue
+        let configuredHorizons = [1, 5, 13, 34]
+        let horizonSlot = TrainingSampleTools.horizonSlot(horizonMinutes: 13, configuredHorizons: configuredHorizons)
+
+        let state = AITrainingRoutingState(
+            modelNormalizationMethods: [aiID: .zScore],
+            horizonNormalizationMethods: [AIHorizonRoutingKey(aiID: aiID, horizonSlot: horizonSlot): .robustMedianIQR],
+            regimeHorizonNormalizationMethods: [
+                AIRegimeHorizonRoutingKey(aiID: aiID, regimeID: 3, horizonSlot: horizonSlot): .revin
+            ]
+        )
+
+        XCTAssertEqual(
+            AIHyperParameterTools.routedNormalizationMethod(
+                aiID: aiID,
+                regimeID: 3,
+                horizonMinutes: 13,
+                state: state,
+                currentMethod: .dain,
+                configuredHorizons: configuredHorizons
+            ),
+            .revin
+        )
+        XCTAssertEqual(
+            AIHyperParameterTools.routedNormalizationMethod(
+                aiID: aiID,
+                regimeID: 1,
+                horizonMinutes: 13,
+                state: state,
+                currentMethod: .dain,
+                configuredHorizons: configuredHorizons
+            ),
+            .robustMedianIQR
+        )
+        XCTAssertEqual(
+            AIHyperParameterTools.routedNormalizationMethod(
+                aiID: -1,
+                regimeID: 3,
+                horizonMinutes: 13,
+                state: state,
+                currentMethod: .dain,
+                configuredHorizons: configuredHorizons
+            ),
+            .dain
+        )
+    }
+
+    func testRoutedThresholdPairBlendsLegacyOverridesAndEdgeAdjustment() {
+        let aiID = AIModelID.tcn.rawValue
+        let configuredHorizons = [1, 5, 13, 34]
+        let horizonSlot = TrainingSampleTools.horizonSlot(horizonMinutes: 13, configuredHorizons: configuredHorizons)
+        let horizonKey = AIHorizonRoutingKey(aiID: aiID, horizonSlot: horizonSlot)
+        let regimeKey = AIRegimeRoutingKey(aiID: aiID, regimeID: 2)
+        let bankKey = AIRegimeHorizonRoutingKey(aiID: aiID, regimeID: 2, horizonSlot: horizonSlot)
+
+        let state = AITrainingRoutingState(
+            modelThresholds: [aiID: WarmupThresholdPair(buy: 0.76, sell: 0.24)],
+            horizonThresholds: [horizonKey: WarmupThresholdPair(buy: 0.80, sell: 0.20)],
+            regimeThresholds: [regimeKey: WarmupThresholdPair(buy: 0.82, sell: 0.18)],
+            regimeHorizonThresholds: [bankKey: WarmupThresholdPair(buy: 0.88, sell: 0.12)],
+            modelGlobalEdges: [aiID: 0.10],
+            horizonEdges: [horizonKey: 0.20]
+        )
+
+        let routed = AIHyperParameterTools.routedThresholdPair(
+            aiID: aiID,
+            regimeID: 2,
+            horizonMinutes: 13,
+            baseBuy: 0.70,
+            baseSell: 0.30,
+            state: state,
+            configuredHorizons: configuredHorizons
+        )
+        XCTAssertEqual(routed.buy, 0.821445, accuracy: 1e-12)
+        XCTAssertEqual(routed.sell, 0.178555, accuracy: 1e-12)
+
+        let invalid = AIHyperParameterTools.routedThresholdPair(
+            aiID: -1,
+            regimeID: 2,
+            horizonMinutes: 13,
+            baseBuy: 0.40,
+            baseSell: 0.60,
+            state: state,
+            configuredHorizons: configuredHorizons
+        )
+        XCTAssertEqual(invalid, WarmupThresholdPair(buy: 0.50, sell: 0.49))
+    }
+
     func testThresholdSamplingUsesSanitizedRangesAndLCGOrder() {
         var rng = TrainingRandomGenerator(seed: 7)
         var expectedRNG = rng
