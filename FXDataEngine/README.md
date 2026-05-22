@@ -12,7 +12,7 @@ Repository-root Swift data-engine package for the FXAI migration away from the o
 - The old MQL5 `TensorCore` is intentionally not part of the Swift data-engine port. AI model training, inference, and tensor execution will move into FXPlugins and use PyTorch or TensorFlow per plugin.
 - PyTorch and TensorFlow support is represented by explicit backend descriptors and payload DTOs; process runners will be wired when individual AI plugins are converted.
 - Metal support starts with device probing and kernel descriptors so FXBacktest can adopt accelerated feature/model stages incrementally.
-- Offline macro-event support mirrors the legacy MQL5 `event_macro` dataset contract: TSV parsing, leakage-safe dataset stats, event-window features, macro-state pressure features, and 20-slot macro feature-vector overlays.
+- Offline macro-event and calendar-cache support mirrors the legacy MQL5 `event_macro` and `runtime_calendar_cache` contracts: TSV parsing, leakage-safe dataset stats, event-window features, macro-state pressure features, 20-slot macro feature-vector overlays, news gate states, stale detection, and calendar reason payloads.
 - The MQL5-to-Swift port plan is tracked in `Docs/MQL5PortPlan.md`. The first non-tensor runtime slice ports control-plane DTOs, profile defaults, safe artifact paths, CSV weight helpers, and snapshot parsing.
 
 ## Build
