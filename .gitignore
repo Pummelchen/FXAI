@@ -33,7 +33,6 @@ FXDataEngine/Tools/OfflineLab/PairNetwork/Reports/
 FXDataEngine/Tools/OfflineLab/PairNetwork/pair_network_status.json
 FXDataEngine/Tools/OfflineLab/PairNetwork/pair_network_history.ndjson
 FXDataEngine/Tools/Runtime/drift_governance_summary.json
-FXAI/FILE_COMMON/
 FXDataEngineGUI/.build/
 FXDataEngineGUI/.swiftpm/
 FXDataEngineGUI/Artifacts/
@@ -52,7 +51,6 @@ FXPlugins/Package.resolved
 FXDatabase/Config/
 FXDatabase/Logs/
 FXDataEngine/Tools/tests/.pytest_cache/
-FXAI/.pytest_cache/
 FXDataEngine/Tools/__pycache__/
 FXDataEngine/Tools/offline_lab/__pycache__/
 FXDataEngine/Tools/testlab/__pycache__/

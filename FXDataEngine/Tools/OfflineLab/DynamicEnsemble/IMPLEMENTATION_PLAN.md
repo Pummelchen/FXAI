@@ -264,11 +264,10 @@ GUI should show:
 ## Docs and Wiki
 Update:
 - repo `README.md`
-- `FXAI/README.md`
-- `FXAI/FXDataEngineGUI/README.md`
+- `FXDataEngine/README.md`
+- `FXDataEngineGUI/README.md`
 - `FXDataEngine/Tools/OfflineLab/README.md`
-- wiki page `Dynamic-Ensemble.md`
-- `Home.md`, `GUI.md`, `Offline-Lab.md`, `Project-Structure.md`, `FXAI-Framework.md`, `_Sidebar.md`
+- root-level project documentation that references Dynamic Ensemble
 
 ## Step-by-Step Execution Plan
 1. Add the implementation-plan and implementation-note docs directory.
@@ -280,7 +279,7 @@ Update:
 7. Add `FXDataEngine/FXAI.mq5` inputs for enable/disable, thresholds, and dominant-weight caps.
 8. Add GUI models/reader/view and wire them into the app shell.
 9. Add tests and fixtures.
-10. Update docs and wiki.
+10. Update owning project documentation.
 11. Review new code for logic correctness.
 12. Deep bug check API usage, data flow, fallback behavior, and integration.
 13. Run Python tests, Swift tests/build, and MT5 `verify-all`.
