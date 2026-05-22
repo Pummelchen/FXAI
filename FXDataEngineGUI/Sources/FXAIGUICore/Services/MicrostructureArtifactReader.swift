@@ -28,7 +28,7 @@ public struct MicrostructureArtifactReader {
 
     private func statusArtifactURL(projectRoot: URL) -> URL? {
         let localStatus = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/Microstructure", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/Microstructure", isDirectory: true)
             .appendingPathComponent("microstructure_status.json", isDirectory: false)
         if FileManager.default.fileExists(atPath: localStatus.path) {
             return localStatus

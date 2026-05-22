@@ -34,9 +34,9 @@ FXAI is a framework for turning market data, model outputs, runtime context, and
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_testlab.py doctor
-python3 Tools/fxai_testlab.py verify-all
-python3 Tools/fxai_offline_lab.py live-state --symbol EURUSD
+python3 FXDataEngine/Tools/fxai_testlab.py doctor
+python3 FXDataEngine/Tools/fxai_testlab.py verify-all
+python3 FXDataEngine/Tools/fxai_offline_lab.py live-state --symbol EURUSD
 ```
 
 Use the GUI when you want a role-based surface. Use the terminal when you need repeatable command history.

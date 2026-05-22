@@ -8,9 +8,9 @@ struct AdaptiveRouterArtifactReaderTests {
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("fxai-adaptive-router-reader-\(UUID().uuidString)", isDirectory: true)
         let profileDirectory = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/ResearchOS/continuous", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/ResearchOS/continuous", isDirectory: true)
         let replayDirectory = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/AdaptiveRouter/Reports", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/AdaptiveRouter/Reports", isDirectory: true)
         try FileManager.default.createDirectory(at: profileDirectory, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: replayDirectory, withIntermediateDirectories: true)
 

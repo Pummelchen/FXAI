@@ -4,7 +4,7 @@ public struct AdaptiveRouterArtifactReader {
     public init() {}
 
     public func read(projectRoot: URL) -> AdaptiveRouterSnapshot? {
-        let researchRoot = projectRoot.appendingPathComponent("Tools/OfflineLab/ResearchOS", isDirectory: true)
+        let researchRoot = projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/ResearchOS", isDirectory: true)
         guard
             let dashboardURL = latestFile(named: "operator_dashboard.json", under: researchRoot),
             let dashboard = parseJSON(dashboardURL)
@@ -15,7 +15,7 @@ public struct AdaptiveRouterArtifactReader {
         let profileDirectory = dashboardURL.deletingLastPathComponent()
         let profileName = profileDirectory.lastPathComponent
         let replayURL = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/AdaptiveRouter/Reports", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/AdaptiveRouter/Reports", isDirectory: true)
             .appendingPathComponent("adaptive_router_replay_report.json", isDirectory: false)
         let replayDocument = parseJSON(replayURL)
         let replayBySymbol: [String: [String: Any]] = Dictionary(

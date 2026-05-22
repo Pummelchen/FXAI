@@ -39,5 +39,5 @@
 - `python3 Tools/fxai_offline_lab.py drift-governance-validate`
 - `python3 Tools/fxai_offline_lab.py drift-governance-run`
 - `python3 Tools/fxai_offline_lab.py drift-governance-report`
-- `python3 -m pytest FXAI/Tools/tests/test_drift_governance.py FXAI/Tools/tests/test_dashboard.py FXAI/Tools/tests/test_adaptive_router.py FXAI/Tools/tests/test_cli_smoke.py FXAI/Tools/tests/test_offline_fixture_golden.py -q`
+- `python3 -m pytest FXDataEngine/Tools/tests/test_drift_governance.py FXDataEngine/Tools/tests/test_dashboard.py FXDataEngine/Tools/tests/test_adaptive_router.py FXDataEngine/Tools/tests/test_cli_smoke.py FXDataEngine/Tools/tests/test_offline_fixture_golden.py -q`
 - `cd FXDataEngineGUI && swift test && swift build`

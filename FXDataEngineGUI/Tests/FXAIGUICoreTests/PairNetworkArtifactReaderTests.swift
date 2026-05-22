@@ -10,9 +10,9 @@ struct PairNetworkArtifactReaderTests {
         let runtimeDirectory = projectRoot
             .appendingPathComponent("FILE_COMMON/FXAI/Runtime", isDirectory: true)
         let reportDirectory = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/PairNetwork/Reports", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/PairNetwork/Reports", isDirectory: true)
         let statusDirectory = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/PairNetwork", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/PairNetwork", isDirectory: true)
         try FileManager.default.createDirectory(at: runtimeDirectory, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: reportDirectory, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: statusDirectory, withIntermediateDirectories: true)

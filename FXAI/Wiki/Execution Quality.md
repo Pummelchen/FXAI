@@ -31,8 +31,8 @@ Execution Quality forecasts whether a theoretically good signal can be traded un
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_offline_lab.py execution-quality-validate
-python3 Tools/fxai_offline_lab.py execution-quality-replay-report --symbol EURUSD --hours-back 72
+python3 FXDataEngine/Tools/fxai_offline_lab.py execution-quality-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py execution-quality-replay-report --symbol EURUSD --hours-back 72
 ```
 
 ## Example Case Scenarios

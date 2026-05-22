@@ -5,10 +5,10 @@ public struct PairNetworkArtifactReader {
 
     public func read(projectRoot: URL) -> PairNetworkSnapshot? {
         let statusURL = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/PairNetwork", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/PairNetwork", isDirectory: true)
             .appendingPathComponent("pair_network_status.json", isDirectory: false)
         let reportURL = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/PairNetwork/Reports", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/PairNetwork/Reports", isDirectory: true)
             .appendingPathComponent("pair_network_report.json", isDirectory: false)
 
         let status = parseJSON(statusURL) ?? [:]

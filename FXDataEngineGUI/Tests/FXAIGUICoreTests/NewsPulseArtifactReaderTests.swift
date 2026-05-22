@@ -8,7 +8,7 @@ struct NewsPulseArtifactReaderTests {
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("fxai-newspulse-reader-\(UUID().uuidString)", isDirectory: true)
         let statusURL = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/NewsPulse", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/NewsPulse", isDirectory: true)
             .appendingPathComponent("newspulse_status.json", isDirectory: false)
         try FileManager.default.createDirectory(at: statusURL.deletingLastPathComponent(), withIntermediateDirectories: true)
 

@@ -41,31 +41,31 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
   MT5 Service that exports configured indicator-only MT5 symbols for the shared cross-asset macro/liquidity subsystem.
 - `Tools/offline_lab/`
   Internal Python package for Offline Lab database, export, campaign, promotion, shadow-fleet ingest, foundation and student bundling, supervisor-service generation, teacher-factory modules, world simulation, and autonomous governance.
-- `Tools/OfflineLab/NewsPulse/`
+- `FXDataEngine/Tools/OfflineLab/NewsPulse/`
   NewsPulse operator config, local status mirrors, and subsystem documentation.
-- `Tools/OfflineLab/AdaptiveRouter/`
+- `FXDataEngine/Tools/OfflineLab/AdaptiveRouter/`
   Adaptive Regime Classifier + Plugin Router docs, configs, replay outputs, and implementation notes for the regime-aware plugin-orchestration layer.
-- `Tools/OfflineLab/DynamicEnsemble/`
+- `FXDataEngine/Tools/OfflineLab/DynamicEnsemble/`
   Dynamic Ensemble / Meta-Learner docs, config, replay outputs, and implementation notes for the post-inference plugin-weighting layer that combines live plugin outputs with shared FXAI context.
-- `Tools/OfflineLab/ProbabilisticCalibration/`
+- `FXDataEngine/Tools/OfflineLab/ProbabilisticCalibration/`
   Probabilistic Calibration + Abstention docs, config, tier memory, replay outputs, and runtime decision artifacts for the cost-aware final trade-quality layer.
-- `Tools/OfflineLab/ExecutionQuality/`
+- `FXDataEngine/Tools/OfflineLab/ExecutionQuality/`
   Execution-Quality Forecaster docs, config, tier memory, replay outputs, and runtime forecast artifacts for the execution-condition scoring layer that feeds abstention, trade-risk, and order-send controls.
-- `Tools/OfflineLab/RatesEngine/`
+- `FXDataEngine/Tools/OfflineLab/RatesEngine/`
   Rates / term-structure / policy-path docs, configs, replay outputs, and status artifacts for the shared macro rates subsystem.
-- `Tools/OfflineLab/CrossAsset/`
+- `FXDataEngine/Tools/OfflineLab/CrossAsset/`
   Cross-asset macro/liquidity docs, configs, replay outputs, and MT5 probe status for the shared global-context subsystem.
-- `Tools/OfflineLab/Microstructure/`
+- `FXDataEngine/Tools/OfflineLab/Microstructure/`
   Microstructure subsystem docs, local status mirrors, replay outputs, and MT5 service config for the shared short-horizon execution-state layer.
-- `Tools/OfflineLab/LabelEngine/`
+- `FXDataEngine/Tools/OfflineLab/LabelEngine/`
   Multi-Horizon Label Engine + Meta-Labeling docs, config, reports, and artifact outputs for shared target construction, cost-aware tradeability labels, and signal-level meta-label research.
-- `Tools/OfflineLab/DriftGovernance/`
+- `FXDataEngine/Tools/OfflineLab/DriftGovernance/`
   Online Drift Detector + Champion/Challenger Governance docs, config, reports, and audit history for plugin-health monitoring, conservative demotion, and promotion-review workflows.
-- `Tools/OfflineLab/PairNetwork/`
+- `FXDataEngine/Tools/OfflineLab/PairNetwork/`
   Pair-Network / Factor Graph + Portfolio Conflict Resolver docs, config, graph reports, and runtime decision history for portfolio-level exposure coordination and conflict resolution.
-- `Tools/OfflineLab/Profiles/`
+- `FXDataEngine/Tools/OfflineLab/Profiles/`
   Versioned strategy-profile catalog plus promoted MT5 presets and sibling strategy manifests for audit, champion, top, and distillation workflows.
-- `Tools/Benchmarks/`
+- `FXDataEngine/Tools/Benchmarks/`
   Public benchmark matrix, reference audit bundle, exported promotion criteria, and release-note deltas generated from committed audit and promotion artifacts.
 - root-level `../FXDataEngineGUI/`
   Optional SwiftUI operator app for role-based dashboards, plugin-zoo browsing, report exploration, run builders for Audit/Offline/backtest workflows, runtime inspection, promotion review, Research OS control, advanced Metal-backed visual analysis, saved workspace views, onboarding, incident recovery, detached startup, soft reconnect, terminal-first command guidance, and the shared FXAI operator theme system.
@@ -190,51 +190,51 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 
 - Canonical research data is M1 OHLCV. Converted Swift plugins use volume-derived features when dataset volume is nonzero and do not depend on MT5 spread fields.
 - Root `FXPlugins/` is the active Swift-era plugin migration package. It contains the copied legacy plugin reference tree, converted `FXAIPluginV4` implementations, FXBacktest demo adapters, and the reviewed per-plugin acceleration plan.
-- The preferred platform verification path is `python3 FXAI/Tools/fxai_testlab.py verify-all`.
-- The preferred focused core-runtime verification path is `python3 FXAI/Tools/fxai_testlab.py compile-tensorcore`, which compiles the dedicated `FXAI_TensorCoreRunner.mq5` test surface used for TensorCore math, optimizer convergence, and plugin-contract checks.
-- The preferred environment self-check path is `python3 FXAI/Tools/fxai_testlab.py doctor` or `python3 FXAI/Tools/fxai_offline_lab.py doctor`.
-- The preferred public benchmark publishing path is `python3 FXAI/Tools/fxai_testlab.py publish-benchmarks --profile bestparams`, which writes the benchmark matrix, reference audit bundle, promotion criteria, and release-note delta artifacts under `Tools/Benchmarks/`.
+- The preferred platform verification path is `python3 FXDataEngine/Tools/fxai_testlab.py verify-all`.
+- The preferred focused core-runtime verification path is `python3 FXDataEngine/Tools/fxai_testlab.py compile-tensorcore`, which compiles the dedicated `FXAI_TensorCoreRunner.mq5` test surface used for TensorCore math, optimizer convergence, and plugin-contract checks.
+- The preferred environment self-check path is `python3 FXDataEngine/Tools/fxai_testlab.py doctor` or `python3 FXDataEngine/Tools/fxai_offline_lab.py doctor`.
+- The preferred public benchmark publishing path is `python3 FXDataEngine/Tools/fxai_testlab.py publish-benchmarks --profile bestparams`, which writes the benchmark matrix, reference audit bundle, promotion criteria, and release-note delta artifacts under `FXDataEngine/Tools/Benchmarks/`.
 - Toolchain paths are profile-driven through `fxai.toml`, with optional `.env` overrides for `FXAI_MT5_ROOT`, `FXAI_METAEDITOR`, `FXAI_TERMINAL`, `FXAI_COMMON_FILES`, `FXAI_RUNTIME_DIR`, `FXAI_DEFAULT_DB`, and related operator-machine specifics.
-- The preferred MT5 binary release path is `python3 FXAI/Tools/fxai_testlab.py package-mt5-release --version <tag>` after a clean verification gate. Git tracks `.mq5`/`.mqh` source and manifests only; compiled `.ex5` files must be uploaded to GitHub Releases with the generated manifest and SHA-256 sums instead of being committed.
+- The preferred MT5 binary release path is `python3 FXDataEngine/Tools/fxai_testlab.py package-mt5-release --version <tag>` after a clean verification gate. Git tracks `.mq5`/`.mqh` source and manifests only; compiled `.ex5` files must be uploaded to GitHub Releases with the generated manifest and SHA-256 sums instead of being committed.
 - The preferred GUI verification path from the repo root is `cd FXDataEngineGUI && swift test && swift build`.
 - GUI release packaging from the repo root is `cd FXDataEngineGUI && ./Tools/package_gui_release.sh`.
-- The preferred Offline Lab bootstrap path is `python3 FXAI/Tools/fxai_offline_lab.py bootstrap --seed-demo`.
-- The preferred market-universe inspection path is `python3 FXAI/Tools/fxai_offline_lab.py market-universe-show`.
-- The preferred market-universe export path is `python3 FXAI/Tools/fxai_offline_lab.py market-universe-export`.
-- The preferred NewsPulse service install path is `python3 FXAI/Tools/fxai_offline_lab.py newspulse-install-service`.
-- The preferred NewsPulse smoke path is `python3 FXAI/Tools/fxai_offline_lab.py newspulse-once`.
-- The preferred NewsPulse health path is `python3 FXAI/Tools/fxai_offline_lab.py newspulse-health`.
-- The preferred Adaptive Router validation path is `python3 FXAI/Tools/fxai_offline_lab.py adaptive-router-validate`.
-- The preferred Adaptive Router promotion path is `python3 FXAI/Tools/fxai_offline_lab.py adaptive-router-profiles --profile continuous`.
-- The preferred Adaptive Router replay path is `python3 FXAI/Tools/fxai_offline_lab.py adaptive-router-replay-report --symbol EURUSD --hours-back 72`.
-- The preferred Dynamic Ensemble validation path is `python3 FXAI/Tools/fxai_offline_lab.py dynamic-ensemble-validate`.
-- The preferred Dynamic Ensemble replay path is `python3 FXAI/Tools/fxai_offline_lab.py dynamic-ensemble-replay-report --symbol EURUSD --hours-back 72`.
-- The preferred Probabilistic Calibration validation path is `python3 FXAI/Tools/fxai_offline_lab.py prob-calibration-validate`.
-- The preferred Probabilistic Calibration replay path is `python3 FXAI/Tools/fxai_offline_lab.py prob-calibration-replay-report --symbol EURUSD --hours-back 72`.
-- The preferred Execution-Quality validation path is `python3 FXAI/Tools/fxai_offline_lab.py execution-quality-validate`.
-- The preferred Execution-Quality replay path is `python3 FXAI/Tools/fxai_offline_lab.py execution-quality-replay-report --symbol EURUSD --hours-back 72`.
-- The preferred Rates Engine validation path is `python3 FXAI/Tools/fxai_offline_lab.py rates-engine-validate`.
-- The preferred Rates Engine smoke path is `python3 FXAI/Tools/fxai_offline_lab.py rates-engine-once`.
-- The preferred Rates Engine health path is `python3 FXAI/Tools/fxai_offline_lab.py rates-engine-health`.
-- The preferred Rates Engine replay path is `python3 FXAI/Tools/fxai_offline_lab.py rates-engine-replay-report --symbol EURUSD --hours-back 72`.
-- The preferred Cross Asset validation path is `python3 FXAI/Tools/fxai_offline_lab.py cross-asset-validate`.
-- The preferred Cross Asset service install path is `python3 FXAI/Tools/fxai_offline_lab.py cross-asset-install-service`.
-- The preferred Cross Asset smoke path is `python3 FXAI/Tools/fxai_offline_lab.py cross-asset-once`.
-- The preferred Cross Asset health path is `python3 FXAI/Tools/fxai_offline_lab.py cross-asset-health`.
-- The preferred Cross Asset replay path is `python3 FXAI/Tools/fxai_offline_lab.py cross-asset-replay-report --symbol EURUSD --hours-back 72`.
-- The preferred Microstructure validation path is `python3 FXAI/Tools/fxai_offline_lab.py microstructure-validate`.
-- The preferred Microstructure service install path is `python3 FXAI/Tools/fxai_offline_lab.py microstructure-install-service`.
-- The preferred Microstructure health path is `python3 FXAI/Tools/fxai_offline_lab.py microstructure-health`.
-- The preferred Microstructure replay path is `python3 FXAI/Tools/fxai_offline_lab.py microstructure-replay-report --symbol EURUSD --hours-back 72`.
-- The preferred Label Engine validation path is `python3 FXAI/Tools/fxai_offline_lab.py label-engine-validate`.
-- The preferred Label Engine build path is `python3 FXAI/Tools/fxai_offline_lab.py label-engine-build --profile continuous --limit-datasets 1`.
-- The preferred Label Engine report path is `python3 FXAI/Tools/fxai_offline_lab.py label-engine-report --profile continuous`.
-- The preferred Drift Governance validation path is `python3 FXAI/Tools/fxai_offline_lab.py drift-governance-validate`.
-- The preferred Drift Governance cycle path is `python3 FXAI/Tools/fxai_offline_lab.py drift-governance-run --profile continuous`.
-- The preferred Drift Governance report path is `python3 FXAI/Tools/fxai_offline_lab.py drift-governance-report --profile continuous`.
-- The preferred Pair Network validation path is `python3 FXAI/Tools/fxai_offline_lab.py pair-network-validate`.
-- The preferred Pair Network build path is `python3 FXAI/Tools/fxai_offline_lab.py pair-network-build --profile continuous`.
-- The preferred Pair Network report path is `python3 FXAI/Tools/fxai_offline_lab.py pair-network-report --profile continuous`.
+- The preferred Offline Lab bootstrap path is `python3 FXDataEngine/Tools/fxai_offline_lab.py bootstrap --seed-demo`.
+- The preferred market-universe inspection path is `python3 FXDataEngine/Tools/fxai_offline_lab.py market-universe-show`.
+- The preferred market-universe export path is `python3 FXDataEngine/Tools/fxai_offline_lab.py market-universe-export`.
+- The preferred NewsPulse service install path is `python3 FXDataEngine/Tools/fxai_offline_lab.py newspulse-install-service`.
+- The preferred NewsPulse smoke path is `python3 FXDataEngine/Tools/fxai_offline_lab.py newspulse-once`.
+- The preferred NewsPulse health path is `python3 FXDataEngine/Tools/fxai_offline_lab.py newspulse-health`.
+- The preferred Adaptive Router validation path is `python3 FXDataEngine/Tools/fxai_offline_lab.py adaptive-router-validate`.
+- The preferred Adaptive Router promotion path is `python3 FXDataEngine/Tools/fxai_offline_lab.py adaptive-router-profiles --profile continuous`.
+- The preferred Adaptive Router replay path is `python3 FXDataEngine/Tools/fxai_offline_lab.py adaptive-router-replay-report --symbol EURUSD --hours-back 72`.
+- The preferred Dynamic Ensemble validation path is `python3 FXDataEngine/Tools/fxai_offline_lab.py dynamic-ensemble-validate`.
+- The preferred Dynamic Ensemble replay path is `python3 FXDataEngine/Tools/fxai_offline_lab.py dynamic-ensemble-replay-report --symbol EURUSD --hours-back 72`.
+- The preferred Probabilistic Calibration validation path is `python3 FXDataEngine/Tools/fxai_offline_lab.py prob-calibration-validate`.
+- The preferred Probabilistic Calibration replay path is `python3 FXDataEngine/Tools/fxai_offline_lab.py prob-calibration-replay-report --symbol EURUSD --hours-back 72`.
+- The preferred Execution-Quality validation path is `python3 FXDataEngine/Tools/fxai_offline_lab.py execution-quality-validate`.
+- The preferred Execution-Quality replay path is `python3 FXDataEngine/Tools/fxai_offline_lab.py execution-quality-replay-report --symbol EURUSD --hours-back 72`.
+- The preferred Rates Engine validation path is `python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-validate`.
+- The preferred Rates Engine smoke path is `python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-once`.
+- The preferred Rates Engine health path is `python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-health`.
+- The preferred Rates Engine replay path is `python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-replay-report --symbol EURUSD --hours-back 72`.
+- The preferred Cross Asset validation path is `python3 FXDataEngine/Tools/fxai_offline_lab.py cross-asset-validate`.
+- The preferred Cross Asset service install path is `python3 FXDataEngine/Tools/fxai_offline_lab.py cross-asset-install-service`.
+- The preferred Cross Asset smoke path is `python3 FXDataEngine/Tools/fxai_offline_lab.py cross-asset-once`.
+- The preferred Cross Asset health path is `python3 FXDataEngine/Tools/fxai_offline_lab.py cross-asset-health`.
+- The preferred Cross Asset replay path is `python3 FXDataEngine/Tools/fxai_offline_lab.py cross-asset-replay-report --symbol EURUSD --hours-back 72`.
+- The preferred Microstructure validation path is `python3 FXDataEngine/Tools/fxai_offline_lab.py microstructure-validate`.
+- The preferred Microstructure service install path is `python3 FXDataEngine/Tools/fxai_offline_lab.py microstructure-install-service`.
+- The preferred Microstructure health path is `python3 FXDataEngine/Tools/fxai_offline_lab.py microstructure-health`.
+- The preferred Microstructure replay path is `python3 FXDataEngine/Tools/fxai_offline_lab.py microstructure-replay-report --symbol EURUSD --hours-back 72`.
+- The preferred Label Engine validation path is `python3 FXDataEngine/Tools/fxai_offline_lab.py label-engine-validate`.
+- The preferred Label Engine build path is `python3 FXDataEngine/Tools/fxai_offline_lab.py label-engine-build --profile continuous --limit-datasets 1`.
+- The preferred Label Engine report path is `python3 FXDataEngine/Tools/fxai_offline_lab.py label-engine-report --profile continuous`.
+- The preferred Drift Governance validation path is `python3 FXDataEngine/Tools/fxai_offline_lab.py drift-governance-validate`.
+- The preferred Drift Governance cycle path is `python3 FXDataEngine/Tools/fxai_offline_lab.py drift-governance-run --profile continuous`.
+- The preferred Drift Governance report path is `python3 FXDataEngine/Tools/fxai_offline_lab.py drift-governance-report --profile continuous`.
+- The preferred Pair Network validation path is `python3 FXDataEngine/Tools/fxai_offline_lab.py pair-network-validate`.
+- The preferred Pair Network build path is `python3 FXDataEngine/Tools/fxai_offline_lab.py pair-network-build --profile continuous`.
+- The preferred Pair Network report path is `python3 FXDataEngine/Tools/fxai_offline_lab.py pair-network-report --profile continuous`.
 - The shared TensorCore path now includes a self-supervised foundation encoder, teacher-student transfer heads, hierarchical trade-quality signals, and persistent analog regime memory.
 - Feature normalization now uses train-fit artifacts for min/max buffer, z-score, robust, quantile-to-normal, and Yeo-Johnson transforms, while RevIN/DAIN run as sequence-aware payload normalization over the current input plus rolling window; these fitted stats are persisted in runtime artifacts so warmup and live reuse the same scaling contract.
 - The live EA now uses portfolio-native sizing and gating with directional-cluster pressure, hierarchy floors, and macro-state quality controls instead of only scalar conviction scaling.
@@ -252,14 +252,14 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 - Shared transfer warmup now uses a deeper temporal backbone over the rolling window instead of only static current-bar summary features, and runtime artifacts persist that backbone state.
 - Broker execution replay now persists raw symbol, side, order-type, reject, partial-fill, latency, fill-ratio, and event-mass libraries for later audit and runtime reuse.
 - Ensemble routing now uses persisted regime, session, and horizon-specific value, regret, and counterfactual state, while warmup stores cross-symbol portfolio objectives for promotion-time weighting.
-- Audit Lab now includes adversarial market certification on mined hostile `M1 OHLC + spread` windows, in addition to the standard market replay, walk-forward, and macro-event packs.
+- Audit Lab now includes adversarial market certification on mined hostile `M1 OHLCV` windows, in addition to the standard market replay, walk-forward, and macro-event packs.
 - Audit Lab now exercises scoped runtime-artifact persistence and conformal calibration state instead of stub no-op hooks.
-- Audit scenarios build coherent `OHLC + spread` context bars rather than reconstructing them from close-only shortcuts.
+- Audit scenarios build coherent `OHLCV` context bars rather than reconstructing them from close-only shortcuts.
 - Macro-event datasets now run under schema version 2 with revision-chain, source-trust, and currency-relevance manifests, and the feature pipeline derives a higher-level macro state for policy, inflation, labor, growth, carry, decay, and quality.
 - The canonical feature vector already includes robust derived filters and volatility estimators such as quadruple-smoothed DEMA, RSI, ATR/NATR, Parkinson, Rogers-Satchell, Garman-Klass, rolling median plus Hampel, Kalman, and a 2-pole Ehlers Super Smoother.
-- Offline Lab now exports exact-window `M1 OHLC + spread` datasets into Turso/libSQL, stores full tuning ledgers and scenario metrics, and promotes ready-to-use MT5 `.set` files under `Tools/OfflineLab/Profiles/`, `MQL5/Profiles/Tester/`, and `FILE_COMMON/FXAI/Offline/Promotions/`.
-- Promoted presets are now compiled from the versioned catalog in `Tools/OfflineLab/Profiles/strategy_profiles.json`, with layered inheritance across `strategy -> symbol -> broker -> runtime` and a sibling `__strategy_profile.json` manifest written next to each promoted artifact.
-- Offline Lab also maintains champion/challenger governance, parameter lineage, family scorecards, distillation artifacts, teacher-factory payloads, live deployment profiles, shadow-fleet telemetry, and learned red-team plans under `Tools/OfflineLab/ResearchOS/` and `Tools/OfflineLab/Distillation/`.
+- Offline Lab now exports exact-window `M1 OHLCV` datasets into Turso/libSQL, stores full tuning ledgers and scenario metrics, and promotes ready-to-use MT5 `.set` files under `FXDataEngine/Tools/OfflineLab/Profiles/`, `MQL5/Profiles/Tester/`, and `FILE_COMMON/FXAI/Offline/Promotions/`.
+- Promoted presets are now compiled from the versioned catalog in `FXDataEngine/Tools/OfflineLab/Profiles/strategy_profiles.json`, with layered inheritance across `strategy -> symbol -> broker -> runtime` and a sibling `__strategy_profile.json` manifest written next to each promoted artifact.
+- Offline Lab also maintains champion/challenger governance, parameter lineage, family scorecards, distillation artifacts, teacher-factory payloads, live deployment profiles, shadow-fleet telemetry, and learned red-team plans under `FXDataEngine/Tools/OfflineLab/ResearchOS/` and `FXDataEngine/Tools/OfflineLab/Distillation/`.
 - Offline Lab now emits foundation-teacher artifacts, portfolio-supervisor profiles, and per-symbol world-simulator plans that are consumed by MT5 runtime control-plane logic and Audit Lab adversarial generation.
 - World-simulator plans now include transition entropy, shock decay, and session-specific sigma/spread scaling learned from exported market windows instead of only coarse global stress factors.
 - Offline Lab now also emits student deployment bundles and per-symbol or global supervisor-service artifacts so the promoted runtime can blend peer pressure, capital budget, add or reduce bias, and lifecycle floors without manual operator edits.

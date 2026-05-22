@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_toolchain_config_reads_fxai_toml_and_env_override(tmp_path: Path):
-    project_root = tmp_path / "FXAI"
+    project_root = tmp_path / "FXDataEngine"
     project_root.mkdir(parents=True)
     (project_root / "fxai.toml").write_text(
         """
@@ -43,7 +43,7 @@ def test_toolchain_config_reads_fxai_toml_and_env_override(tmp_path: Path):
 
 
 def test_toolchain_config_supports_headless_swift_offline_profile(tmp_path: Path):
-    project_root = tmp_path / "FXAI"
+    project_root = tmp_path / "FXDataEngine"
     config = load_toolchain_config(
         project_root_hint=project_root,
         env={

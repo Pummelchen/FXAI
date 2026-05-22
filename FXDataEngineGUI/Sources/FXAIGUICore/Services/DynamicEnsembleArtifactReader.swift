@@ -9,7 +9,7 @@ public struct DynamicEnsembleArtifactReader {
         }
 
         let replayURL = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/DynamicEnsemble/Reports", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/DynamicEnsemble/Reports", isDirectory: true)
             .appendingPathComponent("dynamic_ensemble_replay_report.json", isDirectory: false)
         let replayDocument = parseJSON(replayURL)
         let replayBySymbol: [String: [String: Any]] = Dictionary(

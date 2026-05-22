@@ -109,11 +109,16 @@ public enum CommandFactory {
     }
 
     private static func toolProjectRoot(_ projectRoot: URL) -> URL {
+        let dataEngineRoot = projectRoot.appendingPathComponent("FXDataEngine", isDirectory: true)
+        let dataEngineTools = dataEngineRoot.appendingPathComponent("Tools", isDirectory: true)
+        if FileManager.default.fileExists(atPath: dataEngineTools.path) {
+            return dataEngineRoot
+        }
         let rootTools = projectRoot.appendingPathComponent("Tools", isDirectory: true)
         if FileManager.default.fileExists(atPath: rootTools.path) {
             return projectRoot
         }
-        return projectRoot.appendingPathComponent("FXAI", isDirectory: true)
+        return dataEngineRoot
     }
 
     private static func shellQuoted(_ value: String) -> String {

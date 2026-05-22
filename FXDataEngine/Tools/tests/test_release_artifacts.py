@@ -67,6 +67,6 @@ def test_mt5_release_bundle_contains_hashes_and_compatibility(tmp_path: Path):
 
 
 def test_fxai_gitignore_blocks_compiled_mt5_binaries():
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[3]
     text = (root / ".gitignore").read_text(encoding="utf-8")
     assert "*.ex5" in text

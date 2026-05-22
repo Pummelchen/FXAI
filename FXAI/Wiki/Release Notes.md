@@ -24,8 +24,8 @@ This page explains how FXAI release notes are tied to benchmark deltas.
 
 The generated reference files live under:
 
-- `Tools/Benchmarks/ReleaseNotes/reference_release_notes.md`
-- `Tools/Benchmarks/ReleaseNotes/reference_release_notes.json`
+- `FXDataEngine/Tools/Benchmarks/ReleaseNotes/reference_release_notes.md`
+- `FXDataEngine/Tools/Benchmarks/ReleaseNotes/reference_release_notes.json`
 
 They are built from the benchmark publisher and compare the current benchmark snapshot with the reference audit context.
 
@@ -33,7 +33,7 @@ They are built from the benchmark publisher and compare the current benchmark sn
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_testlab.py publish-benchmarks --profile bestparams --release-tag reference
+python3 FXDataEngine/Tools/fxai_testlab.py publish-benchmarks --profile bestparams --release-tag reference
 ```
 
 ## What A Good FXAI Release Note Includes

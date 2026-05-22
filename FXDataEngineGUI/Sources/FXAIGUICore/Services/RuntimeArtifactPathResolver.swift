@@ -69,28 +69,32 @@ public enum RuntimeArtifactPathResolver {
             configuration: configuration,
             key: "runtime_dir"
         ) {
-            let candidate = FXAIProjectConfigurationResolver.resolvedPathURL(
-                rawValue: explicitRuntime,
-                baseDirectory: projectRoot,
-                environment: configuration.environment
-            ) ?? URL(fileURLWithPath: explicitRuntime, isDirectory: true)
-            if fileExists(candidate) {
-                return candidate
+            for baseDirectory in [configuration.configDirectory, projectRoot] {
+                let candidate = FXAIProjectConfigurationResolver.resolvedPathURL(
+                    rawValue: explicitRuntime,
+                    baseDirectory: baseDirectory,
+                    environment: configuration.environment
+                ) ?? URL(fileURLWithPath: explicitRuntime, isDirectory: true)
+                if fileExists(candidate) {
+                    return candidate
+                }
             }
         }
         if let commonFiles = FXAIProjectConfigurationResolver.configuredValue(
             configuration: configuration,
             key: "common_files"
         ) {
-            let candidate = (FXAIProjectConfigurationResolver.resolvedPathURL(
-                rawValue: commonFiles,
-                baseDirectory: projectRoot,
-                environment: configuration.environment
-            ) ?? URL(fileURLWithPath: commonFiles, isDirectory: true))
-                .appendingPathComponent("FXAI", isDirectory: true)
-                .appendingPathComponent("Runtime", isDirectory: true)
-            if fileExists(candidate) {
-                return candidate
+            for baseDirectory in [configuration.configDirectory, projectRoot] {
+                let candidate = (FXAIProjectConfigurationResolver.resolvedPathURL(
+                    rawValue: commonFiles,
+                    baseDirectory: baseDirectory,
+                    environment: configuration.environment
+                ) ?? URL(fileURLWithPath: commonFiles, isDirectory: true))
+                    .appendingPathComponent("FXAI", isDirectory: true)
+                    .appendingPathComponent("Runtime", isDirectory: true)
+                if fileExists(candidate) {
+                    return candidate
+                }
             }
         }
         return nil

@@ -76,7 +76,7 @@ cd /path/to/FXAI/FXDataEngineGUI
 ./Tools/package_gui_release.sh
 ```
 
-The GUI release packager reads the repo-root toolchain config, falling back to `../FXAI/fxai.toml` when no root `fxai.toml` exists. It respects `FXAI_GUI_MINIMUM_MACOS` or `FXAI_GUI_RELEASE_ARCHIVE` overrides when you need a different packaging target.
+The GUI release packager reads the repo-root toolchain config, falling back to `../FXDataEngine/fxai.toml` when no root `fxai.toml` exists. It respects `FXAI_GUI_MINIMUM_MACOS` or `FXAI_GUI_RELEASE_ARCHIVE` overrides when you need a different packaging target.
 
 ## GUI Validation
 

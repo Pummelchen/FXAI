@@ -390,7 +390,7 @@ public struct AdvancedVisualizationBuilder {
     }
 
     private func resolveProfileRoot(projectRoot: URL, profileName: String?) -> URL? {
-        let researchRoot = projectRoot.appendingPathComponent("Tools/OfflineLab/ResearchOS", isDirectory: true)
+        let researchRoot = projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/ResearchOS", isDirectory: true)
         if let profileName, !profileName.isEmpty {
             let candidate = researchRoot.appendingPathComponent(profileName, isDirectory: true)
             if FileManager.default.fileExists(atPath: candidate.path) {

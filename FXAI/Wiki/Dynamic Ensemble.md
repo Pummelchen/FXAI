@@ -31,8 +31,8 @@ Dynamic Ensemble combines plugin outputs with context-aware weights instead of t
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_offline_lab.py dynamic-ensemble-validate
-python3 Tools/fxai_offline_lab.py dynamic-ensemble-replay-report --symbol EURUSD --hours-back 72
+python3 FXDataEngine/Tools/fxai_offline_lab.py dynamic-ensemble-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py dynamic-ensemble-replay-report --symbol EURUSD --hours-back 72
 ```
 
 ## Example Case Scenarios

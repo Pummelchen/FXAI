@@ -24,7 +24,7 @@ struct RuntimeArtifactReaderTests {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
 
-        let profileRoot = root.appendingPathComponent("Tools/OfflineLab/ResearchOS/test-runtime", isDirectory: true)
+        let profileRoot = root.appendingPathComponent("FXDataEngine/Tools/OfflineLab/ResearchOS/test-runtime", isDirectory: true)
         let fileCommonRoot = root.appendingPathComponent("Promotions", isDirectory: true)
 
         try FileManager.default.createDirectory(at: profileRoot, withIntermediateDirectories: true)

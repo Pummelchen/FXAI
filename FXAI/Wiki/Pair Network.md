@@ -31,9 +31,9 @@ Pair Network resolves redundant, contradictory, or over-concentrated FX exposure
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_offline_lab.py pair-network-validate
-python3 Tools/fxai_offline_lab.py pair-network-build --profile continuous
-python3 Tools/fxai_offline_lab.py pair-network-report --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py pair-network-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py pair-network-build --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py pair-network-report --profile continuous
 ```
 
 ## Example Case Scenarios

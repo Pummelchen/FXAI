@@ -5,7 +5,7 @@ public struct RatesEngineArtifactReader {
 
     public func read(projectRoot: URL) -> RatesEngineSnapshot? {
         let statusURL = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/RatesEngine", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/RatesEngine", isDirectory: true)
             .appendingPathComponent("rates_engine_status.json", isDirectory: false)
         guard let document = parseJSON(statusURL) else {
             return nil

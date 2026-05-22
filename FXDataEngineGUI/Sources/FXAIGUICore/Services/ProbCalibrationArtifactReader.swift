@@ -9,7 +9,7 @@ public struct ProbCalibrationArtifactReader {
         }
 
         let replayURL = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/ProbabilisticCalibration/Reports", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/ProbabilisticCalibration/Reports", isDirectory: true)
             .appendingPathComponent("prob_calibration_replay_report.json", isDirectory: false)
         let replayDocument = parseJSON(replayURL)
         let replayBySymbol: [String: [String: Any]] = Dictionary(

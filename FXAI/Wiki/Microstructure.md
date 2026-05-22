@@ -37,9 +37,9 @@ These are broker-visible proxies. They must not be marketed as institutional ord
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_offline_lab.py microstructure-validate
-python3 Tools/fxai_offline_lab.py microstructure-health
-python3 Tools/fxai_offline_lab.py microstructure-replay-report --symbol EURUSD --hours-back 72
+python3 FXDataEngine/Tools/fxai_offline_lab.py microstructure-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py microstructure-health
+python3 FXDataEngine/Tools/fxai_offline_lab.py microstructure-replay-report --symbol EURUSD --hours-back 72
 ```
 
 ## Example Case Scenarios

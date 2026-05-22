@@ -23,49 +23,49 @@ It does not replace the MT5 model engine. MT5 and MQL5 still execute the real pl
 Main commands from the repo root:
 
 ```bash
-python3 FXAI/Tools/fxai_offline_lab.py validate-env
-python3 FXAI/Tools/fxai_offline_lab.py bootstrap --seed-demo
-python3 FXAI/Tools/fxai_offline_lab.py init-db
-python3 FXAI/Tools/fxai_offline_lab.py export-dataset --symbol-pack majors --months-list 3,6,12
-python3 FXAI/Tools/fxai_offline_lab.py tune-zoo --profile continuous --auto-export --symbol-pack majors --months-list 3,6,12
-python3 FXAI/Tools/fxai_offline_lab.py best-params --profile continuous
-python3 FXAI/Tools/fxai_offline_lab.py turso-branch-create --profile continuous --source-database fxai-main
-python3 FXAI/Tools/fxai_offline_lab.py turso-pitr-restore --profile continuous --source-database fxai-main --timestamp 2026-04-04T00:00:00Z
-python3 FXAI/Tools/fxai_offline_lab.py turso-audit-sync --limit 50 --pages 1
-python3 FXAI/Tools/fxai_offline_lab.py attribution-prune --profile continuous
-python3 FXAI/Tools/fxai_offline_lab.py turso-vector-reindex --profile continuous
-python3 FXAI/Tools/fxai_offline_lab.py turso-vector-neighbors --profile continuous --symbol EURUSD
-python3 FXAI/Tools/fxai_offline_lab.py newspulse-validate
-python3 FXAI/Tools/fxai_offline_lab.py newspulse-install-service
-python3 FXAI/Tools/fxai_offline_lab.py newspulse-once
-python3 FXAI/Tools/fxai_offline_lab.py newspulse-daemon --interval-seconds 60
-python3 FXAI/Tools/fxai_offline_lab.py rates-engine-validate
-python3 FXAI/Tools/fxai_offline_lab.py rates-engine-once
-python3 FXAI/Tools/fxai_offline_lab.py rates-engine-daemon --interval-seconds 120
-python3 FXAI/Tools/fxai_offline_lab.py rates-engine-replay-report --symbol EURUSD --hours-back 72
-python3 FXAI/Tools/fxai_offline_lab.py cross-asset-validate
-python3 FXAI/Tools/fxai_offline_lab.py cross-asset-install-service
-python3 FXAI/Tools/fxai_offline_lab.py cross-asset-once
-python3 FXAI/Tools/fxai_offline_lab.py cross-asset-daemon --interval-seconds 120
-python3 FXAI/Tools/fxai_offline_lab.py cross-asset-health
-python3 FXAI/Tools/fxai_offline_lab.py cross-asset-replay-report --symbol EURUSD --hours-back 72
-python3 FXAI/Tools/fxai_offline_lab.py microstructure-validate
-python3 FXAI/Tools/fxai_offline_lab.py microstructure-install-service
-python3 FXAI/Tools/fxai_offline_lab.py microstructure-health
-python3 FXAI/Tools/fxai_offline_lab.py microstructure-replay-report --symbol EURUSD --hours-back 72
-python3 FXAI/Tools/fxai_offline_lab.py prob-calibration-validate
-python3 FXAI/Tools/fxai_offline_lab.py prob-calibration-replay-report --symbol EURUSD --hours-back 72
-python3 FXAI/Tools/fxai_offline_lab.py execution-quality-validate
-python3 FXAI/Tools/fxai_offline_lab.py execution-quality-replay-report --symbol EURUSD --hours-back 72
-python3 FXAI/Tools/fxai_offline_lab.py deploy-profiles --profile continuous
-python3 FXAI/Tools/fxai_offline_lab.py supervisor-sync --profile continuous
-python3 FXAI/Tools/fxai_offline_lab.py autonomous-governance --profile continuous
-python3 FXAI/Tools/fxai_offline_lab.py lineage-report --profile continuous
-python3 FXAI/Tools/fxai_offline_lab.py minimal-bundle --profile continuous
-python3 FXAI/Tools/fxai_offline_lab.py recover-artifacts --profile continuous
-python3 FXAI/Tools/fxai_offline_lab.py verify-deterministic
-python3 FXAI/Tools/fxai_offline_lab.py control-loop --profile continuous --symbol-pack majors --months-list 3,6,12 --cycles 0 --sleep-seconds 1800
-python3 FXAI/Tools/fxai_testlab.py verify-all
+python3 FXDataEngine/Tools/fxai_offline_lab.py validate-env
+python3 FXDataEngine/Tools/fxai_offline_lab.py bootstrap --seed-demo
+python3 FXDataEngine/Tools/fxai_offline_lab.py init-db
+python3 FXDataEngine/Tools/fxai_offline_lab.py export-dataset --symbol-pack majors --months-list 3,6,12
+python3 FXDataEngine/Tools/fxai_offline_lab.py tune-zoo --profile continuous --auto-export --symbol-pack majors --months-list 3,6,12
+python3 FXDataEngine/Tools/fxai_offline_lab.py best-params --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py turso-branch-create --profile continuous --source-database fxai-main
+python3 FXDataEngine/Tools/fxai_offline_lab.py turso-pitr-restore --profile continuous --source-database fxai-main --timestamp 2026-04-04T00:00:00Z
+python3 FXDataEngine/Tools/fxai_offline_lab.py turso-audit-sync --limit 50 --pages 1
+python3 FXDataEngine/Tools/fxai_offline_lab.py attribution-prune --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py turso-vector-reindex --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py turso-vector-neighbors --profile continuous --symbol EURUSD
+python3 FXDataEngine/Tools/fxai_offline_lab.py newspulse-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py newspulse-install-service
+python3 FXDataEngine/Tools/fxai_offline_lab.py newspulse-once
+python3 FXDataEngine/Tools/fxai_offline_lab.py newspulse-daemon --interval-seconds 60
+python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-once
+python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-daemon --interval-seconds 120
+python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-replay-report --symbol EURUSD --hours-back 72
+python3 FXDataEngine/Tools/fxai_offline_lab.py cross-asset-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py cross-asset-install-service
+python3 FXDataEngine/Tools/fxai_offline_lab.py cross-asset-once
+python3 FXDataEngine/Tools/fxai_offline_lab.py cross-asset-daemon --interval-seconds 120
+python3 FXDataEngine/Tools/fxai_offline_lab.py cross-asset-health
+python3 FXDataEngine/Tools/fxai_offline_lab.py cross-asset-replay-report --symbol EURUSD --hours-back 72
+python3 FXDataEngine/Tools/fxai_offline_lab.py microstructure-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py microstructure-install-service
+python3 FXDataEngine/Tools/fxai_offline_lab.py microstructure-health
+python3 FXDataEngine/Tools/fxai_offline_lab.py microstructure-replay-report --symbol EURUSD --hours-back 72
+python3 FXDataEngine/Tools/fxai_offline_lab.py prob-calibration-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py prob-calibration-replay-report --symbol EURUSD --hours-back 72
+python3 FXDataEngine/Tools/fxai_offline_lab.py execution-quality-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py execution-quality-replay-report --symbol EURUSD --hours-back 72
+python3 FXDataEngine/Tools/fxai_offline_lab.py deploy-profiles --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py supervisor-sync --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py autonomous-governance --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py lineage-report --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py minimal-bundle --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py recover-artifacts --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py verify-deterministic
+python3 FXDataEngine/Tools/fxai_offline_lab.py control-loop --profile continuous --symbol-pack majors --months-list 3,6,12 --cycles 0 --sleep-seconds 1800
+python3 FXDataEngine/Tools/fxai_testlab.py verify-all
 ```
 
 Notes:
@@ -142,12 +142,12 @@ Operator incident workflow:
 5. Run `fxai_testlab.py verify-all` before promoting or pushing changes.
 
 Generated promotion artifacts land in:
-- `FXAI/Tools/OfflineLab/Profiles/`
+- `FXDataEngine/Tools/OfflineLab/Profiles/`
 - `MQL5/Profiles/Tester/`
 - `FILE_COMMON/FXAI/Offline/Promotions/`
 
 Research and governance artifacts land in:
-- `FXAI/Tools/OfflineLab/ResearchOS/`
-- `FXAI/Tools/OfflineLab/Distillation/`
+- `FXDataEngine/Tools/OfflineLab/ResearchOS/`
+- `FXDataEngine/Tools/OfflineLab/Distillation/`
 
 These Offline Lab runtime outputs are generated artifacts and should not be versioned in git.

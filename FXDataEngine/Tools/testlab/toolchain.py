@@ -132,6 +132,13 @@ def _read_toml(path: Path | None) -> dict[str, Any]:
         return tomllib.load(handle)
 
 
+def _first_existing_path(paths: list[Path]) -> Path:
+    for path in paths:
+        if path.exists() and path.is_file():
+            return path
+    return paths[0]
+
+
 def _nested_dict(payload: Mapping[str, Any], key: str) -> dict[str, Any]:
     value = payload.get(key, {})
     return dict(value) if isinstance(value, Mapping) else {}
@@ -234,10 +241,18 @@ def load_toolchain_config(
     default_project_root = (project_root_hint or _default_project_root()).resolve()
     config_path = _normalize_path(env_map.get("FXAI_CONFIG"), base_dir=default_project_root)
     if config_path is None:
-        config_path = default_project_root / "fxai.toml"
+        config_path = _first_existing_path([
+            default_project_root / "fxai.toml",
+            default_project_root.parent / "fxai.toml",
+            default_project_root.parent / "FXAI" / "fxai.toml",
+        ])
     env_path = _normalize_path(env_map.get("FXAI_ENV_FILE"), base_dir=default_project_root)
     if env_path is None:
-        env_path = default_project_root / ".env"
+        env_path = _first_existing_path([
+            default_project_root / ".env",
+            default_project_root.parent / ".env",
+            default_project_root.parent / "FXAI" / ".env",
+        ])
     dotenv_values = _parse_dotenv(env_path)
     merged_env = dict(dotenv_values)
     merged_env.update(env_map)

@@ -4,6 +4,7 @@ struct FXAIProjectConfigurationSnapshot {
     let environment: [String: String]
     let parser: SimpleTOMLParser?
     let profile: String
+    let configDirectory: URL
 }
 
 enum FXAIProjectConfigurationResolver {
@@ -18,6 +19,7 @@ enum FXAIProjectConfigurationResolver {
         ) ?? firstExisting(
             candidates: [
                 projectRoot.appendingPathComponent(".env", isDirectory: false),
+                projectRoot.appendingPathComponent("FXDataEngine", isDirectory: true).appendingPathComponent(".env", isDirectory: false),
                 projectRoot.appendingPathComponent("FXAI", isDirectory: true).appendingPathComponent(".env", isDirectory: false)
             ]
         )
@@ -35,6 +37,7 @@ enum FXAIProjectConfigurationResolver {
         ) ?? firstExisting(
             candidates: [
                 projectRoot.appendingPathComponent("fxai.toml", isDirectory: false),
+                projectRoot.appendingPathComponent("FXDataEngine", isDirectory: true).appendingPathComponent("fxai.toml", isDirectory: false),
                 projectRoot.appendingPathComponent("FXAI", isDirectory: true).appendingPathComponent("fxai.toml", isDirectory: false)
             ]
         )
@@ -48,7 +51,8 @@ enum FXAIProjectConfigurationResolver {
         return FXAIProjectConfigurationSnapshot(
             environment: mergedEnvironment,
             parser: parser,
-            profile: profile
+            profile: profile,
+            configDirectory: configURL.deletingLastPathComponent()
         )
     }
 

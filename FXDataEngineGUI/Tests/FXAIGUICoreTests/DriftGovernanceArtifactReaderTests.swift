@@ -8,9 +8,9 @@ struct DriftGovernanceArtifactReaderTests {
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("fxai-drift-governance-reader-\(UUID().uuidString)", isDirectory: true)
         let reportDirectory = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/DriftGovernance/Reports", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/DriftGovernance/Reports", isDirectory: true)
         let statusDirectory = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/DriftGovernance", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/DriftGovernance", isDirectory: true)
         try FileManager.default.createDirectory(at: reportDirectory, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: statusDirectory, withIntermediateDirectories: true)
         defer {

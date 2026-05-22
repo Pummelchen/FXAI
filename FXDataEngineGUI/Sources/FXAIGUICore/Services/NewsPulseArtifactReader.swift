@@ -4,7 +4,7 @@ public struct NewsPulseArtifactReader {
     public init() {}
 
     public func read(projectRoot: URL) -> NewsPulseSnapshot? {
-        let statusURL = projectRoot.appendingPathComponent("Tools/OfflineLab/NewsPulse/newspulse_status.json", isDirectory: false)
+        let statusURL = projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/NewsPulse/newspulse_status.json", isDirectory: false)
         guard
             let data = try? Data(contentsOf: statusURL),
             let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any]

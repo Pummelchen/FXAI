@@ -25,6 +25,6 @@ def test_run_pytest_suite_prefers_repo_local_tools_path():
 
     assert payload["ok"] is True
     assert payload["returncode"] == 0
-    assert str(captured["cwd"]) == str(repo_root / "FXAI")
+    assert str(captured["cwd"]) == str(repo_root / "FXDataEngine")
     pythonpath = str(dict(captured["env"]).get("PYTHONPATH", ""))
-    assert pythonpath.split(verification.os.pathsep)[0] == str(repo_root / "FXAI" / "Tools")
+    assert pythonpath.split(verification.os.pathsep)[0] == str(repo_root / "FXDataEngine" / "Tools")

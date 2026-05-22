@@ -55,7 +55,7 @@ struct ResearchOSPhase4Tests {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
 
-        let profileRoot = root.appendingPathComponent("Tools/OfflineLab/ResearchOS/continuous", isDirectory: true)
+        let profileRoot = root.appendingPathComponent("FXDataEngine/Tools/OfflineLab/ResearchOS/continuous", isDirectory: true)
         try FileManager.default.createDirectory(at: profileRoot, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("FXDataEngine", isDirectory: true), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("FXPlugins", isDirectory: true), withIntermediateDirectories: true)

@@ -15,6 +15,7 @@ Repository-root Swift data-engine package for the FXAI migration away from the o
 - Offline macro-event and calendar-cache support mirrors the legacy MQL5 `event_macro` and `runtime_calendar_cache` contracts: TSV parsing, leakage-safe dataset stats, event-window features, macro-state pressure features, 20-slot macro feature-vector overlays, news gate states, stale detection, and calendar reason payloads.
 - Offline factor-context support ports the legacy trend/carry/policy/value/commodity scoring math from prepared daily closes, swap snapshots, and calendar states; MT5 symbol lookup is intentionally replaced by explicit Swift inputs.
 - The MQL5-to-Swift port completion record is tracked in `Docs/MQL5PortPlan.md`.
+- The former FXAI Python toolchain now lives in `Tools/` inside this package so non-plugin framework utilities stay with FXDataEngine.
 
 ## Build
 

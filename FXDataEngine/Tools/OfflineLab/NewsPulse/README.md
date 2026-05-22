@@ -51,7 +51,7 @@ Main files:
 
 Local operator mirrors and config live under:
 
-`FXAI/Tools/OfflineLab/NewsPulse/`
+`FXDataEngine/Tools/OfflineLab/NewsPulse/`
 
 Tracked operator-editable files:
 - `newspulse_config.json`
@@ -78,7 +78,7 @@ NewsPulse preserves that explicitly:
 Install and compile the MT5 calendar service:
 
 ```bash
-python3 FXAI/Tools/fxai_offline_lab.py newspulse-install-service
+python3 FXDataEngine/Tools/fxai_offline_lab.py newspulse-install-service
 ```
 
 Then start the service from MT5:
@@ -92,38 +92,38 @@ The service is per terminal or machine, not per chart.
 Validate NewsPulse config and paths:
 
 ```bash
-python3 FXAI/Tools/fxai_offline_lab.py newspulse-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py newspulse-validate
 ```
 
 Run a one-shot fusion cycle:
 
 ```bash
-python3 FXAI/Tools/fxai_offline_lab.py newspulse-once
+python3 FXDataEngine/Tools/fxai_offline_lab.py newspulse-once
 ```
 
 Run the daemon continuously:
 
 ```bash
-python3 FXAI/Tools/fxai_offline_lab.py newspulse-daemon --interval-seconds 60
+python3 FXDataEngine/Tools/fxai_offline_lab.py newspulse-daemon --interval-seconds 60
 ```
 
 Show current daemon and source health:
 
 ```bash
-python3 FXAI/Tools/fxai_offline_lab.py newspulse-health
+python3 FXDataEngine/Tools/fxai_offline_lab.py newspulse-health
 ```
 
 Rebuild the replay report from append-only history:
 
 ```bash
-python3 FXAI/Tools/fxai_offline_lab.py newspulse-replay-report --hours-back 72
+python3 FXDataEngine/Tools/fxai_offline_lab.py newspulse-replay-report --hours-back 72
 ```
 
 ## Config
 
 Main config:
 
-`FXAI/Tools/OfflineLab/NewsPulse/newspulse_config.json`
+`FXDataEngine/Tools/OfflineLab/NewsPulse/newspulse_config.json`
 
 Controls:
 - poll interval
@@ -146,7 +146,7 @@ That means NewsPulse can keep the shared snapshot fresh for downstream consumers
 
 Source whitelist:
 
-`FXAI/Tools/OfflineLab/NewsPulse/newspulse_sources.json`
+`FXDataEngine/Tools/OfflineLab/NewsPulse/newspulse_sources.json`
 
 Controls:
 - domain whitelist
@@ -159,7 +159,7 @@ Only whitelisted sources enter scoring.
 
 Operator pair and symbol policy:
 
-`FXAI/Tools/OfflineLab/NewsPulse/newspulse_policy.json`
+`FXDataEngine/Tools/OfflineLab/NewsPulse/newspulse_policy.json`
 
 Controls:
 - active pair watchlists
@@ -223,7 +223,7 @@ It records:
 
 Additional replay outputs:
 - `FILE_COMMON/FXAI/Runtime/news_replay_timeline.tsv`
-- `FXAI/Tools/OfflineLab/NewsPulse/Reports/newspulse_replay_report.json`
+- `FXDataEngine/Tools/OfflineLab/NewsPulse/Reports/newspulse_replay_report.json`
 
 ## Phase 1 vs Deferred
 

@@ -31,8 +31,8 @@ Probabilistic Calibration converts model and ensemble output into calibrated pro
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_offline_lab.py prob-calibration-validate
-python3 Tools/fxai_offline_lab.py prob-calibration-replay-report --symbol EURUSD --hours-back 72
+python3 FXDataEngine/Tools/fxai_offline_lab.py prob-calibration-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py prob-calibration-replay-report --symbol EURUSD --hours-back 72
 ```
 
 ## Example Case Scenarios

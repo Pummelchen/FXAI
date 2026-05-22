@@ -64,7 +64,7 @@ Recommended first pages:
 
 ## Swift And Metal Migration
 
-FXBacktest and FXDatabase are the foundation for the pure Swift stack. FXDatabase owns verified historical M1 OHLCV data and the one remaining MT5 exporter bridge. FXDataEngine owns the ported data-engine contracts, FXPlugins owns converted plugin execution adapters, and FXBacktest owns strategy simulation, optimization, plugin evaluation, and Metal acceleration. Legacy FXAI MQL5 source has been retired from this repository.
+FXBacktest and FXDatabase are the foundation for the pure Swift stack. FXDatabase owns verified historical M1 OHLCV data and the one remaining MT5 exporter bridge. FXDataEngine owns the ported data-engine contracts and the former FXAI toolchain under `FXDataEngine/Tools`, FXPlugins owns converted plugin execution adapters, and FXBacktest owns strategy simulation, optimization, plugin evaluation, and Metal acceleration. Legacy FXAI MQL5 source has been retired from this repository.
 
 Subsystem guides:
 

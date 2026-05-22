@@ -5,10 +5,10 @@ public struct LabelEngineArtifactReader {
 
     public func read(projectRoot: URL) -> LabelEngineSnapshot? {
         let reportURL = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/LabelEngine/Reports", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/LabelEngine/Reports", isDirectory: true)
             .appendingPathComponent("label_engine_report.json", isDirectory: false)
         let statusURL = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/LabelEngine", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/LabelEngine", isDirectory: true)
             .appendingPathComponent("label_engine_status.json", isDirectory: false)
 
         guard let report = parseJSON(reportURL) else {

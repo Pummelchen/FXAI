@@ -31,7 +31,7 @@ Offline Lab is the research, promotion, and artifact-recovery engine behind FXAI
 
 ## Strategy Profiles
 
-- promoted audit and EA presets are compiled from `Tools/OfflineLab/Profiles/strategy_profiles.json`
+- promoted audit and EA presets are compiled from `FXDataEngine/Tools/OfflineLab/Profiles/strategy_profiles.json`
 - the compiler layers `strategy -> symbol -> broker -> runtime` before applying run-specific overrides
 - each promoted preset now carries a sibling `__strategy_profile.json` manifest so operators can see exactly which profile version and inheritance chain produced the artifact
 - if you need a new deployment posture, change the catalog and regenerate artifacts instead of hand-editing dozens of MT5 input fields
@@ -40,13 +40,13 @@ Offline Lab is the research, promotion, and artifact-recovery engine behind FXAI
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_offline_lab.py doctor
-python3 Tools/fxai_offline_lab.py bootstrap --seed-demo
-python3 Tools/fxai_offline_lab.py verify-deterministic
-python3 Tools/fxai_offline_lab.py recover-artifacts
-python3 Tools/fxai_offline_lab.py pair-network-build --profile continuous
-python3 Tools/fxai_offline_lab.py dashboard --profile continuous
-python3 Tools/fxai_testlab.py publish-benchmarks --profile bestparams
+python3 FXDataEngine/Tools/fxai_offline_lab.py doctor
+python3 FXDataEngine/Tools/fxai_offline_lab.py bootstrap --seed-demo
+python3 FXDataEngine/Tools/fxai_offline_lab.py verify-deterministic
+python3 FXDataEngine/Tools/fxai_offline_lab.py recover-artifacts
+python3 FXDataEngine/Tools/fxai_offline_lab.py pair-network-build --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py dashboard --profile continuous
+python3 FXDataEngine/Tools/fxai_testlab.py publish-benchmarks --profile bestparams
 ```
 
 ## Practical Workflows

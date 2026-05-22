@@ -24,8 +24,8 @@ This page explains the exact public release thresholds that back FXAI promotions
 
 The canonical exported artifact is:
 
-- `Tools/Benchmarks/promotion_criteria.md`
-- `Tools/Benchmarks/promotion_criteria.json`
+- `FXDataEngine/Tools/Benchmarks/promotion_criteria.md`
+- `FXDataEngine/Tools/Benchmarks/promotion_criteria.json`
 
 Those files are generated from `Tools/testlab/release_gate.py`, so the published criteria and the actual release gate stay aligned.
 
@@ -33,7 +33,7 @@ Those files are generated from `Tools/testlab/release_gate.py`, so the published
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_testlab.py publish-benchmarks --profile bestparams
+python3 FXDataEngine/Tools/fxai_testlab.py publish-benchmarks --profile bestparams
 ```
 
 ## What The Criteria Cover
@@ -51,7 +51,7 @@ python3 Tools/fxai_testlab.py publish-benchmarks --profile bestparams
 ### Scenario: A candidate improved headline score but still should not ship
 
 What to check:
-1. Open `Tools/Benchmarks/promotion_criteria.md`.
+1. Open `FXDataEngine/Tools/Benchmarks/promotion_criteria.md`.
 2. Compare the candidate against walkforward, adversarial, and macro thresholds.
 3. If one hard gate fails, treat the candidate as non-promotable regardless of a prettier average score.
 

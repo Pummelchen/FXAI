@@ -4,7 +4,7 @@ public struct RuntimeArtifactReader {
     public init() {}
 
     public func read(projectRoot: URL) -> RuntimeOperationsSnapshot {
-        let researchRoot = projectRoot.appendingPathComponent("Tools/OfflineLab/ResearchOS", isDirectory: true)
+        let researchRoot = projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/ResearchOS", isDirectory: true)
         let dashboardURL = latestFile(named: "operator_dashboard.json", under: researchRoot)
         let championsURL = latestFile(named: "champions.json", under: researchRoot)
 

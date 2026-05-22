@@ -31,9 +31,9 @@ Cross Asset adds shared macro and liquidity context from configured indicator-on
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_offline_lab.py cross-asset-validate
-python3 Tools/fxai_offline_lab.py cross-asset-health
-python3 Tools/fxai_offline_lab.py cross-asset-replay-report --symbol AUDUSD --hours-back 72
+python3 FXDataEngine/Tools/fxai_offline_lab.py cross-asset-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py cross-asset-health
+python3 FXDataEngine/Tools/fxai_offline_lab.py cross-asset-replay-report --symbol AUDUSD --hours-back 72
 ```
 
 ## Example Case Scenarios

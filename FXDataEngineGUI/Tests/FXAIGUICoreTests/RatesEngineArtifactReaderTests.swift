@@ -8,7 +8,7 @@ struct RatesEngineArtifactReaderTests {
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("fxai-rates-reader-\(UUID().uuidString)", isDirectory: true)
         let statusURL = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/RatesEngine", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/RatesEngine", isDirectory: true)
             .appendingPathComponent("rates_engine_status.json", isDirectory: false)
         try FileManager.default.createDirectory(at: statusURL.deletingLastPathComponent(), withIntermediateDirectories: true)
 

@@ -34,9 +34,9 @@ It does not replace plugins, the Adaptive Router, or the Dynamic Ensemble. It co
 ## Preferred Commands
 
 ```bash
-python3 FXAI/Tools/fxai_offline_lab.py prob-calibration-validate
-python3 FXAI/Tools/fxai_offline_lab.py prob-calibration-replay-report --symbol EURUSD --hours-back 72
-python3 FXAI/Tools/fxai_testlab.py compile-main
+python3 FXDataEngine/Tools/fxai_offline_lab.py prob-calibration-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py prob-calibration-replay-report --symbol EURUSD --hours-back 72
+python3 FXDataEngine/Tools/fxai_testlab.py compile-main
 cd FXDataEngineGUI && swift test && swift build
 ```
 

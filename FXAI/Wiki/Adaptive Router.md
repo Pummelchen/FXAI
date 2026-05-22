@@ -31,9 +31,9 @@ Adaptive Router classifies the current regime and routes trust toward plugin fam
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_offline_lab.py adaptive-router-validate
-python3 Tools/fxai_offline_lab.py adaptive-router-profiles --profile continuous
-python3 Tools/fxai_offline_lab.py adaptive-router-replay-report --symbol EURUSD --hours-back 72
+python3 FXDataEngine/Tools/fxai_offline_lab.py adaptive-router-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py adaptive-router-profiles --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py adaptive-router-replay-report --symbol EURUSD --hours-back 72
 ```
 
 ## Example Case Scenarios

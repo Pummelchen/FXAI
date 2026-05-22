@@ -9,7 +9,7 @@ public struct ExecutionQualityArtifactReader {
         }
 
         let replayURL = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/ExecutionQuality/Reports", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/ExecutionQuality/Reports", isDirectory: true)
             .appendingPathComponent("execution_quality_replay_report.json", isDirectory: false)
         let replayDocument = parseJSON(replayURL)
         let replayBySymbol: [String: [String: Any]] = Dictionary(

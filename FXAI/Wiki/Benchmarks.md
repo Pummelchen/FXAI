@@ -22,17 +22,17 @@ This page explains the public benchmark surface for FXAI.
 
 ## What FXAI Publishes
 
-- a public benchmark matrix in `Tools/Benchmarks/benchmark_matrix.md`
-- a machine-readable benchmark matrix in `Tools/Benchmarks/benchmark_matrix.json`
-- a reference audit bundle in `Tools/Benchmarks/ReferenceAudit/`
-- exported promotion thresholds in `Tools/Benchmarks/promotion_criteria.md`
-- release-note deltas in `Tools/Benchmarks/ReleaseNotes/`
+- a public benchmark matrix in `FXDataEngine/Tools/Benchmarks/benchmark_matrix.md`
+- a machine-readable benchmark matrix in `FXDataEngine/Tools/Benchmarks/benchmark_matrix.json`
+- a reference audit bundle in `FXDataEngine/Tools/Benchmarks/ReferenceAudit/`
+- exported promotion thresholds in `FXDataEngine/Tools/Benchmarks/promotion_criteria.md`
+- release-note deltas in `FXDataEngine/Tools/Benchmarks/ReleaseNotes/`
 
 ## How To Regenerate The Benchmark Surface
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_testlab.py publish-benchmarks --profile bestparams
+python3 FXDataEngine/Tools/fxai_testlab.py publish-benchmarks --profile bestparams
 ```
 
 That command writes:
@@ -54,7 +54,7 @@ Each row tells you:
 
 ### Scenario: A live trader wants to know whether a promoted EURUSD profile has real evidence
 
-1. Open `Tools/Benchmarks/benchmark_matrix.md`.
+1. Open `FXDataEngine/Tools/Benchmarks/benchmark_matrix.md`.
 2. Find the `EURUSD` row for the matching broker and execution assumptions.
 3. Open the linked strategy-profile or sample audit artifact.
 4. Compare the row with the promotion criteria page before trusting the posture.
@@ -62,7 +62,7 @@ Each row tells you:
 ### Scenario: A researcher changed a strategy profile and wants to show the impact
 
 1. Regenerate the benchmark surface.
-2. Open `Tools/Benchmarks/ReleaseNotes/reference_release_notes.md`.
+2. Open `FXDataEngine/Tools/Benchmarks/ReleaseNotes/reference_release_notes.md`.
 3. Verify that the model or profile change is paired with visible audit-score and scenario deltas.
 4. If there is no meaningful delta, do not market the change as an upgrade.
 

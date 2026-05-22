@@ -327,12 +327,22 @@ public struct ProjectScanner {
     private func scanTursoSummary(projectRoot: URL) -> TursoSummary {
         let configuration = FXAIProjectConfigurationResolver.load(projectRoot: projectRoot)
         let environment = configuration.environment
-        let dbURL = FXAIProjectConfigurationResolver.resolvedPathURL(
-            rawValue: environment["FXAI_DEFAULT_DB"]
-                ?? FXAIProjectConfigurationResolver.configuredValue(configuration: configuration, key: "default_db"),
-            baseDirectory: projectRoot,
-            environment: environment
-        ) ?? projectRoot.appendingPathComponent("Tools/OfflineLab/fxai_offline_lab.turso.db")
+        let dbURL: URL
+        if let envDefaultDB = environment["FXAI_DEFAULT_DB"], !envDefaultDB.isEmpty {
+            dbURL = FXAIProjectConfigurationResolver.resolvedPathURL(
+                rawValue: envDefaultDB,
+                baseDirectory: projectRoot,
+                environment: environment
+            ) ?? URL(fileURLWithPath: envDefaultDB, isDirectory: false)
+        } else if let configuredDefaultDB = FXAIProjectConfigurationResolver.configuredValue(configuration: configuration, key: "default_db") {
+            dbURL = FXAIProjectConfigurationResolver.resolvedPathURL(
+                rawValue: configuredDefaultDB,
+                baseDirectory: configuration.configDirectory,
+                environment: environment
+            ) ?? URL(fileURLWithPath: configuredDefaultDB, isDirectory: false)
+        } else {
+            dbURL = toolsURL(projectRoot: projectRoot, relativePath: "OfflineLab/fxai_offline_lab.turso.db")
+        }
         let fm = FileManager.default
 
         return TursoSummary(
@@ -345,16 +355,23 @@ public struct ProjectScanner {
     }
 
     private func toolsURL(projectRoot: URL, relativePath: String) -> URL {
-        let rootToolsURL = projectRoot
-            .appendingPathComponent("Tools", isDirectory: true)
-            .appendingPathComponent(relativePath, isDirectory: true)
-        if FileManager.default.fileExists(atPath: rootToolsURL.path) {
-            return rootToolsURL
+        let candidates = [
+            projectRoot
+                .appendingPathComponent("FXDataEngine", isDirectory: true)
+                .appendingPathComponent("Tools", isDirectory: true)
+                .appendingPathComponent(relativePath, isDirectory: true),
+            projectRoot
+                .appendingPathComponent("Tools", isDirectory: true)
+                .appendingPathComponent(relativePath, isDirectory: true),
+            projectRoot
+                .appendingPathComponent("FXAI", isDirectory: true)
+                .appendingPathComponent("Tools", isDirectory: true)
+                .appendingPathComponent(relativePath, isDirectory: true)
+        ]
+        if let existing = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+            return existing
         }
-        return projectRoot
-            .appendingPathComponent("FXAI", isDirectory: true)
-            .appendingPathComponent("Tools", isDirectory: true)
-            .appendingPathComponent(relativePath, isDirectory: true)
+        return candidates[0]
     }
 
     private func recursiveFiles(at root: URL) -> [URL] {

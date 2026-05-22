@@ -31,8 +31,8 @@ This page maps common user goals to the repository areas that matter.
 | repo root `FXPlugins/` | Swift plugin package with converted FXAI plugins, FXBacktest demo adapters, acceleration metadata, and PyTorch/TensorFlow backend bridge. |
 | `Tools/fxai_testlab.py` | Compile, audit, benchmark, package, and release-gate CLI. |
 | `Tools/fxai_offline_lab.py` | Offline Lab, subsystem validation, promotion, and recovery CLI. |
-| `Tools/OfflineLab/` | Generated or configured research, report, and subsystem artifacts. |
-| `Tools/Benchmarks/` | Published benchmark and promotion evidence. |
+| `FXDataEngine/Tools/OfflineLab/` | Generated or configured research, report, and subsystem artifacts. |
+| `FXDataEngine/Tools/Benchmarks/` | Published benchmark and promotion evidence. |
 | `FXDataEngineGUI/` | Optional SwiftUI operator app. |
 | `Wiki/` | Versioned user handbook that mirrors the GitHub wiki. |
 | repo root `FXBacktest/` | Swift optimizer/backtester source, tracked directly in FXAI. |
@@ -76,9 +76,9 @@ Start with:
 ### Scenario: A system architect wants to release
 
 Start with:
-1. `python3 Tools/fxai_testlab.py verify-all`
-2. `python3 Tools/fxai_testlab.py publish-benchmarks --profile bestparams`
-3. `python3 Tools/fxai_testlab.py package-mt5-release --version <tag>`
+1. `python3 FXDataEngine/Tools/fxai_testlab.py verify-all`
+2. `python3 FXDataEngine/Tools/fxai_testlab.py publish-benchmarks --profile bestparams`
+3. `python3 FXDataEngine/Tools/fxai_testlab.py package-mt5-release --version <tag>`
 
 ## Next Pages
 

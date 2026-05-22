@@ -23,13 +23,14 @@ from pathlib import Path
 import sys
 
 root = Path(os.environ["FXAI_ROOT"])
-tools_root = root / "Tools"
+project_root = root / "FXDataEngine"
+tools_root = project_root / "Tools"
 if not tools_root.exists():
-    tools_root = root / "FXAI" / "Tools"
+    tools_root = root / "Tools"
 sys.path.insert(0, str(tools_root))
 from testlab.toolchain import load_toolchain_config
 
-config = load_toolchain_config(project_root_hint=root)
+config = load_toolchain_config(project_root_hint=project_root)
 print(config.profile)
 print(config.gui_minimum_macos)
 print(config.gui_release_archive)

@@ -33,8 +33,8 @@ Compile and run the standard release gate:
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_testlab.py doctor
-python3 Tools/fxai_testlab.py verify-all
+python3 FXDataEngine/Tools/fxai_testlab.py doctor
+python3 FXDataEngine/Tools/fxai_testlab.py verify-all
 ```
 
 If you want focused MT5-side auditing, use the Audit Runner path documented in the project tree and GUI builder.

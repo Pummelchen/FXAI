@@ -38,7 +38,7 @@ The expanded zoo adds these MT5-native plugin modules:
 
 ## How To Use It
 
-1. Run the normal FXAI verification path after changing plugin breadth: `python3 Tools/fxai_testlab.py verify-all`.
+1. Run the normal FXAI verification path after changing plugin breadth: `python3 FXDataEngine/Tools/fxai_testlab.py verify-all`.
 2. Use Audit Lab to compare families on scenarios such as `random_walk`, `drift_up`, `regime_shift`, `vol_cluster`, and `mean_revert`.
 3. Use plugin oracle findings to decide whether a family is behaving as intended.
 4. Let Adaptive Router and Dynamic Ensemble decide live weights; do not manually force all plugins to vote equally.

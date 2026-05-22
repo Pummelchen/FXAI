@@ -35,25 +35,25 @@ Phase 1 is routing-first and audit-first. It does not force retraining of the pl
 Validate config:
 
 ```bash
-python3 FXAI/Tools/fxai_offline_lab.py adaptive-router-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py adaptive-router-validate
 ```
 
 Generate promoted profiles:
 
 ```bash
-python3 FXAI/Tools/fxai_offline_lab.py adaptive-router-profiles --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py adaptive-router-profiles --profile continuous
 ```
 
 Build replay summary:
 
 ```bash
-python3 FXAI/Tools/fxai_offline_lab.py adaptive-router-replay-report --symbol EURUSD --hours-back 72
+python3 FXDataEngine/Tools/fxai_offline_lab.py adaptive-router-replay-report --symbol EURUSD --hours-back 72
 ```
 
 The full release-gate path still remains:
 
 ```bash
-python3 FXAI/Tools/fxai_testlab.py verify-all
+python3 FXDataEngine/Tools/fxai_testlab.py verify-all
 ```
 
 ## Runtime Artifacts

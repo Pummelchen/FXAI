@@ -31,9 +31,9 @@ Drift Governance watches whether features, regimes, calibration, and plugin beha
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_offline_lab.py drift-governance-validate
-python3 Tools/fxai_offline_lab.py drift-governance-run --profile continuous
-python3 Tools/fxai_offline_lab.py drift-governance-report --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py drift-governance-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py drift-governance-run --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py drift-governance-report --profile continuous
 ```
 
 ## Example Case Scenarios

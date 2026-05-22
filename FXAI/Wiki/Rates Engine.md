@@ -32,9 +32,9 @@ Rates Engine adds policy-path and rates-aware context to FXAI's runtime control 
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_offline_lab.py rates-engine-validate
-python3 Tools/fxai_offline_lab.py rates-engine-health
-python3 Tools/fxai_offline_lab.py rates-engine-replay-report --symbol EURUSD --hours-back 72
+python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-health
+python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-replay-report --symbol EURUSD --hours-back 72
 ```
 
 In the GUI, open `Rates Engine` or inspect `Live Overview` reasons when a pair is blocked or cautioned.

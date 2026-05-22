@@ -5,10 +5,10 @@ public struct DriftGovernanceArtifactReader {
 
     public func read(projectRoot: URL) -> DriftGovernanceSnapshot? {
         let reportURL = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/DriftGovernance/Reports", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/DriftGovernance/Reports", isDirectory: true)
             .appendingPathComponent("drift_governance_report.json", isDirectory: false)
         let statusURL = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/DriftGovernance", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/DriftGovernance", isDirectory: true)
             .appendingPathComponent("drift_governance_status.json", isDirectory: false)
 
         guard let report = parseJSON(reportURL) else {

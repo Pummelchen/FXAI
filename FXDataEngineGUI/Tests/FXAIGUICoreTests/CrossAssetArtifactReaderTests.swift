@@ -10,7 +10,7 @@ struct CrossAssetArtifactReaderTests {
         let runtimeDirectory = projectRoot
             .appendingPathComponent("FILE_COMMON/FXAI/Runtime", isDirectory: true)
         let statusDirectory = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/CrossAsset", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/CrossAsset", isDirectory: true)
 
         try FileManager.default.createDirectory(at: runtimeDirectory, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: statusDirectory, withIntermediateDirectories: true)

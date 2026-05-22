@@ -8,7 +8,7 @@ struct MicrostructureArtifactReaderTests {
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("fxai-microstructure-reader-\(UUID().uuidString)", isDirectory: true)
         let statusURL = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/Microstructure", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/Microstructure", isDirectory: true)
             .appendingPathComponent("microstructure_status.json", isDirectory: false)
         try FileManager.default.createDirectory(at: statusURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         defer {

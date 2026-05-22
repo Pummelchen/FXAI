@@ -30,8 +30,8 @@ Example:
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_testlab.py doctor
-python3 Tools/fxai_testlab.py verify-all
+python3 FXDataEngine/Tools/fxai_testlab.py doctor
+python3 FXDataEngine/Tools/fxai_testlab.py verify-all
 ```
 
 ## First Commands To Know
@@ -40,14 +40,14 @@ python3 Tools/fxai_testlab.py verify-all
 swift test --package-path FXDataEngine
 swift test --package-path FXPlugins
 swift test --package-path FXBacktest
-python3 FXAI/Tools/fxai_testlab.py doctor
-python3 FXAI/Tools/fxai_testlab.py verify-all
-python3 FXAI/Tools/fxai_testlab.py publish-benchmarks --profile bestparams
-python3 FXAI/Tools/fxai_offline_lab.py newspulse-health
-python3 FXAI/Tools/fxai_offline_lab.py rates-engine-health
-python3 FXAI/Tools/fxai_offline_lab.py cross-asset-health
-python3 FXAI/Tools/fxai_offline_lab.py microstructure-health
-python3 FXAI/Tools/fxai_offline_lab.py live-state --symbol EURUSD
+python3 FXDataEngine/Tools/fxai_testlab.py doctor
+python3 FXDataEngine/Tools/fxai_testlab.py verify-all
+python3 FXDataEngine/Tools/fxai_testlab.py publish-benchmarks --profile bestparams
+python3 FXDataEngine/Tools/fxai_offline_lab.py newspulse-health
+python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-health
+python3 FXDataEngine/Tools/fxai_offline_lab.py cross-asset-health
+python3 FXDataEngine/Tools/fxai_offline_lab.py microstructure-health
+python3 FXDataEngine/Tools/fxai_offline_lab.py live-state --symbol EURUSD
 ```
 
 What they do:
@@ -134,10 +134,10 @@ Why this works:
 ### Scenario: You need a clean pre-release confidence check
 
 What to do:
-1. Run `python3 Tools/fxai_testlab.py verify-all`.
+1. Run `python3 FXDataEngine/Tools/fxai_testlab.py verify-all`.
 2. If you changed the GUI, run `cd FXDataEngineGUI && swift test`.
 3. If you changed an Offline Lab subsystem, run its dedicated `*-validate` command too.
-4. Build MT5 release binaries with `python3 Tools/fxai_testlab.py package-mt5-release --version <tag>`.
+4. Build MT5 release binaries with `python3 FXDataEngine/Tools/fxai_testlab.py package-mt5-release --version <tag>`.
 5. Upload the generated `.ex5` files, manifest, and SHA-256 checksum files to GitHub Releases; do not commit compiled MT5 binaries.
 
 ## Common Mistakes

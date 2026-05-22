@@ -66,31 +66,31 @@ Shared runtime artifacts:
 Validate config and inputs:
 
 ```bash
-python3 FXAI/Tools/fxai_offline_lab.py rates-engine-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-validate
 ```
 
 Run one bounded cycle:
 
 ```bash
-python3 FXAI/Tools/fxai_offline_lab.py rates-engine-once
+python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-once
 ```
 
 Run continuously:
 
 ```bash
-python3 FXAI/Tools/fxai_offline_lab.py rates-engine-daemon --interval-seconds 120
+python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-daemon --interval-seconds 120
 ```
 
 Inspect health:
 
 ```bash
-python3 FXAI/Tools/fxai_offline_lab.py rates-engine-health
+python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-health
 ```
 
 Build a replay report:
 
 ```bash
-python3 FXAI/Tools/fxai_offline_lab.py rates-engine-replay-report --symbol EURUSD --hours-back 72
+python3 FXDataEngine/Tools/fxai_offline_lab.py rates-engine-replay-report --symbol EURUSD --hours-back 72
 ```
 
 ## Runtime Integration

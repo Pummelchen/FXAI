@@ -8,9 +8,9 @@ struct LabelEngineArtifactReaderTests {
         let projectRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("fxai-label-engine-reader-\(UUID().uuidString)", isDirectory: true)
         let reportDirectory = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/LabelEngine/Reports", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/LabelEngine/Reports", isDirectory: true)
         let statusDirectory = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/LabelEngine", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/LabelEngine", isDirectory: true)
         try FileManager.default.createDirectory(at: reportDirectory, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: statusDirectory, withIntermediateDirectories: true)
         defer {

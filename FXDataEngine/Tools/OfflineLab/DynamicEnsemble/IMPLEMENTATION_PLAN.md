@@ -266,7 +266,7 @@ Update:
 - repo `README.md`
 - `FXAI/README.md`
 - `FXAI/FXDataEngineGUI/README.md`
-- `FXAI/Tools/OfflineLab/README.md`
+- `FXDataEngine/Tools/OfflineLab/README.md`
 - wiki page `Dynamic-Ensemble.md`
 - `Home.md`, `GUI.md`, `Offline-Lab.md`, `Project-Structure.md`, `FXAI-Framework.md`, `_Sidebar.md`
 

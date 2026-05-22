@@ -43,7 +43,7 @@ Tick, DOM, spread, swap, commission, and centralized order-book data are not par
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_testlab.py verify-all
+python3 FXDataEngine/Tools/fxai_testlab.py verify-all
 python3 -m pytest -q Tools/tests/test_data_pipeline_gateway.py Tools/tests/test_pipeline_cores.py Tools/tests/test_normalization_pipeline.py
 ```
 

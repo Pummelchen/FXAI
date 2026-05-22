@@ -10,7 +10,7 @@ struct ExecutionQualityArtifactReaderTests {
         let runtimeDirectory = projectRoot
             .appendingPathComponent("FILE_COMMON/FXAI/Runtime", isDirectory: true)
         let replayDirectory = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/ExecutionQuality/Reports", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/ExecutionQuality/Reports", isDirectory: true)
         try FileManager.default.createDirectory(at: runtimeDirectory, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: replayDirectory, withIntermediateDirectories: true)
         defer {

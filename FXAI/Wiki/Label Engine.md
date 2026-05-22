@@ -31,9 +31,9 @@ Label Engine creates reproducible training and evaluation targets for direction,
 
 ```bash
 cd /path/to/FXAI
-python3 Tools/fxai_offline_lab.py label-engine-validate
-python3 Tools/fxai_offline_lab.py label-engine-build --profile continuous --limit-datasets 1
-python3 Tools/fxai_offline_lab.py label-engine-report --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py label-engine-validate
+python3 FXDataEngine/Tools/fxai_offline_lab.py label-engine-build --profile continuous --limit-datasets 1
+python3 FXDataEngine/Tools/fxai_offline_lab.py label-engine-report --profile continuous
 ```
 
 ## Example Case Scenarios

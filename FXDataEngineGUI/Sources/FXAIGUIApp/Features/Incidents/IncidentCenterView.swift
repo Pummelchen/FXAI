@@ -44,8 +44,9 @@ struct IncidentCenterView: View {
 
     private var verifyCommand: String {
         guard let projectRoot = model.projectRoot else { return "" }
+        let toolRoot = projectRoot.appendingPathComponent("FXDataEngine", isDirectory: true)
         return [
-            "cd '\(projectRoot.path.replacingOccurrences(of: "'", with: "'\"'\"'"))'",
+            "cd '\(toolRoot.path.replacingOccurrences(of: "'", with: "'\"'\"'"))'",
             "python3 Tools/fxai_testlab.py verify-all"
         ].joined(separator: "\n")
     }

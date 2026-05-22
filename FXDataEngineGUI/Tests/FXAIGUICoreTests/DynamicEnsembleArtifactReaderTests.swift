@@ -10,7 +10,7 @@ struct DynamicEnsembleArtifactReaderTests {
         let runtimeDirectory = projectRoot
             .appendingPathComponent("FILE_COMMON/FXAI/Runtime", isDirectory: true)
         let replayDirectory = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/DynamicEnsemble/Reports", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/DynamicEnsemble/Reports", isDirectory: true)
         try FileManager.default.createDirectory(at: runtimeDirectory, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: replayDirectory, withIntermediateDirectories: true)
         defer {

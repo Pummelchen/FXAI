@@ -132,7 +132,7 @@ def test_framework_common_contains_required_swift_algorithmic_guards() -> None:
 
 
 def test_new_plugin_oracles_exist() -> None:
-    data = json.loads(_read("FXAI/Tools/plugin_oracles.json"))
+    data = json.loads(_read("FXDataEngine/Tools/plugin_oracles.json"))
     plugins = data["plugins"]
     for plugin_name in CONVERTED_MODEL_CASES:
         entry = plugins.get(plugin_name)
@@ -142,7 +142,7 @@ def test_new_plugin_oracles_exist() -> None:
 
 
 def test_router_config_knows_new_regime_and_trend_plugins() -> None:
-    data = json.loads(_read("FXAI/Tools/OfflineLab/AdaptiveRouter/adaptive_router_config.json"))
+    data = json.loads(_read("FXDataEngine/Tools/OfflineLab/AdaptiveRouter/adaptive_router_config.json"))
     overrides = data["plugin_overrides"]
     for plugin_name in (
         "stat_msgarch",

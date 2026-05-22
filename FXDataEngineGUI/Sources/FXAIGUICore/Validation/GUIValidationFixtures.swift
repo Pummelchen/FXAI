@@ -42,10 +42,10 @@ public enum GUIValidationFixtures {
                 ReportCategorySummary(id: "distillation", category: "Distillation", fileCount: 8, latestModifiedAt: now.addingTimeInterval(-7200))
             ],
             recentArtifacts: [
-                ReportArtifact(category: "Audit", name: "audit_latest.summary.json", path: projectRoot.appendingPathComponent("Tools/Reports/audit_latest.summary.json"), modifiedAt: now, sizeBytes: 14_220),
-                ReportArtifact(category: "Profiles", name: "EURUSD_profile.tsv", path: projectRoot.appendingPathComponent("Tools/OfflineLab/Profiles/EURUSD_profile.tsv"), modifiedAt: now.addingTimeInterval(-600), sizeBytes: 3_620),
-                ReportArtifact(category: "ResearchOS", name: "research_os_dashboard.json", path: projectRoot.appendingPathComponent("Tools/OfflineLab/research_os_dashboard.json"), modifiedAt: now.addingTimeInterval(-480), sizeBytes: 24_918),
-                ReportArtifact(category: "Distillation", name: "teacher_bundle.json", path: projectRoot.appendingPathComponent("Tools/OfflineLab/foundation_teacher_bundle.json"), modifiedAt: now.addingTimeInterval(-2500), sizeBytes: 42_112)
+                ReportArtifact(category: "Audit", name: "audit_latest.summary.json", path: projectRoot.appendingPathComponent("FXDataEngine/Tools/Reports/audit_latest.summary.json"), modifiedAt: now, sizeBytes: 14_220),
+                ReportArtifact(category: "Profiles", name: "EURUSD_profile.tsv", path: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/Profiles/EURUSD_profile.tsv"), modifiedAt: now.addingTimeInterval(-600), sizeBytes: 3_620),
+                ReportArtifact(category: "ResearchOS", name: "research_os_dashboard.json", path: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/research_os_dashboard.json"), modifiedAt: now.addingTimeInterval(-480), sizeBytes: 24_918),
+                ReportArtifact(category: "Distillation", name: "teacher_bundle.json", path: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/foundation_teacher_bundle.json"), modifiedAt: now.addingTimeInterval(-2500), sizeBytes: 42_112)
             ],
             runtimeProfiles: [
                 RuntimeProfileSummary(
@@ -55,7 +55,7 @@ public enum GUIValidationFixtures {
                     profileName: "continuous",
                     promotionTier: "production",
                     runtimeMode: "live",
-                    sourcePath: projectRoot.appendingPathComponent("Tools/OfflineLab/Profiles/EURUSD_profile.tsv")
+                    sourcePath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/Profiles/EURUSD_profile.tsv")
                 ),
                 RuntimeProfileSummary(
                     id: "USDJPY",
@@ -64,7 +64,7 @@ public enum GUIValidationFixtures {
                     profileName: "continuous",
                     promotionTier: "audit-approved",
                     runtimeMode: "demo",
-                    sourcePath: projectRoot.appendingPathComponent("Tools/OfflineLab/Profiles/USDJPY_profile.tsv")
+                    sourcePath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/Profiles/USDJPY_profile.tsv")
                 )
             ],
             operatorSummary: OperatorSummary(
@@ -75,7 +75,7 @@ public enum GUIValidationFixtures {
             ),
             tursoSummary: TursoSummary(
                 localDatabasePresent: true,
-                localDatabasePath: projectRoot.appendingPathComponent("Tools/OfflineLab/fxai_offline_lab.turso.db"),
+                localDatabasePath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/fxai_offline_lab.turso.db"),
                 embeddedReplicaConfigured: true,
                 encryptionConfigured: true
             )
@@ -87,7 +87,7 @@ public enum GUIValidationFixtures {
         let deploymentSections = [
             RuntimeArtifactSection(
                 title: "Deployment Profile",
-                sourcePath: projectRoot.appendingPathComponent("Tools/OfflineLab/Profiles/EURUSD_profile.tsv"),
+                sourcePath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/Profiles/EURUSD_profile.tsv"),
                 values: [
                     KeyValueRecord(key: "runtime_mode", value: "live"),
                     KeyValueRecord(key: "plugin_name", value: "ai_tft"),
@@ -102,7 +102,7 @@ public enum GUIValidationFixtures {
         let supervisorSections = [
             RuntimeArtifactSection(
                 title: "Supervisor",
-                sourcePath: projectRoot.appendingPathComponent("Tools/OfflineLab/supervisor_service.json"),
+                sourcePath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/supervisor_service.json"),
                 values: [
                     KeyValueRecord(key: "supervisor_blend", value: "0.81"),
                     KeyValueRecord(key: "reduce_bias", value: "0.27"),
@@ -114,7 +114,7 @@ public enum GUIValidationFixtures {
         let worldSections = [
             RuntimeArtifactSection(
                 title: "World Plan",
-                sourcePath: projectRoot.appendingPathComponent("Tools/OfflineLab/world_plan_EURUSD.json"),
+                sourcePath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/world_plan_EURUSD.json"),
                 values: [
                     KeyValueRecord(key: "sigma_scale", value: "1.14"),
                     KeyValueRecord(key: "price_cost_scale", value: "1.07"),
@@ -144,16 +144,16 @@ public enum GUIValidationFixtures {
                 performanceFailures: [],
                 artifactSizeFailures: []
             ),
-            deploymentPath: projectRoot.appendingPathComponent("Tools/OfflineLab/Profiles/EURUSD_profile.tsv"),
-            studentRouterPath: projectRoot.appendingPathComponent("Tools/OfflineLab/student_router_EURUSD.tsv"),
-            supervisorServicePath: projectRoot.appendingPathComponent("Tools/OfflineLab/supervisor_service.json"),
-            supervisorCommandPath: projectRoot.appendingPathComponent("Tools/OfflineLab/supervisor_command.json"),
-            worldPlanPath: projectRoot.appendingPathComponent("Tools/OfflineLab/world_plan_EURUSD.json"),
+            deploymentPath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/Profiles/EURUSD_profile.tsv"),
+            studentRouterPath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/student_router_EURUSD.tsv"),
+            supervisorServicePath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/supervisor_service.json"),
+            supervisorCommandPath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/supervisor_command.json"),
+            worldPlanPath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/world_plan_EURUSD.json"),
             deploymentSections: deploymentSections,
             routerSections: [
                 RuntimeArtifactSection(
                     title: "Student Router",
-                    sourcePath: projectRoot.appendingPathComponent("Tools/OfflineLab/student_router_EURUSD.tsv"),
+                    sourcePath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/student_router_EURUSD.tsv"),
                     values: [
                         KeyValueRecord(key: "teacher_signal_gain", value: "1.18"),
                         KeyValueRecord(key: "student_signal_gain", value: "0.94")
@@ -164,7 +164,7 @@ public enum GUIValidationFixtures {
             commandSections: [
                 RuntimeArtifactSection(
                     title: "Supervisor Commands",
-                    sourcePath: projectRoot.appendingPathComponent("Tools/OfflineLab/supervisor_command.json"),
+                    sourcePath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/supervisor_command.json"),
                     values: [
                         KeyValueRecord(key: "mode", value: "coordinated"),
                         KeyValueRecord(key: "net_bias_limit", value: "0.46")
@@ -175,7 +175,7 @@ public enum GUIValidationFixtures {
             attributionSections: [
                 RuntimeArtifactSection(
                     title: "Attribution",
-                    sourcePath: projectRoot.appendingPathComponent("Tools/OfflineLab/attribution_EURUSD.tsv"),
+                    sourcePath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/attribution_EURUSD.tsv"),
                     values: [
                         KeyValueRecord(key: "macro_family", value: "0.33"),
                         KeyValueRecord(key: "trend_family", value: "0.41")
@@ -218,15 +218,15 @@ public enum GUIValidationFixtures {
                 performanceFailures: [],
                 artifactSizeFailures: []
             ),
-            deploymentPath: projectRoot.appendingPathComponent("Tools/OfflineLab/Profiles/USDJPY_profile.tsv"),
-            studentRouterPath: projectRoot.appendingPathComponent("Tools/OfflineLab/student_router_USDJPY.tsv"),
-            supervisorServicePath: projectRoot.appendingPathComponent("Tools/OfflineLab/supervisor_service.json"),
-            supervisorCommandPath: projectRoot.appendingPathComponent("Tools/OfflineLab/supervisor_command.json"),
-            worldPlanPath: projectRoot.appendingPathComponent("Tools/OfflineLab/world_plan_USDJPY.json"),
+            deploymentPath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/Profiles/USDJPY_profile.tsv"),
+            studentRouterPath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/student_router_USDJPY.tsv"),
+            supervisorServicePath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/supervisor_service.json"),
+            supervisorCommandPath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/supervisor_command.json"),
+            worldPlanPath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/world_plan_USDJPY.json"),
             deploymentSections: [
                 RuntimeArtifactSection(
                     title: "Deployment Profile",
-                    sourcePath: projectRoot.appendingPathComponent("Tools/OfflineLab/Profiles/USDJPY_profile.tsv"),
+                    sourcePath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/Profiles/USDJPY_profile.tsv"),
                     values: [
                         KeyValueRecord(key: "runtime_mode", value: "demo"),
                         KeyValueRecord(key: "plugin_name", value: "tree_catboost"),
@@ -548,7 +548,7 @@ public enum GUIValidationFixtures {
         )
     }
 
-    public static func driftGovernanceSnapshot(projectRoot _: URL) -> DriftGovernanceSnapshot {
+    public static func driftGovernanceSnapshot(projectRoot: URL) -> DriftGovernanceSnapshot {
         let now = Date()
         let eurusd = DriftGovernanceSymbolSnapshot(
             symbol: "EURUSD",
@@ -849,9 +849,9 @@ public enum GUIValidationFixtures {
                 KeyValueRecord(key: "symbol_count", value: "2"),
             ],
             artifactPaths: [
-                KeyValueRecord(key: "history_path", value: "/tmp/FXAI/Tools/OfflineLab/DriftGovernance/drift_governance_history.ndjson"),
-                KeyValueRecord(key: "report_path", value: "/tmp/FXAI/Tools/OfflineLab/DriftGovernance/Reports/drift_governance_report.json"),
-                KeyValueRecord(key: "status_path", value: "/tmp/FXAI/Tools/OfflineLab/DriftGovernance/drift_governance_status.json"),
+                KeyValueRecord(key: "history_path", value: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/DriftGovernance/drift_governance_history.ndjson").path),
+                KeyValueRecord(key: "report_path", value: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/DriftGovernance/Reports/drift_governance_report.json").path),
+                KeyValueRecord(key: "status_path", value: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/DriftGovernance/drift_governance_status.json").path),
             ],
             symbols: [eurusd, usdjpy]
         )
@@ -1511,12 +1511,12 @@ public enum GUIValidationFixtures {
             environment: ResearchOSEnvironmentStatus(
                 backend: "turso",
                 syncMode: "embedded-replica",
-                databasePath: projectRoot.appendingPathComponent("Tools/OfflineLab/fxai_offline_lab.turso.db"),
+                databasePath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/fxai_offline_lab.turso.db"),
                 databaseName: "fxai-offline-lab",
                 organizationSlug: "fxai",
                 groupName: "default",
                 locationName: "fra",
-                cliConfigPath: projectRoot.appendingPathComponent("Tools/OfflineLab/turso.toml"),
+                cliConfigPath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/turso.toml"),
                 syncIntervalSeconds: 30,
                 encryptionEnabled: true,
                 platformAPIEnabled: true,
@@ -1536,7 +1536,7 @@ public enum GUIValidationFixtures {
                     locationName: "fra",
                     hostname: "fxai.turso.io",
                     syncURL: "libsql://fxai.turso.io",
-                    envArtifactPath: projectRoot.appendingPathComponent("Tools/OfflineLab/branches/continuous.env"),
+                    envArtifactPath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/branches/continuous.env"),
                     isBranch: true,
                     createdAt: now.addingTimeInterval(-86_400),
                     sourceTimestamp: "2026-04-05T07:00:00Z"
@@ -1578,7 +1578,7 @@ public enum GUIValidationFixtures {
                             ]
                         )
                     ],
-                    deploymentArtifactPath: projectRoot.appendingPathComponent("Tools/OfflineLab/Profiles/EURUSD_profile.tsv"),
+                    deploymentArtifactPath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/Profiles/EURUSD_profile.tsv"),
                     deploymentCreatedAt: now.addingTimeInterval(-900)
                 ),
                 ResearchOSSymbolControl(
@@ -1598,7 +1598,7 @@ public enum GUIValidationFixtures {
                             ]
                         )
                     ],
-                    deploymentArtifactPath: projectRoot.appendingPathComponent("Tools/OfflineLab/Profiles/USDJPY_profile.tsv"),
+                    deploymentArtifactPath: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/Profiles/USDJPY_profile.tsv"),
                     deploymentCreatedAt: now.addingTimeInterval(-3600)
                 )
             ],
@@ -1687,13 +1687,13 @@ public enum GUIValidationFixtures {
                     affectedSymbol: "USDJPY",
                     detailLines: ["Supervisor snapshot age is increasing."],
                     actions: [
-                        IncidentAction(title: "Open Runtime", summary: "Inspect runtime deployment sections", command: "python3 Tools/fxai_testlab.py verify-all", destinationSelection: "runtimeMonitor")
+                        IncidentAction(title: "Open Runtime", summary: "Inspect runtime deployment sections", command: "python3 FXDataEngine/Tools/fxai_testlab.py verify-all", destinationSelection: "runtimeMonitor")
                     ],
                     playbook: RecoveryPlaybook(
                         title: "Refresh runtime artifacts",
                         summary: "Regenerate and verify the deployed runtime state.",
                         steps: [
-                            RecoveryStep(title: "Verify all", summary: "Confirm clean compiles and fixtures.", command: "python3 Tools/fxai_testlab.py verify-all", destinationSelection: "runtimeMonitor")
+                            RecoveryStep(title: "Verify all", summary: "Confirm clean compiles and fixtures.", command: "python3 FXDataEngine/Tools/fxai_testlab.py verify-all", destinationSelection: "runtimeMonitor")
                         ]
                     )
                 ),
@@ -1704,13 +1704,13 @@ public enum GUIValidationFixtures {
                     title: "Research branch ready",
                     summary: "A continuous branch is available for operator review.",
                     actions: [
-                        IncidentAction(title: "Open Research OS", summary: "Inspect branch status and audit events", command: "python3 Tools/fxai_offline_lab.py dashboard", destinationSelection: "researchControl")
+                        IncidentAction(title: "Open Research OS", summary: "Inspect branch status and audit events", command: "python3 FXDataEngine/Tools/fxai_offline_lab.py dashboard", destinationSelection: "researchControl")
                     ],
                     playbook: RecoveryPlaybook(
                         title: "Review branch health",
                         summary: "Inspect recent Research OS branch and audit state.",
                         steps: [
-                            RecoveryStep(title: "Open Research OS", summary: "Review branch inventory.", command: "python3 Tools/fxai_offline_lab.py branch-inventory", destinationSelection: "researchControl")
+                            RecoveryStep(title: "Open Research OS", summary: "Review branch inventory.", command: "python3 FXDataEngine/Tools/fxai_offline_lab.py branch-inventory", destinationSelection: "researchControl")
                         ]
                     )
                 )
@@ -1854,7 +1854,7 @@ public enum GUIValidationFixtures {
                 KeyValueRecord(key: "currency_count", value: "2"),
             ],
             artifactPaths: [
-                KeyValueRecord(key: "snapshot_json", value: projectRoot.appendingPathComponent("Tools/OfflineLab/RatesEngine/rates_engine_status.json").path),
+                KeyValueRecord(key: "snapshot_json", value: projectRoot.appendingPathComponent("FXDataEngine/Tools/OfflineLab/RatesEngine/rates_engine_status.json").path),
             ]
         )
     }

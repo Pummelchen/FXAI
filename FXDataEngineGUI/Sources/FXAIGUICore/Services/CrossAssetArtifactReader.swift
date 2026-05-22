@@ -10,7 +10,7 @@ public struct CrossAssetArtifactReader {
 
         let runtimeSnapshotURL = runtimeDirectory.appendingPathComponent("cross_asset_snapshot.json", isDirectory: false)
         let statusURL = projectRoot
-            .appendingPathComponent("Tools/OfflineLab/CrossAsset", isDirectory: true)
+            .appendingPathComponent("FXDataEngine/Tools/OfflineLab/CrossAsset", isDirectory: true)
             .appendingPathComponent("cross_asset_status.json", isDirectory: false)
 
         guard let snapshot = parseJSON(runtimeSnapshotURL) else {

@@ -66,8 +66,8 @@ struct ProjectScannerTests {
         try FileManager.default.createDirectory(at: root.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Sequence", isDirectory: true), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("FXBacktest", isDirectory: true), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("FXDatabase", isDirectory: true), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("Tools/Baselines", isDirectory: true), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("Tools/OfflineLab/ResearchOS/test-profile", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXDataEngine/Tools/Baselines", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXDataEngine/Tools/OfflineLab/ResearchOS/test-profile", isDirectory: true), withIntermediateDirectories: true)
 
         try Data("// swift-tools-version: 6.3\n".utf8).write(to: root.appendingPathComponent("FXDataEngine/Package.swift"))
         try Data("// swift-tools-version: 6.3\n".utf8).write(to: root.appendingPathComponent("FXPlugins/Package.swift"))
@@ -91,7 +91,7 @@ struct ProjectScannerTests {
             )
             """.utf8
         ).write(to: root.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Sequence/SequenceFixture.swift"))
-        try Data("{\"plugins\":{}}".utf8).write(to: root.appendingPathComponent("Tools/Baselines/example.summary.json"))
+        try Data("{\"plugins\":{}}".utf8).write(to: root.appendingPathComponent("FXDataEngine/Tools/Baselines/example.summary.json"))
         try Data(
             """
             {
@@ -104,7 +104,7 @@ struct ProjectScannerTests {
               ]
             }
             """.utf8
-        ).write(to: root.appendingPathComponent("Tools/OfflineLab/ResearchOS/test-profile/live_deploy_EURUSD.json"))
+        ).write(to: root.appendingPathComponent("FXDataEngine/Tools/OfflineLab/ResearchOS/test-profile/live_deploy_EURUSD.json"))
         try Data(
             """
             {
@@ -116,7 +116,7 @@ struct ProjectScannerTests {
               ]
             }
             """.utf8
-        ).write(to: root.appendingPathComponent("Tools/OfflineLab/ResearchOS/test-profile/operator_dashboard.json"))
+        ).write(to: root.appendingPathComponent("FXDataEngine/Tools/OfflineLab/ResearchOS/test-profile/operator_dashboard.json"))
 
         return root
     }

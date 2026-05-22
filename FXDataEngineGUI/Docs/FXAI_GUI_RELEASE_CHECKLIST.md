@@ -6,7 +6,7 @@ Use this checklist when packaging the FXAI GUI for operator use.
 
 - `swift test`
 - `swift build`
-- `python3 ../FXAI/Tools/fxai_testlab.py verify-all`
+- `python3 ../FXDataEngine/Tools/fxai_testlab.py verify-all`
 - confirm the latest GUI state renders:
   - saved views
   - onboarding
