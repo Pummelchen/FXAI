@@ -62,7 +62,8 @@ public struct ExecutionQualityArtifactReader {
 
         let latest = replay["latest"] as? [String: Any] ?? [:]
         let latestState = latest["state"] as? [String: Any] ?? [:]
-        let reasons = splitSemicolonSeparated(values["reasons_csv"]).ifEmpty(latestState["reason_codes"] as? [String] ?? [])
+        let latestReasons = (latestState["reason_codes"] as? [String] ?? []).map(normalizedExecutionQualityReason)
+        let reasons = splitSemicolonSeparated(values["reasons_csv"]).ifEmpty(latestReasons)
 
         return ExecutionQualitySymbolSnapshot(
             symbol: symbol,
@@ -83,9 +84,21 @@ public struct ExecutionQualityArtifactReader {
             brokerCoverage: parseDouble(values["broker_coverage"]) ?? (latestState["broker_coverage"] as? Double) ?? 0,
             brokerRejectProbability: parseDouble(values["broker_reject_prob"]) ?? (latestState["broker_reject_prob"] as? Double) ?? 0,
             brokerPartialFillProbability: parseDouble(values["broker_partial_fill_prob"]) ?? (latestState["broker_partial_fill_prob"] as? Double) ?? 0,
-            spreadNowPoints: parseDouble(values["spread_now_points"]) ?? (latestState["spread_now_points"] as? Double) ?? 0,
-            spreadExpectedPoints: parseDouble(values["spread_expected_points"]) ?? (latestState["spread_expected_points"] as? Double) ?? 0,
-            spreadWideningRisk: parseDouble(values["spread_widening_risk"]) ?? (latestState["spread_widening_risk"] as? Double) ?? 0,
+            priceCostNowPoints: parseDouble(values["price_cost_now_points"])
+                ?? parseDouble(values["spread_now_points"])
+                ?? parseDouble(latestState["price_cost_now_points"])
+                ?? parseDouble(latestState["spread_now_points"])
+                ?? 0,
+            priceCostExpectedPoints: parseDouble(values["price_cost_expected_points"])
+                ?? parseDouble(values["spread_expected_points"])
+                ?? parseDouble(latestState["price_cost_expected_points"])
+                ?? parseDouble(latestState["spread_expected_points"])
+                ?? 0,
+            priceCostWideningRisk: parseDouble(values["price_cost_widening_risk"])
+                ?? parseDouble(values["spread_widening_risk"])
+                ?? parseDouble(latestState["price_cost_widening_risk"])
+                ?? parseDouble(latestState["spread_widening_risk"])
+                ?? 0,
             expectedSlippagePoints: parseDouble(values["expected_slippage_points"]) ?? (latestState["expected_slippage_points"] as? Double) ?? 0,
             slippageRisk: parseDouble(values["slippage_risk"]) ?? (latestState["slippage_risk"] as? Double) ?? 0,
             fillQualityScore: parseDouble(values["fill_quality_score"]) ?? (latestState["fill_quality_score"] as? Double) ?? 0,
@@ -102,7 +115,9 @@ public struct ExecutionQualityArtifactReader {
             replayTopReasons: namedCounts(replay["top_reasons"] as? [[String: Any]] ?? [], nameKey: "reason"),
             recentTransitions: parseTransitions(replay["recent_transitions"] as? [[String: Any]] ?? []),
             observationCount: replay["observations"] as? Int ?? 0,
-            maxSpreadWideningRisk: replay["max_spread_widening_risk"] as? Double ?? 0,
+            maxPriceCostWideningRisk: parseDouble(replay["max_price_cost_widening_risk"])
+                ?? parseDouble(replay["max_spread_widening_risk"])
+                ?? 0,
             maxSlippageRisk: replay["max_slippage_risk"] as? Double ?? 0,
             minExecutionQualityScore: replay["min_execution_quality_score"] as? Double ?? 0
         )
@@ -182,7 +197,7 @@ public struct ExecutionQualityArtifactReader {
         raw.compactMap { item in
             guard let key = item[nameKey] as? String else { return nil }
             let count = item["count"] as? Int ?? 0
-            return KeyValueRecord(key: key, value: "\(count)")
+            return KeyValueRecord(key: normalizedExecutionQualityReason(key), value: "\(count)")
         }
     }
 
@@ -192,6 +207,11 @@ public struct ExecutionQualityArtifactReader {
             .split(separator: ";")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+            .map(normalizedExecutionQualityReason)
+    }
+
+    private func normalizedExecutionQualityReason(_ reason: String) -> String {
+        reason == "SPREAD_ALREADY_ELEVATED" ? "PRICE_COST_ALREADY_ELEVATED" : reason
     }
 
     private func statePriority(_ value: String) -> Int {

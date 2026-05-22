@@ -36,9 +36,9 @@ public struct ExecutionQualitySymbolSnapshot: Identifiable, Hashable, Sendable {
     public let brokerCoverage: Double
     public let brokerRejectProbability: Double
     public let brokerPartialFillProbability: Double
-    public let spreadNowPoints: Double
-    public let spreadExpectedPoints: Double
-    public let spreadWideningRisk: Double
+    public let priceCostNowPoints: Double
+    public let priceCostExpectedPoints: Double
+    public let priceCostWideningRisk: Double
     public let expectedSlippagePoints: Double
     public let slippageRisk: Double
     public let fillQualityScore: Double
@@ -55,7 +55,7 @@ public struct ExecutionQualitySymbolSnapshot: Identifiable, Hashable, Sendable {
     public let replayTopReasons: [KeyValueRecord]
     public let recentTransitions: [ExecutionQualityTransition]
     public let observationCount: Int
-    public let maxSpreadWideningRisk: Double
+    public let maxPriceCostWideningRisk: Double
     public let maxSlippageRisk: Double
     public let minExecutionQualityScore: Double
 
@@ -78,9 +78,9 @@ public struct ExecutionQualitySymbolSnapshot: Identifiable, Hashable, Sendable {
         brokerCoverage: Double,
         brokerRejectProbability: Double,
         brokerPartialFillProbability: Double,
-        spreadNowPoints: Double,
-        spreadExpectedPoints: Double,
-        spreadWideningRisk: Double,
+        priceCostNowPoints: Double,
+        priceCostExpectedPoints: Double,
+        priceCostWideningRisk: Double,
         expectedSlippagePoints: Double,
         slippageRisk: Double,
         fillQualityScore: Double,
@@ -97,7 +97,7 @@ public struct ExecutionQualitySymbolSnapshot: Identifiable, Hashable, Sendable {
         replayTopReasons: [KeyValueRecord],
         recentTransitions: [ExecutionQualityTransition],
         observationCount: Int,
-        maxSpreadWideningRisk: Double,
+        maxPriceCostWideningRisk: Double,
         maxSlippageRisk: Double,
         minExecutionQualityScore: Double
     ) {
@@ -120,9 +120,9 @@ public struct ExecutionQualitySymbolSnapshot: Identifiable, Hashable, Sendable {
         self.brokerCoverage = brokerCoverage
         self.brokerRejectProbability = brokerRejectProbability
         self.brokerPartialFillProbability = brokerPartialFillProbability
-        self.spreadNowPoints = spreadNowPoints
-        self.spreadExpectedPoints = spreadExpectedPoints
-        self.spreadWideningRisk = spreadWideningRisk
+        self.priceCostNowPoints = priceCostNowPoints
+        self.priceCostExpectedPoints = priceCostExpectedPoints
+        self.priceCostWideningRisk = priceCostWideningRisk
         self.expectedSlippagePoints = expectedSlippagePoints
         self.slippageRisk = slippageRisk
         self.fillQualityScore = fillQualityScore
@@ -139,10 +139,22 @@ public struct ExecutionQualitySymbolSnapshot: Identifiable, Hashable, Sendable {
         self.replayTopReasons = replayTopReasons
         self.recentTransitions = recentTransitions
         self.observationCount = observationCount
-        self.maxSpreadWideningRisk = maxSpreadWideningRisk
+        self.maxPriceCostWideningRisk = maxPriceCostWideningRisk
         self.maxSlippageRisk = maxSlippageRisk
         self.minExecutionQualityScore = minExecutionQualityScore
     }
+
+    @available(*, deprecated, renamed: "priceCostNowPoints")
+    public var spreadNowPoints: Double { priceCostNowPoints }
+
+    @available(*, deprecated, renamed: "priceCostExpectedPoints")
+    public var spreadExpectedPoints: Double { priceCostExpectedPoints }
+
+    @available(*, deprecated, renamed: "priceCostWideningRisk")
+    public var spreadWideningRisk: Double { priceCostWideningRisk }
+
+    @available(*, deprecated, renamed: "maxPriceCostWideningRisk")
+    public var maxSpreadWideningRisk: Double { maxPriceCostWideningRisk }
 }
 
 public struct ExecutionQualitySnapshot: Sendable {

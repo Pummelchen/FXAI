@@ -36,9 +36,12 @@ struct ExecutionQualityArtifactReaderTests {
         broker_coverage\t0.710000
         broker_reject_prob\t0.190000
         broker_partial_fill_prob\t0.140000
-        spread_now_points\t1.300000
-        spread_expected_points\t2.800000
-        spread_widening_risk\t0.680000
+        spread_now_points\t9.300000
+        spread_expected_points\t9.800000
+        spread_widening_risk\t0.980000
+        price_cost_now_points\t1.300000
+        price_cost_expected_points\t2.800000
+        price_cost_widening_risk\t0.680000
         expected_slippage_points\t1.100000
         slippage_risk\t0.570000
         fill_quality_score\t0.490000
@@ -65,7 +68,7 @@ struct ExecutionQualityArtifactReaderTests {
                     "observations": 18,
                     "state_counts": ["CAUTION": 11, "NORMAL": 7],
                     "tier_counts": ["PAIR_REGIME": 12, "REGIME": 6],
-                    "max_spread_widening_risk": 0.79,
+                    "max_price_cost_widening_risk": 0.79,
                     "max_slippage_risk": 0.66,
                     "min_execution_quality_score": 0.39,
                     "top_reasons": [
@@ -124,8 +127,13 @@ struct ExecutionQualityArtifactReaderTests {
         #expect(snapshot.replayHoursBack == 48)
         #expect(snapshot.symbols.count == 1)
         #expect(snapshot.symbols.first?.executionState == "CAUTION")
-        #expect(snapshot.symbols.first?.spreadExpectedPoints == 2.8)
+        #expect(snapshot.symbols.first?.priceCostNowPoints == 1.3)
+        #expect(snapshot.symbols.first?.priceCostExpectedPoints == 2.8)
+        #expect(snapshot.symbols.first?.priceCostWideningRisk == 0.68)
+        #expect(snapshot.symbols.first?.maxPriceCostWideningRisk == 0.79)
+        #expect(snapshot.symbols.first?.reasons.contains("PRICE_COST_ALREADY_ELEVATED") == true)
         #expect(snapshot.symbols.first?.replayTopReasons.first?.key == "NEWS_WINDOW_ACTIVE")
+        #expect(snapshot.symbols.first?.replayTopReasons.dropFirst().first?.key == "PRICE_COST_ALREADY_ELEVATED")
         #expect(snapshot.symbols.first?.recentTransitions.first?.toValue == "CAUTION")
     }
 

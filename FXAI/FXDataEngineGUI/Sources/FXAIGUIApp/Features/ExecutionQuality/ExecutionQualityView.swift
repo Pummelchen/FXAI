@@ -26,7 +26,7 @@ struct ExecutionQualityView: View {
             VStack(alignment: .leading, spacing: 18) {
                 SectionHeader(
                     title: "Execution Quality",
-                    subtitle: "Inspect the live execution forecast that prices spread widening, slippage risk, fill quality, latency sensitivity, and liquidity fragility before the final trade gate commits capital."
+                    subtitle: "Inspect the live execution forecast that models price-cost widening, slippage risk, fill quality, latency sensitivity, and liquidity fragility before the final trade gate commits capital."
                 )
 
                 if let snapshot = model.executionQualitySnapshot, !snapshot.symbols.isEmpty {
@@ -141,7 +141,7 @@ struct ExecutionQualityView: View {
                             Text(percentString(symbolState.executionQualityScore))
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(stateTint(symbolState.executionState))
-                            Text(pointString(symbolState.spreadExpectedPoints))
+                            Text(pointString(symbolState.priceCostExpectedPoints))
                                 .font(.caption)
                                 .foregroundStyle(FXAITheme.textMuted)
                         }
@@ -162,7 +162,7 @@ struct ExecutionQualityView: View {
         VStack(alignment: .leading, spacing: 16) {
             if let selectedSymbol {
                 let bars = [
-                    ExecutionQualityRiskBar(id: "spread", label: "Spread Risk", value: selectedSymbol.spreadWideningRisk),
+                    ExecutionQualityRiskBar(id: "price-cost", label: "Price-Cost Risk", value: selectedSymbol.priceCostWideningRisk),
                     ExecutionQualityRiskBar(id: "slippage", label: "Slippage", value: selectedSymbol.slippageRisk),
                     ExecutionQualityRiskBar(id: "latency", label: "Latency", value: selectedSymbol.latencySensitivityScore),
                     ExecutionQualityRiskBar(id: "fragility", label: "Fragility", value: selectedSymbol.liquidityFragilityScore),
@@ -180,8 +180,8 @@ struct ExecutionQualityView: View {
 
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
                         detailMetric(title: "Quality", value: percentString(selectedSymbol.executionQualityScore), tint: qualityTint(for: selectedSymbol.executionQualityScore))
-                        detailMetric(title: "Spread Now", value: pointString(selectedSymbol.spreadNowPoints), tint: FXAITheme.accentSoft)
-                        detailMetric(title: "Spread Expected", value: pointString(selectedSymbol.spreadExpectedPoints), tint: FXAITheme.warning)
+                        detailMetric(title: "Price Cost Now", value: pointString(selectedSymbol.priceCostNowPoints), tint: FXAITheme.accentSoft)
+                        detailMetric(title: "Price Cost Expected", value: pointString(selectedSymbol.priceCostExpectedPoints), tint: FXAITheme.warning)
                         detailMetric(title: "Expected Slippage", value: pointString(selectedSymbol.expectedSlippagePoints), tint: FXAITheme.warning)
                         detailMetric(title: "Deviation", value: pointString(selectedSymbol.allowedDeviationPoints), tint: FXAITheme.accent)
                         detailMetric(title: "Lot Scale", value: String(format: "%.2fx", selectedSymbol.cautionLotScale), tint: FXAITheme.success)
@@ -283,7 +283,7 @@ struct ExecutionQualityView: View {
                         metricListCard(
                             title: "Replay Extremes",
                             values: [
-                                KeyValueRecord(key: "max_spread_widening_risk", value: percentString(selectedSymbol.maxSpreadWideningRisk)),
+                                KeyValueRecord(key: "max_price_cost_widening_risk", value: percentString(selectedSymbol.maxPriceCostWideningRisk)),
                                 KeyValueRecord(key: "max_slippage_risk", value: percentString(selectedSymbol.maxSlippageRisk)),
                                 KeyValueRecord(key: "min_execution_quality", value: percentString(selectedSymbol.minExecutionQualityScore)),
                             ]

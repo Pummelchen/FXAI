@@ -1010,9 +1010,9 @@ public enum GUIValidationFixtures {
             brokerCoverage: 0.71,
             brokerRejectProbability: 0.19,
             brokerPartialFillProbability: 0.14,
-            spreadNowPoints: 1.3,
-            spreadExpectedPoints: 2.8,
-            spreadWideningRisk: 0.68,
+            priceCostNowPoints: 1.3,
+            priceCostExpectedPoints: 2.8,
+            priceCostWideningRisk: 0.68,
             expectedSlippagePoints: 1.1,
             slippageRisk: 0.57,
             fillQualityScore: 0.49,
@@ -1025,7 +1025,7 @@ public enum GUIValidationFixtures {
             executionState: "CAUTION",
             reasons: [
                 "NEWS_WINDOW_ACTIVE",
-                "SPREAD_ALREADY_ELEVATED",
+                "PRICE_COST_ALREADY_ELEVATED",
                 "LATENCY_SENSITIVITY_HIGH",
             ],
             replayStateCounts: [
@@ -1038,13 +1038,13 @@ public enum GUIValidationFixtures {
             ],
             replayTopReasons: [
                 KeyValueRecord(key: "NEWS_WINDOW_ACTIVE", value: "9"),
-                KeyValueRecord(key: "SPREAD_ALREADY_ELEVATED", value: "7"),
+                KeyValueRecord(key: "PRICE_COST_ALREADY_ELEVATED", value: "7"),
             ],
             recentTransitions: [
                 ExecutionQualityTransition(type: "execution_state", fromValue: "NORMAL", toValue: "CAUTION", observedAt: now.addingTimeInterval(-900)),
             ],
             observationCount: 18,
-            maxSpreadWideningRisk: 0.79,
+            maxPriceCostWideningRisk: 0.79,
             maxSlippageRisk: 0.66,
             minExecutionQualityScore: 0.39
         )
@@ -1068,9 +1068,9 @@ public enum GUIValidationFixtures {
             brokerCoverage: 0.84,
             brokerRejectProbability: 0.07,
             brokerPartialFillProbability: 0.05,
-            spreadNowPoints: 1.1,
-            spreadExpectedPoints: 1.4,
-            spreadWideningRisk: 0.29,
+            priceCostNowPoints: 1.1,
+            priceCostExpectedPoints: 1.4,
+            priceCostWideningRisk: 0.29,
             expectedSlippagePoints: 0.4,
             slippageRisk: 0.22,
             fillQualityScore: 0.74,
@@ -1093,7 +1093,7 @@ public enum GUIValidationFixtures {
             ],
             recentTransitions: [],
             observationCount: 17,
-            maxSpreadWideningRisk: 0.42,
+            maxPriceCostWideningRisk: 0.42,
             maxSlippageRisk: 0.33,
             minExecutionQualityScore: 0.66
         )
@@ -1664,7 +1664,7 @@ public enum GUIValidationFixtures {
                     timeline: [
                         VisualizationTimelineEvent(category: "promotion", title: "Champion Promoted", detail: "ai_tft promoted for EURUSD", date: now.addingTimeInterval(-3600), score: 0.82)
                     ],
-                    weakScenarios: ["Macro shock cluster", "Late NY spread widening"]
+                    weakScenarios: ["Macro shock cluster", "Late NY price-cost widening"]
                 )
             ],
             globalTimeline: [
