@@ -91,6 +91,41 @@ public struct ReliabilityPendingQueue: Codable, Hashable, Sendable {
     }
 }
 
+public struct ReliabilityPendingOutcomeAction: Codable, Hashable, Sendable {
+    public var entry: ReliabilityPendingEntry
+    public var age: Int
+    public var predictionIndex: Int
+    public var futureIndex: Int
+    public var canEvaluate: Bool
+
+    public init(
+        entry: ReliabilityPendingEntry,
+        age: Int,
+        predictionIndex: Int,
+        futureIndex: Int,
+        canEvaluate: Bool
+    ) {
+        self.entry = entry
+        self.age = max(0, age)
+        self.predictionIndex = max(0, predictionIndex)
+        self.futureIndex = max(0, futureIndex)
+        self.canEvaluate = canEvaluate
+    }
+}
+
+public struct ReliabilityPendingResolution: Codable, Hashable, Sendable {
+    public var keptQueue: ReliabilityPendingQueue
+    public var outcomeActions: [ReliabilityPendingOutcomeAction]
+
+    public init(
+        keptQueue: ReliabilityPendingQueue,
+        outcomeActions: [ReliabilityPendingOutcomeAction] = []
+    ) {
+        self.keptQueue = keptQueue
+        self.outcomeActions = outcomeActions
+    }
+}
+
 public enum ModelReliabilityTools {
     public static func updatedReliability(
         currentReliability: Double,
@@ -218,6 +253,56 @@ public enum ModelReliabilityTools {
             }
         }
         return maximum
+    }
+
+    public static func resolvedPendingOutcomes(
+        _ queue: ReliabilityPendingQueue,
+        currentSignalSequence: Int,
+        availableBarCount: Int
+    ) -> ReliabilityPendingResolution {
+        guard currentSignalSequence >= 0 else {
+            return ReliabilityPendingResolution(keptQueue: queue)
+        }
+
+        let capacity = max(queue.capacity, 1)
+        let keepLimit = max(capacity - 1, 0)
+        var keptEntries: [ReliabilityPendingEntry] = []
+        var actions: [ReliabilityPendingOutcomeAction] = []
+
+        for entry in queue.activeEntries() {
+            let age = currentSignalSequence - entry.signalSequence
+            let horizon = TrainingSampleTools.clampHorizon(entry.horizonMinutes)
+            guard age >= horizon else {
+                if keptEntries.count < keepLimit {
+                    keptEntries.append(entry)
+                }
+                continue
+            }
+
+            let predictionIndex = age
+            let futureIndex = age - horizon
+            let canEvaluate = predictionIndex >= 0 &&
+                predictionIndex < availableBarCount &&
+                futureIndex >= 0 &&
+                futureIndex < availableBarCount
+            actions.append(ReliabilityPendingOutcomeAction(
+                entry: entry,
+                age: age,
+                predictionIndex: predictionIndex,
+                futureIndex: futureIndex,
+                canEvaluate: canEvaluate
+            ))
+        }
+
+        return ReliabilityPendingResolution(
+            keptQueue: ReliabilityPendingQueue(
+                head: 0,
+                tail: keptEntries.count,
+                entries: keptEntries,
+                capacity: capacity
+            ),
+            outcomeActions: actions
+        )
     }
 
     public static func voteWeight(aiIndex: Int, reliabilities: [Double]) -> Double {

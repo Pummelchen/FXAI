@@ -130,6 +130,86 @@ final class ModelReliabilityTests: XCTestCase {
         )
     }
 
+    func testReliabilityPendingResolutionConsumesAgedEntriesAndKeepsYoungEntries() {
+        var queue = ReliabilityPendingQueue(capacity: 5)
+        queue = ModelReliabilityTools.enqueuedPending(
+            queue,
+            signalSequence: 2,
+            signal: LabelClass.buy.rawValue,
+            regimeID: 1,
+            sessionBucket: 2,
+            expectedMovePoints: 4.0,
+            horizonMinutes: 5,
+            probabilities: [0.10, 0.70, 0.20]
+        )
+        queue = ModelReliabilityTools.enqueuedPending(
+            queue,
+            signalSequence: 10,
+            signal: LabelClass.sell.rawValue,
+            regimeID: 3,
+            sessionBucket: 1,
+            expectedMovePoints: 2.0,
+            horizonMinutes: 5,
+            probabilities: [0.70, 0.10, 0.20]
+        )
+        queue = ModelReliabilityTools.enqueuedPending(
+            queue,
+            signalSequence: 8,
+            signal: -1,
+            regimeID: 4,
+            sessionBucket: 0,
+            expectedMovePoints: 1.0,
+            horizonMinutes: 3,
+            probabilities: [0.20, 0.20, 0.60]
+        )
+
+        let resolution = ModelReliabilityTools.resolvedPendingOutcomes(
+            queue,
+            currentSignalSequence: 13,
+            availableBarCount: 14
+        )
+
+        XCTAssertEqual(resolution.keptQueue.activeEntries().map(\.signalSequence), [10])
+        XCTAssertEqual(resolution.outcomeActions.map { $0.entry.signalSequence }, [2, 8])
+        XCTAssertEqual(resolution.outcomeActions.map(\.age), [11, 5])
+        XCTAssertEqual(resolution.outcomeActions.map(\.predictionIndex), [11, 5])
+        XCTAssertEqual(resolution.outcomeActions.map(\.futureIndex), [6, 2])
+        XCTAssertEqual(resolution.outcomeActions.map(\.canEvaluate), [true, true])
+    }
+
+    func testReliabilityPendingResolutionDropsAgedEntriesWhenHistoryCannotEvaluate() {
+        var queue = ReliabilityPendingQueue(capacity: 4)
+        queue = ModelReliabilityTools.enqueuedPending(
+            queue,
+            signalSequence: 1,
+            signal: LabelClass.buy.rawValue,
+            regimeID: 1,
+            sessionBucket: 2,
+            expectedMovePoints: 4.0,
+            horizonMinutes: 5,
+            probabilities: [0.10, 0.70, 0.20]
+        )
+
+        let unchanged = ModelReliabilityTools.resolvedPendingOutcomes(
+            queue,
+            currentSignalSequence: -1,
+            availableBarCount: 0
+        )
+        XCTAssertEqual(unchanged.keptQueue.activeEntries().map(\.signalSequence), [1])
+        XCTAssertTrue(unchanged.outcomeActions.isEmpty)
+
+        let resolution = ModelReliabilityTools.resolvedPendingOutcomes(
+            queue,
+            currentSignalSequence: 7,
+            availableBarCount: 5
+        )
+        XCTAssertTrue(resolution.keptQueue.activeEntries().isEmpty)
+        XCTAssertEqual(resolution.outcomeActions.count, 1)
+        XCTAssertEqual(resolution.outcomeActions[0].predictionIndex, 6)
+        XCTAssertEqual(resolution.outcomeActions[0].futureIndex, 1)
+        XCTAssertFalse(resolution.outcomeActions[0].canEvaluate)
+    }
+
     func testVoteWeightClampsLikeLegacyAccessor() {
         XCTAssertEqual(ModelReliabilityTools.voteWeight(aiIndex: -1, reliabilities: [0.1]), 1.0, accuracy: 0.0)
         XCTAssertEqual(ModelReliabilityTools.voteWeight(aiIndex: 3, reliabilities: [0.1]), 1.0, accuracy: 0.0)
