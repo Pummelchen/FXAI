@@ -10,7 +10,9 @@ public struct RiskPolicyConfig: Codable, Hashable, Sendable {
     public var baseLot: Double
     public var positionSizing: RiskPositionSizing
     public var riskPerTradePct: Double
+    public var riskTargetMovePoints: Double
     public var evThresholdPoints: Double
+    public var maxPortfolioPressure: Double
     public var minConfidence: Double
     public var minReliability: Double
     public var maxPathRisk: Double
@@ -29,7 +31,9 @@ public struct RiskPolicyConfig: Codable, Hashable, Sendable {
         baseLot: Double = 0.01,
         positionSizing: RiskPositionSizing = .conviction,
         riskPerTradePct: Double = 0.35,
+        riskTargetMovePoints: Double = 12.0,
         evThresholdPoints: Double = 0.0,
+        maxPortfolioPressure: Double = 0.78,
         minConfidence: Double = 0.52,
         minReliability: Double = 0.48,
         maxPathRisk: Double = 0.72,
@@ -47,7 +51,9 @@ public struct RiskPolicyConfig: Codable, Hashable, Sendable {
         self.baseLot = max(0.0, fxSafeFinite(baseLot))
         self.positionSizing = positionSizing
         self.riskPerTradePct = max(0.0, fxSafeFinite(riskPerTradePct))
+        self.riskTargetMovePoints = riskTargetMovePoints
         self.evThresholdPoints = max(0.0, fxSafeFinite(evThresholdPoints))
+        self.maxPortfolioPressure = maxPortfolioPressure
         self.minConfidence = minConfidence
         self.minReliability = minReliability
         self.maxPathRisk = maxPathRisk
@@ -146,6 +152,41 @@ public struct RiskBudgetInput: Codable, Hashable, Sendable {
     }
 }
 
+public struct RiskPortfolioExposureState: Codable, Hashable, Sendable {
+    public var grossExposureLots: Double
+    public var correlatedExposureLots: Double
+    public var directionalClusterLots: Double
+    public var maxPortfolioExposureLots: Double
+    public var maxCorrelatedExposureLots: Double
+    public var maxDirectionalClusterLots: Double
+
+    public init(
+        grossExposureLots: Double = 0.0,
+        correlatedExposureLots: Double = 0.0,
+        directionalClusterLots: Double = 0.0,
+        maxPortfolioExposureLots: Double = 0.0,
+        maxCorrelatedExposureLots: Double = 0.0,
+        maxDirectionalClusterLots: Double = 0.0
+    ) {
+        self.grossExposureLots = grossExposureLots
+        self.correlatedExposureLots = correlatedExposureLots
+        self.directionalClusterLots = directionalClusterLots
+        self.maxPortfolioExposureLots = maxPortfolioExposureLots
+        self.maxCorrelatedExposureLots = maxCorrelatedExposureLots
+        self.maxDirectionalClusterLots = maxDirectionalClusterLots
+    }
+}
+
+public struct RiskPortfolioPressureResult: Codable, Hashable, Sendable {
+    public var pressure: Double
+    public var controlPlaneScore: Double
+
+    public init(pressure: Double = 0.0, controlPlaneScore: Double = 0.0) {
+        self.pressure = pressure
+        self.controlPlaneScore = controlPlaneScore
+    }
+}
+
 public struct RiskPolicyDecision: Codable, Hashable, Sendable {
     public var allowed: Bool
     public var reason: String
@@ -176,6 +217,76 @@ public struct RiskSizingResult: Codable, Hashable, Sendable {
 }
 
 public enum RiskPolicyTools {
+    public static func estimatedRiskPoints(config: RiskPolicyConfig, signal: RiskPolicySignalState) -> Double {
+        let baseCost = max(signal.minMovePoints, 0.25)
+        let expectedMove = max(signal.expectedMovePoints, baseCost)
+        let configuredTarget = max(config.riskTargetMovePoints, 0.0)
+        var riskPoints = baseCost +
+            expectedMove * (0.45 + 0.65 * fxClamp(signal.pathRisk, 0.0, 1.0)) +
+            baseCost * (0.25 + 0.50 * fxClamp(signal.fillRisk, 0.0, 1.0))
+        if configuredTarget > 0.0, configuredTarget > riskPoints {
+            riskPoints = configuredTarget
+        }
+        if !riskPoints.isFinite || riskPoints <= 0.0 {
+            riskPoints = max(configuredTarget, baseCost)
+        }
+        return max(riskPoints, 0.25)
+    }
+
+    public static func portfolioPressure(
+        exposure: RiskPortfolioExposureState,
+        signal: RiskPolicySignalState,
+        deployment: LiveDeploymentProfile = LiveDeploymentProfile(),
+        aggregate: ControlPlaneAggregate = ControlPlaneAggregate(),
+        supervisor: PortfolioSupervisorProfile = PortfolioSupervisorProfile(),
+        serviceState: SupervisorServiceState = SupervisorServiceState(),
+        direction: Int,
+        macroEventLeakageSafe: Bool = false,
+        supervisorScore explicitSupervisorScore: Double? = nil,
+        serviceScore explicitServiceScore: Double? = nil
+    ) -> RiskPortfolioPressureResult {
+        let portfolioCap = max(exposure.maxPortfolioExposureLots, 0.0)
+        let corrCap = max(exposure.maxCorrelatedExposureLots, 0.0)
+        let dirCap = max(exposure.maxDirectionalClusterLots, 0.0)
+        let grossRatio = portfolioCap > 1e-9 ? exposure.grossExposureLots / portfolioCap : 0.0
+        let corrRatio = corrCap > 1e-9 ? exposure.correlatedExposureLots / corrCap : 0.0
+        let dirRatio = dirCap > 1e-9 ? exposure.directionalClusterLots / dirCap : 0.0
+        let hierarchyPenalty = 1.0 - fxClamp(signal.hierarchyScore, 0.0, 1.0)
+        let macroPenalty = macroEventLeakageSafe ? (1.0 - fxClamp(signal.macroStateQuality, 0.0, 1.0)) : 0.0
+        let supervisorScore = explicitSupervisorScore ??
+            ControlPlaneScoring.portfolioSupervisorScore(direction: direction, aggregate: aggregate, profile: supervisor)
+        let serviceScore = explicitServiceScore ??
+            ControlPlaneScoring.supervisorServiceScore(direction: direction, state: serviceState)
+        let supervisorBlend = fxClamp(
+            0.55 * fxClamp(supervisor.supervisorWeight, 0.0, 1.0) +
+                0.45 * fxClamp(deployment.supervisorBlend, 0.0, 1.0),
+            0.0,
+            1.0
+        )
+        let controlPlaneScore = fxClamp(
+            (1.0 - supervisorBlend) * aggregate.score +
+                0.55 * supervisorBlend * supervisorScore +
+                0.45 * supervisorBlend * serviceScore,
+            0.0,
+            3.0
+        )
+        let pressure = fxClamp(
+            0.30 * fxClamp(grossRatio / max(supervisor.grossBudgetBias, 0.40), 0.0, 2.0) +
+                0.28 * fxClamp(corrRatio, 0.0, 2.0) +
+                0.22 * fxClamp(dirRatio, 0.0, 2.0) +
+                0.12 * fxClamp(aggregate.score, 0.0, 1.5) +
+                0.08 * fxClamp(supervisorScore, 0.0, 1.5) +
+                0.08 * fxClamp(serviceScore, 0.0, 1.5) +
+                0.06 * fxClamp(aggregate.macroOverlap, 0.0, 1.0) +
+                0.06 * fxClamp(serviceState.macroPressure, 0.0, 1.0) +
+                0.10 * hierarchyPenalty +
+                0.06 * macroPenalty,
+            0.0,
+            1.5
+        )
+        return RiskPortfolioPressureResult(pressure: pressure, controlPlaneScore: controlPlaneScore)
+    }
+
     public static func regimeKillSwitch(
         config: RiskPolicyConfig,
         signal: RiskPolicySignalState
@@ -328,7 +439,8 @@ public enum RiskPolicyTools {
         config: RiskPolicyConfig,
         signal: RiskPolicySignalState,
         conviction: Double,
-        budget: RiskBudgetInput? = nil
+        budget: RiskBudgetInput? = nil,
+        portfolioPressure: Double? = nil
     ) -> RiskSizingResult {
         var requestedLot = config.baseLot
         var hardCapLot = 1_000_000.0
@@ -361,6 +473,10 @@ public enum RiskPolicyTools {
 
         if signal.tradeEdgePoints < max(config.evThresholdPoints * 0.50, 0.0) {
             return RiskSizingResult(requestedLot: 0.0, hardCapLot: hardCapLot, riskBudgetLot: riskBudgetLot, reason: "risk_edge_floor")
+        }
+        if let portfolioPressure,
+           portfolioPressure > fxClamp(config.maxPortfolioPressure, 0.0, 1.5) {
+            return RiskSizingResult(requestedLot: 0.0, hardCapLot: hardCapLot, riskBudgetLot: riskBudgetLot, reason: "risk_portfolio_pressure")
         }
         if requestedLot > hardCapLot + 1e-9 {
             return RiskSizingResult(requestedLot: 0.0, hardCapLot: hardCapLot, riskBudgetLot: riskBudgetLot, reason: "risk_min_volume_cap")

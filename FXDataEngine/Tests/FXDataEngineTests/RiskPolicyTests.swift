@@ -174,5 +174,66 @@ final class RiskPolicyTests: XCTestCase {
         let blocked = RiskPolicyTools.sizingResult(config: convictionConfig, signal: signal, conviction: 0.50, budget: budget)
         XCTAssertEqual(blocked.requestedLot, 0.0)
         XCTAssertEqual(blocked.reason, "risk_edge_floor")
+
+        signal.tradeEdgePoints = 20.0
+        let pressureBlocked = RiskPolicyTools.sizingResult(
+            config: RiskPolicyConfig(baseLot: 0.10, maxPortfolioPressure: 0.78),
+            signal: signal,
+            conviction: 0.50,
+            budget: budget,
+            portfolioPressure: 0.80
+        )
+        XCTAssertEqual(pressureBlocked.requestedLot, 0.0)
+        XCTAssertEqual(pressureBlocked.reason, "risk_portfolio_pressure")
+    }
+
+    func testEstimatedRiskPointsMatchLegacyFallbackAndConfiguredTarget() {
+        let signal = RiskPolicySignalState(
+            pathRisk: 0.50,
+            fillRisk: 0.25,
+            minMovePoints: 2.0,
+            expectedMovePoints: 10.0
+        )
+
+        XCTAssertEqual(
+            RiskPolicyTools.estimatedRiskPoints(config: RiskPolicyConfig(riskTargetMovePoints: 0.0), signal: signal),
+            10.5,
+            accuracy: 1e-12
+        )
+        XCTAssertEqual(
+            RiskPolicyTools.estimatedRiskPoints(config: RiskPolicyConfig(riskTargetMovePoints: 12.0), signal: signal),
+            12.0,
+            accuracy: 1e-12
+        )
+    }
+
+    func testPortfolioPressureUsesPreparedExposureAndControlPlaneInputs() {
+        var aggregate = ControlPlaneAggregate()
+        aggregate.score = 0.40
+        aggregate.macroOverlap = 0.30
+
+        var service = SupervisorServiceState()
+        service.macroPressure = 0.20
+
+        let result = RiskPolicyTools.portfolioPressure(
+            exposure: RiskPortfolioExposureState(
+                grossExposureLots: 0.15,
+                correlatedExposureLots: 0.10,
+                directionalClusterLots: 0.09,
+                maxPortfolioExposureLots: 0.30,
+                maxCorrelatedExposureLots: 0.20,
+                maxDirectionalClusterLots: 0.18
+            ),
+            signal: RiskPolicySignalState(hierarchyScore: 0.80, macroStateQuality: 0.70),
+            aggregate: aggregate,
+            serviceState: service,
+            direction: 1,
+            macroEventLeakageSafe: true,
+            supervisorScore: 0.20,
+            serviceScore: 0.10
+        )
+
+        XCTAssertEqual(result.pressure, 0.54, accuracy: 1e-12)
+        XCTAssertEqual(result.controlPlaneScore, 0.28975, accuracy: 1e-12)
     }
 }
