@@ -23,6 +23,7 @@ public enum FXDataEngineConstants {
     public static let analogMemoryFeatures = 12
     public static let analogMemoryMinMatches = 3
     public static let pluginHorizonBuckets = 8
+    public static let pluginReplaySteps = 2
     public static let sharedTransferHorizonBuckets = pluginHorizonBuckets
     public static let sharedTransferFeatures = 28
     public static let sharedTransferLatent = 12
