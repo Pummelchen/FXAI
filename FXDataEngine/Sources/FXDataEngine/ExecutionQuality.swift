@@ -249,6 +249,55 @@ public struct ExecutionQualityTierSelection: Codable, Hashable, Sendable {
     }
 }
 
+public struct ExecutionQualityPolicyInputs: Codable, Hashable, Sendable {
+    public var symbol: String
+    public var generatedAtUTC: Int64
+    public var sessionLabel: String?
+    public var regimeLabel: String?
+    public var priceCostPredictedPoints: Double
+    public var horizonMinutes: Int
+    public var upstreamDecision: Int
+    public var pathRisk: Double
+    public var fillRisk: Double
+    public var newsState: NewsPulsePairState
+    public var ratesState: RatesEnginePairState
+    public var crossAssetState: CrossAssetPairState
+    public var microstructureState: MicrostructurePairState
+    public var brokerStats: BrokerExecutionStats
+
+    public init(
+        symbol: String,
+        generatedAtUTC: Int64,
+        sessionLabel: String? = nil,
+        regimeLabel: String? = nil,
+        priceCostPredictedPoints: Double = 0.0,
+        horizonMinutes: Int = 1,
+        upstreamDecision: Int = 2,
+        pathRisk: Double = 0.0,
+        fillRisk: Double = 0.0,
+        newsState: NewsPulsePairState = .reset,
+        ratesState: RatesEnginePairState = .reset,
+        crossAssetState: CrossAssetPairState = .reset,
+        microstructureState: MicrostructurePairState = .reset,
+        brokerStats: BrokerExecutionStats = BrokerExecutionStats()
+    ) {
+        self.symbol = symbol.uppercased()
+        self.generatedAtUTC = max(0, generatedAtUTC)
+        self.sessionLabel = sessionLabel
+        self.regimeLabel = regimeLabel
+        self.priceCostPredictedPoints = max(0.0, fxSafeFinite(priceCostPredictedPoints))
+        self.horizonMinutes = max(1, horizonMinutes)
+        self.upstreamDecision = upstreamDecision
+        self.pathRisk = fxClamp(pathRisk, 0.0, 1.0)
+        self.fillRisk = fxClamp(fillRisk, 0.0, 1.0)
+        self.newsState = newsState
+        self.ratesState = ratesState
+        self.crossAssetState = crossAssetState
+        self.microstructureState = microstructureState
+        self.brokerStats = brokerStats
+    }
+}
+
 public struct ExecutionQualityPairState: Codable, Hashable, Sendable {
     public var ready: Bool
     public var available: Bool
@@ -257,7 +306,10 @@ public struct ExecutionQualityPairState: Codable, Hashable, Sendable {
     public var memoryStale: Bool
     public var dataStale: Bool
     public var supportUsable: Bool
+    public var newsWindowActive: Bool
+    public var ratesRepricingActive: Bool
     public var generatedAt: Int64
+    public var symbol: String
     public var method: String
     public var sessionLabel: String
     public var regimeLabel: String
@@ -265,6 +317,9 @@ public struct ExecutionQualityPairState: Codable, Hashable, Sendable {
     public var selectedTierKey: String
     public var selectedSupport: Int
     public var selectedQuality: Double
+    public var brokerCoverage: Double
+    public var brokerRejectProbability: Double
+    public var brokerPartialFillProbability: Double
     public var spreadNowPoints: Double
     public var spreadExpectedPoints: Double
     public var spreadWideningRisk: Double
@@ -288,7 +343,10 @@ public struct ExecutionQualityPairState: Codable, Hashable, Sendable {
         memoryStale: Bool = true,
         dataStale: Bool = true,
         supportUsable: Bool = false,
+        newsWindowActive: Bool = false,
+        ratesRepricingActive: Bool = false,
         generatedAt: Int64 = 0,
+        symbol: String = "",
         method: String = "SCORECARD_V1",
         sessionLabel: String = "UNKNOWN",
         regimeLabel: String = "UNKNOWN",
@@ -296,6 +354,9 @@ public struct ExecutionQualityPairState: Codable, Hashable, Sendable {
         selectedTierKey: String = "GLOBAL|*|*|*",
         selectedSupport: Int = 0,
         selectedQuality: Double = 0.0,
+        brokerCoverage: Double = 0.0,
+        brokerRejectProbability: Double = 0.0,
+        brokerPartialFillProbability: Double = 0.0,
         spreadNowPoints: Double = 0.0,
         spreadExpectedPoints: Double = 0.0,
         spreadWideningRisk: Double = 0.0,
@@ -318,7 +379,10 @@ public struct ExecutionQualityPairState: Codable, Hashable, Sendable {
         self.memoryStale = memoryStale
         self.dataStale = dataStale
         self.supportUsable = supportUsable
+        self.newsWindowActive = newsWindowActive
+        self.ratesRepricingActive = ratesRepricingActive
         self.generatedAt = max(0, generatedAt)
+        self.symbol = symbol.uppercased()
         self.method = method
         self.sessionLabel = sessionLabel
         self.regimeLabel = regimeLabel
@@ -326,6 +390,9 @@ public struct ExecutionQualityPairState: Codable, Hashable, Sendable {
         self.selectedTierKey = selectedTierKey
         self.selectedSupport = selectedSupport
         self.selectedQuality = selectedQuality
+        self.brokerCoverage = fxClamp(brokerCoverage, 0.0, 1.0)
+        self.brokerRejectProbability = fxClamp(brokerRejectProbability, 0.0, 1.0)
+        self.brokerPartialFillProbability = fxClamp(brokerPartialFillProbability, 0.0, 1.0)
         self.spreadNowPoints = spreadNowPoints
         self.spreadExpectedPoints = spreadExpectedPoints
         self.spreadWideningRisk = spreadWideningRisk
@@ -423,6 +490,8 @@ public enum ExecutionQualityTools {
             state.ready = true
 
             switch key {
+            case "symbol":
+                state.symbol = value
             case "generated_at":
                 state.generatedAt = Int64(value) ?? 0
             case "method":
@@ -447,6 +516,16 @@ public enum ExecutionQualityTools {
                 state.dataStale = (Int(value) ?? 0) != 0
             case "support_usable":
                 state.supportUsable = (Int(value) ?? 0) != 0
+            case "news_window_active":
+                state.newsWindowActive = (Int(value) ?? 0) != 0
+            case "rates_repricing_active":
+                state.ratesRepricingActive = (Int(value) ?? 0) != 0
+            case "broker_coverage":
+                state.brokerCoverage = Double(value) ?? 0.0
+            case "broker_reject_prob":
+                state.brokerRejectProbability = Double(value) ?? 0.0
+            case "broker_partial_fill_prob":
+                state.brokerPartialFillProbability = Double(value) ?? 0.0
             case "spread_now_points":
                 state.spreadNowPoints = Double(value) ?? 0.0
             case "spread_expected_points":
@@ -631,6 +710,310 @@ public enum ExecutionQualityTools {
         return ExecutionQualityMemory(generatedAt: generatedAt, defaultMethod: method, tiers: tiers)
     }
 
+    public static func applyPolicy(
+        config: ExecutionQualityConfig,
+        memory: ExecutionQualityMemory,
+        profile: ExecutionProfile,
+        inputs: ExecutionQualityPolicyInputs
+    ) -> ExecutionQualityPairState {
+        var state = ExecutionQualityPairState.reset
+        state.method = memory.defaultMethod
+        state.symbol = inputs.symbol
+        state.generatedAt = inputs.generatedAtUTC
+        state.sessionLabel = resolvedSessionLabel(
+            explicit: inputs.sessionLabel,
+            news: inputs.newsState,
+            microstructure: inputs.microstructureState
+        )
+        state.regimeLabel = resolvedRegimeLabel(explicit: inputs.regimeLabel)
+        state.newsWindowActive = newsWindowActive(inputs.newsState)
+        state.ratesRepricingActive = ratesRepricingActive(inputs.ratesState)
+        guard config.enabled else { return state }
+
+        let selection = selectTier(
+            symbol: inputs.symbol,
+            session: state.sessionLabel,
+            regime: state.regimeLabel,
+            config: config,
+            memory: memory
+        )
+        let tier = selection.tier
+        state.selectedTierKind = tier.kind
+        state.selectedTierKey = tier.key
+        state.selectedSupport = tier.support
+        state.selectedQuality = fxClamp(tier.quality, 0.0, 1.0)
+        state.fallbackUsed = selection.fallbackUsed
+
+        let newsStale = inputs.newsState.ready && inputs.newsState.available && inputs.newsState.stale
+        let ratesStale = inputs.ratesState.ready && inputs.ratesState.available && inputs.ratesState.stale
+        let crossStale = inputs.crossAssetState.ready && inputs.crossAssetState.available && inputs.crossAssetState.stale
+        let microStale = inputs.microstructureState.ready && inputs.microstructureState.available && inputs.microstructureState.stale
+        let staleContextCount = [newsStale, ratesStale, crossStale, microStale].filter { $0 }.count
+
+        state.memoryStale = memory.generatedAt <= 0 ||
+            (config.memoryStaleAfterHours > 0 &&
+                state.generatedAt > 0 &&
+                (state.generatedAt - memory.generatedAt) > Int64(config.memoryStaleAfterHours * 3_600))
+        state.spreadNowPoints = max(inputs.priceCostPredictedPoints, 0.0)
+        state.brokerCoverage = fxClamp(inputs.brokerStats.coverage, 0.0, 1.0)
+        state.brokerRejectProbability = fxClamp(inputs.brokerStats.rejectProbability, 0.0, 1.0)
+        state.brokerPartialFillProbability = fxClamp(
+            max(
+                inputs.brokerStats.partialFillProbability,
+                1.0 - fxClamp(inputs.brokerStats.fillRatioMean, 0.0, 1.0)
+            ),
+            0.0,
+            1.0
+        )
+        state.supportUsable = selection.supportUsable && state.brokerCoverage >= 0.05
+        state.dataStale = state.memoryStale ||
+            state.spreadNowPoints <= 0.0 ||
+            (config.blockOnUnknown && staleContextCount > 0)
+
+        let newsRisk = inputs.newsState.ready && inputs.newsState.available
+            ? fxClamp(inputs.newsState.newsRiskScore, 0.0, 1.0)
+            : (newsStale ? 0.45 : 0.12)
+        let ratesRisk = inputs.ratesState.ready && inputs.ratesState.available
+            ? fxClamp(inputs.ratesState.ratesRiskScore, 0.0, 1.0)
+            : (ratesStale ? 0.32 : 0.10)
+        let crossRisk = inputs.crossAssetState.ready && inputs.crossAssetState.available
+            ? fxClamp(
+                max(
+                    inputs.crossAssetState.pairCrossAssetRiskScore,
+                    max(
+                        inputs.crossAssetState.usdLiquidityStressScore,
+                        inputs.crossAssetState.crossAssetDislocationScore
+                    )
+                ),
+                0.0,
+                1.0
+            )
+            : (crossStale ? 0.34 : 0.12)
+        let microHostile = inputs.microstructureState.ready && inputs.microstructureState.available
+            ? fxClamp(inputs.microstructureState.hostileExecutionScore, 0.0, 1.0)
+            : (microStale ? 0.42 : 0.10)
+        let microLiquidity = inputs.microstructureState.ready && inputs.microstructureState.available
+            ? fxClamp(inputs.microstructureState.liquidityStressScore, 0.0, 1.0)
+            : (microStale ? 0.44 : 0.12)
+        let priceCostZNorm = inputs.microstructureState.ready && inputs.microstructureState.available
+            ? fxClamp(inputs.microstructureState.spreadZscore60s / 4.0, 0.0, 1.0)
+            : 0.0
+        let volatilityBurstNorm = inputs.microstructureState.ready && inputs.microstructureState.available
+            ? fxClamp(inputs.microstructureState.volBurstScore5m / 3.0, 0.0, 1.0)
+            : 0.0
+        let tickRateNorm = inputs.microstructureState.ready && inputs.microstructureState.available
+            ? fxClamp(inputs.microstructureState.tickRateZscore60s / 3.0, 0.0, 1.0)
+            : 0.0
+        let tickImbalanceNorm = inputs.microstructureState.ready && inputs.microstructureState.available
+            ? fxClamp(abs(inputs.microstructureState.tickImbalance30s), 0.0, 1.0)
+            : 0.0
+        let thinness = sessionThinness(
+            sessionLabel: state.sessionLabel,
+            handoffFlag: inputs.microstructureState.ready &&
+                inputs.microstructureState.available &&
+                inputs.microstructureState.handoffFlag
+        )
+        let staleNorm = fxClamp(Double(staleContextCount) / 3.0, 0.0, 1.0)
+        let supportShortfall = fxClamp(
+            Double(config.supportSoftFloor - tier.support) / Double(max(config.supportSoftFloor, 1)),
+            0.0,
+            1.0
+        )
+        let brokerBurst = fxClamp(inputs.brokerStats.eventBurstPenalty, 0.0, 1.0)
+        let brokerLatencyNorm = fxClamp(inputs.brokerStats.latencyPoints / 5.0, 0.0, 1.0)
+
+        state.spreadWideningRisk = fxClamp(
+            0.10 +
+                config.weightPriceCostZScore * priceCostZNorm +
+                config.weightNewsRisk * newsRisk +
+                config.weightRatesRisk * ratesRisk +
+                0.12 * crossRisk +
+                config.weightMicroLiquidity * microLiquidity +
+                config.weightVolatilityBurst * volatilityBurstNorm +
+                config.weightSessionThinness * thinness +
+                config.weightBrokerReject * state.brokerRejectProbability * 0.45 +
+                config.weightBrokerPartial * state.brokerPartialFillProbability * 0.40 +
+                config.weightBrokerEventBurst * brokerBurst +
+                config.weightStaleContext * staleNorm +
+                (state.newsWindowActive ? 0.08 : 0.0) +
+                (state.ratesRepricingActive ? 0.05 : 0.0) -
+                0.10 * state.selectedQuality,
+            0.0,
+            1.0
+        )
+
+        let expectedCostMultiplier = fxClamp(
+            0.96 +
+                0.38 * tier.priceCostMultiplier +
+                0.64 * state.spreadWideningRisk +
+                0.14 * priceCostZNorm +
+                0.06 * thinness,
+            1.0,
+            config.capExpectedPriceCostMultiplier
+        )
+        state.spreadExpectedPoints = max(
+            state.spreadNowPoints,
+            state.spreadNowPoints * expectedCostMultiplier +
+                0.12 * max(inputs.brokerStats.slippagePoints, 0.0)
+        )
+
+        state.expectedSlippagePoints = fxClamp(
+            max(inputs.brokerStats.slippagePoints, 0.0) * tier.slippageMultiplier +
+                0.16 * state.spreadExpectedPoints +
+                0.55 * microHostile +
+                0.38 * volatilityBurstNorm +
+                0.26 * thinness +
+                0.24 * newsRisk +
+                0.18 * ratesRisk +
+                0.22 * crossRisk +
+                0.28 * brokerBurst +
+                0.32 * state.brokerRejectProbability +
+                0.30 * state.brokerPartialFillProbability +
+                0.18 * brokerLatencyNorm * tier.latencyMultiplier,
+            0.0,
+            config.capExpectedSlippagePoints
+        )
+
+        state.slippageRisk = fxClamp(
+            0.12 +
+                0.24 * fxClamp(
+                    state.expectedSlippagePoints / max(state.spreadExpectedPoints + 0.5, 1.0),
+                    0.0,
+                    3.0
+                ) / 3.0 +
+                0.18 * microHostile +
+                0.12 * volatilityBurstNorm +
+                0.12 * newsRisk +
+                0.08 * ratesRisk +
+                0.10 * brokerBurst +
+                0.12 * state.brokerRejectProbability +
+                0.10 * state.brokerPartialFillProbability,
+            0.0,
+            1.0
+        )
+
+        state.latencySensitivityScore = fxClamp(
+            0.14 +
+                0.22 * tickRateNorm +
+                0.18 * volatilityBurstNorm +
+                0.16 * newsRisk +
+                0.10 * ratesRisk +
+                0.08 * crossRisk +
+                0.12 * brokerLatencyNorm * tier.latencyMultiplier +
+                0.08 * microHostile +
+                0.08 * thinness +
+                0.06 * tickImbalanceNorm,
+            0.0,
+            1.0
+        )
+
+        state.liquidityFragilityScore = fxClamp(
+            0.10 +
+                0.26 * microLiquidity * tier.fragilityMultiplier +
+                0.16 * microHostile +
+                0.12 * priceCostZNorm +
+                0.08 * newsRisk +
+                0.08 * ratesRisk +
+                0.12 * crossRisk +
+                0.12 * state.brokerPartialFillProbability +
+                0.10 * state.brokerRejectProbability +
+                0.10 * thinness +
+                0.06 * brokerBurst -
+                0.08 * state.selectedQuality,
+            0.0,
+            1.0
+        )
+
+        state.fillQualityScore = fxClamp(
+            0.86 +
+                tier.fillQualityBias -
+                0.28 * state.slippageRisk -
+                0.24 * state.latencySensitivityScore -
+                0.22 * state.liquidityFragilityScore -
+                0.14 * state.brokerRejectProbability -
+                0.12 * state.brokerPartialFillProbability -
+                0.08 * thinness,
+            0.0,
+            1.0
+        )
+
+        state.executionQualityScore = fxClamp(
+            0.40 * state.fillQualityScore +
+                0.18 * (1.0 - state.spreadWideningRisk) +
+                0.18 * (1.0 - state.slippageRisk) +
+                0.12 * (1.0 - state.latencySensitivityScore) +
+                0.12 * (1.0 - state.liquidityFragilityScore) -
+                config.weightStaleContext * 0.80 * staleNorm -
+                config.weightSupportShortfall * supportShortfall,
+            0.0,
+            1.0
+        )
+
+        let blockThreshold = config.thresholdStressedMin * 0.72
+        if state.dataStale && config.blockOnUnknown {
+            state.executionState = "BLOCKED"
+        } else if config.allowBlockState &&
+            (state.executionQualityScore < blockThreshold ||
+                state.spreadWideningRisk >= 0.90 ||
+                state.slippageRisk >= 0.90 ||
+                state.fillQualityScore <= 0.20) {
+            state.executionState = "BLOCKED"
+        } else if state.executionQualityScore < config.thresholdStressedMin {
+            state.executionState = "STRESSED"
+        } else if state.executionQualityScore < config.thresholdCautionMin {
+            state.executionState = "CAUTION"
+        } else {
+            state.executionState = "NORMAL"
+        }
+
+        let baseDeviation = ExecutionReplayTools.allowedDeviationPoints(
+            profile: profile,
+            pathRisk: inputs.pathRisk,
+            fillRisk: inputs.fillRisk
+        )
+        state.allowedDeviationPoints = fxClamp(
+            baseDeviation *
+                tier.deviationMultiplier *
+                (1.0 +
+                    0.14 * state.spreadWideningRisk +
+                    0.18 * state.slippageRisk +
+                    0.10 * state.latencySensitivityScore),
+            config.capAllowedDeviationPointsMin,
+            config.capAllowedDeviationPointsMax
+        )
+
+        switch state.executionState {
+        case "BLOCKED":
+            state.cautionLotScale = config.lotScaleBlocked
+            state.cautionEnterProbabilityBuffer = config.enterProbabilityBufferBlocked
+        case "STRESSED":
+            state.cautionLotScale = config.lotScaleStressed
+            state.cautionEnterProbabilityBuffer = config.enterProbabilityBufferStressed
+        case "CAUTION":
+            state.cautionLotScale = config.lotScaleCaution
+            state.cautionEnterProbabilityBuffer = config.enterProbabilityBufferCaution
+        default:
+            state.cautionLotScale = config.lotScaleNormal
+            state.cautionEnterProbabilityBuffer = config.enterProbabilityBufferNormal
+        }
+
+        appendPolicyReasons(
+            state: &state,
+            newsRisk: newsRisk,
+            ratesRisk: ratesRisk,
+            crossRisk: crossRisk,
+            microHostile: microHostile,
+            microLiquidity: microLiquidity,
+            priceCostZNorm: priceCostZNorm,
+            volatilityBurstNorm: volatilityBurstNorm,
+            sessionThinness: thinness
+        )
+        state.ready = true
+        state.available = true
+        state.stale = state.dataStale
+        return state
+    }
+
     public static func tierHierarchyIndex(kind: String) -> Int {
         switch kind.uppercased() {
         case "PAIR_SESSION_REGIME": return 0
@@ -753,6 +1136,118 @@ public enum ExecutionQualityTools {
             thinness = max(thinness, 0.55)
         }
         return fxClamp(thinness, 0.0, 1.0)
+    }
+
+    private static func appendPolicyReasons(
+        state: inout ExecutionQualityPairState,
+        newsRisk: Double,
+        ratesRisk: Double,
+        crossRisk: Double,
+        microHostile: Double,
+        microLiquidity: Double,
+        priceCostZNorm: Double,
+        volatilityBurstNorm: Double,
+        sessionThinness: Double
+    ) {
+        if state.dataStale {
+            state.appendReason("DATA_STALE")
+        }
+        if state.memoryStale {
+            state.appendReason("MEMORY_STALE")
+        }
+        if !state.supportUsable {
+            state.appendReason("SUPPORT_TOO_LOW")
+        }
+        if state.newsWindowActive || newsRisk >= 0.68 {
+            state.appendReason("NEWS_WINDOW_ACTIVE")
+        }
+        if state.ratesRepricingActive || ratesRisk >= 0.68 {
+            state.appendReason("RATES_REPRICING_ACTIVE")
+        }
+        if crossRisk >= 0.58 {
+            state.appendReason("CROSS_ASSET_STRESS_ELEVATED")
+        }
+        if priceCostZNorm >= 0.55 {
+            state.appendReason("SPREAD_ALREADY_ELEVATED")
+        }
+        if microHostile >= 0.62 {
+            state.appendReason("MICROSTRUCTURE_HOSTILE")
+        }
+        if microLiquidity >= 0.62 {
+            state.appendReason("LIQUIDITY_STRESS_ELEVATED")
+        }
+        if volatilityBurstNorm >= 0.58 {
+            state.appendReason("VOLATILITY_BURST")
+        }
+        if sessionThinness >= 0.52 {
+            state.appendReason("LOW_LIQUIDITY_SESSION")
+        }
+        if state.slippageRisk >= 0.66 {
+            state.appendReason("SLIPPAGE_RISK_ELEVATED")
+        }
+        if state.latencySensitivityScore >= 0.66 {
+            state.appendReason("LATENCY_SENSITIVITY_HIGH")
+        }
+        if state.brokerRejectProbability >= 0.40 {
+            state.appendReason("BROKER_REJECT_RISK_ELEVATED")
+        }
+        if state.brokerPartialFillProbability >= 0.42 {
+            state.appendReason("BROKER_PARTIAL_FILL_RISK_ELEVATED")
+        }
+        if state.executionState == "BLOCKED" {
+            state.appendReason("EXECUTION_STATE_BLOCKED")
+        } else if state.executionState == "STRESSED" {
+            state.appendReason("EXECUTION_STATE_STRESSED")
+        } else if state.executionState == "CAUTION" {
+            state.appendReason("EXECUTION_STATE_CAUTION")
+        }
+    }
+
+    private static func newsWindowActive(_ state: NewsPulsePairState) -> Bool {
+        state.ready &&
+            state.available &&
+            !state.stale &&
+            (state.tradeGate.uppercased() == "BLOCK" ||
+                state.tradeGate.uppercased() == "CAUTION" ||
+                (state.eventETAMinutes >= 0 && state.eventETAMinutes <= 30) ||
+                state.newsRiskScore >= 0.64)
+    }
+
+    private static func ratesRepricingActive(_ state: RatesEnginePairState) -> Bool {
+        state.ready &&
+            state.available &&
+            !state.stale &&
+            (state.meetingPathRepriceNow ||
+                state.tradeGate.uppercased() == "BLOCK" ||
+                state.ratesRiskScore >= 0.64)
+    }
+
+    private static func resolvedSessionLabel(
+        explicit: String?,
+        news: NewsPulsePairState,
+        microstructure: MicrostructurePairState
+    ) -> String {
+        if let explicit {
+            let value = explicit.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty { return value.uppercased() }
+        }
+        if microstructure.ready {
+            let value = microstructure.sessionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty { return value.uppercased() }
+        }
+        if news.ready {
+            let value = news.sessionProfile.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty { return value.uppercased() }
+        }
+        return "UNKNOWN"
+    }
+
+    private static func resolvedRegimeLabel(explicit: String?) -> String {
+        if let explicit {
+            let value = explicit.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty { return value.uppercased() }
+        }
+        return "UNKNOWN"
     }
 
     private static func normalizedAvailableState(

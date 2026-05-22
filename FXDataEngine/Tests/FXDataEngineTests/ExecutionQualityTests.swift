@@ -123,10 +123,111 @@ final class ExecutionQualityTests: XCTestCase {
         XCTAssertEqual(ExecutionQualityTools.sessionThinness(sessionLabel: "LONDON", handoffFlag: true), 0.55, accuracy: 0.0)
     }
 
+    func testExecutionQualityPolicyApplyMatchesLegacyScoreFormula() {
+        let memory = ExecutionQualityTools.parseMemory(tsv: """
+        meta\tgenerated_at\t2024-01-01T00:00:00Z
+        meta\tdefault_method\tSCORECARD_V2
+        tier\tPAIR_SESSION_REGIME\tEURUSD\tEU_US_OVERLAP\tTREND\t100\t0.80\t1.10\t1.20\t-0.02\t1.05\t1.10\t1.10
+        """)
+        let inputs = ExecutionQualityPolicyInputs(
+            symbol: "EURUSD",
+            generatedAtUTC: 1_704_067_200,
+            regimeLabel: "TREND",
+            priceCostPredictedPoints: 1.5,
+            horizonMinutes: 15,
+            upstreamDecision: 1,
+            pathRisk: 0.30,
+            fillRisk: 0.20,
+            newsState: NewsPulsePairState(
+                ready: true,
+                available: true,
+                stale: false,
+                generatedAt: 1_704_067_100,
+                eventETAMinutes: 20,
+                newsRiskScore: 0.70,
+                tradeGate: "CAUTION",
+                sessionProfile: "LONDON"
+            ),
+            ratesState: RatesEnginePairState(
+                ready: true,
+                available: true,
+                stale: false,
+                generatedAt: 1_704_067_100,
+                ratesRiskScore: 0.20
+            ),
+            crossAssetState: CrossAssetPairState(
+                ready: true,
+                available: true,
+                stale: false,
+                generatedAt: 1_704_067_100,
+                usdLiquidityStressScore: 0.20,
+                crossAssetDislocationScore: 0.30,
+                pairCrossAssetRiskScore: 0.50
+            ),
+            microstructureState: MicrostructurePairState(
+                ready: true,
+                available: true,
+                stale: false,
+                generatedAt: 1_704_067_100,
+                tickImbalance30s: -0.40,
+                spreadZscore60s: 2.0,
+                tickRateZscore60s: 1.5,
+                volBurstScore5m: 1.5,
+                liquidityStressScore: 0.40,
+                hostileExecutionScore: 0.30,
+                sessionTag: "EU_US_OVERLAP"
+            ),
+            brokerStats: BrokerExecutionStats(
+                coverage: 0.80,
+                slippagePoints: 1.20,
+                latencyPoints: 2.0,
+                rejectProbability: 0.25,
+                partialFillProbability: 0.35,
+                fillRatioMean: 0.70,
+                eventBurstPenalty: 0.40
+            )
+        )
+
+        let state = ExecutionQualityTools.applyPolicy(
+            config: ExecutionQualityConfig(),
+            memory: memory,
+            profile: ExecutionProfile.preset(.defaultProfile),
+            inputs: inputs
+        )
+
+        XCTAssertTrue(state.ready)
+        XCTAssertTrue(state.available)
+        XCTAssertFalse(state.stale)
+        XCTAssertEqual(state.symbol, "EURUSD")
+        XCTAssertEqual(state.method, "SCORECARD_V2")
+        XCTAssertEqual(state.sessionLabel, "EU_US_OVERLAP")
+        XCTAssertEqual(state.regimeLabel, "TREND")
+        XCTAssertTrue(state.newsWindowActive)
+        XCTAssertFalse(state.ratesRepricingActive)
+        XCTAssertEqual(state.selectedTierKey, "PAIR_SESSION_REGIME|EURUSD|EU_US_OVERLAP|TREND")
+        XCTAssertEqual(state.brokerCoverage, 0.80, accuracy: 0.0)
+        XCTAssertEqual(state.brokerRejectProbability, 0.25, accuracy: 0.0)
+        XCTAssertEqual(state.brokerPartialFillProbability, 0.35, accuracy: 0.0)
+        XCTAssertEqual(state.spreadWideningRisk, 0.6656, accuracy: 1e-12)
+        XCTAssertEqual(state.spreadExpectedPoints, 2.9747760000000003, accuracy: 1e-12)
+        XCTAssertEqual(state.expectedSlippagePoints, 3.0147641600000004, accuracy: 1e-12)
+        XCTAssertEqual(state.slippageRisk, 0.5084091166739958, accuracy: 1e-12)
+        XCTAssertEqual(state.latencySensitivityScore, 0.628, accuracy: 1e-12)
+        XCTAssertEqual(state.liquidityFragilityScore, 0.5034000000000001, accuracy: 1e-12)
+        XCTAssertEqual(state.fillQualityScore, 0.34157744733128126, accuracy: 1e-12)
+        XCTAssertEqual(state.executionQualityScore, 0.3895413379311932, accuracy: 1e-12)
+        XCTAssertEqual(state.executionState, "CAUTION")
+        XCTAssertEqual(state.allowedDeviationPoints, 4.5970288070898615, accuracy: 1e-12)
+        XCTAssertEqual(state.cautionLotScale, 0.82, accuracy: 0.0)
+        XCTAssertEqual(state.cautionEnterProbabilityBuffer, 0.04, accuracy: 0.0)
+        XCTAssertEqual(state.reasonsCSV, "NEWS_WINDOW_ACTIVE; EXECUTION_STATE_CAUTION")
+    }
+
     func testExecutionQualityParsesKeyValueStateAndReasonCSV() {
         let state = ExecutionQualityTools.readPairState(
             symbol: "EURUSD",
             stateTSV: """
+            symbol\tEURUSD
             generated_at\t1000
             method\tSCORECARD_V2
             session_label\tLONDON
@@ -139,6 +240,11 @@ final class ExecutionQualityTests: XCTestCase {
             memory_stale\t0
             data_stale\t1
             support_usable\t1
+            news_window_active\t1
+            rates_repricing_active\t0
+            broker_coverage\t0.9
+            broker_reject_prob\t0.2
+            broker_partial_fill_prob\t0.3
             spread_now_points\t1.2
             spread_expected_points\t0.8
             spread_widening_risk\t1.4
@@ -168,6 +274,7 @@ final class ExecutionQualityTests: XCTestCase {
         XCTAssertFalse(state?.memoryStale ?? true)
         XCTAssertTrue(state?.supportUsable ?? false)
         XCTAssertEqual(state?.generatedAt, 1_000)
+        XCTAssertEqual(state?.symbol, "EURUSD")
         XCTAssertEqual(state?.method, "SCORECARD_V2")
         XCTAssertEqual(state?.sessionLabel, "LONDON")
         XCTAssertEqual(state?.regimeLabel, "TREND")
@@ -175,6 +282,11 @@ final class ExecutionQualityTests: XCTestCase {
         XCTAssertEqual(state?.selectedTierKey, "SYMBOL|EURUSD|LONDON|*")
         XCTAssertEqual(state?.selectedSupport, 42)
         XCTAssertEqual(state?.selectedQuality, 0.81)
+        XCTAssertTrue(state?.newsWindowActive ?? false)
+        XCTAssertFalse(state?.ratesRepricingActive ?? true)
+        XCTAssertEqual(state?.brokerCoverage, 0.9)
+        XCTAssertEqual(state?.brokerRejectProbability, 0.2)
+        XCTAssertEqual(state?.brokerPartialFillProbability, 0.3)
         XCTAssertEqual(state?.spreadNowPoints, 1.2)
         XCTAssertEqual(state?.spreadExpectedPoints, 0.8)
         XCTAssertEqual(state?.spreadWideningRisk, 1.4)
