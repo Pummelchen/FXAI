@@ -236,4 +236,163 @@ final class RiskPolicyTests: XCTestCase {
         XCTAssertEqual(result.pressure, 0.54, accuracy: 1e-12)
         XCTAssertEqual(result.controlPlaneScore, 0.28975, accuracy: 1e-12)
     }
+
+    func testSupervisorOverlayBlocksInLegacyOrder() {
+        let signal = RiskPolicySignalState(policyEnterProb: 0.50)
+        var aggregate = ControlPlaneAggregate()
+        aggregate.maxCapitalRiskPct = 1.30
+        var supervisor = PortfolioSupervisorProfile()
+        supervisor.capitalRiskCapPct = 1.20
+
+        XCTAssertEqual(
+            RiskPolicyTools.supervisorOverlayDecision(
+                signal: signal,
+                direction: 1,
+                overlay: RiskControlPlaneOverlayState(aggregate: aggregate, supervisor: supervisor, supervisorScore: 0.0)
+            ).reason,
+            "risk_supervisor_capital"
+        )
+
+        aggregate.maxCapitalRiskPct = 1.00
+        supervisor.hardBlockScore = 1.08
+        XCTAssertEqual(
+            RiskPolicyTools.supervisorOverlayDecision(
+                signal: signal,
+                direction: 1,
+                overlay: RiskControlPlaneOverlayState(aggregate: aggregate, supervisor: supervisor, supervisorScore: 1.20)
+            ).reason,
+            "risk_supervisor_block"
+        )
+
+        var service = SupervisorServiceState(symbol: "EURUSD")
+        service.ready = true
+        service.blockScore = 1.10
+        XCTAssertEqual(
+            RiskPolicyTools.supervisorOverlayDecision(
+                signal: signal,
+                direction: 1,
+                overlay: RiskControlPlaneOverlayState(
+                    aggregate: aggregate,
+                    supervisor: supervisor,
+                    serviceState: service,
+                    supervisorScore: 0.20,
+                    serviceScore: 1.20
+                )
+            ).reason,
+            "risk_supervisor_service_block"
+        )
+
+        service.entryFloor = 0.60
+        XCTAssertEqual(
+            RiskPolicyTools.supervisorOverlayDecision(
+                signal: signal,
+                direction: 1,
+                overlay: RiskControlPlaneOverlayState(
+                    aggregate: aggregate,
+                    supervisor: supervisor,
+                    serviceState: service,
+                    supervisorScore: 0.20,
+                    serviceScore: 0.20
+                )
+            ).reason,
+            "risk_supervisor_service_entry_floor"
+        )
+
+        service.entryFloor = 0.40
+        var command = SupervisorCommandState(symbol: "EURUSD")
+        command.ready = true
+        command.longBlock = true
+        XCTAssertEqual(
+            RiskPolicyTools.supervisorOverlayDecision(
+                signal: RiskPolicySignalState(policyEnterProb: 0.70),
+                direction: 1,
+                overlay: RiskControlPlaneOverlayState(
+                    aggregate: aggregate,
+                    supervisor: supervisor,
+                    serviceState: service,
+                    commandState: command,
+                    supervisorScore: 0.20,
+                    serviceScore: 0.20
+                )
+            ).reason,
+            "risk_supervisor_command_block"
+        )
+    }
+
+    func testSupervisorOverlayMultiplierMatchesLegacyScaling() {
+        var service = SupervisorServiceState(symbol: "EURUSD")
+        service.ready = true
+        service.longEntryBudgetMultiplier = 0.80
+
+        var command = SupervisorCommandState(symbol: "EURUSD")
+        command.ready = true
+        command.longEntryBudgetMultiplier = 0.90
+
+        let multiplier = RiskPolicyTools.supervisorOverlayLotMultiplier(
+            signal: RiskPolicySignalState(
+                policyEnterProb: 0.60,
+                policySizeMultiplier: 1.20,
+                policyCapitalEfficiency: 0.50
+            ),
+            direction: 1,
+            portfolioPressure: 0.50,
+            overlay: RiskControlPlaneOverlayState(
+                serviceState: service,
+                commandState: command,
+                supervisorScore: 0.30,
+                serviceScore: 0.10,
+                controlPlaneScore: 0.40,
+                controlPlaneBuyScore: 0.70
+            )
+        )
+
+        XCTAssertEqual(multiplier, 0.4197639465676799, accuracy: 1e-15)
+    }
+
+    func testApplyExposureCapsMatchesLegacyOrderingAndCapsLot() {
+        var supervisor = PortfolioSupervisorProfile()
+        supervisor.grossBudgetBias = 1.0
+        supervisor.correlatedBudgetBias = 1.0
+        supervisor.directionalBudgetBias = 1.0
+
+        let blocked = RiskPolicyTools.applyExposureCaps(
+            requestedLot: 0.20,
+            hardCapLot: 1.00,
+            exposure: RiskPortfolioExposureState(
+                grossExposureLots: 0.50,
+                maxPortfolioExposureLots: 0.50
+            ),
+            supervisor: supervisor
+        )
+        XCTAssertEqual(blocked.requestedLot, 0.0)
+        XCTAssertEqual(blocked.reason, "risk_portfolio_cap")
+
+        let capped = RiskPolicyTools.applyExposureCaps(
+            requestedLot: 0.50,
+            hardCapLot: 1.00,
+            riskBudgetLot: 0.90,
+            exposure: RiskPortfolioExposureState(
+                grossExposureLots: 0.40,
+                correlatedExposureLots: 0.20,
+                directionalClusterLots: 0.10,
+                maxPortfolioExposureLots: 1.00,
+                maxCorrelatedExposureLots: 0.50,
+                maxDirectionalClusterLots: 0.30
+            ),
+            supervisor: supervisor
+        )
+        XCTAssertEqual(capped.requestedLot, 0.20, accuracy: 1e-12)
+        XCTAssertEqual(capped.hardCapLot, 0.20, accuracy: 1e-12)
+        XCTAssertEqual(capped.riskBudgetLot, 0.90, accuracy: 1e-12)
+        XCTAssertEqual(capped.reason, "ok")
+
+        let invalid = RiskPolicyTools.applyExposureCaps(
+            requestedLot: .nan,
+            hardCapLot: 1.00,
+            exposure: RiskPortfolioExposureState(),
+            supervisor: supervisor
+        )
+        XCTAssertEqual(invalid.requestedLot, 0.0)
+        XCTAssertEqual(invalid.reason, "risk_lot_invalid")
+    }
 }

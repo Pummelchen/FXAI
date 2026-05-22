@@ -187,6 +187,40 @@ public struct RiskPortfolioPressureResult: Codable, Hashable, Sendable {
     }
 }
 
+public struct RiskControlPlaneOverlayState: Codable, Hashable, Sendable {
+    public var aggregate: ControlPlaneAggregate
+    public var supervisor: PortfolioSupervisorProfile
+    public var serviceState: SupervisorServiceState
+    public var commandState: SupervisorCommandState
+    public var supervisorScore: Double?
+    public var serviceScore: Double?
+    public var controlPlaneScore: Double?
+    public var controlPlaneBuyScore: Double
+    public var controlPlaneSellScore: Double
+
+    public init(
+        aggregate: ControlPlaneAggregate = ControlPlaneAggregate(),
+        supervisor: PortfolioSupervisorProfile = PortfolioSupervisorProfile(),
+        serviceState: SupervisorServiceState = SupervisorServiceState(),
+        commandState: SupervisorCommandState = SupervisorCommandState(),
+        supervisorScore: Double? = nil,
+        serviceScore: Double? = nil,
+        controlPlaneScore: Double? = nil,
+        controlPlaneBuyScore: Double = 0.0,
+        controlPlaneSellScore: Double = 0.0
+    ) {
+        self.aggregate = aggregate
+        self.supervisor = supervisor
+        self.serviceState = serviceState
+        self.commandState = commandState
+        self.supervisorScore = supervisorScore
+        self.serviceScore = serviceScore
+        self.controlPlaneScore = controlPlaneScore
+        self.controlPlaneBuyScore = controlPlaneBuyScore
+        self.controlPlaneSellScore = controlPlaneSellScore
+    }
+}
+
 public struct RiskPolicyDecision: Codable, Hashable, Sendable {
     public var allowed: Bool
     public var reason: String
@@ -217,6 +251,40 @@ public struct RiskSizingResult: Codable, Hashable, Sendable {
 }
 
 public enum RiskPolicyTools {
+    private static func resolvedSupervisorScore(direction: Int, overlay: RiskControlPlaneOverlayState) -> Double {
+        fxSafeFinite(overlay.supervisorScore ??
+            ControlPlaneScoring.portfolioSupervisorScore(direction: direction, aggregate: overlay.aggregate, profile: overlay.supervisor)
+        )
+    }
+
+    private static func resolvedServiceScore(direction: Int, overlay: RiskControlPlaneOverlayState) -> Double {
+        fxSafeFinite(overlay.serviceScore ??
+            ControlPlaneScoring.supervisorServiceScore(direction: direction, state: overlay.serviceState)
+        )
+    }
+
+    private static func computedControlPlaneScore(
+        deployment: LiveDeploymentProfile,
+        aggregate: ControlPlaneAggregate,
+        supervisor: PortfolioSupervisorProfile,
+        supervisorScore: Double,
+        serviceScore: Double
+    ) -> Double {
+        let supervisorBlend = fxClamp(
+            0.55 * fxClamp(supervisor.supervisorWeight, 0.0, 1.0) +
+                0.45 * fxClamp(deployment.supervisorBlend, 0.0, 1.0),
+            0.0,
+            1.0
+        )
+        return fxClamp(
+            (1.0 - supervisorBlend) * aggregate.score +
+                0.55 * supervisorBlend * supervisorScore +
+                0.45 * supervisorBlend * serviceScore,
+            0.0,
+            3.0
+        )
+    }
+
     public static func estimatedRiskPoints(config: RiskPolicyConfig, signal: RiskPolicySignalState) -> Double {
         let baseCost = max(signal.minMovePoints, 0.25)
         let expectedMove = max(signal.expectedMovePoints, baseCost)
@@ -257,18 +325,12 @@ public enum RiskPolicyTools {
             ControlPlaneScoring.portfolioSupervisorScore(direction: direction, aggregate: aggregate, profile: supervisor)
         let serviceScore = explicitServiceScore ??
             ControlPlaneScoring.supervisorServiceScore(direction: direction, state: serviceState)
-        let supervisorBlend = fxClamp(
-            0.55 * fxClamp(supervisor.supervisorWeight, 0.0, 1.0) +
-                0.45 * fxClamp(deployment.supervisorBlend, 0.0, 1.0),
-            0.0,
-            1.0
-        )
-        let controlPlaneScore = fxClamp(
-            (1.0 - supervisorBlend) * aggregate.score +
-                0.55 * supervisorBlend * supervisorScore +
-                0.45 * supervisorBlend * serviceScore,
-            0.0,
-            3.0
+        let controlPlaneScore = computedControlPlaneScore(
+            deployment: deployment,
+            aggregate: aggregate,
+            supervisor: supervisor,
+            supervisorScore: supervisorScore,
+            serviceScore: serviceScore
         )
         let pressure = fxClamp(
             0.30 * fxClamp(grossRatio / max(supervisor.grossBudgetBias, 0.40), 0.0, 2.0) +
@@ -285,6 +347,140 @@ public enum RiskPolicyTools {
             1.5
         )
         return RiskPortfolioPressureResult(pressure: pressure, controlPlaneScore: controlPlaneScore)
+    }
+
+    public static func supervisorOverlayDecision(
+        signal: RiskPolicySignalState,
+        direction: Int,
+        overlay: RiskControlPlaneOverlayState
+    ) -> RiskPolicyDecision {
+        let supervisorScore = resolvedSupervisorScore(direction: direction, overlay: overlay)
+        let serviceScore = resolvedServiceScore(direction: direction, overlay: overlay)
+        if overlay.aggregate.maxCapitalRiskPct > fxClamp(overlay.supervisor.capitalRiskCapPct, 0.10, 10.0) {
+            return RiskPolicyDecision(allowed: false, reason: "risk_supervisor_capital")
+        }
+        if supervisorScore > fxClamp(overlay.supervisor.hardBlockScore, 0.20, 3.0) {
+            return RiskPolicyDecision(allowed: false, reason: "risk_supervisor_block")
+        }
+        if overlay.serviceState.ready {
+            if serviceScore > fxClamp(overlay.serviceState.blockScore, 0.20, 3.0) {
+                return RiskPolicyDecision(allowed: false, reason: "risk_supervisor_service_block")
+            }
+            if signal.policyEnterProb < max(fxClamp(overlay.serviceState.entryFloor, 0.10, 0.95), 0.05) {
+                return RiskPolicyDecision(allowed: false, reason: "risk_supervisor_service_entry_floor")
+            }
+        }
+        if overlay.commandState.ready, overlay.commandState.blocksDirection(direction) {
+            return RiskPolicyDecision(allowed: false, reason: "risk_supervisor_command_block")
+        }
+        return RiskPolicyDecision()
+    }
+
+    public static func supervisorOverlayLotMultiplier(
+        signal: RiskPolicySignalState,
+        direction: Int,
+        portfolioPressure: Double,
+        deployment: LiveDeploymentProfile = LiveDeploymentProfile(),
+        overlay: RiskControlPlaneOverlayState
+    ) -> Double {
+        let supervisorScore = resolvedSupervisorScore(direction: direction, overlay: overlay)
+        let serviceScore = resolvedServiceScore(direction: direction, overlay: overlay)
+        var controlPlanePressure = overlay.controlPlaneScore ?? computedControlPlaneScore(
+            deployment: deployment,
+            aggregate: overlay.aggregate,
+            supervisor: overlay.supervisor,
+            supervisorScore: supervisorScore,
+            serviceScore: serviceScore
+        )
+        if direction == 1 {
+            controlPlanePressure = max(controlPlanePressure, overlay.controlPlaneBuyScore)
+        } else if direction == 0 {
+            controlPlanePressure = max(controlPlanePressure, overlay.controlPlaneSellScore)
+        }
+        let serviceEntryBudget = fxClamp(
+            overlay.serviceState.ready
+                ? (direction == 1
+                    ? overlay.serviceState.longEntryBudgetMultiplier
+                    : (direction == 0
+                        ? overlay.serviceState.shortEntryBudgetMultiplier
+                        : overlay.serviceState.budgetMultiplier))
+                : 1.0,
+            0.10,
+            1.20
+        )
+        return fxClamp(
+            (1.08 - 0.60 * portfolioPressure) *
+                (1.02 - 0.25 * fxClamp(controlPlanePressure, 0.0, 1.5)) *
+                fxClamp(1.04 - 0.22 * supervisorScore, 0.25, 1.10) *
+                serviceEntryBudget *
+                overlay.commandState.entryBudgetMultiplier(for: direction) *
+                fxClamp(signal.policySizeMultiplier, 0.25, 1.60) *
+                fxClamp(0.70 + 0.30 * signal.policyEnterProb, 0.20, 1.10) *
+                fxClamp(0.72 + 0.28 * signal.policyCapitalEfficiency, 0.25, 1.15),
+            0.20,
+            1.10
+        )
+    }
+
+    public static func applyExposureCaps(
+        requestedLot: Double,
+        hardCapLot: Double,
+        riskBudgetLot: Double = 0.0,
+        exposure: RiskPortfolioExposureState,
+        supervisor: PortfolioSupervisorProfile
+    ) -> RiskSizingResult {
+        var requestedLot = requestedLot
+        var hardCapLot = fxSafeFinite(hardCapLot)
+
+        func capResult(available: Double, reason: String) -> RiskSizingResult? {
+            if available <= 0.0 {
+                return RiskSizingResult(requestedLot: 0.0, hardCapLot: hardCapLot, riskBudgetLot: riskBudgetLot, reason: reason)
+            }
+            if requestedLot > available {
+                requestedLot = available
+            }
+            if available < hardCapLot {
+                hardCapLot = available
+            }
+            return nil
+        }
+
+        let portfolioCap = max(exposure.maxPortfolioExposureLots, 0.0)
+        if portfolioCap > 0.0,
+           let blocked = capResult(
+            available: portfolioCap * max(supervisor.grossBudgetBias, 0.40) - exposure.grossExposureLots,
+            reason: "risk_portfolio_cap"
+           ) {
+            return blocked
+        }
+
+        let correlatedCap = max(exposure.maxCorrelatedExposureLots, 0.0)
+        if correlatedCap > 0.0,
+           let blocked = capResult(
+            available: correlatedCap * max(supervisor.correlatedBudgetBias, 0.40) - exposure.correlatedExposureLots,
+            reason: "risk_correlated_cap"
+           ) {
+            return blocked
+        }
+
+        let directionalCap = max(exposure.maxDirectionalClusterLots, 0.0)
+        if directionalCap > 0.0,
+           let blocked = capResult(
+            available: directionalCap * max(supervisor.directionalBudgetBias, 0.40) - exposure.directionalClusterLots,
+            reason: "risk_directional_cluster_cap"
+           ) {
+            return blocked
+        }
+
+        if !requestedLot.isFinite || requestedLot <= 0.0 {
+            return RiskSizingResult(requestedLot: 0.0, hardCapLot: hardCapLot, riskBudgetLot: riskBudgetLot, reason: "risk_lot_invalid")
+        }
+
+        return RiskSizingResult(
+            requestedLot: requestedLot,
+            hardCapLot: hardCapLot,
+            riskBudgetLot: riskBudgetLot
+        )
     }
 
     public static func regimeKillSwitch(
