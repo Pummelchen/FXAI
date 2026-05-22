@@ -45,6 +45,7 @@ public enum FXDataEngineConstants {
     public static let horizonPolicyHidden = 16
     public static let stackFeatures = 84
     public static let stackHidden = 28
+    public static let tradeGateHidden = 16
     public static let unitRangeFloor = 0.0001
     public static let unitRangeCeil = 0.9999
     public static let signedUnitRangeFloor = -0.9999

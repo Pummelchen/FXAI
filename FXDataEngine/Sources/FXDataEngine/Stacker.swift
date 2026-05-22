@@ -244,6 +244,79 @@ public struct StackPrediction: Codable, Hashable, Sendable {
     }
 }
 
+public struct TradeGateNetworkState: Codable, Hashable, Sendable {
+    public var inputWeights: [[Double]]
+    public var hiddenBias: [Double]
+    public var outputWeights: [Double]
+    public var outputBias: Double
+    public var ready: Bool
+    public var observations: Int
+
+    public init(
+        inputWeights: [[Double]] = [],
+        hiddenBias: [Double] = [],
+        outputWeights: [Double] = [],
+        outputBias: Double = 0.0,
+        ready: Bool = false,
+        observations: Int = 0
+    ) {
+        self.inputWeights = Self.normalizedMatrix(
+            inputWeights,
+            rows: FXDataEngineConstants.tradeGateHidden,
+            columns: FXDataEngineConstants.stackFeatures
+        )
+        self.hiddenBias = Self.normalizedVector(hiddenBias, count: FXDataEngineConstants.tradeGateHidden)
+        self.outputWeights = Self.normalizedVector(outputWeights, count: FXDataEngineConstants.tradeGateHidden)
+        self.outputBias = fxSafeFinite(outputBias)
+        self.ready = ready
+        self.observations = min(max(observations, 0), StackerTools.observationCap)
+    }
+
+    private static func normalizedVector(_ values: [Double], count: Int) -> [Double] {
+        var output = Array(repeating: 0.0, count: count)
+        for index in 0..<min(values.count, count) {
+            output[index] = fxSafeFinite(values[index])
+        }
+        return output
+    }
+
+    private static func normalizedMatrix(_ values: [[Double]], rows: Int, columns: Int) -> [[Double]] {
+        var output = Array(repeating: Array(repeating: 0.0, count: columns), count: rows)
+        for row in 0..<min(values.count, rows) {
+            for column in 0..<min(values[row].count, columns) {
+                output[row][column] = fxSafeFinite(values[row][column])
+            }
+        }
+        return output
+    }
+}
+
+public struct TradeGatePrediction: Codable, Hashable, Sendable {
+    public var probability: Double
+    public var heuristicProbability: Double
+    public var learnedProbability: Double?
+    public var oofPrior: Double?
+    public var hidden: [Double]
+
+    public init(
+        probability: Double,
+        heuristicProbability: Double,
+        learnedProbability: Double? = nil,
+        oofPrior: Double? = nil,
+        hidden: [Double] = []
+    ) {
+        self.probability = fxClamp(probability, 0.0, 1.0)
+        self.heuristicProbability = fxClamp(heuristicProbability, 0.0, 1.0)
+        self.learnedProbability = learnedProbability.map { fxClamp($0, 0.0, 1.0) }
+        self.oofPrior = oofPrior.map { fxClamp($0, 0.0, 1.0) }
+        var resolvedHidden = Array(repeating: 0.0, count: FXDataEngineConstants.tradeGateHidden)
+        for index in 0..<min(hidden.count, resolvedHidden.count) {
+            resolvedHidden[index] = fxSafeFinite(hidden[index])
+        }
+        self.hidden = resolvedHidden
+    }
+}
+
 public enum StackerTools {
     public static let observationCap = 200_000
 
@@ -528,6 +601,128 @@ public enum StackerTools {
         )
     }
 
+    public static func tradeGateHeuristic(
+        features: [Double],
+        oofPriorCell: OOFHorizonPriorCell? = nil
+    ) -> Double {
+        let features = normalizedStackFeatures(features)
+        var heuristic = fxClamp(
+            0.46 +
+            0.16 * stackFeature(features, 7) +
+            0.12 * stackFeature(features, 20) +
+            0.12 * stackFeature(features, 21) +
+            0.10 * stackFeature(features, 23) +
+            0.10 * stackFeature(features, 53) +
+            0.08 * stackFeature(features, 54) -
+            0.10 * stackFeature(features, 3) -
+            0.08 * stackFeature(features, 49) -
+            0.08 * stackFeature(features, 50) +
+            0.08 * stackFeature(features, 62) +
+            0.06 * stackFeature(features, 70) -
+            0.08 * stackFeature(features, 57) -
+            0.06 * stackFeature(features, 60) -
+            0.04 * stackFeature(features, 63) +
+            0.06 * stackFeature(features, 72) +
+            0.06 * stackFeature(features, 75) +
+            0.08 * stackFeature(features, 77) +
+            0.08 * stackFeature(features, 79) +
+            0.10 * stackFeature(features, 80) +
+            0.10 * stackFeature(features, 81) +
+            0.10 * stackFeature(features, 82) +
+            0.08 * stackFeature(features, 83),
+            0.01,
+            0.99
+        )
+        if let prior = resolvedOOFTradeGatePrior(oofPriorCell) {
+            heuristic = fxClamp(0.78 * heuristic + 0.22 * prior, 0.01, 0.99)
+        }
+        return heuristic
+    }
+
+    public static func predictTradeGate(
+        _ state: TradeGateNetworkState,
+        features: [Double],
+        oofPriorCell: OOFHorizonPriorCell? = nil
+    ) -> TradeGatePrediction {
+        let features = normalizedStackFeatures(features)
+        let oofPrior = resolvedOOFTradeGatePrior(oofPriorCell)
+        let heuristic = tradeGateHeuristic(features: features, oofPriorCell: oofPriorCell)
+        guard state.ready else {
+            return TradeGatePrediction(
+                probability: heuristic,
+                heuristicProbability: heuristic,
+                oofPrior: oofPrior
+            )
+        }
+
+        let forward = tradeGateForward(state, features: features)
+        let mix = fxClamp(Double(max(state.observations, 0)) / 180.0, 0.20, 0.85)
+        var probability = fxClamp((1.0 - mix) * heuristic + mix * forward.probability, 0.0, 1.0)
+        if let oofPrior, let priorCell = oofPriorCell {
+            let oofMix = fxClamp(Double(max(priorCell.observations, 0)) / 96.0, 0.08, 0.28)
+            probability = fxClamp((1.0 - oofMix) * probability + oofMix * oofPrior, 0.0, 1.0)
+        }
+        return TradeGatePrediction(
+            probability: probability,
+            heuristicProbability: heuristic,
+            learnedProbability: forward.probability,
+            oofPrior: oofPrior,
+            hidden: forward.hidden
+        )
+    }
+
+    public static func updatedTradeGateNetwork(
+        _ state: TradeGateNetworkState,
+        features: [Double],
+        tradeTarget: Bool,
+        sampleWeight: Double
+    ) -> TradeGateNetworkState {
+        let features = normalizedStackFeatures(features)
+        let forward = tradeGateForward(state, features: features)
+        let target = tradeTarget ? 1.0 : 0.0
+        let error = fxClamp(
+            (target - forward.probability) * fxClamp(sampleWeight, 0.20, 8.00),
+            -3.0,
+            3.0
+        )
+        let learningRate = fxClamp(
+            0.020 / sqrt(1.0 + 0.02 * Double(max(state.observations, 0))),
+            0.0015,
+            0.020
+        )
+
+        var outputBias = state.outputBias + learningRate * error
+        outputBias = fxSafeFinite(outputBias)
+        var outputWeights = state.outputWeights
+        let oldOutputWeights = state.outputWeights
+        for hiddenIndex in 0..<FXDataEngineConstants.tradeGateHidden {
+            let regularization = 0.0006 * outputWeights[hiddenIndex]
+            outputWeights[hiddenIndex] += learningRate * (error * forward.hidden[hiddenIndex] - regularization)
+        }
+
+        var hiddenBias = state.hiddenBias
+        var inputWeights = state.inputWeights
+        for hiddenIndex in 0..<FXDataEngineConstants.tradeGateHidden {
+            let hiddenValue = forward.hidden[hiddenIndex]
+            let deltaHidden = (1.0 - hiddenValue * hiddenValue) * oldOutputWeights[hiddenIndex] * error
+            hiddenBias[hiddenIndex] += learningRate * deltaHidden
+            for featureIndex in 0..<FXDataEngineConstants.stackFeatures {
+                let regularization = featureIndex == 0 ? 0.0 : 0.0004 * inputWeights[hiddenIndex][featureIndex]
+                inputWeights[hiddenIndex][featureIndex] += learningRate *
+                    (deltaHidden * features[featureIndex] - regularization)
+            }
+        }
+
+        return TradeGateNetworkState(
+            inputWeights: inputWeights,
+            hiddenBias: hiddenBias,
+            outputWeights: outputWeights,
+            outputBias: outputBias,
+            ready: true,
+            observations: min(max(state.observations, 0) + 1, observationCap)
+        )
+    }
+
     public static func stackPortfolioObjective(features: [Double]) -> Double {
         fxClamp(
             0.30 * stackFeature(features, 61) +
@@ -796,6 +991,12 @@ public enum StackerTools {
         return (exp2 - 1.0) / (exp2 + 1.0)
     }
 
+    public static func legacySigmoid(_ value: Double) -> Double {
+        if value > 35.0 { return 1.0 }
+        if value < -35.0 { return 0.0 }
+        return 1.0 / (1.0 + exp(-value))
+    }
+
     private static func vectorValue(_ values: [Double], _ index: Int, default defaultValue: Double) -> Double {
         guard index >= 0, index < values.count else { return defaultValue }
         return fxSafeFinite(values[index], fallback: defaultValue)
@@ -825,6 +1026,33 @@ public enum StackerTools {
             logits[labelIndex] = z
         }
         return (hidden, softmax3(logits))
+    }
+
+    private static func tradeGateForward(
+        _ state: TradeGateNetworkState,
+        features: [Double]
+    ) -> (hidden: [Double], probability: Double) {
+        let features = normalizedStackFeatures(features)
+        var hidden = Array(repeating: 0.0, count: FXDataEngineConstants.tradeGateHidden)
+        for hiddenIndex in 0..<FXDataEngineConstants.tradeGateHidden {
+            var z = state.hiddenBias[hiddenIndex]
+            for featureIndex in 0..<FXDataEngineConstants.stackFeatures {
+                z += state.inputWeights[hiddenIndex][featureIndex] * features[featureIndex]
+            }
+            hidden[hiddenIndex] = legacyTanh(z)
+        }
+
+        var z = state.outputBias
+        for hiddenIndex in 0..<FXDataEngineConstants.tradeGateHidden {
+            z += state.outputWeights[hiddenIndex] * hidden[hiddenIndex]
+        }
+        return (hidden, legacySigmoid(z))
+    }
+
+    private static func resolvedOOFTradeGatePrior(_ cell: OOFHorizonPriorCell?) -> Double? {
+        guard let cell else { return nil }
+        let prior = HorizonPolicyTools.oofTradeGatePrior(cell)
+        return prior >= 0.0 ? prior : nil
     }
 
     private static func softmax3(_ logits: [Double]) -> [Double] {

@@ -189,6 +189,69 @@ final class StackerTests: XCTestCase {
         XCTAssertEqual(updated.inputWeights[2][6], 0.25107092306663903, accuracy: 1e-12)
     }
 
+    func testTradeGatePredictionMatchesLegacyFormula() throws {
+        let features = StackerTools.buildStackFeatures(makeFeatureInputs())
+        let priorCell = makeOOFPriorCell()
+
+        XCTAssertEqual(
+            StackerTools.tradeGateHeuristic(features: features),
+            0.99,
+            accuracy: 0.0
+        )
+        XCTAssertEqual(
+            StackerTools.tradeGateHeuristic(features: features, oofPriorCell: priorCell),
+            0.907049,
+            accuracy: 1e-12
+        )
+
+        let cold = StackerTools.predictTradeGate(
+            TradeGateNetworkState(),
+            features: features,
+            oofPriorCell: priorCell
+        )
+        XCTAssertEqual(cold.probability, 0.907049, accuracy: 1e-12)
+        XCTAssertNil(cold.learnedProbability)
+
+        let prediction = StackerTools.predictTradeGate(
+            makeTradeGateNetworkState(),
+            features: features,
+            oofPriorCell: priorCell
+        )
+        XCTAssertEqual(try XCTUnwrap(prediction.oofPrior), 0.61295, accuracy: 1e-12)
+        XCTAssertEqual(prediction.heuristicProbability, 0.907049, accuracy: 1e-12)
+        XCTAssertEqual(try XCTUnwrap(prediction.learnedProbability), 0.512524629565967, accuracy: 1e-12)
+        XCTAssertEqual(prediction.hidden[0], 0.36096932243320357, accuracy: 1e-12)
+        XCTAssertEqual(prediction.hidden[1], 0.08479588154870195, accuracy: 1e-12)
+        XCTAssertEqual(prediction.hidden[2], 0.08678116153147494, accuracy: 1e-12)
+        XCTAssertEqual(prediction.probability, 0.7110782613149985, accuracy: 1e-12)
+    }
+
+    func testTradeGateUpdateMatchesLegacyFormula() {
+        let features = StackerTools.buildStackFeatures(makeFeatureInputs())
+        let updated = StackerTools.updatedTradeGateNetwork(
+            makeTradeGateNetworkState(),
+            features: features,
+            tradeTarget: true,
+            sampleWeight: 1.7
+        )
+
+        XCTAssertTrue(updated.ready)
+        XCTAssertEqual(updated.observations, 73)
+        XCTAssertEqual(updated.outputBias, -0.03938947966933394, accuracy: 1e-12)
+        XCTAssertEqual(updated.outputWeights[0], 0.30382776767058545, accuracy: 1e-12)
+        XCTAssertEqual(updated.outputWeights[1], -0.24909835102167174, accuracy: 1e-12)
+        XCTAssertEqual(updated.outputWeights[2], 0.15091964094682914, accuracy: 1e-12)
+        XCTAssertEqual(updated.hiddenBias[0], 0.05276839451457164, accuracy: 1e-12)
+        XCTAssertEqual(updated.hiddenBias[1], -0.1026335567664257, accuracy: 1e-12)
+        XCTAssertEqual(updated.hiddenBias[2], 0.021579591923060883, accuracy: 1e-12)
+        XCTAssertEqual(updated.inputWeights[0][7], 0.4015205683929355, accuracy: 1e-12)
+        XCTAssertEqual(updated.inputWeights[0][20], 0.15199247582921196, accuracy: 1e-12)
+        XCTAssertEqual(updated.inputWeights[1][49], -0.2005256870582457, accuracy: 1e-12)
+        XCTAssertEqual(updated.inputWeights[1][80], 0.2980232959826215, accuracy: 1e-12)
+        XCTAssertEqual(updated.inputWeights[2][53], 0.2509085645788837, accuracy: 1e-12)
+        XCTAssertEqual(updated.inputWeights[2][57], -0.34965069726060755, accuracy: 1e-12)
+    }
+
     func testStackRouterObservationMatchesLegacyPreparedState() {
         let features = makeFeatures()
         let probabilities = [0.2, 0.6, 0.2]
@@ -379,6 +442,49 @@ final class StackerTests: XCTestCase {
             outputBias: [0.05, -0.02, 0.01],
             ready: true,
             observations: 10
+        )
+    }
+
+    private func makeOOFPriorCell() -> OOFHorizonPriorCell {
+        OOFHorizonPriorCell(
+            scoreEMA: 3.2,
+            edgeEMA: 1.4,
+            qualityEMA: 0.75,
+            tradeRateEMA: 0.65,
+            ready: true,
+            observations: 40
+        )
+    }
+
+    private func makeTradeGateNetworkState() -> TradeGateNetworkState {
+        var inputWeights = Array(
+            repeating: Array(repeating: 0.0, count: FXDataEngineConstants.stackFeatures),
+            count: FXDataEngineConstants.tradeGateHidden
+        )
+        inputWeights[0][7] = 0.4
+        inputWeights[0][20] = 0.15
+        inputWeights[1][49] = -0.2
+        inputWeights[1][80] = 0.3
+        inputWeights[2][53] = 0.25
+        inputWeights[2][57] = -0.35
+
+        var hiddenBias = Array(repeating: 0.0, count: FXDataEngineConstants.tradeGateHidden)
+        hiddenBias[0] = 0.05
+        hiddenBias[1] = -0.1
+        hiddenBias[2] = 0.02
+
+        var outputWeights = Array(repeating: 0.0, count: FXDataEngineConstants.tradeGateHidden)
+        outputWeights[0] = 0.3
+        outputWeights[1] = -0.25
+        outputWeights[2] = 0.15
+
+        return TradeGateNetworkState(
+            inputWeights: inputWeights,
+            hiddenBias: hiddenBias,
+            outputWeights: outputWeights,
+            outputBias: -0.05,
+            ready: true,
+            observations: 72
         )
     }
 }
