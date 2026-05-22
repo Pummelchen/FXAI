@@ -106,6 +106,23 @@ final class PluginContractSuiteTests: XCTestCase {
         XCTAssertEqual(predictionSuite.legacyReason, "predict_request_contract:predict_4_probability_sum")
     }
 
+    func testAuditPluginContractSelfTestMirrorsLegacyWrapper() {
+        let valid = PluginContractSuiteFactory {
+            ContractSuiteGoodPlugin(manifest: Self.windowedManifest(aiID: 5))
+        }
+        let validResult = AuditPluginContractTools.selfTest(factories: [valid])
+        XCTAssertTrue(validResult.passed)
+        XCTAssertEqual(validResult.reason, "")
+        XCTAssertEqual(validResult.suite.total, 5)
+
+        let invalid = PluginContractSuiteFactory {
+            ContractSuiteBadPredictionPlugin(manifest: Self.windowedManifest(aiID: 6))
+        }
+        let invalidResult = AuditPluginContractTools.selfTest(factories: [invalid])
+        XCTAssertFalse(invalidResult.passed)
+        XCTAssertEqual(invalidResult.reason, "predict_request_contract:predict_6_probability_sum")
+    }
+
     private static func windowedManifest(aiID: Int, name: String = "ContractPlugin") -> PluginManifestV4 {
         PluginManifestV4(
             aiID: aiID,

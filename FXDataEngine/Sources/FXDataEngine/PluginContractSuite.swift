@@ -41,6 +41,32 @@ public struct PluginContractSuiteFactory: Sendable {
     }
 }
 
+public struct AuditPluginContractSelfTestResult: Codable, Hashable, Sendable {
+    public var passed: Bool
+    public var reason: String
+    public var suite: TestSuiteResult
+
+    public init(suite: TestSuiteResult) {
+        self.suite = suite
+        self.passed = suite.passed
+        self.reason = suite.legacyReason
+    }
+}
+
+public enum AuditPluginContractTools {
+    public static func selfTest(
+        factories: [PluginContractSuiteFactory],
+        configuration: PluginContractSuiteConfiguration = PluginContractSuiteConfiguration()
+    ) -> AuditPluginContractSelfTestResult {
+        AuditPluginContractSelfTestResult(
+            suite: PluginContractSuiteTools.runSuite(
+                factories: factories,
+                configuration: configuration
+            )
+        )
+    }
+}
+
 public enum PluginContractSuiteTools {
     public static let defaultSampleTimeUTC: Int64 = 1_704_153_600
 
