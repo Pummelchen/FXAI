@@ -197,30 +197,17 @@ public struct PreparedTrainingDataset: Sendable {
 }
 
 public enum TrainingSampleTools {
-    public static let defaultConfiguredHorizons = [1, 2, 3, 5, 8, 13, 21, 34]
+    public static let defaultConfiguredHorizons = HorizonTools.defaultConfiguredHorizons
 
     public static func clampHorizon(_ horizonMinutes: Int) -> Int {
-        min(max(1, horizonMinutes), 720)
+        HorizonTools.clampHorizon(horizonMinutes)
     }
 
     public static func horizonSlot(
         horizonMinutes: Int,
         configuredHorizons: [Int] = defaultConfiguredHorizons
     ) -> Int {
-        let horizons = Array(configuredHorizons.prefix(RuntimeArtifactConstants.maxHorizons))
-            .map(clampHorizon)
-        guard !horizons.isEmpty else { return 0 }
-        let horizon = clampHorizon(horizonMinutes)
-        var best = 0
-        var bestDiff = abs(horizons[0] - horizon)
-        for index in horizons.indices.dropFirst() {
-            let diff = abs(horizons[index] - horizon)
-            if diff < bestDiff {
-                best = index
-                bestDiff = diff
-            }
-        }
-        return best
+        HorizonTools.horizonSlot(horizonMinutes: horizonMinutes, configuredHorizons: configuredHorizons)
     }
 
     public static func movePoints(from entry: Int64, to exit: Int64) -> Double {
@@ -458,13 +445,7 @@ public enum TrainingSampleTools {
     }
 
     static func sessionGroup(timestampUTC: Int64) -> Int {
-        let date = Date(timeIntervalSince1970: TimeInterval(timestampUTC))
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        let hour = calendar.component(.hour, from: date)
-        if hour < 8 { return 0 }
-        if hour < 16 { return 1 }
-        return 2
+        HorizonTools.sessionGroup(timestampUTC: timestampUTC)
     }
 }
 
