@@ -118,10 +118,10 @@ struct AdvancedVisualizationView: View {
                         if let secondary = point.secondaryValue {
                             BarMark(
                                 x: .value("Session", point.label),
-                                y: .value("Spread", secondary)
+                                y: .value("Price Cost", secondary)
                             )
                             .foregroundStyle(FXAITheme.warning.gradient)
-                            .position(by: .value("Type", "Spread"))
+                            .position(by: .value("Type", "Price Cost"))
                         }
                     }
                     .frame(height: 220)

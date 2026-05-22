@@ -186,14 +186,22 @@ struct AdvancedVisualizationBuilderTests {
         #expect(snapshot.familyStressHeatmap?.rowLabels == ["EURUSD"])
         #expect(snapshot.familyStressHeatmap?.columnLabels.contains("recurrent") == true)
         #expect(snapshot.globalTimeline.count >= 3)
+        let runtimeDetail = try #require(runtimeSnapshot.deployments.first)
+        #expect(runtimeDetail.summaryMetrics.contains(where: { $0.key == "price_cost_scale" && $0.value == "0.87" }))
 
         let detail = try #require(snapshot.symbolDetails.first)
         #expect(detail.worldSessionScales.count == 3)
         #expect(detail.worldStressMetrics.contains(where: { $0.label == "Shock Decay" }))
+        #expect(detail.worldStressMetrics.contains(where: { $0.label == "Price Cost" && $0.value == 0.87 }))
+        #expect(detail.worldSessionScales.first?.secondaryValue == 1.0)
+        #expect(detail.worldSessionScales.dropFirst().first?.secondaryValue == 1.1)
+        #expect(detail.worldSessionScales.last?.secondaryValue == 1.05)
         #expect(detail.familyWeights.contains(where: { $0.label == "recurrent" }))
         #expect(detail.featureWeights.contains(where: { $0.label == "price" }))
         #expect(detail.pluginWeights.contains(where: { $0.label == "ai_mlp" }))
         #expect(detail.artifactDiffHeatmap != nil)
+        #expect(detail.artifactDiffHeatmap?.columnLabels.contains("price_cost_scale") == true)
+        #expect(detail.artifactDiffHeatmap?.columnLabels.contains("spread_scale") == false)
         #expect(detail.weakScenarios == ["market_adversarial", "market_macro_event"])
         #expect(detail.timeline.contains(where: { $0.category == "promotion" }))
         #expect(detail.timeline.contains(where: { $0.category == "attribution" }))
@@ -236,13 +244,14 @@ struct AdvancedVisualizationBuilderTests {
             """
             {
               "asia_sigma_scale": 0.5,
-              "asia_spread_scale": 1.0,
+              "asia_price_cost_scale": 1.0,
               "london_sigma_scale": 0.6,
-              "london_spread_scale": 1.1,
+              "london_fill_risk_scale": 1.1,
               "newyork_sigma_scale": 0.55,
               "newyork_spread_scale": 1.05,
               "sigma_scale": 0.77,
-              "spread_scale": 0.87,
+              "price_cost_scale": 0.87,
+              "spread_scale": 0.12,
               "shock_decay": 0.73,
               "liquidity_stress": 0.17,
               "transition_entropy": 0.11,

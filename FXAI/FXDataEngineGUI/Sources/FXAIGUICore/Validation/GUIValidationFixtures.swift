@@ -116,7 +116,7 @@ public enum GUIValidationFixtures {
                 sourcePath: projectRoot.appendingPathComponent("Tools/OfflineLab/world_plan_EURUSD.json"),
                 values: [
                     KeyValueRecord(key: "sigma_scale", value: "1.14"),
-                    KeyValueRecord(key: "spread_scale", value: "1.07"),
+                    KeyValueRecord(key: "price_cost_scale", value: "1.07"),
                     KeyValueRecord(key: "shock_decay", value: "0.42")
                 ]
             )
@@ -1635,7 +1635,7 @@ public enum GUIValidationFixtures {
                     ],
                     worldStressMetrics: [
                         VisualizationSeriesPoint(label: "Sigma", value: 1.14),
-                        VisualizationSeriesPoint(label: "Spread", value: 1.07),
+                        VisualizationSeriesPoint(label: "Price Cost", value: 1.07),
                         VisualizationSeriesPoint(label: "Shock", value: 0.42)
                     ],
                     familyWeights: [

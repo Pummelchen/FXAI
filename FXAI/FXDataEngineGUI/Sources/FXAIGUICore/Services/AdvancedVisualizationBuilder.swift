@@ -134,18 +134,22 @@ public struct AdvancedVisualizationBuilder {
             "reduce_bias",
             "exit_bias",
             "sigma_scale",
-            "spread_scale",
+            "price_cost_scale",
             "family_weight_recurrent",
             "feature_weight_price",
             "feature_weight_volatility"
         ]
 
         let numericMaps: [(String, [String: Double])] = sections.map { label, records in
+            var map: [String: Double] = [:]
             let pairs: [(String, Double)] = records.compactMap { record in
                 guard let value = record.numericValue else { return nil }
-                return (record.key, value)
+                return (canonicalArtifactMetricKey(record.key), value)
             }
-            return (label, Dictionary(uniqueKeysWithValues: pairs))
+            for (key, value) in pairs where map[key] == nil {
+                map[key] = value
+            }
+            return (label, map)
         }
 
         let availableKeys = Set(numericMaps.flatMap { $0.1.keys })
@@ -185,17 +189,26 @@ public struct AdvancedVisualizationBuilder {
             VisualizationSeriesPoint(
                 label: "Asia",
                 value: doubleValue(world["asia_sigma_scale"]),
-                secondaryValue: doubleValue(world["asia_spread_scale"])
+                secondaryValue: worldOptional(
+                    world,
+                    keys: ["asia_price_cost_scale", "asia_fill_risk_scale", "asia_spread_scale"]
+                )
             ),
             VisualizationSeriesPoint(
                 label: "London",
                 value: doubleValue(world["london_sigma_scale"]),
-                secondaryValue: doubleValue(world["london_spread_scale"])
+                secondaryValue: worldOptional(
+                    world,
+                    keys: ["london_price_cost_scale", "london_fill_risk_scale", "london_spread_scale"]
+                )
             ),
             VisualizationSeriesPoint(
                 label: "New York",
                 value: doubleValue(world["newyork_sigma_scale"]),
-                secondaryValue: doubleValue(world["newyork_spread_scale"])
+                secondaryValue: worldOptional(
+                    world,
+                    keys: ["newyork_price_cost_scale", "newyork_fill_risk_scale", "newyork_spread_scale"]
+                )
             )
         ]
     }
@@ -206,7 +219,10 @@ public struct AdvancedVisualizationBuilder {
     ) -> [VisualizationSeriesPoint] {
         [
             VisualizationSeriesPoint(label: "Sigma", value: doubleValue(world["sigma_scale"])),
-            VisualizationSeriesPoint(label: "Spread", value: doubleValue(world["spread_scale"])),
+            VisualizationSeriesPoint(
+                label: "Price Cost",
+                value: worldValue(world, keys: ["price_cost_scale", "fill_risk_scale", "spread_scale"])
+            ),
             VisualizationSeriesPoint(label: "Shock Decay", value: doubleValue(world["shock_decay"])),
             VisualizationSeriesPoint(label: "Liquidity", value: doubleValue(world["liquidity_stress"])),
             VisualizationSeriesPoint(label: "Transition Entropy", value: doubleValue(world["transition_entropy"])),
@@ -445,6 +461,15 @@ public struct AdvancedVisualizationBuilder {
         return nil
     }
 
+    private func canonicalArtifactMetricKey(_ key: String) -> String {
+        switch key {
+        case "fill_risk_scale", "spread_scale":
+            return "price_cost_scale"
+        default:
+            return key
+        }
+    }
+
     private func doubleValue(_ raw: Any?) -> Double {
         if let value = raw as? Double { return value }
         if let value = raw as? NSNumber { return value.doubleValue }
@@ -456,6 +481,19 @@ public struct AdvancedVisualizationBuilder {
         if let value = raw as? Double { return value }
         if let value = raw as? NSNumber { return value.doubleValue }
         if let value = raw as? String, let parsed = Double(value) { return parsed }
+        return nil
+    }
+
+    private func worldValue(_ world: [String: Any], keys: [String]) -> Double {
+        worldOptional(world, keys: keys) ?? 0
+    }
+
+    private func worldOptional(_ world: [String: Any], keys: [String]) -> Double? {
+        for key in keys {
+            if let value = doubleOptional(world[key]) {
+                return value
+            }
+        }
         return nil
     }
 }

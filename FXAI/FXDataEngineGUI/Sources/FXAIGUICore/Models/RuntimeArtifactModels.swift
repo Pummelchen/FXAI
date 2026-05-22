@@ -124,7 +124,7 @@ public struct RuntimeDeploymentDetail: Identifiable, Hashable, Sendable {
             "reduce_bias",
             "exit_bias",
             "sigma_scale",
-            "spread_scale",
+            "price_cost_scale",
             "shock_decay"
         ]
 
@@ -132,7 +132,20 @@ public struct RuntimeDeploymentDetail: Identifiable, Hashable, Sendable {
             .flatMap(\.values)
 
         return preferredKeys.compactMap { key in
-            allValues.first(where: { $0.key == key })
+            let aliases = summaryMetricAliases(for: key)
+            guard let record = allValues.first(where: { aliases.contains($0.key) }) else {
+                return nil
+            }
+            return record.key == key ? record : KeyValueRecord(key: key, value: record.value)
+        }
+    }
+
+    private func summaryMetricAliases(for key: String) -> [String] {
+        switch key {
+        case "price_cost_scale":
+            ["price_cost_scale", "fill_risk_scale", "spread_scale"]
+        default:
+            [key]
         }
     }
 }
