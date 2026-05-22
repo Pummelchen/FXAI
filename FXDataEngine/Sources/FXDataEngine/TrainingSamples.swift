@@ -149,6 +149,16 @@ public struct PreparedTrainingPayload: Sendable {
     }
 }
 
+public struct PreparedSampleWindow: Codable, Hashable, Sendable {
+    public var rows: [[Double]]
+
+    public var size: Int { rows.count }
+
+    public init(rows: [[Double]] = []) {
+        self.rows = rows.map(TrainingSampleTools.sanitizeModelInput)
+    }
+}
+
 public struct TrainingDatasetRequest: Sendable {
     public var startIndex: Int?
     public var endIndex: Int?
@@ -198,6 +208,28 @@ public struct PreparedTrainingDataset: Sendable {
 
 public enum TrainingSampleTools {
     public static let defaultConfiguredHorizons = HorizonTools.defaultConfiguredHorizons
+
+    public static func preparedSampleWindow(
+        samples: [PreparedTrainingSample],
+        anchorIndex: Int,
+        requestedBars: Int
+    ) -> PreparedSampleWindow {
+        let sequence = min(max(requestedBars, 1), FXDataEngineConstants.maxSequenceBars)
+        guard anchorIndex > 0, anchorIndex < samples.count else {
+            return PreparedSampleWindow()
+        }
+
+        var rows: [[Double]] = []
+        rows.reserveCapacity(sequence)
+        for offset in 1...sequence {
+            let index = anchorIndex - offset
+            if index < 0 || index >= samples.count { break }
+            let sample = samples[index]
+            if !sample.valid { break }
+            rows.append(sample.x)
+        }
+        return PreparedSampleWindow(rows: rows)
+    }
 
     public static func clampHorizon(_ horizonMinutes: Int) -> Int {
         HorizonTools.clampHorizon(horizonMinutes)
