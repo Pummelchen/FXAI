@@ -35,13 +35,15 @@ public struct OhlcBar: Sendable, Hashable {
     public let high: Int64
     public let low: Int64
     public let close: Int64
+    public let volume: UInt64
 
-    public init(utcTimestamp: Int64, open: Int64, high: Int64, low: Int64, close: Int64) {
+    public init(utcTimestamp: Int64, open: Int64, high: Int64, low: Int64, close: Int64, volume: UInt64 = 0) {
         self.utcTimestamp = utcTimestamp
         self.open = open
         self.high = high
         self.low = low
         self.close = close
+        self.volume = volume
     }
 }
 
@@ -52,9 +54,11 @@ public struct OhlcDataSeries: Sendable {
     public let high: ContiguousArray<Int64>
     public let low: ContiguousArray<Int64>
     public let close: ContiguousArray<Int64>
+    public let volume: ContiguousArray<UInt64>
 
     @inlinable public var count: Int { utcTimestamps.count }
     @inlinable public var isEmpty: Bool { count == 0 }
+    @inlinable public var hasVolume: Bool { volume.contains { $0 > 0 } }
 
     public init(
         metadata: FXBacktestMarketMetadata,
@@ -62,7 +66,8 @@ public struct OhlcDataSeries: Sendable {
         open: ContiguousArray<Int64>,
         high: ContiguousArray<Int64>,
         low: ContiguousArray<Int64>,
-        close: ContiguousArray<Int64>
+        close: ContiguousArray<Int64>,
+        volume: ContiguousArray<UInt64> = []
     ) throws {
         guard (0...10).contains(metadata.digits) else {
             throw FXBacktestError.invalidMarketData("Price digits must be in 0...10.")
@@ -70,6 +75,15 @@ public struct OhlcDataSeries: Sendable {
         let rowCount = utcTimestamps.count
         guard open.count == rowCount, high.count == rowCount, low.count == rowCount, close.count == rowCount else {
             throw FXBacktestError.invalidMarketData("OHLC columns must have equal length.")
+        }
+        let resolvedVolume: ContiguousArray<UInt64>
+        if volume.isEmpty {
+            resolvedVolume = ContiguousArray(repeating: 0, count: rowCount)
+        } else {
+            guard volume.count == rowCount else {
+                throw FXBacktestError.invalidMarketData("Volume column must match OHLC row count.")
+            }
+            resolvedVolume = volume
         }
         for index in 0..<rowCount {
             guard utcTimestamps[index] > 0, utcTimestamps[index] % 60 == 0 else {
@@ -91,6 +105,7 @@ public struct OhlcDataSeries: Sendable {
         self.high = high
         self.low = low
         self.close = close
+        self.volume = resolvedVolume
     }
 
     public init(response: FXBacktestM1HistoryResponse) throws {
@@ -109,7 +124,8 @@ public struct OhlcDataSeries: Sendable {
             open: ContiguousArray(response.open),
             high: ContiguousArray(response.high),
             low: ContiguousArray(response.low),
-            close: ContiguousArray(response.close)
+            close: ContiguousArray(response.close),
+            volume: ContiguousArray(response.volume)
         )
     }
 
@@ -119,7 +135,8 @@ public struct OhlcDataSeries: Sendable {
             open: open[index],
             high: high[index],
             low: low[index],
-            close: close[index]
+            close: close[index],
+            volume: volume[index]
         )
     }
 }
@@ -133,11 +150,13 @@ public extension OhlcDataSeries {
         var high = ContiguousArray<Int64>()
         var low = ContiguousArray<Int64>()
         var close = ContiguousArray<Int64>()
+        var volume = ContiguousArray<UInt64>()
         utc.reserveCapacity(safeCount)
         open.reserveCapacity(safeCount)
         high.reserveCapacity(safeCount)
         low.reserveCapacity(safeCount)
         close.reserveCapacity(safeCount)
+        volume.reserveCapacity(safeCount)
 
         var price = Int64(108_000)
         for index in 0..<safeCount {
@@ -153,6 +172,7 @@ public extension OhlcDataSeries {
             high.append(barHigh)
             low.append(barLow)
             close.append(barClose)
+            volume.append(UInt64(100 + (index % 21)))
             price = barClose
         }
 
@@ -169,7 +189,8 @@ public extension OhlcDataSeries {
             open: open,
             high: high,
             low: low,
-            close: close
+            close: close,
+            volume: volume
         )
     }
 }

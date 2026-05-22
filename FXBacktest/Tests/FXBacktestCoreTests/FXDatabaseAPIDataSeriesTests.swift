@@ -21,7 +21,7 @@ final class FXDatabaseAPIDataSeriesTests: XCTestCase {
             high: [108_020, 108_030],
             low: [107_990, 108_000],
             close: [108_010, 108_020],
-            volume: [0, 0]
+            volume: [0, 42]
         )
 
         let series = try OhlcDataSeries(response: response)
@@ -33,6 +33,8 @@ final class FXDatabaseAPIDataSeriesTests: XCTestCase {
         XCTAssertEqual(series.metadata.digits, 5)
         XCTAssertEqual(series.open[0], 108_000)
         XCTAssertEqual(series.close[1], 108_020)
+        XCTAssertEqual(series.volume[1], 42)
+        XCTAssertTrue(series.hasVolume)
     }
 
     func testOhlcDataSeriesRejectsInvalidDigits() throws {

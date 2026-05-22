@@ -1,10 +1,10 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.3
 import PackageDescription
 
 let package = Package(
     name: "FXDatabase",
     platforms: [
-        .macOS(.v13)
+        .macOS("26.0")
     ],
     products: [
         .library(name: "FXDatabaseFXBacktestAPI", targets: ["FXBacktestAPI"]),

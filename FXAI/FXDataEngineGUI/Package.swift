@@ -1,11 +1,11 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.3
 
 import PackageDescription
 
 let package = Package(
     name: "FXAIGUI",
     platforms: [
-        .macOS("14.0")
+        .macOS("26.0")
     ],
     products: [
         .library(
@@ -40,5 +40,6 @@ let package = Package(
             dependencies: ["FXAIGUICore", "FXAIGUIApp"],
             path: "Tests/FXAIGUIAppTests"
         )
-    ]
+    ],
+    swiftLanguageModes: [.v6]
 )

@@ -39,8 +39,8 @@ Important MT5 socket note: standard MQL5 sockets are client-oriented. The sample
 
 ## Prerequisites
 
-- macOS on Apple Silicon M2/M3.
-- Swift 6 toolchain.
+- macOS 26 on Apple Silicon M2/M3 or newer.
+- Swift 6.3 toolchain from Xcode 26.5 or newer.
 - ClickHouse installed with Homebrew and reachable over HTTP, usually `http://localhost:8123`.
 - MetaTrader 5 running under Wine on macOS.
 - The EA copied/compiled inside MT5.

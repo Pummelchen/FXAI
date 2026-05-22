@@ -66,7 +66,7 @@ Compare `ai_lstm`, `ai_tcn`, `ai_gru`, `ai_bilstm`, `ai_lstm_tcn`, `ai_cnn_lstm`
 
 - Plugins consume FXAI payloads and context only; they do not pull raw MT5 bars directly.
 - Live inference remains MT5-native and DLL-free.
-- The canonical market-training contract remains `M1 OHLC + spread`.
+- The canonical Swift-era market-training contract is `M1 OHLCV` from FXDatabase. Spread is not part of the offline contract, and plugins should use volume whenever the dataset provides nonzero volume.
 - Microstructure features remain MT5-visible broker-side proxies and must fail safe when stale or missing.
 - All plugin outputs must remain probability, confidence, and abstention compatible.
 

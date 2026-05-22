@@ -55,9 +55,9 @@ Important files:
 
 ## Requirements
 
-- macOS 13 or newer.
-- Apple Silicon Mac recommended, especially M2/M3 for the intended performance target.
-- Swift 6 toolchain.
+- macOS 26 or newer.
+- Apple Silicon Mac recommended, especially M2/M3 or newer for the intended performance target.
+- Swift 6.3 toolchain from Xcode 26.5 or newer.
 - FXAI checked out with FXBacktest and FXDatabase inside the same repository:
 
 ```text
@@ -158,7 +158,7 @@ At the FXDatabase `>` prompt, run:
 > fxbacktest-api --config-dir Config --api-host 127.0.0.1 --api-port 5066
 ```
 
-Leave FXDatabase running while FXBacktest loads data. FXBacktest uses FXDatabase only as a historical M1 OHLCV provider; backtests run on pure open/high/low/close bars and do not request spread, swap, commission, margin, bid/ask, tick, or volume data.
+Leave FXDatabase running while FXBacktest loads data. FXBacktest uses FXDatabase only as a historical M1 OHLCV provider; backtests receive open/high/low/close/volume bars and do not request spread, swap, commission, margin, bid/ask, or tick data. Plugins should use volume whenever the loaded dataset has nonzero volume.
 
 Then in FXBacktest:
 
@@ -273,11 +273,12 @@ FXBacktest expects:
 - M1 closed bars only.
 - UTC timestamps, not MT5 server timestamps.
 - Scaled integer OHLC prices.
+- Unsigned M1 volume values; MT5 rows currently use `0`, while other providers can supply real volume.
 - Strictly increasing timestamps.
 - Complete verified coverage for the requested UTC range.
 - Matching broker source, logical symbol, MT5 symbol, and digits.
 
-FXBacktest does not call FXDatabase for execution side data. Spread, swap, commission, margin, bid/ask quotes, tick data, and volume are intentionally outside the current backtest model.
+FXBacktest does not call FXDatabase for execution side data. Spread, swap, commission, margin, bid/ask quotes, and tick data are intentionally outside the current backtest model. Volume is market data and is passed through to plugins when available.
 
 Direct ClickHouse access is forbidden for historical Forex OHLC data. The only ClickHouse exception in FXBacktest is the local optimization result-store API, which writes and purges FXBacktest result tables:
 
@@ -392,7 +393,7 @@ FXStupid now uses `OhlcMarketUniverse`, so loaded symbols from `FXPairs` can par
 
 ### FX7
 
-`FX7` is the OHLC-only conversion of the FX7 MQL5 EA core. The CPU path keeps the EA's closed-bar feature flow where possible while intentionally omitting non-OHLC dependencies such as carry, value, macro data, spread, swap, commission, margin, bid/ask, tick data, and volume.
+`FX7` is the OHLCV conversion of the FX7 MQL5 EA core. The CPU path keeps the EA's closed-bar feature flow where possible while intentionally omitting non-OHLCV dependencies such as carry, value, macro data, spread, swap, commission, margin, bid/ask, and tick data.
 
 Key conversion details:
 

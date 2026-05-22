@@ -36,9 +36,14 @@ FXAI/FILE_COMMON/
 FXAI/FXDataEngineGUI/.build/
 FXAI/FXDataEngineGUI/.swiftpm/
 FXAI/FXDataEngineGUI/Artifacts/
+FXDataEngine/.build/
+FXDataEngine/.swiftpm/
 FXDatabase/.build/
 FXDatabase/.swiftpm/
 FXDatabase/Package.resolved
+FXBacktest/.build/
+FXBacktest/.swiftpm/
+FXBacktest/Package.resolved
 FXDatabase/Config/
 FXDatabase/Logs/
 FXAI/Tools/tests/.pytest_cache/

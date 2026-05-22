@@ -14,6 +14,10 @@ FXBacktest and FXDatabase are now first-class FXAI subprojects included as ordin
 git clone https://github.com/Pummelchen/FXAI.git
 ```
 
+## Swift Standard
+
+All Swift projects and subprojects in FXAI use the current local Apple toolchain standard: Swift tools 6.3, Swift language mode 6, Xcode 26.5, and macOS 26 as the deployment floor. New Swift packages should follow that baseline unless the repo standard is intentionally upgraded.
+
 ## User Matrix Benefits
 
 | User | Core Benefit | Start Here |
@@ -27,7 +31,7 @@ git clone https://github.com/Pummelchen/FXAI.git
 ## Core Benefits
 
 - Transitional MT5 live runtime: no external live inference service and no DLL dependency for current trade decisions while the Swift/Metal architecture is built out.
-- One canonical historical market contract: verified `M1 OHLCV` from FXDatabase, with MT5 raw data access isolated behind the FXDatabase bridge and FXAI data pipeline.
+- One canonical historical market contract: verified `M1 OHLCV` from FXDatabase, with MT5 raw data access isolated behind the FXDatabase bridge and FXAI data pipeline. Spread is not part of this offline contract; volume is used by plugins whenever the dataset provides nonzero values.
 - Native Swift backtesting: FXBacktest consumes FXDatabase history and can run CPU, Metal, or hybrid CPU+Metal optimization paths for converted plugins.
 - Plugin-based model layer: statistical, tree, linear, sequence, factor, trend, regime, policy, and ensemble families share one prediction contract.
 - Runtime control plane: NewsPulse, Rates Engine, Cross Asset, Microstructure, Adaptive Router, Dynamic Ensemble, Probabilistic Calibration, Execution Quality, Drift Governance, and Pair Network layers can explain or suppress unsafe trades.
