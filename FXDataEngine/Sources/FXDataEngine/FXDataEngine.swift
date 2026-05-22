@@ -94,6 +94,131 @@ public struct FXDataEnginePipeline: Sendable {
         )
     }
 
+    public func prepareTrainPayload(
+        universe: MarketUniverse,
+        request dataRequest: DataCoreRequest,
+        manifest: PluginManifestV4,
+        horizonMinutes: Int,
+        roundTripCostPoints: Double = 0.0,
+        evThresholdPoints: Double = 0.0,
+        normalizationMethod: FeatureNormalizationMethod = .existing,
+        tradeKillerMinutes: Int? = nil
+    ) throws -> PreparedTrainingPayload {
+        try manifest.validate()
+        let dataBundle = try dataCore.buildBundle(request: dataRequest, universe: universe)
+        let horizon = TrainingSampleTools.clampHorizon(horizonMinutes)
+        guard dataBundle.sampleIndex + horizon < dataBundle.primary.count else {
+            throw FXDataEngineError.insufficientData("sample index \(dataBundle.sampleIndex) does not leave \(horizon) future M1 bars for training label")
+        }
+
+        let featureFrame = try featureCore.buildFrame(
+            bundle: dataBundle,
+            request: FeatureCoreRequest(
+                sampleIndex: dataBundle.sampleIndex,
+                horizonMinutes: horizon,
+                normalizationMethod: normalizationMethod
+            )
+        )
+        let normalizationFrame = try normalizationCore.buildInputFrame(from: featureFrame)
+        let label = TrainingSampleTools.buildTripleBarrierLabel(
+            series: dataBundle.primary,
+            index: dataBundle.sampleIndex,
+            horizonMinutes: horizon,
+            roundTripCostPoints: roundTripCostPoints,
+            evThresholdPoints: evThresholdPoints,
+            tradeKillerMinutes: tradeKillerMinutes
+        )
+        let sequenceBars = manifest.resolvedSequenceBars(horizonMinutes: horizon)
+        let xWindow = buildInputWindow(
+            universe: universe,
+            centerIndex: dataBundle.sampleIndex,
+            sequenceBars: sequenceBars,
+            normalizationMethod: normalizationMethod
+        )
+        let payloadFrame = try normalizationCore.buildPayloadFrame(NormalizationPayloadRequest(
+            valid: true,
+            featureSchema: manifest.featureSchema,
+            featureGroups: manifest.featureGroups,
+            normalizationMethod: normalizationMethod,
+            horizonMinutes: horizon,
+            sequenceBars: sequenceBars,
+            sampleTimeUTC: featureFrame.sampleTimeUTC,
+            windowSize: xWindow.count,
+            x: normalizationFrame.modelInput,
+            xWindow: xWindow
+        ))
+
+        let primary = dataBundle.primary
+        let pointValue = 1.0 / pow(10.0, Double(primary.metadata.digits))
+        let minMovePoints = max(0.0, roundTripCostPoints)
+        let pathRisk = TrainingSampleTools.pathRisk(
+            mfePoints: label.mfePoints,
+            maePoints: label.maePoints,
+            minMovePoints: minMovePoints,
+            timeToHitFraction: label.timeToHitFraction,
+            pathFlags: label.pathFlags
+        )
+        let edge = max(abs(label.realizedMovePoints) - minMovePoints, 0.0)
+        let quality = trainingQuality(
+            label: label,
+            minMovePoints: minMovePoints,
+            spreadStress: 0.0
+        )
+        let sampleWeight = fxClamp(
+            (label.labelClass == .skip ? 0.85 : 1.20) *
+                quality *
+                (0.75 + edge / max(minMovePoints, 0.50)),
+            0.25,
+            7.50
+        )
+        let sample = PreparedTrainingSample(
+            valid: true,
+            labelClass: label.labelClass,
+            regimeID: TrainingSampleTools.staticRegimeID(series: primary, index: dataBundle.sampleIndex),
+            horizonMinutes: horizon,
+            horizonSlot: TrainingSampleTools.horizonSlot(horizonMinutes: horizon),
+            movePoints: label.realizedMovePoints,
+            minMovePoints: minMovePoints,
+            costPoints: minMovePoints,
+            sampleWeight: sampleWeight,
+            qualityScore: quality,
+            mfePoints: label.mfePoints,
+            maePoints: label.maePoints,
+            timeToHitFraction: label.timeToHitFraction,
+            pathFlags: label.pathFlags,
+            pathRisk: pathRisk,
+            fillRisk: TrainingSampleTools.fillRisk(spreadStressPoints: 0.0, minMovePoints: minMovePoints, costPoints: minMovePoints),
+            maskedStepTarget: maskedStepTarget(series: primary, index: dataBundle.sampleIndex),
+            nextVolumeTarget: nextVolatilityTarget(series: primary, index: dataBundle.sampleIndex, horizonMinutes: horizon, fallback: abs(label.realizedMovePoints)),
+            regimeShiftTarget: regimeShiftTarget(series: primary, index: dataBundle.sampleIndex, horizonMinutes: horizon),
+            contextLeadTarget: contextLeadTarget(bundle: dataBundle, movePoints: label.realizedMovePoints),
+            pointValue: pointValue,
+            domainHash: PluginContractTools.symbolHash01(universe.primarySymbol),
+            sampleTimeUTC: featureFrame.sampleTimeUTC,
+            x: normalizationFrame.modelInput
+        )
+        let context = PluginContextV4(
+            regimeID: sample.regimeID,
+            sessionBucket: PluginContractTools.deriveSessionBucket(timestampUTC: featureFrame.sampleTimeUTC),
+            horizonMinutes: horizon,
+            featureSchema: manifest.featureSchema,
+            normalizationMethod: normalizationMethod,
+            sequenceBars: sequenceBars,
+            pointValue: pointValue,
+            domainHash: sample.domainHash,
+            sampleTimeUTC: featureFrame.sampleTimeUTC,
+            dataHasVolume: featureFrame.hasVolume
+        )
+        return PreparedTrainingPayload(
+            dataBundle: dataBundle,
+            featureFrame: featureFrame,
+            normalizationFrame: normalizationFrame,
+            payloadFrame: payloadFrame,
+            sample: sample,
+            context: context
+        )
+    }
+
     public func buildInputWindow(
         universe: MarketUniverse,
         centerIndex: Int,
@@ -124,5 +249,80 @@ public struct FXDataEnginePipeline: Sendable {
             }
         }
         return window
+    }
+
+    private func trainingQuality(
+        label: TripleBarrierLabelResult,
+        minMovePoints: Double,
+        spreadStress: Double
+    ) -> Double {
+        let quality: Double
+        if label.labelClass == .skip {
+            quality = 0.75 - (0.10 * spreadStress)
+        } else {
+            let mfeRatio = label.mfePoints / max(minMovePoints, 0.50)
+            let adverseRatio = label.maePoints / max(label.mfePoints, minMovePoints)
+            let speedBonus = 1.0 - fxClamp(label.timeToHitFraction, 0.0, 1.0)
+            var directionalQuality = 0.85 +
+                0.20 * fxClamp(mfeRatio, 0.0, 4.0) +
+                0.20 * speedBonus -
+                0.15 * fxClamp(adverseRatio, 0.0, 3.0) -
+                0.10 * spreadStress
+            if label.pathFlags.contains(.dualHit) { directionalQuality -= 0.12 }
+            if label.pathFlags.contains(.killedEarly) { directionalQuality -= 0.10 }
+            quality = directionalQuality
+        }
+        return fxClamp(quality, 0.35, 2.20)
+    }
+
+    private func maskedStepTarget(series: M1OHLCVSeries, index: Int) -> Double {
+        guard index >= 0, index + 1 < series.count else { return 0.0 }
+        return TrainingSampleTools.movePoints(from: series.close[index], to: series.close[index + 1])
+    }
+
+    private func nextVolatilityTarget(
+        series: M1OHLCVSeries,
+        index: Int,
+        horizonMinutes: Int,
+        fallback: Double
+    ) -> Double {
+        let auxHorizon = min(max(1, horizonMinutes), 8)
+        guard index >= 0, index + 1 < series.count else { return abs(fallback) }
+        var sum = 0.0
+        var count = 0
+        for step in 1...auxHorizon {
+            let futureIndex = index + step
+            guard futureIndex < series.count else { break }
+            sum += abs(TrainingSampleTools.movePoints(from: series.close[index], to: series.close[futureIndex]))
+            count += 1
+        }
+        return count > 0 ? sum / Double(count) : abs(fallback)
+    }
+
+    private func regimeShiftTarget(series: M1OHLCVSeries, index: Int, horizonMinutes: Int) -> Double {
+        let auxHorizon = min(max(1, horizonMinutes), 8)
+        guard index >= 0, index + auxHorizon < series.count else { return 0.0 }
+        let currentRegime = TrainingSampleTools.staticRegimeID(series: series, index: index)
+        let futureRegime = TrainingSampleTools.staticRegimeID(series: series, index: index + auxHorizon)
+        return currentRegime == futureRegime ? 0.0 : 1.0
+    }
+
+    private func contextLeadTarget(bundle: DataCoreBundle, movePoints: Double) -> Double {
+        let index = bundle.sampleIndex
+        guard index >= 0,
+              index < bundle.contextAggregates.mean.count,
+              index < bundle.contextAggregates.standardDeviation.count else {
+            return 0.5
+        }
+        let mean = bundle.contextAggregates.mean[index]
+        let standardDeviation = bundle.contextAggregates.standardDeviation[index]
+        let signal = standardDeviation > 1e-6 ? mean / standardDeviation : mean
+        return fxClamp(0.5 + 0.5 * sign(signal) * sign(movePoints), 0.0, 1.0)
+    }
+
+    private func sign(_ value: Double) -> Double {
+        if value > 0 { return 1.0 }
+        if value < 0 { return -1.0 }
+        return 0.0
     }
 }

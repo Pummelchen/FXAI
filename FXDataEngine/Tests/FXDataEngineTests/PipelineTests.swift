@@ -144,6 +144,56 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(frame.previous[10], aggregates.mean[index - 1] / previousVolatilityUnit, accuracy: 1e-12)
     }
 
+    func testTripleBarrierLabelUsesAscendingFutureBars() throws {
+        let series = try makeBreakoutSeries(symbol: "EURUSD", count: 90, breakoutIndex: 52)
+        let label = TrainingSampleTools.buildTripleBarrierLabel(
+            series: series,
+            index: 50,
+            horizonMinutes: 5,
+            roundTripCostPoints: 1.0,
+            evThresholdPoints: 1.0
+        )
+
+        XCTAssertEqual(label.labelClass, .buy)
+        XCTAssertGreaterThan(label.realizedMovePoints, 0.0)
+        XCTAssertEqual(label.timeToHitFraction, 0.4, accuracy: 1e-12)
+        XCTAssertGreaterThan(label.mfePoints, label.maePoints)
+    }
+
+    func testPipelineBuildsTrainPayloadWithTripleBarrierLabel() throws {
+        let series = try makeBreakoutSeries(symbol: "EURUSD", count: 110, breakoutIndex: 62)
+        let universe = try MarketUniverse(primarySymbol: "EURUSD", series: [series])
+        let manifest = PluginManifestV4(
+            aiID: 7,
+            aiName: "TrainableWindow",
+            family: .linear,
+            capabilityMask: [.selfTest, .windowContext],
+            minSequenceBars: 2,
+            maxSequenceBars: 16
+        )
+        let payload = try FXDataEnginePipeline().prepareTrainPayload(
+            universe: universe,
+            request: DataCoreRequest(symbol: "EURUSD", neededBars: 50, alignUpToIndex: 60),
+            manifest: manifest,
+            horizonMinutes: 5,
+            roundTripCostPoints: 1.0,
+            evThresholdPoints: 1.0
+        )
+        let request = payload.trainRequest
+
+        try request.validate()
+        XCTAssertEqual(payload.sample.labelClass, .buy)
+        XCTAssertEqual(payload.sample.horizonSlot, 3)
+        XCTAssertEqual(request.labelClass, .buy)
+        XCTAssertEqual(request.context.regimeID, payload.sample.regimeID)
+        XCTAssertEqual(request.context.dataHasVolume, true)
+        XCTAssertEqual(request.x.count, FXDataEngineConstants.aiWeights)
+        XCTAssertGreaterThan(request.windowSize, 0)
+        XCTAssertGreaterThan(request.movePoints, 0.0)
+        XCTAssertGreaterThan(payload.sample.qualityScore, 0.35)
+        XCTAssertEqual(request.fillRisk, 0.0)
+    }
+
     private func makeSeries(volumeEnabled: Bool, count: Int) throws -> M1OHLCVSeries {
         let start = Int64(1_704_067_200)
         var utc = ContiguousArray<Int64>()
@@ -203,6 +253,53 @@ final class PipelineTests: XCTestCase {
             low.append(min(price, next) - 5)
             close.append(next)
             volume.append(UInt64(100 + (index % 19)))
+            price = next
+        }
+
+        return try M1OHLCVSeries(
+            metadata: FXMarketMetadata(
+                brokerSourceId: "demo",
+                sourceOrigin: "DEMO",
+                logicalSymbol: symbol,
+                providerSymbol: symbol,
+                digits: 5,
+                firstUTC: utc.first,
+                lastUTC: utc.last
+            ),
+            utcTimestamps: utc,
+            open: open,
+            high: high,
+            low: low,
+            close: close,
+            volume: volume
+        )
+    }
+
+    private func makeBreakoutSeries(symbol: String, count: Int, breakoutIndex: Int) throws -> M1OHLCVSeries {
+        let start = Int64(1_704_067_200)
+        var utc = ContiguousArray<Int64>()
+        var open = ContiguousArray<Int64>()
+        var high = ContiguousArray<Int64>()
+        var low = ContiguousArray<Int64>()
+        var close = ContiguousArray<Int64>()
+        var volume = ContiguousArray<UInt64>()
+        var price = Int64(100_000)
+
+        for index in 0..<count {
+            let next: Int64
+            if index < breakoutIndex - 1 {
+                next = price
+            } else if index == breakoutIndex - 1 {
+                next = price + 1
+            } else {
+                next = 100_020 + Int64(index - breakoutIndex)
+            }
+            utc.append(start + Int64(index * 60))
+            open.append(price)
+            high.append(max(price, next) + 2)
+            low.append(min(price, next) - 2)
+            close.append(next)
+            volume.append(UInt64(200 + (index % 23)))
             price = next
         }
 
