@@ -194,7 +194,30 @@ public enum WarmupTools {
     public static let ftrlLogitAIID = 4
     public static let lightGBMAIID = 6
     public static let xgbFastAIID = 20
-    public static let seriousNativeAIIDs: Set<Int> = [32, 33, 34, 35, 25, lightGBMAIID, xgbFastAIID]
+    public static let seriousNativeAIIDs: Set<Int> = [
+        AIModelID.mlpTiny.rawValue,
+        AIModelID.lstm.rawValue,
+        AIModelID.lstmg.rawValue,
+        AIModelID.tcn.rawValue,
+        AIModelID.tft.rawValue,
+        AIModelID.tst.rawValue,
+        AIModelID.s4.rawValue,
+        AIModelID.autoformer.rawValue,
+        AIModelID.patchTST.rawValue,
+        AIModelID.chronos.rawValue,
+        AIModelID.timesfm.rawValue,
+        AIModelID.qcew.rawValue,
+        AIModelID.fewc.rawValue,
+        AIModelID.gha.rawValue,
+        AIModelID.tesseract.rawValue,
+        AIModelID.graphWM.rawValue,
+        AIModelID.lightgbm.rawValue,
+        AIModelID.xgbFast.rawValue
+    ]
+
+    public static func isSeriousNativeAI(aiID: Int) -> Bool {
+        seriousNativeAIIDs.contains(aiID)
+    }
 
     public static func sanitizeThresholdPair(buyThreshold: Double, sellThreshold: Double) -> WarmupThresholdPair {
         var buy = fxClamp(buyThreshold, 0.50, 0.95)
@@ -522,7 +545,7 @@ public enum WarmupTools {
         symbol: String
     ) -> Int {
         var epochs = max(baseEpochs, 1)
-        guard seriousNativeAIIDs.contains(aiID) else { return epochs }
+        guard isSeriousNativeAI(aiID: aiID) else { return epochs }
 
         let scale = ModelContextTools.modelCapacityScale(symbol: symbol, horizonMinutes: max(horizonMinutes, 1))
         var bonus = 1
@@ -546,6 +569,38 @@ public enum WarmupTools {
         }
         epochs += bonus
         return min(epochs, 10)
+    }
+
+    public static func warmupBlockSpan(aiID: Int, horizonMinutes: Int, symbol: String) -> Int {
+        guard isSeriousNativeAI(aiID: aiID) else { return 1 }
+
+        let horizon = max(horizonMinutes, 1)
+        var span = ModelContextTools.contextBatchSpan(maxCap: 24, horizonMinutes: horizon, symbol: symbol, baseMin: 4)
+        if horizon >= 15 {
+            span += 4
+        }
+        if horizon >= 30 {
+            span += 4
+        }
+        if horizon >= 60 {
+            span += 4
+        }
+        return min(max(span, 8), 40)
+    }
+
+    public static func curriculumPriority(sample: PreparedTrainingSample) -> Double {
+        let edge = max(abs(sample.movePoints) - max(sample.costPoints, 0.0), 0.0)
+        let timing = 1.0 - fxClamp(sample.timeToHitFraction, 0.0, 1.0)
+        let mfeRatio = sample.mfePoints / max(abs(sample.movePoints) + 0.50, 0.50)
+        let maeRatio = sample.maePoints / max(sample.mfePoints + 0.50, 0.50)
+        let quality = 1.0
+            + 0.20 * fxClamp(mfeRatio, 0.0, 3.0)
+            + 0.12 * timing
+            - 0.10 * fxClamp(maeRatio, 0.0, 2.0)
+
+        return sample.sampleWeight * quality
+            + 0.04 * edge
+            + 0.06 * fxClamp(sample.fillRisk, 0.0, 1.0)
     }
 
     public static func estimatePortfolioSymbolCorrelation(samples: [PreparedTrainingSample]) -> Double {

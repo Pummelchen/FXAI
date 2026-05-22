@@ -99,9 +99,37 @@ final class WarmupTests: XCTestCase {
     }
 
     func testWarmupEpochBudgetAndPortfolioDiagnosticsMatchLegacyMath() {
+        let expectedSeriousNativeIDs: Set<Int> = [
+            AIModelID.mlpTiny.rawValue,
+            AIModelID.lstm.rawValue,
+            AIModelID.lstmg.rawValue,
+            AIModelID.tcn.rawValue,
+            AIModelID.tft.rawValue,
+            AIModelID.tst.rawValue,
+            AIModelID.s4.rawValue,
+            AIModelID.autoformer.rawValue,
+            AIModelID.patchTST.rawValue,
+            AIModelID.chronos.rawValue,
+            AIModelID.timesfm.rawValue,
+            AIModelID.qcew.rawValue,
+            AIModelID.fewc.rawValue,
+            AIModelID.gha.rawValue,
+            AIModelID.tesseract.rawValue,
+            AIModelID.graphWM.rawValue,
+            AIModelID.lightgbm.rawValue,
+            AIModelID.xgbFast.rawValue
+        ]
+        XCTAssertEqual(WarmupTools.seriousNativeAIIDs, expectedSeriousNativeIDs)
+        XCTAssertFalse(WarmupTools.isSeriousNativeAI(aiID: AIModelID.sgdLogit.rawValue))
+        XCTAssertFalse(WarmupTools.isSeriousNativeAI(aiID: AIModelID.xgboost.rawValue))
+
         XCTAssertEqual(
             WarmupTools.warmupEpochBudget(aiID: 14, horizonMinutes: 60, baseEpochs: 0, symbol: "EURUSD"),
             1
+        )
+        XCTAssertEqual(
+            WarmupTools.warmupEpochBudget(aiID: AIModelID.lstm.rawValue, horizonMinutes: 60, baseEpochs: 2, symbol: "EURUSD"),
+            6
         )
         XCTAssertEqual(
             WarmupTools.warmupEpochBudget(aiID: 20, horizonMinutes: 60, baseEpochs: 2, symbol: "EURUSD"),
@@ -111,6 +139,21 @@ final class WarmupTests: XCTestCase {
             WarmupTools.warmupEpochBudget(aiID: 20, horizonMinutes: 240, baseEpochs: 5, symbol: "XAUUSD"),
             10
         )
+        XCTAssertEqual(WarmupTools.warmupBlockSpan(aiID: AIModelID.sgdLogit.rawValue, horizonMinutes: 60, symbol: "EURUSD"), 1)
+        XCTAssertEqual(WarmupTools.warmupBlockSpan(aiID: AIModelID.lstm.rawValue, horizonMinutes: 60, symbol: "EURUSD"), 34)
+        XCTAssertEqual(WarmupTools.warmupBlockSpan(aiID: AIModelID.xgbFast.rawValue, horizonMinutes: 240, symbol: "XAUUSD"), 36)
+
+        let prioritySample = PreparedTrainingSample(
+            valid: true,
+            movePoints: 10.0,
+            costPoints: 2.0,
+            sampleWeight: 2.0,
+            mfePoints: 12.0,
+            maePoints: 3.0,
+            timeToHitFraction: 0.25,
+            fillRisk: 0.5
+        )
+        XCTAssertEqual(WarmupTools.curriculumPriority(sample: prioritySample), 2.939142857142857, accuracy: 1e-12)
 
         var sampleA = PreparedTrainingSample(valid: true)
         var xA = sampleA.x
