@@ -109,7 +109,7 @@
     "news_penalty": 0.24,
     "rates_penalty": 0.2,
     "single_plugin_quality_penalty": 0.16,
-    "spread_cost_penalty": 0.28,
+    "price_cost_penalty": 0.28,
     "stale_context_penalty": 0.24
   },
   "schema_version": 1,

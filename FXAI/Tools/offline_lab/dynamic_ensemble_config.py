@@ -136,7 +136,7 @@ def default_config() -> dict[str, Any]:
             "context_regret_penalty": 0.38,
             "disagreement_penalty": 0.28,
             "drift_penalty": 0.18,
-            "spread_cost_penalty": 0.28,
+            "price_cost_penalty": 0.28,
             "news_penalty": 0.24,
             "rates_penalty": 0.20,
             "micro_penalty": 0.30,
@@ -172,6 +172,19 @@ def _merge_defaults(default_value: Any, payload_value: Any) -> Any:
     if payload_value is None:
         return deepcopy(default_value)
     return deepcopy(payload_value)
+
+
+def _normalize_legacy_penalty_keys(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    normalized = deepcopy(payload)
+    penalties = normalized.get("penalties")
+    if isinstance(penalties, dict) and "price_cost_penalty" not in penalties:
+        if "cost_penalty" in penalties:
+            penalties["price_cost_penalty"] = penalties["cost_penalty"]
+        elif "spread_cost_penalty" in penalties:
+            penalties["price_cost_penalty"] = penalties["spread_cost_penalty"]
+    return normalized
 
 
 def ensure_default_files(path: Path | None = None) -> Path:
@@ -251,7 +264,7 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         raise OfflineLabError(f"Dynamic ensemble config is not valid JSON: {path}") from exc
     if not isinstance(payload, dict):
         raise OfflineLabError(f"Dynamic ensemble config must be a JSON object: {path}")
-    merged = _merge_defaults(default_config(), payload)
+    merged = _merge_defaults(default_config(), _normalize_legacy_penalty_keys(payload))
     validate_config_payload(merged)
     export_runtime_config(merged)
     return merged

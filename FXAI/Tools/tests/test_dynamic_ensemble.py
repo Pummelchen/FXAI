@@ -5,7 +5,7 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from offline_lab.dynamic_ensemble_config import load_config
+from offline_lab.dynamic_ensemble_config import default_config, load_config
 import offline_lab.dynamic_ensemble_contracts as contracts
 from offline_lab.dynamic_ensemble_replay import build_dynamic_ensemble_replay_report
 from offline_lab.environment import bootstrap_environment
@@ -26,7 +26,27 @@ def test_dynamic_ensemble_validate_exports_runtime_config():
             assert contracts.DYNAMIC_ENSEMBLE_RUNTIME_CONFIG_PATH.exists()
             runtime_text = contracts.DYNAMIC_ENSEMBLE_RUNTIME_CONFIG_PATH.read_text(encoding="utf-8")
             assert "threshold_suppress_trust_threshold" in runtime_text
+            assert "penalty_price_cost_penalty" in runtime_text
+            assert "penalty_spread_cost_penalty" not in runtime_text
             assert "family_news_compat_transformer" in runtime_text
+
+
+def test_dynamic_ensemble_config_migrates_legacy_spread_cost_penalty():
+    with tempfile.TemporaryDirectory(prefix="fxai_dynamic_ensemble_legacy_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)) as paths:
+            bootstrap_environment(paths["default_db"], init_db=True)
+            legacy = default_config()
+            legacy["penalties"]["spread_cost_penalty"] = 0.41
+            legacy["penalties"].pop("price_cost_penalty")
+            contracts.DYNAMIC_ENSEMBLE_CONFIG_PATH.write_text(
+                json.dumps(legacy, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+
+            payload = load_config()
+            assert payload["penalties"]["price_cost_penalty"] == 0.41
+            runtime_text = contracts.DYNAMIC_ENSEMBLE_RUNTIME_CONFIG_PATH.read_text(encoding="utf-8")
+            assert "penalty_price_cost_penalty\t0.41" in runtime_text
 
 
 def test_dynamic_ensemble_replay_report_summarizes_runtime_history():
