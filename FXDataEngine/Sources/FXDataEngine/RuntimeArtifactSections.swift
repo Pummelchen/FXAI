@@ -851,3 +851,122 @@ public enum RuntimeReplayReservoirCodec {
         )
     }
 }
+
+public enum RuntimeConformalCalibrationCodec {
+    public static let byteCount = RuntimeArtifactPayloadMaterializer.conformalCalibrationByteCount(
+        header: RuntimeArtifactHeader()
+    )
+
+    public static func encode(_ state: ConformalCalibrationState) throws -> Data {
+        let normalized = ConformalCalibrationState(aiStates: state.aiStates)
+        var writer = RuntimeArtifactBinaryWriter()
+        for aiState in normalized.aiStates {
+            for regime in 0..<FXDataEngineConstants.pluginRegimeBuckets {
+                for horizon in 0..<RuntimeArtifactConstants.maxHorizons {
+                    let cell = ConformalCalibrationAIState.cellIndex(regimeID: regime, horizonSlot: horizon)
+                    try writer.appendInt32(aiState.counts[cell])
+                    try writer.appendInt32(aiState.heads[cell])
+                    for depthIndex in 0..<RuntimeArtifactConstants.conformalDepth {
+                        let offset = ConformalCalibrationAIState.scoreOffset(
+                            cellIndex: cell,
+                            depthIndex: depthIndex
+                        )
+                        writer.appendDouble(aiState.classScores[offset])
+                        writer.appendDouble(aiState.moveScores[offset])
+                        writer.appendDouble(aiState.pathScores[offset])
+                    }
+                }
+            }
+
+            try writer.appendInt32(aiState.pendingHead)
+            try writer.appendInt32(aiState.pendingTail)
+            for index in 0..<RuntimeArtifactConstants.reliabilityPendingCapacity {
+                let entry = aiState.pendingEntries[index]
+                let probabilities = ConformalPendingEntry.sanitizedProbabilities(entry.classProbabilities)
+                try writer.appendInt32(entry.signalSequence)
+                try writer.appendInt32(entry.regimeID)
+                try writer.appendInt32(entry.horizonMinutes)
+                writer.appendDouble(probabilities[0])
+                writer.appendDouble(probabilities[1])
+                writer.appendDouble(probabilities[2])
+                writer.appendDouble(entry.moveQ25Points)
+                writer.appendDouble(entry.moveQ50Points)
+                writer.appendDouble(entry.moveQ75Points)
+                writer.appendDouble(entry.pathRisk)
+            }
+        }
+        return writer.data
+    }
+
+    public static func decode(from data: Data) throws -> ConformalCalibrationState {
+        var reader = RuntimeArtifactBinaryReader(data: data)
+        var aiStates: [ConformalCalibrationAIState] = []
+        aiStates.reserveCapacity(FXDataEngineConstants.aiCount)
+        for _ in 0..<FXDataEngineConstants.aiCount {
+            var counts: [Int] = []
+            var heads: [Int] = []
+            var classScores: [Double] = []
+            var moveScores: [Double] = []
+            var pathScores: [Double] = []
+            counts.reserveCapacity(ConformalCalibrationAIState.scoreCellCount)
+            heads.reserveCapacity(ConformalCalibrationAIState.scoreCellCount)
+            let scoreCapacity = ConformalCalibrationAIState.scoreCellCount * RuntimeArtifactConstants.conformalDepth
+            classScores.reserveCapacity(scoreCapacity)
+            moveScores.reserveCapacity(scoreCapacity)
+            pathScores.reserveCapacity(scoreCapacity)
+
+            for _ in 0..<FXDataEngineConstants.pluginRegimeBuckets {
+                for _ in 0..<RuntimeArtifactConstants.maxHorizons {
+                    counts.append(try reader.readInt32())
+                    heads.append(try reader.readInt32())
+                    for _ in 0..<RuntimeArtifactConstants.conformalDepth {
+                        classScores.append(try reader.readDouble())
+                        moveScores.append(try reader.readDouble())
+                        pathScores.append(try reader.readDouble())
+                    }
+                }
+            }
+
+            let pendingHead = try reader.readInt32()
+            let pendingTail = try reader.readInt32()
+            var pendingEntries: [ConformalPendingEntry] = []
+            pendingEntries.reserveCapacity(RuntimeArtifactConstants.reliabilityPendingCapacity)
+            for _ in 0..<RuntimeArtifactConstants.reliabilityPendingCapacity {
+                let signalSequence = try reader.readInt32()
+                let regimeID = try reader.readInt32()
+                let horizonMinutes = try reader.readInt32()
+                let probabilities = [
+                    try reader.readDouble(),
+                    try reader.readDouble(),
+                    try reader.readDouble()
+                ]
+                let q25 = try reader.readDouble()
+                let q50 = try reader.readDouble()
+                let q75 = try reader.readDouble()
+                let pathRisk = try reader.readDouble()
+                pendingEntries.append(ConformalPendingEntry(
+                    signalSequence: signalSequence,
+                    regimeID: regimeID,
+                    horizonMinutes: horizonMinutes,
+                    classProbabilities: probabilities,
+                    moveQ25Points: q25,
+                    moveQ50Points: q50,
+                    moveQ75Points: q75,
+                    pathRisk: pathRisk
+                ))
+            }
+
+            aiStates.append(ConformalCalibrationAIState(
+                counts: counts,
+                heads: heads,
+                classScores: classScores,
+                moveScores: moveScores,
+                pathScores: pathScores,
+                pendingHead: pendingHead,
+                pendingTail: pendingTail,
+                pendingEntries: pendingEntries
+            ))
+        }
+        return ConformalCalibrationState(aiStates: aiStates)
+    }
+}
