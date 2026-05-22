@@ -378,6 +378,180 @@ public enum AuditScenarioTools {
         return output
     }
 
+    public static func applyWorldPlanToAsSeriesBars(
+        _ bars: [AuditScenarioDoubleBar],
+        spec: AuditScenarioSpec,
+        point: Double
+    ) -> [AuditScenarioDoubleBar] {
+        guard !bars.isEmpty, point > 0.0 else { return bars }
+
+        var output = bars
+        var previousTransformedClose = 0.0
+        var previousTransformedReturn = 0.0
+        var previousShockStrength = 0.0
+        let pt = max(point, 1e-5)
+
+        for index in stride(from: output.count - 1, through: 0, by: -1) {
+            var bar = output[index]
+            let originalOpen = max(bar.open, pt)
+            let originalClose = max(bar.close, pt)
+            let originalHigh = max(bar.high, max(originalOpen, originalClose))
+            let originalLow = max(pt, min(bar.low, min(originalOpen, originalClose)))
+            var originalPreviousClose = originalOpen
+            if index < output.count - 1 {
+                originalPreviousClose = max(output[index + 1].close, pt)
+            }
+            if previousTransformedClose <= pt {
+                previousTransformedClose = originalPreviousClose
+            }
+
+            var baseReturn = originalPreviousClose > pt ? (originalClose - originalPreviousClose) / originalPreviousClose : 0.0
+            let baseGap = originalPreviousClose > pt ? (originalOpen - originalPreviousClose) / originalPreviousClose : 0.0
+            let baseRange = max(originalHigh - originalLow, 2.0 * pt)
+            let bodyHigh = max(originalOpen, originalClose)
+            let bodyLow = min(originalOpen, originalClose)
+            let upperRatio = max(originalHigh - bodyHigh, 0.0) / baseRange
+            let lowerRatio = max(bodyLow - originalLow, 0.0) / baseRange
+            let sessionEdge = sessionEdgeStrength(timestampUTC: bar.timestampUTC)
+            let hour = hourOf(timestampUTC: bar.timestampUTC)
+
+            var sigmaScale = fxClamp(spec.worldSigmaScale, 0.50, 3.00)
+            let edgeFocus = fxClamp(spec.worldSessionEdgeFocus, 0.0, 1.5)
+            let persistence = fxClamp(spec.worldTrendPersistence, 0.0, 1.0)
+            let shockMemory = fxClamp(spec.worldShockMemory, 0.0, 1.0)
+            let shockDecay = fxClamp(spec.worldShockDecay, 0.0, 1.5)
+            let recoveryBias = fxClamp(spec.worldRecoveryBias, -1.0, 1.0)
+            let transitionBurst = fxClamp(spec.worldRegimeTransitionBurst, 0.0, 1.0)
+            let transitionEntropy = fxClamp(spec.worldTransitionEntropy, 0.0, 1.0)
+            let meanRevertBias = fxClamp(spec.worldMeanRevertBias, 0.0, 1.0)
+            let volatilityClusterBias = fxClamp(spec.worldVolatilityClusterBias, 0.0, 1.0)
+            let gapProbability = fxClamp(spec.worldGapProbability, 0.0, 0.30)
+            let gapScale = fxClamp(spec.worldGapScale, 0.0, 8.0)
+            var fillRiskScale = fxClamp(spec.worldFillRiskScale, 0.50, 4.00)
+            sigmaScale *= sessionSigmaScale(spec: spec, hour: hour)
+            fillRiskScale *= sessionFillRiskScale(spec: spec, hour: hour)
+            let liquidity = fxClamp(spec.worldLiquidityStress, 0.0, 3.0)
+            let liquidityShockProbability = fxClamp(spec.worldLiquidityShockProbability, 0.0, 0.50)
+            let liquidityShockScale = fxClamp(spec.worldLiquidityShockScale, 1.0, 8.0)
+            let flipProbability = fxClamp(spec.worldFlipProbability, 0.0, 0.50)
+
+            let edgeVolatilityMultiplier = 1.0 +
+                0.32 * edgeFocus * sessionEdge +
+                0.18 * volatilityClusterBias * previousShockStrength
+            let trendBias = (persistence - 0.50) * (0.30 - 0.18 * meanRevertBias) * abs(previousTransformedReturn)
+            if previousTransformedReturn >= 0.0 {
+                baseReturn += trendBias
+            } else {
+                baseReturn -= trendBias
+            }
+            if previousShockStrength > 0.0 {
+                let shockTerm = previousShockStrength * (0.18 * shockMemory - 0.14 * recoveryBias)
+                if previousTransformedReturn >= 0.0 {
+                    baseReturn += shockTerm
+                } else {
+                    baseReturn -= shockTerm
+                }
+            }
+
+            var transformedReturn = baseReturn * sigmaScale * edgeVolatilityMultiplier +
+                spec.worldDriftBias * (0.70 + 0.30 * sessionEdge)
+            let liveFlipProbability = fxClamp(
+                flipProbability +
+                    0.14 * meanRevertBias +
+                    0.10 * transitionBurst * (1.0 - sessionEdge) +
+                    0.08 * transitionEntropy,
+                0.0,
+                0.65
+            )
+            if worldHashUnit(timestampUTC: bar.timestampUTC, salt: 5) < liveFlipProbability {
+                transformedReturn *= -1.0
+            }
+
+            let microGap = 0.40 * pt / max(previousTransformedClose, pt)
+            var gapTerm = baseGap * (0.65 + 0.35 * sigmaScale) +
+                0.06 * sessionEdge * edgeFocus * worldSign(timestampUTC: bar.timestampUTC, salt: 7) * microGap
+            let liveGapProbability = fxClamp(gapProbability + 0.10 * transitionBurst, 0.0, 0.40)
+            if worldHashUnit(timestampUTC: bar.timestampUTC, salt: 11) < liveGapProbability {
+                gapTerm += gapScale *
+                    max(abs(baseReturn), 0.20 * pt / max(previousTransformedClose, pt)) *
+                    worldSign(timestampUTC: bar.timestampUTC, salt: 13)
+            }
+
+            var newOpen = previousTransformedClose * (1.0 + gapTerm)
+            if newOpen <= pt {
+                newOpen = previousTransformedClose
+            }
+            if newOpen <= pt {
+                newOpen = originalOpen
+            }
+
+            var newClose = previousTransformedClose * (1.0 + transformedReturn)
+            if newClose <= pt {
+                newClose = max(newOpen, originalClose)
+            }
+
+            var rangeScale = (0.78 + 0.22 * sigmaScale) *
+                (1.0 + 0.22 * edgeFocus * sessionEdge + 0.10 * liquidity + 0.12 * transitionBurst)
+            if previousShockStrength > 0.0 {
+                rangeScale *= 1.0 +
+                    0.20 * previousShockStrength *
+                    (0.60 + shockMemory + 0.35 * volatilityClusterBias) *
+                    (1.0 + 0.20 * transitionEntropy)
+            }
+            let newRange = max(2.0 * pt, baseRange * rangeScale)
+            var wickUp = max(0.5 * pt, newRange * max(upperRatio, 0.15))
+            var wickDown = max(0.5 * pt, newRange * max(lowerRatio, 0.15))
+            if recoveryBias > 0.0, previousShockStrength > 0.0 {
+                if transformedReturn >= 0.0 {
+                    wickDown *= 1.0 + 0.20 * recoveryBias * previousShockStrength
+                } else {
+                    wickUp *= 1.0 + 0.20 * recoveryBias * previousShockStrength
+                }
+            }
+
+            let newBodyHigh = max(newOpen, newClose)
+            let newBodyLow = min(newOpen, newClose)
+            bar.open = newOpen
+            bar.close = newClose
+            bar.high = newBodyHigh + wickUp
+            bar.low = max(pt, newBodyLow - wickDown)
+
+            var liveFillRiskScale = fillRiskScale * (1.0 + 0.20 * edgeFocus * sessionEdge + 0.16 * liquidity)
+            let liquidityShock = worldHashUnit(timestampUTC: bar.timestampUTC, salt: 17) < liquidityShockProbability
+            if liquidityShock {
+                liveFillRiskScale *= liquidityShockScale
+            }
+            let baseFillRisk = max(bar.fillRiskPoints, spec.fillRiskPoints, 0.25)
+            bar.fillRiskPoints = baseFillRisk * liveFillRiskScale
+            if bar.volume > 0.0 {
+                let shockVolumeDrag = liquidityShock ? 0.08 * liquidityShockScale : 0.0
+                let volumeScale = fxClamp(
+                    1.0 + 0.10 * edgeFocus * sessionEdge - 0.18 * liquidity - shockVolumeDrag,
+                    0.10,
+                    3.0
+                )
+                bar.volume = max(0.0, bar.volume * volumeScale)
+            }
+
+            bar = normalizeSyntheticBar(bar, point: pt)
+            output[index] = bar
+
+            previousTransformedReturn = previousTransformedClose > pt
+                ? (bar.close - previousTransformedClose) / previousTransformedClose
+                : 0.0
+            previousShockStrength = fxClamp(
+                (abs(previousTransformedReturn) / max(abs(baseReturn) + 1e-6, 1e-6)) *
+                    (1.0 - 0.25 * shockDecay) +
+                    0.10 * transitionEntropy,
+                0.0,
+                3.0
+            )
+            previousTransformedClose = bar.close
+        }
+
+        return output
+    }
+
     private static func clampWorldPlan(_ spec: inout AuditScenarioSpec) {
         spec.worldSigmaScale = fxClamp(spec.worldSigmaScale, 0.50, 3.00)
         spec.worldDriftBias = fxClamp(spec.worldDriftBias, -3.0 * spec.sigmaPerBar, 3.0 * spec.sigmaPerBar)

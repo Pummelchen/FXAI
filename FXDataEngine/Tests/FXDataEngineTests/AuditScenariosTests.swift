@@ -140,4 +140,79 @@ final class AuditScenariosTests: XCTestCase {
         XCTAssertEqual(normalized.volume, 125.0, accuracy: 0.0)
         XCTAssertEqual(normalized.fillRiskPoints, 0.0, accuracy: 0.0)
     }
+
+    func testApplyWorldPlanToAsSeriesBarsTransformsOHLCVFillRiskAndVolume() {
+        let baseTime: Int64 = 1_704_096_000
+        let bars = [
+            AuditScenarioDoubleBar(
+                timestampUTC: baseTime + 2 * 60,
+                open: 1.1020,
+                high: 1.1035,
+                low: 1.1010,
+                close: 1.1030,
+                volume: 100.0,
+                fillRiskPoints: 1.0
+            ),
+            AuditScenarioDoubleBar(
+                timestampUTC: baseTime + 60,
+                open: 1.1010,
+                high: 1.1025,
+                low: 1.1000,
+                close: 1.1020,
+                volume: 100.0,
+                fillRiskPoints: 1.0
+            ),
+            AuditScenarioDoubleBar(
+                timestampUTC: baseTime,
+                open: 1.1000,
+                high: 1.1015,
+                low: 1.0990,
+                close: 1.1010,
+                volume: 100.0,
+                fillRiskPoints: 1.0
+            )
+        ]
+        let spec = AuditScenarioSpec(
+            sigmaPerBar: 0.00018,
+            fillRiskPoints: 1.0,
+            worldSigmaScale: 1.8,
+            worldDriftBias: 0.00005,
+            worldFillRiskScale: 2.0,
+            worldGapProbability: 0.0,
+            worldGapScale: 0.0,
+            worldFlipProbability: 0.0,
+            worldLiquidityStress: 2.0,
+            worldSessionEdgeFocus: 1.0,
+            worldTrendPersistence: 0.8,
+            worldShockMemory: 0.4,
+            worldRecoveryBias: 0.2,
+            worldLiquidityShockProbability: 1.0,
+            worldLiquidityShockScale: 2.0,
+            worldRegimeTransitionBurst: 0.2,
+            worldTransitionEntropy: 0.1,
+            worldMeanRevertBias: 0.0,
+            worldVolatilityClusterBias: 0.3,
+            worldShockDecay: 0.5,
+            worldAsiaSigmaScale: 1.0,
+            worldLondonSigmaScale: 1.5,
+            worldNewYorkSigmaScale: 1.0,
+            worldAsiaFillRiskScale: 1.0,
+            worldLondonFillRiskScale: 1.5,
+            worldNewYorkFillRiskScale: 1.0
+        )
+
+        let transformed = AuditScenarioTools.applyWorldPlanToAsSeriesBars(bars, spec: spec, point: 0.0001)
+
+        XCTAssertEqual(transformed.count, bars.count)
+        XCTAssertEqual(transformed.map(\.timestampUTC), bars.map(\.timestampUTC))
+        XCTAssertNotEqual(transformed[0].close, bars[0].close)
+        XCTAssertGreaterThan(transformed[0].high, max(transformed[0].open, transformed[0].close))
+        XCTAssertLessThan(transformed[0].low, min(transformed[0].open, transformed[0].close))
+        XCTAssertGreaterThan(transformed[0].fillRiskPoints, bars[0].fillRiskPoints)
+        XCTAssertLessThan(transformed[0].volume, bars[0].volume)
+        XCTAssertEqual(
+            AuditScenarioTools.applyWorldPlanToAsSeriesBars(bars, spec: spec, point: 0.0),
+            bars
+        )
+    }
 }
