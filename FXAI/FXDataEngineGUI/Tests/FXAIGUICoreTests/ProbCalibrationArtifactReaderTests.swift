@@ -41,7 +41,8 @@ struct ProbCalibrationArtifactReaderTests {
         expected_move_q25_points\t2.700000
         expected_move_q50_points\t6.100000
         expected_move_q75_points\t11.300000
-        spread_cost_points\t1.600000
+        spread_cost_points\t9.600000
+        price_cost_points\t1.600000
         slippage_cost_points\t0.900000
         uncertainty_score\t0.630000
         uncertainty_penalty_points\t2.100000
@@ -132,6 +133,7 @@ struct ProbCalibrationArtifactReaderTests {
         #expect(snapshot.symbols.first?.tierKind == "PAIR_REGIME")
         #expect(snapshot.symbols.first?.finalAction == "SKIP")
         #expect(snapshot.symbols.first?.abstain == true)
+        #expect(snapshot.symbols.first?.priceCostPoints == 1.6)
         #expect(snapshot.symbols.first?.replayTopReasons.first?.key == "EDGE_TOO_SMALL")
         #expect(snapshot.symbols.first?.recentTransitions.first?.toValue == "SKIP")
     }

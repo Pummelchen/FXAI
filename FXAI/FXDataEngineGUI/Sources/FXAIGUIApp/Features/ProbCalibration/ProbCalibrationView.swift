@@ -89,7 +89,7 @@ struct ProbCalibrationView: View {
             MetricCard(
                 title: "Edge After Costs",
                 value: pointString(detail.edgeAfterCostsPoints),
-                footnote: "Gross \(pointString(detail.expectedGrossEdgePoints)) • spread+slip \(pointString(detail.spreadCostPoints + detail.slippageCostPoints))",
+                footnote: "Gross \(pointString(detail.expectedGrossEdgePoints)) • cost+slip \(pointString(detail.priceCostPoints + detail.slippageCostPoints))",
                 symbolName: detail.edgeAfterCostsPoints >= 0 ? "plus.circle.fill" : "minus.circle.fill",
                 tint: detail.edgeAfterCostsPoints >= 0 ? FXAITheme.success : criticalColor
             )
@@ -209,7 +209,7 @@ struct ProbCalibrationView: View {
                     metricListCard(
                         title: "Costs",
                         values: [
-                            KeyValueRecord(key: "spread_cost_points", value: pointString(detail.spreadCostPoints)),
+                            KeyValueRecord(key: "price_cost_points", value: pointString(detail.priceCostPoints)),
                             KeyValueRecord(key: "slippage_cost_points", value: pointString(detail.slippageCostPoints)),
                             KeyValueRecord(key: "uncertainty_penalty_points", value: pointString(detail.uncertaintyPenaltyPoints)),
                             KeyValueRecord(key: "risk_penalty_points", value: pointString(detail.riskPenaltyPoints)),

@@ -40,7 +40,7 @@ public struct ProbCalibrationSymbolSnapshot: Identifiable, Hashable, Sendable {
     public let expectedMoveQ25Points: Double
     public let expectedMoveQ50Points: Double
     public let expectedMoveQ75Points: Double
-    public let spreadCostPoints: Double
+    public let priceCostPoints: Double
     public let slippageCostPoints: Double
     public let uncertaintyScore: Double
     public let uncertaintyPenaltyPoints: Double
@@ -90,7 +90,7 @@ public struct ProbCalibrationSymbolSnapshot: Identifiable, Hashable, Sendable {
         expectedMoveQ25Points: Double,
         expectedMoveQ50Points: Double,
         expectedMoveQ75Points: Double,
-        spreadCostPoints: Double,
+        priceCostPoints: Double,
         slippageCostPoints: Double,
         uncertaintyScore: Double,
         uncertaintyPenaltyPoints: Double,
@@ -140,7 +140,7 @@ public struct ProbCalibrationSymbolSnapshot: Identifiable, Hashable, Sendable {
         self.expectedMoveQ25Points = expectedMoveQ25Points
         self.expectedMoveQ50Points = expectedMoveQ50Points
         self.expectedMoveQ75Points = expectedMoveQ75Points
-        self.spreadCostPoints = spreadCostPoints
+        self.priceCostPoints = priceCostPoints
         self.slippageCostPoints = slippageCostPoints
         self.uncertaintyScore = uncertaintyScore
         self.uncertaintyPenaltyPoints = uncertaintyPenaltyPoints
@@ -167,6 +167,9 @@ public struct ProbCalibrationSymbolSnapshot: Identifiable, Hashable, Sendable {
         self.minEdgeAfterCostsPoints = minEdgeAfterCostsPoints
         self.maxEdgeAfterCostsPoints = maxEdgeAfterCostsPoints
     }
+
+    @available(*, deprecated, renamed: "priceCostPoints")
+    public var spreadCostPoints: Double { priceCostPoints }
 }
 
 public struct ProbCalibrationSnapshot: Sendable {

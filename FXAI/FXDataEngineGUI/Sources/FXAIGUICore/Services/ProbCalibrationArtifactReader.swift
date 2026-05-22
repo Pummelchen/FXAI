@@ -87,7 +87,11 @@ public struct ProbCalibrationArtifactReader {
             expectedMoveQ25Points: parseDouble(values["expected_move_q25_points"]) ?? (latestState["expected_move_q25_points"] as? Double) ?? 0,
             expectedMoveQ50Points: parseDouble(values["expected_move_q50_points"]) ?? (latestState["expected_move_q50_points"] as? Double) ?? 0,
             expectedMoveQ75Points: parseDouble(values["expected_move_q75_points"]) ?? (latestState["expected_move_q75_points"] as? Double) ?? 0,
-            spreadCostPoints: parseDouble(values["spread_cost_points"]) ?? (latestState["spread_cost_points"] as? Double) ?? 0,
+            priceCostPoints: parseDouble(values["price_cost_points"])
+                ?? parseDouble(values["spread_cost_points"])
+                ?? parseDouble(latestState["price_cost_points"])
+                ?? parseDouble(latestState["spread_cost_points"])
+                ?? 0,
             slippageCostPoints: parseDouble(values["slippage_cost_points"]) ?? (latestState["slippage_cost_points"] as? Double) ?? 0,
             uncertaintyScore: parseDouble(values["uncertainty_score"]) ?? (latestState["uncertainty_score"] as? Double) ?? 0,
             uncertaintyPenaltyPoints: parseDouble(values["uncertainty_penalty_points"]) ?? (latestState["uncertainty_penalty_points"] as? Double) ?? 0,
