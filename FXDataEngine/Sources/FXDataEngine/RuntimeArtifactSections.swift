@@ -778,3 +778,76 @@ public enum RuntimeArtifactAnalogMemoryCodec {
         )
     }
 }
+
+public enum RuntimeReplayReservoirCodec {
+    public static let byteCount = RuntimeArtifactPayloadMaterializer.replayReservoirByteCount(
+        header: RuntimeArtifactHeader()
+    )
+
+    public static func encode(_ state: ReplayReservoirState) throws -> Data {
+        let normalized = ReplayReservoirState(
+            capacity: RuntimeArtifactConstants.replayCapacity,
+            count: state.count,
+            cursor: state.cursor,
+            lastSampleTimeUTCByHorizon: state.lastSampleTimeUTCByHorizon,
+            bucketCounts: state.bucketCounts,
+            entries: state.entries
+        )
+        var writer = RuntimeArtifactBinaryWriter()
+        try writer.appendInt32(normalized.count)
+        try writer.appendInt32(normalized.cursor)
+        for value in normalized.lastSampleTimeUTCByHorizon {
+            writer.appendInt64(value)
+        }
+        for regime in 0..<FXDataEngineConstants.pluginRegimeBuckets {
+            for horizon in 0..<RuntimeArtifactConstants.maxHorizons {
+                try writer.appendInt32(normalized.bucketCounts[regime][horizon])
+            }
+        }
+        for index in 0..<RuntimeArtifactConstants.replayCapacity {
+            let entry = normalized.entries[index]
+            try writer.appendInt32(entry.used ? 1 : 0)
+            writer.appendDouble(entry.priority)
+            try writer.appendInt32(entry.flags.rawValue)
+            try RuntimeArtifactPreparedSampleCodec.encode(entry.sample, into: &writer)
+        }
+        return writer.data
+    }
+
+    public static func decode(from data: Data) throws -> ReplayReservoirState {
+        var reader = RuntimeArtifactBinaryReader(data: data)
+        let count = try reader.readInt32()
+        let cursor = try reader.readInt32()
+        var lastSampleTimes: [Int64] = []
+        lastSampleTimes.reserveCapacity(RuntimeArtifactConstants.maxHorizons)
+        for _ in 0..<RuntimeArtifactConstants.maxHorizons {
+            lastSampleTimes.append(try reader.readInt64())
+        }
+        var bucketCounts = Array(
+            repeating: Array(repeating: 0, count: RuntimeArtifactConstants.maxHorizons),
+            count: FXDataEngineConstants.pluginRegimeBuckets
+        )
+        for regime in 0..<FXDataEngineConstants.pluginRegimeBuckets {
+            for horizon in 0..<RuntimeArtifactConstants.maxHorizons {
+                bucketCounts[regime][horizon] = try reader.readInt32()
+            }
+        }
+        var entries: [ReplayReservoirEntry] = []
+        entries.reserveCapacity(RuntimeArtifactConstants.replayCapacity)
+        for _ in 0..<RuntimeArtifactConstants.replayCapacity {
+            let used = try reader.readInt32() != 0
+            let priority = try reader.readDouble()
+            let flags = ReplaySampleFlags(rawValue: try reader.readInt32())
+            let sample = try RuntimeArtifactPreparedSampleCodec.decode(from: &reader)
+            entries.append(ReplayReservoirEntry(used: used, priority: priority, flags: flags, sample: sample))
+        }
+        return ReplayReservoirState(
+            capacity: RuntimeArtifactConstants.replayCapacity,
+            count: count,
+            cursor: cursor,
+            lastSampleTimeUTCByHorizon: lastSampleTimes,
+            bucketCounts: bucketCounts,
+            entries: entries
+        )
+    }
+}
