@@ -2,6 +2,19 @@ import XCTest
 @testable import FXDataEngine
 
 final class ControlPlaneTests: XCTestCase {
+    private func temporaryRepository() throws -> (URL, ControlPlaneFileRepository) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FXDataEngineTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return (root, ControlPlaneFileRepository(rootURL: root))
+    }
+
+    private func write(_ text: String, relativePath: String, root: URL) throws {
+        let url = root.appendingPathComponent(relativePath)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try text.write(to: url, atomically: true, encoding: .utf8)
+    }
+
     func testSafeTokensAndProfilePathsMatchMQLShape() {
         XCTAssertEqual(ControlPlanePaths.safeToken("EUR/USD live"), "EUR_USD_live")
         XCTAssertEqual(ControlPlanePaths.safeToken(""), "default")
@@ -289,5 +302,156 @@ final class ControlPlaneTests: XCTestCase {
             nowUTC: 1_101
         )
         XCTAssertFalse(expired.ready)
+    }
+
+    func testControlPlaneScoringAggregatesPeerSnapshots() {
+        let identity = ControlPlanePeerIdentity(login: 42, magic: 99, chartID: 7)
+        let peerA = ControlPlaneSnapshot.parse(tsv: """
+        login\t42
+        magic\t99
+        chart_id\t8
+        symbol\tUSDJPY
+        bar_time\t10000
+        direction\t1
+        signal_intensity\t1.2
+        confidence\t0.8
+        reliability\t0.6
+        macro_quality\t0.5
+        policy_trade_prob\t0.7
+        policy_no_trade_prob\t0.2
+        policy_capital_efficiency\t0.9
+        policy_portfolio_fit\t0.8
+        capital_risk_pct\t1.4
+        """)
+        let peerB = ControlPlaneSnapshot.parse(tsv: """
+        login\t42
+        magic\t99
+        chart_id\t9
+        symbol\tEURJPY
+        bar_time\t10000
+        direction\t0
+        signal_intensity\t0.8
+        confidence\t0.5
+        reliability\t0.5
+        macro_quality\t0.2
+        policy_trade_prob\t0.5
+        policy_no_trade_prob\t0.4
+        policy_capital_efficiency\t0.6
+        policy_portfolio_fit\t0.4
+        capital_risk_pct\t0.6
+        """)
+        let stale = ControlPlaneSnapshot.parse(tsv: """
+        login\t42
+        magic\t99
+        chart_id\t10
+        symbol\tGBPUSD
+        bar_time\t1
+        signal_intensity\t4
+        """)
+        let selfSnapshot = ControlPlaneSnapshot.parse(tsv: """
+        login\t42
+        magic\t99
+        chart_id\t7
+        symbol\tEURUSD
+        bar_time\t10000
+        signal_intensity\t4
+        """)
+
+        let aggregate = ControlPlaneScoring.aggregate(
+            anchorSymbol: "EURUSD",
+            direction: 1,
+            identity: identity,
+            nowUTC: 10_100,
+            snapshots: [peerA, peerB, stale, selfSnapshot],
+            correlationWeight: { _, _ in 1.0 },
+            directionalAlignment: { _, direction, _, otherDirection in direction == otherDirection ? 1.0 : 0.0 }
+        )
+
+        XCTAssertEqual(aggregate.peerCount, 2)
+        XCTAssertEqual(aggregate.grossIntensity, 2.0, accuracy: 1e-9)
+        XCTAssertEqual(aggregate.directionalIntensity, 1.2, accuracy: 1e-9)
+        XCTAssertEqual(aggregate.meanTradeProb, 0.6, accuracy: 1e-9)
+        XCTAssertEqual(aggregate.meanNoTradeProb, 0.3, accuracy: 1e-9)
+        XCTAssertEqual(aggregate.meanCapitalEfficiency, 0.75, accuracy: 1e-9)
+        XCTAssertEqual(aggregate.maxCapitalRiskPct, 1.4, accuracy: 1e-9)
+        XCTAssertGreaterThan(aggregate.score, 0.0)
+
+        let profile = PortfolioSupervisorProfile()
+        XCTAssertGreaterThan(ControlPlaneScoring.portfolioSupervisorScore(direction: 1, aggregate: aggregate, profile: profile), 0.0)
+    }
+
+    func testSupervisorServiceScoreMatchesLegacyBlend() {
+        let state = SupervisorServiceState.parse(tsv: """
+        symbol\tEURUSD
+        generated_at\t1000
+        gross_pressure\t1.0
+        directional_long_pressure\t0.5
+        directional_short_pressure\t0.2
+        macro_pressure\t0.4
+        concentration_pressure\t0.3
+        reduce_bias\t0.2
+        exit_bias\t0.1
+        supervisor_score\t0.8
+        """, nowUTC: 1_100)
+
+        XCTAssertEqual(ControlPlaneScoring.supervisorServiceDirectionalPressure(state, direction: 1), 0.5)
+        XCTAssertEqual(ControlPlaneScoring.supervisorServiceDirectionalPressure(state, direction: 0), 0.2)
+        XCTAssertGreaterThan(ControlPlaneScoring.supervisorServiceScore(direction: 1, state: state), 0.0)
+        XCTAssertEqual(ControlPlaneScoring.supervisorServiceScore(direction: 1, state: SupervisorServiceState()), 0.0)
+    }
+
+    func testFileRepositoryLoadsProfilesAndSnapshots() throws {
+        let (root, repository) = try temporaryRepository()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try write("profile_name\tlive\n", relativePath: ControlPlanePaths.liveDeploymentProfileFile(symbol: "EURUSD"), root: root)
+        try write("profile_name\tportfolio\n", relativePath: ControlPlaneConstants.portfolioSupervisorFile, root: root)
+        try write("champion_only\t1\n", relativePath: ControlPlanePaths.studentRouterProfileFile(symbol: "EURUSD"), root: root)
+        try write("enabled\t1\n", relativePath: ControlPlanePaths.adaptiveRouterProfileFile(symbol: "EURUSD"), root: root)
+        try write("""
+        symbol\t__GLOBAL__
+        generated_at\t1000
+        gross_pressure\t0.5
+        """, relativePath: ControlPlaneConstants.supervisorServiceGlobalFile, root: root)
+        try write("""
+        symbol\t__GLOBAL__
+        generated_at\t1000
+        long_block\t1
+        """, relativePath: ControlPlaneConstants.supervisorCommandGlobalFile, root: root)
+        try write("""
+        login\t42
+        magic\t99
+        chart_id\t8
+        symbol\tUSDJPY
+        bar_time\t9900
+        signal_intensity\t1
+        """, relativePath: "\(ControlPlaneConstants.directory)/cp_peer.tsv", root: root)
+        try write("""
+        login\t42
+        magic\t99
+        chart_id\t9
+        symbol\tGBPUSD
+        bar_time\t1
+        signal_intensity\t4
+        """, relativePath: "\(ControlPlaneConstants.directory)/cp_stale.tsv", root: root)
+
+        XCTAssertEqual(try repository.loadLiveDeploymentProfile(symbol: "EURUSD")?.profileName, "live")
+        XCTAssertEqual(try repository.loadPortfolioSupervisorProfile()?.profileName, "portfolio")
+        XCTAssertTrue(try XCTUnwrap(repository.loadStudentRouterProfile(symbol: "EURUSD")).championOnly)
+        XCTAssertTrue(try XCTUnwrap(repository.loadAdaptiveRouterProfile(symbol: "EURUSD")).enabled)
+        XCTAssertEqual(try repository.loadSupervisorServiceState(symbol: "EURUSD", nowUTC: 1_100)?.symbol, "EURUSD")
+        XCTAssertTrue(try XCTUnwrap(repository.loadSupervisorCommandState(symbol: "EURUSD", nowUTC: 1_100)).longBlock)
+        XCTAssertEqual(try repository.loadControlPlaneSnapshots().count, 2)
+
+        let aggregate = try repository.loadControlPlaneAggregate(
+            anchorSymbol: "EURUSD",
+            direction: 1,
+            identity: ControlPlanePeerIdentity(login: 42, magic: 99, chartID: 7),
+            nowUTC: 10_000,
+            correlationWeight: { _, _ in 1.0 },
+            directionalAlignment: { _, _, _, _ in 1.0 }
+        )
+        XCTAssertEqual(aggregate.peerCount, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("\(ControlPlaneConstants.directory)/cp_stale.tsv").path))
     }
 }

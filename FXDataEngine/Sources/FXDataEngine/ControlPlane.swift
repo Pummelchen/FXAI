@@ -916,3 +916,265 @@ public struct SupervisorCommandState: Codable, Hashable, Sendable {
         return fxClamp(entryBudgetMultiplier, 0.10, 1.20)
     }
 }
+
+public struct ControlPlanePeerIdentity: Codable, Hashable, Sendable {
+    public var login: Int64
+    public var magic: UInt64
+    public var chartID: Int64
+
+    public init(login: Int64, magic: UInt64, chartID: Int64) {
+        self.login = login
+        self.magic = magic
+        self.chartID = chartID
+    }
+}
+
+public enum ControlPlaneScoring {
+    public static func isStale(_ snapshot: ControlPlaneSnapshot, nowUTC: Int64) -> Bool {
+        nowUTC > 0 &&
+            snapshot.barTimeUTC > 0 &&
+            nowUTC - snapshot.barTimeUTC > Int64(ControlPlaneConstants.ttlSeconds)
+    }
+
+    public static func aggregate(
+        anchorSymbol: String,
+        direction: Int,
+        identity: ControlPlanePeerIdentity,
+        nowUTC: Int64,
+        snapshots: [ControlPlaneSnapshot],
+        correlationWeight: (String, String) -> Double,
+        directionalAlignment: (String, Int, String, Int) -> Double
+    ) -> ControlPlaneAggregate {
+        var aggregate = ControlPlaneAggregate()
+        var uniqueSymbols: Set<String> = []
+        var tradeProbSum = 0.0
+        var noTradeProbSum = 0.0
+        var capitalEfficiencySum = 0.0
+        var portfolioFitSum = 0.0
+        var maxSymbolIntensity = 0.0
+
+        for snapshot in snapshots where snapshot.valid {
+            guard !isStale(snapshot, nowUTC: nowUTC) else { continue }
+            guard snapshot.login == identity.login,
+                  snapshot.magic == identity.magic,
+                  snapshot.chartID != identity.chartID else {
+                continue
+            }
+
+            let correlation = correlationWeight(anchorSymbol, snapshot.symbol)
+            guard correlation > 0.0 else { continue }
+
+            aggregate.peerCount += 1
+            aggregate.grossIntensity += snapshot.signalIntensity
+            aggregate.correlatedIntensity += correlation * snapshot.signalIntensity
+            tradeProbSum += snapshot.policyTradeProb
+            noTradeProbSum += snapshot.policyNoTradeProb
+            capitalEfficiencySum += snapshot.policyCapitalEfficiency
+            portfolioFitSum += snapshot.policyPortfolioFit
+            aggregate.maxCapitalRiskPct = max(aggregate.maxCapitalRiskPct, snapshot.capitalRiskPct)
+            maxSymbolIntensity = max(maxSymbolIntensity, snapshot.signalIntensity)
+
+            if direction == 0 || direction == 1 {
+                let alignment = directionalAlignment(anchorSymbol, direction, snapshot.symbol, snapshot.direction)
+                if alignment > 0.0 {
+                    aggregate.directionalIntensity += alignment * snapshot.signalIntensity
+                    aggregate.macroOverlap += alignment * snapshot.signalIntensity * snapshot.macroQuality
+                    aggregate.qualityOverlap += alignment * snapshot.signalIntensity *
+                        (0.55 * snapshot.confidence + 0.45 * snapshot.reliability)
+                }
+            }
+
+            if uniqueSymbols.count < 64 {
+                uniqueSymbols.insert(snapshot.symbol)
+            }
+        }
+
+        aggregate.diversityBonus = fxClamp(Double(uniqueSymbols.count) / 6.0, 0.0, 1.0)
+        if aggregate.peerCount > 0 {
+            let peerCount = Double(aggregate.peerCount)
+            aggregate.meanTradeProb = fxClamp(tradeProbSum / peerCount, 0.0, 1.0)
+            aggregate.meanNoTradeProb = fxClamp(noTradeProbSum / peerCount, 0.0, 1.0)
+            aggregate.meanCapitalEfficiency = fxClamp(capitalEfficiencySum / peerCount, 0.0, 1.0)
+            aggregate.meanPortfolioFit = fxClamp(portfolioFitSum / peerCount, 0.0, 1.0)
+        }
+
+        aggregate.concentrationPenalty = fxClamp(maxSymbolIntensity / max(aggregate.grossIntensity, 1e-6), 0.0, 1.0)
+        aggregate.score = fxClamp(
+            0.34 * fxClamp(aggregate.grossIntensity / 2.0, 0.0, 1.5) +
+                0.30 * fxClamp(aggregate.correlatedIntensity / 1.6, 0.0, 1.5) +
+                0.22 * fxClamp(aggregate.directionalIntensity / 1.4, 0.0, 1.5) +
+                0.08 * fxClamp(aggregate.macroOverlap / 1.2, 0.0, 1.0) +
+                0.08 * fxClamp(aggregate.qualityOverlap / 1.2, 0.0, 1.0) -
+                0.10 * aggregate.diversityBonus +
+                0.10 * aggregate.concentrationPenalty +
+                0.08 * fxClamp(aggregate.maxCapitalRiskPct / 2.0, 0.0, 1.0),
+            0.0,
+            2.0
+        )
+        return aggregate
+    }
+
+    public static func portfolioSupervisorScore(
+        direction: Int,
+        aggregate: ControlPlaneAggregate,
+        profile: PortfolioSupervisorProfile
+    ) -> Double {
+        var score = 0.0
+        score += 0.30 * fxClamp(aggregate.score, 0.0, 2.0)
+        score += 0.14 * fxClamp(aggregate.maxCapitalRiskPct / max(profile.capitalRiskCapPct, 0.10), 0.0, 2.0)
+        score += 0.12 * fxClamp(aggregate.macroOverlap / max(profile.macroOverlapCap, 0.10), 0.0, 2.0)
+        score += 0.10 * fxClamp(aggregate.concentrationPenalty / max(profile.concentrationCap, 0.10), 0.0, 2.0)
+        score += 0.12 * fxClamp(aggregate.meanNoTradeProb / max(profile.policyNoTradeCeiling, 0.10), 0.0, 2.0)
+        score -= 0.10 * fxClamp(aggregate.meanCapitalEfficiency, 0.0, 1.0)
+        score -= 0.08 * fxClamp(aggregate.meanPortfolioFit, 0.0, 1.0)
+        score -= 0.06 * fxClamp(aggregate.diversityBonus, 0.0, 1.0)
+        if direction < 0 {
+            score *= 0.45
+        }
+        return fxClamp(score, 0.0, 3.0)
+    }
+
+    public static func supervisorServiceDirectionalPressure(_ state: SupervisorServiceState, direction: Int) -> Double {
+        if direction == 1 {
+            return state.directionalLongPressure
+        }
+        if direction == 0 {
+            return state.directionalShortPressure
+        }
+        return max(state.directionalLongPressure, state.directionalShortPressure)
+    }
+
+    public static func supervisorServiceScore(direction: Int, state: SupervisorServiceState) -> Double {
+        guard state.ready else { return 0.0 }
+        let directional = supervisorServiceDirectionalPressure(state, direction: direction)
+        let score = fxClamp(
+            0.34 * state.grossPressure +
+                0.22 * directional +
+                0.16 * state.macroPressure +
+                0.12 * state.concentrationPressure +
+                0.10 * state.reduceBias +
+                0.06 * state.exitBias,
+            0.0,
+            3.0
+        )
+        return fxClamp(0.55 * state.supervisorScore + 0.45 * score, 0.0, 3.0)
+    }
+}
+
+public struct ControlPlaneFileRepository {
+    public let rootURL: URL
+    public let fileManager: FileManager
+
+    public init(rootURL: URL, fileManager: FileManager = .default) {
+        self.rootURL = rootURL
+        self.fileManager = fileManager
+    }
+
+    public func url(for relativePath: String) -> URL {
+        rootURL.appendingPathComponent(relativePath)
+    }
+
+    public func readText(relativePath: String) throws -> String? {
+        let fileURL = url(for: relativePath)
+        guard fileManager.fileExists(atPath: fileURL.path) else { return nil }
+        return try String(contentsOf: fileURL, encoding: .utf8)
+    }
+
+    public func loadLiveDeploymentProfile(symbol: String, loadedAtUTC: Int64 = 0) throws -> LiveDeploymentProfile? {
+        guard let text = try readText(relativePath: ControlPlanePaths.liveDeploymentProfileFile(symbol: symbol)) else {
+            return nil
+        }
+        return LiveDeploymentProfile.parse(symbol: symbol, tsv: text, loadedAtUTC: loadedAtUTC)
+    }
+
+    public func loadPortfolioSupervisorProfile(loadedAtUTC: Int64 = 0) throws -> PortfolioSupervisorProfile? {
+        guard let text = try readText(relativePath: ControlPlaneConstants.portfolioSupervisorFile) else {
+            return nil
+        }
+        return PortfolioSupervisorProfile.parse(tsv: text, loadedAtUTC: loadedAtUTC)
+    }
+
+    public func loadStudentRouterProfile(symbol: String, loadedAtUTC: Int64 = 0) throws -> StudentRouterProfile? {
+        guard let text = try readText(relativePath: ControlPlanePaths.studentRouterProfileFile(symbol: symbol)) else {
+            return nil
+        }
+        return StudentRouterProfile.parse(symbol: symbol, tsv: text, loadedAtUTC: loadedAtUTC)
+    }
+
+    public func loadAdaptiveRouterProfile(symbol: String, loadedAtUTC: Int64 = 0) throws -> AdaptiveRouterProfile? {
+        guard let text = try readText(relativePath: ControlPlanePaths.adaptiveRouterProfileFile(symbol: symbol)) else {
+            return nil
+        }
+        return AdaptiveRouterProfile.parse(symbol: symbol, tsv: text, loadedAtUTC: loadedAtUTC)
+    }
+
+    public func loadSupervisorServiceState(symbol: String, nowUTC: Int64) throws -> SupervisorServiceState? {
+        if let text = try readText(relativePath: ControlPlanePaths.supervisorServiceSymbolFile(symbol: symbol)) {
+            let state = SupervisorServiceState.parse(tsv: text, nowUTC: nowUTC)
+            return state.ready ? state : nil
+        }
+        guard let globalText = try readText(relativePath: ControlPlaneConstants.supervisorServiceGlobalFile) else {
+            return nil
+        }
+        let state = SupervisorServiceState.parse(tsv: globalText, nowUTC: nowUTC).resolvedSymbol(symbol)
+        return state.ready ? state : nil
+    }
+
+    public func loadSupervisorCommandState(symbol: String, nowUTC: Int64) throws -> SupervisorCommandState? {
+        if let text = try readText(relativePath: ControlPlanePaths.supervisorCommandSymbolFile(symbol: symbol)) {
+            let state = SupervisorCommandState.parse(symbol: symbol, tsv: text, nowUTC: nowUTC)
+            return state.ready ? state : nil
+        }
+        guard let globalText = try readText(relativePath: ControlPlaneConstants.supervisorCommandGlobalFile) else {
+            return nil
+        }
+        let state = SupervisorCommandState.parse(symbol: symbol, tsv: globalText, nowUTC: nowUTC).resolvedSymbol(symbol)
+        return state.ready ? state : nil
+    }
+
+    public func loadControlPlaneSnapshots(nowUTC: Int64 = 0, pruneStale: Bool = false) throws -> [ControlPlaneSnapshot] {
+        let directoryURL = url(for: ControlPlaneConstants.directory)
+        guard let entries = try? fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        var snapshots: [ControlPlaneSnapshot] = []
+        for entry in entries where entry.lastPathComponent.hasPrefix("cp_") && entry.pathExtension == "tsv" {
+            let text = try String(contentsOf: entry, encoding: .utf8)
+            let snapshot = ControlPlaneSnapshot.parse(tsv: text)
+            if snapshot.valid {
+                if ControlPlaneScoring.isStale(snapshot, nowUTC: nowUTC) {
+                    if pruneStale {
+                        try? fileManager.removeItem(at: entry)
+                    }
+                    continue
+                }
+                snapshots.append(snapshot)
+            }
+        }
+        return snapshots
+    }
+
+    public func loadControlPlaneAggregate(
+        anchorSymbol: String,
+        direction: Int,
+        identity: ControlPlanePeerIdentity,
+        nowUTC: Int64,
+        correlationWeight: (String, String) -> Double,
+        directionalAlignment: (String, Int, String, Int) -> Double
+    ) throws -> ControlPlaneAggregate {
+        try ControlPlaneScoring.aggregate(
+            anchorSymbol: anchorSymbol,
+            direction: direction,
+            identity: identity,
+            nowUTC: nowUTC,
+            snapshots: loadControlPlaneSnapshots(nowUTC: nowUTC, pruneStale: true),
+            correlationWeight: correlationWeight,
+            directionalAlignment: directionalAlignment
+        )
+    }
+}
