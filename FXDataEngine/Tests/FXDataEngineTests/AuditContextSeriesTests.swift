@@ -100,4 +100,91 @@ final class AuditContextSeriesTests: XCTestCase {
         )
         XCTAssertNotEqual(inverseContext.close[0], momentumContext.close[0])
     }
+
+    func testAggregatedCandleStateUsesVolumeAwareLiquidityPressure() {
+        let series = makeSyntheticAsSeries(count: 70, currentVolume: 10.0, olderVolume: 100.0)
+        let state = AuditContextSeriesTools.computeAggregatedCandleLiquidityState(
+            index: 0,
+            windowBars: 5,
+            series: series,
+            point: 0.0001
+        )
+        XCTAssertNotNil(state)
+        XCTAssertGreaterThan(state?.liquidityPressure ?? 0.0, 0.0)
+        XCTAssertGreaterThanOrEqual(state?.rangePressure ?? -10.0, -6.0)
+        XCTAssertLessThanOrEqual(state?.rangePressure ?? 10.0, 6.0)
+
+        XCTAssertEqual(AuditContextSeriesTools.contextMTFBarsForSlot(0), 1)
+        XCTAssertEqual(AuditContextSeriesTools.contextMTFBarsForSlot(4), 60)
+        XCTAssertEqual(
+            AuditContextSeriesTools.contextSlotMTFExtraIndex(slot: 0, timeframeSlot: 0, metric: .volumePressure),
+            FXDataEngineConstants.contextMTFOffset + MTFStateMetric.volumePressure.rawValue
+        )
+    }
+
+    func testBuildContextFeaturesPopulatesSharedAndMTFExtras() {
+        let base = makeSyntheticAsSeries(count: 70, currentVolume: 50.0, olderVolume: 100.0)
+        let context1 = AuditContextSeriesTools.deriveContextSeriesFromBase(point: 0.0001, base: base, transformID: 0)
+        let context2 = AuditContextSeriesTools.deriveContextSeriesFromBase(point: 0.0001, base: base, transformID: 1)
+        let context3 = AuditContextSeriesTools.deriveContextSeriesFromBase(point: 0.0001, base: base, transformID: 2)
+        let features = AuditContextSeriesTools.buildContextFeatures(
+            mainClose: base.close,
+            point: 0.0001,
+            contexts: [context1, context2, context3]
+        )
+
+        XCTAssertEqual(features.count, base.count)
+        XCTAssertEqual(features.extra.count, base.count * FXDataEngineConstants.contextExtraFeatures)
+        XCTAssertNotEqual(features.mean[0], 0.0)
+        XCTAssertEqual(
+            features.extraValue(sampleIndex: 0, featureIndex: FXDataEngineConstants.contextSharedOffset + 3),
+            1.0,
+            accuracy: 0.0
+        )
+        let mtfLiquidityIndex = AuditContextSeriesTools.contextSlotMTFExtraIndex(
+            slot: 0,
+            timeframeSlot: 0,
+            metric: .volumePressure
+        )
+        XCTAssertNotNil(mtfLiquidityIndex)
+        XCTAssertNotEqual(
+            features.extraValue(sampleIndex: 0, featureIndex: mtfLiquidityIndex ?? -1),
+            0.0
+        )
+    }
+
+    private func makeSyntheticAsSeries(
+        count: Int,
+        currentVolume: Double,
+        olderVolume: Double
+    ) -> AuditAsSeriesOHLCV {
+        var timeUTC: [Int64] = []
+        var open: [Double] = []
+        var high: [Double] = []
+        var low: [Double] = []
+        var close: [Double] = []
+        var volume: [Double] = []
+        var fillRiskPoints: [Double] = []
+
+        for index in 0..<count {
+            let price = 1.2000 - Double(index) * 0.0007
+            timeUTC.append(Int64(1_704_067_200 - index * 60))
+            open.append(price - 0.0002)
+            high.append(price + 0.0005)
+            low.append(price - 0.0006)
+            close.append(price)
+            volume.append(index < 5 ? currentVolume : olderVolume)
+            fillRiskPoints.append(1.0 + (index < 5 ? 0.1 : 0.0))
+        }
+
+        return AuditAsSeriesOHLCV(
+            timeUTC: timeUTC,
+            open: open,
+            high: high,
+            low: low,
+            close: close,
+            volume: volume,
+            fillRiskPoints: fillRiskPoints
+        )
+    }
 }
