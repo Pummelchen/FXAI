@@ -34,7 +34,7 @@ All Swift projects and subprojects in FXAI use the current local Apple toolchain
 - One canonical historical market contract: verified `M1 OHLCV` from FXDatabase, with MT5 raw data access isolated behind the FXDatabase bridge and FXAI data pipeline. Spread is not part of this offline contract; volume is used by plugins whenever the dataset provides nonzero values.
 - Native Swift backtesting: FXBacktest consumes FXDatabase history and can run CPU, Metal, or hybrid CPU+Metal optimization paths for converted plugins.
 - Plugin-based model layer: statistical, tree, linear, sequence, factor, trend, regime, policy, and ensemble families share one prediction contract.
-- Runtime control plane: NewsPulse, Rates Engine, Cross Asset, Microstructure, Adaptive Router, Dynamic Ensemble, Probabilistic Calibration, Execution Quality, Drift Governance, and Pair Network layers can explain or suppress unsafe trades.
+- Runtime control plane: NewsPulse, Rates Engine, Cross Asset, Microstructure, Adaptive Router, Dynamic Ensemble, Probabilistic Calibration, Execution Quality, Drift Governance, Pair Network, and System Health layers can explain or suppress unsafe trades.
 - Audit and promotion discipline: candidates are checked through repeatable compile, deterministic, pytest, audit, benchmark, and release-gate workflows before promotion.
 - Practical operator surfaces: terminal commands remain first-class, and the optional GUI provides role-based dashboards, report browsing, run builders, promotion review, and recovery guidance.
 
@@ -43,7 +43,7 @@ All Swift projects and subprojects in FXAI use the current local Apple toolchain
 - Check the live state of a symbol and understand the reason behind `ALLOW`, `CAUTION`, `BLOCK`, or `ABSTAIN`.
 - Run Swift-native FXBacktest jobs and MQL5 Audit Lab scenarios with shared assumptions instead of manually comparing inconsistent settings.
 - Research and promote better candidates with Offline Lab, benchmark cards, model-family scorecards, and strategy-profile manifests.
-- Inspect service health for news, rates, cross-asset, microstructure, calibration, execution, drift, and portfolio-conflict layers.
+- Inspect service health for news, rates, cross-asset, microstructure, calendar, factor context, calibration, execution, drift, and portfolio-conflict layers.
 - Use the GUI to arrange dashboards, save layouts, start common workflows, and recover from missing or stale artifacts.
 
 ## Documentation
