@@ -149,4 +149,61 @@ final class PairNetworkTests: XCTestCase {
 
         XCTAssertEqual(score, 0.785, accuracy: 1e-12)
     }
+
+    func testPairNetworkDecisionStateReasonsMatchLegacyLimitAndCSV() {
+        var state = PairNetworkDecisionState(reasons: ["", "A", "A", "B"])
+
+        XCTAssertFalse(state.ready)
+        XCTAssertTrue(state.graphStale)
+        XCTAssertEqual(state.direction, -1)
+        XCTAssertEqual(state.decision, "ALLOW")
+        XCTAssertEqual(state.recommendedSizeMultiplier, 1.0)
+        XCTAssertEqual(state.reasons, ["A", "B"])
+
+        for index in 1...20 {
+            state.appendReason("R\(index)")
+        }
+        state.appendReason("R1")
+        state.appendReason("")
+
+        XCTAssertEqual(state.reasonCount, PairNetworkConstants.maxReasons)
+        XCTAssertEqual(state.reasonsCSV, "A; B; R1; R2; R3; R4; R5; R6; R7; R8; R9; R10")
+    }
+
+    func testPairNetworkConcentrationAndCSVHelpersMatchLegacyMath() {
+        let exposure = PairNetworkExposure(
+            currencyKeys: ["EUR", "USD", "JPY"],
+            currencyValues: [2.0, -1.0, 0.0],
+            factorValues: [0.0, 1.5, 0.0, -0.25, 0.0, 0.5, 0.0]
+        )
+        let other = PairNetworkExposure(currencyKeys: ["USD", "JPY"], currencyValues: [-1.0, 1.0])
+
+        XCTAssertEqual(PairNetworkTools.currencyExposureCSV(exposure), "EUR:2.0000; USD:-1.0000")
+        XCTAssertEqual(
+            PairNetworkTools.factorExposureCSV(exposure.factorValues),
+            "eur_rates:1.5000; commodity_fx:-0.2500; liquidity_stress:0.5000"
+        )
+        XCTAssertEqual(PairNetworkTools.currencyCosine(exposure, other), 1.0 / sqrt(10.0), accuracy: 1e-12)
+        XCTAssertEqual(PairNetworkTools.topShareCurrency([2.0, -1.0]), 2.0 / 3.0, accuracy: 1e-12)
+        XCTAssertEqual(PairNetworkTools.herfindahlCurrency([2.0, -1.0]), 5.0 / 9.0, accuracy: 1e-12)
+        XCTAssertEqual(PairNetworkTools.topShareFactor(exposure.factorValues), 1.5 / 2.25, accuracy: 1e-12)
+        XCTAssertEqual(
+            PairNetworkTools.herfindahlFactor(exposure.factorValues),
+            (1.5 / 2.25) * (1.5 / 2.25) + (0.25 / 2.25) * (0.25 / 2.25) + (0.5 / 2.25) * (0.5 / 2.25),
+            accuracy: 1e-12
+        )
+    }
+
+    func testPairNetworkMacroFitUsesCrossAssetAndRatesStates() {
+        let factors = [0.0, 0.0, 0.7, 0.0, 0.2, 0.5, 0.0]
+        let cross = CrossAssetPairState(ready: true, riskState: "RISK_OFF", liquidityState: "STRESSED")
+        let rates = RatesEnginePairState(ready: true, tradeGate: "CAUTION")
+
+        XCTAssertEqual(PairNetworkTools.macroFit(candidateFactors: factors, crossState: cross, ratesState: rates), 0.52, accuracy: 1e-12)
+        XCTAssertEqual(
+            PairNetworkTools.macroFit(candidateFactors: factors, crossState: .reset, ratesState: RatesEnginePairState(ready: true, tradeGate: "BLOCK")),
+            0.38,
+            accuracy: 1e-12
+        )
+    }
 }

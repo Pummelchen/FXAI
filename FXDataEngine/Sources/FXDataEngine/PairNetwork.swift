@@ -144,7 +144,7 @@ public struct PairNetworkConfig: Codable, Hashable, Sendable {
         self.fallbackGraphUsed = fallbackGraphUsed
         self.partialDependencyData = partialDependencyData
         self.graphStale = graphStale
-        self.generatedAt = max(0, generatedAt)
+        self.generatedAt = generatedAt
         self.graphMode = graphMode
         self.graphStaleAfterSeconds = graphStaleAfterSeconds
         self.historyPoints = historyPoints
@@ -193,6 +193,105 @@ public struct PairNetworkExposure: Codable, Hashable, Sendable {
 
     public var currencyCount: Int {
         currencyKeys.count
+    }
+}
+
+public struct PairNetworkDecisionState: Codable, Hashable, Sendable {
+    public var ready: Bool
+    public var fallbackGraphUsed: Bool
+    public var partialDependencyData: Bool
+    public var graphStale: Bool
+    public var generatedAt: Int64
+    public var symbol: String
+    public var direction: Int
+    public var decision: String
+    public var conflictScore: Double
+    public var redundancyScore: Double
+    public var contradictionScore: Double
+    public var concentrationScore: Double
+    public var currencyConcentration: Double
+    public var factorConcentration: Double
+    public var recommendedSizeMultiplier: Double
+    public var preferredExpression: String
+    public var currencyExposureCSV: String
+    public var factorExposureCSV: String
+    public var reasons: [String]
+
+    public init(
+        ready: Bool = false,
+        fallbackGraphUsed: Bool = false,
+        partialDependencyData: Bool = false,
+        graphStale: Bool = true,
+        generatedAt: Int64 = 0,
+        symbol: String = "",
+        direction: Int = -1,
+        decision: String = "ALLOW",
+        conflictScore: Double = 0.0,
+        redundancyScore: Double = 0.0,
+        contradictionScore: Double = 0.0,
+        concentrationScore: Double = 0.0,
+        currencyConcentration: Double = 0.0,
+        factorConcentration: Double = 0.0,
+        recommendedSizeMultiplier: Double = 1.0,
+        preferredExpression: String = "",
+        currencyExposureCSV: String = "",
+        factorExposureCSV: String = "",
+        reasons: [String] = []
+    ) {
+        self.ready = ready
+        self.fallbackGraphUsed = fallbackGraphUsed
+        self.partialDependencyData = partialDependencyData
+        self.graphStale = graphStale
+        self.generatedAt = generatedAt
+        self.symbol = symbol
+        self.direction = direction
+        self.decision = decision
+        self.conflictScore = conflictScore
+        self.redundancyScore = redundancyScore
+        self.contradictionScore = contradictionScore
+        self.concentrationScore = concentrationScore
+        self.currencyConcentration = currencyConcentration
+        self.factorConcentration = factorConcentration
+        self.recommendedSizeMultiplier = recommendedSizeMultiplier
+        self.preferredExpression = preferredExpression
+        self.currencyExposureCSV = currencyExposureCSV
+        self.factorExposureCSV = factorExposureCSV
+        self.reasons = Self.uniqueReasons(reasons)
+    }
+
+    public static var reset: PairNetworkDecisionState {
+        PairNetworkDecisionState()
+    }
+
+    public var reasonCount: Int {
+        reasons.count
+    }
+
+    public var reasonsCSV: String {
+        reasons.filter { !$0.isEmpty }.joined(separator: "; ")
+    }
+
+    public mutating func appendReason(_ reason: String) {
+        guard !reason.isEmpty,
+              !reasons.contains(reason),
+              reasons.count < PairNetworkConstants.maxReasons else {
+            return
+        }
+        reasons.append(reason)
+    }
+
+    private static func uniqueReasons(_ input: [String]) -> [String] {
+        var output: [String] = []
+        output.reserveCapacity(min(input.count, PairNetworkConstants.maxReasons))
+        for value in input {
+            guard !value.isEmpty,
+                  !output.contains(value),
+                  output.count < PairNetworkConstants.maxReasons else {
+                continue
+            }
+            output.append(value)
+        }
+        return output
     }
 }
 
@@ -382,23 +481,150 @@ public enum PairNetworkTools {
         )
     }
 
-    static func factorCosine(_ lhs: [Double], _ rhs: [Double]) -> Double {
+    public static func macroFit(
+        candidateFactors: [Double],
+        crossState: CrossAssetPairState,
+        ratesState: RatesEnginePairState
+    ) -> Double {
+        var score = 0.50
+        if crossState.ready {
+            if crossState.riskState == "RISK_OFF" {
+                score += 0.10 * fxClamp(
+                    factorValue(candidateFactors, PairNetworkFactor.safeHaven.rawValue) -
+                        factorValue(candidateFactors, PairNetworkFactor.riskOn.rawValue),
+                    -1.0,
+                    1.0
+                )
+            } else {
+                score += 0.08 * fxClamp(
+                    factorValue(candidateFactors, PairNetworkFactor.riskOn.rawValue) -
+                        factorValue(candidateFactors, PairNetworkFactor.safeHaven.rawValue),
+                    -1.0,
+                    1.0
+                )
+            }
+            if crossState.liquidityState == "STRESSED" {
+                score += 0.06 * fxClamp(factorValue(candidateFactors, PairNetworkFactor.liquidityStress.rawValue), -1.0, 1.0)
+            }
+        }
+        if ratesState.ready {
+            if ratesState.tradeGate == "BLOCK" {
+                score -= 0.12
+            } else if ratesState.tradeGate == "CAUTION" {
+                score -= 0.06
+            }
+        }
+        return fxClamp(score, 0.0, 1.0)
+    }
+
+    public static func currencyExposureCSV(_ exposure: PairNetworkExposure) -> String {
+        var fields: [String] = []
+        let count = min(exposure.currencyKeys.count, exposure.currencyValues.count, PairNetworkConstants.maxCurrencies)
+        for index in 0..<count where abs(exposure.currencyValues[index]) > 1e-9 {
+            fields.append("\(exposure.currencyKeys[index]):\(RuntimeArtifactTSV.double(exposure.currencyValues[index], decimals: 4))")
+        }
+        return fields.joined(separator: "; ")
+    }
+
+    public static func factorExposureCSV(_ values: [Double]) -> String {
+        var fields: [String] = []
+        for index in 0..<PairNetworkConstants.factorCount {
+            let value = factorValue(values, index)
+            guard abs(value) > 1e-9 else { continue }
+            fields.append("\(factorName(index)):\(RuntimeArtifactTSV.double(value, decimals: 4))")
+        }
+        return fields.joined(separator: "; ")
+    }
+
+    public static func currencyCosine(_ lhs: PairNetworkExposure, _ rhs: PairNetworkExposure) -> Double {
+        let lhsCount = min(lhs.currencyKeys.count, lhs.currencyValues.count)
+        let rhsCount = min(rhs.currencyKeys.count, rhs.currencyValues.count)
+        let lhsNorm = currencyNorm(lhs.currencyValues.prefix(lhsCount))
+        let rhsNorm = currencyNorm(rhs.currencyValues.prefix(rhsCount))
+        guard lhsNorm > 0.0, rhsNorm > 0.0 else { return 0.0 }
+        var dot = 0.0
+        for lhsIndex in 0..<lhsCount {
+            guard let rhsIndex = rhs.currencyKeys.prefix(rhsCount).firstIndex(of: lhs.currencyKeys[lhsIndex]) else {
+                continue
+            }
+            dot += lhs.currencyValues[lhsIndex] * rhs.currencyValues[rhsIndex]
+        }
+        return fxClamp(dot / (lhsNorm * rhsNorm), -1.0, 1.0)
+    }
+
+    public static func factorCosine(_ lhs: [Double], _ rhs: [Double]) -> Double {
         let lhsNorm = factorNorm(lhs)
         let rhsNorm = factorNorm(rhs)
         guard lhsNorm > 0.0, rhsNorm > 0.0 else { return 0.0 }
         var dot = 0.0
         for index in 0..<PairNetworkConstants.factorCount {
-            dot += lhs[index] * rhs[index]
+            dot += factorValue(lhs, index) * factorValue(rhs, index)
         }
         return fxClamp(dot / (lhsNorm * rhsNorm), -1.0, 1.0)
+    }
+
+    public static func topShareCurrency(_ values: [Double]) -> Double {
+        topAbsShare(values.prefix(PairNetworkConstants.maxCurrencies))
+    }
+
+    public static func herfindahlCurrency(_ values: [Double]) -> Double {
+        herfindahlAbs(values.prefix(PairNetworkConstants.maxCurrencies))
+    }
+
+    public static func topShareFactor(_ values: [Double]) -> Double {
+        topAbsShare((0..<PairNetworkConstants.factorCount).map { factorValue(values, $0) })
+    }
+
+    public static func herfindahlFactor(_ values: [Double]) -> Double {
+        herfindahlAbs((0..<PairNetworkConstants.factorCount).map { factorValue(values, $0) })
     }
 
     private static func factorNorm(_ values: [Double]) -> Double {
         var total = 0.0
         for index in 0..<PairNetworkConstants.factorCount {
-            total += values[index] * values[index]
+            let value = factorValue(values, index)
+            total += value * value
         }
         return total > 0.0 ? sqrt(total) : 0.0
+    }
+
+    private static func currencyNorm<S: Sequence>(_ values: S) -> Double where S.Element == Double {
+        var total = 0.0
+        for value in values.prefix(PairNetworkConstants.maxCurrencies) {
+            total += value * value
+        }
+        return total > 0.0 ? sqrt(total) : 0.0
+    }
+
+    private static func factorValue(_ values: [Double], _ index: Int) -> Double {
+        guard index >= 0, index < values.count else { return 0.0 }
+        return values[index]
+    }
+
+    private static func topAbsShare<S: Sequence>(_ values: S) -> Double where S.Element == Double {
+        var total = 0.0
+        var maxAbs = 0.0
+        for value in values {
+            let absValue = abs(value)
+            total += absValue
+            if absValue > maxAbs {
+                maxAbs = absValue
+            }
+        }
+        guard total > 0.0 else { return 0.0 }
+        return fxClamp(maxAbs / total, 0.0, 1.0)
+    }
+
+    private static func herfindahlAbs<S: Sequence>(_ values: S) -> Double where S.Element == Double {
+        let stored = Array(values)
+        let total = stored.reduce(0.0) { $0 + abs($1) }
+        guard total > 0.0 else { return 0.0 }
+        var score = 0.0
+        for value in stored {
+            let share = abs(value) / total
+            score += share * share
+        }
+        return fxClamp(score, 0.0, 1.0)
     }
 
     private static func addKeyValue(_ exposure: inout PairNetworkExposure, key: String, delta: Double) {
