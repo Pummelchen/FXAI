@@ -33,7 +33,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 
 ## Current Gaps By Module
 
-- `Engine/Core`: partially ported. Core constants, feature groups, plugin families, data request basics, context symbol filtering, timeframe need/lag helpers, aligned-index maps, context aggregate arrays, context aggregate feature-slot adapters, feature schema, normalization concepts, model-context capacity/span helpers, and analog-memory/hierarchical signal scoring exist in Swift; broker execution, regime graph, and runtime perf details remain.
+- `Engine/Core`: partially ported. Core constants, feature groups, plugin families, data request basics, context symbol filtering, timeframe need/lag helpers, aligned-index maps, context aggregate arrays, context aggregate feature-slot adapters, feature schema, normalization concepts, model-context capacity/span helpers, analog-memory/hierarchical signal scoring, and regime graph transition scoring exist in Swift; broker execution and runtime perf details remain.
 - `Engine` root: partially ported. Feature registry/build/norm exist only as a first slice; runtime artifact text manifests plus binary runtime artifact header/envelope persistence are ported; M1 OHLCV training-sample preparation now covers ascending triple-barrier labels, plugin train payloads, deterministic range-based training datasets, and deterministic horizon configuration helpers. Event macro, broader FXDatabase dataset loading, meta calibration/reliability/policy/stacker/horizon learned state, and typed binary runtime state section materialization remain.
 - `Runtime/ControlPlane`: partially ported. Swift now has profile/snapshot DTOs, safe path helpers, TSV parsing, adaptive/student router weight helpers, portfolio supervisor defaults, supervisor service/command state parsing, freshness checks, command direction/budget helpers, file-backed profile loaders, peer aggregate scoring, and stale snapshot pruning.
 - `Runtime/Trade`: not ported. Must be split between FXBacktest simulation and FXDataEngine policy/risk DTOs.
@@ -56,6 +56,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 - Done: model-context capacity helpers: horizon clamping, symbol/horizon model scale, sequence/batch/tree span defaults, move EMA state, and three-way split branching.
 - Done: deterministic horizon configuration helpers: MQL-style horizon list parsing, configured-horizon slot lookup, max horizon resolution, safe array reads, positive int means, and no-spread static regime bucketing.
 - Done: analog-memory core: foundation/student/analog/hierarchical signal DTOs, legacy analog feature vector mapping, no-spread ring-buffer memory updates, weighted analog queries, horizon buckets, and hierarchical score blending.
+- Done: regime graph core: transition/dwell state, macro alignment EMA, feedback edge/quality EMA, predicted regime selection, and query score outputs.
 - Remaining in phase 3: typed materialization of non-tensor runtime binary state sections; tensor/plugin model state remains owned by FXPlugins, and broker execution state moves to FXBacktest.
 
 ## Start Order
