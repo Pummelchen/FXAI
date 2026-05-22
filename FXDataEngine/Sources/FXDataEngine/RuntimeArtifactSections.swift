@@ -393,6 +393,70 @@ public enum RuntimeNormalizationWindowConfigCodec {
     }
 }
 
+public enum RuntimeNormalizationHistoryCodec {
+    public static let byteCount = RuntimeArtifactPayloadMaterializer.normalizationHistoryByteCount(
+        header: RuntimeArtifactHeader()
+    )
+
+    public static func encode(_ state: NormalizationHistoryState) throws -> Data {
+        let normalized = NormalizationHistoryState(
+            initialized: state.initialized,
+            methods: state.methods
+        )
+        var writer = RuntimeArtifactBinaryWriter()
+        try writer.appendInt32(normalized.initialized ? 1 : 0)
+        for method in normalized.methods {
+            writer.appendInt64(method.lastSampleTimeUTC)
+            try writer.appendInt32(method.lastConfigVersion)
+            for feature in 0..<FXDataEngineConstants.aiFeatures {
+                try writer.appendInt32(method.counts[feature])
+                try writer.appendInt32(method.heads[feature])
+                for windowIndex in 0..<RuntimeArtifactConstants.normalizationRollWindowMax {
+                    let offset = NormalizationHistoryMethodState.valueOffset(
+                        featureIndex: feature,
+                        windowIndex: windowIndex
+                    )
+                    writer.appendDouble(method.values[offset])
+                }
+            }
+        }
+        return writer.data
+    }
+
+    public static func decode(from data: Data) throws -> NormalizationHistoryState {
+        var reader = RuntimeArtifactBinaryReader(data: data)
+        let initialized = try reader.readInt32() != 0
+        var methods: [NormalizationHistoryMethodState] = []
+        methods.reserveCapacity(FXDataEngineConstants.normMethodCount)
+        let valueCapacity = FXDataEngineConstants.aiFeatures * RuntimeArtifactConstants.normalizationRollWindowMax
+        for _ in 0..<FXDataEngineConstants.normMethodCount {
+            let lastSampleTime = try reader.readInt64()
+            let lastConfigVersion = try reader.readInt32()
+            var counts: [Int] = []
+            var heads: [Int] = []
+            var values: [Double] = []
+            counts.reserveCapacity(FXDataEngineConstants.aiFeatures)
+            heads.reserveCapacity(FXDataEngineConstants.aiFeatures)
+            values.reserveCapacity(valueCapacity)
+            for _ in 0..<FXDataEngineConstants.aiFeatures {
+                counts.append(try reader.readInt32())
+                heads.append(try reader.readInt32())
+                for _ in 0..<RuntimeArtifactConstants.normalizationRollWindowMax {
+                    values.append(try reader.readDouble())
+                }
+            }
+            methods.append(NormalizationHistoryMethodState(
+                lastSampleTimeUTC: lastSampleTime,
+                lastConfigVersion: lastConfigVersion,
+                counts: counts,
+                heads: heads,
+                values: values
+            ))
+        }
+        return NormalizationHistoryState(initialized: initialized, methods: methods)
+    }
+}
+
 public struct RuntimeArtifactPreparedSample: Codable, Hashable, Sendable {
     public var valid: Bool
     public var labelClass: LabelClass

@@ -85,4 +85,52 @@ final class NormalizationStateTests: XCTestCase {
         XCTAssertEqual(configDecoded.configVersion, 2)
         XCTAssertEqual(configDecoded.featureWindows[3], 96)
     }
+
+    func testNormalizationMethodStatePoliciesMatchLegacyGroups() {
+        XCTAssertTrue(FeatureNormalizationMethod.zScore.usesRollingNormalizationHistory)
+        XCTAssertTrue(FeatureNormalizationMethod.quantileToNormal.usesRollingNormalizationHistory)
+        XCTAssertFalse(FeatureNormalizationMethod.powerYeoJohnson.usesRollingNormalizationHistory)
+        XCTAssertTrue(FeatureNormalizationMethod.powerYeoJohnson.usesFittedStats)
+        XCTAssertTrue(FeatureNormalizationMethod.revin.usesAdaptivePayloadNormalization)
+        XCTAssertFalse(FeatureNormalizationMethod.existing.usesFittedStats)
+    }
+
+    func testNormalizationHistoryRecordsNewestFirstAndResetsOnRewindOrConfigChange() {
+        var history = NormalizationHistoryState()
+        XCTAssertTrue(history.prepareForSample(method: .zScore, sampleTimeUTC: 100, configVersion: 1))
+        history.record(method: .zScore, featureIndex: 4, value: 1.0)
+        history.record(method: .zScore, featureIndex: 4, value: 2.0)
+        history.record(method: .zScore, featureIndex: 4, value: 3.0)
+
+        XCTAssertEqual(history.historyCount(method: .zScore, featureIndex: 4, window: 2), 3)
+        XCTAssertEqual(history.recentValues(method: .zScore, featureIndex: 4, window: 2), [3.0, 2.0, 1.0])
+
+        XCTAssertTrue(history.prepareForSample(method: .zScore, sampleTimeUTC: 90, configVersion: 1))
+        XCTAssertEqual(history.historyCount(method: .zScore, featureIndex: 4, window: 64), 0)
+        history.record(method: .zScore, featureIndex: 4, value: 4.0)
+        XCTAssertEqual(history.recentValues(method: .zScore, featureIndex: 4, window: 64), [4.0])
+
+        XCTAssertTrue(history.prepareForSample(method: .zScore, sampleTimeUTC: 110, configVersion: 2))
+        XCTAssertEqual(history.historyCount(method: .zScore, featureIndex: 4, window: 64), 0)
+
+        XCTAssertFalse(history.prepareForSample(method: .existing, sampleTimeUTC: 120, configVersion: 3))
+        history.record(method: .existing, featureIndex: 4, value: 5.0)
+        XCTAssertEqual(history.historyCount(method: .existing, featureIndex: 4, window: 64), 0)
+    }
+
+    func testNormalizationHistoryCodecRoundTripsLegacySection() throws {
+        var history = NormalizationHistoryState()
+        _ = history.prepareForSample(method: .robustMedianIQR, sampleTimeUTC: 1_704_067_200, configVersion: 7)
+        history.record(method: .robustMedianIQR, featureIndex: 8, value: -1.5)
+        history.record(method: .robustMedianIQR, featureIndex: 8, value: 2.5)
+
+        let encoded = try RuntimeNormalizationHistoryCodec.encode(history)
+        let decoded = try RuntimeNormalizationHistoryCodec.decode(from: encoded)
+
+        XCTAssertEqual(encoded.count, RuntimeNormalizationHistoryCodec.byteCount)
+        XCTAssertTrue(decoded.initialized)
+        XCTAssertEqual(decoded.methods[FeatureNormalizationMethod.robustMedianIQR.rawValue].lastSampleTimeUTC, 1_704_067_200)
+        XCTAssertEqual(decoded.methods[FeatureNormalizationMethod.robustMedianIQR.rawValue].lastConfigVersion, 7)
+        XCTAssertEqual(decoded.recentValues(method: .robustMedianIQR, featureIndex: 8, window: 4), [2.5, -1.5])
+    }
 }
