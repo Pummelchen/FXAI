@@ -72,5 +72,6 @@ Each artifact bundle contains:
 ## Notes
 
 - Label generation is deterministic for a fixed dataset and config snapshot.
+- Label artifacts use `price_cost_points`; legacy `spread_multiplier` configs are migrated to `price_cost_multiplier`.
 - Path-aware logic is based on M1 bar geometry, so it is a bar-path approximation, not tick-perfect execution replay.
 - If a symbol needs an exact point size, add it under `symbol_point_overrides` in the config.

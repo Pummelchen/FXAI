@@ -45,7 +45,7 @@
   "safety_margin_points": 0.25,
   "sample_start_bars": 16,
   "schema_version": 1,
-  "spread_multiplier": 1.0,
+  "price_cost_multiplier": 1.0,
   "symbol_point_overrides": {},
   "timeframe": "M1",
   "tradeability": {

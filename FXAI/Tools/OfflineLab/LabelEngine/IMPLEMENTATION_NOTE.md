@@ -17,7 +17,7 @@
 
 - A dedicated offline-lab subsystem rooted at `<FXAI_ROOT>/Tools/OfflineLab/LabelEngine`
 - Deterministic multi-horizon side-aware labels over exported `dataset_bars`
-- Cost-aware tradeability labels driven by spread, slippage, fill penalty, commission, and safety margin
+- Cost-aware tradeability labels driven by price-cost points, slippage, fill penalty, commission, and safety margin
 - Path-aware barrier timing and MFE/MAE labeling using bar-path approximation
 - Meta-label generation over either:
   - baseline momentum candidates
@@ -32,7 +32,7 @@
 - There was no existing clean candidate-signal log tied to offline dataset bars, so phase 1 implements:
   - a deterministic baseline candidate generator
   - an external candidate ingest path
-- The export runner currently stores M1 OHLC and `spread_points`, but not symbol digit metadata. Point-size resolution is therefore:
+- The export runner currently stores M1 OHLC and a legacy `spread_points` cost column, but not symbol digit metadata. The label engine treats that legacy column as `price_cost_points` at its boundary. Point-size resolution is therefore:
   - overrideable in config
   - heuristically inferred per symbol otherwise
 - Path-aware labels are built from M1 bar geometry, not tick-level path, so every row records that a path approximation was used.

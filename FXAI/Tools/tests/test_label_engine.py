@@ -10,7 +10,7 @@ from offline_lab.dashboard import build_profile_dashboard
 from offline_lab.environment import bootstrap_environment
 from offline_lab.fixtures import patched_paths
 from offline_lab.label_engine import build_label_engine_artifacts, build_label_engine_bundle, build_label_engine_report, validate_label_engine_config
-from offline_lab.label_engine_config import load_config, validate_config_payload
+from offline_lab.label_engine_config import default_config, load_config, validate_config_payload
 
 
 def _insert_dataset(conn, *, dataset_key: str = "label:eurusd:m1", profile_name: str = "labels", symbol: str = "EURUSD") -> dict:
@@ -84,6 +84,36 @@ def test_label_engine_validate_rejects_duplicate_horizon_ids():
         raise AssertionError("duplicate label-engine horizon ids should fail validation")
 
 
+def test_label_engine_config_migrates_legacy_spread_multiplier():
+    payload = load_config()
+    payload.pop("price_cost_multiplier", None)
+    payload["spread_multiplier"] = 1.75
+
+    validated = validate_config_payload(payload)
+
+    assert validated["price_cost_multiplier"] == 1.75
+    assert "spread_multiplier" not in validated
+
+
+def test_label_engine_load_config_migrates_legacy_spread_multiplier_file():
+    with tempfile.TemporaryDirectory(prefix="fxai_label_engine_legacy_config_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)):
+            payload = default_config()
+            payload.pop("price_cost_multiplier", None)
+            payload["spread_multiplier"] = 1.75
+            label_engine_contracts.LABEL_ENGINE_CONFIG_PATH.write_text(
+                json.dumps(payload, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+
+            loaded = load_config()
+            persisted = json.loads(label_engine_contracts.LABEL_ENGINE_CONFIG_PATH.read_text(encoding="utf-8"))
+
+            assert loaded["price_cost_multiplier"] == 1.75
+            assert persisted["price_cost_multiplier"] == 1.75
+            assert "spread_multiplier" not in persisted
+
+
 def test_label_engine_bundle_writes_artifacts_and_dashboard_summary():
     with tempfile.TemporaryDirectory(prefix="fxai_label_engine_bundle_") as tmp_dir:
         with patched_paths(Path(tmp_dir)) as paths:
@@ -99,6 +129,9 @@ def test_label_engine_bundle_writes_artifacts_and_dashboard_summary():
             assert bundle["meta_summary"]["candidate_count"] > 0
             assert Path(bundle["artifact_paths"]["labels_ndjson"]).exists()
             assert Path(bundle["artifact_paths"]["meta_labels_ndjson"]).exists()
+            first_label = json.loads(Path(bundle["artifact_paths"]["labels_ndjson"]).read_text(encoding="utf-8").splitlines()[0])
+            assert first_label["price_cost_points"] == 12.0
+            assert "spread_cost_points" not in first_label
             assert report["artifact_count"] == 1
             assert dashboard["label_engine"]["report"]["artifact_count"] == 1
             assert dashboard["label_engine"]["report"]["builds"][0]["dataset_key"] == dataset["dataset_key"]

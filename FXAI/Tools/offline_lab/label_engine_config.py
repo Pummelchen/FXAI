@@ -27,7 +27,7 @@ def default_config() -> dict[str, Any]:
         "sample_start_bars": 16,
         "overlap_stride_bars": 1,
         "direction_zero_band_points": 0.50,
-        "spread_multiplier": 1.0,
+        "price_cost_multiplier": 1.0,
         "commission_points": 0.0,
         "safety_margin_points": 0.25,
         "default_point_sizes": {
@@ -113,8 +113,11 @@ def validate_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     if float(payload.get("direction_zero_band_points", 0.0) or 0.0) < 0.0:
         raise OfflineLabError("Label engine direction_zero_band_points must be >= 0")
-    if float(payload.get("spread_multiplier", 1.0) or 1.0) <= 0.0:
-        raise OfflineLabError("Label engine spread_multiplier must be > 0")
+    if "price_cost_multiplier" not in payload and "spread_multiplier" in payload:
+        payload["price_cost_multiplier"] = payload["spread_multiplier"]
+    payload.pop("spread_multiplier", None)
+    if float(payload.get("price_cost_multiplier", 1.0) or 1.0) <= 0.0:
+        raise OfflineLabError("Label engine price_cost_multiplier must be > 0")
 
     default_point_sizes = payload.get("default_point_sizes", {})
     if not isinstance(default_point_sizes, dict) or not default_point_sizes:
@@ -198,6 +201,12 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         json_dump(path, defaults)
         return deepcopy(defaults)
     payload = json.loads(path.read_text(encoding="utf-8"))
+    if (
+        isinstance(payload, dict)
+        and "price_cost_multiplier" not in payload
+        and "spread_multiplier" in payload
+    ):
+        payload["price_cost_multiplier"] = payload["spread_multiplier"]
     merged = _merge_defaults(defaults, payload)
     validated = validate_config_payload(merged)
     if json.dumps(validated, sort_keys=True) != json.dumps(payload, sort_keys=True):

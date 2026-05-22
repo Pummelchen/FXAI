@@ -16,7 +16,7 @@ class BarRecord:
     high: float
     low: float
     close: float
-    spread_points: float
+    price_cost_points: float
     tick_volume: int
     real_volume: int
 
@@ -29,7 +29,7 @@ class HorizonSpec:
 
 @dataclass(frozen=True)
 class CostSpec:
-    spread_cost_points: float
+    price_cost_points: float
     slippage_points: float
     fill_penalty_points: float
     commission_points: float
@@ -40,7 +40,7 @@ class CostSpec:
     @property
     def total_cost_points(self) -> float:
         return (
-            self.spread_cost_points
+            self.price_cost_points
             + self.slippage_points
             + self.fill_penalty_points
             + self.commission_points
@@ -284,7 +284,7 @@ def build_label_row(
         "mfe_bps": round(mfe_bps, 6),
         "mae_bps": round(mae_bps, 6),
         "cost_adjusted_return_points": round(cost_adjusted_return_points, 6),
-        "spread_cost_points": round(float(cost_spec.spread_cost_points), 6),
+        "price_cost_points": round(float(cost_spec.price_cost_points), 6),
         "slippage_cost_points": round(float(cost_spec.slippage_points), 6),
         "fill_penalty_points": round(float(cost_spec.fill_penalty_points), 6),
         "commission_points": round(float(cost_spec.commission_points), 6),

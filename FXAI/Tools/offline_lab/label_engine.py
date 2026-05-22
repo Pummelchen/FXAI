@@ -39,7 +39,7 @@ def _load_dataset_bars(conn: libsql.Connection, dataset_id: int) -> list[BarReco
     rows = query_all(
         conn,
         """
-        SELECT bar_time_unix, open, high, low, close, spread_points, tick_volume, real_volume
+        SELECT bar_time_unix, open, high, low, close, spread_points AS price_cost_points, tick_volume, real_volume
           FROM dataset_bars
          WHERE dataset_id = ?
          ORDER BY bar_time_unix ASC
@@ -54,7 +54,7 @@ def _load_dataset_bars(conn: libsql.Connection, dataset_id: int) -> list[BarReco
             high=float(row["high"]),
             low=float(row["low"]),
             close=float(row["close"]),
-            spread_points=float(row["spread_points"]),
+            price_cost_points=float(row["price_cost_points"]),
             tick_volume=int(row["tick_volume"]),
             real_volume=int(row["real_volume"]),
         )
@@ -89,11 +89,11 @@ def _cost_spec_for_bar(
     execution_penalty_points: float = 0.0,
     news_penalty_points: float = 0.0,
 ) -> CostSpec:
-    spread_multiplier = float(config.get("spread_multiplier", 1.0) or 1.0)
+    price_cost_multiplier = float(config.get("price_cost_multiplier", config.get("spread_multiplier", 1.0)) or 1.0)
     commission_points = float(config.get("commission_points", 0.0) or 0.0)
     safety_margin_points = float(config.get("safety_margin_points", 0.25) or 0.25)
     return CostSpec(
-        spread_cost_points=float(bar.spread_points) * spread_multiplier,
+        price_cost_points=float(bar.price_cost_points) * price_cost_multiplier,
         slippage_points=float(execution_profile.get("slippage_points", 0.0) or 0.0),
         fill_penalty_points=float(execution_profile.get("fill_penalty_points", 0.0) or 0.0),
         commission_points=commission_points,
