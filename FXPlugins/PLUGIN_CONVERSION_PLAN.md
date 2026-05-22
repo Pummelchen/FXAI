@@ -278,12 +278,22 @@ Completed first Swift wave on 2026-05-23:
 - Extended `AIModelID` and the FXDataEngine model count from 63 to 65 so the two
   demo adapters have stable model identifiers.
 
+Completed full Swift adapter wave on 2026-05-23:
+
+- Added generated Swift `FXAIPluginV4` adapters for the other 59 legacy MQL5
+  plugins.
+- `FXAIPluginRegistry` now exposes all 65 model IDs: 63 legacy FXAI plugins plus
+  the 2 FXBacktest demo adapters.
+- Every generated adapter has a validated manifest, volume-aware deterministic
+  fallback prediction, and explicit Apple Silicon backend metadata.
+- Sequence and RL plugins now have Swift contract adapters and declared
+  PyTorch MPS, TensorFlow Metal, and/or Core ML inference candidates.
+
 Remaining work:
 
-- Convert the other 59 legacy MQL5 plugins one plugin at a time following the
-  per-plugin matrix above.
-- For high-complexity sequence/RL plugins, implement Swift contract adapters
-  first, then add PyTorch MPS or TensorFlow Metal backends after operation
-  coverage and training/inference boundaries are tested.
+- Replace generated fallback prediction with full per-plugin native logic or
+  external PyTorch/TensorFlow model execution as each backend is implemented.
+- Add parity fixtures for every non-generated algorithm body before removing
+  its MQL5 reference file.
 - Remove or retire MQL5 reference files only after each corresponding Swift or
   backend plugin passes contract, parity, and acceleration-plan tests.

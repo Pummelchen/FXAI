@@ -104,8 +104,8 @@ final class FXBacktestDemoAdapterTests: XCTestCase {
         let pluginNames = Set(FXAIPluginRegistry.availablePlugins().map(\.manifest.aiName))
         let planNames = Set(FXAIPluginRegistry.accelerationPlans().map(\.pluginName))
 
-        XCTAssertEqual(pluginNames.count, 6)
-        XCTAssertEqual(planNames.count, 6)
+        XCTAssertEqual(pluginNames.count, FXDataEngineConstants.aiCount)
+        XCTAssertEqual(planNames.count, FXDataEngineConstants.aiCount)
         XCTAssertTrue(pluginNames.contains("rule_buyonly"))
         XCTAssertTrue(pluginNames.contains("rule_sellonly"))
         XCTAssertTrue(pluginNames.contains("rule_random"))

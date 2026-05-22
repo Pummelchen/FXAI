@@ -14,16 +14,17 @@ Converted plugins should consume the Swift FXDataEngine OHLCV contracts and use 
 - family folders such as `Rule/`, `Sequence/`, `Tree/`, and `Stat/`: copied MQL5 reference plugins, kept temporarily for porting parity.
 - `PLUGIN_CONVERSION_PLAN.md`: per-plugin Swift/Metal/PyTorch/TensorFlow/Core ML conversion plan and reviewed migration order.
 
-## Current Swift Wave
+## Current Swift Coverage
 
-The first verified wave includes:
+Root `FXPlugins` now exposes all 65 FXAI model IDs through Swift `FXAIPluginV4`
+contracts:
 
-- `rule_buyonly`
-- `rule_sellonly`
-- `rule_random`
-- `rule_m1sync`
-- `fxbacktest_moving_average_cross`
-- `fxbacktest_fxstupid`
+- 4 hand-ported legacy rule plugins.
+- 2 FXBacktest demo adapters: `fxbacktest_moving_average_cross` and `fxbacktest_fxstupid`.
+- 59 generated Swift adapters for the remaining legacy plugins, each with
+  volume-aware deterministic fallback prediction and explicit Apple Silicon
+  backend metadata for Swift SIMD, Accelerate, Metal, PyTorch MPS,
+  TensorFlow Metal, or Core ML / Neural Engine candidates.
 
 Run the local verification gate with:
 
