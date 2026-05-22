@@ -39,7 +39,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 - `Runtime/Trade`: not ported. Must be split between FXBacktest simulation and FXDataEngine policy/risk DTOs.
 - `Runtime` stages: partially ported. Time-context helpers, router model-cap pressure logic, and final signal reason/intensity math are available as deterministic Swift contracts; broader feature/model/transfer/policy orchestration still needs plugin mockability before real PyTorch/TensorFlow backends.
 - `Lifecycle` and `Warmup`: not ported. Must be moved after data/sample contracts stabilize.
-- `Services`: not ported. MT5 service collectors should become offline data-provider inputs or deterministic readers.
+- `Services`: partially ported. NewsPulse pair-state TSV reader and calendar-cache fallback are available in Swift; remaining MT5 service collectors should become offline data-provider inputs or deterministic readers.
 - `Tests`: not ported, except current Swift tests for the first OHLCV/volume contract slice.
 
 ## Port Progress
@@ -75,6 +75,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 - Done: runtime system-health aggregation: prepared-input health states for news, rates, cross-asset, microstructure, execution quality, calendar cache, and factor context now preserve legacy scoring, reason CSV, readiness/staleness flags, execution `stale || data_stale` handling, and posture thresholds. MT5 cycle/order invariant repair from `runtime_system_health.mqh` is intentionally not ported to FXDataEngine because it mutates live broker state; any retained behavior belongs in FXBacktest simulation policy or future live-agent contracts.
 - Remaining in phase 5: lifecycle wiring that consumes macro/calendar/factor/system-health availability and broader runtime policy integration.
 - Done: runtime time/router/finalize micro-slice: `runtime_time_service.mqh` reset/build/offset conversion/summary behavior is ported to prepared Swift time inputs, `runtime_router_stage.mqh` performance-budget model capping is ported against `RuntimePerformanceState`, and `runtime_signal_finalize.mqh` final reason priority plus signal-intensity math are ported without MT5 global snapshot side effects.
+- Done: NewsPulse service-state reader: `runtime_trade_newspulse.mqh` symbol-map parsing, supported-currency heuristic pair IDs, flat pair snapshot parsing, max-six reason de-duplication, freshness/stale handling, value clamps, and calendar-cache fallback are ported as pure Swift inputs.
 
 ## Start Order
 
