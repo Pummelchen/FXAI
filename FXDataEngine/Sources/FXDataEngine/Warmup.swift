@@ -122,8 +122,79 @@ public struct WarmupExecutionPlan: Codable, Hashable, Sendable {
     }
 }
 
+public struct WarmupCandidateSplit: Codable, Hashable, Sendable {
+    public var validationStart: Int
+    public var validationEnd: Int
+    public var trainingStart: Int
+    public var trainingEnd: Int
+
+    public init(validationStart: Int, validationEnd: Int, trainingStart: Int, trainingEnd: Int) {
+        self.validationStart = validationStart
+        self.validationEnd = validationEnd
+        self.trainingStart = trainingStart
+        self.trainingEnd = trainingEnd
+    }
+}
+
+public struct WarmupAdaptiveThresholds: Codable, Hashable, Sendable {
+    public var buyMinProbability: Double
+    public var sellMinProbability: Double
+    public var skipMinProbability: Double
+
+    public init(buyMinProbability: Double, sellMinProbability: Double, skipMinProbability: Double) {
+        self.buyMinProbability = buyMinProbability
+        self.sellMinProbability = sellMinProbability
+        self.skipMinProbability = skipMinProbability
+    }
+}
+
+public struct WarmupPortfolioContribution: Codable, Hashable, Sendable {
+    public var edge: Double
+    public var weight: Double
+    public var absoluteCorrelation: Double
+    public var diversificationWeight: Double
+
+    public init(edge: Double, weight: Double, absoluteCorrelation: Double = 0.0, diversificationWeight: Double = 1.0) {
+        self.edge = fxSafeFinite(edge)
+        self.weight = max(0.0, fxSafeFinite(weight))
+        self.absoluteCorrelation = fxClamp(absoluteCorrelation, 0.0, 1.0)
+        self.diversificationWeight = fxClamp(diversificationWeight, 0.0, 1.0)
+    }
+}
+
+public struct WarmupPortfolioDiagnostics: Codable, Hashable, Sendable {
+    public var meanEdge: Double
+    public var stability: Double
+    public var correlationPenalty: Double
+    public var diversification: Double
+    public var symbolCount: Int
+
+    public init(
+        meanEdge: Double,
+        stability: Double,
+        correlationPenalty: Double,
+        diversification: Double,
+        symbolCount: Int
+    ) {
+        self.meanEdge = fxSafeFinite(meanEdge)
+        self.stability = fxClamp(stability, 0.0, 1.0)
+        self.correlationPenalty = fxClamp(correlationPenalty, 0.0, 1.0)
+        self.diversification = fxClamp(diversification, 0.0, 1.0)
+        self.symbolCount = max(0, symbolCount)
+    }
+}
+
 public enum WarmupTools {
     public static let missingScore = -1e9
+    public static let transferSeedSymbols = [
+        "EURUSD", "USDJPY", "GBPUSD", "AUDUSD", "USDCAD",
+        "USDCHF", "NZDUSD", "EURJPY", "EURGBP", "EURAUD"
+    ]
+    public static let sgdLogitAIID = 14
+    public static let ftrlLogitAIID = 4
+    public static let lightGBMAIID = 6
+    public static let xgbFastAIID = 20
+    public static let seriousNativeAIIDs: Set<Int> = [32, 33, 34, 35, 25, lightGBMAIID, xgbFastAIID]
 
     public static func sanitizeThresholdPair(buyThreshold: Double, sellThreshold: Double) -> WarmupThresholdPair {
         var buy = fxClamp(buyThreshold, 0.50, 0.95)
@@ -221,6 +292,318 @@ public enum WarmupTools {
             aiHint: aiHint,
             transferSampleCap: transferCap,
             portfolioEvaluationCap: portfolioCap
+        )
+    }
+
+    public static func transferUniverse(mainSymbol: String, contextSymbols: [String]) -> [String] {
+        var symbols: [String] = []
+        if !mainSymbol.isEmpty {
+            symbols.append(mainSymbol)
+        }
+
+        for candidate in contextSymbols where !candidate.isEmpty {
+            if !symbols.contains(candidate) {
+                symbols.append(candidate)
+            }
+        }
+
+        for candidate in transferSeedSymbols where !candidate.isEmpty {
+            if !symbols.contains(candidate) {
+                symbols.append(candidate)
+            }
+        }
+
+        return symbols
+    }
+
+    public static func transferSampleRange(
+        neededBars: Int,
+        maxHorizonMinutes: Int,
+        sampleCap: Int,
+        featureLookback: Int = 10
+    ) -> ClosedRange<Int>? {
+        guard sampleCap > 0 else { return nil }
+        let start = maxHorizonMinutes
+        var end = start + sampleCap - 1
+        let maxValid = neededBars - max(0, featureLookback) - 1
+        if end > maxValid {
+            end = maxValid
+        }
+        guard end > start else { return nil }
+        return start...end
+    }
+
+    public static func cappedValidSampleIndexes(validFlags: [Bool], sampleCap: Int) -> [Int] {
+        guard sampleCap > 0 else { return [] }
+        let validTotal = validFlags.filter { $0 }.count
+        guard validTotal > 0 else { return [] }
+
+        let stride = validTotal > sampleCap ? max(1, validTotal / sampleCap) : 1
+        var emitted: [Int] = []
+        emitted.reserveCapacity(min(validTotal, sampleCap))
+        var seen = 0
+        for index in validFlags.indices.reversed() {
+            guard validFlags[index] else { continue }
+            if (seen % stride) != 0 {
+                seen += 1
+                continue
+            }
+            seen += 1
+            emitted.append(index)
+            if emitted.count >= sampleCap {
+                break
+            }
+        }
+        return emitted
+    }
+
+    public static func cappedValidSampleIndexes(samples: [PreparedTrainingSample], sampleCap: Int) -> [Int] {
+        cappedValidSampleIndexes(validFlags: samples.map(\.valid), sampleCap: sampleCap)
+    }
+
+    public static func normalizationScoringModelIDs(primaryAI: Int, ensemble: Bool) -> [Int] {
+        let primary = (0..<FXDataEngineConstants.aiCount).contains(primaryAI) ? primaryAI : sgdLogitAIID
+        let anchors = [primary, ftrlLogitAIID, xgbFastAIID, lightGBMAIID]
+        let maxModels = min(max(ensemble ? 4 : 1, 1), 4)
+        var modelIDs: [Int] = []
+        for id in anchors {
+            guard !modelIDs.contains(id) else { continue }
+            modelIDs.append(id)
+            if modelIDs.count >= maxModels {
+                break
+            }
+        }
+        return modelIDs
+    }
+
+    public static func normalizationCandidateSplit(
+        horizonMinutes: Int,
+        startIndex: Int,
+        endIndex: Int
+    ) -> WarmupCandidateSplit? {
+        let span = endIndex - startIndex + 1
+        guard span >= 240 else { return nil }
+
+        var validationLength = span / 3
+        if validationLength < 80 {
+            validationLength = 80
+        }
+        if validationLength > 240 {
+            validationLength = 240
+        }
+
+        let validationStart = startIndex
+        var validationEnd = validationStart + validationLength - 1
+        if validationEnd >= endIndex {
+            validationEnd = endIndex - 1
+        }
+        guard validationEnd > validationStart else { return nil }
+
+        var purge = horizonMinutes + 240
+        if purge < horizonMinutes + 40 {
+            purge = horizonMinutes + 40
+        }
+        let trainingStart = validationEnd + purge + 1
+        let trainingEnd = endIndex
+        guard trainingEnd - trainingStart >= 100 else { return nil }
+
+        return WarmupCandidateSplit(
+            validationStart: validationStart,
+            validationEnd: validationEnd,
+            trainingStart: trainingStart,
+            trainingEnd: trainingEnd
+        )
+    }
+
+    public static func warmupFoldSplits(
+        horizonMinutes: Int,
+        startIndex: Int,
+        endIndex: Int,
+        folds: Int
+    ) -> [WarmupCandidateSplit] {
+        let sampleSpan = endIndex - startIndex + 1
+        guard sampleSpan > 0, folds > 0 else { return [] }
+
+        var foldLength = sampleSpan / (folds + 1)
+        if foldLength < 40 {
+            foldLength = 40
+        }
+        if foldLength > sampleSpan / 2 {
+            foldLength = sampleSpan / 2
+        }
+        guard foldLength >= 20 else { return [] }
+
+        var splits: [WarmupCandidateSplit] = []
+        splits.reserveCapacity(folds)
+        for fold in 0..<folds {
+            var validationStart = startIndex + (fold * foldLength)
+            var validationEnd = validationStart + foldLength - 1
+            if validationStart < startIndex {
+                validationStart = startIndex
+            }
+            if validationEnd >= endIndex {
+                validationEnd = endIndex - 1
+            }
+            guard validationEnd > validationStart else { continue }
+
+            var purge = horizonMinutes + 240
+            if purge < horizonMinutes + 40 {
+                purge = horizonMinutes + 40
+            }
+            let trainingStart = validationEnd + purge + 1
+            let trainingEnd = endIndex
+            guard trainingEnd - trainingStart >= 100 else { continue }
+
+            splits.append(
+                WarmupCandidateSplit(
+                    validationStart: validationStart,
+                    validationEnd: validationEnd,
+                    trainingStart: trainingStart,
+                    trainingEnd: trainingEnd
+                )
+            )
+        }
+        return splits
+    }
+
+    public static func deriveAdaptiveThresholds(
+        baseBuyThreshold: Double,
+        baseSellThreshold: Double,
+        minMovePoints: Double,
+        expectedMovePoints: Double,
+        volatilityProxy: Double
+    ) -> WarmupAdaptiveThresholds {
+        let buyBase = fxClamp(baseBuyThreshold, 0.50, 0.95)
+        let sellBase = fxClamp(1.0 - baseSellThreshold, 0.50, 0.95)
+        let expectedMove = max(expectedMovePoints, minMovePoints + 0.10)
+        let costRatio = fxClamp(minMovePoints / expectedMove, 0.0, 2.0)
+        let volatilityRatio = fxClamp(volatilityProxy / 4.0, 0.0, 1.0)
+        let tighten = fxClamp(((costRatio - 0.35) * 0.35) + (0.10 * volatilityRatio), 0.0, 0.25)
+
+        return WarmupAdaptiveThresholds(
+            buyMinProbability: fxClamp(buyBase + tighten, 0.50, 0.96),
+            sellMinProbability: fxClamp(sellBase + tighten, 0.50, 0.96),
+            skipMinProbability: fxClamp(0.45 + (0.20 * costRatio) + (0.10 * volatilityRatio), 0.35, 0.85)
+        )
+    }
+
+    public static func classSignalFromEV(
+        probabilities: [Double],
+        thresholds: WarmupAdaptiveThresholds,
+        expectedMovePoints: Double,
+        minMovePoints: Double,
+        evThresholdPoints: Double
+    ) -> LabelClass? {
+        guard expectedMovePoints > 0.0 else { return nil }
+        let sellProbability = HorizonTools.value(in: probabilities, index: LabelClass.sell.rawValue, default: 0.0)
+        let buyProbability = HorizonTools.value(in: probabilities, index: LabelClass.buy.rawValue, default: 0.0)
+        let skipProbability = HorizonTools.value(in: probabilities, index: LabelClass.skip.rawValue, default: 0.0)
+
+        if skipProbability >= thresholds.skipMinProbability {
+            return nil
+        }
+
+        let buyEV = ((2.0 * buyProbability) - 1.0) * expectedMovePoints - minMovePoints
+        let sellEV = ((2.0 * sellProbability) - 1.0) * expectedMovePoints - minMovePoints
+        let evThreshold = fxSafeFinite(evThresholdPoints)
+        if buyProbability >= thresholds.buyMinProbability, buyEV >= evThreshold, buyEV > sellEV {
+            return .buy
+        }
+        if sellProbability >= thresholds.sellMinProbability, sellEV >= evThreshold, sellEV > buyEV {
+            return .sell
+        }
+        return nil
+    }
+
+    public static func warmupEpochBudget(
+        aiID: Int,
+        horizonMinutes: Int,
+        baseEpochs: Int,
+        symbol: String
+    ) -> Int {
+        var epochs = max(baseEpochs, 1)
+        guard seriousNativeAIIDs.contains(aiID) else { return epochs }
+
+        let scale = ModelContextTools.modelCapacityScale(symbol: symbol, horizonMinutes: max(horizonMinutes, 1))
+        var bonus = 1
+        if scale > 1.05 {
+            bonus += 1
+        }
+        if scale > 1.18 {
+            bonus += 1
+        }
+        if scale > 1.28 {
+            bonus += 1
+        }
+        if horizonMinutes >= 15 {
+            bonus += 1
+        }
+        if horizonMinutes >= 30 {
+            bonus += 1
+        }
+        if horizonMinutes >= 60 {
+            bonus += 1
+        }
+        epochs += bonus
+        return min(epochs, 10)
+    }
+
+    public static func estimatePortfolioSymbolCorrelation(samples: [PreparedTrainingSample]) -> Double {
+        var correlationSum = 0.0
+        var used = 0
+        for sample in samples where sample.valid {
+            correlationSum += abs(HorizonTools.value(in: sample.x, index: 53, default: 0.0))
+            used += 1
+        }
+        guard used > 0 else { return 0.0 }
+        return fxClamp(correlationSum / Double(used), 0.0, 1.0)
+    }
+
+    public static func primaryPortfolioWeight(tradeRate: Double) -> Double {
+        fxClamp(0.70 + 0.30 * tradeRate, 0.35, 1.20)
+    }
+
+    public static func transferDiversificationWeight(absoluteCorrelation: Double) -> Double {
+        fxClamp(1.0 - 0.60 * absoluteCorrelation, 0.25, 1.0)
+    }
+
+    public static func transferPortfolioWeight(tradeRate: Double, diversificationWeight: Double) -> Double {
+        fxClamp(diversificationWeight * (0.55 + 0.45 * tradeRate), 0.15, 1.10)
+    }
+
+    public static func portfolioDiagnostics(
+        contributions: [WarmupPortfolioContribution]
+    ) -> WarmupPortfolioDiagnostics? {
+        var scoreSum = 0.0
+        var scoreSquareSum = 0.0
+        var weightSum = 0.0
+        var correlationSum = 0.0
+        var diversificationSum = 0.0
+        var symbolCount = 0
+
+        for contribution in contributions where contribution.weight > 0.0 {
+            scoreSum += contribution.weight * contribution.edge
+            scoreSquareSum += contribution.weight * contribution.edge * contribution.edge
+            weightSum += contribution.weight
+            correlationSum += contribution.weight * contribution.absoluteCorrelation
+            diversificationSum += contribution.weight * contribution.diversificationWeight
+            symbolCount += 1
+        }
+
+        guard weightSum > 0.0 else { return nil }
+        let meanEdge = scoreSum / weightSum
+        let variance = max(scoreSquareSum / weightSum - meanEdge * meanEdge, 0.0)
+        let standardDeviation = sqrt(variance)
+        let scale = max(abs(meanEdge), 0.50)
+        let stability = 1.0 - fxClamp(standardDeviation / scale, 0.0, 1.0)
+        let correlationPenalty = correlationSum > 0.0 ? correlationSum / weightSum : 0.0
+        let diversification = fxClamp(diversificationSum / weightSum, 0.0, 1.0)
+        return WarmupPortfolioDiagnostics(
+            meanEdge: meanEdge,
+            stability: stability,
+            correlationPenalty: correlationPenalty,
+            diversification: diversification,
+            symbolCount: symbolCount
         )
     }
 

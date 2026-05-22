@@ -2,6 +2,145 @@ import XCTest
 @testable import FXDataEngine
 
 final class WarmupTests: XCTestCase {
+    func testWarmupTransferUniverseAndRangeMatchLegacyOrdering() {
+        XCTAssertEqual(
+            WarmupTools.transferUniverse(mainSymbol: "EURUSD", contextSymbols: ["USDJPY", "EURUSD", "XAUUSD", ""]),
+            ["EURUSD", "USDJPY", "XAUUSD", "GBPUSD", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD", "EURJPY", "EURGBP", "EURAUD"]
+        )
+        XCTAssertEqual(
+            WarmupTools.transferSampleRange(neededBars: 2_011, maxHorizonMinutes: 34, sampleCap: 100),
+            34...133
+        )
+        XCTAssertNil(WarmupTools.transferSampleRange(neededBars: 100, maxHorizonMinutes: 90, sampleCap: 20))
+    }
+
+    func testWarmupCappedValidSampleIndexesUseLegacyReverseStride() {
+        XCTAssertEqual(
+            WarmupTools.cappedValidSampleIndexes(validFlags: Array(repeating: true, count: 10), sampleCap: 3),
+            [9, 6, 3]
+        )
+        XCTAssertEqual(
+            WarmupTools.cappedValidSampleIndexes(validFlags: [true, false, true], sampleCap: 10),
+            [2, 0]
+        )
+        XCTAssertTrue(WarmupTools.cappedValidSampleIndexes(validFlags: [false, false], sampleCap: 2).isEmpty)
+    }
+
+    func testWarmupNormalizationModelListAndSplitsMatchLegacyPlanning() {
+        XCTAssertEqual(WarmupTools.normalizationScoringModelIDs(primaryAI: 20, ensemble: true), [20, 4, 6])
+        XCTAssertEqual(WarmupTools.normalizationScoringModelIDs(primaryAI: -4, ensemble: false), [14])
+
+        XCTAssertEqual(
+            WarmupTools.normalizationCandidateSplit(horizonMinutes: 13, startIndex: 0, endIndex: 599),
+            WarmupCandidateSplit(validationStart: 0, validationEnd: 199, trainingStart: 453, trainingEnd: 599)
+        )
+        XCTAssertNil(WarmupTools.normalizationCandidateSplit(horizonMinutes: 13, startIndex: 0, endIndex: 239))
+
+        XCTAssertEqual(
+            WarmupTools.warmupFoldSplits(horizonMinutes: 13, startIndex: 0, endIndex: 999, folds: 3),
+            [
+                WarmupCandidateSplit(validationStart: 0, validationEnd: 249, trainingStart: 503, trainingEnd: 999),
+                WarmupCandidateSplit(validationStart: 250, validationEnd: 499, trainingStart: 753, trainingEnd: 999)
+            ]
+        )
+    }
+
+    func testWarmupAdaptiveThresholdsAndEVSignalMatchLegacyRules() {
+        let thresholds = WarmupTools.deriveAdaptiveThresholds(
+            baseBuyThreshold: 0.60,
+            baseSellThreshold: 0.40,
+            minMovePoints: 2.0,
+            expectedMovePoints: 4.0,
+            volatilityProxy: 2.0
+        )
+
+        XCTAssertEqual(thresholds.buyMinProbability, 0.7025, accuracy: 1e-12)
+        XCTAssertEqual(thresholds.sellMinProbability, 0.7025, accuracy: 1e-12)
+        XCTAssertEqual(thresholds.skipMinProbability, 0.60, accuracy: 1e-12)
+        XCTAssertEqual(
+            WarmupTools.classSignalFromEV(
+                probabilities: [0.10, 0.75, 0.15],
+                thresholds: thresholds,
+                expectedMovePoints: 6.0,
+                minMovePoints: 2.0,
+                evThresholdPoints: 0.30
+            ),
+            .buy
+        )
+        XCTAssertEqual(
+            WarmupTools.classSignalFromEV(
+                probabilities: [0.80, 0.10, 0.10],
+                thresholds: thresholds,
+                expectedMovePoints: 6.0,
+                minMovePoints: 2.0,
+                evThresholdPoints: 0.30
+            ),
+            .sell
+        )
+        XCTAssertNil(
+            WarmupTools.classSignalFromEV(
+                probabilities: [0.10, 0.80, 0.90],
+                thresholds: thresholds,
+                expectedMovePoints: 6.0,
+                minMovePoints: 2.0,
+                evThresholdPoints: 0.30
+            )
+        )
+
+        let clamped = WarmupTools.deriveAdaptiveThresholds(
+            baseBuyThreshold: 0.95,
+            baseSellThreshold: 0.05,
+            minMovePoints: 5.0,
+            expectedMovePoints: 0.0,
+            volatilityProxy: 9.0
+        )
+        XCTAssertEqual(clamped.buyMinProbability, 0.96, accuracy: 1e-12)
+        XCTAssertEqual(clamped.sellMinProbability, 0.96, accuracy: 1e-12)
+    }
+
+    func testWarmupEpochBudgetAndPortfolioDiagnosticsMatchLegacyMath() {
+        XCTAssertEqual(
+            WarmupTools.warmupEpochBudget(aiID: 14, horizonMinutes: 60, baseEpochs: 0, symbol: "EURUSD"),
+            1
+        )
+        XCTAssertEqual(
+            WarmupTools.warmupEpochBudget(aiID: 20, horizonMinutes: 60, baseEpochs: 2, symbol: "EURUSD"),
+            6
+        )
+        XCTAssertEqual(
+            WarmupTools.warmupEpochBudget(aiID: 20, horizonMinutes: 240, baseEpochs: 5, symbol: "XAUUSD"),
+            10
+        )
+
+        var sampleA = PreparedTrainingSample(valid: true)
+        var xA = sampleA.x
+        xA[53] = -0.25
+        sampleA.x = xA
+        var sampleB = PreparedTrainingSample(valid: true)
+        var xB = sampleB.x
+        xB[53] = 0.75
+        sampleB.x = xB
+        XCTAssertEqual(WarmupTools.estimatePortfolioSymbolCorrelation(samples: [sampleA, sampleB]), 0.50, accuracy: 1e-12)
+
+        let diversity = WarmupTools.transferDiversificationWeight(absoluteCorrelation: 0.40)
+        XCTAssertEqual(WarmupTools.primaryPortfolioWeight(tradeRate: 0.50), 0.85, accuracy: 1e-12)
+        XCTAssertEqual(diversity, 0.76, accuracy: 1e-12)
+        XCTAssertEqual(WarmupTools.transferPortfolioWeight(tradeRate: 0.50, diversificationWeight: diversity), 0.589, accuracy: 1e-12)
+
+        let diagnostics = WarmupTools.portfolioDiagnostics(
+            contributions: [
+                WarmupPortfolioContribution(edge: 2.0, weight: 1.0),
+                WarmupPortfolioContribution(edge: -1.0, weight: 0.5, absoluteCorrelation: 0.4, diversificationWeight: 0.76)
+            ]
+        )
+        XCTAssertEqual(diagnostics?.meanEdge ?? 0.0, 1.0, accuracy: 1e-12)
+        XCTAssertEqual(diagnostics?.stability ?? -1.0, 0.0, accuracy: 1e-12)
+        XCTAssertEqual(diagnostics?.correlationPenalty ?? 0.0, 0.13333333333333333, accuracy: 1e-12)
+        XCTAssertEqual(diagnostics?.diversification ?? 0.0, 0.92, accuracy: 1e-12)
+        XCTAssertEqual(diagnostics?.symbolCount, 2)
+        XCTAssertNil(WarmupTools.portfolioDiagnostics(contributions: []))
+    }
+
     func testWarmupThresholdSanitizerMatchesLegacyRules() {
         XCTAssertEqual(
             WarmupTools.sanitizeThresholdPair(buyThreshold: 0.97, sellThreshold: 0.02),
