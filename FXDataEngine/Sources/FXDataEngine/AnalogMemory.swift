@@ -180,6 +180,26 @@ public struct AnalogMemoryStore: Codable, Sendable {
         self.entries = Array(repeating: AnalogMemoryEntry(), count: resolvedCapacity)
     }
 
+    public init(
+        capacity: Int,
+        head: Int,
+        size: Int,
+        entries: [AnalogMemoryEntry]
+    ) {
+        let resolvedCapacity = max(1, capacity)
+        self.capacity = resolvedCapacity
+        self.head = head
+        self.size = size
+        self.entries = Array(entries.prefix(resolvedCapacity))
+        if self.entries.count < resolvedCapacity {
+            self.entries.append(contentsOf: Array(
+                repeating: AnalogMemoryEntry(),
+                count: resolvedCapacity - self.entries.count
+            ))
+        }
+        ensureStorage()
+    }
+
     public mutating func reset() {
         ensureStorage()
         head = 0

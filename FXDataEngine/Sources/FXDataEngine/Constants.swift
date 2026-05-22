@@ -23,6 +23,17 @@ public enum FXDataEngineConstants {
     public static let analogMemoryFeatures = 12
     public static let analogMemoryMinMatches = 3
     public static let pluginHorizonBuckets = 8
+    public static let sharedTransferFeatures = 28
+    public static let sharedTransferLatent = 12
+    public static let sharedTransferSequenceTokens = 16
+    public static let sharedTransferBarFeatures = 12
+    public static let sharedTransferStateFeatures = sharedTransferBarFeatures
+    public static let sharedTransferDomainBuckets = 8
+    public static let brokerExecutionTraceCapacity = 192
+    public static let brokerExecutionSymbolBuckets = 12
+    public static let brokerExecutionSideCount = 3
+    public static let brokerExecutionOrderTypeCount = 5
+    public static let brokerExecutionEventKindCount = 4
     public static let apiVersionV4 = 4
     public static let maxSequenceBars = 96
     public static let maxContextSymbols = 48

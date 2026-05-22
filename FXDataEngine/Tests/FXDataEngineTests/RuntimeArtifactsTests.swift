@@ -86,6 +86,158 @@ final class RuntimeArtifactsTests: XCTestCase {
         XCTAssertThrowsError(try RuntimeArtifactBinaryCodec.decodeHeader(from: Data(count: 12)))
     }
 
+    func testRuntimeArtifactPayloadLayoutMaterializesLegacySections() throws {
+        let layout = RuntimeArtifactPayloadMaterializer.layout()
+        XCTAssertEqual(layout.sections.count, RuntimeArtifactPayloadSectionKind.allCases.count)
+        XCTAssertEqual(layout.sections.first?.offset, 0)
+
+        let windows = try XCTUnwrap(layout.section(.normalizationWindows))
+        let replay = try XCTUnwrap(layout.section(.replayReservoir))
+        let featureDrift = try XCTUnwrap(layout.section(.featureDrift))
+        let sharedTransfer = try XCTUnwrap(layout.section(.sharedTransferTensor))
+        let analog = try XCTUnwrap(layout.section(.analogMemory))
+        let broker = try XCTUnwrap(layout.section(.brokerExecution))
+
+        XCTAssertEqual(windows.byteCount, 728)
+        XCTAssertEqual(replay.byteCount, 645_576)
+        XCTAssertEqual(featureDrift.byteCount, 396)
+        XCTAssertEqual(sharedTransfer.owner, .fxPlugins)
+        XCTAssertEqual(analog.owner, .fxDataEngine)
+        XCTAssertEqual(broker.owner, .fxBacktest)
+        XCTAssertEqual(analog.offset + analog.byteCount, broker.offset)
+        XCTAssertEqual(layout.payloadByteCount, broker.offset + broker.byteCount)
+
+        let payload = Data(count: layout.payloadByteCount)
+        XCTAssertEqual(try layout.slice(payload, kind: .analogMemory).count, RuntimeArtifactPayloadMaterializer.analogMemoryByteCount)
+    }
+
+    func testPreparedSampleCodecRoundTripsLegacyBinaryOrderWithNoSpreadDefaults() throws {
+        let modelInput = [1.0, 0.25, -0.50] + Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights - 3)
+        let sample = PreparedTrainingSample(
+            valid: true,
+            labelClass: .buy,
+            regimeID: 2,
+            horizonMinutes: 15,
+            horizonSlot: 3,
+            movePoints: 12.5,
+            minMovePoints: 8.0,
+            costPoints: 0.0,
+            sampleWeight: 1.4,
+            qualityScore: 1.7,
+            mfePoints: 20.0,
+            maePoints: 4.0,
+            timeToHitFraction: 0.25,
+            pathFlags: [.dualHit, .slowHit],
+            pathRisk: 0.30,
+            fillRisk: 0.0,
+            maskedStepTarget: 1.2,
+            nextVolumeTarget: 3.4,
+            regimeShiftTarget: 0.2,
+            contextLeadTarget: 0.7,
+            pointValue: 0.00001,
+            domainHash: 0.42,
+            sampleTimeUTC: 1_704_067_200,
+            x: modelInput
+        )
+        let runtimeSample = RuntimeArtifactPreparedSample(sample: sample)
+        let encoded = try RuntimeArtifactPreparedSampleCodec.encode(runtimeSample)
+        let decoded = try RuntimeArtifactPreparedSampleCodec.decode(from: encoded)
+
+        XCTAssertEqual(encoded.count, RuntimeArtifactPreparedSampleCodec.byteCount)
+        XCTAssertEqual(encoded.prefix(20), Data([1, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 15, 0, 0, 0, 3, 0, 0, 0]))
+        XCTAssertEqual(decoded.valid, true)
+        XCTAssertEqual(decoded.labelClass, .buy)
+        XCTAssertEqual(decoded.spreadStress, 0.0)
+        XCTAssertEqual(decoded.traceSpreadMeanRatio, 0.0)
+        XCTAssertEqual(decoded.traceGapRatio, 0.30, accuracy: 1e-12)
+        XCTAssertEqual(decoded.traceReversalRatio, 0.30, accuracy: 1e-12)
+        XCTAssertEqual(decoded.preparedTrainingSample.fillRisk, 0.0, accuracy: 1e-12)
+        XCTAssertEqual(decoded.x[0], 1.0, accuracy: 1e-12)
+        XCTAssertEqual(decoded.x[2], -0.50, accuracy: 1e-12)
+
+        let legacyZeroX = RuntimeArtifactPreparedSample(x: Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights))
+        let decodedLegacyZeroX = try RuntimeArtifactPreparedSampleCodec.decode(
+            from: try RuntimeArtifactPreparedSampleCodec.encode(legacyZeroX)
+        )
+        XCTAssertEqual(decodedLegacyZeroX.x[0], 0.0, accuracy: 1e-12)
+
+        var fillRiskSample = sample
+        fillRiskSample.fillRisk = 0.25
+        let fillRiskRuntimeSample = RuntimeArtifactPreparedSample(sample: fillRiskSample)
+        XCTAssertEqual(fillRiskRuntimeSample.spreadStress, 0.0, accuracy: 1e-12)
+        XCTAssertEqual(fillRiskRuntimeSample.preparedTrainingSample.fillRisk, 0.25, accuracy: 1e-12)
+    }
+
+    func testFeatureDriftCodecRoundTripsLegacyGroupShape() throws {
+        let state = RuntimeFeatureDriftState(
+            ready: true,
+            lastTimeUTC: 1_704_067_200,
+            groups: [
+                RuntimeFeatureDriftGroupState(
+                    baselineObservations: 10,
+                    liveObservations: 4,
+                    baselineMean: 0.20,
+                    baselineAbs: 0.30,
+                    liveMean: -0.10,
+                    liveAbs: 0.40,
+                    driftEMA: 0.50
+                )
+            ]
+        )
+
+        let encoded = try RuntimeFeatureDriftCodec.encode(state)
+        let decoded = try RuntimeFeatureDriftCodec.decode(from: encoded)
+
+        XCTAssertEqual(encoded.count, RuntimeFeatureDriftCodec.byteCount)
+        XCTAssertTrue(decoded.ready)
+        XCTAssertEqual(decoded.lastTimeUTC, 1_704_067_200)
+        XCTAssertEqual(decoded.groups.count, FeatureGroup.allCases.count)
+        XCTAssertEqual(decoded.groups[0].baselineObservations, 10)
+        XCTAssertEqual(decoded.groups[0].liveMean, -0.10, accuracy: 1e-12)
+        XCTAssertEqual(decoded.groups[1].baselineObservations, 0)
+    }
+
+    func testAnalogMemoryCodecRoundTripsLegacySectionAndSanitizesDecodedShape() throws {
+        var store = AnalogMemoryStore()
+        let modelInput = [1.0, 0.10, -0.20, 0.30, -0.40] + Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights - 5)
+        for index in 0..<3 {
+            store.update(
+                modelInput: modelInput,
+                regimeID: index,
+                sessionBucket: index,
+                horizonMinutes: 5 + index,
+                domainHash: 0.25,
+                movePoints: Double(index + 1) * 10.0,
+                minMovePoints: 5.0,
+                qualityScore: 1.2,
+                pathRisk: 0.20,
+                fillRisk: 0.0,
+                sampleTimeUTC: 1_704_067_200 + Int64(index),
+                sampleWeight: 1.0
+            )
+        }
+
+        let encoded = try RuntimeArtifactAnalogMemoryCodec.encode(store)
+        let decoded = try RuntimeArtifactAnalogMemoryCodec.decode(from: encoded)
+
+        XCTAssertEqual(encoded.count, RuntimeArtifactAnalogMemoryCodec.byteCount)
+        XCTAssertTrue(decoded.ready)
+        XCTAssertEqual(decoded.size, 3)
+        XCTAssertEqual(decoded.head, 3)
+        XCTAssertEqual(decoded.entries[0].sampleTimeUTC, 1_704_067_200)
+        XCTAssertEqual(decoded.entries[2].regimeID, 2)
+        XCTAssertEqual(decoded.entries[2].fillRisk, 0.0, accuracy: 1e-12)
+
+        let malformed = AnalogMemoryStore(
+            capacity: FXDataEngineConstants.analogMemoryCapacity,
+            head: 999,
+            size: 999,
+            entries: [AnalogMemoryEntry()]
+        )
+        XCTAssertEqual(malformed.size, FXDataEngineConstants.analogMemoryCapacity)
+        XCTAssertEqual(malformed.head, 0)
+    }
+
     func testRuntimeArtifactSavePolicyMatchesLegacyDirtyThrottle() {
         XCTAssertFalse(RuntimeArtifactSavePolicy.shouldSave(
             dirty: false,
