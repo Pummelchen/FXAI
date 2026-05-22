@@ -21,7 +21,7 @@ DEFAULT_HORIZON_CANDIDATES = [3, 5, 8, 13, 21, 34]
 DEFAULT_M1SYNC_CANDIDATES = [2, 3, 5, 8]
 DEFAULT_EXECUTION_PROFILES = ["default", "tight-fx", "prime-ecn", "retail-fx", "stress"]
 EXPORT_EXPERT = r"FXAI\FXDataEngine\Tests\FXAI_OfflineExportRunner.ex5"
-OFFLINE_SCHEMA_VERSION = 7
+OFFLINE_SCHEMA_VERSION = 8
 OFFLINE_ARTIFACT_SCHEMA_VERSION = 2
 OFFLINE_MACRO_SCHEMA_MIN = 2
 RESEARCH_VECTOR_DIMS = 16
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS dataset_bars (
     high REAL NOT NULL,
     low REAL NOT NULL,
     close REAL NOT NULL,
-    spread_points INTEGER NOT NULL,
+    price_cost_points REAL NOT NULL DEFAULT 0.0,
     tick_volume INTEGER NOT NULL,
     real_volume INTEGER NOT NULL,
     PRIMARY KEY(dataset_id, bar_time_unix),

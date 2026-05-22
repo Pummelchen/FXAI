@@ -962,7 +962,7 @@
     "artifact_schema_version": "2",
     "db_backend": "turso_local",
     "macro_schema_min": "2",
-    "offline_schema_version": "7",
+    "offline_schema_version": "8",
     "turso_database_name": "",
     "turso_encryption": "disabled",
     "turso_organization": "",

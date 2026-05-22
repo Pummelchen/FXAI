@@ -39,7 +39,7 @@ def _load_dataset_bars(conn: libsql.Connection, dataset_id: int) -> list[BarReco
     rows = query_all(
         conn,
         """
-        SELECT bar_time_unix, open, high, low, close, spread_points AS price_cost_points, tick_volume, real_volume
+        SELECT bar_time_unix, open, high, low, close, price_cost_points, tick_volume, real_volume
           FROM dataset_bars
          WHERE dataset_id = ?
          ORDER BY bar_time_unix ASC

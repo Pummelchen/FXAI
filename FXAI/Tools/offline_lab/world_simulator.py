@@ -123,7 +123,7 @@ def build_symbol_world_model(conn: libsql.Connection,
         bars = query_all(
             conn,
             """
-            SELECT bar_time_unix, open, high, low, close, spread_points AS price_cost_points
+            SELECT bar_time_unix, open, high, low, close, price_cost_points
               FROM dataset_bars
              WHERE dataset_id = ?
              ORDER BY bar_time_unix ASC

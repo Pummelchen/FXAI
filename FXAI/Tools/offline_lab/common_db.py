@@ -252,6 +252,17 @@ def connect_db(db_path: Path) -> libsql.Connection:
             ensure_table_column(conn, "shadow_fleet_observations", "portfolio_pressure", "REAL NOT NULL DEFAULT 0.0")
             ensure_table_column(conn, "shadow_fleet_observations", "control_plane_score", "REAL NOT NULL DEFAULT 0.0")
             ensure_table_column(conn, "shadow_fleet_observations", "portfolio_supervisor_score", "REAL NOT NULL DEFAULT 0.0")
+            ensure_table_column(conn, "dataset_bars", "price_cost_points", "REAL NOT NULL DEFAULT 0.0")
+            dataset_bar_columns = table_columns(conn, "dataset_bars")
+            if "spread_points" in dataset_bar_columns and "price_cost_points" in dataset_bar_columns:
+                conn.execute(
+                    """
+                    UPDATE dataset_bars
+                       SET price_cost_points = spread_points
+                     WHERE price_cost_points = 0.0
+                       AND spread_points != 0
+                    """
+                )
             ensure_table_column(conn, "world_simulator_plans", "fill_risk_scale", "REAL NOT NULL DEFAULT 1.0")
             world_plan_columns = table_columns(conn, "world_simulator_plans")
             if "spread_scale" in world_plan_columns and "fill_risk_scale" in world_plan_columns:

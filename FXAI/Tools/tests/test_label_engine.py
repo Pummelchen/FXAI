@@ -53,7 +53,7 @@ def _insert_dataset(conn, *, dataset_key: str = "label:eurusd:m1", profile_name:
         )
     conn.executemany(
         """
-        INSERT INTO dataset_bars(dataset_id, bar_time_unix, open, high, low, close, spread_points, tick_volume, real_volume)
+        INSERT INTO dataset_bars(dataset_id, bar_time_unix, open, high, low, close, price_cost_points, tick_volume, real_volume)
         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         rows,

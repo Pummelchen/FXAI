@@ -194,6 +194,20 @@ def insert_dataset_bars(conn: libsql.Connection, dataset_id: int, data_path: Pat
     batch: list[tuple] = []
     inserted = 0
     prev_time = -1
+    dataset_bar_columns = table_columns(conn, "dataset_bars")
+    has_legacy_spread_column = "spread_points" in dataset_bar_columns
+    if has_legacy_spread_column:
+        insert_sql = (
+            "INSERT INTO dataset_bars(dataset_id, bar_time_unix, open, high, low, close, "
+            "price_cost_points, spread_points, tick_volume, real_volume) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+    else:
+        insert_sql = (
+            "INSERT INTO dataset_bars(dataset_id, bar_time_unix, open, high, low, close, "
+            "price_cost_points, tick_volume, real_volume) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
     with data_path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         for row in reader:
@@ -202,7 +216,7 @@ def insert_dataset_bars(conn: libsql.Connection, dataset_id: int, data_path: Pat
             h = float(row["high"])
             l = float(row["low"])
             c = float(row["close"])
-            spread = int(float(row["spread_points"]))
+            price_cost_points = float(row.get("price_cost_points", row.get("spread_points", 0.0)) or 0.0)
             tick_volume = int(float(row["tick_volume"]))
             real_volume = int(float(row["real_volume"]))
             if bar_time <= prev_time:
@@ -210,21 +224,16 @@ def insert_dataset_bars(conn: libsql.Connection, dataset_id: int, data_path: Pat
             prev_time = bar_time
             if h + 1e-12 < max(o, c, l) or l - 1e-12 > min(o, c, h):
                 raise OfflineLabError(f"invalid OHLC geometry at {bar_time} in {data_path}")
-            batch.append((dataset_id, bar_time, o, h, l, c, spread, tick_volume, real_volume))
+            if has_legacy_spread_column:
+                batch.append((dataset_id, bar_time, o, h, l, c, price_cost_points, price_cost_points, tick_volume, real_volume))
+            else:
+                batch.append((dataset_id, bar_time, o, h, l, c, price_cost_points, tick_volume, real_volume))
             if len(batch) >= 10000:
-                conn.executemany(
-                    "INSERT INTO dataset_bars(dataset_id, bar_time_unix, open, high, low, close, spread_points, tick_volume, real_volume) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    batch,
-                )
+                conn.executemany(insert_sql, batch)
                 inserted += len(batch)
                 batch = []
         if batch:
-            conn.executemany(
-                "INSERT INTO dataset_bars(dataset_id, bar_time_unix, open, high, low, close, spread_points, tick_volume, real_volume) "
-                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                batch,
-            )
+            conn.executemany(insert_sql, batch)
             inserted += len(batch)
     return inserted
 

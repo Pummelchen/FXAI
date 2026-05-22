@@ -14,6 +14,7 @@ from offline_lab.db_backend import (
 )
 from offline_lab.common import OfflineLabError, close_db, commit_db, connect_db, query_all, query_one
 from offline_lab.environment import bootstrap_environment, validate_environment
+from offline_lab.exporter import insert_dataset_bars
 from offline_lab.fixtures import patched_paths
 from offline_lab.vector_store import latest_symbol_shadow_neighbors, refresh_research_vectors
 
@@ -96,6 +97,82 @@ def test_world_simulator_plan_schema_uses_fill_risk_scale_and_migrates_legacy_sp
             assert migrated is not None
             assert float(migrated["fill_risk_scale"]) == 2.4
             assert float(migrated["spread_scale"]) == 2.4
+
+
+def test_dataset_bars_schema_uses_price_cost_points_and_migrates_legacy_spread_points():
+    with tempfile.TemporaryDirectory(prefix="fxai_dataset_schema_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)) as paths:
+            conn = connect_db(paths["default_db"])
+            fresh_columns = {str(row["name"]) for row in query_all(conn, "PRAGMA table_info(dataset_bars)")}
+            assert "price_cost_points" in fresh_columns
+            assert "spread_points" not in fresh_columns
+
+            conn.execute("DROP TABLE dataset_bars")
+            conn.execute(
+                """
+                CREATE TABLE dataset_bars (
+                    dataset_id INTEGER NOT NULL,
+                    bar_time_unix INTEGER NOT NULL,
+                    open REAL NOT NULL,
+                    high REAL NOT NULL,
+                    low REAL NOT NULL,
+                    close REAL NOT NULL,
+                    spread_points INTEGER NOT NULL,
+                    tick_volume INTEGER NOT NULL,
+                    real_volume INTEGER NOT NULL,
+                    PRIMARY KEY(dataset_id, bar_time_unix)
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO dataset_bars(dataset_id, bar_time_unix, open, high, low, close, spread_points, tick_volume, real_volume)
+                VALUES(1, 1700000040, 1.1, 1.2, 1.0, 1.15, 13, 100, 200)
+                """
+            )
+            commit_db(conn)
+            close_db(conn)
+
+            conn = connect_db(paths["default_db"])
+            migrated = query_one(
+                conn,
+                "SELECT price_cost_points, spread_points FROM dataset_bars WHERE dataset_id = 1",
+            )
+            close_db(conn)
+
+            assert migrated is not None
+            assert float(migrated["price_cost_points"]) == 13.0
+            assert int(migrated["spread_points"]) == 13
+
+
+def test_insert_dataset_bars_accepts_canonical_price_cost_points_header():
+    with tempfile.TemporaryDirectory(prefix="fxai_dataset_insert_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)) as paths:
+            conn = connect_db(paths["default_db"])
+            conn.execute(
+                """
+                INSERT INTO datasets(dataset_key, symbol, timeframe, start_unix, end_unix, source_path, created_at)
+                VALUES('canonical-price-cost', 'EURUSD', 'M1', 1700000040, 1700000100, '/tmp/input.tsv', 1700000040)
+                """
+            )
+            dataset = query_one(conn, "SELECT id FROM datasets WHERE dataset_key = 'canonical-price-cost'")
+            assert dataset is not None
+            data_path = Path(tmp_dir) / "bars.tsv"
+            data_path.write_text(
+                "time_unix\topen\thigh\tlow\tclose\tprice_cost_points\ttick_volume\treal_volume\n"
+                "1700000040\t1.10\t1.20\t1.00\t1.15\t1.7\t101\t202\n",
+                encoding="utf-8",
+            )
+
+            inserted = insert_dataset_bars(conn, int(dataset["id"]), data_path)
+            row = query_one(conn, "SELECT price_cost_points, tick_volume, real_volume FROM dataset_bars")
+            close_db(conn)
+
+            assert inserted == 1
+            assert row is not None
+            assert float(row["price_cost_points"]) == 1.7
+            assert int(row["tick_volume"]) == 101
+            assert int(row["real_volume"]) == 202
 
 
 def test_environment_reports_turso_dependencies():

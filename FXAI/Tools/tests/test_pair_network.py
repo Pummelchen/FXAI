@@ -34,7 +34,7 @@ def _seed_dataset(conn, dataset_id: int, symbol: str, closes: list[float], creat
         conn.execute(
             """
             INSERT INTO dataset_bars(
-                dataset_id, bar_time_unix, open, high, low, close, spread_points, tick_volume, real_volume
+                dataset_id, bar_time_unix, open, high, low, close, price_cost_points, tick_volume, real_volume
             ) VALUES (?, ?, ?, ?, ?, ?, 12, 100, 100)
             """,
             (dataset_id, created_at + index * 60, close, close, close, close),
