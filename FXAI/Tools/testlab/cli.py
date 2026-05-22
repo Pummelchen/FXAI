@@ -355,7 +355,7 @@ def main():
     ra.add_argument("--all-plugins", action="store_true")
     ra.add_argument("--plugin-id", type=int, default=28)
     ra.add_argument("--plugin-list", default="{all}")
-    ra.add_argument("--scenario-list", default="{random_walk, drift_up, drift_down, mean_revert, vol_cluster, monotonic_up, monotonic_down, regime_shift, market_recent, market_trend, market_chop, market_session_edges, market_spread_shock, market_walkforward, market_macro_event, market_adversarial}")
+    ra.add_argument("--scenario-list", default="{random_walk, drift_up, drift_down, mean_revert, vol_cluster, monotonic_up, monotonic_down, regime_shift, market_recent, market_trend, market_chop, market_session_edges, market_liquidity_shock, market_walkforward, market_macro_event, market_adversarial}")
     ra.add_argument("--bars", type=int, default=20000)
     ra.add_argument("--horizon", type=int, default=5)
     ra.add_argument("--m1sync-bars", type=int, default=3)

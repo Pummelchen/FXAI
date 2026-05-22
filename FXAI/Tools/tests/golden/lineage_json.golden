@@ -490,7 +490,7 @@
                 "exists": true,
                 "over_budget": false,
                 "path": "<FXAI_PROMOTION_DIR>/fxai_world_plan_EURUSD.tsv",
-                "size_bytes": 688
+                "size_bytes": 706
               },
               {
                 "artifact_key": "fxai_supervisor_service",
@@ -518,7 +518,7 @@
               }
             ],
             "symbol": "EURUSD",
-            "total_bytes": 4059
+            "total_bytes": 4077
           },
           "budget_failures": [],
           "exists": false,
@@ -613,20 +613,23 @@
         },
         "symbol": "EURUSD",
         "world_plan": {
+          "asia_fill_risk_scale": "1.000000",
           "asia_sigma_scale": "0.500000",
-          "asia_spread_scale": "1.000000",
           "context_corr_bias": "0.282875",
           "drift_bias": "-0.000008",
+          "fill_risk_scale": "0.867488",
           "flip_prob": "0.344200",
           "gap_prob": "0.007000",
           "gap_scale": "1.463800",
+          "liquidity_shock_prob": "0.000000",
+          "liquidity_shock_scale": "1.000000",
           "liquidity_stress": "0.173800",
+          "london_fill_risk_scale": "1.000000",
           "london_sigma_scale": "0.500000",
-          "london_spread_scale": "1.000000",
           "macro_focus": "0.048000",
           "mean_revert_bias": "0.038400",
+          "newyork_fill_risk_scale": "1.000000",
           "newyork_sigma_scale": "0.500000",
-          "newyork_spread_scale": "1.000000",
           "profile_name": "fixture",
           "recovery_bias": "-0.014000",
           "regime_transition_burst": "0.000000",
@@ -634,9 +637,6 @@
           "shock_decay": "0.736000",
           "shock_memory": "0.000000",
           "sigma_scale": "0.767824",
-          "spread_scale": "0.867488",
-          "spread_shock_prob": "0.000000",
-          "spread_shock_scale": "1.000000",
           "symbol": "EURUSD",
           "transition_entropy": "0.000000",
           "trend_persistence": "0.500000",

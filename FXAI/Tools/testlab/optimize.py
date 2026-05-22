@@ -18,7 +18,7 @@ def build_optimization_campaign(summary: dict, oracles: dict) -> dict:
         schema_candidates = []
         norm_candidates = []
         seq_candidates = []
-        scenario_focus = ["random_walk", "drift_up", "drift_down", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event", "market_adversarial"]
+        scenario_focus = ["random_walk", "drift_up", "drift_down", "market_trend", "market_chop", "market_session_edges", "market_liquidity_shock", "market_walkforward", "market_macro_event", "market_adversarial"]
 
         if family in (2, 3, 4, 5):  # recurrent/conv/transformer/state-space
             schema_candidates.extend([3, 6])
@@ -94,17 +94,17 @@ def build_optimization_campaign(summary: dict, oracles: dict) -> dict:
         })
         experiments.append({
             "name": "market_replay_cert",
-            "focus": ["market_recent", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event", "market_adversarial"],
+            "focus": ["market_recent", "market_trend", "market_chop", "market_session_edges", "market_liquidity_shock", "market_walkforward", "market_macro_event", "market_adversarial"],
         })
         experiments.append({
             "name": "execution_sweep",
             "slippage_points": [0.0, 0.5, 1.0],
             "fill_penalty_points": [0.0, 0.25, 0.50],
-            "focus": ["market_recent", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event", "market_adversarial"],
+            "focus": ["market_recent", "market_session_edges", "market_liquidity_shock", "market_walkforward", "market_macro_event", "market_adversarial"],
         })
         experiments.append({
             "name": "walkforward_gate",
-            "focus": ["market_walkforward", "market_session_edges", "market_spread_shock", "market_macro_event", "market_adversarial"],
+            "focus": ["market_walkforward", "market_session_edges", "market_liquidity_shock", "market_macro_event", "market_adversarial"],
             "train_test_pairs": [(256, 64), (384, 96), (512, 128)],
         })
 

@@ -232,9 +232,27 @@ def write_world_simulator_plans(conn: libsql.Connection,
         weak_names = {str(item.get("scenario", "")) for item in weak_scenarios}
         macro_flag = 1.0 if "market_macro_event" in weak_names else 0.0
         adversarial_flag = 1.0 if "market_adversarial" in weak_names else 0.0
-        spread_flag = 1.0 if "market_spread_shock" in weak_names else 0.0
+        liquidity_flag = 1.0 if "market_liquidity_shock" in weak_names else 0.0
         session_flag = 1.0 if "market_session_edges" in weak_names else 0.0
         walkforward_flag = 1.0 if "market_walkforward" in weak_names else 0.0
+        model_fill_risk_scale = float(
+            model.get("fill_risk_scale", model.get("price_cost_scale", model.get("spread_scale", 1.0)))
+        )
+        model_liquidity_shock_prob = float(
+            model.get("liquidity_shock_prob", model.get("spread_shock_prob", 0.0))
+        )
+        model_liquidity_shock_scale = float(
+            model.get("liquidity_shock_scale", model.get("spread_shock_scale", 1.0))
+        )
+        model_asia_fill_risk_scale = float(
+            model.get("asia_fill_risk_scale", model.get("asia_spread_scale", 1.0))
+        )
+        model_london_fill_risk_scale = float(
+            model.get("london_fill_risk_scale", model.get("london_spread_scale", 1.0))
+        )
+        model_newyork_fill_risk_scale = float(
+            model.get("newyork_fill_risk_scale", model.get("newyork_spread_scale", 1.0))
+        )
 
         payload = {
             "profile_name": args.profile,
@@ -253,9 +271,9 @@ def write_world_simulator_plans(conn: libsql.Connection,
                 -0.001,
                 0.001,
             ),
-            "spread_scale": _clamp(
-                0.62 * float(model.get("spread_scale", 1.0)) +
-                0.20 * (1.0 + 0.25 * spread_flag + 0.18 * session_flag) +
+            "fill_risk_scale": _clamp(
+                0.62 * model_fill_risk_scale +
+                0.20 * (1.0 + 0.25 * liquidity_flag + 0.18 * session_flag) +
                 0.12 * float(shadow.get("mean_portfolio_pressure", 0.0)),
                 0.50,
                 4.00,
@@ -289,7 +307,7 @@ def write_world_simulator_plans(conn: libsql.Connection,
             ),
             "liquidity_stress": _clamp(
                 0.58 * float(model.get("liquidity_stress", 0.0)) +
-                0.30 * spread_flag + 0.22 * session_flag +
+                0.30 * liquidity_flag + 0.22 * session_flag +
                 0.25 * float(shadow.get("mean_portfolio_supervisor_score", 0.0)),
                 0.0,
                 3.0,
@@ -320,13 +338,13 @@ def write_world_simulator_plans(conn: libsql.Connection,
                 -1.0,
                 1.0,
             ),
-            "spread_shock_prob": _clamp(
-                0.72 * float(model.get("spread_shock_prob", 0.0)) + 0.28 * spread_flag,
+            "liquidity_shock_prob": _clamp(
+                0.72 * model_liquidity_shock_prob + 0.28 * liquidity_flag,
                 0.0,
                 0.50,
             ),
-            "spread_shock_scale": _clamp(
-                0.72 * float(model.get("spread_shock_scale", 1.0)) + 0.28 * (1.0 + spread_flag),
+            "liquidity_shock_scale": _clamp(
+                0.72 * model_liquidity_shock_scale + 0.28 * (1.0 + liquidity_flag),
                 1.0,
                 8.0,
             ),
@@ -350,22 +368,22 @@ def write_world_simulator_plans(conn: libsql.Connection,
             ),
             "vol_cluster_bias": _clamp(
                 0.72 * float(model.get("vol_cluster_bias", 0.0)) +
-                0.16 * spread_flag + 0.12 * float(shadow.get("mean_portfolio_pressure", 0.0)),
+                0.16 * liquidity_flag + 0.12 * float(shadow.get("mean_portfolio_pressure", 0.0)),
                 0.0,
                 1.0,
             ),
             "shock_decay": _clamp(
                 0.72 * float(model.get("shock_decay", 0.6)) +
-                0.16 * (1.0 - spread_flag) + 0.12 * walkforward_flag,
+                0.16 * (1.0 - liquidity_flag) + 0.12 * walkforward_flag,
                 0.0,
                 1.5,
             ),
             "asia_sigma_scale": _clamp(float(model.get("asia_sigma_scale", 1.0)), 0.50, 3.00),
             "london_sigma_scale": _clamp(float(model.get("london_sigma_scale", 1.0)), 0.50, 3.00),
             "newyork_sigma_scale": _clamp(float(model.get("newyork_sigma_scale", 1.0)), 0.50, 3.00),
-            "asia_spread_scale": _clamp(float(model.get("asia_spread_scale", 1.0)), 0.50, 4.00),
-            "london_spread_scale": _clamp(float(model.get("london_spread_scale", 1.0)), 0.50, 4.00),
-            "newyork_spread_scale": _clamp(float(model.get("newyork_spread_scale", 1.0)), 0.50, 4.00),
+            "asia_fill_risk_scale": _clamp(model_asia_fill_risk_scale, 0.50, 4.00),
+            "london_fill_risk_scale": _clamp(model_london_fill_risk_scale, 0.50, 4.00),
+            "newyork_fill_risk_scale": _clamp(model_newyork_fill_risk_scale, 0.50, 4.00),
             "weak_scenarios": weak_scenarios,
             "shadow_summary": shadow,
             "world_model": model,
@@ -380,7 +398,7 @@ def write_world_simulator_plans(conn: libsql.Connection,
                     ("symbol", symbol),
                     ("sigma_scale", payload["sigma_scale"]),
                     ("drift_bias", payload["drift_bias"]),
-                    ("spread_scale", payload["spread_scale"]),
+                    ("fill_risk_scale", payload["fill_risk_scale"]),
                     ("gap_prob", payload["gap_prob"]),
                     ("gap_scale", payload["gap_scale"]),
                     ("flip_prob", payload["flip_prob"]),
@@ -391,8 +409,8 @@ def write_world_simulator_plans(conn: libsql.Connection,
                     ("trend_persistence", payload["trend_persistence"]),
                     ("shock_memory", payload["shock_memory"]),
                     ("recovery_bias", payload["recovery_bias"]),
-                    ("spread_shock_prob", payload["spread_shock_prob"]),
-                    ("spread_shock_scale", payload["spread_shock_scale"]),
+                    ("liquidity_shock_prob", payload["liquidity_shock_prob"]),
+                    ("liquidity_shock_scale", payload["liquidity_shock_scale"]),
                     ("regime_transition_burst", payload["regime_transition_burst"]),
                     ("transition_entropy", payload["transition_entropy"]),
                     ("mean_revert_bias", payload["mean_revert_bias"]),
@@ -401,9 +419,9 @@ def write_world_simulator_plans(conn: libsql.Connection,
                     ("asia_sigma_scale", payload["asia_sigma_scale"]),
                     ("london_sigma_scale", payload["london_sigma_scale"]),
                     ("newyork_sigma_scale", payload["newyork_sigma_scale"]),
-                    ("asia_spread_scale", payload["asia_spread_scale"]),
-                    ("london_spread_scale", payload["london_spread_scale"]),
-                    ("newyork_spread_scale", payload["newyork_spread_scale"]),
+                    ("asia_fill_risk_scale", payload["asia_fill_risk_scale"]),
+                    ("london_fill_risk_scale", payload["london_fill_risk_scale"]),
+                    ("newyork_fill_risk_scale", payload["newyork_fill_risk_scale"]),
                 ]
             ),
             encoding="utf-8",
@@ -442,7 +460,7 @@ def write_world_simulator_plans(conn: libsql.Connection,
                 sha,
                 payload["sigma_scale"],
                 payload["drift_bias"],
-                payload["spread_scale"],
+                payload["fill_risk_scale"],
                 payload["gap_prob"],
                 payload["gap_scale"],
                 payload["flip_prob"],

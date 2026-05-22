@@ -79,7 +79,7 @@ def build_symbol_world_model(conn: libsql.Connection,
             "bar_count": 0,
             "sigma_scale": 1.0,
             "drift_bias": 0.0,
-            "spread_scale": 1.0,
+            "fill_risk_scale": 1.0,
             "gap_prob": 0.0,
             "gap_scale": 0.0,
             "flip_prob": 0.0,
@@ -95,8 +95,8 @@ def build_symbol_world_model(conn: libsql.Connection,
             "trend_persistence": 0.5,
             "shock_memory": 0.0,
             "recovery_bias": 0.0,
-            "spread_shock_prob": 0.0,
-            "spread_shock_scale": 1.0,
+            "liquidity_shock_prob": 0.0,
+            "liquidity_shock_scale": 1.0,
             "shadow_summary": shadow,
             "datasets": [],
         }
@@ -203,10 +203,10 @@ def build_symbol_world_model(conn: libsql.Connection,
     p98_spread = _quantile(spread_values, 0.98, p90_spread)
     gap_med = _quantile(gap_values, 0.50, 0.0)
     gap_p95 = _quantile(gap_values, 0.95, gap_med)
-    spread_shock_prob = 0.0
+    liquidity_shock_prob = 0.0
     if spread_values:
         shock_threshold = max(p90_spread, median_spread * 1.5)
-        spread_shock_prob = sum(1 for value in spread_values if value >= shock_threshold) / float(len(spread_values))
+        liquidity_shock_prob = sum(1 for value in spread_values if value >= shock_threshold) / float(len(spread_values))
 
     edge_vol = _mean(edge_abs_returns, sigma)
     non_edge_vol = _mean(non_edge_abs_returns, sigma)
@@ -269,7 +269,7 @@ def build_symbol_world_model(conn: libsql.Connection,
             "weight": state_counts[idx] / total_states,
             "sigma_scale": _clamp((state_abs_sum[idx] / float(count)) / max(sigma, 1e-6), 0.40, 4.00),
             "drift_bias": _clamp(state_ret_sum[idx] / float(count), -0.001, 0.001),
-            "spread_scale": _clamp((state_spread_sum[idx] / float(count)) / max(median_spread, 1.0), 0.50, 6.00),
+            "fill_risk_scale": _clamp((state_spread_sum[idx] / float(count)) / max(median_spread, 1.0), 0.50, 6.00),
             "transition": [
                 _clamp(transition[idx][j] / float(row_sum), 0.0, 1.0)
                 for j in range(4)
@@ -293,7 +293,7 @@ def build_symbol_world_model(conn: libsql.Connection,
             -0.001,
             0.001,
         ),
-        "spread_scale": _clamp(
+        "fill_risk_scale": _clamp(
             (p90_spread / median_spread) +
             0.08 * float(shadow.get("mean_portfolio_pressure", 0.0)),
             0.50,
@@ -344,8 +344,8 @@ def build_symbol_world_model(conn: libsql.Connection,
         "trend_persistence": _clamp(persistence, 0.0, 1.0),
         "shock_memory": _clamp(shock_memory, 0.0, 1.0),
         "recovery_bias": _clamp(shock_reversal - shock_memory, -1.0, 1.0),
-        "spread_shock_prob": _clamp(spread_shock_prob, 0.0, 0.50),
-        "spread_shock_scale": _clamp(p98_spread / median_spread, 1.0, 8.0),
+        "liquidity_shock_prob": _clamp(liquidity_shock_prob, 0.0, 0.50),
+        "liquidity_shock_scale": _clamp(p98_spread / median_spread, 1.0, 8.0),
         "regime_transition_burst": _clamp(regime_transition_burst, 0.0, 1.0),
         "transition_entropy": _clamp(transition_entropy, 0.0, 1.0),
         "mean_revert_bias": _clamp(mean_revert_bias, 0.0, 1.0),
@@ -354,9 +354,9 @@ def build_symbol_world_model(conn: libsql.Connection,
         "asia_sigma_scale": _clamp(_mean(session_abs_returns["asia"], sigma) / max(sigma, 1e-6), 0.50, 3.00),
         "london_sigma_scale": _clamp(_mean(session_abs_returns["london"], sigma) / max(sigma, 1e-6), 0.50, 3.00),
         "newyork_sigma_scale": _clamp(_mean(session_abs_returns["newyork"], sigma) / max(sigma, 1e-6), 0.50, 3.00),
-        "asia_spread_scale": _clamp(_mean(session_spreads["asia"], median_spread) / max(median_spread, 1.0), 0.50, 4.00),
-        "london_spread_scale": _clamp(_mean(session_spreads["london"], median_spread) / max(median_spread, 1.0), 0.50, 4.00),
-        "newyork_spread_scale": _clamp(_mean(session_spreads["newyork"], median_spread) / max(median_spread, 1.0), 0.50, 4.00),
+        "asia_fill_risk_scale": _clamp(_mean(session_spreads["asia"], median_spread) / max(median_spread, 1.0), 0.50, 4.00),
+        "london_fill_risk_scale": _clamp(_mean(session_spreads["london"], median_spread) / max(median_spread, 1.0), 0.50, 4.00),
+        "newyork_fill_risk_scale": _clamp(_mean(session_spreads["newyork"], median_spread) / max(median_spread, 1.0), 0.50, 4.00),
         "state_prototypes": state_prototypes,
         "shadow_summary": shadow,
         "datasets": dataset_payloads,

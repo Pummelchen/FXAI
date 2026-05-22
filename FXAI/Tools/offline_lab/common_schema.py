@@ -15,7 +15,7 @@ COMMON_EXPORT_DIR = testlab.COMMON_FILES / "FXAI/Offline/Exports"
 COMMON_PROMOTION_DIR = testlab.COMMON_FILES / "FXAI/Offline/Promotions"
 SHADOW_LEDGER_DIR = testlab.RUNTIME_DIR
 
-SERIOUS_SCENARIOS = "{market_recent, market_trend, market_chop, market_session_edges, market_spread_shock, market_walkforward, market_macro_event, market_adversarial}"
+SERIOUS_SCENARIOS = "{market_recent, market_trend, market_chop, market_session_edges, market_liquidity_shock, market_walkforward, market_macro_event, market_adversarial}"
 DEFAULT_MONTHS_LIST = [3, 6, 12]
 DEFAULT_HORIZON_CANDIDATES = [3, 5, 8, 13, 21, 34]
 DEFAULT_M1SYNC_CANDIDATES = [2, 3, 5, 8]

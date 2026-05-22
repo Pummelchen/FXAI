@@ -98,7 +98,7 @@ def extend_campaign(campaign: dict, base_args) -> dict:
         for candidate in [exec_base] + list(DEFAULT_EXECUTION_PROFILES):
             if candidate not in execution_candidates:
                 execution_candidates.append(candidate)
-        market_focus = ["market_recent", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event", "market_adversarial"]
+        market_focus = ["market_recent", "market_trend", "market_chop", "market_session_edges", "market_liquidity_shock", "market_walkforward", "market_macro_event", "market_adversarial"]
         experiments.append({"name": "horizon_sweep", "horizons": horizon_candidates[:6], "focus": market_focus})
         experiments.append({"name": "m1sync_sweep", "m1sync_bars": m1sync_candidates[:5], "focus": market_focus})
         experiments.append({"name": "execution_profile_sweep", "execution_profiles": execution_candidates[:5], "focus": market_focus})
@@ -262,7 +262,7 @@ def build_redteam_runs_for_plugin(plugin_name: str,
         })
         rationale.append("macro weakness triggered macro-heavy schema and full feature coverage")
 
-    if any(name in ("market_session_edges", "market_spread_shock") for name in weak_names):
+    if any(name in ("market_session_edges", "market_liquidity_shock") for name in weak_names):
         runs.append({
             "plugin": plugin_name,
             "experiment": "redteam_execution",

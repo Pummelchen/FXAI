@@ -205,7 +205,7 @@
         "conf_drift_max": 0.24,
         "skip_ratio_min": 0.38
       },
-      "market_spread_shock": {
+      "market_liquidity_shock": {
         "active_ratio_max": 0.40,
         "skip_ratio_min": 0.60
       },
@@ -731,7 +731,7 @@
         "Keep this model as context/gating support, not a false institutional order-flow claim."
       ],
       "scenario_rules": {
-        "market_spread_shock": {
+        "market_liquidity_shock": {
           "active_ratio_max": 0.36,
           "skip_ratio_min": 0.62
         }

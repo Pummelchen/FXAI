@@ -350,7 +350,7 @@ def build_multisymbol_summary(symbol_runs: list[dict]) -> dict:
 
 
 def summary_has_market_replay(summary: dict) -> bool:
-    required = {"market_recent", "market_trend", "market_chop", "market_session_edges", "market_spread_shock", "market_walkforward", "market_macro_event", "market_adversarial"}
+    required = {"market_recent", "market_trend", "market_chop", "market_session_edges", "market_liquidity_shock", "market_walkforward", "market_macro_event", "market_adversarial"}
     seen = set()
     for plugin in summary.get("plugins", {}).values():
         seen.update(plugin.get("scenarios", {}).keys())

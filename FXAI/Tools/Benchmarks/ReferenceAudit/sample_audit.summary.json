@@ -8,7 +8,7 @@
         "missing required scenario: market_chop",
         "missing required scenario: market_trend",
         "missing required scenario: market_session_edges",
-        "missing required scenario: market_spread_shock",
+        "missing required scenario: market_liquidity_shock",
         "missing required scenario: market_walkforward",
         "missing required scenario: vol_cluster",
         "missing required scenario: monotonic_down"
