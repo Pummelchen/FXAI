@@ -36,6 +36,7 @@ public enum FXDataEngineConstants {
     public static let brokerExecutionSideCount = 3
     public static let brokerExecutionOrderTypeCount = 5
     public static let brokerExecutionEventKindCount = 4
+    public static let aiMLPHidden = 12
     public static let apiVersionV4 = 4
     public static let maxSequenceBars = 96
     public static let maxContextSymbols = 48
