@@ -96,6 +96,11 @@ public struct DataCoreTimeframeLags: Codable, Hashable, Sendable {
 }
 
 public enum DataCoreAlignment {
+    public static func movePoints(priceNow: Double, priceFuture: Double, point: Double) -> Double {
+        guard point > 0.0 else { return 0.0 }
+        return (fxSafeFinite(priceFuture) - fxSafeFinite(priceNow)) / point
+    }
+
     public static func findAlignedIndex(
         targetTimesAscending: ContiguousArray<Int64>,
         referenceTimeUTC: Int64,
@@ -149,6 +154,23 @@ public enum DataCoreAlignment {
             output[refIndex] = targetIndex
         }
         return output
+    }
+
+    public static func alignedFreshnessWeight(
+        targetTimesAscending: ContiguousArray<Int64>,
+        targetIndex: Int,
+        referenceTimeUTC: Int64,
+        maxLagSeconds: Int
+    ) -> Double {
+        guard targetIndex >= 0,
+              targetIndex < targetTimesAscending.count,
+              referenceTimeUTC > 0 else {
+            return 0.0
+        }
+        guard maxLagSeconds > 0 else { return 1.0 }
+        let lag = referenceTimeUTC - targetTimesAscending[targetIndex]
+        guard lag >= 0, lag <= Int64(maxLagSeconds) else { return 0.0 }
+        return fxClamp(1.0 - Double(lag) / Double(maxLagSeconds), 0.0, 1.0)
     }
 }
 

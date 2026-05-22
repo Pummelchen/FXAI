@@ -49,6 +49,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 - Done: file-backed control-plane repositories and snapshot aggregation with MQL-style stale snapshot pruning.
 - Done: runtime artifact text manifest writers for persistence coverage, feature registry, macro dataset stats, runtime performance rows, and shadow fleet ledger rows.
 - Done: DataCore request/context helper slice: context symbol normalization/de-duplication, legacy higher-timeframe need/lag calculations, ascending M1 aligned-index maps, and deterministic context aggregate arrays.
+- Done: DataCore alignment completion slice: `data_align.mqh` double-price move-point conversion and aligned freshness weighting are ported for canonical ascending M1 OHLCV timelines.
 - Done: FeatureCore now consumes DataCore context aggregates for feature slots 10-12 and 50-65, including MQL-style raw volatility scaling, signed up-ratio mapping, shared adapter mapping, and previous-frame payload parity.
 - Done: binary runtime artifact envelope slice: MQL-order header encode/decode, payload preservation, repository read/write/file-size helpers, and the legacy dirty-save throttle.
 - Done: first sample-preparation slice: no-spread M1 OHLCV triple-barrier labels on ascending Swift data, sample quality/weight/path-risk targets, and `TrainRequestV4` payload preparation.

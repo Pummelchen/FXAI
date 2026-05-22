@@ -47,6 +47,31 @@ final class DataCoreTests: XCTestCase {
             DataCoreAlignment.findAlignedIndex(targetTimesAscending: target, referenceTimeUTC: 240, maxLagSeconds: 90),
             1
         )
+        XCTAssertEqual(
+            DataCoreAlignment.alignedFreshnessWeight(
+                targetTimesAscending: target,
+                targetIndex: 1,
+                referenceTimeUTC: 240,
+                maxLagSeconds: 120
+            ),
+            0.50,
+            accuracy: 1e-12
+        )
+        XCTAssertEqual(
+            DataCoreAlignment.alignedFreshnessWeight(
+                targetTimesAscending: target,
+                targetIndex: 1,
+                referenceTimeUTC: 240,
+                maxLagSeconds: 30
+            ),
+            0.0,
+            accuracy: 0.0
+        )
+        XCTAssertEqual(
+            DataCoreAlignment.movePoints(priceNow: 1.1000, priceFuture: 1.1015, point: 0.0001),
+            15.0,
+            accuracy: 1e-9
+        )
     }
 
     func testDataCoreBuildsContextAggregatesForBundle() throws {
