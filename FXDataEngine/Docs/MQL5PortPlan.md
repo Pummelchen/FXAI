@@ -34,7 +34,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 ## Current Gaps By Module
 
 - `Engine/Core`: partially ported. Core constants, feature groups, plugin families, data request basics, context symbol filtering, timeframe need/lag helpers, aligned-index maps, context aggregate arrays, context aggregate feature-slot adapters, feature schema, and normalization concepts exist in Swift; analog memory, broker execution, regime graph, runtime perf, and deeper model-context details remain.
-- `Engine` root: partially ported. Feature registry/build/norm exist only as a first slice; runtime artifact text manifests plus binary runtime artifact header/envelope persistence are ported; M1 OHLCV training-sample preparation now covers ascending triple-barrier labels and plugin train payloads. Event macro, broader data pipeline/window dataset builders, meta calibration/reliability/policy/stacker/horizon, and typed binary runtime state section materialization remain.
+- `Engine` root: partially ported. Feature registry/build/norm exist only as a first slice; runtime artifact text manifests plus binary runtime artifact header/envelope persistence are ported; M1 OHLCV training-sample preparation now covers ascending triple-barrier labels, plugin train payloads, and deterministic range-based training datasets. Event macro, broader FXDatabase dataset loading, meta calibration/reliability/policy/stacker/horizon, and typed binary runtime state section materialization remain.
 - `Runtime/ControlPlane`: partially ported. Swift now has profile/snapshot DTOs, safe path helpers, TSV parsing, adaptive/student router weight helpers, portfolio supervisor defaults, supervisor service/command state parsing, freshness checks, command direction/budget helpers, file-backed profile loaders, peer aggregate scoring, and stale snapshot pruning.
 - `Runtime/Trade`: not ported. Must be split between FXBacktest simulation and FXDataEngine policy/risk DTOs.
 - `Runtime` stages: not ported. Must be rebuilt with plugin mockability before real PyTorch/TensorFlow backends.
@@ -52,6 +52,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 - Done: FeatureCore now consumes DataCore context aggregates for feature slots 10-12 and 50-65, including MQL-style raw volatility scaling, signed up-ratio mapping, shared adapter mapping, and previous-frame payload parity.
 - Done: binary runtime artifact envelope slice: MQL-order header encode/decode, payload preservation, repository read/write/file-size helpers, and the legacy dirty-save throttle.
 - Done: first sample-preparation slice: no-spread M1 OHLCV triple-barrier labels on ascending Swift data, sample quality/weight/path-risk targets, and `TrainRequestV4` payload preparation.
+- Done: deterministic training dataset range builder for repeated offline `TrainRequestV4` payload generation from one `MarketUniverse`.
 - Remaining in phase 3: typed materialization of non-tensor runtime binary state sections; tensor/plugin model state remains owned by FXPlugins, and broker execution state moves to FXBacktest.
 
 ## Start Order

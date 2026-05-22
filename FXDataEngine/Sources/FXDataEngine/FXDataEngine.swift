@@ -219,6 +219,64 @@ public struct FXDataEnginePipeline: Sendable {
         )
     }
 
+    public func prepareTrainingDataset(
+        universe: MarketUniverse,
+        baseRequest: DataCoreRequest,
+        manifest: PluginManifestV4,
+        datasetRequest: TrainingDatasetRequest
+    ) throws -> PreparedTrainingDataset {
+        try manifest.validate()
+        let horizon = TrainingSampleTools.clampHorizon(datasetRequest.horizonMinutes)
+        let lowerBound = max(baseRequest.neededBars - 1, 0)
+        let upperBound = universe.primary.count - horizon - 1
+        let start = min(max(datasetRequest.startIndex ?? lowerBound, lowerBound), max(lowerBound, upperBound))
+        let end = min(max(datasetRequest.endIndex ?? upperBound, start), upperBound)
+        guard upperBound >= lowerBound, datasetRequest.maxSamples > 0 else {
+            return PreparedTrainingDataset(
+                symbol: baseRequest.symbol,
+                horizonMinutes: horizon,
+                startIndex: start,
+                endIndex: end,
+                stride: datasetRequest.stride,
+                payloads: []
+            )
+        }
+
+        var payloads: [PreparedTrainingPayload] = []
+        payloads.reserveCapacity(min(datasetRequest.maxSamples, max(0, ((end - start) / datasetRequest.stride) + 1)))
+        var sampleIndex = start
+        while sampleIndex <= end, payloads.count < datasetRequest.maxSamples {
+            let request = DataCoreRequest(
+                liveMode: baseRequest.liveMode,
+                symbol: baseRequest.symbol,
+                neededBars: baseRequest.neededBars,
+                alignUpToIndex: sampleIndex,
+                contextSymbols: baseRequest.contextSymbols
+            )
+            let payload = try prepareTrainPayload(
+                universe: universe,
+                request: request,
+                manifest: manifest,
+                horizonMinutes: horizon,
+                roundTripCostPoints: datasetRequest.roundTripCostPoints,
+                evThresholdPoints: datasetRequest.evThresholdPoints,
+                normalizationMethod: datasetRequest.normalizationMethod,
+                tradeKillerMinutes: datasetRequest.tradeKillerMinutes
+            )
+            payloads.append(payload)
+            sampleIndex += datasetRequest.stride
+        }
+
+        return PreparedTrainingDataset(
+            symbol: baseRequest.symbol,
+            horizonMinutes: horizon,
+            startIndex: start,
+            endIndex: end,
+            stride: datasetRequest.stride,
+            payloads: payloads
+        )
+    }
+
     public func buildInputWindow(
         universe: MarketUniverse,
         centerIndex: Int,

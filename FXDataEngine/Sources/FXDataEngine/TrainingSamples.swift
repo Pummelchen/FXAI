@@ -149,6 +149,53 @@ public struct PreparedTrainingPayload: Sendable {
     }
 }
 
+public struct TrainingDatasetRequest: Sendable {
+    public var startIndex: Int?
+    public var endIndex: Int?
+    public var stride: Int
+    public var maxSamples: Int
+    public var horizonMinutes: Int
+    public var roundTripCostPoints: Double
+    public var evThresholdPoints: Double
+    public var normalizationMethod: FeatureNormalizationMethod
+    public var tradeKillerMinutes: Int?
+
+    public init(
+        startIndex: Int? = nil,
+        endIndex: Int? = nil,
+        stride: Int = 1,
+        maxSamples: Int = Int.max,
+        horizonMinutes: Int,
+        roundTripCostPoints: Double = 0.0,
+        evThresholdPoints: Double = 0.0,
+        normalizationMethod: FeatureNormalizationMethod = .existing,
+        tradeKillerMinutes: Int? = nil
+    ) {
+        self.startIndex = startIndex
+        self.endIndex = endIndex
+        self.stride = max(1, stride)
+        self.maxSamples = max(0, maxSamples)
+        self.horizonMinutes = TrainingSampleTools.clampHorizon(horizonMinutes)
+        self.roundTripCostPoints = max(0.0, fxSafeFinite(roundTripCostPoints))
+        self.evThresholdPoints = max(0.0, fxSafeFinite(evThresholdPoints))
+        self.normalizationMethod = normalizationMethod
+        self.tradeKillerMinutes = tradeKillerMinutes
+    }
+}
+
+public struct PreparedTrainingDataset: Sendable {
+    public let symbol: String
+    public let horizonMinutes: Int
+    public let startIndex: Int
+    public let endIndex: Int
+    public let stride: Int
+    public let payloads: [PreparedTrainingPayload]
+
+    public var trainRequests: [TrainRequestV4] {
+        payloads.map(\.trainRequest)
+    }
+}
+
 public enum TrainingSampleTools {
     public static let defaultConfiguredHorizons = [1, 2, 3, 5, 8, 13, 21, 34]
 

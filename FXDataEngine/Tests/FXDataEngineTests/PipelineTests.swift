@@ -194,6 +194,43 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(request.fillRisk, 0.0)
     }
 
+    func testPipelineBuildsTrainingDatasetAcrossIndexRange() throws {
+        let series = try makeBreakoutSeries(symbol: "EURUSD", count: 130, breakoutIndex: 80)
+        let universe = try MarketUniverse(primarySymbol: "EURUSD", series: [series])
+        let manifest = PluginManifestV4(
+            aiID: 8,
+            aiName: "DatasetWindow",
+            family: .linear,
+            capabilityMask: [.selfTest, .windowContext],
+            minSequenceBars: 2,
+            maxSequenceBars: 16
+        )
+
+        let dataset = try FXDataEnginePipeline().prepareTrainingDataset(
+            universe: universe,
+            baseRequest: DataCoreRequest(symbol: "EURUSD", neededBars: 50),
+            manifest: manifest,
+            datasetRequest: TrainingDatasetRequest(
+                startIndex: 60,
+                endIndex: 72,
+                stride: 3,
+                maxSamples: 4,
+                horizonMinutes: 5,
+                roundTripCostPoints: 1.0,
+                evThresholdPoints: 1.0
+            )
+        )
+
+        XCTAssertEqual(dataset.symbol, "EURUSD")
+        XCTAssertEqual(dataset.payloads.map(\.dataBundle.sampleIndex), [60, 63, 66, 69])
+        XCTAssertEqual(dataset.trainRequests.count, 4)
+        for request in dataset.trainRequests {
+            try request.validate()
+            XCTAssertEqual(request.context.horizonMinutes, 5)
+            XCTAssertGreaterThan(request.windowSize, 0)
+        }
+    }
+
     private func makeSeries(volumeEnabled: Bool, count: Int) throws -> M1OHLCVSeries {
         let start = Int64(1_704_067_200)
         var utc = ContiguousArray<Int64>()
