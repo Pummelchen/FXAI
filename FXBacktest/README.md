@@ -448,7 +448,7 @@ The test suite includes:
 
 ## Documentation
 
-FXBacktest documentation now lives in this README and the FXAI handbook. The former standalone FXBacktest GitHub Wiki should be treated as historical once the standalone repository is retired.
+FXBacktest documentation now lives in this README and the root-level FXAI project documentation. The former standalone FXBacktest GitHub Wiki should be treated as historical once the standalone repository is retired.
 
 ## Status
 

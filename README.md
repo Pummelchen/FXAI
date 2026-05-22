@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="FXAI/Wiki/assets/fxai-overview.png" alt="FXAI architecture overview">
-</p>
-
 # FXAI
 
 FXAI is a trading-system framework that has moved its data-engine, plugin, and offline backtest surface from the original MT5/MQL5 runtime into native Swift and Metal packages. The remaining MT5 bridge is the FXDatabase exporter EA, which exists only to collect M1 OHLCV data for the Swift stack.
@@ -22,11 +18,11 @@ All Swift projects and subprojects in FXAI use the current local Apple toolchain
 
 | User | Core Benefit | Start Here |
 |---|---|---|
-| Live Trader | See whether a trade is allowed, cautioned, blocked, or abstained before trusting a signal. | [Quick Start By Role](FXAI/Wiki/Quick%20Start%20By%20Role.md) |
-| Demo Trader | Learn how the full control plane behaves under real market conditions without risking capital. | [Getting Started](FXAI/Wiki/Getting%20Started.md) |
-| Backtester | Run scenario-aware Swift/Metal evaluations instead of comparing isolated tester runs by headline score only. | [Audit Lab](FXAI/Wiki/Audit%20Lab.md) |
-| EA Researcher | Improve models, labels, calibration, routing, and promotion decisions with lineage and evidence. | [Offline Lab](FXAI/Wiki/Offline%20Lab.md) |
-| System Architect | Operate services, artifacts, release gates, recovery, and platform health without hidden machine assumptions. | [Project Structure](FXAI/Wiki/Project%20Structure.md) |
+| Live Trader | See whether a trade is allowed, cautioned, blocked, or abstained before trusting a signal. | [FXDataEngineGUI](FXDataEngineGUI/README.md) |
+| Demo Trader | Learn how the full control plane behaves under real market conditions without risking capital. | [FXDataEngine](FXDataEngine/README.md) |
+| Backtester | Run scenario-aware Swift/Metal evaluations instead of comparing isolated tester runs by headline score only. | [FXBacktest](FXBacktest/README.md) |
+| EA Researcher | Improve models, labels, calibration, routing, and promotion decisions with lineage and evidence. | [Offline Lab](FXDataEngine/Tools/OfflineLab/README.md) |
+| System Architect | Operate services, artifacts, release gates, recovery, and platform health without hidden machine assumptions. | [FXDataEngine](FXDataEngine/README.md) |
 
 ## Core Benefits
 
@@ -48,17 +44,14 @@ All Swift projects and subprojects in FXAI use the current local Apple toolchain
 
 ## Documentation
 
-Use the versioned handbook in [FXAI/Wiki](FXAI/Wiki/Home.md). The public GitHub wiki should mirror these pages.
+The old in-repo handbook has been retired. Documentation now lives with the project that owns the code or artifact flow.
 
 Recommended first pages:
 
-- [Home](FXAI/Wiki/Home.md)
-- [Quick Start By Role](FXAI/Wiki/Quick%20Start%20By%20Role.md)
-- [Getting Started](FXAI/Wiki/Getting%20Started.md)
-- [Runtime Control Plane](FXAI/Wiki/Runtime%20Control%20Plane.md)
-- [GUI](FXAI/Wiki/GUI.md)
-- [Data Policy](FXAI/Wiki/Data%20Policy.md)
-- [Project Structure](FXAI/Wiki/Project%20Structure.md)
+- [FXDataEngine](FXDataEngine/README.md)
+- [FXDataEngine MQL5 Port Plan](FXDataEngine/Docs/MQL5PortPlan.md)
+- [FXDataEngineGUI](FXDataEngineGUI/README.md)
+- [FXPlugins](FXPlugins/README.md)
 - [FXBacktest Subproject](FXBacktest/README.md)
 - [FXDatabase Subproject](FXDatabase/README.md)
 
@@ -68,23 +61,21 @@ FXBacktest and FXDatabase are the foundation for the pure Swift stack. FXDatabas
 
 Subsystem guides:
 
-- [Audit Lab](FXAI/Wiki/Audit%20Lab.md)
-- [Offline Lab](FXAI/Wiki/Offline%20Lab.md)
-- [Benchmarks](FXAI/Wiki/Benchmarks.md)
-- [Model Zoo](FXAI/Wiki/Model%20Zoo.md)
-- [Promotion Criteria](FXAI/Wiki/Promotion%20Criteria.md)
-- [Release Notes](FXAI/Wiki/Release%20Notes.md)
-- [NewsPulse](FXAI/Wiki/NewsPulse.md)
-- [Rates Engine](FXAI/Wiki/Rates%20Engine.md)
-- [Cross Asset](FXAI/Wiki/Cross%20Asset.md)
-- [Microstructure](FXAI/Wiki/Microstructure.md)
-- [Adaptive Router](FXAI/Wiki/Adaptive%20Router.md)
-- [Dynamic Ensemble](FXAI/Wiki/Dynamic%20Ensemble.md)
-- [Probabilistic Calibration](FXAI/Wiki/Probabilistic%20Calibration.md)
-- [Execution Quality](FXAI/Wiki/Execution%20Quality.md)
-- [Label Engine](FXAI/Wiki/Label%20Engine.md)
-- [Drift Governance](FXAI/Wiki/Drift%20Governance.md)
-- [Pair Network](FXAI/Wiki/Pair%20Network.md)
+- [Offline Lab](FXDataEngine/Tools/OfflineLab/README.md)
+- [Benchmarks](FXDataEngine/Tools/Benchmarks/benchmark_matrix.md)
+- [Promotion Criteria](FXDataEngine/Tools/Benchmarks/promotion_criteria.md)
+- [Release Notes](FXDataEngine/Tools/Benchmarks/ReleaseNotes/reference_release_notes.md)
+- [NewsPulse](FXDataEngine/Tools/OfflineLab/NewsPulse/README.md)
+- [Rates Engine](FXDataEngine/Tools/OfflineLab/RatesEngine/README.md)
+- [Cross Asset](FXDataEngine/Tools/OfflineLab/CrossAsset/README.md)
+- [Microstructure](FXDataEngine/Tools/OfflineLab/Microstructure/README.md)
+- [Adaptive Router](FXDataEngine/Tools/OfflineLab/AdaptiveRouter/README.md)
+- [Dynamic Ensemble](FXDataEngine/Tools/OfflineLab/DynamicEnsemble/README.md)
+- [Probabilistic Calibration](FXDataEngine/Tools/OfflineLab/ProbabilisticCalibration/README.md)
+- [Execution Quality](FXDataEngine/Tools/OfflineLab/ExecutionQuality/README.md)
+- [Label Engine](FXDataEngine/Tools/OfflineLab/LabelEngine/README.md)
+- [Drift Governance](FXDataEngine/Tools/OfflineLab/DriftGovernance/README.md)
+- [Pair Network](FXDataEngine/Tools/OfflineLab/PairNetwork/README.md)
 
 ## Operating Boundary
 
