@@ -143,6 +143,30 @@ final class WarmupTests: XCTestCase {
         XCTAssertEqual(WarmupTools.warmupBlockSpan(aiID: AIModelID.lstm.rawValue, horizonMinutes: 60, symbol: "EURUSD"), 34)
         XCTAssertEqual(WarmupTools.warmupBlockSpan(aiID: AIModelID.xgbFast.rawValue, horizonMinutes: 240, symbol: "XAUUSD"), 36)
 
+        let blockPlan = WarmupTools.makeBlockBatchPlan(
+            startIndex: 10,
+            currentEnd: 37,
+            blockSpan: 12,
+            replayEnabled: true,
+            learningRateScale: 7.0
+        )
+        XCTAssertEqual(blockPlan.start, 26)
+        XCTAssertEqual(blockPlan.end, 37)
+        XCTAssertEqual(blockPlan.replayBudget, 2)
+        XCTAssertEqual(blockPlan.learningRateScale, 4.0, accuracy: 0.0)
+
+        let singlePlan = WarmupTools.makeBlockBatchPlan(
+            startIndex: 10,
+            currentEnd: 12,
+            blockSpan: 0,
+            replayEnabled: false,
+            learningRateScale: 0.01
+        )
+        XCTAssertEqual(singlePlan.start, 12)
+        XCTAssertEqual(singlePlan.end, 12)
+        XCTAssertEqual(singlePlan.replayBudget, 0)
+        XCTAssertEqual(singlePlan.learningRateScale, 0.10, accuracy: 0.0)
+
         let prioritySample = PreparedTrainingSample(
             valid: true,
             movePoints: 10.0,

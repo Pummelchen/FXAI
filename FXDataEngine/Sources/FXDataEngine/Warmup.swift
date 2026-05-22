@@ -184,6 +184,20 @@ public struct WarmupPortfolioDiagnostics: Codable, Hashable, Sendable {
     }
 }
 
+public struct WarmupBlockBatchPlan: Codable, Hashable, Sendable {
+    public var start: Int
+    public var end: Int
+    public var replayBudget: Int
+    public var learningRateScale: Double
+
+    public init(start: Int, end: Int, replayBudget: Int, learningRateScale: Double) {
+        self.start = start
+        self.end = end
+        self.replayBudget = max(0, replayBudget)
+        self.learningRateScale = fxClamp(learningRateScale, 0.10, 4.00)
+    }
+}
+
 public enum WarmupTools {
     public static let missingScore = -1e9
     public static let transferSeedSymbols = [
@@ -586,6 +600,22 @@ public enum WarmupTools {
             span += 4
         }
         return min(max(span, 8), 40)
+    }
+
+    public static func makeBlockBatchPlan(
+        startIndex: Int,
+        currentEnd: Int,
+        blockSpan: Int,
+        replayEnabled: Bool,
+        learningRateScale: Double = 1.0
+    ) -> WarmupBlockBatchPlan {
+        let span = max(blockSpan, 1)
+        return WarmupBlockBatchPlan(
+            start: max(startIndex, currentEnd - span + 1),
+            end: currentEnd,
+            replayBudget: replayEnabled ? min(2, span) : 0,
+            learningRateScale: learningRateScale
+        )
     }
 
     public static func curriculumPriority(sample: PreparedTrainingSample) -> Double {
