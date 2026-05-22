@@ -60,6 +60,8 @@ final class NormalizationStateTests: XCTestCase {
         XCTAssertEqual(AIModelID.lstm.rawValue, 7)
         XCTAssertEqual(AIModelID.qcew.rawValue, 32)
         XCTAssertEqual(AIModelID.mythosRDT.rawValue, 62)
+        XCTAssertEqual(AIModelID.demoMovingAverageCross.rawValue, 63)
+        XCTAssertEqual(AIModelID.demoFXStupid.rawValue, 64)
         XCTAssertTrue(AIModelID.lstm.usesDeepNormalizationCandidates)
         XCTAssertFalse(AIModelID.gru.usesDeepNormalizationCandidates)
 

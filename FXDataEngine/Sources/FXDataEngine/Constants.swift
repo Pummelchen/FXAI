@@ -18,7 +18,7 @@ public enum FXDataEngineConstants {
     public static let contextMTFOffset = contextSharedOffset + contextSharedAdapterFeatures
     public static let contextExtraFeatures = contextMTFOffset + contextTopSymbols * contextSlotMTFFeatures
     public static let contextDynamicPool = 12
-    public static let aiCount = 63
+    public static let aiCount = 65
     public static let analogMemoryCapacity = 384
     public static let analogMemoryFeatures = 12
     public static let analogMemoryMinMatches = 3

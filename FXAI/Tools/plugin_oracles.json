@@ -905,6 +905,38 @@
         }
       },
       "sequence_delta_min": 0.024
+    },
+    "fxbacktest_moving_average_cross": {
+      "identity": "FXBacktest MovingAverageCross demo adapter connected to FXDataEngine plugin contracts for Swift and Metal backtest plumbing.",
+      "recommendations": [
+        "Use this adapter as a deterministic bridge test for FXBacktest plugins entering the FXDataEngine registry.",
+        "The underlying backtest plugin may use Metal for parameter sweeps, but prediction quality still depends on clean fast/slow feature construction and volume-aware confidence."
+      ],
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.25
+        },
+        "drift_up": {
+          "trend_align_min": 0.25
+        },
+        "random_walk": {
+          "active_ratio_max": 0.55,
+          "skip_ratio_min": 0.40
+        }
+      }
+    },
+    "fxbacktest_fxstupid": {
+      "identity": "FXBacktest FXStupid demo adapter connected to FXDataEngine plugin contracts as a simple scalar control-flow baseline.",
+      "recommendations": [
+        "Treat this as a plumbing and parity adapter, not a production model.",
+        "Keep scalar control-flow behavior deterministic while volume becomes only a confidence or bias input when dataset volume exists."
+      ],
+      "scenario_rules": {
+        "random_walk": {
+          "active_ratio_max": 0.70,
+          "bias_abs_max": 0.80
+        }
+      }
     }
   }
 }

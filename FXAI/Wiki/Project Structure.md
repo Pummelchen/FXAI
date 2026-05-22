@@ -58,9 +58,10 @@ This page maps common user goals to the repository areas that matter.
 
 - `FXDatabase/` is the canonical Swift history-data source for offline backtests and research consumers.
 - `FXBacktest/` is the native Swift and Metal backtest runtime for converted FXAI strategies and plugins.
-- `FXAI/FXDataEngine/` and `FXAI/FXPlugins/` remain the MQL5 reference implementation until their contracts are ported, tested, and promoted into the root Swift-oriented source areas.
+- `FXAI/FXDataEngine/` and the nested `FXAI/FXPlugins/` remain the MQL5 reference implementation until their contracts are ported, tested, and promoted into the root Swift-oriented source areas.
 - Root `FXDataEngine/` is now the Swift 6.3/macOS 26 shared data-engine package for canonical M1 OHLCV features, plugin payloads, ML backend descriptors, and Metal integration.
-- Root `FXPlugins/` is reserved for converted Swift-era plugin implementations that will replace the old MQL5 backtest path.
+- Root `FXPlugins/` is now the converted Swift-era plugin package plus the copied legacy plugin reference tree. It owns `FXAIPluginV4` plugin implementations, FXBacktest demo adapters, acceleration-plan metadata, and plugin tests.
+- Converted plugins consume canonical M1 OHLCV contracts, use volume-derived features when dataset volume is nonzero, and replace old bid/ask spread dependencies with execution-cost context or statistical residual features.
 
 ## Example Case Scenarios
 

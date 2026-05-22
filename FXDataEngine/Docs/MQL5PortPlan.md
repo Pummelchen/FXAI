@@ -176,7 +176,7 @@ The MQL5 `FXAI/FXDataEngine` folder can be removed only when each non-tensor fil
 
 Audited on 2026-05-22. The legacy tree currently contains 119 non-tensor MQL5 files under `FXAI/FXDataEngine`. The 11 `TensorCore` files are excluded from the FXDataEngine parity gate and move to FXPlugins as PyTorch/TensorFlow backend work.
 
-Removal blocker: the current MQL5 plugin tree under `FXAI/FXPlugins` contains 115 files, and 38 plugin entry files still include `FXDataEngine\API\plugin_base.mqh`. Do not delete the legacy MQL5 FXDataEngine headers until those plugins are either converted into root `FXPlugins` Swift/PyTorch/TensorFlow plugins or explicitly retired.
+Removal blocker: the legacy MQL5 plugin tree has been copied into root `FXPlugins` as the active porting reference, while the nested `FXAI/FXPlugins` tree remains in place temporarily. The MQL5 reference plugins still include legacy `FXDataEngine\API\plugin_base.mqh` headers in many entry files. Do not delete the legacy MQL5 FXDataEngine headers until those plugins are either converted into root `FXPlugins` Swift/PyTorch/TensorFlow plugins or explicitly retired.
 
 | Legacy files | Count | Disposition |
 | --- | ---: | --- |

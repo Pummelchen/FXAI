@@ -44,6 +44,9 @@ FXDatabase/Package.resolved
 FXBacktest/.build/
 FXBacktest/.swiftpm/
 FXBacktest/Package.resolved
+FXPlugins/.build/
+FXPlugins/.swiftpm/
+FXPlugins/Package.resolved
 FXDatabase/Config/
 FXDatabase/Logs/
 FXAI/Tools/tests/.pytest_cache/

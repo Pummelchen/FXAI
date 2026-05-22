@@ -60,7 +60,8 @@ public enum PluginPersistenceTools {
             return .compressedNative
         case .ftrlLogit, .paLinear, .sgdLogit, .linElasticLogit, .linProfitLogit:
             return .fullNative
-        case .m1Sync, .buyOnly, .sellOnly, .randomNoSkip:
+        case .m1Sync, .buyOnly, .sellOnly, .randomNoSkip,
+             .demoMovingAverageCross, .demoFXStupid:
             return .ruleBaseline
         }
     }

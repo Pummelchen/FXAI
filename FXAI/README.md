@@ -188,7 +188,8 @@ If you are approaching FXAI as an operator rather than as a framework engineer, 
 
 ## Operating Notes
 
-- Canonical research data is `M1 OHLC + spread`.
+- Canonical research data is M1 OHLCV. Converted Swift plugins use volume-derived features when dataset volume is nonzero and do not depend on MT5 spread fields.
+- Root `FXPlugins/` is the active Swift-era plugin migration package. It contains the copied legacy plugin reference tree, converted `FXAIPluginV4` implementations, FXBacktest demo adapters, and the reviewed per-plugin acceleration plan.
 - The preferred platform verification path is `python3 FXAI/Tools/fxai_testlab.py verify-all`.
 - The preferred focused core-runtime verification path is `python3 FXAI/Tools/fxai_testlab.py compile-tensorcore`, which compiles the dedicated `FXAI_TensorCoreRunner.mq5` test surface used for TensorCore math, optimizer convergence, and plugin-contract checks.
 - The preferred environment self-check path is `python3 FXAI/Tools/fxai_testlab.py doctor` or `python3 FXAI/Tools/fxai_offline_lab.py doctor`.

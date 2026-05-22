@@ -70,6 +70,8 @@ public enum AIModelID: Int, Codable, Sendable, CaseIterable {
     case bilstm
     case lstmTCN
     case mythosRDT
+    case demoMovingAverageCross
+    case demoFXStupid
 
     public var usesDeepNormalizationCandidates: Bool {
         switch self {
