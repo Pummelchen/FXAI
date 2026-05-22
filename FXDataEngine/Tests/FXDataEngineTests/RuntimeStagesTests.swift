@@ -94,4 +94,72 @@ final class RuntimeStagesTests: XCTestCase {
         XCTAssertEqual(result.runtimeModelCap, 4)
         XCTAssertEqual(result.activeAIIDs, [0, 1, 2, 3])
     }
+
+    func testRuntimeFinalizeDecisionUsesLegacyReasonPriority() {
+        XCTAssertEqual(RuntimeStageTools.finalizeDecision(.init(decision: 1)).reason, "buy")
+        XCTAssertEqual(RuntimeStageTools.finalizeDecision(.init(decision: 0)).reason, "sell")
+        XCTAssertEqual(
+            RuntimeStageTools.finalizeDecision(
+                .init(
+                    decision: -1,
+                    singleNoTradeReason: "single_reason",
+                    probabilityCalibrationReady: true,
+                    probabilityCalibrationPrimaryReason: "calibration_reason"
+                )
+            ).reason,
+            "calibration_reason"
+        )
+        XCTAssertEqual(
+            RuntimeStageTools.finalizeDecision(
+                .init(
+                    decision: -1,
+                    aiType: RuntimeStageTools.m1SyncAIID,
+                    singleNoTradeReason: "m1sync_no_trade"
+                )
+            ).reason,
+            "m1sync_no_trade"
+        )
+        XCTAssertEqual(
+            RuntimeStageTools.finalizeDecision(.init(decision: -1, ensembleMode: true, ensembleMetaTotal: 0.0)).reason,
+            "no_meta_weight"
+        )
+        XCTAssertEqual(RuntimeStageTools.finalizeDecision(.init(decision: -1)).reason, "no_consensus_or_ev")
+    }
+
+    func testRuntimeFinalizeDecisionMatchesLegacySignalIntensityMath() {
+        let finalized = RuntimeStageTools.finalizeDecision(
+            .init(
+                symbol: "EURUSD",
+                decision: 1,
+                signalBarUTC: 1_704_067_200,
+                decisionKey: 42,
+                macroProfileShortfall: 0.40,
+                regimeTransitionPenalty: 0.25,
+                tradeGate: 0.70,
+                policyTradeProbability: 0.60,
+                policyConfidence: 0.50,
+                policySizeMultiplier: 1.20
+            )
+        )
+
+        let expected = (0.55 * 0.70 + 0.25 * 0.60 + 0.20 * 0.50) *
+            1.20 *
+            (1.0 - 0.35 * 0.40 - 0.20 * 0.25)
+        XCTAssertEqual(finalized.symbol, "EURUSD")
+        XCTAssertEqual(finalized.decision, 1)
+        XCTAssertEqual(finalized.signalBarUTC, 1_704_067_200)
+        XCTAssertEqual(finalized.decisionKey, 42)
+        XCTAssertEqual(finalized.signalIntensity, expected, accuracy: 1e-12)
+
+        let skipped = RuntimeStageTools.finalizeDecision(
+            .init(
+                decision: -1,
+                tradeGate: 2.0,
+                policyTradeProbability: 2.0,
+                policyConfidence: 2.0,
+                policySizeMultiplier: 10.0
+            )
+        )
+        XCTAssertEqual(skipped.signalIntensity, 0.0)
+    }
 }

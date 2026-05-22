@@ -60,7 +60,89 @@ public struct RuntimeRouterCapResult: Codable, Hashable, Sendable {
     }
 }
 
+public struct RuntimeFinalizeInput: Codable, Hashable, Sendable {
+    public var symbol: String
+    public var decision: Int
+    public var signalBarUTC: Int64
+    public var decisionKey: Int
+    public var ensembleMode: Bool
+    public var aiType: Int
+    public var singleNoTradeReason: String
+    public var ensembleMetaTotal: Double
+    public var macroProfileShortfall: Double
+    public var regimeTransitionPenalty: Double
+    public var tradeGate: Double
+    public var policyTradeProbability: Double
+    public var policyConfidence: Double
+    public var policySizeMultiplier: Double
+    public var probabilityCalibrationReady: Bool
+    public var probabilityCalibrationPrimaryReason: String
+
+    public init(
+        symbol: String = "",
+        decision: Int = -1,
+        signalBarUTC: Int64 = 0,
+        decisionKey: Int = 0,
+        ensembleMode: Bool = false,
+        aiType: Int = -1,
+        singleNoTradeReason: String = "",
+        ensembleMetaTotal: Double = 0.0,
+        macroProfileShortfall: Double = 0.0,
+        regimeTransitionPenalty: Double = 0.0,
+        tradeGate: Double = 0.0,
+        policyTradeProbability: Double = 0.0,
+        policyConfidence: Double = 0.0,
+        policySizeMultiplier: Double = 1.0,
+        probabilityCalibrationReady: Bool = false,
+        probabilityCalibrationPrimaryReason: String = ""
+    ) {
+        self.symbol = symbol
+        self.decision = decision
+        self.signalBarUTC = max(0, signalBarUTC)
+        self.decisionKey = decisionKey
+        self.ensembleMode = ensembleMode
+        self.aiType = aiType
+        self.singleNoTradeReason = singleNoTradeReason
+        self.ensembleMetaTotal = ensembleMetaTotal
+        self.macroProfileShortfall = macroProfileShortfall
+        self.regimeTransitionPenalty = regimeTransitionPenalty
+        self.tradeGate = tradeGate
+        self.policyTradeProbability = policyTradeProbability
+        self.policyConfidence = policyConfidence
+        self.policySizeMultiplier = policySizeMultiplier
+        self.probabilityCalibrationReady = probabilityCalibrationReady
+        self.probabilityCalibrationPrimaryReason = probabilityCalibrationPrimaryReason
+    }
+}
+
+public struct RuntimeFinalizedSignal: Codable, Hashable, Sendable {
+    public var symbol: String
+    public var decision: Int
+    public var signalBarUTC: Int64
+    public var decisionKey: Int
+    public var reason: String
+    public var signalIntensity: Double
+
+    public init(
+        symbol: String,
+        decision: Int,
+        signalBarUTC: Int64,
+        decisionKey: Int,
+        reason: String,
+        signalIntensity: Double
+    ) {
+        self.symbol = symbol
+        self.decision = decision
+        self.signalBarUTC = max(0, signalBarUTC)
+        self.decisionKey = decisionKey
+        self.reason = reason
+        self.signalIntensity = fxClamp(signalIntensity, 0.0, 4.0)
+    }
+}
+
 public enum RuntimeStageTools {
+    public static let m1SyncAIID = 28
+
     public static func buildTimeContext(
         serverNow: Int64,
         utcNow: Int64? = nil,
@@ -84,6 +166,49 @@ public enum RuntimeStageTools {
             serverDayOfWeek: dayOfWeek(timestamp: serverNow),
             utcDayOfWeek: dayOfWeek(timestamp: effectiveUTC),
             localDayOfWeek: dayOfWeek(timestamp: effectiveLocal)
+        )
+    }
+
+    public static func finalizeDecision(_ input: RuntimeFinalizeInput) -> RuntimeFinalizedSignal {
+        let reason: String
+        if input.decision == 1 {
+            reason = "buy"
+        } else if input.decision == 0 {
+            reason = "sell"
+        } else if input.probabilityCalibrationReady, !input.probabilityCalibrationPrimaryReason.isEmpty {
+            reason = input.probabilityCalibrationPrimaryReason
+        } else if !input.ensembleMode, input.aiType == m1SyncAIID, !input.singleNoTradeReason.isEmpty {
+            reason = input.singleNoTradeReason
+        } else if input.ensembleMode, input.ensembleMetaTotal <= 0.0 {
+            reason = "no_meta_weight"
+        } else {
+            reason = "no_consensus_or_ev"
+        }
+
+        var intensity = fxClamp(
+            (0.55 * input.tradeGate +
+                0.25 * input.policyTradeProbability +
+                0.20 * input.policyConfidence) *
+                fxClamp(input.policySizeMultiplier, 0.25, 1.60) *
+                fxClamp(
+                    1.0 - 0.35 * input.macroProfileShortfall - 0.20 * input.regimeTransitionPenalty,
+                    0.20,
+                    1.0
+                ),
+            0.0,
+            4.0
+        )
+        if input.decision < 0 {
+            intensity = 0.0
+        }
+
+        return RuntimeFinalizedSignal(
+            symbol: input.symbol,
+            decision: input.decision,
+            signalBarUTC: input.signalBarUTC,
+            decisionKey: input.decisionKey,
+            reason: reason,
+            signalIntensity: intensity
         )
     }
 
