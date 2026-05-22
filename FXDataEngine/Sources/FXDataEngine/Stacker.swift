@@ -173,6 +173,77 @@ public struct StackFeatureInputs: Codable, Hashable, Sendable {
     }
 }
 
+public struct StackNetworkState: Codable, Hashable, Sendable {
+    public var inputWeights: [[Double]]
+    public var hiddenBias: [Double]
+    public var outputWeights: [[Double]]
+    public var outputBias: [Double]
+    public var ready: Bool
+    public var observations: Int
+
+    public init(
+        inputWeights: [[Double]] = [],
+        hiddenBias: [Double] = [],
+        outputWeights: [[Double]] = [],
+        outputBias: [Double] = [],
+        ready: Bool = false,
+        observations: Int = 0
+    ) {
+        self.inputWeights = Self.normalizedMatrix(
+            inputWeights,
+            rows: FXDataEngineConstants.stackHidden,
+            columns: FXDataEngineConstants.stackFeatures
+        )
+        self.hiddenBias = Self.normalizedVector(hiddenBias, count: FXDataEngineConstants.stackHidden)
+        self.outputWeights = Self.normalizedMatrix(
+            outputWeights,
+            rows: LabelClass.allCases.count,
+            columns: FXDataEngineConstants.stackHidden
+        )
+        self.outputBias = Self.normalizedVector(outputBias, count: LabelClass.allCases.count)
+        self.ready = ready
+        self.observations = min(max(observations, 0), StackerTools.observationCap)
+    }
+
+    private static func normalizedVector(_ values: [Double], count: Int) -> [Double] {
+        var output = Array(repeating: 0.0, count: count)
+        for index in 0..<min(values.count, count) {
+            output[index] = fxSafeFinite(values[index])
+        }
+        return output
+    }
+
+    private static func normalizedMatrix(_ values: [[Double]], rows: Int, columns: Int) -> [[Double]] {
+        var output = Array(repeating: Array(repeating: 0.0, count: columns), count: rows)
+        for row in 0..<min(values.count, rows) {
+            for column in 0..<min(values[row].count, columns) {
+                output[row][column] = fxSafeFinite(values[row][column])
+            }
+        }
+        return output
+    }
+}
+
+public struct StackPrediction: Codable, Hashable, Sendable {
+    public var probabilities: [Double]
+    public var rawProbabilities: [Double]
+    public var hidden: [Double]
+
+    public init(probabilities: [Double], rawProbabilities: [Double], hidden: [Double]) {
+        self.probabilities = Self.normalizedVector(probabilities, count: LabelClass.allCases.count)
+        self.rawProbabilities = Self.normalizedVector(rawProbabilities, count: LabelClass.allCases.count)
+        self.hidden = Self.normalizedVector(hidden, count: FXDataEngineConstants.stackHidden)
+    }
+
+    private static func normalizedVector(_ values: [Double], count: Int) -> [Double] {
+        var output = Array(repeating: 0.0, count: count)
+        for index in 0..<min(values.count, count) {
+            output[index] = fxSafeFinite(values[index])
+        }
+        return output
+    }
+}
+
 public enum StackerTools {
     public static let observationCap = 200_000
 
@@ -323,6 +394,138 @@ public enum StackerTools {
         features[82] = fxClamp(input.hierarchyExecutionViability, 0.0, 1.0)
         features[83] = fxClamp(input.hierarchyHorizonFit, 0.0, 1.0)
         return features
+    }
+
+    public static func predictStackProbabilities(
+        _ state: StackNetworkState,
+        features: [Double],
+        actionCells: [StackRouterActionCell] = []
+    ) -> StackPrediction {
+        let features = normalizedStackFeatures(features)
+        guard state.ready else {
+            let probabilities = stackRouterBlend(
+                probabilities: heuristicStackProbabilities(features: features),
+                features: features,
+                actionCells: actionCells
+            )
+            return StackPrediction(
+                probabilities: probabilities,
+                rawProbabilities: probabilities,
+                hidden: []
+            )
+        }
+
+        let forward = stackNetworkForward(state, features: features)
+        var probabilities = forward.rawProbabilities
+        let portfolioObjective = stackPortfolioObjective(features: features)
+        let routingObjective = stackRoutingObjective(features: features)
+        let directionBias = fxClamp(
+            0.08 * routingObjective * fxClamp(stackFeature(features, 6), -1.0, 1.0) +
+            0.05 * portfolioObjective * fxClamp(stackFeature(features, 71), -1.0, 1.0),
+            -0.12,
+            0.12
+        )
+        probabilities[LabelClass.sell.rawValue] = fxClamp(
+            probabilities[LabelClass.sell.rawValue] + max(-directionBias, 0.0),
+            0.0005,
+            0.9990
+        )
+        probabilities[LabelClass.buy.rawValue] = fxClamp(
+            probabilities[LabelClass.buy.rawValue] + max(directionBias, 0.0),
+            0.0005,
+            0.9990
+        )
+        probabilities[LabelClass.skip.rawValue] = fxClamp(
+            probabilities[LabelClass.skip.rawValue] - 0.04 * portfolioObjective,
+            0.0005,
+            0.9990
+        )
+        probabilities = normalizedProbabilities(probabilities)
+        probabilities = stackRouterBlend(
+            probabilities: probabilities,
+            features: features,
+            actionCells: actionCells
+        )
+        return StackPrediction(
+            probabilities: probabilities,
+            rawProbabilities: forward.rawProbabilities,
+            hidden: forward.hidden
+        )
+    }
+
+    public static func updatedStackNetwork(
+        _ state: StackNetworkState,
+        features: [Double],
+        labelClass: LabelClass,
+        sampleWeight: Double
+    ) -> StackNetworkState {
+        let features = normalizedStackFeatures(features)
+        let forward = stackNetworkForward(state, features: features)
+        let learningRate = fxClamp(
+            0.025 / sqrt(1.0 + 0.02 * Double(max(state.observations, 0))),
+            0.002,
+            0.025
+        )
+        let portfolioObjective = stackPortfolioObjective(features: features)
+        let routingObjective = stackRoutingObjective(features: features)
+        let sampleWeight = fxClamp(
+            sampleWeight * fxClamp(0.90 + 0.30 * portfolioObjective + 0.20 * routingObjective, 0.45, 1.60),
+            0.20,
+            7.50
+        )
+
+        var deltaOutput = Array(repeating: 0.0, count: LabelClass.allCases.count)
+        for label in LabelClass.allCases {
+            let index = label.rawValue
+            let target = label == labelClass ? 1.0 : 0.0
+            deltaOutput[index] = fxClamp(
+                (target - forward.rawProbabilities[index]) * sampleWeight,
+                -3.0,
+                3.0
+            )
+        }
+
+        var deltaHidden = Array(repeating: 0.0, count: FXDataEngineConstants.stackHidden)
+        for hiddenIndex in 0..<FXDataEngineConstants.stackHidden {
+            var back = 0.0
+            for label in LabelClass.allCases {
+                back += deltaOutput[label.rawValue] * state.outputWeights[label.rawValue][hiddenIndex]
+            }
+            let hiddenValue = forward.hidden[hiddenIndex]
+            deltaHidden[hiddenIndex] = fxClamp(back * (1.0 - hiddenValue * hiddenValue), -3.0, 3.0)
+        }
+
+        var outputWeights = state.outputWeights
+        var outputBias = state.outputBias
+        for label in LabelClass.allCases {
+            let labelIndex = label.rawValue
+            outputBias[labelIndex] += learningRate * deltaOutput[labelIndex]
+            for hiddenIndex in 0..<FXDataEngineConstants.stackHidden {
+                let regularization = 0.0005 * outputWeights[labelIndex][hiddenIndex]
+                outputWeights[labelIndex][hiddenIndex] += learningRate *
+                    (deltaOutput[labelIndex] * forward.hidden[hiddenIndex] - regularization)
+            }
+        }
+
+        var inputWeights = state.inputWeights
+        var hiddenBias = state.hiddenBias
+        for hiddenIndex in 0..<FXDataEngineConstants.stackHidden {
+            hiddenBias[hiddenIndex] += learningRate * deltaHidden[hiddenIndex]
+            for featureIndex in 0..<FXDataEngineConstants.stackFeatures {
+                let regularization = featureIndex == 0 ? 0.0 : 0.0004 * inputWeights[hiddenIndex][featureIndex]
+                inputWeights[hiddenIndex][featureIndex] += learningRate *
+                    (deltaHidden[hiddenIndex] * features[featureIndex] - regularization)
+            }
+        }
+
+        return StackNetworkState(
+            inputWeights: inputWeights,
+            hiddenBias: hiddenBias,
+            outputWeights: outputWeights,
+            outputBias: outputBias,
+            ready: true,
+            observations: min(max(state.observations, 0) + 1, observationCap)
+        )
     }
 
     public static func stackPortfolioObjective(features: [Double]) -> Double {
@@ -495,9 +698,167 @@ public enum StackerTools {
         return output.map { $0 / denominator }
     }
 
+    public static func heuristicStackProbabilities(features: [Double]) -> [Double] {
+        let features = normalizedStackFeatures(features)
+        var sellProbability = fxClamp(
+            0.26 +
+            0.31 * stackFeature(features, 2) -
+            0.12 * stackFeature(features, 3) +
+            0.16 * stackFeature(features, 5) -
+            0.07 * stackFeature(features, 10) +
+            0.08 * stackFeature(features, 20) +
+            0.08 * stackFeature(features, 21) +
+            0.05 * stackFeature(features, 23) +
+            0.05 * stackFeature(features, 30) +
+            0.04 * stackFeature(features, 34) +
+            0.05 * stackFeature(features, 58) +
+            0.04 * stackFeature(features, 59) +
+            0.04 * stackFeature(features, 61) +
+            0.04 * stackFeature(features, 62) -
+            0.05 * stackFeature(features, 57) -
+            0.04 * stackFeature(features, 63) -
+            0.03 * stackFeature(features, 73) +
+            0.03 * stackFeature(features, 78) +
+            0.03 * stackFeature(features, 80) +
+            0.02 * stackFeature(features, 82),
+            0.01,
+            0.98
+        )
+        var buyProbability = fxClamp(
+            0.26 +
+            0.31 * stackFeature(features, 1) -
+            0.12 * stackFeature(features, 3) +
+            0.16 * stackFeature(features, 4) -
+            0.07 * stackFeature(features, 10) +
+            0.08 * stackFeature(features, 20) +
+            0.08 * stackFeature(features, 21) +
+            0.05 * stackFeature(features, 23) -
+            0.05 * stackFeature(features, 30) +
+            0.04 * stackFeature(features, 34) +
+            0.05 * stackFeature(features, 58) +
+            0.04 * stackFeature(features, 59) +
+            0.04 * stackFeature(features, 61) +
+            0.04 * stackFeature(features, 62) -
+            0.05 * stackFeature(features, 57) -
+            0.04 * stackFeature(features, 63) +
+            0.03 * stackFeature(features, 73) +
+            0.03 * stackFeature(features, 78) +
+            0.03 * stackFeature(features, 80) +
+            0.02 * stackFeature(features, 82),
+            0.01,
+            0.98
+        )
+        var skipProbability = fxClamp(
+            0.18 +
+            0.32 * stackFeature(features, 3) +
+            0.18 * stackFeature(features, 10) -
+            0.08 * stackFeature(features, 8) -
+            0.07 * stackFeature(features, 20) -
+            0.07 * stackFeature(features, 21) +
+            0.08 * stackFeature(features, 31) -
+            0.04 * stackFeature(features, 28) -
+            0.03 * stackFeature(features, 32) +
+            0.08 * stackFeature(features, 57) +
+            0.07 * stackFeature(features, 60) +
+            0.05 * stackFeature(features, 63) -
+            0.05 * stackFeature(features, 62) -
+            0.05 * stackFeature(features, 80) -
+            0.05 * stackFeature(features, 81) -
+            0.04 * stackFeature(features, 82) -
+            0.03 * stackFeature(features, 77),
+            0.01,
+            0.98
+        )
+        let portfolioObjective = stackPortfolioObjective(features: features)
+        let routingObjective = stackRoutingObjective(features: features)
+        sellProbability = fxClamp(
+            sellProbability + 0.05 * portfolioObjective - 0.06 * routingObjective * fxClamp(stackFeature(features, 6), -1.0, 1.0),
+            0.01,
+            0.98
+        )
+        buyProbability = fxClamp(
+            buyProbability + 0.05 * portfolioObjective + 0.06 * routingObjective * fxClamp(stackFeature(features, 6), -1.0, 1.0),
+            0.01,
+            0.98
+        )
+        skipProbability = fxClamp(
+            skipProbability - 0.05 * portfolioObjective - 0.04 * routingObjective * fxClamp(stackFeature(features, 19), -1.0, 1.0),
+            0.01,
+            0.98
+        )
+        return normalizedProbabilities([sellProbability, buyProbability, skipProbability])
+    }
+
+    public static func legacyTanh(_ value: Double) -> Double {
+        if value > 18.0 { return 1.0 }
+        if value < -18.0 { return -1.0 }
+        let exp2 = exp(2.0 * value)
+        return (exp2 - 1.0) / (exp2 + 1.0)
+    }
+
     private static func vectorValue(_ values: [Double], _ index: Int, default defaultValue: Double) -> Double {
         guard index >= 0, index < values.count else { return defaultValue }
         return fxSafeFinite(values[index], fallback: defaultValue)
+    }
+
+    private static func stackNetworkForward(
+        _ state: StackNetworkState,
+        features: [Double]
+    ) -> (hidden: [Double], rawProbabilities: [Double]) {
+        let features = normalizedStackFeatures(features)
+        var hidden = Array(repeating: 0.0, count: FXDataEngineConstants.stackHidden)
+        for hiddenIndex in 0..<FXDataEngineConstants.stackHidden {
+            var z = state.hiddenBias[hiddenIndex]
+            for featureIndex in 0..<FXDataEngineConstants.stackFeatures {
+                z += state.inputWeights[hiddenIndex][featureIndex] * features[featureIndex]
+            }
+            hidden[hiddenIndex] = legacyTanh(z)
+        }
+
+        var logits = Array(repeating: 0.0, count: LabelClass.allCases.count)
+        for label in LabelClass.allCases {
+            let labelIndex = label.rawValue
+            var z = state.outputBias[labelIndex]
+            for hiddenIndex in 0..<FXDataEngineConstants.stackHidden {
+                z += state.outputWeights[labelIndex][hiddenIndex] * hidden[hiddenIndex]
+            }
+            logits[labelIndex] = z
+        }
+        return (hidden, softmax3(logits))
+    }
+
+    private static func softmax3(_ logits: [Double]) -> [Double] {
+        let sell = vectorValue(logits, LabelClass.sell.rawValue, default: 0.0)
+        let buy = vectorValue(logits, LabelClass.buy.rawValue, default: 0.0)
+        let skip = vectorValue(logits, LabelClass.skip.rawValue, default: 0.0)
+        let maximum = max(sell, buy, skip)
+        let eSell = exp(sell - maximum)
+        let eBuy = exp(buy - maximum)
+        let eSkip = exp(skip - maximum)
+        let denominator = max(eSell + eBuy + eSkip, 1.0)
+        return [eSell / denominator, eBuy / denominator, eSkip / denominator]
+    }
+
+    private static func normalizedProbabilities(_ probabilities: [Double]) -> [Double] {
+        var output = [
+            vectorValue(probabilities, LabelClass.sell.rawValue, default: 0.3333),
+            vectorValue(probabilities, LabelClass.buy.rawValue, default: 0.3333),
+            vectorValue(probabilities, LabelClass.skip.rawValue, default: 0.3334)
+        ]
+        let denominator = output.reduce(0.0, +)
+        guard denominator > 0.0 else { return [0.3333, 0.3333, 0.3334] }
+        output[0] /= denominator
+        output[1] /= denominator
+        output[2] /= denominator
+        return output
+    }
+
+    private static func normalizedStackFeatures(_ features: [Double]) -> [Double] {
+        var output = Array(repeating: 0.0, count: FXDataEngineConstants.stackFeatures)
+        for index in 0..<min(features.count, output.count) {
+            output[index] = fxSafeFinite(features[index])
+        }
+        return output
     }
 
     private static func normalizedCells(_ cells: [StackRouterActionCell]) -> [StackRouterActionCell] {

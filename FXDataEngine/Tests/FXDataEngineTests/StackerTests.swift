@@ -136,6 +136,59 @@ final class StackerTests: XCTestCase {
         )
     }
 
+    func testStackHeuristicAndNetworkPredictionMatchLegacyFormula() {
+        let features = StackerTools.buildStackFeatures(makeFeatureInputs())
+        let heuristic = StackerTools.heuristicStackProbabilities(features: features)
+        XCTAssertEqual(heuristic[LabelClass.sell.rawValue], 0.39096986223853664, accuracy: 1e-12)
+        XCTAssertEqual(heuristic[LabelClass.buy.rawValue], 0.6011122055452974, accuracy: 1e-12)
+        XCTAssertEqual(heuristic[LabelClass.skip.rawValue], 0.007917932216165883, accuracy: 1e-12)
+
+        let state = makeStackNetworkState()
+        let prediction = StackerTools.predictStackProbabilities(state, features: features)
+        XCTAssertEqual(prediction.hidden[0], 0.5511280285381469, accuracy: 1e-12)
+        XCTAssertEqual(prediction.hidden[1], 0.18130656540177173, accuracy: 1e-12)
+        XCTAssertEqual(prediction.hidden[2], 0.12435300177159618, accuracy: 1e-12)
+        XCTAssertEqual(prediction.rawProbabilities[LabelClass.sell.rawValue], 0.38147346863924947, accuracy: 1e-12)
+        XCTAssertEqual(prediction.rawProbabilities[LabelClass.buy.rawValue], 0.28949911417535534, accuracy: 1e-12)
+        XCTAssertEqual(prediction.rawProbabilities[LabelClass.skip.rawValue], 0.3290274171853952, accuracy: 1e-12)
+        XCTAssertEqual(prediction.probabilities[LabelClass.sell.rawValue], 0.38282497777707236, accuracy: 1e-12)
+        XCTAssertEqual(prediction.probabilities[LabelClass.buy.rawValue], 0.30909570816832066, accuracy: 1e-12)
+        XCTAssertEqual(prediction.probabilities[LabelClass.skip.rawValue], 0.308079314054607, accuracy: 1e-12)
+    }
+
+    func testStackNetworkUpdateMatchesLegacyFormula() {
+        let features = StackerTools.buildStackFeatures(makeFeatureInputs())
+        let updated = StackerTools.updatedStackNetwork(
+            makeStackNetworkState(),
+            features: features,
+            labelClass: .buy,
+            sampleWeight: 1.4
+        )
+
+        XCTAssertTrue(updated.ready)
+        XCTAssertEqual(updated.observations, 11)
+        XCTAssertEqual(updated.outputBias[LabelClass.sell.rawValue], 0.03632101673362803, accuracy: 1e-12)
+        XCTAssertEqual(updated.outputBias[LabelClass.buy.rawValue], 0.005477341222722736, accuracy: 1e-12)
+        XCTAssertEqual(updated.outputBias[LabelClass.skip.rawValue], -0.0017983579563507629, accuracy: 1e-12)
+        XCTAssertEqual(updated.outputWeights[LabelClass.sell.rawValue][0], 0.2924577056540137, accuracy: 1e-12)
+        XCTAssertEqual(updated.outputWeights[LabelClass.sell.rawValue][1], -0.10247894838555274, accuracy: 1e-12)
+        XCTAssertEqual(updated.outputWeights[LabelClass.sell.rawValue][2], 0.04829840682531248, accuracy: 1e-12)
+        XCTAssertEqual(updated.outputWeights[LabelClass.buy.rawValue][0], -0.18595644098220424, accuracy: 1e-12)
+        XCTAssertEqual(updated.outputWeights[LabelClass.buy.rawValue][1], 0.25461635651100717, accuracy: 1e-12)
+        XCTAssertEqual(updated.outputWeights[LabelClass.buy.rawValue][2], 0.10316704276954333, accuracy: 1e-12)
+        XCTAssertEqual(updated.outputWeights[LabelClass.skip.rawValue][0], 0.09349645315086758, accuracy: 1e-12)
+        XCTAssertEqual(updated.outputWeights[LabelClass.skip.rawValue][1], 0.047860309697222644, accuracy: 1e-12)
+        XCTAssertEqual(updated.outputWeights[LabelClass.skip.rawValue][2], -0.1514654495948558, accuracy: 1e-12)
+        XCTAssertEqual(updated.hiddenBias[0], 0.09277353997802817, accuracy: 1e-12)
+        XCTAssertEqual(updated.hiddenBias[1], -0.19308763133333767, accuracy: 1e-12)
+        XCTAssertEqual(updated.hiddenBias[2], 0.053577350813206526, accuracy: 1e-12)
+        XCTAssertEqual(updated.inputWeights[0][0], 0.49277353997802814, accuracy: 1e-12)
+        XCTAssertEqual(updated.inputWeights[0][1], 0.19927552825594447, accuracy: 1e-12)
+        XCTAssertEqual(updated.inputWeights[1][2], -0.3034534457205436, accuracy: 1e-12)
+        XCTAssertEqual(updated.inputWeights[1][4], 0.40402856357183636, accuracy: 1e-12)
+        XCTAssertEqual(updated.inputWeights[2][6], 0.25107092306663903, accuracy: 1e-12)
+    }
+
     func testStackRouterObservationMatchesLegacyPreparedState() {
         let features = makeFeatures()
         let probabilities = [0.2, 0.6, 0.2]
@@ -286,6 +339,46 @@ final class StackerTests: XCTestCase {
             hierarchyTradability: 0.69,
             hierarchyExecutionViability: 0.58,
             hierarchyHorizonFit: 0.62
+        )
+    }
+
+    private func makeStackNetworkState() -> StackNetworkState {
+        var inputWeights = Array(
+            repeating: Array(repeating: 0.0, count: FXDataEngineConstants.stackFeatures),
+            count: FXDataEngineConstants.stackHidden
+        )
+        inputWeights[0][0] = 0.5
+        inputWeights[0][1] = 0.2
+        inputWeights[1][2] = -0.3
+        inputWeights[1][4] = 0.4
+        inputWeights[2][6] = 0.25
+
+        var hiddenBias = Array(repeating: 0.0, count: FXDataEngineConstants.stackHidden)
+        hiddenBias[0] = 0.1
+        hiddenBias[1] = -0.2
+        hiddenBias[2] = 0.05
+
+        var outputWeights = Array(
+            repeating: Array(repeating: 0.0, count: FXDataEngineConstants.stackHidden),
+            count: LabelClass.allCases.count
+        )
+        outputWeights[LabelClass.sell.rawValue][0] = 0.3
+        outputWeights[LabelClass.sell.rawValue][1] = -0.1
+        outputWeights[LabelClass.sell.rawValue][2] = 0.05
+        outputWeights[LabelClass.buy.rawValue][0] = -0.2
+        outputWeights[LabelClass.buy.rawValue][1] = 0.25
+        outputWeights[LabelClass.buy.rawValue][2] = 0.1
+        outputWeights[LabelClass.skip.rawValue][0] = 0.1
+        outputWeights[LabelClass.skip.rawValue][1] = 0.05
+        outputWeights[LabelClass.skip.rawValue][2] = -0.15
+
+        return StackNetworkState(
+            inputWeights: inputWeights,
+            hiddenBias: hiddenBias,
+            outputWeights: outputWeights,
+            outputBias: [0.05, -0.02, 0.01],
+            ready: true,
+            observations: 10
         )
     }
 }
