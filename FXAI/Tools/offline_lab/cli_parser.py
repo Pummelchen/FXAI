@@ -202,7 +202,7 @@ def build_parser() -> argparse.ArgumentParser:
     comp = sub.add_parser("compile-export", help="Compile the MT5 offline export runner")
     comp.set_defaults(func=cmd_compile_export)
 
-    exp = sub.add_parser("export-dataset", help="Export exact-window M1 OHLC+spread history from MT5 into Turso")
+    exp = sub.add_parser("export-dataset", help="Export exact-window M1 OHLCV history from MT5 into Turso")
     exp.add_argument("--symbol", default="EURUSD")
     exp.add_argument("--symbol-list", default="")
     exp.add_argument("--symbol-pack", default="", choices=[""] + sorted(testlab.SYMBOL_PACKS.keys()))

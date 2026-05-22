@@ -272,7 +272,7 @@ def build_redteam_runs_for_plugin(plugin_name: str,
             "fill_penalty_points": 0.50,
             "m1sync_bars": max(base_sync, 5),
         })
-        rationale.append("session/spread weakness triggered harsher execution stress and stricter M1 sync")
+        rationale.append("session/liquidity weakness triggered harsher execution stress and stricter M1 sync")
 
     if not runs:
         runs.append({

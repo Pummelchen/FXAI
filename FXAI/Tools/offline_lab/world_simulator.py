@@ -102,14 +102,14 @@ def build_symbol_world_model(conn: libsql.Connection,
         }
 
     returns: list[float] = []
-    spread_values: list[float] = []
+    price_cost_values: list[float] = []
     gap_values: list[float] = []
     edge_abs_returns: list[float] = []
-    edge_spreads: list[float] = []
+    edge_price_costs: list[float] = []
     non_edge_abs_returns: list[float] = []
-    non_edge_spreads: list[float] = []
+    non_edge_price_costs: list[float] = []
     session_abs_returns: dict[str, list[float]] = {"asia": [], "london": [], "newyork": []}
-    session_spreads: dict[str, list[float]] = {"asia": [], "london": [], "newyork": []}
+    session_price_costs: dict[str, list[float]] = {"asia": [], "london": [], "newyork": []}
     bar_records: list[tuple[float, float, float]] = []
     same_sign = 0
     sign_pairs = 0
@@ -123,7 +123,7 @@ def build_symbol_world_model(conn: libsql.Connection,
         bars = query_all(
             conn,
             """
-            SELECT bar_time_unix, open, high, low, close, spread_points
+            SELECT bar_time_unix, open, high, low, close, spread_points AS price_cost_points
               FROM dataset_bars
              WHERE dataset_id = ?
              ORDER BY bar_time_unix ASC
@@ -141,7 +141,6 @@ def build_symbol_world_model(conn: libsql.Connection,
         })
         total_bars += len(bars)
         local_returns: list[float] = []
-        local_spreads: list[float] = []
         for idx in range(1, len(bars)):
             prev = bars[idx - 1]
             cur = bars[idx]
@@ -152,26 +151,25 @@ def build_symbol_world_model(conn: libsql.Connection,
                 continue
             ret = (cur_close - prev_close) / prev_close
             gap = (cur_open - prev_close) / prev_close
-            spread = float(cur["spread_points"])
+            price_cost = float(cur["price_cost_points"])
             returns.append(ret)
             local_returns.append(ret)
             gap_values.append(abs(gap))
-            spread_values.append(spread)
-            local_spreads.append(spread)
+            price_cost_values.append(price_cost)
 
             hour = datetime.fromtimestamp(int(cur["bar_time_unix"]), tz=timezone.utc).hour
             edge_hour = (7 <= hour <= 9) or (15 <= hour <= 17) or hour in (22, 23, 0)
             edge_score = 1.0 if edge_hour else 0.0
             session_key = _session_bucket_from_hour(hour)
-            bar_records.append((ret, spread, edge_score))
+            bar_records.append((ret, price_cost, edge_score))
             session_abs_returns[session_key].append(abs(ret))
-            session_spreads[session_key].append(spread)
+            session_price_costs[session_key].append(price_cost)
             if edge_hour:
                 edge_abs_returns.append(abs(ret))
-                edge_spreads.append(spread)
+                edge_price_costs.append(price_cost)
             else:
                 non_edge_abs_returns.append(abs(ret))
-                non_edge_spreads.append(spread)
+                non_edge_price_costs.append(price_cost)
 
         for idx in range(1, len(local_returns)):
             prev = local_returns[idx - 1]
@@ -198,32 +196,32 @@ def build_symbol_world_model(conn: libsql.Connection,
     abs_returns = [abs(v) for v in returns]
     sigma = _mean(abs_returns, 0.0)
     drift = _mean(returns, 0.0)
-    median_spread = max(_quantile(spread_values, 0.50, 1.0), 1.0)
-    p90_spread = _quantile(spread_values, 0.90, median_spread)
-    p98_spread = _quantile(spread_values, 0.98, p90_spread)
+    median_price_cost = max(_quantile(price_cost_values, 0.50, 1.0), 1.0)
+    p90_price_cost = _quantile(price_cost_values, 0.90, median_price_cost)
+    p98_price_cost = _quantile(price_cost_values, 0.98, p90_price_cost)
     gap_med = _quantile(gap_values, 0.50, 0.0)
     gap_p95 = _quantile(gap_values, 0.95, gap_med)
     liquidity_shock_prob = 0.0
-    if spread_values:
-        shock_threshold = max(p90_spread, median_spread * 1.5)
-        liquidity_shock_prob = sum(1 for value in spread_values if value >= shock_threshold) / float(len(spread_values))
+    if price_cost_values:
+        shock_threshold = max(p90_price_cost, median_price_cost * 1.5)
+        liquidity_shock_prob = sum(1 for value in price_cost_values if value >= shock_threshold) / float(len(price_cost_values))
 
     edge_vol = _mean(edge_abs_returns, sigma)
     non_edge_vol = _mean(non_edge_abs_returns, sigma)
-    edge_spread = _mean(edge_spreads, median_spread)
-    non_edge_spread = _mean(non_edge_spreads, median_spread)
+    edge_price_cost = _mean(edge_price_costs, median_price_cost)
+    non_edge_price_cost = _mean(non_edge_price_costs, median_price_cost)
 
     shadow = symbol_shadow_summary(conn, profile_name, symbol)
     persistence = (same_sign / float(sign_pairs)) if sign_pairs > 0 else 0.5
     shock_memory = (shock_follow_same / float(shock_hits)) if shock_hits > 0 else 0.0
     shock_reversal = (shock_follow_reverse / float(shock_hits)) if shock_hits > 0 else 0.0
     vol_thr = max(_quantile(abs_returns, 0.65, sigma), sigma)
-    spread_thr = max(_quantile(spread_values, 0.75, median_spread), median_spread)
+    price_cost_thr = max(_quantile(price_cost_values, 0.75, median_price_cost), median_price_cost)
     state_names = ["calm_trend", "calm_revert", "stress_trend", "stress_revert"]
     state_counts = [0, 0, 0, 0]
     state_ret_sum = [0.0, 0.0, 0.0, 0.0]
     state_abs_sum = [0.0, 0.0, 0.0, 0.0]
-    state_spread_sum = [0.0, 0.0, 0.0, 0.0]
+    state_price_cost_sum = [0.0, 0.0, 0.0, 0.0]
     transition = [[0, 0, 0, 0] for _ in range(4)]
     prev_state = -1
     prev_ret = 0.0
@@ -231,14 +229,14 @@ def build_symbol_world_model(conn: libsql.Connection,
     stress_stay = 0
     stress_obs = 0
     revert_obs = 0
-    for ret, spread, edge_score in bar_records:
+    for ret, price_cost, edge_score in bar_records:
         vol_hi = abs(ret) >= vol_thr
         trend_like = (prev_ret == 0.0 or ret * prev_ret >= 0.0)
-        state = (2 if vol_hi or spread >= spread_thr else 0) + (0 if trend_like else 1)
+        state = (2 if vol_hi or price_cost >= price_cost_thr else 0) + (0 if trend_like else 1)
         state_counts[state] += 1
         state_ret_sum[state] += ret
         state_abs_sum[state] += abs(ret)
-        state_spread_sum[state] += spread
+        state_price_cost_sum[state] += price_cost
         if state in (1, 3):
             revert_obs += 1
         if prev_state >= 0:
@@ -269,7 +267,7 @@ def build_symbol_world_model(conn: libsql.Connection,
             "weight": state_counts[idx] / total_states,
             "sigma_scale": _clamp((state_abs_sum[idx] / float(count)) / max(sigma, 1e-6), 0.40, 4.00),
             "drift_bias": _clamp(state_ret_sum[idx] / float(count), -0.001, 0.001),
-            "fill_risk_scale": _clamp((state_spread_sum[idx] / float(count)) / max(median_spread, 1.0), 0.50, 6.00),
+            "fill_risk_scale": _clamp((state_price_cost_sum[idx] / float(count)) / max(median_price_cost, 1.0), 0.50, 6.00),
             "transition": [
                 _clamp(transition[idx][j] / float(row_sum), 0.0, 1.0)
                 for j in range(4)
@@ -294,7 +292,7 @@ def build_symbol_world_model(conn: libsql.Connection,
             0.001,
         ),
         "fill_risk_scale": _clamp(
-            (p90_spread / median_spread) +
+            (p90_price_cost / median_price_cost) +
             0.08 * float(shadow.get("mean_portfolio_pressure", 0.0)),
             0.50,
             4.00,
@@ -324,7 +322,7 @@ def build_symbol_world_model(conn: libsql.Connection,
             1.0,
         ),
         "liquidity_stress": _clamp(
-            ((edge_spread / max(non_edge_spread, 1.0)) - 1.0) +
+            ((edge_price_cost / max(non_edge_price_cost, 1.0)) - 1.0) +
             0.25 * float(shadow.get("mean_portfolio_supervisor_score", 0.0)),
             0.0,
             3.0,
@@ -337,7 +335,7 @@ def build_symbol_world_model(conn: libsql.Connection,
         ),
         "session_edge_focus": _clamp(
             0.45 * ((edge_vol / max(non_edge_vol, 1e-6)) - 1.0) +
-            0.30 * ((edge_spread / max(non_edge_spread, 1.0)) - 1.0),
+            0.30 * ((edge_price_cost / max(non_edge_price_cost, 1.0)) - 1.0),
             0.0,
             1.5,
         ),
@@ -345,7 +343,7 @@ def build_symbol_world_model(conn: libsql.Connection,
         "shock_memory": _clamp(shock_memory, 0.0, 1.0),
         "recovery_bias": _clamp(shock_reversal - shock_memory, -1.0, 1.0),
         "liquidity_shock_prob": _clamp(liquidity_shock_prob, 0.0, 0.50),
-        "liquidity_shock_scale": _clamp(p98_spread / median_spread, 1.0, 8.0),
+        "liquidity_shock_scale": _clamp(p98_price_cost / median_price_cost, 1.0, 8.0),
         "regime_transition_burst": _clamp(regime_transition_burst, 0.0, 1.0),
         "transition_entropy": _clamp(transition_entropy, 0.0, 1.0),
         "mean_revert_bias": _clamp(mean_revert_bias, 0.0, 1.0),
@@ -354,9 +352,9 @@ def build_symbol_world_model(conn: libsql.Connection,
         "asia_sigma_scale": _clamp(_mean(session_abs_returns["asia"], sigma) / max(sigma, 1e-6), 0.50, 3.00),
         "london_sigma_scale": _clamp(_mean(session_abs_returns["london"], sigma) / max(sigma, 1e-6), 0.50, 3.00),
         "newyork_sigma_scale": _clamp(_mean(session_abs_returns["newyork"], sigma) / max(sigma, 1e-6), 0.50, 3.00),
-        "asia_fill_risk_scale": _clamp(_mean(session_spreads["asia"], median_spread) / max(median_spread, 1.0), 0.50, 4.00),
-        "london_fill_risk_scale": _clamp(_mean(session_spreads["london"], median_spread) / max(median_spread, 1.0), 0.50, 4.00),
-        "newyork_fill_risk_scale": _clamp(_mean(session_spreads["newyork"], median_spread) / max(median_spread, 1.0), 0.50, 4.00),
+        "asia_fill_risk_scale": _clamp(_mean(session_price_costs["asia"], median_price_cost) / max(median_price_cost, 1.0), 0.50, 4.00),
+        "london_fill_risk_scale": _clamp(_mean(session_price_costs["london"], median_price_cost) / max(median_price_cost, 1.0), 0.50, 4.00),
+        "newyork_fill_risk_scale": _clamp(_mean(session_price_costs["newyork"], median_price_cost) / max(median_price_cost, 1.0), 0.50, 4.00),
         "state_prototypes": state_prototypes,
         "shadow_summary": shadow,
         "datasets": dataset_payloads,
