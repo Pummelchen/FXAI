@@ -141,6 +141,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 - Done: Test harness result slice: `test_harness.mqh` suite reset, case append, pass/fail totals, first-failure legacy reason, JSON escaping, and deterministic JSON document rendering are ported as Swift audit/test utilities.
 - Done: Plugin contract suite slice: `plugin_contract_suite.mqh` deterministic default hyperparameters, predict-request fixture construction, synthetic M1 OHLCV fixture construction, finite prediction checks, registry/factory validation, manifest/self-test checks, optional state roundtrip, optional synthetic-series support, and suite result assembly are ported over `FXAIPluginV4`. Real backend execution remains FXPlugins work.
 - Done: Audit plugin contract wrapper slice: `audit_plugin_contracts.mqh` suite invocation, pass/fail return, and first-failure legacy reason extraction are ported as Swift wrapper utilities around the plugin contract suite.
+- Done: Audit runtime artifact wrapper slice: deterministic `audit_core.mqh` audit runtime safe-key/path rules, magic/version conformal-state envelope, optional plugin-state byte persistence, load result flags, and dirty-save throttle are ported as Swift repository utilities over existing conformal codecs. Real plugin checkpoint semantics remain FXPlugins responsibilities.
 
 ## Start Order
 
