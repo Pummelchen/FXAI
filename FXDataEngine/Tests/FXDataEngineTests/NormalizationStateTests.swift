@@ -133,4 +133,68 @@ final class NormalizationStateTests: XCTestCase {
         XCTAssertEqual(decoded.methods[FeatureNormalizationMethod.robustMedianIQR.rawValue].lastConfigVersion, 7)
         XCTAssertEqual(decoded.recentValues(method: .robustMedianIQR, featureIndex: 8, window: 4), [2.5, -1.5])
     }
+
+    func testNormalizationFallbackAndFitStatsMatchLegacyMath() {
+        let fallback = NormalizationFitTools.fallbackStats(featureIndex: 5)
+        XCTAssertEqual(fallback.minimum, 0.0, accuracy: 1e-12)
+        XCTAssertEqual(fallback.maximum, 10.0, accuracy: 1e-12)
+        XCTAssertEqual(fallback.mean, 5.0, accuracy: 1e-12)
+        XCTAssertEqual(fallback.standardDeviation, 2.5, accuracy: 1e-12)
+        XCTAssertEqual(fallback.interquartileRange, 5.0, accuracy: 1e-12)
+
+        let stats = NormalizationFitTools.fitFeatureStats(values: [0, 1, 2, 3, 4, 5, 6, 7], featureIndex: 0)
+        XCTAssertEqual(stats.minimum, 0.0, accuracy: 1e-12)
+        XCTAssertEqual(stats.maximum, 7.0, accuracy: 1e-12)
+        XCTAssertEqual(stats.mean, 3.5, accuracy: 1e-12)
+        XCTAssertEqual(stats.standardDeviation, sqrt(5.25), accuracy: 1e-12)
+        XCTAssertEqual(stats.median, 3.5, accuracy: 1e-12)
+        XCTAssertEqual(stats.interquartileRange, 3.5, accuracy: 1e-12)
+        XCTAssertEqual(stats.quantiles[4], 1.75, accuracy: 1e-12)
+        XCTAssertEqual(stats.quantiles[12], 5.25, accuracy: 1e-12)
+    }
+
+    func testNormalizationFitStateFitsRowsAndSkipsNonFittedMethods() {
+        var fit = NormalizationFitState()
+        let rows = (0..<8).map { value -> [Double] in
+            var row = Array(repeating: 0.0, count: FXDataEngineConstants.aiFeatures)
+            row[0] = Double(value)
+            row[5] = Double(value) * 2.0
+            return row
+        }
+
+        XCTAssertTrue(fit.fit(method: .zScore, horizonMinutes: 5, rawRows: rows))
+        let feature0 = fit.featureStats(method: .zScore, horizonMinutes: 5, featureIndex: 0)
+        XCTAssertTrue(feature0.ready)
+        XCTAssertEqual(feature0.stats.mean, 3.5, accuracy: 1e-12)
+        XCTAssertEqual(feature0.stats.standardDeviation, sqrt(5.25), accuracy: 1e-12)
+        XCTAssertEqual(feature0.stats.quantiles[16], 7.0, accuracy: 1e-12)
+
+        XCTAssertFalse(fit.fit(method: .zScore, horizonMinutes: 5, rawRows: Array(rows.prefix(7))))
+        XCTAssertFalse(fit.featureStats(method: .zScore, horizonMinutes: 5, featureIndex: 0).ready)
+
+        XCTAssertTrue(fit.fit(method: .existing, horizonMinutes: 5, rawRows: rows))
+        let existing = fit.featureStats(method: .existing, horizonMinutes: 5, featureIndex: 0)
+        XCTAssertFalse(existing.ready)
+        XCTAssertEqual(existing.stats.mean, 0.0, accuracy: 1e-12)
+    }
+
+    func testNormalizationFitCodecRoundTripsLegacySection() throws {
+        var fit = NormalizationFitState()
+        let rows = (0..<8).map { value -> [Double] in
+            var row = Array(repeating: 0.0, count: FXDataEngineConstants.aiFeatures)
+            row[0] = Double(value)
+            return row
+        }
+        XCTAssertTrue(fit.fit(method: .robustMedianIQR, horizonMinutes: 13, rawRows: rows))
+
+        let encoded = try RuntimeNormalizationFitCodec.encode(fit)
+        let decoded = try RuntimeNormalizationFitCodec.decode(from: encoded)
+        let lookup = decoded.featureStats(method: .robustMedianIQR, horizonMinutes: 13, featureIndex: 0)
+
+        XCTAssertEqual(encoded.count, RuntimeNormalizationFitCodec.byteCount)
+        XCTAssertTrue(decoded.initialized)
+        XCTAssertTrue(lookup.ready)
+        XCTAssertEqual(lookup.stats.median, 3.5, accuracy: 1e-12)
+        XCTAssertEqual(lookup.stats.interquartileRange, 3.5, accuracy: 1e-12)
+    }
 }

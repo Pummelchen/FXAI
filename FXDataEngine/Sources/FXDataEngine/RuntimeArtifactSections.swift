@@ -457,6 +457,109 @@ public enum RuntimeNormalizationHistoryCodec {
     }
 }
 
+public enum RuntimeNormalizationFitCodec {
+    public static let byteCount = RuntimeArtifactPayloadMaterializer.normalizationFitByteCount(
+        header: RuntimeArtifactHeader()
+    )
+
+    public static func encode(_ state: NormalizationFitState) throws -> Data {
+        let normalized = NormalizationFitState(initialized: state.initialized, slots: state.slots)
+        var writer = RuntimeArtifactBinaryWriter()
+        try writer.appendInt32(normalized.initialized ? 1 : 0)
+        for horizon in 0..<RuntimeArtifactConstants.maxHorizons {
+            for methodID in 0..<FXDataEngineConstants.normMethodCount {
+                let method = FeatureNormalizationMethod(rawValue: methodID) ?? .existing
+                let slot = normalized.slots[NormalizationFitState.slotIndex(horizonSlot: horizon, method: method)]
+                try writer.appendInt32(slot.ready ? 1 : 0)
+                try writer.appendInt32(slot.observations)
+                for feature in 0..<FXDataEngineConstants.aiFeatures {
+                    writer.appendDouble(slot.minimum[feature])
+                    writer.appendDouble(slot.maximum[feature])
+                    writer.appendDouble(slot.mean[feature])
+                    writer.appendDouble(slot.standardDeviation[feature])
+                    writer.appendDouble(slot.median[feature])
+                    writer.appendDouble(slot.interquartileRange[feature])
+                    writer.appendDouble(slot.yeoJohnsonLambda[feature])
+                    writer.appendDouble(slot.yeoJohnsonMean[feature])
+                    writer.appendDouble(slot.yeoJohnsonStandardDeviation[feature])
+                    for knot in 0..<RuntimeArtifactPayloadMaterializer.normalizationQuantileKnots {
+                        let offset = NormalizationFitSlotState.quantileOffset(
+                            featureIndex: feature,
+                            knotIndex: knot
+                        )
+                        writer.appendDouble(slot.quantiles[offset])
+                    }
+                }
+            }
+        }
+        return writer.data
+    }
+
+    public static func decode(from data: Data) throws -> NormalizationFitState {
+        var reader = RuntimeArtifactBinaryReader(data: data)
+        let initialized = try reader.readInt32() != 0
+        var slots = Array(repeating: NormalizationFitSlotState(), count: NormalizationFitState.slotCount)
+        for horizon in 0..<RuntimeArtifactConstants.maxHorizons {
+            for methodID in 0..<FXDataEngineConstants.normMethodCount {
+                let method = FeatureNormalizationMethod(rawValue: methodID) ?? .existing
+                let ready = try reader.readInt32() != 0
+                let observations = try reader.readInt32()
+                var minimum: [Double] = []
+                var maximum: [Double] = []
+                var mean: [Double] = []
+                var standardDeviation: [Double] = []
+                var median: [Double] = []
+                var interquartileRange: [Double] = []
+                var yeoJohnsonLambda: [Double] = []
+                var yeoJohnsonMean: [Double] = []
+                var yeoJohnsonStandardDeviation: [Double] = []
+                var quantiles: [Double] = []
+                minimum.reserveCapacity(FXDataEngineConstants.aiFeatures)
+                maximum.reserveCapacity(FXDataEngineConstants.aiFeatures)
+                mean.reserveCapacity(FXDataEngineConstants.aiFeatures)
+                standardDeviation.reserveCapacity(FXDataEngineConstants.aiFeatures)
+                median.reserveCapacity(FXDataEngineConstants.aiFeatures)
+                interquartileRange.reserveCapacity(FXDataEngineConstants.aiFeatures)
+                yeoJohnsonLambda.reserveCapacity(FXDataEngineConstants.aiFeatures)
+                yeoJohnsonMean.reserveCapacity(FXDataEngineConstants.aiFeatures)
+                yeoJohnsonStandardDeviation.reserveCapacity(FXDataEngineConstants.aiFeatures)
+                quantiles.reserveCapacity(
+                    FXDataEngineConstants.aiFeatures * RuntimeArtifactPayloadMaterializer.normalizationQuantileKnots
+                )
+                for _ in 0..<FXDataEngineConstants.aiFeatures {
+                    minimum.append(try reader.readDouble())
+                    maximum.append(try reader.readDouble())
+                    mean.append(try reader.readDouble())
+                    standardDeviation.append(try reader.readDouble())
+                    median.append(try reader.readDouble())
+                    interquartileRange.append(try reader.readDouble())
+                    yeoJohnsonLambda.append(try reader.readDouble())
+                    yeoJohnsonMean.append(try reader.readDouble())
+                    yeoJohnsonStandardDeviation.append(try reader.readDouble())
+                    for _ in 0..<RuntimeArtifactPayloadMaterializer.normalizationQuantileKnots {
+                        quantiles.append(try reader.readDouble())
+                    }
+                }
+                slots[NormalizationFitState.slotIndex(horizonSlot: horizon, method: method)] = NormalizationFitSlotState(
+                    ready: ready,
+                    observations: observations,
+                    minimum: minimum,
+                    maximum: maximum,
+                    mean: mean,
+                    standardDeviation: standardDeviation,
+                    median: median,
+                    interquartileRange: interquartileRange,
+                    yeoJohnsonLambda: yeoJohnsonLambda,
+                    yeoJohnsonMean: yeoJohnsonMean,
+                    yeoJohnsonStandardDeviation: yeoJohnsonStandardDeviation,
+                    quantiles: quantiles
+                )
+            }
+        }
+        return NormalizationFitState(initialized: initialized, slots: slots)
+    }
+}
+
 public struct RuntimeArtifactPreparedSample: Codable, Hashable, Sendable {
     public var valid: Bool
     public var labelClass: LabelClass
