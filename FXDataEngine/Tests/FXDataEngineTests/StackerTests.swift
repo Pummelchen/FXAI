@@ -2,6 +2,102 @@ import XCTest
 @testable import FXDataEngine
 
 final class StackerTests: XCTestCase {
+    func testStackFeatureBuilderMatchesLegacyVectorFormula() {
+        let features = StackerTools.buildStackFeatures(makeFeatureInputs())
+        let expected = [
+            1,
+            0.10000000000000009,
+            -0.5,
+            -0.59999999999999998,
+            0.58333333333333337,
+            0.19999999999999998,
+            0.30000000000000004,
+            0.55000000000000004,
+            0.092244340001498615,
+            0.28749999999999998,
+            -0.099999999999999978,
+            0.625,
+            0.25,
+            -0.35000000000000003,
+            0.30000000000000004,
+            0.30000000000000004,
+            0.5,
+            0.4375,
+            0.625,
+            0.60000000000000009,
+            0.71999999999999997,
+            0.65000000000000002,
+            0.45000000000000001,
+            0.40000000000000002,
+            0.80000000000000004,
+            0.59999999999999998,
+            0.65000000000000002,
+            0.34999999999999998,
+            0.80000000000000004,
+            0.46799999999999997,
+            0.12000000000000002,
+            0.17999999999999999,
+            -0.27250000000000002,
+            0.39000000000000001,
+            0.39166666666666666,
+            0.063187372901026551,
+            0.17499999999999999,
+            0.069999999999999951,
+            0.20499999999999996,
+            -0.23999999999999999,
+            0.47999999999999998,
+            0.17999999999999999,
+            0.43200000000000005,
+            0.091999999999999998,
+            0.05534660400089917,
+            0.23039999999999999,
+            -0.2465,
+            0.33571428571428574,
+            0.34999999999999998,
+            0.20000000000000001,
+            0.14999999999999999,
+            0.19999999999999996,
+            0.099999999999999978,
+            0.57599999999999996,
+            0.51000000000000001,
+            -0.024000000000000077,
+            0.45000000000000001,
+            0.22,
+            0.38,
+            0.51000000000000001,
+            0.12,
+            0.44,
+            0.71999999999999997,
+            0.17999999999999999,
+            0.66000000000000003,
+            0.31,
+            0.45000000000000001,
+            0.28000000000000003,
+            0.56999999999999995,
+            0.29000000000000004,
+            0.56159999999999999,
+            0.42333333333333334,
+            0.60999999999999999,
+            0.33000000000000002,
+            0.1333333333333333,
+            0.47999999999999998,
+            0.53000000000000003,
+            0.64000000000000001,
+            0.40999999999999998,
+            0.69999999999999996,
+            0.75,
+            0.68999999999999995,
+            0.57999999999999996,
+            0.62
+        ]
+
+        XCTAssertEqual(features.count, FXDataEngineConstants.stackFeatures)
+        XCTAssertEqual(features.count, expected.count)
+        for index in 0..<expected.count {
+            XCTAssertEqual(features[index], expected[index], accuracy: 1e-12, "feature \(index)")
+        }
+    }
+
     func testStackObjectivesTrustAndUtilitiesMatchLegacyFormula() {
         let features = makeFeatures()
 
@@ -138,5 +234,58 @@ final class StackerTests: XCTestCase {
         features[70] = 0.65
         features[71] = 0.2
         return features
+    }
+
+    private func makeFeatureInputs() -> StackFeatureInputs {
+        StackFeatureInputs(
+            buyPct: 55.0,
+            sellPct: 25.0,
+            skipPct: 20.0,
+            avgBuyEV: 3.5,
+            avgSellEV: 1.2,
+            minMovePoints: 2.0,
+            expectedMovePoints: 5.0,
+            volProxy: 2.5,
+            horizonMinutes: 60,
+            maxConfiguredHorizonMinutes: 240,
+            avgConfidence: 0.72,
+            avgReliability: 0.65,
+            moveDispersion: 1.8,
+            directionalMargin: 0.4,
+            activeFamilyRatio: 0.8,
+            dominantFamilyRatio: 0.6,
+            contextStrength: 1.3,
+            contextQuality: 0.7,
+            avgHitTime: 0.35,
+            avgPathRisk: 0.2,
+            avgFillRisk: 0.15,
+            avgMFERatio: 1.4,
+            avgMAERatio: 0.6,
+            avgContextEdgeNorm: 0.45,
+            avgContextRegret: 0.22,
+            avgGlobalEdgeNorm: 0.38,
+            bestCounterfactualEdgeNorm: 0.51,
+            ensembleVsBestGapNorm: 0.12,
+            avgPortfolioEdgeNorm: 0.44,
+            avgPortfolioStability: 0.72,
+            avgPortfolioCorrelationPenalty: 0.18,
+            avgPortfolioDiversification: 0.66,
+            bestModelShare: 0.31,
+            bestBuyShare: 0.45,
+            bestSellShare: 0.28,
+            avgContextTrust: 0.57,
+            foundationTrust: 0.61,
+            foundationDirectionBias: 0.33,
+            foundationMoveRatio: 1.2,
+            studentTrust: 0.48,
+            studentTradability: 0.53,
+            analogSimilarity: 0.64,
+            analogEdgeNorm: 0.41,
+            analogQuality: 0.7,
+            hierarchyConsistency: 0.75,
+            hierarchyTradability: 0.69,
+            hierarchyExecutionViability: 0.58,
+            hierarchyHorizonFit: 0.62
+        )
     }
 }
