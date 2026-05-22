@@ -19,6 +19,10 @@ public enum FXDataEngineConstants {
     public static let contextExtraFeatures = contextMTFOffset + contextTopSymbols * contextSlotMTFFeatures
     public static let contextDynamicPool = 12
     public static let aiCount = 63
+    public static let analogMemoryCapacity = 384
+    public static let analogMemoryFeatures = 12
+    public static let analogMemoryMinMatches = 3
+    public static let pluginHorizonBuckets = 8
     public static let apiVersionV4 = 4
     public static let maxSequenceBars = 96
     public static let maxContextSymbols = 48
@@ -50,4 +54,11 @@ public func fxClampSignedUnit(_ value: Double) -> Double {
 @inlinable
 public func fxSafeFinite(_ value: Double, fallback: Double = 0.0) -> Double {
     value.isFinite ? value : fallback
+}
+
+@inlinable
+public func fxSign(_ value: Double) -> Double {
+    if value > 0.0 { return 1.0 }
+    if value < 0.0 { return -1.0 }
+    return 0.0
 }
