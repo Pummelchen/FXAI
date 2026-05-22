@@ -464,6 +464,64 @@ public enum ExecutionQualityTools {
         "\(ExecutionQualityConstants.runtimeDirectory)/fxai_execution_quality_\(ControlPlanePaths.safeToken(symbol)).tsv"
     }
 
+    public static func runtimeHistoryPath(symbol: String) -> String {
+        "\(ExecutionQualityConstants.runtimeDirectory)/fxai_execution_quality_history_\(ControlPlanePaths.safeToken(symbol)).ndjson"
+    }
+
+    public static func runtimeStateTSV(symbol: String, state: ExecutionQualityPairState) -> String? {
+        guard state.ready, !symbol.isEmpty else { return nil }
+        return runtimeStateRows(symbol: symbol, state: state)
+            .map { key, value in
+                "\(RuntimeArtifactTSV.field(key))\t\(RuntimeArtifactTSV.field(value))"
+            }
+            .joined(separator: "\r\n") + "\r\n"
+    }
+
+    public static func runtimeHistoryNDJSONLine(symbol: String, state: ExecutionQualityPairState) -> String? {
+        guard state.ready, !symbol.isEmpty else { return nil }
+        let qSymbol = jsonQuoted(symbol)
+        let reasons = state.reasons
+            .map(jsonQuoted)
+            .joined(separator: ",")
+
+        return "{" +
+            "\"generated_at\":\"\(iso8601UTC(state.generatedAt))\"," +
+            "\"symbol\":\(qSymbol)," +
+            "\"state\":{" +
+            "\"symbol\":\(qSymbol)," +
+            "\"method\":\(jsonQuoted(state.method))," +
+            "\"session_label\":\(jsonQuoted(state.sessionLabel))," +
+            "\"regime_label\":\(jsonQuoted(state.regimeLabel))," +
+            "\"selected_tier_kind\":\(jsonQuoted(state.selectedTierKind))," +
+            "\"selected_tier_key\":\(jsonQuoted(state.selectedTierKey))," +
+            "\"selected_support\":\(state.selectedSupport)," +
+            "\"selected_quality\":\(RuntimeArtifactTSV.double(state.selectedQuality))," +
+            "\"fallback_used\":\(state.fallbackUsed ? 1 : 0)," +
+            "\"memory_stale\":\(state.memoryStale ? 1 : 0)," +
+            "\"data_stale\":\(state.dataStale ? 1 : 0)," +
+            "\"support_usable\":\(state.supportUsable ? 1 : 0)," +
+            "\"news_window_active\":\(state.newsWindowActive ? 1 : 0)," +
+            "\"rates_repricing_active\":\(state.ratesRepricingActive ? 1 : 0)," +
+            "\"broker_coverage\":\(RuntimeArtifactTSV.double(state.brokerCoverage))," +
+            "\"broker_reject_prob\":\(RuntimeArtifactTSV.double(state.brokerRejectProbability))," +
+            "\"broker_partial_fill_prob\":\(RuntimeArtifactTSV.double(state.brokerPartialFillProbability))," +
+            "\"spread_now_points\":\(RuntimeArtifactTSV.double(state.spreadNowPoints))," +
+            "\"spread_expected_points\":\(RuntimeArtifactTSV.double(state.spreadExpectedPoints))," +
+            "\"spread_widening_risk\":\(RuntimeArtifactTSV.double(state.spreadWideningRisk))," +
+            "\"expected_slippage_points\":\(RuntimeArtifactTSV.double(state.expectedSlippagePoints))," +
+            "\"slippage_risk\":\(RuntimeArtifactTSV.double(state.slippageRisk))," +
+            "\"fill_quality_score\":\(RuntimeArtifactTSV.double(state.fillQualityScore))," +
+            "\"latency_sensitivity_score\":\(RuntimeArtifactTSV.double(state.latencySensitivityScore))," +
+            "\"liquidity_fragility_score\":\(RuntimeArtifactTSV.double(state.liquidityFragilityScore))," +
+            "\"execution_quality_score\":\(RuntimeArtifactTSV.double(state.executionQualityScore))," +
+            "\"allowed_deviation_points\":\(RuntimeArtifactTSV.double(state.allowedDeviationPoints))," +
+            "\"caution_lot_scale\":\(RuntimeArtifactTSV.double(state.cautionLotScale))," +
+            "\"caution_enter_prob_buffer\":\(RuntimeArtifactTSV.double(state.cautionEnterProbabilityBuffer))," +
+            "\"execution_state\":\(jsonQuoted(state.executionState))," +
+            "\"reason_codes\":[\(reasons)]" +
+            "}}"
+    }
+
     public static func readPairState(
         symbol _: String,
         stateTSV: String?,
@@ -1306,5 +1364,108 @@ public enum ExecutionQualityTools {
         )
         guard let date = calendar.date(from: components) else { return 0 }
         return Int64(date.timeIntervalSince1970)
+    }
+
+    private static func runtimeStateRows(
+        symbol: String,
+        state: ExecutionQualityPairState
+    ) -> [(String, String)] {
+        [
+            ("symbol", symbol),
+            ("generated_at", "\(state.generatedAt)"),
+            ("method", state.method),
+            ("session_label", state.sessionLabel),
+            ("regime_label", state.regimeLabel),
+            ("selected_tier_kind", state.selectedTierKind),
+            ("selected_tier_key", state.selectedTierKey),
+            ("selected_support", "\(state.selectedSupport)"),
+            ("selected_quality", RuntimeArtifactTSV.double(state.selectedQuality)),
+            ("fallback_used", RuntimeArtifactTSV.bool(state.fallbackUsed)),
+            ("memory_stale", RuntimeArtifactTSV.bool(state.memoryStale)),
+            ("data_stale", RuntimeArtifactTSV.bool(state.dataStale)),
+            ("support_usable", RuntimeArtifactTSV.bool(state.supportUsable)),
+            ("news_window_active", RuntimeArtifactTSV.bool(state.newsWindowActive)),
+            ("rates_repricing_active", RuntimeArtifactTSV.bool(state.ratesRepricingActive)),
+            ("broker_coverage", RuntimeArtifactTSV.double(state.brokerCoverage)),
+            ("broker_reject_prob", RuntimeArtifactTSV.double(state.brokerRejectProbability)),
+            ("broker_partial_fill_prob", RuntimeArtifactTSV.double(state.brokerPartialFillProbability)),
+            ("spread_now_points", RuntimeArtifactTSV.double(state.spreadNowPoints)),
+            ("spread_expected_points", RuntimeArtifactTSV.double(state.spreadExpectedPoints)),
+            ("spread_widening_risk", RuntimeArtifactTSV.double(state.spreadWideningRisk)),
+            ("expected_slippage_points", RuntimeArtifactTSV.double(state.expectedSlippagePoints)),
+            ("slippage_risk", RuntimeArtifactTSV.double(state.slippageRisk)),
+            ("fill_quality_score", RuntimeArtifactTSV.double(state.fillQualityScore)),
+            ("latency_sensitivity_score", RuntimeArtifactTSV.double(state.latencySensitivityScore)),
+            ("liquidity_fragility_score", RuntimeArtifactTSV.double(state.liquidityFragilityScore)),
+            ("execution_quality_score", RuntimeArtifactTSV.double(state.executionQualityScore)),
+            ("allowed_deviation_points", RuntimeArtifactTSV.double(state.allowedDeviationPoints)),
+            ("caution_lot_scale", RuntimeArtifactTSV.double(state.cautionLotScale)),
+            ("caution_enter_prob_buffer", RuntimeArtifactTSV.double(state.cautionEnterProbabilityBuffer)),
+            ("execution_state", state.executionState),
+            ("reasons_csv", state.reasonsCSV)
+        ]
+    }
+
+    private static func iso8601UTC(_ timestamp: Int64) -> String {
+        guard timestamp > 0 else { return "" }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        let components = calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: Date(timeIntervalSince1970: TimeInterval(timestamp))
+        )
+        return String(
+            format: "%04d-%02d-%02dT%02d:%02d:%02dZ",
+            locale: Locale(identifier: "en_US_POSIX"),
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0,
+            components.hour ?? 0,
+            components.minute ?? 0,
+            components.second ?? 0
+        )
+    }
+
+    private static func jsonQuoted(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+        return "\"\(escaped)\""
+    }
+}
+
+public extension RuntimeArtifactFileRepository {
+    func writeExecutionQualityRuntimeArtifacts(
+        symbol: String,
+        state: ExecutionQualityPairState
+    ) throws {
+        guard let stateTSV = ExecutionQualityTools.runtimeStateTSV(symbol: symbol, state: state),
+              let historyLine = ExecutionQualityTools.runtimeHistoryNDJSONLine(symbol: symbol, state: state) else {
+            return
+        }
+
+        let stateURL = url(for: ExecutionQualityTools.runtimeStatePath(symbol: symbol))
+        try fileManager.createDirectory(
+            at: stateURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try stateTSV.write(to: stateURL, atomically: true, encoding: .utf8)
+
+        let historyURL = url(for: ExecutionQualityTools.runtimeHistoryPath(symbol: symbol))
+        try fileManager.createDirectory(
+            at: historyURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let historyData = Data((historyLine + "\r\n").utf8)
+        if fileManager.fileExists(atPath: historyURL.path) {
+            let handle = try FileHandle(forWritingTo: historyURL)
+            defer { try? handle.close() }
+            try handle.seekToEnd()
+            try handle.write(contentsOf: historyData)
+        } else {
+            try historyData.write(to: historyURL, options: .atomic)
+        }
     }
 }

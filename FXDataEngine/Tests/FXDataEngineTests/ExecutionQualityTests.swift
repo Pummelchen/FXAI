@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import FXDataEngine
 
@@ -14,6 +15,10 @@ final class ExecutionQualityTests: XCTestCase {
         XCTAssertEqual(
             ExecutionQualityTools.runtimeStatePath(symbol: "EUR/USD live"),
             "FXAI/Runtime/fxai_execution_quality_EUR_USD_live.tsv"
+        )
+        XCTAssertEqual(
+            ExecutionQualityTools.runtimeHistoryPath(symbol: "EUR/USD live"),
+            "FXAI/Runtime/fxai_execution_quality_history_EUR_USD_live.ndjson"
         )
     }
 
@@ -221,6 +226,100 @@ final class ExecutionQualityTests: XCTestCase {
         XCTAssertEqual(state.cautionLotScale, 0.82, accuracy: 0.0)
         XCTAssertEqual(state.cautionEnterProbabilityBuffer, 0.04, accuracy: 0.0)
         XCTAssertEqual(state.reasonsCSV, "NEWS_WINDOW_ACTIVE; EXECUTION_STATE_CAUTION")
+    }
+
+    func testExecutionQualityRuntimeArtifactsMatchLegacyTSVAndNDJSONShape() throws {
+        let state = ExecutionQualityPairState(
+            ready: true,
+            available: true,
+            stale: false,
+            fallbackUsed: true,
+            memoryStale: false,
+            dataStale: true,
+            supportUsable: true,
+            newsWindowActive: true,
+            ratesRepricingActive: false,
+            generatedAt: 1_704_067_200,
+            symbol: "EURUSD",
+            method: "SCORECARD_V2",
+            sessionLabel: "EU_US_OVERLAP",
+            regimeLabel: "TREND",
+            selectedTierKind: "PAIR_SESSION_REGIME",
+            selectedTierKey: "PAIR_SESSION_REGIME|EURUSD|EU_US_OVERLAP|TREND",
+            selectedSupport: 100,
+            selectedQuality: 0.80,
+            brokerCoverage: 0.90,
+            brokerRejectProbability: 0.20,
+            brokerPartialFillProbability: 0.30,
+            spreadNowPoints: 1.25,
+            spreadExpectedPoints: 2.50,
+            spreadWideningRisk: 0.60,
+            expectedSlippagePoints: 3.75,
+            slippageRisk: 0.40,
+            fillQualityScore: 0.55,
+            latencySensitivityScore: 0.45,
+            liquidityFragilityScore: 0.35,
+            executionQualityScore: 0.50,
+            allowedDeviationPoints: 4.25,
+            cautionLotScale: 0.82,
+            cautionEnterProbabilityBuffer: 0.04,
+            executionState: "CAUTION",
+            reasons: ["DATA_STALE", "EXECUTION_STATE_CAUTION"]
+        )
+
+        let tsv = try XCTUnwrap(ExecutionQualityTools.runtimeStateTSV(symbol: "EUR/USD live", state: state))
+        XCTAssertTrue(tsv.hasSuffix("\r\n"))
+        XCTAssertTrue(tsv.contains("symbol\tEUR/USD live\r\n"))
+        XCTAssertTrue(tsv.contains("selected_quality\t0.800000\r\n"))
+        XCTAssertTrue(tsv.contains("fallback_used\t1\r\n"))
+        XCTAssertTrue(tsv.contains("rates_repricing_active\t0\r\n"))
+        XCTAssertTrue(tsv.contains("spread_expected_points\t2.500000\r\n"))
+        XCTAssertTrue(tsv.contains("reasons_csv\tDATA_STALE; EXECUTION_STATE_CAUTION\r\n"))
+
+        let parsed = try XCTUnwrap(ExecutionQualityTools.readPairState(symbol: "EUR/USD live", stateTSV: tsv, nowUTC: 1_704_067_201))
+        XCTAssertEqual(parsed.symbol, "EUR/USD live")
+        XCTAssertEqual(parsed.executionState, "CAUTION")
+        XCTAssertEqual(parsed.reasonsCSV, "DATA_STALE; EXECUTION_STATE_CAUTION")
+
+        let line = try XCTUnwrap(ExecutionQualityTools.runtimeHistoryNDJSONLine(symbol: "EUR/USD live", state: state))
+        let data = try XCTUnwrap(line.data(using: .utf8))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(object["generated_at"] as? String, "2024-01-01T00:00:00Z")
+        XCTAssertEqual(object["symbol"] as? String, "EUR/USD live")
+        let nested = try XCTUnwrap(object["state"] as? [String: Any])
+        XCTAssertEqual(nested["execution_state"] as? String, "CAUTION")
+        XCTAssertEqual(nested["fallback_used"] as? Int, 1)
+        XCTAssertEqual(try XCTUnwrap(nested["selected_quality"] as? Double), 0.80, accuracy: 0.0)
+        XCTAssertEqual(nested["reason_codes"] as? [String], ["DATA_STALE", "EXECUTION_STATE_CAUTION"])
+    }
+
+    func testExecutionQualityRepositoryWritesStateAndAppendsHistory() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ExecutionQualityTests-\(UUID().uuidString)", isDirectory: true)
+        let repository = RuntimeArtifactFileRepository(rootURL: root)
+        var state = ExecutionQualityPairState(
+            ready: true,
+            generatedAt: 1_704_067_200,
+            method: "SCORECARD_V2",
+            executionState: "NORMAL",
+            reasons: ["EXECUTION_STATE_CAUTION"]
+        )
+
+        try repository.writeExecutionQualityRuntimeArtifacts(symbol: "EUR/USD live", state: state)
+        state.generatedAt = 1_704_067_260
+        state.executionState = "CAUTION"
+        try repository.writeExecutionQualityRuntimeArtifacts(symbol: "EUR/USD live", state: state)
+
+        let statePath = ExecutionQualityTools.runtimeStatePath(symbol: "EUR/USD live")
+        let historyPath = ExecutionQualityTools.runtimeHistoryPath(symbol: "EUR/USD live")
+        let stateText = try String(contentsOf: root.appendingPathComponent(statePath), encoding: .utf8)
+        let historyText = try String(contentsOf: root.appendingPathComponent(historyPath), encoding: .utf8)
+
+        XCTAssertTrue(stateText.contains("generated_at\t1704067260\r\n"))
+        XCTAssertTrue(stateText.contains("execution_state\tCAUTION\r\n"))
+        XCTAssertEqual(historyText.components(separatedBy: .newlines).filter { !$0.isEmpty }.count, 2)
+        XCTAssertTrue(historyText.contains("\"generated_at\":\"2024-01-01T00:00:00Z\""))
+        XCTAssertTrue(historyText.contains("\"generated_at\":\"2024-01-01T00:01:00Z\""))
     }
 
     func testExecutionQualityParsesKeyValueStateAndReasonCSV() {
