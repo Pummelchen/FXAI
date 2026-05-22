@@ -124,17 +124,27 @@ public struct AuditIssueFlags: OptionSet, Codable, Hashable, Sendable {
 }
 
 public struct AuditScenarioMetrics: Codable, Hashable, Sendable {
+    public var aiID: Int
+    public var aiName: String
+    public var family: Int
     public var scenario: String
+    public var barsTotal: Int
     public var samplesTotal: Int
     public var validPredictions: Int
     public var invalidPredictions: Int
     public var buyCount: Int
     public var sellCount: Int
     public var skipCount: Int
+    public var trueBuyCount: Int
+    public var trueSellCount: Int
+    public var trueSkipCount: Int
+    public var exactMatchCount: Int
     public var directionalEvaluationCount: Int
     public var directionalCorrectCount: Int
     public var trendAlignmentSum: Double
     public var trendAlignmentCount: Int
+    public var confidenceSum: Double
+    public var reliabilitySum: Double
     public var moveSum: Double
     public var directionalConfidenceSum: Double
     public var directionalHitSum: Double
@@ -180,17 +190,27 @@ public struct AuditScenarioMetrics: Codable, Hashable, Sendable {
     public var issueFlags: AuditIssueFlags
 
     public init(
+        aiID: Int = 0,
+        aiName: String = "",
+        family: Int = 0,
         scenario: String = "",
+        barsTotal: Int = 0,
         samplesTotal: Int = 0,
         validPredictions: Int = 0,
         invalidPredictions: Int = 0,
         buyCount: Int = 0,
         sellCount: Int = 0,
         skipCount: Int = 0,
+        trueBuyCount: Int = 0,
+        trueSellCount: Int = 0,
+        trueSkipCount: Int = 0,
+        exactMatchCount: Int = 0,
         directionalEvaluationCount: Int = 0,
         directionalCorrectCount: Int = 0,
         trendAlignmentSum: Double = 0.0,
         trendAlignmentCount: Int = 0,
+        confidenceSum: Double = 0.0,
+        reliabilitySum: Double = 0.0,
         moveSum: Double = 0.0,
         directionalConfidenceSum: Double = 0.0,
         directionalHitSum: Double = 0.0,
@@ -235,17 +255,27 @@ public struct AuditScenarioMetrics: Codable, Hashable, Sendable {
         score: Double = 0.0,
         issueFlags: AuditIssueFlags = []
     ) {
+        self.aiID = max(0, aiID)
+        self.aiName = aiName
+        self.family = max(0, family)
         self.scenario = scenario
+        self.barsTotal = max(0, barsTotal)
         self.samplesTotal = max(0, samplesTotal)
         self.validPredictions = max(0, validPredictions)
         self.invalidPredictions = max(0, invalidPredictions)
         self.buyCount = max(0, buyCount)
         self.sellCount = max(0, sellCount)
         self.skipCount = max(0, skipCount)
+        self.trueBuyCount = max(0, trueBuyCount)
+        self.trueSellCount = max(0, trueSellCount)
+        self.trueSkipCount = max(0, trueSkipCount)
+        self.exactMatchCount = max(0, exactMatchCount)
         self.directionalEvaluationCount = max(0, directionalEvaluationCount)
         self.directionalCorrectCount = max(0, directionalCorrectCount)
         self.trendAlignmentSum = fxSafeFinite(trendAlignmentSum)
         self.trendAlignmentCount = max(0, trendAlignmentCount)
+        self.confidenceSum = fxSafeFinite(confidenceSum)
+        self.reliabilitySum = fxSafeFinite(reliabilitySum)
         self.moveSum = fxSafeFinite(moveSum)
         self.directionalConfidenceSum = fxSafeFinite(directionalConfidenceSum)
         self.directionalHitSum = fxSafeFinite(directionalHitSum)
