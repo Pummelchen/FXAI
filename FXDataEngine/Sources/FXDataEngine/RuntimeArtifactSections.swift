@@ -315,6 +315,84 @@ public struct RuntimeArtifactBinaryReader {
     }
 }
 
+public enum RuntimeNormalizationWindowsCodec {
+    public static let byteCount = RuntimeArtifactPayloadMaterializer.normalizationWindowsByteCount(
+        header: RuntimeArtifactHeader()
+    )
+
+    public static func encode(_ state: NormalizationLegacyWindowState) throws -> Data {
+        let normalized = NormalizationLegacyWindowState(
+            ready: state.ready,
+            defaultWindow: state.defaultWindow,
+            featureWindows: state.featureWindows
+        )
+        var writer = RuntimeArtifactBinaryWriter()
+        try writer.appendInt32(normalized.ready ? 1 : 0)
+        try writer.appendInt32(normalized.defaultWindow)
+        for window in normalized.featureWindows {
+            try writer.appendInt32(window)
+        }
+        return writer.data
+    }
+
+    public static func decode(from data: Data) throws -> NormalizationLegacyWindowState {
+        var reader = RuntimeArtifactBinaryReader(data: data)
+        let ready = try reader.readInt32() != 0
+        let defaultWindow = try reader.readInt32()
+        var featureWindows: [Int] = []
+        featureWindows.reserveCapacity(FXDataEngineConstants.aiFeatures)
+        for _ in 0..<FXDataEngineConstants.aiFeatures {
+            featureWindows.append(try reader.readInt32())
+        }
+        return NormalizationLegacyWindowState(
+            ready: ready,
+            defaultWindow: defaultWindow,
+            featureWindows: featureWindows
+        )
+    }
+}
+
+public enum RuntimeNormalizationWindowConfigCodec {
+    public static let byteCount = RuntimeArtifactPayloadMaterializer.normalizationWindowConfigByteCount(
+        header: RuntimeArtifactHeader()
+    )
+
+    public static func encode(_ state: NormalizationWindowConfigState) throws -> Data {
+        let normalized = NormalizationWindowConfigState(
+            initialized: state.initialized,
+            defaultWindow: state.defaultWindow,
+            configVersion: state.configVersion,
+            featureWindows: state.featureWindows
+        )
+        var writer = RuntimeArtifactBinaryWriter()
+        try writer.appendInt32(normalized.initialized ? 1 : 0)
+        try writer.appendInt32(normalized.defaultWindow)
+        try writer.appendInt32(normalized.configVersion)
+        for window in normalized.featureWindows {
+            try writer.appendInt32(window)
+        }
+        return writer.data
+    }
+
+    public static func decode(from data: Data) throws -> NormalizationWindowConfigState {
+        var reader = RuntimeArtifactBinaryReader(data: data)
+        let initialized = try reader.readInt32() != 0
+        let defaultWindow = try reader.readInt32()
+        let configVersion = try reader.readInt32()
+        var featureWindows: [Int] = []
+        featureWindows.reserveCapacity(FXDataEngineConstants.aiFeatures)
+        for _ in 0..<FXDataEngineConstants.aiFeatures {
+            featureWindows.append(try reader.readInt32())
+        }
+        return NormalizationWindowConfigState(
+            initialized: initialized,
+            defaultWindow: defaultWindow,
+            configVersion: configVersion,
+            featureWindows: featureWindows
+        )
+    }
+}
+
 public struct RuntimeArtifactPreparedSample: Codable, Hashable, Sendable {
     public var valid: Bool
     public var labelClass: LabelClass
