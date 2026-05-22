@@ -12,6 +12,12 @@ public enum FXDataEngineConstants {
     public static let macroEventFeatures = 20
     public static let aiFeatures = macroEventFeatureOffset + macroEventFeatures
     public static let aiWeights = aiFeatures + 1
+    public static let contextBaseSymbolFeatures = 4
+    public static let contextSharedAdapterFeatures = 4
+    public static let contextSharedOffset = contextTopSymbols * contextBaseSymbolFeatures
+    public static let contextMTFOffset = contextSharedOffset + contextSharedAdapterFeatures
+    public static let contextExtraFeatures = contextMTFOffset + contextTopSymbols * contextSlotMTFFeatures
+    public static let contextDynamicPool = 12
     public static let aiCount = 63
     public static let apiVersionV4 = 4
     public static let maxSequenceBars = 96
