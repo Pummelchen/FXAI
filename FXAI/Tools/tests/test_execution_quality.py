@@ -34,6 +34,11 @@ def test_execution_quality_validate_creates_default_files():
             assert Path(contracts.EXECUTION_QUALITY_MEMORY_PATH).exists()
             assert Path(contracts.EXECUTION_QUALITY_RUNTIME_MEMORY_PATH).exists()
             assert memory["tiers"]
+            runtime_config = Path(contracts.EXECUTION_QUALITY_RUNTIME_CONFIG_PATH).read_text(encoding="utf-8")
+            assert "cap_price_cost_expected_mult" in runtime_config
+            assert "cap_spread_expected_mult" not in runtime_config
+            assert "weight_price_cost_zscore" in runtime_config
+            assert "weight_spread_zscore" not in runtime_config
 
 
 def test_execution_quality_validate_rejects_bad_threshold_order():
@@ -46,6 +51,34 @@ def test_execution_quality_validate_rejects_bad_threshold_order():
         assert "state_thresholds" in str(exc)
     else:
         raise AssertionError("invalid execution-quality thresholds should fail validation")
+
+
+def test_execution_quality_loaders_migrate_legacy_price_cost_keys():
+    with tempfile.TemporaryDirectory(prefix="fxai_execquality_legacy_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)):
+            legacy_config = default_config()
+            legacy_config["forecast_caps"]["spread_expected_mult"] = 6.2
+            legacy_config["forecast_caps"].pop("price_cost_expected_mult")
+            legacy_config["weights"]["spread_zscore"] = 0.33
+            legacy_config["weights"].pop("price_cost_zscore")
+            Path(contracts.EXECUTION_QUALITY_CONFIG_PATH).write_text(
+                json.dumps(legacy_config, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+
+            legacy_memory = default_memory()
+            legacy_memory["tiers"][0]["spread_mult"] = 1.44
+            legacy_memory["tiers"][0].pop("price_cost_mult")
+            Path(contracts.EXECUTION_QUALITY_MEMORY_PATH).write_text(
+                json.dumps(legacy_memory, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+
+            config = load_config()
+            memory = load_memory()
+            assert config["forecast_caps"]["price_cost_expected_mult"] == 6.2
+            assert config["weights"]["price_cost_zscore"] == 0.33
+            assert memory["tiers"][0]["price_cost_mult"] == 1.44
 
 
 def test_execution_quality_validate_rejects_duplicate_memory_tiers():
@@ -92,14 +125,14 @@ def test_execution_quality_forecast_enters_blocked_state_under_stress():
         symbol="EURUSD",
         session_label="ASIA",
         regime_label="HIGH_VOL_EVENT",
-        current_spread_points=4.2,
+        current_price_cost_points=4.2,
         broker_slippage_points=3.1,
         broker_latency_points=2.8,
         broker_reject_prob=0.54,
         broker_partial_fill_prob=0.48,
         broker_fill_ratio_mean=0.52,
         broker_event_burst_penalty=0.76,
-        micro_spread_zscore=3.2,
+        micro_price_cost_zscore=3.2,
         micro_hostile_execution=0.88,
         micro_liquidity_stress=0.84,
         micro_vol_burst=2.4,
@@ -116,7 +149,7 @@ def test_execution_quality_forecast_enters_blocked_state_under_stress():
         base_allowed_deviation_points=6.0,
     )
     assert result["execution_state"] == "BLOCKED"
-    assert result["spread_expected_points"] >= result["spread_now_points"]
+    assert result["price_cost_expected_points"] >= result["price_cost_now_points"]
     assert result["slippage_risk"] > 0.6
     assert "NEWS_WINDOW_ACTIVE" in result["reason_codes"]
 
@@ -130,14 +163,14 @@ def test_execution_quality_forecast_stays_normal_in_supported_calm_state():
         symbol="EURUSD",
         session_label="LONDON_NY_OVERLAP",
         regime_label="TREND_PERSISTENT",
-        current_spread_points=0.8,
+        current_price_cost_points=0.8,
         broker_slippage_points=0.2,
         broker_latency_points=0.4,
         broker_reject_prob=0.02,
         broker_partial_fill_prob=0.03,
         broker_fill_ratio_mean=0.98,
         broker_event_burst_penalty=0.02,
-        micro_spread_zscore=0.30,
+        micro_price_cost_zscore=0.30,
         micro_hostile_execution=0.16,
         micro_liquidity_stress=0.18,
         micro_vol_burst=0.50,
@@ -176,7 +209,7 @@ def test_execution_quality_replay_report_summarizes_history():
                                     "symbol": "EURUSD",
                                     "execution_state": "CAUTION",
                                     "selected_tier_kind": "GLOBAL",
-                                    "spread_widening_risk": 0.42,
+                                    "spread_widening_risk": 0.92,
                                     "slippage_risk": 0.38,
                                     "execution_quality_score": 0.58,
                                     "reason_codes": ["SPREAD_ALREADY_ELEVATED"],
@@ -191,7 +224,7 @@ def test_execution_quality_replay_report_summarizes_history():
                                     "symbol": "EURUSD",
                                     "execution_state": "STRESSED",
                                     "selected_tier_kind": "REGIME",
-                                    "spread_widening_risk": 0.76,
+                                    "price_cost_widening_risk": 0.76,
                                     "slippage_risk": 0.68,
                                     "execution_quality_score": 0.31,
                                     "reason_codes": ["VOLATILITY_BURST", "SLIPPAGE_RISK_ELEVATED"],
@@ -209,3 +242,4 @@ def test_execution_quality_replay_report_summarizes_history():
             assert latest["execution_state"] == "STRESSED"
             assert payload["symbols"][0]["state_counts"]["CAUTION"] == 1
             assert payload["symbols"][0]["state_counts"]["STRESSED"] == 1
+            assert payload["symbols"][0]["max_price_cost_widening_risk"] == 0.92

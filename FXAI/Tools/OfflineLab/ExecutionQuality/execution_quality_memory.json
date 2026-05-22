@@ -13,7 +13,7 @@
       "regime": "*",
       "session": "*",
       "slippage_mult": 1.08,
-      "spread_mult": 1.06,
+      "price_cost_mult": 1.06,
       "support": 512,
       "symbol": "*"
     },
@@ -27,7 +27,7 @@
       "regime": "TREND_PERSISTENT",
       "session": "*",
       "slippage_mult": 0.96,
-      "spread_mult": 1.02,
+      "price_cost_mult": 1.02,
       "support": 240,
       "symbol": "*"
     },
@@ -41,7 +41,7 @@
       "regime": "RANGE_MEAN_REVERTING",
       "session": "*",
       "slippage_mult": 1.0,
-      "spread_mult": 1.04,
+      "price_cost_mult": 1.04,
       "support": 210,
       "symbol": "*"
     },
@@ -55,7 +55,7 @@
       "regime": "BREAKOUT_TRANSITION",
       "session": "*",
       "slippage_mult": 1.16,
-      "spread_mult": 1.12,
+      "price_cost_mult": 1.12,
       "support": 156,
       "symbol": "*"
     },
@@ -69,7 +69,7 @@
       "regime": "HIGH_VOL_EVENT",
       "session": "*",
       "slippage_mult": 1.36,
-      "spread_mult": 1.28,
+      "price_cost_mult": 1.28,
       "support": 112,
       "symbol": "*"
     },
@@ -83,7 +83,7 @@
       "regime": "RISK_ON_OFF_MACRO",
       "session": "*",
       "slippage_mult": 1.18,
-      "spread_mult": 1.14,
+      "price_cost_mult": 1.14,
       "support": 128,
       "symbol": "*"
     },
@@ -97,7 +97,7 @@
       "regime": "LIQUIDITY_STRESS",
       "session": "*",
       "slippage_mult": 1.42,
-      "spread_mult": 1.34,
+      "price_cost_mult": 1.34,
       "support": 98,
       "symbol": "*"
     },
@@ -111,7 +111,7 @@
       "regime": "SESSION_FLOW",
       "session": "*",
       "slippage_mult": 1.08,
-      "spread_mult": 1.1,
+      "price_cost_mult": 1.1,
       "support": 140,
       "symbol": "*"
     }

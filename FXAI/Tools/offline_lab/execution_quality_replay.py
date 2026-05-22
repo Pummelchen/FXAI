@@ -61,7 +61,7 @@ def build_execution_quality_replay_report(*, symbol: str = "", hours_back: int =
         state_counts = Counter()
         tier_counts = Counter()
         reason_counts = Counter()
-        max_spread_risk = 0.0
+        max_price_cost_risk = 0.0
         max_slippage_risk = 0.0
         min_quality = 1.0
         recent_transitions: list[dict[str, Any]] = []
@@ -79,7 +79,8 @@ def build_execution_quality_replay_report(*, symbol: str = "", hours_back: int =
             tier_counts[tier_kind] += 1
             for reason in state.get("reason_codes", []):
                 reason_counts[str(reason)] += 1
-            max_spread_risk = max(max_spread_risk, float(state.get("spread_widening_risk", 0.0) or 0.0))
+            price_cost_risk = state.get("price_cost_widening_risk", state.get("spread_widening_risk", 0.0))
+            max_price_cost_risk = max(max_price_cost_risk, float(price_cost_risk or 0.0))
             max_slippage_risk = max(max_slippage_risk, float(state.get("slippage_risk", 0.0) or 0.0))
             min_quality = min(min_quality, float(state.get("execution_quality_score", 1.0) or 1.0))
             if previous_state and execution_state != previous_state:
@@ -94,7 +95,7 @@ def build_execution_quality_replay_report(*, symbol: str = "", hours_back: int =
                 "observations": len(items),
                 "state_counts": dict(sorted(state_counts.items())),
                 "tier_counts": dict(sorted(tier_counts.items())),
-                "max_spread_widening_risk": round(max_spread_risk, 6),
+                "max_price_cost_widening_risk": round(max_price_cost_risk, 6),
                 "max_slippage_risk": round(max_slippage_risk, 6),
                 "min_execution_quality_score": round(min_quality if items else 0.0, 6),
                 "top_reasons": [{"reason": name, "count": count} for name, count in reason_counts.most_common(8)],

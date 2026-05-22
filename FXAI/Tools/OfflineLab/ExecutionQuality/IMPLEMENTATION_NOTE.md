@@ -68,7 +68,7 @@ Phase 1 is a deterministic scorecard forecaster, not a black-box learned model.
 
 It combines:
 
-- live spread and broker execution trace stress
+- price-cost and broker execution trace stress
 - NewsPulse event and risk windows
 - rates repricing and policy-stress context
 - microstructure hostile-execution and liquidity-stress context
@@ -77,8 +77,8 @@ It combines:
 
 Outputs:
 
-- expected spread
-- spread-widening risk
+- expected price cost
+- price-cost widening risk
 - expected slippage
 - slippage risk
 - fill quality score

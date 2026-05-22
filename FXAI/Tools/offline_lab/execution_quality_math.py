@@ -96,7 +96,7 @@ def select_execution_quality_tier(
         "regime": "*",
         "support": 0,
         "quality": 0.34,
-        "spread_mult": 1.08,
+        "price_cost_mult": 1.08,
         "slippage_mult": 1.12,
         "fill_quality_bias": -0.06,
         "latency_mult": 1.08,
@@ -114,14 +114,14 @@ def compute_execution_quality_forecast(
     symbol: str,
     session_label: str,
     regime_label: str,
-    current_spread_points: float,
+    current_price_cost_points: float,
     broker_slippage_points: float,
     broker_latency_points: float,
     broker_reject_prob: float,
     broker_partial_fill_prob: float,
     broker_fill_ratio_mean: float,
     broker_event_burst_penalty: float,
-    micro_spread_zscore: float,
+    micro_price_cost_zscore: float,
     micro_hostile_execution: float,
     micro_liquidity_stress: float,
     micro_vol_burst: float,
@@ -142,13 +142,18 @@ def compute_execution_quality_forecast(
     enter_prob_buffers = dict(config.get("enter_prob_buffers", {}))
     forecast_caps = dict(config.get("forecast_caps", {}))
     weights = dict(config.get("weights", {}))
+    weight_price_cost_zscore = float(weights.get("price_cost_zscore", weights.get("spread_zscore", 0.22)) or 0.22)
+    cap_price_cost_expected_mult = float(
+        forecast_caps.get("price_cost_expected_mult", forecast_caps.get("spread_expected_mult", 4.5)) or 4.5
+    )
+    tier_price_cost_mult = float(tier.get("price_cost_mult", tier.get("spread_mult", 1.0)) or 1.0)
 
     support_soft_floor = max(int(config.get("support_soft_floor", 64) or 64), 1)
     tier_quality = clamp(float(tier.get("quality", 0.0) or 0.0), 0.0, 1.0)
     tier_support = max(int(tier.get("support", 0) or 0), 0)
     support_shortfall = clamp((support_soft_floor - tier_support) / support_soft_floor, 0.0, 1.0)
 
-    spread_z_norm = clamp(float(micro_spread_zscore or 0.0) / 4.0, 0.0, 1.0)
+    price_cost_z_norm = clamp(float(micro_price_cost_zscore or 0.0) / 4.0, 0.0, 1.0)
     hostile_norm = clamp(float(micro_hostile_execution or 0.0), 0.0, 1.0)
     liquidity_norm = clamp(float(micro_liquidity_stress or 0.0), 0.0, 1.0)
     vol_burst_norm = clamp(float(micro_vol_burst or 0.0) / 3.0, 0.0, 1.0)
@@ -167,9 +172,9 @@ def compute_execution_quality_forecast(
     session_thinness = classify_session_thinness(session_label, handoff_flag)
     stale_norm = clamp(stale_context_count / 3.0, 0.0, 1.0)
 
-    spread_widening_risk = clamp(
+    price_cost_widening_risk = clamp(
         0.10
-        + float(weights.get("spread_zscore", 0.22) or 0.22) * spread_z_norm
+        + weight_price_cost_zscore * price_cost_z_norm
         + float(weights.get("news_risk", 0.18) or 0.18) * news_risk
         + float(weights.get("rates_risk", 0.10) or 0.10) * rates_risk
         + float(weights.get("micro_liquidity", 0.18) or 0.18) * liquidity_norm
@@ -186,24 +191,24 @@ def compute_execution_quality_forecast(
         1.0,
     )
 
-    spread_expected_mult = clamp(
+    price_cost_expected_mult = clamp(
         0.96
-        + 0.38 * float(tier.get("spread_mult", 1.0) or 1.0)
-        + 0.64 * spread_widening_risk
-        + 0.14 * spread_z_norm
+        + 0.38 * tier_price_cost_mult
+        + 0.64 * price_cost_widening_risk
+        + 0.14 * price_cost_z_norm
         + 0.06 * session_thinness,
         1.0,
-        float(forecast_caps.get("spread_expected_mult", 4.5) or 4.5),
+        cap_price_cost_expected_mult,
     )
-    spread_now = max(float(current_spread_points or 0.0), 0.0)
-    spread_expected_points = max(
-        spread_now,
-        spread_now * spread_expected_mult + 0.12 * max(float(broker_slippage_points or 0.0), 0.0),
+    price_cost_now = max(float(current_price_cost_points or 0.0), 0.0)
+    price_cost_expected_points = max(
+        price_cost_now,
+        price_cost_now * price_cost_expected_mult + 0.12 * max(float(broker_slippage_points or 0.0), 0.0),
     )
 
     expected_slippage_points = clamp(
         max(float(broker_slippage_points or 0.0), 0.0) * float(tier.get("slippage_mult", 1.0) or 1.0)
-        + 0.16 * spread_expected_points
+        + 0.16 * price_cost_expected_points
         + 0.55 * hostile_norm
         + 0.38 * vol_burst_norm
         + 0.26 * session_thinness
@@ -219,7 +224,7 @@ def compute_execution_quality_forecast(
 
     slippage_risk = clamp(
         0.12
-        + 0.24 * clamp(expected_slippage_points / max(spread_expected_points + 0.5, 1.0), 0.0, 3.0) / 3.0
+        + 0.24 * clamp(expected_slippage_points / max(price_cost_expected_points + 0.5, 1.0), 0.0, 3.0) / 3.0
         + 0.18 * hostile_norm
         + 0.12 * vol_burst_norm
         + 0.12 * news_risk
@@ -249,7 +254,7 @@ def compute_execution_quality_forecast(
         0.10
         + 0.26 * liquidity_norm * float(tier.get("fragility_mult", 1.0) or 1.0)
         + 0.16 * hostile_norm
-        + 0.12 * spread_z_norm
+        + 0.12 * price_cost_z_norm
         + 0.08 * news_risk
         + 0.08 * rates_risk
         + 0.12 * partial_norm
@@ -276,7 +281,7 @@ def compute_execution_quality_forecast(
 
     execution_quality_score = clamp(
         0.40 * fill_quality_score
-        + 0.18 * (1.0 - spread_widening_risk)
+        + 0.18 * (1.0 - price_cost_widening_risk)
         + 0.18 * (1.0 - slippage_risk)
         + 0.12 * (1.0 - latency_sensitivity_score)
         + 0.12 * (1.0 - liquidity_fragility_score)
@@ -293,7 +298,7 @@ def compute_execution_quality_forecast(
         bool(config.get("allow_block_state", True))
         and (
             execution_quality_score < block_threshold
-            or spread_widening_risk >= 0.90
+            or price_cost_widening_risk >= 0.90
             or slippage_risk >= 0.90
             or fill_quality_score <= 0.20
         )
@@ -309,7 +314,7 @@ def compute_execution_quality_forecast(
     allowed_deviation_points = clamp(
         float(base_allowed_deviation_points or 0.0)
         * float(tier.get("deviation_mult", 1.0) or 1.0)
-        * (1.0 + 0.14 * spread_widening_risk + 0.18 * slippage_risk + 0.10 * latency_sensitivity_score),
+        * (1.0 + 0.14 * price_cost_widening_risk + 0.18 * slippage_risk + 0.10 * latency_sensitivity_score),
         float(forecast_caps.get("allowed_deviation_points_min", 2.0) or 2.0),
         float(forecast_caps.get("allowed_deviation_points_max", 25.0) or 25.0),
     )
@@ -323,8 +328,8 @@ def compute_execution_quality_forecast(
         reasons.append("NEWS_WINDOW_ACTIVE")
     if rates_repricing_active or rates_risk >= 0.68:
         reasons.append("RATES_REPRICING_ACTIVE")
-    if spread_z_norm >= 0.55:
-        reasons.append("SPREAD_ALREADY_ELEVATED")
+    if price_cost_z_norm >= 0.55:
+        reasons.append("PRICE_COST_ALREADY_ELEVATED")
     if hostile_norm >= 0.62:
         reasons.append("MICROSTRUCTURE_HOSTILE")
     if liquidity_norm >= 0.62:
@@ -360,9 +365,9 @@ def compute_execution_quality_forecast(
         "symbol": str(symbol or "").upper(),
         "session": str(session_label or "UNKNOWN").upper(),
         "regime": str(regime_label or "UNKNOWN").upper(),
-        "spread_now_points": round(spread_now, 6),
-        "spread_expected_points": round(spread_expected_points, 6),
-        "spread_widening_risk": round(spread_widening_risk, 6),
+        "price_cost_now_points": round(price_cost_now, 6),
+        "price_cost_expected_points": round(price_cost_expected_points, 6),
+        "price_cost_widening_risk": round(price_cost_widening_risk, 6),
         "expected_slippage_points": round(expected_slippage_points, 6),
         "slippage_risk": round(slippage_risk, 6),
         "fill_quality_score": round(fill_quality_score, 6),

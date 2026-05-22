@@ -4,14 +4,14 @@ The Execution-Quality Forecaster is FXAI's shared phase-1 execution-intelligence
 
 It does not try to create alpha. It answers a different question:
 
-`If FXAI wants to trade now, how likely is the market to punish the entry with spread widening, slippage, latency damage, or fragile liquidity?`
+`If FXAI wants to trade now, how likely is the market to punish the entry with price-cost widening, slippage, latency damage, or fragile liquidity?`
 
 ## What it predicts
 
 Per symbol, the runtime now forecasts:
 
-- expected spread for the execution horizon
-- spread-widening risk
+- expected price cost for the execution horizon
+- price-cost widening risk
 - expected slippage points
 - slippage risk
 - fill quality score
@@ -64,7 +64,7 @@ python3 Tools/fxai_offline_lab.py execution-quality-replay-report --symbol EURUS
 The forecaster feeds two existing consumers directly:
 
 1. Probabilistic Calibration
-   - uses forecasted spread and slippage instead of simple static execution assumptions
+   - uses forecasted price cost and slippage instead of simple static execution assumptions
    - adds explicit execution-quality reasons into abstention logic
 
 2. Trade Risk and Order Send

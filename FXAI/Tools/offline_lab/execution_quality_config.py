@@ -27,7 +27,7 @@ _REGIME_TIER_DEFAULTS: list[dict[str, Any]] = [
         "regime": "TREND_PERSISTENT",
         "support": 240,
         "quality": 0.68,
-        "spread_mult": 1.02,
+        "price_cost_mult": 1.02,
         "slippage_mult": 0.96,
         "fill_quality_bias": 0.05,
         "latency_mult": 1.02,
@@ -41,7 +41,7 @@ _REGIME_TIER_DEFAULTS: list[dict[str, Any]] = [
         "regime": "RANGE_MEAN_REVERTING",
         "support": 210,
         "quality": 0.64,
-        "spread_mult": 1.04,
+        "price_cost_mult": 1.04,
         "slippage_mult": 1.00,
         "fill_quality_bias": 0.02,
         "latency_mult": 1.04,
@@ -55,7 +55,7 @@ _REGIME_TIER_DEFAULTS: list[dict[str, Any]] = [
         "regime": "BREAKOUT_TRANSITION",
         "support": 156,
         "quality": 0.58,
-        "spread_mult": 1.12,
+        "price_cost_mult": 1.12,
         "slippage_mult": 1.16,
         "fill_quality_bias": -0.04,
         "latency_mult": 1.12,
@@ -69,7 +69,7 @@ _REGIME_TIER_DEFAULTS: list[dict[str, Any]] = [
         "regime": "HIGH_VOL_EVENT",
         "support": 112,
         "quality": 0.46,
-        "spread_mult": 1.28,
+        "price_cost_mult": 1.28,
         "slippage_mult": 1.36,
         "fill_quality_bias": -0.12,
         "latency_mult": 1.24,
@@ -83,7 +83,7 @@ _REGIME_TIER_DEFAULTS: list[dict[str, Any]] = [
         "regime": "RISK_ON_OFF_MACRO",
         "support": 128,
         "quality": 0.54,
-        "spread_mult": 1.14,
+        "price_cost_mult": 1.14,
         "slippage_mult": 1.18,
         "fill_quality_bias": -0.06,
         "latency_mult": 1.10,
@@ -97,7 +97,7 @@ _REGIME_TIER_DEFAULTS: list[dict[str, Any]] = [
         "regime": "LIQUIDITY_STRESS",
         "support": 98,
         "quality": 0.42,
-        "spread_mult": 1.34,
+        "price_cost_mult": 1.34,
         "slippage_mult": 1.42,
         "fill_quality_bias": -0.15,
         "latency_mult": 1.18,
@@ -111,7 +111,7 @@ _REGIME_TIER_DEFAULTS: list[dict[str, Any]] = [
         "regime": "SESSION_FLOW",
         "support": 140,
         "quality": 0.56,
-        "spread_mult": 1.10,
+        "price_cost_mult": 1.10,
         "slippage_mult": 1.08,
         "fill_quality_bias": -0.02,
         "latency_mult": 1.10,
@@ -155,13 +155,13 @@ def default_config() -> dict[str, Any]:
             "blocked": 1.00,
         },
         "forecast_caps": {
-            "spread_expected_mult": 4.50,
+            "price_cost_expected_mult": 4.50,
             "expected_slippage_points": 18.0,
             "allowed_deviation_points_min": 2.0,
             "allowed_deviation_points_max": 25.0,
         },
         "weights": {
-            "spread_zscore": 0.22,
+            "price_cost_zscore": 0.22,
             "news_risk": 0.18,
             "rates_risk": 0.10,
             "micro_liquidity": 0.18,
@@ -192,7 +192,7 @@ def default_memory() -> dict[str, Any]:
                 "regime": "*",
                 "support": 512,
                 "quality": 0.60,
-                "spread_mult": 1.06,
+                "price_cost_mult": 1.06,
                 "slippage_mult": 1.08,
                 "fill_quality_bias": 0.0,
                 "latency_mult": 1.04,
@@ -219,6 +219,31 @@ def _merge_defaults(default_value: Any, payload_value: Any) -> Any:
     if payload_value is None:
         return deepcopy(default_value)
     return deepcopy(payload_value)
+
+
+def _normalize_legacy_config_keys(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    normalized = deepcopy(payload)
+    caps = normalized.get("forecast_caps")
+    if isinstance(caps, dict) and "price_cost_expected_mult" not in caps and "spread_expected_mult" in caps:
+        caps["price_cost_expected_mult"] = caps["spread_expected_mult"]
+    weights = normalized.get("weights")
+    if isinstance(weights, dict) and "price_cost_zscore" not in weights and "spread_zscore" in weights:
+        weights["price_cost_zscore"] = weights["spread_zscore"]
+    return normalized
+
+
+def _normalize_legacy_memory_keys(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    normalized = deepcopy(payload)
+    tiers = normalized.get("tiers")
+    if isinstance(tiers, list):
+        for tier in tiers:
+            if isinstance(tier, dict) and "price_cost_mult" not in tier and "spread_mult" in tier:
+                tier["price_cost_mult"] = tier["spread_mult"]
+    return normalized
 
 
 def _require_bool(payload: dict[str, Any], key: str) -> None:
@@ -344,12 +369,15 @@ def _write_runtime_config(config: dict[str, Any]) -> None:
     ])
     caps = dict(config.get("forecast_caps", {}))
     lines.extend([
-        f"cap_spread_expected_mult\t{float(caps.get('spread_expected_mult', 4.5) or 4.5):.6f}",
+        f"cap_price_cost_expected_mult\t{float(caps.get('price_cost_expected_mult', caps.get('spread_expected_mult', 4.5)) or 4.5):.6f}",
         f"cap_expected_slippage_points\t{float(caps.get('expected_slippage_points', 18.0) or 18.0):.6f}",
         f"cap_allowed_deviation_points_min\t{float(caps.get('allowed_deviation_points_min', 2.0) or 2.0):.6f}",
         f"cap_allowed_deviation_points_max\t{float(caps.get('allowed_deviation_points_max', 25.0) or 25.0):.6f}",
     ])
     weights = dict(config.get("weights", {}))
+    if "price_cost_zscore" not in weights and "spread_zscore" in weights:
+        weights["price_cost_zscore"] = weights["spread_zscore"]
+    weights.pop("spread_zscore", None)
     for key in sorted(weights):
         lines.append(f"weight_{key}\t{float(weights[key] or 0.0):.6f}")
     hierarchy = [str(item or "").upper() for item in config.get("bucket_hierarchy", [])]
@@ -375,7 +403,7 @@ def _write_runtime_memory(memory: dict[str, Any]) -> None:
                     str(tier.get("regime", "*") or "*").upper(),
                     str(int(tier.get("support", 0) or 0)),
                     f"{float(tier.get('quality', 0.0) or 0.0):.6f}",
-                    f"{float(tier.get('spread_mult', 1.0) or 1.0):.6f}",
+                    f"{float(tier.get('price_cost_mult', tier.get('spread_mult', 1.0)) or 1.0):.6f}",
                     f"{float(tier.get('slippage_mult', 1.0) or 1.0):.6f}",
                     f"{float(tier.get('fill_quality_bias', 0.0) or 0.0):.6f}",
                     f"{float(tier.get('latency_mult', 1.0) or 1.0):.6f}",
@@ -389,7 +417,7 @@ def _write_runtime_memory(memory: dict[str, Any]) -> None:
 
 def load_config() -> dict[str, Any]:
     ensure_execution_quality_dirs()
-    merged = _merge_defaults(default_config(), json_load(EXECUTION_QUALITY_CONFIG_PATH))
+    merged = _merge_defaults(default_config(), _normalize_legacy_config_keys(json_load(EXECUTION_QUALITY_CONFIG_PATH)))
     validate_config_payload(merged)
     json_dump(EXECUTION_QUALITY_CONFIG_PATH, merged)
     _write_runtime_config(merged)
@@ -398,7 +426,7 @@ def load_config() -> dict[str, Any]:
 
 def load_memory() -> dict[str, Any]:
     ensure_execution_quality_dirs()
-    merged = _merge_defaults(default_memory(), json_load(EXECUTION_QUALITY_MEMORY_PATH))
+    merged = _merge_defaults(default_memory(), _normalize_legacy_memory_keys(json_load(EXECUTION_QUALITY_MEMORY_PATH)))
     validate_memory_payload(merged)
     json_dump(EXECUTION_QUALITY_MEMORY_PATH, merged)
     _write_runtime_memory(merged)

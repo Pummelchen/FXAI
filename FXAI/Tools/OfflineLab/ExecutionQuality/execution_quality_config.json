@@ -19,7 +19,7 @@
     "allowed_deviation_points_max": 25.0,
     "allowed_deviation_points_min": 2.0,
     "expected_slippage_points": 18.0,
-    "spread_expected_mult": 4.5
+    "price_cost_expected_mult": 4.5
   },
   "lot_scales": {
     "blocked": 0.0,
@@ -46,7 +46,7 @@
     "news_risk": 0.18,
     "rates_risk": 0.1,
     "session_thinness": 0.1,
-    "spread_zscore": 0.22,
+    "price_cost_zscore": 0.22,
     "stale_context": 0.1,
     "support_shortfall": 0.08,
     "tick_rate_burst": 0.12,
