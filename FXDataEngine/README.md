@@ -9,6 +9,7 @@ Repository-root Swift data-engine package for the FXAI migration away from the o
 - Spread, swap, commission, margin, bid/ask, ticks, and execution metadata are not part of this offline data-engine contract.
 - Volume is first-class: when any loaded dataset has nonzero volume, the feature pipeline emits volume-derived features and plugin contexts set `dataHasVolume = true`.
 - The migrated contract preserves the old 180-feature / 181-input shape for plugin compatibility while replacing legacy spread/cost-dependent slots with volume-aware OHLCV features.
+- The old MQL5 `TensorCore` is intentionally not part of the Swift data-engine port. AI model training, inference, and tensor execution will move into FXPlugins and use PyTorch or TensorFlow per plugin.
 - PyTorch and TensorFlow support is represented by explicit backend descriptors and payload DTOs; process runners will be wired when individual AI plugins are converted.
 - Metal support starts with device probing and kernel descriptors so FXBacktest can adopt accelerated feature/model stages incrementally.
 
@@ -19,4 +20,4 @@ swift test
 swift build -c release
 ```
 
-The current MT5/MQL5 reference implementation remains under `FXAI/FXDataEngine/` until each layer has been ported, tested, and promoted into this package.
+The current MT5/MQL5 reference implementation remains under `FXAI/FXDataEngine/` until each non-tensor engine layer has been ported, tested, and promoted into this package. Legacy tensor code remains reference material for future plugin-level PyTorch/TensorFlow conversions, not a deletion gate for FXDataEngine itself.
