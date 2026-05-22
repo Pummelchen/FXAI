@@ -24,18 +24,11 @@ This page maps common user goals to the repository areas that matter.
 
 | Area | Purpose |
 |---|---|
-| `FXDataEngine/FXAI.mq5` | Main MT5 Expert Advisor entry point. |
-| `FXDataEngine/API/` | Plugin contracts, context helpers, and TensorCore bridge surface. |
-| `FXDataEngine/Engine/Core/` | DataCore, FeatureCore, NormalizationCore, and market-data gateway boundaries. |
-| `FXDataEngine/Engine/Runtime/` | Live control-plane stages and trade gating. |
-| `FXPlugins/` | Model and framework plugin implementations. |
-| `FXDataEngine/TensorCore/` | MT5-native neural runtime support. |
-| `FXDataEngine/Tests/` | MT5-side audit and core-runtime runners. |
 | repo root `FXBacktestAgent/` | Offline backtest agent source root. |
 | repo root `FXDemoAgent/` | Demo-trading agent source root. |
 | repo root `FXLiveAgent/` | Live-trading agent source root. |
-| repo root `FXDataEngine/` | Repository-root shared data-engine source area. |
-| repo root `FXPlugins/` | Repository-root shared plugin source area. |
+| repo root `FXDataEngine/` | Swift 6.3 data-engine package for M1 OHLCV contracts, feature construction, plugin payloads, runtime policy DTOs, ML backend descriptors, and Metal integration. |
+| repo root `FXPlugins/` | Swift plugin package with converted FXAI plugins, FXBacktest demo adapters, acceleration metadata, and PyTorch/TensorFlow backend bridge. |
 | `Tools/fxai_testlab.py` | Compile, audit, benchmark, package, and release-gate CLI. |
 | `Tools/fxai_offline_lab.py` | Offline Lab, subsystem validation, promotion, and recovery CLI. |
 | `Tools/OfflineLab/` | Generated or configured research, report, and subsystem artifacts. |
@@ -58,10 +51,10 @@ This page maps common user goals to the repository areas that matter.
 
 - `FXDatabase/` is the canonical Swift history-data source for offline backtests and research consumers.
 - `FXBacktest/` is the native Swift and Metal backtest runtime for converted FXAI strategies and plugins.
-- `FXAI/FXDataEngine/` and the nested `FXAI/FXPlugins/` remain the MQL5 reference implementation until their contracts are ported, tested, and promoted into the root Swift-oriented source areas.
 - Root `FXDataEngine/` is now the Swift 6.3/macOS 26 shared data-engine package for canonical M1 OHLCV features, plugin payloads, ML backend descriptors, and Metal integration.
-- Root `FXPlugins/` is now the converted Swift-era plugin package plus the copied legacy plugin reference tree. It owns `FXAIPluginV4` plugin implementations, FXBacktest demo adapters, acceleration-plan metadata, and plugin tests.
+- Root `FXPlugins/` is now the converted Swift-era plugin package. It owns `FXAIPluginV4` plugin implementations, FXBacktest demo adapters, acceleration-plan metadata, and plugin tests.
 - Converted plugins consume canonical M1 OHLCV contracts, use volume-derived features when dataset volume is nonzero, and replace old bid/ask spread dependencies with execution-cost context or statistical residual features.
+- Legacy FXAI MQL5 source has been removed. The only remaining MT5 source in the repo is `FXDatabase/EA/FXDatabase.mq5`, the data-export bridge for FXDatabase.
 
 ## Example Case Scenarios
 
@@ -75,7 +68,7 @@ Start with:
 ### Scenario: A researcher wants to add a model
 
 Start with:
-1. `FXDataEngine/API/plugin_contract.mqh`
+1. `FXDataEngine/Sources/FXDataEngine`
 2. `FXPlugins/`
 3. `Tools/plugin_oracles.json`
 4. relevant `Tools/tests/`

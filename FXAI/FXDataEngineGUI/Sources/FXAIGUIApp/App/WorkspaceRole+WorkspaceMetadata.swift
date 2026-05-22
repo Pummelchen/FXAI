@@ -38,7 +38,7 @@ extension WorkspaceRole {
         case .demoTrader:
             "Study live behavior safely and compare it against audit expectation before risking real capital."
         case .backtester:
-            "Generate realistic compile, audit, and baseline flows before handing off into MT5 Strategy Tester."
+            "Generate realistic Swift package, audit, and baseline flows before launching offline backtest campaigns."
         case .researcher:
             "Move between plugin discovery, Offline Lab flows, promotion state, and visual analysis without context switching."
         case .architect:
@@ -62,9 +62,9 @@ extension WorkspaceRole {
             ]
         case .backtester:
             [
-                "Start from the exact pre-tester flow FXAI expects instead of an ad-hoc MT5 session.",
+                "Start from the exact Swift-era pre-campaign flow FXAI expects instead of an ad-hoc run.",
                 "Keep scenario realism, execution assumptions, and baselines aligned across repeated tests.",
-                "Hand the same certified setup from GUI into terminal and Strategy Tester."
+                "Hand the same certified setup from GUI into terminal and FXBacktest."
             ]
         case .researcher:
             [
@@ -96,7 +96,7 @@ extension WorkspaceRole {
         case .backtester:
             [
                 "Prepare a USDJPY macro-week versus quiet-week comparison with the same compile and audit assumptions.",
-                "Save a repeatable baseline workflow before broadening a Strategy Tester campaign."
+                "Save a repeatable baseline workflow before broadening an FXBacktest campaign."
             ]
         case .researcher:
             [

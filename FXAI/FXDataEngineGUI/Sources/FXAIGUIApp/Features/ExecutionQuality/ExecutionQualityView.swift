@@ -36,7 +36,7 @@ struct ExecutionQualityView: View {
                 } else {
                     EmptyStateView(
                         title: "Execution-quality artifacts not found",
-                        message: "Run execution-quality-validate so the runtime config and memory exports exist, let MT5 publish per-symbol execution-quality state, and rebuild the replay report for operator visibility.",
+                        message: "Run execution-quality-validate so the runtime config and memory exports exist, publish per-symbol execution-quality state, and rebuild the replay report for operator visibility.",
                         symbolName: "speedometer"
                     )
                 }

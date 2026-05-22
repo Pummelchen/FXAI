@@ -2,8 +2,9 @@ import Foundation
 
 public enum RunBuilderCommandFactory {
     public static func auditCommand(projectRoot: URL, draft: AuditLabDraft) -> String {
+        let toolRoot = toolProjectRoot(projectRoot)
         var parts: [String] = [
-            "cd \(shellQuoted(projectRoot.path))",
+            "cd \(shellQuoted(toolRoot.path))",
             "python3 Tools/fxai_testlab.py run-audit"
         ]
 
@@ -32,6 +33,7 @@ public enum RunBuilderCommandFactory {
     }
 
     public static func backtestWorkflow(projectRoot: URL, draft: BacktestBuilderDraft) -> String {
+        let toolRoot = toolProjectRoot(projectRoot)
         let auditDraft = AuditLabDraft(
             pluginName: draft.pluginName,
             allPlugins: false,
@@ -49,15 +51,17 @@ public enum RunBuilderCommandFactory {
 
         return [
             "cd \(shellQuoted(projectRoot.path))",
-            "python3 Tools/fxai_testlab.py compile-main",
-            "python3 Tools/fxai_testlab.py compile-audit",
+            "swift test --package-path FXDataEngine",
+            "swift test --package-path FXPlugins",
+            "swift test --package-path FXBacktest",
+            "cd \(shellQuoted(toolRoot.path))",
             auditCommand(projectRoot: projectRoot, draft: auditDraft).split(separator: "\n").last.map(String.init) ?? "",
             "python3 Tools/fxai_testlab.py baseline-save --name \(shellQuoted(draft.baselineName))"
         ].joined(separator: "\n")
     }
 
     public static func offlineWorkflow(projectRoot: URL, draft: OfflineLabDraft) -> String {
-        var commands: [String] = ["cd \(shellQuoted(projectRoot.path))"]
+        var commands: [String] = ["cd \(shellQuoted(toolProjectRoot(projectRoot).path))"]
 
         if draft.includeBootstrap {
             commands.append("python3 Tools/fxai_offline_lab.py bootstrap")
@@ -113,5 +117,13 @@ public enum RunBuilderCommandFactory {
 
     private static func shellQuoted(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
+    }
+
+    private static func toolProjectRoot(_ projectRoot: URL) -> URL {
+        let rootTools = projectRoot.appendingPathComponent("Tools", isDirectory: true)
+        if FileManager.default.fileExists(atPath: rootTools.path) {
+            return projectRoot
+        }
+        return projectRoot.appendingPathComponent("FXAI", isDirectory: true)
     }
 }

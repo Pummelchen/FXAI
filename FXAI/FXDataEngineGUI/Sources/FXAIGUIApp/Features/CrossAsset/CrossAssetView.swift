@@ -30,7 +30,7 @@ struct CrossAssetView: View {
                 } else {
                     EmptyStateView(
                         title: "Cross-asset artifacts not found",
-                        message: "Run cross-asset-validate, start the MT5 cross-asset probe service, build a shared snapshot with cross-asset-once or cross-asset-daemon, and refresh the GUI.",
+                        message: "Run cross-asset-validate, publish provider state, build a shared snapshot with cross-asset-once or cross-asset-daemon, and refresh the GUI.",
                         symbolName: "globe.americas.fill"
                     )
                 }

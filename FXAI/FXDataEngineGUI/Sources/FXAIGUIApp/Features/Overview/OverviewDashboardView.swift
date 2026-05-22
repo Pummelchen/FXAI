@@ -161,7 +161,7 @@ struct OverviewDashboardView: View {
             MetricCard(
                 title: "Build Targets",
                 value: "\(snapshot.cleanBuildTargetCount)/\(snapshot.buildTargets.count)",
-                footnote: "MT5 outputs currently present in the project tree.",
+                footnote: "Swift package surfaces currently present in the project tree.",
                 symbolName: "hammer.fill",
                 tint: FXAITheme.warning
             )

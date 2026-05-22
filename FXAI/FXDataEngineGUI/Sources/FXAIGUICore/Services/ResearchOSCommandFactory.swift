@@ -4,7 +4,7 @@ public enum ResearchOSCommandFactory {
     public static func environmentDiagnostics(projectRoot: URL, profileName: String) -> String {
         let effectiveProfile = nonEmpty(profileName) ?? "continuous"
         return [
-            "cd \(shellQuoted(projectRoot.path))",
+            "cd \(shellQuoted(toolProjectRoot(projectRoot).path))",
             "python3 Tools/fxai_offline_lab.py validate-env",
             "python3 Tools/fxai_offline_lab.py dashboard --profile \(shellQuoted(effectiveProfile))"
         ].joined(separator: "\n")
@@ -23,14 +23,14 @@ public enum ResearchOSCommandFactory {
             command = buildBranchDestroyCommand(draft: draft)
         }
         return [
-            "cd \(shellQuoted(projectRoot.path))",
+            "cd \(shellQuoted(toolProjectRoot(projectRoot).path))",
             command
         ].joined(separator: "\n")
     }
 
     public static func auditSyncCommand(projectRoot: URL, draft: ResearchOSAuditDraft) -> String {
         [
-            "cd \(shellQuoted(projectRoot.path))",
+            "cd \(shellQuoted(toolProjectRoot(projectRoot).path))",
             "python3 Tools/fxai_offline_lab.py turso-audit-sync --limit \(max(draft.limit, 1)) --pages \(max(draft.pages, 1))",
             "python3 Tools/fxai_offline_lab.py dashboard --profile 'continuous'"
         ].joined(separator: "\n")
@@ -43,7 +43,7 @@ public enum ResearchOSCommandFactory {
         }
 
         var commands = [
-            "cd \(shellQuoted(projectRoot.path))",
+            "cd \(shellQuoted(toolProjectRoot(projectRoot).path))",
             command
         ]
 
@@ -58,7 +58,7 @@ public enum ResearchOSCommandFactory {
 
     public static func recoveryCommand(projectRoot: URL, draft: ResearchOSRecoveryDraft) -> String {
         [
-            "cd \(shellQuoted(projectRoot.path))",
+            "cd \(shellQuoted(toolProjectRoot(projectRoot).path))",
             "python3 Tools/fxai_offline_lab.py recover-artifacts --profile \(shellQuoted(draft.profileName)) --runtime-mode \(shellQuoted(draft.runtimeMode))",
             "python3 Tools/fxai_offline_lab.py lineage-report --profile \(shellQuoted(draft.profileName))",
             "python3 Tools/fxai_offline_lab.py minimal-bundle --profile \(shellQuoted(draft.profileName))"
@@ -135,5 +135,13 @@ public enum ResearchOSCommandFactory {
 
     private static func shellQuoted(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
+    }
+
+    private static func toolProjectRoot(_ projectRoot: URL) -> URL {
+        let rootTools = projectRoot.appendingPathComponent("Tools", isDirectory: true)
+        if FileManager.default.fileExists(atPath: rootTools.path) {
+            return projectRoot
+        }
+        return projectRoot.appendingPathComponent("FXAI", isDirectory: true)
     }
 }

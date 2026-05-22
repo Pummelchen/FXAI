@@ -1,6 +1,0 @@
-   #include "Context\\plugin_context_state.mqh"
-   #include "Context\\plugin_context_payload.mqh"
-   #include "Context\\plugin_context_transfer.mqh"
-   #include "Context\\plugin_context_quality.mqh"
-   #include "Context\\plugin_context_replay.mqh"
-   #include "Context\\plugin_context_runtime.mqh"

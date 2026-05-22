@@ -23,35 +23,35 @@ public struct IncidentBuilder {
                         severity: .critical,
                         category: .build,
                         title: "Build targets are missing",
-                        summary: "One or more MT5 outputs are absent. Live inspection and tester workflows should not be trusted until the build surface is clean again.",
+                        summary: "One or more Swift package surfaces are absent. Runtime inspection and backtest workflows should not be trusted until the build surface is clean again.",
                         detailLines: targetList.map { "Missing build target: \($0)" },
                         actions: [
                             IncidentAction(
-                                title: "Run full verification",
-                                summary: "Compile, pytest, and deterministic checks through the standard FXAI validation path.",
+                                title: "Run Swift verification",
+                                summary: "Build and test the Swift data engine, plugin package, and backtest runtime.",
                                 command: verifyAllCommand(projectRoot: projectRoot),
                                 destinationSelection: "commands"
                             ),
                             IncidentAction(
-                                title: "Compile MT5 targets",
-                                summary: "Rebuild the main EA, audit runner, and export runner directly.",
+                                title: "Build Swift packages",
+                                summary: "Rebuild the core Swift packages directly.",
                                 command: compileTargetsCommand(projectRoot: projectRoot),
                                 destinationSelection: "backtestBuilder"
                             )
                         ],
                         playbook: RecoveryPlaybook(
                             title: "Recover the build surface",
-                            summary: "Bring the MT5 outputs back to a known-good state before you inspect or promote anything else.",
+                            summary: "Bring the Swift package surface back to a known-good state before you inspect or promote anything else.",
                             steps: [
                                 RecoveryStep(
-                                    title: "Run verify-all",
-                                    summary: "Confirm whether the failure is limited to MT5 targets or broader Python and artifact validation.",
+                                    title: "Run Swift tests",
+                                    summary: "Confirm whether the failure is limited to one Swift package or broader project integration.",
                                     command: verifyAllCommand(projectRoot: projectRoot),
                                     destinationSelection: "commands"
                                 ),
                                 RecoveryStep(
-                                    title: "Compile all MT5 targets",
-                                    summary: "Rebuild the EA, Audit Runner, and Offline Export Runner.",
+                                    title: "Build Swift packages",
+                                    summary: "Rebuild FXDataEngine, FXPlugins, and FXBacktest.",
                                     command: compileTargetsCommand(projectRoot: projectRoot),
                                     destinationSelection: "backtestBuilder"
                                 )
@@ -73,7 +73,7 @@ public struct IncidentBuilder {
                         actions: [
                             IncidentAction(
                                 title: "Deploy profiles",
-                                summary: "Emit the promoted deployment payloads for MT5 runtime consumption.",
+                                summary: "Emit the promoted deployment payloads for the Swift runtime surface.",
                                 command: deployProfilesCommand(projectRoot: projectRoot, profileName: effectiveProfile, runtimeMode: "research"),
                                 destinationSelection: "offlineLab"
                             ),
@@ -96,7 +96,7 @@ public struct IncidentBuilder {
                                 ),
                                 RecoveryStep(
                                     title: "Emit deployment profiles",
-                                    summary: "Rebuild the runtime deployment payloads and MT5 bundle artifacts.",
+                                    summary: "Rebuild the runtime deployment payloads and bundle artifacts.",
                                     command: deployProfilesCommand(projectRoot: projectRoot, profileName: effectiveProfile, runtimeMode: "research"),
                                     destinationSelection: "offlineLab"
                                 )
@@ -202,7 +202,7 @@ public struct IncidentBuilder {
                         actions: [
                             IncidentAction(
                                 title: "Deploy profiles",
-                                summary: "Regenerate the MT5 deployment payloads for the active profile.",
+                                summary: "Regenerate the deployment payloads for the active profile.",
                                 command: deployProfilesCommand(projectRoot: projectRoot, profileName: effectiveProfile, runtimeMode: "research"),
                                 destinationSelection: "offlineLab"
                             )
@@ -219,7 +219,7 @@ public struct IncidentBuilder {
                                 ),
                                 RecoveryStep(
                                     title: "Deploy profiles",
-                                    summary: "Emit the live runtime payloads and MT5 promotions.",
+                                    summary: "Emit the runtime payloads and promotions.",
                                     command: deployProfilesCommand(projectRoot: projectRoot, profileName: effectiveProfile, runtimeMode: "research"),
                                     destinationSelection: "offlineLab"
                                 )
@@ -275,7 +275,7 @@ public struct IncidentBuilder {
                             ],
                             playbook: RecoveryPlaybook(
                                 title: "Repair \(deployment.symbol) runtime state",
-                                summary: "Rebuild the runtime payloads in a controlled order so MT5 and the GUI agree on the active deployment state again.",
+                                summary: "Rebuild the runtime payloads in a controlled order so the Swift runtime surface and the GUI agree on the active deployment state again.",
                                 steps: [
                                     RecoveryStep(
                                         title: "Run recovery bundle",
@@ -294,7 +294,7 @@ public struct IncidentBuilder {
                                     ),
                                     RecoveryStep(
                                         title: "Verify the full platform",
-                                        summary: "Run compile, deterministic, pytest, and MT5 verification before trusting the repaired state.",
+                                        summary: "Run Swift package tests and deterministic checks before trusting the repaired state.",
                                         command: verifyAllCommand(projectRoot: projectRoot),
                                         destinationSelection: "commands"
                                     )
@@ -461,29 +461,31 @@ public struct IncidentBuilder {
     private func verifyAllCommand(projectRoot: URL) -> String {
         [
             "cd \(shellQuoted(projectRoot.path))",
-            "python3 Tools/fxai_testlab.py verify-all"
+            "swift test --package-path FXDataEngine",
+            "swift test --package-path FXPlugins",
+            "swift test --package-path FXBacktest"
         ].joined(separator: "\n")
     }
 
     private func compileTargetsCommand(projectRoot: URL) -> String {
         [
             "cd \(shellQuoted(projectRoot.path))",
-            "python3 Tools/fxai_testlab.py compile-main",
-            "python3 Tools/fxai_testlab.py compile-audit",
-            "python3 Tools/fxai_testlab.py compile-export"
+            "swift build --package-path FXDataEngine",
+            "swift build --package-path FXPlugins",
+            "swift build --package-path FXBacktest"
         ].joined(separator: "\n")
     }
 
     private func deployProfilesCommand(projectRoot: URL, profileName: String, runtimeMode: String) -> String {
         [
-            "cd \(shellQuoted(projectRoot.path))",
+            "cd \(shellQuoted(toolProjectRoot(projectRoot).path))",
             "python3 Tools/fxai_offline_lab.py deploy-profiles --profile \(shellQuoted(profileName)) --runtime-mode \(shellQuoted(runtimeMode))"
         ].joined(separator: "\n")
     }
 
     private func autonomousGovernanceCommand(projectRoot: URL, profileName: String) -> String {
         [
-            "cd \(shellQuoted(projectRoot.path))",
+            "cd \(shellQuoted(toolProjectRoot(projectRoot).path))",
             "python3 Tools/fxai_offline_lab.py autonomous-governance --profile \(shellQuoted(profileName))",
             "python3 Tools/fxai_offline_lab.py dashboard --profile \(shellQuoted(profileName))"
         ].joined(separator: "\n")
@@ -491,30 +493,38 @@ public struct IncidentBuilder {
 
     private func dashboardCommand(projectRoot: URL, profileName: String) -> String {
         [
-            "cd \(shellQuoted(projectRoot.path))",
+            "cd \(shellQuoted(toolProjectRoot(projectRoot).path))",
             "python3 Tools/fxai_offline_lab.py dashboard --profile \(shellQuoted(profileName))"
         ].joined(separator: "\n")
     }
 
     private func bootstrapCommand(projectRoot: URL) -> String {
         [
-            "cd \(shellQuoted(projectRoot.path))",
+            "cd \(shellQuoted(toolProjectRoot(projectRoot).path))",
             "python3 Tools/fxai_offline_lab.py bootstrap --seed-demo"
         ].joined(separator: "\n")
     }
 
     private func newspulseValidateCommand(projectRoot: URL) -> String {
         [
-            "cd \(shellQuoted(projectRoot.path))",
+            "cd \(shellQuoted(toolProjectRoot(projectRoot).path))",
             "python3 Tools/fxai_offline_lab.py newspulse-validate"
         ].joined(separator: "\n")
     }
 
     private func newspulseOnceCommand(projectRoot: URL) -> String {
         [
-            "cd \(shellQuoted(projectRoot.path))",
+            "cd \(shellQuoted(toolProjectRoot(projectRoot).path))",
             "python3 Tools/fxai_offline_lab.py newspulse-once"
         ].joined(separator: "\n")
+    }
+
+    private func toolProjectRoot(_ projectRoot: URL) -> URL {
+        let rootTools = projectRoot.appendingPathComponent("Tools", isDirectory: true)
+        if FileManager.default.fileExists(atPath: rootTools.path) {
+            return projectRoot
+        }
+        return projectRoot.appendingPathComponent("FXAI", isDirectory: true)
     }
 
     private func activePairID(for symbol: String) -> String? {

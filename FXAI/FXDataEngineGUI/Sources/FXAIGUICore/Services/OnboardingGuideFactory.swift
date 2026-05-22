@@ -23,7 +23,7 @@ public enum OnboardingGuideFactory {
                     ),
                     OnboardingStep(
                         title: "Use Incident Center for anything stale or missing",
-                        summary: "If runtime artifacts are stale or incomplete, follow the guided recovery playbook before opening MT5 or forcing a deployment.",
+                        summary: "If runtime artifacts are stale or incomplete, follow the guided recovery playbook before forcing a deployment.",
                         destination: OnboardingDestinationHint(title: "Incident Center", selection: "incidents")
                     )
                 ],
@@ -67,12 +67,12 @@ public enum OnboardingGuideFactory {
         case .backtester:
             return RoleOnboardingGuide(
                 role: role,
-                headline: "Build a realistic test flow before you open Strategy Tester.",
-                summary: "Backtesters should use the GUI to generate compile, audit, and baseline workflows, then hand off to the MT5 tester with clean assumptions.",
+                headline: "Build a realistic Swift backtest flow before a campaign.",
+                summary: "Backtesters should use the GUI to generate Swift package checks, audit, and baseline workflows with clean assumptions.",
                 steps: [
                     OnboardingStep(
-                        title: "Prepare builds first",
-                        summary: "Compile the EA and Audit Runner before any serious Strategy Tester session.",
+                        title: "Prepare Swift checks first",
+                        summary: "Run FXDataEngine, FXPlugins, and FXBacktest tests before any serious campaign.",
                         destination: OnboardingDestinationHint(title: "Backtest Builder", selection: "backtestBuilder")
                     ),
                     OnboardingStep(

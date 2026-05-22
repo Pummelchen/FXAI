@@ -37,22 +37,22 @@ python3 Tools/fxai_testlab.py verify-all
 ## First Commands To Know
 
 ```bash
-python3 Tools/fxai_testlab.py doctor
-python3 Tools/fxai_testlab.py compile-main
-python3 Tools/fxai_testlab.py compile-tensorcore
-python3 Tools/fxai_testlab.py verify-all
-python3 Tools/fxai_testlab.py publish-benchmarks --profile bestparams
-python3 Tools/fxai_offline_lab.py newspulse-health
-python3 Tools/fxai_offline_lab.py rates-engine-health
-python3 Tools/fxai_offline_lab.py cross-asset-health
-python3 Tools/fxai_offline_lab.py microstructure-health
-python3 Tools/fxai_offline_lab.py live-state --symbol EURUSD
+swift test --package-path FXDataEngine
+swift test --package-path FXPlugins
+swift test --package-path FXBacktest
+python3 FXAI/Tools/fxai_testlab.py doctor
+python3 FXAI/Tools/fxai_testlab.py verify-all
+python3 FXAI/Tools/fxai_testlab.py publish-benchmarks --profile bestparams
+python3 FXAI/Tools/fxai_offline_lab.py newspulse-health
+python3 FXAI/Tools/fxai_offline_lab.py rates-engine-health
+python3 FXAI/Tools/fxai_offline_lab.py cross-asset-health
+python3 FXAI/Tools/fxai_offline_lab.py microstructure-health
+python3 FXAI/Tools/fxai_offline_lab.py live-state --symbol EURUSD
 ```
 
 What they do:
-- `doctor`: verifies the active toolchain profile, path overrides from `fxai.toml` or `.env`, and whether MT5 compile or terminal launch prerequisites are actually present.
-- `compile-main`: checks that the EA still compiles cleanly.
-- `compile-tensorcore`: checks that the dedicated TensorCore and plugin-contract MT5 runner still compiles cleanly.
+- `swift test --package-path ...`: verifies the Swift data engine, plugin package, and FXBacktest runtime.
+- `doctor`: verifies the active toolchain profile and path overrides from `fxai.toml` or `.env`.
 - `verify-all`: runs the broader release gate.
 - `publish-benchmarks`: writes the public benchmark matrix, reference audit bundle, promotion criteria, and release-note delta artifacts.
 - `*-health`: tells you whether the shared runtime layers are fresh enough to trust.

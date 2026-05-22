@@ -2,10 +2,11 @@
 
 Date: 2026-05-23
 
-This plan converts the legacy MQL5 plugins from `FXAI/FXPlugins` into the root
-`FXPlugins` area, then ports them one plugin at a time to Swift contracts backed
-by `FXDataEngine`. It also connects the two FXBacktest demo/reference plugins to
-the same `FXDataEngine` plugin contract surface.
+This plan records the conversion of the former MQL5 plugin inventory into the
+root `FXPlugins` Swift package backed by `FXDataEngine`. It also connects the
+two FXBacktest demo/reference plugins to the same `FXDataEngine` plugin contract
+surface. The old MQL5 plugin files have now been removed; historical `.mqh`
+paths in this document are retained only as inventory labels.
 
 ## Hardware And Framework Policy
 
@@ -71,11 +72,10 @@ plugins in this request.
 
 ## Directory Plan
 
-1. Move the legacy MQL5 plugin tree up from `FXAI/FXPlugins` to root
-   `FXPlugins`, preserving family folders and plugin filenames.
-2. Keep the old MQL5 files temporarily as legacy reference files during porting.
-   Do not delete them until the Swift implementation for that plugin has a
-   passing parity/contract test.
+1. Preserve the former plugin family and identifier structure in the root
+   `FXPlugins` Swift package.
+2. Retire the old MQL5 files after the Swift package exposes every plugin ID
+   through a contract-tested implementation or backend plan.
 3. Add a SwiftPM package in root `FXPlugins`.
 4. Put Swift sources under `FXPlugins/Sources/FXAIPlugins/<Family>/`, mirroring
    the family structure.
@@ -120,8 +120,9 @@ Port from low risk to high risk:
 
 Each plugin step:
 
-1. Read MQL5 implementation and identify inputs, state, training, prediction,
-   persistence, and any legacy spread references.
+1. Review the historical inventory entry and current Swift adapter to identify
+   inputs, state, training, prediction, persistence, and any old spread
+   references.
 2. Write Swift plugin implementation and manifest.
 3. Add a focused contract test and an acceleration-plan assertion.
 4. Run `swift test` for `FXPlugins`.
@@ -205,8 +206,8 @@ Findings:
 
 - The inventory count of 63 matches `FXDataEngineConstants.aiCount` and the
   `AIModelID` enum count.
-- The existing root `FXPlugins` folder has only documentation, so moving the
-  nested MQL5 tree up will not overwrite converted Swift code.
+- The root `FXPlugins` folder is now the converted Swift package and should not
+  contain legacy MQL5 source.
 - Several plugin names contain "spread"; those are not bid/ask spread
   dependencies by default. During conversion, inspect each occurrence and map it
   either to statistical residual or to `priceCostPoints`.
@@ -245,13 +246,12 @@ Revision from pass 2:
   `FXDataEngine` now.
 - Keep converted plugins in a registry owned by `FXPlugins`; later FXAI agents
   can import that registry.
-- Do not delete nested `FXAI/FXPlugins` until the move is committed and verified
-  by `git status`, because current tests and docs may still reference it.
+- The nested `FXAI/FXPlugins` reference tree has been removed after the Swift
+  adapter wave and documentation updates.
 
 ## Immediate Coding Plan
 
-1. Copy the nested plugin tree into root `FXPlugins` preserving the family
-   structure.
+1. Preserve the plugin family structure in root `FXPlugins`.
 2. Add a root `FXPlugins/Package.swift` package.
 3. Add shared Swift support:
    - `PluginAccelerationPlan`
@@ -290,14 +290,15 @@ Revision from pass 2:
 
 Remaining parity work after this wave is plugin-specific: replace generated
 surrogate bodies with direct Swift, Metal, PyTorch, or TensorFlow implementations
-and add per-plugin MQL5 parity fixtures before deleting the matching legacy
-reference file.
+and add per-plugin parity fixtures against the behavior documented in the
+historical inventory.
 
 ## Implementation Status
 
 Completed first Swift wave on 2026-05-23:
 
-- Root `FXPlugins` now contains the copied legacy MQL5 plugin reference tree.
+- Root `FXPlugins` is now the Swift plugin package; legacy MQL5 reference files
+  have been removed.
 - Added a SwiftPM `FXAIPlugins` package wired to `FXDataEngine`.
 - Added `PluginAccelerationPlan` metadata for backend suitability.
 - Added `FXAIPluginRegistry` for converted plugin discovery.
@@ -329,7 +330,6 @@ Remaining work:
 - Replace generated surrogate prediction with full per-plugin native logic or
   model-specific PyTorch/TensorFlow training/inference as each backend is
   implemented.
-- Add parity fixtures for every non-generated algorithm body before removing
-  its MQL5 reference file.
-- Remove or retire MQL5 reference files only after each corresponding Swift or
-  backend plugin passes contract, parity, and acceleration-plan tests.
+- Add parity fixtures for every non-generated algorithm body before replacing
+  its generated adapter.
+- Keep the repository MQL5-free except for `FXDatabase/EA/FXDatabase.mq5`.

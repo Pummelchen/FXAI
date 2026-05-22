@@ -20,7 +20,7 @@ struct MicrostructureView: View {
             VStack(alignment: .leading, spacing: 18) {
                 SectionHeader(
                     title: "Microstructure",
-                    subtitle: "Inspect live MT5 tick-flow proxies, liquidity stress, stop-run rejection risk, session handoff behavior, and the runtime trade gate they currently imply."
+                    subtitle: "Inspect provider microstructure proxies, liquidity stress, stop-run rejection risk, session handoff behavior, and the runtime trade gate they currently imply."
                 )
 
                 if let snapshot = model.microstructureSnapshot {
@@ -30,7 +30,7 @@ struct MicrostructureView: View {
                 } else {
                     EmptyStateView(
                         title: "Microstructure service is not visible yet",
-                        message: "Install and start FXAI_MicrostructureProbe in MT5 Services, then refresh the GUI so the operator shell can read the latest runtime snapshot.",
+                        message: "Publish the microstructure provider snapshot, then refresh the GUI so the operator shell can read the latest runtime state.",
                         symbolName: "waveform.path.ecg.rectangle.fill"
                     )
                 }

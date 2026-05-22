@@ -4,14 +4,14 @@ public enum GUIValidationFixtures {
     public static func projectSnapshot(projectRoot: URL) -> FXAIProjectSnapshot {
         let now = Date()
         let plugins = [
-            PluginDescriptor(name: "ai_tft", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("Plugins/Sequence/ai_tft"), sourceKind: .folder),
-            PluginDescriptor(name: "ai_patchtst", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("Plugins/Sequence/ai_patchtst"), sourceKind: .folder),
-            PluginDescriptor(name: "ai_gha", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("Plugins/Sequence/ai_gha.mqh"), sourceKind: .file),
-            PluginDescriptor(name: "ai_qcew", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("Plugins/Sequence/ai_qcew.mqh"), sourceKind: .file),
-            PluginDescriptor(name: "tree_catboost", family: "Tree", sourcePath: projectRoot.appendingPathComponent("Plugins/Tree/tree_catboost"), sourceKind: .folder),
-            PluginDescriptor(name: "tree_lgbm", family: "Tree", sourcePath: projectRoot.appendingPathComponent("Plugins/Tree/tree_lgbm"), sourceKind: .folder),
-            PluginDescriptor(name: "lin_pa", family: "Linear", sourcePath: projectRoot.appendingPathComponent("Plugins/Linear/lin_pa"), sourceKind: .folder),
-            PluginDescriptor(name: "native_transformer", family: "TensorCore", sourcePath: projectRoot.appendingPathComponent("TensorCore"), sourceKind: .folder)
+            PluginDescriptor(name: "ai_tft", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Generated/FXAIGeneratedPluginAdapters.swift"), sourceKind: .file),
+            PluginDescriptor(name: "ai_patchtst", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Generated/FXAIGeneratedPluginAdapters.swift"), sourceKind: .file),
+            PluginDescriptor(name: "ai_gha", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Generated/FXAIGeneratedPluginAdapters.swift"), sourceKind: .file),
+            PluginDescriptor(name: "ai_qcew", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Generated/FXAIGeneratedPluginAdapters.swift"), sourceKind: .file),
+            PluginDescriptor(name: "tree_catboost", family: "Tree", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Generated/FXAIGeneratedPluginAdapters.swift"), sourceKind: .file),
+            PluginDescriptor(name: "tree_lgbm", family: "Tree", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Generated/FXAIGeneratedPluginAdapters.swift"), sourceKind: .file),
+            PluginDescriptor(name: "lin_pa", family: "Linear", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Generated/FXAIGeneratedPluginAdapters.swift"), sourceKind: .file),
+            PluginDescriptor(name: "fxbacktest_moving_average_cross", family: "FXBacktestDemo", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/FXBacktestDemo/MovingAverageCrossFXDataEnginePlugin.swift"), sourceKind: .file)
         ]
         let pluginFamilies = Dictionary(grouping: plugins, by: \.family)
             .map { family, familyPlugins in
@@ -28,9 +28,10 @@ public enum GUIValidationFixtures {
             projectRoot: projectRoot,
             generatedAt: now,
             buildTargets: [
-                BuildTargetStatus(name: "FXAI.ex5", relativePath: "FXAI.ex5", exists: true, modifiedAt: now),
-                BuildTargetStatus(name: "FXAI_AuditRunner.ex5", relativePath: "Tests/FXAI_AuditRunner.ex5", exists: true, modifiedAt: now),
-                BuildTargetStatus(name: "FXAI_OfflineExportRunner.ex5", relativePath: "Tests/FXAI_OfflineExportRunner.ex5", exists: true, modifiedAt: now)
+                BuildTargetStatus(name: "FXDataEngine Swift Package", relativePath: "FXDataEngine/Package.swift", exists: true, modifiedAt: now),
+                BuildTargetStatus(name: "FXPlugins Swift Package", relativePath: "FXPlugins/Package.swift", exists: true, modifiedAt: now),
+                BuildTargetStatus(name: "FXBacktest Swift Package", relativePath: "FXBacktest/Package.swift", exists: true, modifiedAt: now),
+                BuildTargetStatus(name: "FXDatabase Swift Package", relativePath: "FXDatabase/Package.swift", exists: true, modifiedAt: now)
             ],
             pluginFamilies: pluginFamilies,
             plugins: plugins,
@@ -1602,9 +1603,9 @@ public enum GUIValidationFixtures {
                 )
             ],
             sourceOfTruth: [
-                KeyValueRecord(key: "profiles", value: "FILE_COMMON/FXAI/Offline/Promotions"),
+                KeyValueRecord(key: "profiles", value: "FXAI/Offline/Promotions"),
                 KeyValueRecord(key: "database", value: "Turso"),
-                KeyValueRecord(key: "runtime", value: "MT5 FILE_COMMON")
+                KeyValueRecord(key: "runtime", value: "Swift runtime artifacts")
             ]
         )
     }

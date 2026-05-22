@@ -4,7 +4,7 @@
 
 # FXAI
 
-FXAI is a trading-system framework in transition from its original MT5/MQL5 runtime toward a native Swift and Metal research and backtest stack. Live trading currently remains inside MetaTrader 5 and MQL5, while the new repo-root Swift projects provide the historical data source and accelerated offline backtest path.
+FXAI is a trading-system framework that has moved its data-engine, plugin, and offline backtest surface from the original MT5/MQL5 runtime into native Swift and Metal packages. The remaining MT5 bridge is the FXDatabase exporter EA, which exists only to collect M1 OHLCV data for the Swift stack.
 
 FXAI is not a single black-box strategy. It is a governed decision framework: shared data contracts, model plugins, runtime risk layers, audit gates, promotion artifacts, and an optional GUI all work from the same source of truth.
 
@@ -24,13 +24,13 @@ All Swift projects and subprojects in FXAI use the current local Apple toolchain
 |---|---|---|
 | Live Trader | See whether a trade is allowed, cautioned, blocked, or abstained before trusting a signal. | [Quick Start By Role](FXAI/Wiki/Quick%20Start%20By%20Role.md) |
 | Demo Trader | Learn how the full control plane behaves under real market conditions without risking capital. | [Getting Started](FXAI/Wiki/Getting%20Started.md) |
-| Backtester | Run scenario-aware evaluations instead of comparing isolated MT5 tester runs by headline score only. | [Audit Lab](FXAI/Wiki/Audit%20Lab.md) |
+| Backtester | Run scenario-aware Swift/Metal evaluations instead of comparing isolated tester runs by headline score only. | [Audit Lab](FXAI/Wiki/Audit%20Lab.md) |
 | EA Researcher | Improve models, labels, calibration, routing, and promotion decisions with lineage and evidence. | [Offline Lab](FXAI/Wiki/Offline%20Lab.md) |
 | System Architect | Operate services, artifacts, release gates, recovery, and platform health without hidden machine assumptions. | [Project Structure](FXAI/Wiki/Project%20Structure.md) |
 
 ## Core Benefits
 
-- Transitional MT5 live runtime: no external live inference service and no DLL dependency for current trade decisions while the Swift/Metal architecture is built out.
+- Swift-first runtime direction: FXDataEngine, FXPlugins, FXBacktest, FXDatabase, and the agent folders are the active source surfaces for the migration away from MT5 execution.
 - One canonical historical market contract: verified `M1 OHLCV` from FXDatabase, with MT5 raw data access isolated behind the FXDatabase bridge and FXAI data pipeline. Spread is not part of this offline contract; volume is used by plugins whenever the dataset provides nonzero values.
 - Native Swift backtesting: FXBacktest consumes FXDatabase history and can run CPU, Metal, or hybrid CPU+Metal optimization paths for converted plugins.
 - Plugin-based model layer: statistical, tree, linear, sequence, factor, trend, regime, policy, and ensemble families share one prediction contract.
@@ -41,7 +41,7 @@ All Swift projects and subprojects in FXAI use the current local Apple toolchain
 ## What Users Can Do With FXAI
 
 - Check the live state of a symbol and understand the reason behind `ALLOW`, `CAUTION`, `BLOCK`, or `ABSTAIN`.
-- Run Swift-native FXBacktest jobs and MQL5 Audit Lab scenarios with shared assumptions instead of manually comparing inconsistent settings.
+- Run Swift-native FXBacktest jobs and audit scenarios with shared assumptions instead of manually comparing inconsistent settings.
 - Research and promote better candidates with Offline Lab, benchmark cards, model-family scorecards, and strategy-profile manifests.
 - Inspect service health for news, rates, cross-asset, microstructure, calendar, factor context, calibration, execution, drift, and portfolio-conflict layers.
 - Use the GUI to arrange dashboards, save layouts, start common workflows, and recover from missing or stale artifacts.
@@ -64,7 +64,7 @@ Recommended first pages:
 
 ## Swift And Metal Migration
 
-FXBacktest and FXDatabase are the foundation for moving the old FXAI MQL5 backtest workflow into a pure Swift stack. FXDatabase owns verified historical M1 OHLCV data and the MT5 bridge. FXBacktest owns strategy simulation, optimization, plugin conversion, and Metal acceleration. The MQL5 source under `FXAI/` remains the current live EA and reference implementation until each data-engine, plugin, and runtime layer is ported and verified.
+FXBacktest and FXDatabase are the foundation for the pure Swift stack. FXDatabase owns verified historical M1 OHLCV data and the one remaining MT5 exporter bridge. FXDataEngine owns the ported data-engine contracts, FXPlugins owns converted plugin execution adapters, and FXBacktest owns strategy simulation, optimization, plugin evaluation, and Metal acceleration. Legacy FXAI MQL5 source has been retired from this repository.
 
 Subsystem guides:
 

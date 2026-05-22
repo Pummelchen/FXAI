@@ -19,7 +19,7 @@ struct BacktestBuilderView: View {
             VStack(alignment: .leading, spacing: 18) {
                 SectionHeader(
                     title: "Backtest Builder",
-                    subtitle: "Prepare the realistic FXAI workflow that exists today: compile, audit, baseline, then hand off into MT5 Strategy Tester."
+                    subtitle: "Prepare the Swift FXAI workflow: package checks, audit, baseline, then hand off into FXBacktest."
                 )
 
                 FXAIVisualEffectSurface {
@@ -65,7 +65,7 @@ struct BacktestBuilderView: View {
 
                 CommandPreviewCard(
                     title: "Generated Backtest Prep Workflow",
-                    summary: "Copy this into Terminal first, then move into MT5 Strategy Tester with the same plugin and symbol configuration.",
+                    summary: "Copy this into Terminal first, then run FXBacktest with the same plugin and symbol configuration.",
                     command: command,
                     onCopy: { model.copyToPasteboard(command) },
                     onTerminal: { model.handoffCommandToTerminal(command) }
@@ -73,10 +73,10 @@ struct BacktestBuilderView: View {
 
                 FXAIVisualEffectSurface {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Manual Strategy Tester Handoff")
+                        Text("FXBacktest Handoff")
                             .font(.headline)
                             .foregroundStyle(FXAITheme.textPrimary)
-                        Label("After the command workflow completes, open MT5 Strategy Tester and run the same symbol, plugin, and `.set` surface you just certified.", systemImage: "arrowshape.turn.up.right.fill")
+                        Label("After the command workflow completes, run the same symbol, plugin, and execution profile through FXBacktest.", systemImage: "arrowshape.turn.up.right.fill")
                             .foregroundStyle(FXAITheme.textSecondary)
                         Label("Use the audit result and saved baseline to decide whether the tester run is worth expanding.", systemImage: "checkmark.shield.fill")
                             .foregroundStyle(FXAITheme.textSecondary)

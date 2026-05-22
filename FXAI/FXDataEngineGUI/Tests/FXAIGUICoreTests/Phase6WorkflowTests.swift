@@ -70,7 +70,7 @@ struct Phase6WorkflowTests {
             projectRoot: projectRoot,
             generatedAt: Date(),
             buildTargets: [
-                BuildTargetStatus(name: "FXAI.ex5", relativePath: "FXAI.ex5", exists: false, modifiedAt: nil)
+                BuildTargetStatus(name: "FXDataEngine Swift Package", relativePath: "FXDataEngine/Package.swift", exists: false, modifiedAt: nil)
             ],
             pluginFamilies: [],
             plugins: [],
@@ -232,9 +232,14 @@ struct Phase6WorkflowTests {
     private func makeProjectRootFixture() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("Plugins", isDirectory: true), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("Tools", isDirectory: true), withIntermediateDirectories: true)
-        try Data().write(to: root.appendingPathComponent("FXAI.mq5"))
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXDataEngine", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXPlugins", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXBacktest", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXDatabase", isDirectory: true), withIntermediateDirectories: true)
+        try Data("// swift-tools-version: 6.3\n".utf8).write(to: root.appendingPathComponent("FXDataEngine/Package.swift"))
+        try Data("// swift-tools-version: 6.3\n".utf8).write(to: root.appendingPathComponent("FXPlugins/Package.swift"))
+        try Data("// swift-tools-version: 6.3\n".utf8).write(to: root.appendingPathComponent("FXBacktest/Package.swift"))
+        try Data("// swift-tools-version: 6.3\n".utf8).write(to: root.appendingPathComponent("FXDatabase/Package.swift"))
         return root
     }
 }

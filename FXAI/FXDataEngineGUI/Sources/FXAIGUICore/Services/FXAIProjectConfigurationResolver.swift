@@ -15,7 +15,12 @@ enum FXAIProjectConfigurationResolver {
             rawValue: processEnvironment["FXAI_ENV_FILE"],
             baseDirectory: projectRoot,
             environment: processEnvironment
-        ) ?? projectRoot.appendingPathComponent(".env", isDirectory: false)
+        ) ?? firstExisting(
+            candidates: [
+                projectRoot.appendingPathComponent(".env", isDirectory: false),
+                projectRoot.appendingPathComponent("FXAI", isDirectory: true).appendingPathComponent(".env", isDirectory: false)
+            ]
+        )
 
         let dotenv = parseDotEnv(at: envURL)
         var mergedEnvironment = dotenv
@@ -27,7 +32,12 @@ enum FXAIProjectConfigurationResolver {
             rawValue: mergedEnvironment["FXAI_CONFIG"],
             baseDirectory: projectRoot,
             environment: mergedEnvironment
-        ) ?? projectRoot.appendingPathComponent("fxai.toml", isDirectory: false)
+        ) ?? firstExisting(
+            candidates: [
+                projectRoot.appendingPathComponent("fxai.toml", isDirectory: false),
+                projectRoot.appendingPathComponent("FXAI", isDirectory: true).appendingPathComponent("fxai.toml", isDirectory: false)
+            ]
+        )
 
         let parser = parser(at: configURL)
         let profile = resolveProfile(
@@ -81,6 +91,10 @@ enum FXAIProjectConfigurationResolver {
             return nil
         }
         return SimpleTOMLParser(text: text)
+    }
+
+    private static func firstExisting(candidates: [URL]) -> URL {
+        candidates.first { FileManager.default.fileExists(atPath: $0.path) } ?? candidates[0]
     }
 
     private static func parseDotEnv(at url: URL) -> [String: String] {

@@ -20,7 +20,7 @@ struct ProjectScannerTests {
         let snapshot = try scanner.scan(projectRoot: tempRoot)
 
         #expect(snapshot.totalPluginCount == 2)
-        #expect(snapshot.cleanBuildTargetCount == 2)
+        #expect(snapshot.cleanBuildTargetCount == 4)
         #expect(snapshot.reportCategories.contains(where: { $0.category == "ResearchOS" && $0.fileCount == 2 }))
         #expect(snapshot.runtimeProfiles.count == 1)
         #expect(snapshot.operatorSummary.championCount == 1)
@@ -61,17 +61,36 @@ struct ProjectScannerTests {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
 
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("Plugins/Linear", isDirectory: true), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("Plugins/Sequence/ai_mlp", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXDataEngine", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Linear", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Sequence", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXBacktest", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXDatabase", isDirectory: true), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("Tools/Baselines", isDirectory: true), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("Tools/OfflineLab/ResearchOS/test-profile", isDirectory: true), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("Tests", isDirectory: true), withIntermediateDirectories: true)
 
-        try Data().write(to: root.appendingPathComponent("FXAI.mq5"))
-        try Data().write(to: root.appendingPathComponent("Plugins/Linear/lin_sgd.mqh"))
-        try Data().write(to: root.appendingPathComponent("Plugins/Sequence/ai_mlp.mqh"))
-        try Data().write(to: root.appendingPathComponent("FXAI.ex5"))
-        try Data().write(to: root.appendingPathComponent("Tests/FXAI_AuditRunner.ex5"))
+        try Data("// swift-tools-version: 6.3\n".utf8).write(to: root.appendingPathComponent("FXDataEngine/Package.swift"))
+        try Data("// swift-tools-version: 6.3\n".utf8).write(to: root.appendingPathComponent("FXPlugins/Package.swift"))
+        try Data("// swift-tools-version: 6.3\n".utf8).write(to: root.appendingPathComponent("FXBacktest/Package.swift"))
+        try Data("// swift-tools-version: 6.3\n".utf8).write(to: root.appendingPathComponent("FXDatabase/Package.swift"))
+        try Data(
+            """
+            public let manifest = PluginManifestV4(
+                aiID: AIModelID.sgdLogit.rawValue,
+                aiName: "lin_sgd",
+                family: .linear
+            )
+            """.utf8
+        ).write(to: root.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Linear/LinearFixture.swift"))
+        try Data(
+            """
+            public let manifest = PluginManifestV4(
+                aiID: AIModelID.mlpTiny.rawValue,
+                aiName: "ai_mlp",
+                family: .transformer
+            )
+            """.utf8
+        ).write(to: root.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Sequence/SequenceFixture.swift"))
         try Data("{\"plugins\":{}}".utf8).write(to: root.appendingPathComponent("Tools/Baselines/example.summary.json"))
         try Data(
             """

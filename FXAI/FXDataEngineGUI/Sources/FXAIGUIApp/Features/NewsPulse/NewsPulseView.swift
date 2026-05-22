@@ -86,7 +86,7 @@ struct NewsPulseView: View {
                 } else {
                     EmptyStateView(
                         title: "NewsPulse is not running yet",
-                        message: "Install the MT5 calendar service, start the NewsPulse daemon, and refresh the GUI so the operator shell can display merged news state.",
+                        message: "Publish calendar provider state, start the NewsPulse daemon, and refresh the GUI so the operator shell can display merged news state.",
                         symbolName: "dot.radiowaves.left.and.right"
                     )
                 }

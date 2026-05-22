@@ -3,15 +3,18 @@ import Foundation
 public enum CommandFactory {
     public static func recipes(projectRoot: URL) -> [CommandRecipe] {
         let root = projectRoot.path
+        let toolRoot = toolProjectRoot(projectRoot).path
 
         return [
             CommandRecipe(
                 role: .liveTrader,
-                title: "Verify Live Readiness",
-                summary: "Check environment, compile state, and current promoted runtime health.",
+                title: "Verify Swift Runtime Readiness",
+                summary: "Check Swift package health and current promoted runtime artifacts.",
                 command: """
                 cd \(shellQuoted(root))
-                python3 Tools/fxai_testlab.py verify-all
+                swift test --package-path FXDataEngine
+                swift test --package-path FXPlugins
+                swift test --package-path FXBacktest
                 """,
                 commandKind: "Verification"
             ),
@@ -20,7 +23,7 @@ public enum CommandFactory {
                 title: "Refresh NewsPulse",
                 summary: "Rebuild the shared news-risk snapshot before reviewing active trade gates.",
                 command: """
-                cd \(shellQuoted(root))
+                cd \(shellQuoted(toolRoot))
                 python3 Tools/fxai_offline_lab.py newspulse-once
                 python3 Tools/fxai_offline_lab.py newspulse-health
                 """,
@@ -31,19 +34,20 @@ public enum CommandFactory {
                 title: "Run Focused Audit",
                 summary: "Validate one candidate setup before watching it on a demo chart.",
                 command: """
-                cd \(shellQuoted(root))
+                cd \(shellQuoted(toolRoot))
                 python3 Tools/fxai_testlab.py run-audit --plugin-list "{ai_mlp}" --scenario-list "{market_recent,market_walkforward,market_macro_event}" --symbol EURUSD
                 """,
                 commandKind: "Audit"
             ),
             CommandRecipe(
                 role: .backtester,
-                title: "Compile Both MT5 Targets",
-                summary: "Build the EA and Audit Runner before a Strategy Tester session.",
+                title: "Run Swift Backtest Checks",
+                summary: "Build and test the Swift data engine, plugin package, and backtest runtime before a campaign.",
                 command: """
                 cd \(shellQuoted(root))
-                python3 Tools/fxai_testlab.py compile-main
-                python3 Tools/fxai_testlab.py compile-audit
+                swift test --package-path FXDataEngine
+                swift test --package-path FXPlugins
+                swift test --package-path FXBacktest
                 """,
                 commandKind: "Build"
             ),
@@ -52,7 +56,7 @@ public enum CommandFactory {
                 title: "Run Continuous Tuning",
                 summary: "Export current windows and tune the model zoo through Offline Lab.",
                 command: """
-                cd \(shellQuoted(root))
+                cd \(shellQuoted(toolRoot))
                 python3 Tools/fxai_offline_lab.py tune-zoo --profile continuous --auto-export --symbol-pack majors --months-list 3,6,12
                 """,
                 commandKind: "Offline Lab"
@@ -62,7 +66,7 @@ public enum CommandFactory {
                 title: "Promote Best Params",
                 summary: "Emit promoted parameter packs and deployment artifacts.",
                 command: """
-                cd \(shellQuoted(root))
+                cd \(shellQuoted(toolRoot))
                 python3 Tools/fxai_offline_lab.py best-params --profile continuous
                 python3 Tools/fxai_offline_lab.py deploy-profiles --profile continuous
                 """,
@@ -73,7 +77,7 @@ public enum CommandFactory {
                 title: "Bootstrap Research OS",
                 summary: "Validate the environment and seed the research operating system.",
                 command: """
-                cd \(shellQuoted(root))
+                cd \(shellQuoted(toolRoot))
                 python3 Tools/fxai_offline_lab.py validate-env
                 python3 Tools/fxai_offline_lab.py bootstrap --seed-demo
                 """,
@@ -84,7 +88,7 @@ public enum CommandFactory {
                 title: "Validate NewsPulse",
                 summary: "Check NewsPulse config, the operator policy, and current daemon/source health.",
                 command: """
-                cd \(shellQuoted(root))
+                cd \(shellQuoted(toolRoot))
                 python3 Tools/fxai_offline_lab.py newspulse-validate
                 python3 Tools/fxai_offline_lab.py newspulse-health
                 """,
@@ -95,13 +99,21 @@ public enum CommandFactory {
                 title: "Run Autonomous Governance",
                 summary: "Refresh research outputs, lineage, and promoted deployment state.",
                 command: """
-                cd \(shellQuoted(root))
+                cd \(shellQuoted(toolRoot))
                 python3 Tools/fxai_offline_lab.py autonomous-governance --profile continuous
                 python3 Tools/fxai_offline_lab.py dashboard --profile continuous
                 """,
                 commandKind: "Governance"
             )
         ]
+    }
+
+    private static func toolProjectRoot(_ projectRoot: URL) -> URL {
+        let rootTools = projectRoot.appendingPathComponent("Tools", isDirectory: true)
+        if FileManager.default.fileExists(atPath: rootTools.path) {
+            return projectRoot
+        }
+        return projectRoot.appendingPathComponent("FXAI", isDirectory: true)
     }
 
     private static func shellQuoted(_ value: String) -> String {

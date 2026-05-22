@@ -3,9 +3,10 @@ import Foundation
 public enum ProjectPathResolver {
     public static func isProjectRoot(_ url: URL) -> Bool {
         let fm = FileManager.default
-        return fm.fileExists(atPath: url.appendingPathComponent("FXAI.mq5").path)
-            && fm.fileExists(atPath: url.appendingPathComponent("Plugins").path)
-            && fm.fileExists(atPath: url.appendingPathComponent("Tools").path)
+        return fm.fileExists(atPath: url.appendingPathComponent("FXDataEngine/Package.swift").path)
+            && fm.fileExists(atPath: url.appendingPathComponent("FXPlugins/Package.swift").path)
+            && fm.fileExists(atPath: url.appendingPathComponent("FXBacktest/Package.swift").path)
+            && fm.fileExists(atPath: url.appendingPathComponent("FXDatabase/Package.swift").path)
     }
 
     public static func defaultProjectRoot() -> URL? {

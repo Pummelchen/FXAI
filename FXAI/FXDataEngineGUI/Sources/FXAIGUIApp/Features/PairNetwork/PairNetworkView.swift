@@ -35,7 +35,7 @@ struct PairNetworkView: View {
                 } else {
                     EmptyStateView(
                         title: "Pair-network artifacts not found",
-                        message: "Run pair-network-validate to publish the default config, build the graph with pair-network-build, let MT5 emit per-symbol runtime state, and refresh the GUI.",
+                        message: "Run pair-network-validate, build the graph with pair-network-build, publish per-symbol runtime state, and refresh the GUI.",
                         symbolName: "point.3.connected.trianglepath.dotted"
                     )
                 }

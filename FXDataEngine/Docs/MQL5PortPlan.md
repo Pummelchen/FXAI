@@ -1,13 +1,14 @@
-# MQL5 FXDataEngine To Swift Port Plan
+# FXDataEngine Swift Port Completion Record
 
-This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must move into the repository-root Swift `FXDataEngine` package before the legacy `FXAI/FXDataEngine` tree can be removed.
+This record tracks how the former non-tensor MQL5 FXDataEngine surface was moved into the repository-root Swift `FXDataEngine` package before the legacy `FXAI/FXDataEngine` tree was removed.
 
 ## Verified Baseline
 
-- Legacy non-tensor surface checked: `FXAI/FXDataEngine`, excluding `TensorCore` and `Tests/TensorCore`.
-- Remaining non-tensor MQL5 files: 119 files, about 53k lines.
-- Current Swift package surface: OHLCV market contracts, volume-aware feature contracts, normalization payloads, plugin request DTOs, ML backend descriptors, and Metal capability descriptors.
-- Explicit exclusion: old MQL5 `TensorCore` is not part of this Swift data-engine parity gate. Tensor training and inference move to FXPlugins through PyTorch or TensorFlow backends.
+- Legacy non-tensor surface checked before deletion: `FXAI/FXDataEngine`, excluding `TensorCore` and `Tests/TensorCore`.
+- Ported non-tensor MQL5 files: 119 files, about 53k lines, mapped in the deletion-gate disposition audit below.
+- Current Swift package surface: OHLCV market contracts, volume-aware feature contracts, normalization payloads, plugin request DTOs, ML backend descriptors, Metal capability descriptors, runtime policy DTOs, audit utilities, lifecycle planning, warmup planning, and FXDatabase-backed sample preparation.
+- Explicit exclusion: old MQL5 `TensorCore` was not part of this Swift data-engine parity gate. Tensor training and inference move to FXPlugins through PyTorch or TensorFlow backends.
+- Deletion result: the legacy `FXAI/FXDataEngine` tree has been removed. The only remaining MT5 source in the repository is `FXDatabase/EA/FXDatabase.mq5`, the FXDatabase data exporter.
 
 ## Migration Boundaries
 
@@ -31,16 +32,16 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 | 9 | `Lifecycle`, `Warmup`, `engine_lifecycle`, `engine_warmup` | `FXDataEngine` and agents | Bootstrap, compliance, context symbol selection, reset/recovery, warmup scoring, portfolio warmup. | Lifecycle tests cover symbol/session/regime reset and warmup readiness. |
 | 10 | `Tests`, audit/scoring/scenario harness | `FXDataEngine/Tests`, `FXBacktest/Tests` | Rebuild MQL audit suites as Swift fixtures and regression tests. | Every retained legacy behavior has a Swift test or an explicit retirement note. |
 
-## Current Gaps By Module
+## Completion Status By Module
 
-- `Engine/Core`: partially ported. Core constants, feature groups, plugin families, data request basics, context symbol filtering, timeframe need/lag helpers, aligned-index maps, context aggregate arrays, context aggregate feature-slot adapters, feature schema, normalization concepts, model-context capacity/span helpers, analog-memory/hierarchical signal scoring, regime graph transition scoring, runtime performance tracking, broker execution profile/cost/replay helpers, and volume-aware execution trace stats exist in Swift; stateful broker execution memory and live order coupling remain FXBacktest/live-agent migration work.
-- `Engine` root: partially ported. Feature registry/build/norm exist only as a first slice; legacy as-series feature math primitives, deterministic feature-build session/carry/drift helpers, training random/hyperparameter descriptors, routed model-state resolution, and prepared-sample window shaping are ported for parity checks; runtime artifact text manifests, binary runtime artifact header/envelope persistence, typed v15 payload section ownership/layout, deterministic replay reservoir state, conformal calibration state, normalization window/config state, normalization rolling history state, and normalization fit state are ported; M1 OHLCV training-sample preparation now covers ascending triple-barrier labels, plugin train payloads, deterministic range-based training datasets, deterministic horizon configuration helpers, FXDatabase M1 history loading, canonical ascending bar window helpers, M1-derived MTF bar shaping/alignment, context-symbol FXDatabase range request policy, offline macro-event TSV/features/state adapters, calendar-cache news gate readers, prepared-input factor context scoring, deterministic system-health aggregation, prepared-state meta calibration/horizon/reliability/policy/stacker helpers, reliability pending-outcome compaction, stack/policy/horizon pending replay queues, bounded replay outcome targets, meta-artifact path/header/save-throttle planning, API-level plugin invocation/performance wrappers, plugin persistence metadata/path helpers, plugin context runtime/window/prediction shaping helpers, plugin context payload state helpers, common plugin ternary/binary calibration support, deterministic plugin quality-bank/move-head support, cross-symbol transfer slot support, and shared-transfer input/temporal payload construction. Broader runtime/plugin-state integration remains.
-- `Runtime/ControlPlane`: partially ported. Swift now has profile/snapshot DTOs, safe path helpers, TSV parsing, adaptive/student router weight helpers, portfolio supervisor defaults, supervisor service/command state parsing, freshness checks, command direction/budget helpers, file-backed profile loaders, peer aggregate scoring, and stale snapshot pruning.
-- `Runtime/Trade`: partially ported. Pure symbol/currency exposure helpers, Pair Network config/exposure math, risk-policy admission/sizing/overlay DTOs, lifecycle recommendation math, and deterministic execution-plan construction are in FXDataEngine; remaining broker position/order scanning, lifecycle execution, peer discovery, broker lot normalization, order-check/send/cancel/modify effects, and live exposure source collection must be split between FXBacktest simulation and future live-agent contracts.
-- `Runtime` stages: partially ported. Time-context helpers, runtime-cycle entrypoint planning, router model-cap pressure logic, final signal reason/intensity math, runtime signal cache/projection state, deterministic feature-pipeline/transfer handoff planning, runtime model-router selection/filtering, prepared policy-stage arbitration/posture gates, execution-quality config/tier policy support, and probabilistic-calibration prepared-state policy support are available as deterministic Swift contracts; broader model/policy orchestration still needs plugin mockability before real PyTorch/TensorFlow backends.
-- `Lifecycle` and `Warmup`: partially ported. Lifecycle context-symbol category/scoring helpers, lifecycle compliance validation/clamp/window/distance primitives, lifecycle reset planning, lifecycle bootstrap validation planning, lifecycle bootstrap plugin predict/self-test execution, Warmup execution planning, transfer/normalization split helpers, adaptive EV thresholds, serious-native epoch/block budgets, block-batch planning, sample caps, portfolio diagnostics, curriculum-priority scoring, Warmup bucket scoring, and portfolio-objective proxy math are in Swift; remaining provider-backed context discovery, warmup loops, plugin pretraining, real FXPlugins backend adapter wiring, and agent orchestration still need conversion.
-- `Services`: partially ported. NewsPulse, Rates Engine, Cross Asset, Microstructure, and Execution Quality state readers are available in Swift, including calendar-cache fallback for NewsPulse; remaining MT5 service collectors should become offline data-provider inputs or deterministic readers.
-- `Tests`: partially ported. Swift now has audit scoring, report rendering, synthetic and market-backed scenario generation, sample/window bridging, `FXAIPluginV4` protocol runners, suite orchestration, adversarial scenario generation, and lifecycle bootstrap executor coverage; retained parity fixtures should continue expanding while real FXPlugins backend integration remains deferred.
+- `Engine/Core`: ported into Swift deterministic contracts and tests. Stateful broker execution memory and live order coupling are intentionally outside FXDataEngine and belong to FXBacktest or future live-agent work.
+- `Engine` root: ported into Swift feature, sample, market-gateway, runtime-artifact, normalization, replay, conformal, meta, macro, factor, and plugin-context support. Broader plugin-state execution belongs to FXPlugins and FXBacktest orchestration.
+- `Runtime/ControlPlane`: ported into Swift profile/snapshot DTOs, safe path helpers, TSV parsing, router/supervisor helpers, file-backed profile loaders, peer scoring, and stale snapshot pruning.
+- `Runtime/Trade`: pure exposure, pair-network, risk-policy, lifecycle recommendation, execution-quality state, and execution-plan math are ported. Live account, position, order, and broker side effects are excluded from FXDataEngine and move to FXBacktest/live-agent contracts.
+- `Runtime` stages: deterministic time, cycle, router, feature-pipeline, model-router, policy, signal-state, execution-quality, probability-calibration, adaptive-router, and dynamic-ensemble support is ported. Real model execution is owned by FXPlugins.
+- `Lifecycle` and `Warmup`: deterministic lifecycle validation, reset, bootstrap planning, context-symbol scoring, compliance primitives, warmup planning, scoring, thresholds, transfer selection, and portfolio diagnostics are ported. Real pretraining loops and provider orchestration are FXPlugins/FXBacktest/agent work.
+- `Services`: read-only NewsPulse, Rates Engine, Cross Asset, Microstructure, CalendarCache, and Execution Quality state readers are ported. Old MT5 collectors are retired as FXDataEngine dependencies.
+- `Tests`: Swift audit, report, scenario, sample/window, protocol-runner, suite orchestration, adversarial, test-harness, plugin-contract, offline-export, and combined-report utilities are ported.
 
 ## Port Progress
 
@@ -151,7 +152,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 - Done: Offline export runner replacement slice: deterministic `FXAI_OfflineExportRunner.mq5` safe-token/stem/path rules, UTC window validation, newest-bar cap, ascending data output, metadata output, and reset/write behavior are ported as Swift M1 OHLCV export utilities. The Swift data document uses canonical M1 OHLCV plus volume from FXDatabase/FXDataEngine and intentionally omits old MT5-only cost columns.
 - Done: Tensor/plugin combined report wrapper slice: deterministic `FXAI_TensorCoreRunner.mq5` combined JSON report construction, skipped-suite cases, output directory creation, and write behavior are ported as Swift test-report utilities. Actual tensor self-tests remain FXPlugins PyTorch/TensorFlow backend work.
 
-## Start Order
+## Completed Start Order
 
 1. Port `Runtime/ControlPlane` DTOs, safe-token/path helpers, CSV weight utilities, snapshot parsing, and profile defaults.
 2. Port `runtime_artifacts` manifest path helpers and feature/persistence manifest DTOs.
@@ -164,7 +165,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 
 ## Deletion Gate
 
-The MQL5 `FXAI/FXDataEngine` folder can be removed only when each non-tensor file is mapped to one of these outcomes:
+The MQL5 `FXAI/FXDataEngine` folder was removed after each non-tensor file was mapped to one of these outcomes:
 
 - ported to Swift and covered by tests,
 - moved to `FXPlugins` as plugin-owned behavior,
@@ -174,9 +175,9 @@ The MQL5 `FXAI/FXDataEngine` folder can be removed only when each non-tensor fil
 
 ## Deletion-Gate File Disposition Audit
 
-Audited on 2026-05-22. The legacy tree currently contains 119 non-tensor MQL5 files under `FXAI/FXDataEngine`. The 11 `TensorCore` files are excluded from the FXDataEngine parity gate and move to FXPlugins as PyTorch/TensorFlow backend work.
+Audited on 2026-05-22 and deletion executed on 2026-05-23. The legacy tree contained 119 non-tensor MQL5 files under `FXAI/FXDataEngine`. The 11 `TensorCore` files were excluded from the FXDataEngine parity gate and move to FXPlugins as PyTorch/TensorFlow backend work.
 
-Removal blocker: the legacy MQL5 plugin tree has been copied into root `FXPlugins` as the active porting reference, while the nested `FXAI/FXPlugins` tree remains in place temporarily. The MQL5 reference plugins still include legacy `FXDataEngine\API\plugin_base.mqh` headers in many entry files. Do not delete the legacy MQL5 FXDataEngine headers until those plugins are either converted into root `FXPlugins` Swift/PyTorch/TensorFlow plugins or explicitly retired.
+Removal result: the legacy MQL5 plugin references have been retired from the repo after root `FXPlugins` gained Swift `FXAIPluginV4` adapters, acceleration metadata, and backend plans for all former plugin identifiers plus the two FXBacktest demo adapters.
 
 | Legacy files | Count | Disposition |
 | --- | ---: | --- |

@@ -53,11 +53,11 @@ The terminal remains first-class. The GUI is an optional operator layer that:
 
 The GUI should be built around FXAI’s actual artifact surfaces:
 
-- project tree: `FXAI.mq5`, `Tests/`, `Plugins/`, `Tools/`
-- plugin family directories under `Plugins/`
-- baselines under `Tools/Baselines/`
+- project tree: `FXDataEngine/`, `FXPlugins/`, `FXBacktest/`, `FXDatabase/`, `FXAI/Tools/`
+- Swift plugin sources under `FXPlugins/Sources/FXAIPlugins/`
+- baselines under `FXAI/Tools/Baselines/`
 - Offline Lab profiles, ResearchOS, distillation, and bundle artifacts
-- compiled outputs such as `FXAI.ex5`, `FXAI_AuditRunner.ex5`, `FXAI_OfflineExportRunner.ex5`
+- Swift package build/test status for `FXDataEngine`, `FXPlugins`, `FXBacktest`, and `FXDatabase`
 - Turso-backed research state indirectly through emitted files and commands
 - `FILE_COMMON` runtime artifacts in later phases
 

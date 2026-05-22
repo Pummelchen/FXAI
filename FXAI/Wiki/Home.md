@@ -4,7 +4,7 @@
 
 # FXAI Handbook
 
-FXAI is a live-trading and research framework for FX, now expanding from its original MT5/MQL5 runtime into native Swift and Metal backtesting. It combines a modular MT5 Expert Advisor, repo-root Swift subprojects for verified data and accelerated backtests, offline research and promotion workflows, shared runtime risk layers, and an optional macOS GUI so different users can work from the same source of truth without guessing what the system is doing.
+FXAI is a live-trading and research framework for FX, now moving from its original MT5/MQL5 runtime into native Swift and Metal data-engine, plugin, and backtest packages. It combines repo-root Swift subprojects for verified data and accelerated backtests, converted plugin contracts, offline research and promotion workflows, shared runtime risk layers, and an optional macOS GUI so different users can work from the same source of truth without guessing what the system is doing.
 
 ## User Matrix
 
@@ -20,13 +20,13 @@ FXAI is a live-trading and research framework for FX, now expanding from its ori
 
 - Live Trader: FXAI is not just a signal box. It shows whether the signal is safe to trust under current news, rates, microstructure, execution, and portfolio-conflict conditions.
 - Demo Trader: FXAI lets you observe the full control plane in a low-risk setting so you can see when the system blocks, abstains, scales, or reroutes before capital is on the line.
-- Backtester: FXAI makes it practical to compare run windows, settings, and scenarios without manually stitching together MT5 tests, reports, and runtime assumptions.
+- Backtester: FXAI makes it practical to compare run windows, settings, and scenarios without manually stitching together disconnected tests, reports, and runtime assumptions.
 - EA Researcher: FXAI gives you a governed research loop from data export to candidate evaluation to promotion, with lineage and challenger control instead of ad hoc file copying.
 - System Architect: FXAI exposes daemon health, runtime artifacts, services, recovery workflows, and research-state surfaces so platform problems can be found before they degrade trading quality.
 
 ## What You Can Do With FXAI
 
-- Run the live EA with shared control-plane layers such as NewsPulse, Rates Engine, Cross Asset, Microstructure, Adaptive Router, Dynamic Ensemble, Probabilistic Calibration, Execution Quality, and Pair Network.
+- Inspect the shared control-plane layers such as NewsPulse, Rates Engine, Cross Asset, Microstructure, Adaptive Router, Dynamic Ensemble, Probabilistic Calibration, Execution Quality, and Pair Network.
 - Run Audit Lab to see how a strategy or promotion behaves in standard, walk-forward, macro-event, and hostile-market scenarios.
 - Serve verified M1 OHLCV history from the repo-root `FXDatabase/` Swift package for external backtest and research apps.
 - Run Swift-native FXBacktest jobs that consume FXDatabase history and use CPU, Metal, or hybrid CPU+Metal optimization paths.
@@ -101,5 +101,5 @@ Why this matters:
 - The terminal remains first-class.
 - Generated artifacts are the source of truth for operator interpretation.
 - Live safety layers should fail closed when the required state is unknown.
-- The MQL5 EA remains the reference live runtime while data-engine, plugin, and backtest responsibilities migrate into Swift and Metal.
+- The legacy FXAI MQL5 runtime has been retired from the repository; FXDatabase keeps the only MT5 bridge as a data exporter for Swift consumers.
 - The best FXAI workflow is role-based: live users inspect, researchers improve, architects recover, and everyone works from the same artifacts.

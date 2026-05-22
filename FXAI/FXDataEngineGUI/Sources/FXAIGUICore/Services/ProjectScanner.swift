@@ -75,51 +75,11 @@ public struct ProjectScanner {
     }
 
     private func scanPlugins(projectRoot: URL) -> [PluginDescriptor] {
-        let pluginsRoot = projectRoot.appendingPathComponent("Plugins", isDirectory: true)
-        let fm = FileManager.default
-
-        guard let familyURLs = try? fm.contentsOfDirectory(
-            at: pluginsRoot,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return []
-        }
-
+        let pluginsRoot = projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins", isDirectory: true)
         var resultsByID: [String: PluginDescriptor] = [:]
 
-        for familyURL in familyURLs.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-            guard isDirectory(familyURL) else { continue }
-            let family = familyURL.lastPathComponent
-
-            guard let children = try? fm.contentsOfDirectory(
-                at: familyURL,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            ) else {
-                continue
-            }
-
-            for child in children.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-                let descriptor: PluginDescriptor
-                if isDirectory(child) {
-                    descriptor = PluginDescriptor(
-                        name: child.lastPathComponent,
-                        family: family,
-                        sourcePath: child,
-                        sourceKind: .folder
-                    )
-                } else {
-                    let ext = child.pathExtension.lowercased()
-                    guard ext == "mqh" || ext == "mq5" else { continue }
-                    descriptor = PluginDescriptor(
-                        name: child.deletingPathExtension().lastPathComponent,
-                        family: family,
-                        sourcePath: child,
-                        sourceKind: .file
-                    )
-                }
-
+        for sourceFile in recursiveFiles(at: pluginsRoot).filter({ $0.pathExtension.lowercased() == "swift" }) {
+            for descriptor in swiftPluginDescriptors(sourceFile: sourceFile, sourceRoot: pluginsRoot) {
                 if let existing = resultsByID[descriptor.id] {
                     resultsByID[descriptor.id] = preferredPluginDescriptor(existing: existing, candidate: descriptor)
                 } else {
@@ -138,11 +98,100 @@ public struct ProjectScanner {
         return candidate.sourceKind == .file ? candidate : existing
     }
 
+    private func swiftPluginDescriptors(sourceFile: URL, sourceRoot: URL) -> [PluginDescriptor] {
+        guard let source = try? String(contentsOf: sourceFile, encoding: .utf8) else {
+            return []
+        }
+
+        var descriptors: [PluginDescriptor] = []
+        let directNames = regexCaptures(pattern: #"aiName:\s*"([^"]+)""#, text: source)
+        let sourceFamily = pluginFamilyName(for: sourceFile, sourceRoot: sourceRoot)
+        descriptors.append(contentsOf: directNames.map { name in
+            PluginDescriptor(name: name, family: sourceFamily, sourcePath: sourceFile, sourceKind: .file)
+        })
+
+        let generatedPattern = #"(?m)^\s*(linear|tree|sequence|distribution|statistical|factor|trend|mixture|memory|world|reinforcement)\(\.[^,]+,\s*"([^"]+)""#
+        for match in regexCapturePairs(pattern: generatedPattern, text: source) {
+            descriptors.append(
+                PluginDescriptor(
+                    name: match.second,
+                    family: generatedPluginFamily(match.first),
+                    sourcePath: sourceFile,
+                    sourceKind: .file
+                )
+            )
+        }
+
+        return descriptors
+    }
+
+    private func pluginFamilyName(for sourceFile: URL, sourceRoot: URL) -> String {
+        let sourceRootPath = sourceRoot.standardizedFileURL.path
+        let filePath = sourceFile.standardizedFileURL.path
+        guard filePath.hasPrefix(sourceRootPath) else {
+            return "Swift"
+        }
+        let relativePath = String(filePath.dropFirst(sourceRootPath.count))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return relativePath.split(separator: "/").first.map(String.init) ?? "Swift"
+    }
+
+    private func generatedPluginFamily(_ helperName: String) -> String {
+        switch helperName {
+        case "linear": return "Linear"
+        case "tree": return "Tree"
+        case "sequence": return "Sequence"
+        case "distribution": return "Distribution"
+        case "statistical": return "Stat"
+        case "factor": return "Factor"
+        case "trend": return "Trend"
+        case "mixture": return "Mixture"
+        case "memory": return "Memory"
+        case "world": return "World"
+        case "reinforcement": return "RL"
+        default: return "Generated"
+        }
+    }
+
+    private func regexCaptures(pattern: String, text: String) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return []
+        }
+        let nsText = text as NSString
+        return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).compactMap { match in
+            guard match.numberOfRanges > 1, match.range(at: 1).location != NSNotFound else {
+                return nil
+            }
+            return nsText.substring(with: match.range(at: 1))
+        }
+    }
+
+    private func regexCapturePairs(pattern: String, text: String) -> [(first: String, second: String)] {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return []
+        }
+        let nsText = text as NSString
+        return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).compactMap { match in
+            guard
+                match.numberOfRanges > 2,
+                match.range(at: 1).location != NSNotFound,
+                match.range(at: 2).location != NSNotFound
+            else {
+                return nil
+            }
+            return (
+                first: nsText.substring(with: match.range(at: 1)),
+                second: nsText.substring(with: match.range(at: 2))
+            )
+        }
+    }
+
     private func scanBuildTargets(projectRoot: URL) -> [BuildTargetStatus] {
         [
-            buildTarget(named: "FXAI EA", relativePath: "FXAI.ex5", projectRoot: projectRoot),
-            buildTarget(named: "Audit Runner", relativePath: "Tests/FXAI_AuditRunner.ex5", projectRoot: projectRoot),
-            buildTarget(named: "Offline Export Runner", relativePath: "Tests/FXAI_OfflineExportRunner.ex5", projectRoot: projectRoot)
+            buildTarget(named: "FXDataEngine Swift Package", relativePath: "FXDataEngine/Package.swift", projectRoot: projectRoot),
+            buildTarget(named: "FXPlugins Swift Package", relativePath: "FXPlugins/Package.swift", projectRoot: projectRoot),
+            buildTarget(named: "FXBacktest Swift Package", relativePath: "FXBacktest/Package.swift", projectRoot: projectRoot),
+            buildTarget(named: "FXDatabase Swift Package", relativePath: "FXDatabase/Package.swift", projectRoot: projectRoot)
         ]
     }
 
@@ -160,11 +209,11 @@ public struct ProjectScanner {
 
     private func scanArtifacts(projectRoot: URL) -> [ReportArtifact] {
         let roots: [(String, URL)] = [
-            ("Baselines", projectRoot.appendingPathComponent("Tools/Baselines", isDirectory: true)),
-            ("NewsPulse", projectRoot.appendingPathComponent("Tools/OfflineLab/NewsPulse", isDirectory: true)),
-            ("ResearchOS", projectRoot.appendingPathComponent("Tools/OfflineLab/ResearchOS", isDirectory: true)),
-            ("Profiles", projectRoot.appendingPathComponent("Tools/OfflineLab/Profiles", isDirectory: true)),
-            ("Distillation", projectRoot.appendingPathComponent("Tools/OfflineLab/Distillation", isDirectory: true))
+            ("Baselines", toolsURL(projectRoot: projectRoot, relativePath: "Baselines")),
+            ("NewsPulse", toolsURL(projectRoot: projectRoot, relativePath: "OfflineLab/NewsPulse")),
+            ("ResearchOS", toolsURL(projectRoot: projectRoot, relativePath: "OfflineLab/ResearchOS")),
+            ("Profiles", toolsURL(projectRoot: projectRoot, relativePath: "OfflineLab/Profiles")),
+            ("Distillation", toolsURL(projectRoot: projectRoot, relativePath: "OfflineLab/Distillation"))
         ]
 
         var artifacts: [ReportArtifact] = []
@@ -191,7 +240,7 @@ public struct ProjectScanner {
     }
 
     private func scanRuntimeProfiles(projectRoot: URL) -> [RuntimeProfileSummary] {
-        let researchRoot = projectRoot.appendingPathComponent("Tools/OfflineLab/ResearchOS", isDirectory: true)
+        let researchRoot = toolsURL(projectRoot: projectRoot, relativePath: "OfflineLab/ResearchOS")
         let fm = FileManager.default
 
         let candidateFiles = recursiveFiles(at: researchRoot).filter {
@@ -238,7 +287,7 @@ public struct ProjectScanner {
 
     private func scanOperatorSummary(projectRoot: URL) -> OperatorSummary {
         let dashboardFiles = recursiveFiles(
-            at: projectRoot.appendingPathComponent("Tools/OfflineLab/ResearchOS", isDirectory: true)
+            at: toolsURL(projectRoot: projectRoot, relativePath: "OfflineLab/ResearchOS")
         ).filter {
             $0.lastPathComponent == "operator_dashboard.json"
         }
@@ -293,6 +342,19 @@ public struct ProjectScanner {
                 && environment["TURSO_AUTH_TOKEN"]?.isEmpty == false,
             encryptionConfigured: environment["TURSO_ENCRYPTION_KEY"]?.isEmpty == false
         )
+    }
+
+    private func toolsURL(projectRoot: URL, relativePath: String) -> URL {
+        let rootToolsURL = projectRoot
+            .appendingPathComponent("Tools", isDirectory: true)
+            .appendingPathComponent(relativePath, isDirectory: true)
+        if FileManager.default.fileExists(atPath: rootToolsURL.path) {
+            return rootToolsURL
+        }
+        return projectRoot
+            .appendingPathComponent("FXAI", isDirectory: true)
+            .appendingPathComponent("Tools", isDirectory: true)
+            .appendingPathComponent(relativePath, isDirectory: true)
     }
 
     private func recursiveFiles(at root: URL) -> [URL] {

@@ -315,7 +315,7 @@ final class FXAIGUIModel: ObservableObject {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.prompt = "Use FXAI Project"
-        panel.message = "Choose the FXAI project root that contains FXAI.mq5, Plugins, and Tools."
+        panel.message = "Choose the FXAI project root that contains FXDataEngine, FXPlugins, FXBacktest, and FXDatabase."
         panel.directoryURL = projectRoot
 
         guard panel.runModal() == .OK, let url = panel.url else {

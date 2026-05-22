@@ -57,9 +57,14 @@ struct ResearchOSPhase4Tests {
 
         let profileRoot = root.appendingPathComponent("Tools/OfflineLab/ResearchOS/continuous", isDirectory: true)
         try FileManager.default.createDirectory(at: profileRoot, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("Plugins", isDirectory: true), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("Tools", isDirectory: true), withIntermediateDirectories: true)
-        try Data().write(to: root.appendingPathComponent("FXAI.mq5"))
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXDataEngine", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXPlugins", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXBacktest", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXDatabase", isDirectory: true), withIntermediateDirectories: true)
+        try Data("// swift-tools-version: 6.3\n".utf8).write(to: root.appendingPathComponent("FXDataEngine/Package.swift"))
+        try Data("// swift-tools-version: 6.3\n".utf8).write(to: root.appendingPathComponent("FXPlugins/Package.swift"))
+        try Data("// swift-tools-version: 6.3\n".utf8).write(to: root.appendingPathComponent("FXBacktest/Package.swift"))
+        try Data("// swift-tools-version: 6.3\n".utf8).write(to: root.appendingPathComponent("FXDatabase/Package.swift"))
 
         let payload = """
         {
@@ -136,7 +141,7 @@ struct ResearchOSPhase4Tests {
           ],
           "source_of_truth": {
             "turso_libsql": "authoritative research and promotion state",
-            "file_common_promotions": "authoritative MT5 runtime consumption layer"
+            "swift_runtime_promotions": "authoritative Swift runtime consumption layer"
           }
         }
         """

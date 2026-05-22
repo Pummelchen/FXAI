@@ -31,7 +31,7 @@ struct RunBuilderCommandFactoryTests {
     }
 
     @Test
-    func buildsBacktestWorkflowWithCompileAndBaselineSteps() {
+    func buildsBacktestWorkflowWithSwiftChecksAndBaselineSteps() {
         let root = URL(fileURLWithPath: "/tmp/fxai", isDirectory: true)
         let draft = BacktestBuilderDraft(
             pluginName: "tree_lgbm",
@@ -45,8 +45,9 @@ struct RunBuilderCommandFactoryTests {
 
         let command = RunBuilderCommandFactory.backtestWorkflow(projectRoot: root, draft: draft)
 
-        #expect(command.contains("python3 Tools/fxai_testlab.py compile-main"))
-        #expect(command.contains("python3 Tools/fxai_testlab.py compile-audit"))
+        #expect(command.contains("swift test --package-path FXDataEngine"))
+        #expect(command.contains("swift test --package-path FXPlugins"))
+        #expect(command.contains("swift test --package-path FXBacktest"))
         #expect(command.contains("--plugin-list '{tree_lgbm}'"))
         #expect(command.contains("--execution-profile stress"))
         #expect(command.contains("baseline-save --name 'eurusd_tree_lgbm'"))
