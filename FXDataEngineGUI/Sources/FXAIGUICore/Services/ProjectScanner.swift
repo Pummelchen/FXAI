@@ -75,10 +75,10 @@ public struct ProjectScanner {
     }
 
     private func scanPlugins(projectRoot: URL) -> [PluginDescriptor] {
-        let pluginsRoot = projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins", isDirectory: true)
+        let pluginsRoot = projectRoot.appendingPathComponent("FXPlugins", isDirectory: true)
         var resultsByID: [String: PluginDescriptor] = [:]
 
-        for sourceFile in recursiveFiles(at: pluginsRoot).filter({ $0.pathExtension.lowercased() == "swift" }) {
+        for sourceFile in pluginSourceFiles(at: pluginsRoot) {
             for descriptor in swiftPluginDescriptors(sourceFile: sourceFile, sourceRoot: pluginsRoot) {
                 if let existing = resultsByID[descriptor.id] {
                     resultsByID[descriptor.id] = preferredPluginDescriptor(existing: existing, candidate: descriptor)
@@ -89,6 +89,30 @@ public struct ProjectScanner {
         }
 
         return Array(resultsByID.values)
+    }
+
+    private func pluginSourceFiles(at pluginsRoot: URL) -> [URL] {
+        recursiveFiles(at: pluginsRoot)
+            .filter { $0.pathExtension.lowercased() == "swift" }
+            .filter { !isSupportOnlyPluginPath($0, pluginsRoot: pluginsRoot) }
+    }
+
+    private func isSupportOnlyPluginPath(_ sourceFile: URL, pluginsRoot: URL) -> Bool {
+        let components = pluginRelativeComponents(for: sourceFile, sourceRoot: pluginsRoot)
+        guard let first = components.first else {
+            return true
+        }
+
+        if first == "Package.swift" || first == ".build" || first == "Backends" {
+            return true
+        }
+
+        if first == "Common" {
+            let supportFolder = components.dropFirst().first
+            return supportFolder == "Docs" || supportFolder == "Tests"
+        }
+
+        return false
     }
 
     private func preferredPluginDescriptor(existing: PluginDescriptor, candidate: PluginDescriptor) -> PluginDescriptor {
@@ -110,12 +134,13 @@ public struct ProjectScanner {
             PluginDescriptor(name: name, family: sourceFamily, sourcePath: sourceFile, sourceKind: .file)
         })
 
-        let generatedPattern = #"(?m)^\s*(linear|tree|sequence|distribution|statistical|factor|trend|mixture|memory|world|reinforcement)\(\.[^,]+,\s*"([^"]+)""#
+        let generatedPattern = #"(?m)^\s*(?:FXAIPluginDefinitionFactory\.)?(linear|tree|sequence|distribution|statistical|factor|trend|mixture|memory|world|reinforcement)\(\.[^,]+,\s*"([^"]+)""#
         for match in regexCapturePairs(pattern: generatedPattern, text: source) {
+            let family = sourceFamily == "Common" ? generatedPluginFamily(match.first) : sourceFamily
             descriptors.append(
                 PluginDescriptor(
                     name: match.second,
-                    family: generatedPluginFamily(match.first),
+                    family: family,
                     sourcePath: sourceFile,
                     sourceKind: .file
                 )
@@ -126,14 +151,18 @@ public struct ProjectScanner {
     }
 
     private func pluginFamilyName(for sourceFile: URL, sourceRoot: URL) -> String {
+        pluginRelativeComponents(for: sourceFile, sourceRoot: sourceRoot).first ?? "Swift"
+    }
+
+    private func pluginRelativeComponents(for sourceFile: URL, sourceRoot: URL) -> [String] {
         let sourceRootPath = sourceRoot.standardizedFileURL.path
         let filePath = sourceFile.standardizedFileURL.path
         guard filePath.hasPrefix(sourceRootPath) else {
-            return "Swift"
+            return []
         }
         let relativePath = String(filePath.dropFirst(sourceRootPath.count))
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return relativePath.split(separator: "/").first.map(String.init) ?? "Swift"
+        return relativePath.split(separator: "/").map(String.init)
     }
 
     private func generatedPluginFamily(_ helperName: String) -> String {

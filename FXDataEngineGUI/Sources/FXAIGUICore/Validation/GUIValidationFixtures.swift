@@ -4,14 +4,14 @@ public enum GUIValidationFixtures {
     public static func projectSnapshot(projectRoot: URL) -> FXAIProjectSnapshot {
         let now = Date()
         let plugins = [
-            PluginDescriptor(name: "ai_tft", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Generated/FXAIGeneratedPluginAdapters.swift"), sourceKind: .file),
-            PluginDescriptor(name: "ai_patchtst", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Generated/FXAIGeneratedPluginAdapters.swift"), sourceKind: .file),
-            PluginDescriptor(name: "ai_gha", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Generated/FXAIGeneratedPluginAdapters.swift"), sourceKind: .file),
-            PluginDescriptor(name: "ai_qcew", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Generated/FXAIGeneratedPluginAdapters.swift"), sourceKind: .file),
-            PluginDescriptor(name: "tree_catboost", family: "Tree", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Generated/FXAIGeneratedPluginAdapters.swift"), sourceKind: .file),
-            PluginDescriptor(name: "tree_lgbm", family: "Tree", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Generated/FXAIGeneratedPluginAdapters.swift"), sourceKind: .file),
-            PluginDescriptor(name: "lin_pa", family: "Linear", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Generated/FXAIGeneratedPluginAdapters.swift"), sourceKind: .file),
-            PluginDescriptor(name: "fxbacktest_moving_average_cross", family: "FXBacktestDemo", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/FXBacktestDemo/MovingAverageCrossFXDataEnginePlugin.swift"), sourceKind: .file)
+            PluginDescriptor(name: "ai_tft", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sequence/SequencePluginDefinitions.swift"), sourceKind: .file),
+            PluginDescriptor(name: "ai_patchtst", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sequence/SequencePluginDefinitions.swift"), sourceKind: .file),
+            PluginDescriptor(name: "ai_gha", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sequence/SequencePluginDefinitions.swift"), sourceKind: .file),
+            PluginDescriptor(name: "ai_qcew", family: "Sequence", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Sequence/SequencePluginDefinitions.swift"), sourceKind: .file),
+            PluginDescriptor(name: "tree_catboost", family: "Tree", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Tree/TreePluginDefinitions.swift"), sourceKind: .file),
+            PluginDescriptor(name: "tree_lgbm", family: "Tree", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Tree/TreePluginDefinitions.swift"), sourceKind: .file),
+            PluginDescriptor(name: "lin_pa", family: "Linear", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Linear/LinearPluginDefinitions.swift"), sourceKind: .file),
+            PluginDescriptor(name: "fxbacktest_moving_average_cross", family: "Demo", sourcePath: projectRoot.appendingPathComponent("FXPlugins/Demo/fxbacktest_moving_average_cross/MovingAverageCrossFXDataEnginePlugin.swift"), sourceKind: .file)
         ]
         let pluginFamilies = Dictionary(grouping: plugins, by: \.family)
             .map { family, familyPlugins in

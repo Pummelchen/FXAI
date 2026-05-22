@@ -18,12 +18,20 @@ let package = Package(
             dependencies: [
                 .product(name: "FXDataEngine", package: "FXDataEngine")
             ],
-            path: "Sources/FXAIPlugins"
+            path: ".",
+            exclude: [
+                ".build",
+                "Backends/Python",
+                "Common/Docs",
+                "Common/Tests",
+                "Package.swift",
+                "README.md"
+            ]
         ),
         .testTarget(
             name: "FXAIPluginsTests",
             dependencies: ["FXAIPlugins"],
-            path: "Tests/FXAIPluginsTests"
+            path: "Common/Tests/FXAIPluginsTests"
         )
     ],
     swiftLanguageModes: [.v6]

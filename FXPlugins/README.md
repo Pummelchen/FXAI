@@ -1,6 +1,6 @@
 # FXPlugins
 
-Repository-root plugin source area shared across FXAI runtimes.
+Repository-root plugin zoo shared across FXAI runtimes.
 
 AI plugins own model execution. When a converted plugin needs tensor training or inference, it should use a plugin-local PyTorch or TensorFlow backend rather than re-creating the old MQL5 `TensorCore` inside Swift FXDataEngine.
 
@@ -8,11 +8,11 @@ Converted plugins should consume the Swift FXDataEngine OHLCV contracts and use 
 
 ## Layout
 
-- `Package.swift`: SwiftPM package for converted Swift-era plugins.
-- `Sources/FXAIPlugins/`: Swift plugin implementations and adapters that conform to `FXAIPluginV4`.
-- `Tests/FXAIPluginsTests/`: focused contract, parity, and acceleration-plan tests.
-- `Python/fxai_plugin_backend.py`: generic PyTorch/TensorFlow process backend entrypoint used by Swift adapters until plugin-specific training services are added.
-- `PLUGIN_CONVERSION_PLAN.md`: per-plugin Swift/Metal/PyTorch/TensorFlow/Core ML conversion plan and reviewed migration order.
+- `Rule/`, `Linear/`, `Tree/`, `Sequence/`, `Distribution/`, `Stat/`, `Factor/`, `Trend/`, `Mixture/`, `Memory/`, `World/`, `RL/`: converted plugin zoo families matching the former MQL5 plugin inventory.
+- `Demo/`: the two FXBacktest demo/reference adapters connected to the same FXDataEngine plugin contract.
+- `Backends/Python/fxai_plugin_backend.py`: generic PyTorch/TensorFlow process backend entrypoint used by Swift adapters until plugin-specific training services are added.
+- `Common/`: shared registry, acceleration metadata, generated adapter runtime, tests, and archived conversion plan.
+- `Package.swift`: SwiftPM boundary for the zoo. There is no longer a root `Sources/`, `Tests/`, or `Python/` staging layout.
 
 ## Current Swift Coverage
 
@@ -41,4 +41,4 @@ Run the local verification gate with:
 swift test
 ```
 
-The legacy MQL5 plugin reference files have been removed from the repository. The current source of truth is the Swift package plus the conversion plan and generated adapters that preserve the old plugin identifiers.
+The legacy MQL5 plugin reference files have been removed from the repository. The current source of truth is this family-first Swift plugin zoo plus the conversion plan in `Common/Docs/PLUGIN_CONVERSION_PLAN.md`.

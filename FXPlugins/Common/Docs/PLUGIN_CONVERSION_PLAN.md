@@ -77,9 +77,10 @@ plugins in this request.
 2. Retire the old MQL5 files after the Swift package exposes every plugin ID
    through a contract-tested implementation or backend plan.
 3. Add a SwiftPM package in root `FXPlugins`.
-4. Put Swift sources under `FXPlugins/Sources/FXAIPlugins/<Family>/`, mirroring
-   the family structure.
-5. Add tests under `FXPlugins/Tests/FXAIPluginsTests/<Family>/`.
+4. Put Swift sources directly under `FXPlugins/<Family>/`, mirroring the former
+   MQL5 plugin zoo instead of hiding plugins under a generic `Sources/` staging
+   folder.
+5. Add tests under `FXPlugins/Common/Tests/FXAIPluginsTests/<Family>/`.
 6. Keep plugin identifiers identical to legacy `AIName()` values.
 7. Every Swift plugin implements or adapts to `FXAIPluginV4`.
 8. Every plugin manifest sets `requiresVolumeWhenAvailable = true` unless the
@@ -197,8 +198,8 @@ Each plugin step:
 | trend_xsmom_rank | Trend | Trend/trend_xsmom_rank.mqh | Cross-sectional momentum rank plugin | Accelerate sorting/reductions, Metal not first | No |
 | wm_cfx | World | World/wm_cfx.mqh | Currency factor world model | Accelerate graph/matrix ops; Metal later | Maybe after model stabilization |
 | wm_graph | World | World/wm_graph.mqh | Graph world model | Accelerate graph ops; PyTorch Geometric alternative if needed | Maybe after model stabilization |
-| MovingAverageCross | FXBacktest demo | FXPlugins/Sources/FXAIPlugins/FXBacktestDemo/MovingAverageCrossFXDataEnginePlugin.swift | FXDataEngine adapter now independent of FXBacktest-local plugin code | Metal candidate for future FXDataEngine batch/sweep work; Swift scalar adapter now active | No |
-| FXStupid | FXBacktest demo | FXPlugins/Sources/FXAIPlugins/FXBacktestDemo/FXStupidFXDataEnginePlugin.swift | FXDataEngine adapter now independent of FXBacktest-local plugin code | Stateful scalar adapter; no Metal until its order-control flow is redesigned | No |
+| MovingAverageCross | FXBacktest demo | Demo/fxbacktest_moving_average_cross/MovingAverageCrossFXDataEnginePlugin.swift | FXDataEngine adapter now independent of FXBacktest-local plugin code | Metal candidate for future FXDataEngine batch/sweep work; Swift scalar adapter now active | No |
+| FXStupid | FXBacktest demo | Demo/fxbacktest_fxstupid/FXStupidFXDataEnginePlugin.swift | FXDataEngine adapter now independent of FXBacktest-local plugin code | Stateful scalar adapter; no Metal until its order-control flow is redesigned | No |
 
 ## Review Pass 1
 
@@ -278,7 +279,7 @@ Revision from pass 2:
 - `PythonMLBackendBridge` now runs plugin-local Python backends through a JSON
   process contract and sends OHLCV feature vectors, sequence windows, volume
   availability, horizon, min-move, and price-cost context.
-- `Python/fxai_plugin_backend.py` provides the generic PyTorch/TensorFlow
+- `Backends/Python/fxai_plugin_backend.py` provides the generic PyTorch/TensorFlow
   backend entrypoint, including PyTorch MPS / TensorFlow Metal dispatch when the
   frameworks are installed, persisted online backend state, volume-availability
   gating, and a pure-Python fallback for local contract tests.
@@ -322,7 +323,7 @@ Completed full Swift adapter wave on 2026-05-23:
   Silicon backend metadata.
 - Sequence and RL plugins now have Swift contract adapters and declared
   PyTorch MPS, TensorFlow Metal, and/or Core ML inference candidates.
-- `PythonMLBackendBridge` and `Python/fxai_plugin_backend.py` provide the
+- `PythonMLBackendBridge` and `Backends/Python/fxai_plugin_backend.py` provide the
   process-level PyTorch/TensorFlow execution path for backend-owned plugins.
 
 Remaining work:

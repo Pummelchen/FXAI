@@ -19,13 +19,15 @@ struct ProjectScannerTests {
 
         let snapshot = try scanner.scan(projectRoot: tempRoot)
 
-        #expect(snapshot.totalPluginCount == 2)
+        #expect(snapshot.totalPluginCount == 4)
         #expect(snapshot.cleanBuildTargetCount == 4)
         #expect(snapshot.reportCategories.contains(where: { $0.category == "ResearchOS" && $0.fileCount == 2 }))
         #expect(snapshot.runtimeProfiles.count == 1)
         #expect(snapshot.operatorSummary.championCount == 1)
         #expect(snapshot.plugins.contains(where: { $0.name == "ai_mlp" && $0.sourceKind == .file }))
-        #expect(snapshot.pluginFamilies.contains(where: { $0.family == "Sequence" && $0.pluginCount == 1 }))
+        #expect(snapshot.plugins.contains(where: { $0.name == "lin_pa" && $0.family == "Linear" }))
+        #expect(snapshot.plugins.contains(where: { $0.name == "ai_qcew" && $0.family == "Sequence" }))
+        #expect(snapshot.pluginFamilies.contains(where: { $0.family == "Sequence" && $0.pluginCount == 2 }))
     }
 
     @Test
@@ -62,8 +64,8 @@ struct ProjectScannerTests {
 
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("FXDataEngine", isDirectory: true), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Linear", isDirectory: true), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Sequence", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXPlugins/Linear", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXPlugins/Sequence", isDirectory: true), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("FXBacktest", isDirectory: true), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("FXDatabase", isDirectory: true), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("FXDataEngine/Tools/Baselines", isDirectory: true), withIntermediateDirectories: true)
@@ -81,7 +83,7 @@ struct ProjectScannerTests {
                 family: .linear
             )
             """.utf8
-        ).write(to: root.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Linear/LinearFixture.swift"))
+        ).write(to: root.appendingPathComponent("FXPlugins/Linear/LinearFixture.swift"))
         try Data(
             """
             public let manifest = PluginManifestV4(
@@ -90,7 +92,25 @@ struct ProjectScannerTests {
                 family: .transformer
             )
             """.utf8
-        ).write(to: root.appendingPathComponent("FXPlugins/Sources/FXAIPlugins/Sequence/SequenceFixture.swift"))
+        ).write(to: root.appendingPathComponent("FXPlugins/Sequence/SequenceFixture.swift"))
+        try Data(
+            """
+            enum LinearPluginDefinitions {
+                static let all = [
+                    FXAIPluginDefinitionFactory.linear(.paLinear, "lin_pa")
+                ]
+            }
+            """.utf8
+        ).write(to: root.appendingPathComponent("FXPlugins/Linear/LinearGeneratedFixture.swift"))
+        try Data(
+            """
+            enum SequencePluginDefinitions {
+                static let all = [
+                    FXAIPluginDefinitionFactory.distribution(.qcew, "ai_qcew")
+                ]
+            }
+            """.utf8
+        ).write(to: root.appendingPathComponent("FXPlugins/Sequence/SequenceGeneratedFixture.swift"))
         try Data("{\"plugins\":{}}".utf8).write(to: root.appendingPathComponent("FXDataEngine/Tools/Baselines/example.summary.json"))
         try Data(
             """
