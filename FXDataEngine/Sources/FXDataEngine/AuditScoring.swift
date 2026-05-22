@@ -99,7 +99,73 @@ public struct AuditFoldMetrics: Codable, Hashable, Sendable {
     }
 }
 
+public struct AuditIssueFlags: OptionSet, Codable, Hashable, Sendable {
+    public let rawValue: Int
+
+    public init(rawValue: Int) {
+        self.rawValue = rawValue
+    }
+
+    public static let invalidPrediction = AuditIssueFlags(rawValue: 1)
+    public static let overtradesNoise = AuditIssueFlags(rawValue: 2)
+    public static let missesTrend = AuditIssueFlags(rawValue: 4)
+    public static let calibrationDrift = AuditIssueFlags(rawValue: 8)
+    public static let resetDrift = AuditIssueFlags(rawValue: 16)
+    public static let sequenceWeak = AuditIssueFlags(rawValue: 32)
+    public static let deadOutput = AuditIssueFlags(rawValue: 64)
+    public static let sideCollapse = AuditIssueFlags(rawValue: 128)
+    public static let walkForwardOverfit = AuditIssueFlags(rawValue: 256)
+    public static let walkForwardUnstable = AuditIssueFlags(rawValue: 512)
+    public static let walkForwardWeakEdge = AuditIssueFlags(rawValue: 1024)
+    public static let macroBlind = AuditIssueFlags(rawValue: 2048)
+    public static let macroOverreact = AuditIssueFlags(rawValue: 4096)
+    public static let macroDataGap = AuditIssueFlags(rawValue: 8192)
+    public static let adversarialWeak = AuditIssueFlags(rawValue: 16384)
+}
+
 public struct AuditScenarioMetrics: Codable, Hashable, Sendable {
+    public var scenario: String
+    public var samplesTotal: Int
+    public var validPredictions: Int
+    public var invalidPredictions: Int
+    public var buyCount: Int
+    public var sellCount: Int
+    public var skipCount: Int
+    public var directionalEvaluationCount: Int
+    public var directionalCorrectCount: Int
+    public var trendAlignmentSum: Double
+    public var trendAlignmentCount: Int
+    public var moveSum: Double
+    public var directionalConfidenceSum: Double
+    public var directionalHitSum: Double
+    public var brierSum: Double
+    public var calibrationAbsSum: Double
+    public var pathQualityAbsSum: Double
+    public var pathQualityCount: Int
+    public var netSum: Double
+    public var skipRatio: Double
+    public var activeRatio: Double
+    public var biasAbs: Double
+    public var confidenceDrift: Double
+    public var brierScore: Double
+    public var calibrationError: Double
+    public var pathQualityError: Double
+    public var macroEventRate: Double
+    public var macroPreRate: Double
+    public var macroPostRate: Double
+    public var macroImportanceMean: Double
+    public var macroSurpriseAbsMean: Double
+    public var macroDataCoverage: Double
+    public var macroSurpriseZAbsMean: Double
+    public var macroRevisionAbsMean: Double
+    public var macroCurrencyRelevanceMean: Double
+    public var macroProvenanceTrustMean: Double
+    public var macroRatesRate: Double
+    public var macroInflationRate: Double
+    public var macroLaborRate: Double
+    public var macroGrowthRate: Double
+    public var resetDelta: Double
+    public var sequenceDelta: Double
     public var walkForwardFolds: Int
     public var walkForwardTrainSamples: Int
     public var walkForwardTestSamples: Int
@@ -110,8 +176,52 @@ public struct AuditScenarioMetrics: Codable, Hashable, Sendable {
     public var walkForwardPBO: Double
     public var walkForwardDSR: Double
     public var walkForwardPassRate: Double
+    public var score: Double
+    public var issueFlags: AuditIssueFlags
 
     public init(
+        scenario: String = "",
+        samplesTotal: Int = 0,
+        validPredictions: Int = 0,
+        invalidPredictions: Int = 0,
+        buyCount: Int = 0,
+        sellCount: Int = 0,
+        skipCount: Int = 0,
+        directionalEvaluationCount: Int = 0,
+        directionalCorrectCount: Int = 0,
+        trendAlignmentSum: Double = 0.0,
+        trendAlignmentCount: Int = 0,
+        moveSum: Double = 0.0,
+        directionalConfidenceSum: Double = 0.0,
+        directionalHitSum: Double = 0.0,
+        brierSum: Double = 0.0,
+        calibrationAbsSum: Double = 0.0,
+        pathQualityAbsSum: Double = 0.0,
+        pathQualityCount: Int = 0,
+        netSum: Double = 0.0,
+        skipRatio: Double = 0.0,
+        activeRatio: Double = 0.0,
+        biasAbs: Double = 0.0,
+        confidenceDrift: Double = 0.0,
+        brierScore: Double = 0.0,
+        calibrationError: Double = 0.0,
+        pathQualityError: Double = 0.0,
+        macroEventRate: Double = 0.0,
+        macroPreRate: Double = 0.0,
+        macroPostRate: Double = 0.0,
+        macroImportanceMean: Double = 0.0,
+        macroSurpriseAbsMean: Double = 0.0,
+        macroDataCoverage: Double = 0.0,
+        macroSurpriseZAbsMean: Double = 0.0,
+        macroRevisionAbsMean: Double = 0.0,
+        macroCurrencyRelevanceMean: Double = 0.0,
+        macroProvenanceTrustMean: Double = 0.0,
+        macroRatesRate: Double = 0.0,
+        macroInflationRate: Double = 0.0,
+        macroLaborRate: Double = 0.0,
+        macroGrowthRate: Double = 0.0,
+        resetDelta: Double = 0.0,
+        sequenceDelta: Double = 0.0,
         walkForwardFolds: Int = 0,
         walkForwardTrainSamples: Int = 0,
         walkForwardTestSamples: Int = 0,
@@ -121,8 +231,52 @@ public struct AuditScenarioMetrics: Codable, Hashable, Sendable {
         walkForwardGap: Double = 0.0,
         walkForwardPBO: Double = 0.0,
         walkForwardDSR: Double = 0.0,
-        walkForwardPassRate: Double = 0.0
+        walkForwardPassRate: Double = 0.0,
+        score: Double = 0.0,
+        issueFlags: AuditIssueFlags = []
     ) {
+        self.scenario = scenario
+        self.samplesTotal = max(0, samplesTotal)
+        self.validPredictions = max(0, validPredictions)
+        self.invalidPredictions = max(0, invalidPredictions)
+        self.buyCount = max(0, buyCount)
+        self.sellCount = max(0, sellCount)
+        self.skipCount = max(0, skipCount)
+        self.directionalEvaluationCount = max(0, directionalEvaluationCount)
+        self.directionalCorrectCount = max(0, directionalCorrectCount)
+        self.trendAlignmentSum = fxSafeFinite(trendAlignmentSum)
+        self.trendAlignmentCount = max(0, trendAlignmentCount)
+        self.moveSum = fxSafeFinite(moveSum)
+        self.directionalConfidenceSum = fxSafeFinite(directionalConfidenceSum)
+        self.directionalHitSum = fxSafeFinite(directionalHitSum)
+        self.brierSum = fxSafeFinite(brierSum)
+        self.calibrationAbsSum = fxSafeFinite(calibrationAbsSum)
+        self.pathQualityAbsSum = fxSafeFinite(pathQualityAbsSum)
+        self.pathQualityCount = max(0, pathQualityCount)
+        self.netSum = fxSafeFinite(netSum)
+        self.skipRatio = fxSafeFinite(skipRatio)
+        self.activeRatio = fxSafeFinite(activeRatio)
+        self.biasAbs = fxSafeFinite(biasAbs)
+        self.confidenceDrift = fxSafeFinite(confidenceDrift)
+        self.brierScore = fxSafeFinite(brierScore)
+        self.calibrationError = fxSafeFinite(calibrationError)
+        self.pathQualityError = fxSafeFinite(pathQualityError)
+        self.macroEventRate = fxSafeFinite(macroEventRate)
+        self.macroPreRate = fxSafeFinite(macroPreRate)
+        self.macroPostRate = fxSafeFinite(macroPostRate)
+        self.macroImportanceMean = fxSafeFinite(macroImportanceMean)
+        self.macroSurpriseAbsMean = fxSafeFinite(macroSurpriseAbsMean)
+        self.macroDataCoverage = fxSafeFinite(macroDataCoverage)
+        self.macroSurpriseZAbsMean = fxSafeFinite(macroSurpriseZAbsMean)
+        self.macroRevisionAbsMean = fxSafeFinite(macroRevisionAbsMean)
+        self.macroCurrencyRelevanceMean = fxSafeFinite(macroCurrencyRelevanceMean)
+        self.macroProvenanceTrustMean = fxSafeFinite(macroProvenanceTrustMean)
+        self.macroRatesRate = fxSafeFinite(macroRatesRate)
+        self.macroInflationRate = fxSafeFinite(macroInflationRate)
+        self.macroLaborRate = fxSafeFinite(macroLaborRate)
+        self.macroGrowthRate = fxSafeFinite(macroGrowthRate)
+        self.resetDelta = fxSafeFinite(resetDelta)
+        self.sequenceDelta = fxSafeFinite(sequenceDelta)
         self.walkForwardFolds = max(0, walkForwardFolds)
         self.walkForwardTrainSamples = max(0, walkForwardTrainSamples)
         self.walkForwardTestSamples = max(0, walkForwardTestSamples)
@@ -133,6 +287,8 @@ public struct AuditScenarioMetrics: Codable, Hashable, Sendable {
         self.walkForwardPBO = fxClamp(walkForwardPBO, 0.0, 1.0)
         self.walkForwardDSR = fxClamp(walkForwardDSR, 0.0, 1.0)
         self.walkForwardPassRate = fxClamp(walkForwardPassRate, 0.0, 1.0)
+        self.score = fxClamp(score, 0.0, 100.0)
+        self.issueFlags = issueFlags
     }
 }
 
@@ -376,8 +532,245 @@ public enum AuditScoringTools {
         return output
     }
 
+    public static func finalizeScenarioMetrics(
+        _ metrics: AuditScenarioMetrics,
+        macroDatasetActive: Bool = false,
+        macroDatasetSafe: Bool = false
+    ) -> AuditScenarioMetrics {
+        var output = metrics
+        if output.samplesTotal > 0 {
+            let denominator = Double(output.samplesTotal)
+            output.skipRatio = Double(output.skipCount) / denominator
+            output.activeRatio = Double(output.buyCount + output.sellCount) / denominator
+            output.macroEventRate /= denominator
+            output.macroPreRate /= denominator
+            output.macroPostRate /= denominator
+            output.macroImportanceMean /= denominator
+            output.macroSurpriseAbsMean /= denominator
+            output.macroDataCoverage /= denominator
+            output.macroSurpriseZAbsMean /= denominator
+            output.macroRevisionAbsMean /= denominator
+            output.macroCurrencyRelevanceMean /= denominator
+            output.macroProvenanceTrustMean /= denominator
+            output.macroRatesRate /= denominator
+            output.macroInflationRate /= denominator
+            output.macroLaborRate /= denominator
+            output.macroGrowthRate /= denominator
+        }
+
+        let active = output.buyCount + output.sellCount
+        if active > 0 {
+            output.biasAbs = abs(Double(output.buyCount - output.sellCount)) / Double(active)
+        }
+        if output.directionalEvaluationCount > 0 {
+            let averageConfidence = output.directionalConfidenceSum / Double(output.directionalEvaluationCount)
+            let averageHit = output.directionalHitSum / Double(output.directionalEvaluationCount)
+            output.confidenceDrift = abs(averageConfidence - averageHit)
+            output.calibrationError = output.calibrationAbsSum / Double(output.directionalEvaluationCount)
+        }
+        if output.validPredictions > 0 {
+            output.brierScore = output.brierSum / Double(output.validPredictions)
+        }
+        if output.pathQualityCount > 0 {
+            output.pathQualityError = output.pathQualityAbsSum / Double(output.pathQualityCount)
+        }
+
+        let averageNet = output.validPredictions > 0 ? output.netSum / Double(output.validPredictions) : 0.0
+        let hitRate = output.directionalEvaluationCount > 0
+            ? Double(output.directionalCorrectCount) / Double(output.directionalEvaluationCount)
+            : 0.50
+
+        var score = 100.0
+        if output.invalidPredictions > 0 {
+            score -= 35.0
+        }
+        if noisyScenario(output.scenario) {
+            if output.skipRatio < 0.45 {
+                score -= 18.0
+            }
+            if output.activeRatio > 0.80 {
+                score -= 12.0
+            }
+        }
+        if trendScenario(output.scenario), output.trendAlignmentCount > 0 {
+            let alignment = output.trendAlignmentSum / Double(output.trendAlignmentCount)
+            if alignment < 0.20 {
+                score -= 18.0
+            }
+        }
+        if output.scenario == "market_session_edges", output.confidenceDrift > 0.18 {
+            score -= 8.0
+        }
+        if output.confidenceDrift > 0.22 {
+            score -= 10.0
+        }
+        if output.brierScore > 0.52 {
+            score -= 8.0
+        }
+        if output.calibrationError > 0.28 {
+            score -= 8.0
+        }
+        if output.pathQualityError > 0.55 {
+            score -= 8.0
+        }
+
+        if output.scenario == "market_macro_event" {
+            if macroDatasetActive {
+                if !macroDatasetSafe {
+                    score -= 22.0
+                } else {
+                    if output.macroDataCoverage < 0.08 { score -= 20.0 }
+                    if output.macroEventRate < 0.06 { score -= 16.0 }
+                    if output.macroImportanceMean < 0.08 { score -= 10.0 }
+                    if output.macroCurrencyRelevanceMean < 0.40 { score -= 8.0 }
+                    if output.macroProvenanceTrustMean < 0.45 { score -= 8.0 }
+                    if output.activeRatio < 0.05, output.macroEventRate > 0.10 { score -= 8.0 }
+                    if output.activeRatio > 0.88, output.macroSurpriseAbsMean < 0.20 { score -= 8.0 }
+                    if averageNet < 0.0 {
+                        score -= 10.0 * fxClamp(-averageNet / 4.0, 0.0, 1.0)
+                    }
+                }
+            }
+        }
+
+        if ["market_session_edges", "market_spread_shock", "market_walkforward"].contains(output.scenario),
+           averageNet < 0.0 {
+            score -= 8.0 * fxClamp(-averageNet / 4.0, 0.0, 1.0)
+        }
+        if output.scenario == "market_adversarial" {
+            if hitRate < 0.53 {
+                score -= 12.0 * fxClamp((0.53 - hitRate) / 0.18, 0.0, 1.0)
+            }
+            if output.confidenceDrift > 0.20 { score -= 8.0 }
+            if output.calibrationError > 0.26 { score -= 10.0 }
+            if output.pathQualityError > 0.50 { score -= 10.0 }
+            if averageNet < 0.0 {
+                score -= 12.0 * fxClamp(-averageNet / 4.0, 0.0, 1.0)
+            }
+            if output.activeRatio < 0.03 { score -= 6.0 }
+            if output.activeRatio > 0.90, output.brierScore > 0.42 { score -= 8.0 }
+        }
+        if output.resetDelta > 0.30 {
+            score -= 12.0
+        }
+        if output.sequenceDelta < 0.005, output.sequenceDelta >= 0.0 {
+            score -= 6.0
+        }
+        if output.moveSum <= 0.0 {
+            score -= 8.0
+        }
+
+        if output.scenario == "market_walkforward" {
+            if output.walkForwardFolds < 3 { score -= 18.0 }
+            if output.walkForwardGap > 12.0 { score -= 10.0 }
+            if output.walkForwardPBO > 0.45 { score -= 12.0 }
+            if output.walkForwardPassRate < 0.55 { score -= 12.0 }
+            if output.walkForwardDSR < 0.35 { score -= 10.0 }
+            if output.walkForwardTestScore > 0.0, output.walkForwardTestScore < 68.0 { score -= 10.0 }
+            if output.walkForwardTestScoreStd > 10.0 { score -= 6.0 }
+        }
+
+        output.score = fxClamp(score, 0.0, 100.0)
+        output.issueFlags = issueFlags(
+            for: output,
+            macroDatasetActive: macroDatasetActive,
+            macroDatasetSafe: macroDatasetSafe,
+            averageNet: averageNet,
+            hitRate: hitRate,
+            active: active
+        )
+        return output
+    }
+
     private static func probability(_ prediction: PredictionV4, index: Int) -> Double {
         guard index >= 0, index < prediction.classProbabilities.count else { return 0.0 }
         return fxSafeFinite(prediction.classProbabilities[index])
+    }
+
+    private static func noisyScenario(_ scenario: String) -> Bool {
+        ["random_walk", "market_chop", "market_spread_shock"].contains(scenario)
+    }
+
+    private static func trendScenario(_ scenario: String) -> Bool {
+        [
+            "drift_up",
+            "drift_down",
+            "monotonic_up",
+            "monotonic_down",
+            "market_trend",
+            "market_walkforward"
+        ].contains(scenario)
+    }
+
+    private static func issueFlags(
+        for metrics: AuditScenarioMetrics,
+        macroDatasetActive: Bool,
+        macroDatasetSafe: Bool,
+        averageNet: Double,
+        hitRate: Double,
+        active: Int
+    ) -> AuditIssueFlags {
+        var flags: AuditIssueFlags = []
+        if metrics.invalidPredictions > 0 {
+            flags.insert(.invalidPrediction)
+        }
+        if (noisyScenario(metrics.scenario) || metrics.scenario == "market_session_edges"),
+           metrics.skipRatio < 0.55 || metrics.activeRatio > 0.70 {
+            flags.insert(.overtradesNoise)
+        }
+        if metrics.scenario == "market_macro_event", macroDatasetActive {
+            if !macroDatasetSafe || metrics.macroDataCoverage < 0.05 {
+                flags.insert(.macroDataGap)
+            }
+            if macroDatasetSafe, metrics.activeRatio < 0.05, metrics.macroEventRate > 0.10 {
+                flags.insert(.macroBlind)
+            }
+            if macroDatasetSafe, metrics.activeRatio > 0.88, metrics.macroSurpriseAbsMean < 0.20 {
+                flags.insert(.macroOverreact)
+            }
+        }
+        if trendScenario(metrics.scenario),
+           metrics.trendAlignmentCount > 0,
+           metrics.trendAlignmentSum / Double(metrics.trendAlignmentCount) < 0.25 {
+            flags.insert(.missesTrend)
+        }
+        if metrics.confidenceDrift > 0.22 {
+            flags.insert(.calibrationDrift)
+        }
+        if metrics.resetDelta > 0.30 {
+            flags.insert(.resetDrift)
+        }
+        if metrics.sequenceDelta >= 0.0, metrics.sequenceDelta < 0.005 {
+            flags.insert(.sequenceWeak)
+        }
+        if metrics.moveSum <= 0.0 {
+            flags.insert(.deadOutput)
+        }
+        if noisyScenario(metrics.scenario), metrics.biasAbs > 0.85, active > 24 {
+            flags.insert(.sideCollapse)
+        }
+        if metrics.scenario == "market_adversarial",
+           metrics.score < 68.0 ||
+            averageNet < 0.0 ||
+            hitRate < 0.53 ||
+            metrics.calibrationError > 0.26 ||
+            metrics.pathQualityError > 0.50 {
+            flags.insert(.adversarialWeak)
+        }
+        if metrics.scenario == "market_walkforward" {
+            if metrics.walkForwardPBO > 0.45 || metrics.walkForwardGap > 12.0 {
+                flags.insert(.walkForwardOverfit)
+            }
+            if metrics.walkForwardFolds < 3 ||
+                metrics.walkForwardPassRate < 0.55 ||
+                metrics.walkForwardTestScoreStd > 10.0 {
+                flags.insert(.walkForwardUnstable)
+            }
+            if metrics.walkForwardDSR < 0.35 ||
+                (metrics.walkForwardTestScore > 0.0 && metrics.walkForwardTestScore < 68.0) {
+                flags.insert(.walkForwardWeakEdge)
+            }
+        }
+        return flags
     }
 }

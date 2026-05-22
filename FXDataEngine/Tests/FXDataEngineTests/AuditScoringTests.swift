@@ -177,6 +177,89 @@ final class AuditScoringTests: XCTestCase {
         XCTAssertEqual(metrics.walkForwardDSR, 0.9154201124367981, accuracy: 1e-12)
     }
 
+    func testAuditScenarioFinalizationAppliesLegacyScoresAndIssueFlags() {
+        let noisy = AuditScoringTools.finalizeScenarioMetrics(
+            AuditScenarioMetrics(
+                scenario: "random_walk",
+                samplesTotal: 100,
+                validPredictions: 99,
+                invalidPredictions: 1,
+                buyCount: 50,
+                sellCount: 35,
+                skipCount: 15,
+                directionalEvaluationCount: 50,
+                directionalCorrectCount: 30,
+                moveSum: 200.0,
+                directionalConfidenceSum: 30.0,
+                directionalHitSum: 28.0,
+                brierSum: 10.0,
+                calibrationAbsSum: 5.0,
+                pathQualityAbsSum: 5.0,
+                pathQualityCount: 20,
+                netSum: 20.0,
+                sequenceDelta: 0.01
+            )
+        )
+        XCTAssertEqual(noisy.skipRatio, 0.15, accuracy: 1e-12)
+        XCTAssertEqual(noisy.activeRatio, 0.85, accuracy: 1e-12)
+        XCTAssertEqual(noisy.biasAbs, 15.0 / 85.0, accuracy: 1e-12)
+        XCTAssertEqual(noisy.confidenceDrift, 0.04, accuracy: 1e-12)
+        XCTAssertEqual(noisy.score, 35.0, accuracy: 1e-12)
+        XCTAssertTrue(noisy.issueFlags.contains(.invalidPrediction))
+        XCTAssertTrue(noisy.issueFlags.contains(.overtradesNoise))
+        XCTAssertFalse(noisy.issueFlags.contains(.sideCollapse))
+
+        let macro = AuditScoringTools.finalizeScenarioMetrics(
+            AuditScenarioMetrics(
+                scenario: "market_macro_event",
+                samplesTotal: 100,
+                validPredictions: 100,
+                buyCount: 1,
+                sellCount: 2,
+                skipCount: 97,
+                moveSum: 20.0,
+                macroEventRate: 12.0,
+                macroImportanceMean: 20.0,
+                macroDataCoverage: 4.0,
+                macroCurrencyRelevanceMean: 50.0,
+                macroProvenanceTrustMean: 50.0,
+                sequenceDelta: 0.01
+            ),
+            macroDatasetActive: true,
+            macroDatasetSafe: true
+        )
+        XCTAssertEqual(macro.macroEventRate, 0.12, accuracy: 1e-12)
+        XCTAssertEqual(macro.macroDataCoverage, 0.04, accuracy: 1e-12)
+        XCTAssertEqual(macro.score, 72.0, accuracy: 1e-12)
+        XCTAssertTrue(macro.issueFlags.contains(.macroDataGap))
+        XCTAssertTrue(macro.issueFlags.contains(.macroBlind))
+        XCTAssertFalse(macro.issueFlags.contains(.macroOverreact))
+
+        let walkForward = AuditScoringTools.finalizeScenarioMetrics(
+            AuditScenarioMetrics(
+                scenario: "market_walkforward",
+                samplesTotal: 80,
+                validPredictions: 80,
+                trendAlignmentSum: 0.10,
+                trendAlignmentCount: 1,
+                moveSum: 100.0,
+                sequenceDelta: 0.01,
+                walkForwardFolds: 2,
+                walkForwardTestScore: 65.0,
+                walkForwardTestScoreStd: 11.0,
+                walkForwardGap: 13.0,
+                walkForwardPBO: 0.50,
+                walkForwardDSR: 0.20,
+                walkForwardPassRate: 0.40
+            )
+        )
+        XCTAssertEqual(walkForward.score, 4.0, accuracy: 1e-12)
+        XCTAssertTrue(walkForward.issueFlags.contains(.missesTrend))
+        XCTAssertTrue(walkForward.issueFlags.contains(.walkForwardOverfit))
+        XCTAssertTrue(walkForward.issueFlags.contains(.walkForwardUnstable))
+        XCTAssertTrue(walkForward.issueFlags.contains(.walkForwardWeakEdge))
+    }
+
     private func fold(
         _ samplesTotal: Int,
         _ validPredictions: Int,
