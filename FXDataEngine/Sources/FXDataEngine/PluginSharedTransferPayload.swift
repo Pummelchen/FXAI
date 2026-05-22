@@ -229,6 +229,232 @@ public enum PluginSharedTransferPayloadTools {
             windowValue(window, barIndex: lastIndex, featureIndex: featureIndex)
     }
 
+    public static func domainBucket(domainHash: Double) -> Int {
+        let value = fxClamp(domainHash, 0.0, 1.0 - 1e-9)
+        let bucket = Int(floor(value * Double(FXDataEngineConstants.sharedTransferDomainBuckets)))
+        return min(max(bucket, 0), FXDataEngineConstants.sharedTransferDomainBuckets - 1)
+    }
+
+    public static func horizonBucket(horizonMinutes: Int) -> Int {
+        let horizon = min(max(horizonMinutes, 1), 1440)
+        let bucket: Int
+        if horizon <= 2 {
+            bucket = 0
+        } else if horizon <= 5 {
+            bucket = 1
+        } else if horizon <= 15 {
+            bucket = 2
+        } else if horizon <= 30 {
+            bucket = 3
+        } else if horizon <= 60 {
+            bucket = 4
+        } else if horizon <= 240 {
+            bucket = 5
+        } else if horizon <= 720 {
+            bucket = 6
+        } else {
+            bucket = 7
+        }
+        return min(max(bucket, 0), FXDataEngineConstants.sharedTransferHorizonBuckets - 1)
+    }
+
+    public static func windowFeatureSegmentMean(
+        _ window: [[Double]],
+        featureIndex: Int,
+        segmentStart: Int,
+        segmentLength: Int,
+        declaredWindowSize: Int? = nil
+    ) -> Double {
+        let size = effectiveWindowSize(window, declaredWindowSize: declaredWindowSize)
+        guard isValidFeatureIndex(featureIndex), size > 0, segmentLength > 0 else { return 0.0 }
+        var first = max(0, segmentStart)
+        if first >= size {
+            first = size - 1
+        }
+        let last = min(first + segmentLength, size)
+        guard last > first else { return 0.0 }
+        var sum = 0.0
+        for barIndex in first..<last {
+            sum += windowValue(window, barIndex: barIndex, featureIndex: featureIndex)
+        }
+        return sum / Double(last - first)
+    }
+
+    public static func windowFeatureAt(
+        _ window: [[Double]],
+        barIndex: Int,
+        featureIndex: Int,
+        fallback: Double = 0.0,
+        declaredWindowSize: Int? = nil
+    ) -> Double {
+        let size = effectiveWindowSize(window, declaredWindowSize: declaredWindowSize)
+        let inputIndex = featureIndex + 1
+        guard size > 0,
+              barIndex >= 0,
+              barIndex < size,
+              inputIndex >= 1,
+              inputIndex < FXDataEngineConstants.aiWeights,
+              inputIndex < window[barIndex].count
+        else { return fallback }
+        return fxSafeFinite(window[barIndex][inputIndex], fallback: fallback)
+    }
+
+    public static func barFeatures(
+        _ window: [[Double]],
+        barIndex: Int,
+        declaredWindowSize: Int? = nil
+    ) -> [Double] {
+        var features = Array(repeating: 0.0, count: FXDataEngineConstants.sharedTransferBarFeatures)
+        let size = effectiveWindowSize(window, declaredWindowSize: declaredWindowSize)
+        guard size > 0, barIndex >= 0, barIndex < size else { return features }
+
+        features[0] = fxClamp(windowFeatureAt(window, barIndex: barIndex, featureIndex: 0, declaredWindowSize: size), -4.0, 4.0)
+        features[1] = fxClamp(windowFeatureAt(window, barIndex: barIndex, featureIndex: 3, declaredWindowSize: size), -4.0, 4.0)
+        features[2] = fxClamp(windowFeatureAt(window, barIndex: barIndex, featureIndex: 5, declaredWindowSize: size), 0.0, 6.0)
+        features[3] = fxClamp(windowFeatureAt(window, barIndex: barIndex, featureIndex: 10, declaredWindowSize: size), -4.0, 4.0)
+        features[4] = fxClamp(windowFeatureAt(window, barIndex: barIndex, featureIndex: 41, declaredWindowSize: size), 0.0, 6.0)
+        features[5] = fxClamp(windowFeatureAt(window, barIndex: barIndex, featureIndex: 62, declaredWindowSize: size), -4.0, 4.0)
+        features[6] = fxClamp(windowFeatureAt(window, barIndex: barIndex, featureIndex: 80, declaredWindowSize: size), -6.0, 8.0)
+        features[7] = fxClamp(windowFeatureAt(window, barIndex: barIndex, featureIndex: 82, declaredWindowSize: size), 0.0, 8.0)
+        features[8] = fxClamp(windowFeatureAt(window, barIndex: barIndex, featureIndex: 72, declaredWindowSize: size), -4.0, 4.0)
+        features[9] = fxClamp(windowFeatureAt(window, barIndex: barIndex, featureIndex: 78, declaredWindowSize: size), -4.0, 4.0)
+        let macroImportance = fxClamp(
+            windowFeatureAt(
+                window,
+                barIndex: barIndex,
+                featureIndex: FXDataEngineConstants.macroEventFeatureOffset + 2,
+                declaredWindowSize: size
+            ),
+            0.0,
+            1.0
+        )
+        let macroStateQuality = windowFeatureAt(
+            window,
+            barIndex: barIndex,
+            featureIndex: FXDataEngineConstants.macroEventFeatureOffset + 19,
+            declaredWindowSize: size
+        )
+        let macroPolicyPressure = windowFeatureAt(
+            window,
+            barIndex: barIndex,
+            featureIndex: FXDataEngineConstants.macroEventFeatureOffset + 15,
+            declaredWindowSize: size
+        )
+        let macroPolicyDivergence = windowFeatureAt(
+            window,
+            barIndex: barIndex,
+            featureIndex: FXDataEngineConstants.macroEventFeatureOffset + 14,
+            declaredWindowSize: size
+        )
+        features[10] = fxClamp(0.70 * macroImportance + 0.30 * macroStateQuality, 0.0, 1.0)
+        features[11] = fxClamp(
+            0.50 * windowFeatureAt(
+                window,
+                barIndex: barIndex,
+                featureIndex: FXDataEngineConstants.macroEventFeatureOffset + 3,
+                declaredWindowSize: size
+            ) +
+                0.30 * macroPolicyPressure +
+                0.20 * macroPolicyDivergence,
+            -6.0,
+            6.0
+        )
+        return features
+    }
+
+    public static func sequenceTokens(
+        payload: [Double],
+        window: [[Double]],
+        declaredWindowSize: Int? = nil
+    ) -> [Double] {
+        var tokens = Array(repeating: 0.0, count: FXDataEngineConstants.sharedTransferSequenceTokens)
+        let size = effectiveWindowSize(window, declaredWindowSize: declaredWindowSize)
+        guard size > 0 else {
+            tokens[0] = payloadValue(payload, 20)
+            tokens[1] = payloadValue(payload, 21)
+            tokens[2] = payloadValue(payload, 22)
+            tokens[3] = payloadValue(payload, 23)
+            tokens[4] = payloadValue(payload, 24)
+            tokens[5] = payloadValue(payload, 25)
+            tokens[6] = payloadValue(payload, 26)
+            tokens[7] = payloadValue(payload, 27)
+            tokens[8] = fxClamp(0.50 * payloadValue(payload, 11) + 0.50 * payloadValue(payload, 12), -4.0, 4.0)
+            tokens[9] = fxClamp(0.55 * payloadValue(payload, 13) + 0.45 * payloadValue(payload, 14), -4.0, 4.0)
+            tokens[10] = fxClamp(0.50 * payloadValue(payload, 15) + 0.50 * payloadValue(payload, 16), -4.0, 4.0)
+            tokens[11] = fxClamp(0.50 * payloadValue(payload, 17) + 0.50 * payloadValue(payload, 18), -4.0, 4.0)
+            tokens[12] = fxClamp(0.60 * payloadValue(payload, 6) + 0.40 * payloadValue(payload, 7), -4.0, 4.0)
+            tokens[13] = fxClamp(0.50 * payloadValue(payload, 4) + 0.50 * payloadValue(payload, 8), -4.0, 4.0)
+            tokens[14] = fxClamp(payloadValue(payload, 19), -4.0, 4.0)
+            tokens[15] = fxClamp((abs(tokens[0]) + abs(tokens[3]) + abs(tokens[7])) / 3.0, 0.0, 6.0)
+            return tokens
+        }
+
+        var segmentLength = max(size / 4, 2)
+        if segmentLength > size {
+            segmentLength = size
+        }
+        let tailStart = max(size - segmentLength, 0)
+        let retRecent = windowFeatureSegmentMean(window, featureIndex: 0, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let retMid = windowFeatureSegmentMean(window, featureIndex: 1, segmentStart: segmentLength, segmentLength: segmentLength, declaredWindowSize: size)
+        let retTail = windowFeatureSegmentMean(window, featureIndex: 2, segmentStart: tailStart, segmentLength: segmentLength, declaredWindowSize: size)
+        let trendRecent = windowFeatureSegmentMean(window, featureIndex: 3, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let volumeRecent = windowFeatureSegmentMean(window, featureIndex: 5, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let volumeTail = windowFeatureSegmentMean(window, featureIndex: 5, segmentStart: tailStart, segmentLength: segmentLength, declaredWindowSize: size)
+        let volumeLogRecent = windowFeatureSegmentMean(window, featureIndex: 80, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let volumeLogTail = windowFeatureSegmentMean(window, featureIndex: 80, segmentStart: tailStart, segmentLength: segmentLength, declaredWindowSize: size)
+        let volumeZRecent = windowFeatureSegmentMean(window, featureIndex: 81, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let contextRecent = windowFeatureSegmentMean(window, featureIndex: 10, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let contextTail = windowFeatureSegmentMean(window, featureIndex: 10, segmentStart: tailStart, segmentLength: segmentLength, declaredWindowSize: size)
+        let sharedRecent = windowFeatureSegmentMean(window, featureIndex: 62, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let sharedLeadRecent = windowFeatureSegmentMean(window, featureIndex: 64, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let sharedCoverRecent = windowFeatureSegmentMean(window, featureIndex: 65, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let sessionRecent = windowFeatureSegmentMean(window, featureIndex: 72, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let overlapRecent = windowFeatureSegmentMean(window, featureIndex: 73, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let volumeActivityRecent = windowFeatureSegmentMean(window, featureIndex: 74, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let volumePersistenceRecent = windowFeatureSegmentMean(window, featureIndex: 78, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let driftRecent = windowFeatureSegmentMean(window, featureIndex: 79, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let driftTail = windowFeatureSegmentMean(window, featureIndex: 79, segmentStart: tailStart, segmentLength: segmentLength, declaredWindowSize: size)
+        let macroPreRecent = windowFeatureSegmentMean(window, featureIndex: FXDataEngineConstants.macroEventFeatureOffset, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let macroPostRecent = windowFeatureSegmentMean(window, featureIndex: FXDataEngineConstants.macroEventFeatureOffset + 1, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let macroImportanceRecent = windowFeatureSegmentMean(window, featureIndex: FXDataEngineConstants.macroEventFeatureOffset + 2, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let macroSurpriseRecent = windowFeatureSegmentMean(window, featureIndex: FXDataEngineConstants.macroEventFeatureOffset + 3, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let macroAbsRecent = windowFeatureSegmentMean(window, featureIndex: FXDataEngineConstants.macroEventFeatureOffset + 4, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let macroZRecent = windowFeatureSegmentMean(window, featureIndex: FXDataEngineConstants.macroEventFeatureOffset + 6, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let macroRevisionRecent = windowFeatureSegmentMean(window, featureIndex: FXDataEngineConstants.macroEventFeatureOffset + 7, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let macroCurrencyRecent = windowFeatureSegmentMean(window, featureIndex: FXDataEngineConstants.macroEventFeatureOffset + 8, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let macroProvenanceRecent = windowFeatureSegmentMean(window, featureIndex: FXDataEngineConstants.macroEventFeatureOffset + 9, segmentStart: 0, segmentLength: segmentLength, declaredWindowSize: size)
+        let mtf = recentMTFSummary(window, segmentLength: segmentLength, declaredWindowSize: size)
+
+        tokens[0] = fxClamp(retRecent, -4.0, 4.0)
+        tokens[1] = fxClamp(retMid, -4.0, 4.0)
+        tokens[2] = fxClamp(retTail, -4.0, 4.0)
+        tokens[3] = fxClamp(trendRecent + 0.35 * (retRecent - retTail), -4.0, 4.0)
+        tokens[4] = fxClamp(0.65 * volumeRecent + 0.35 * (volumeRecent - volumeTail), 0.0, 6.0)
+        tokens[5] = fxClamp(0.60 * volumeLogRecent + 0.25 * volumeZRecent + 0.15 * (volumeLogRecent - volumeLogTail), -6.0, 8.0)
+        tokens[6] = fxClamp(0.60 * contextRecent + 0.20 * (contextRecent - contextTail) + 0.20 * sharedRecent, -4.0, 4.0)
+        tokens[7] = fxClamp(0.45 * sharedRecent + 0.30 * sharedLeadRecent + 0.25 * sharedCoverRecent, -4.0, 4.0)
+        tokens[8] = fxClamp(0.45 * sessionRecent + 0.30 * overlapRecent + 0.25 * volumeActivityRecent, -4.0, 4.0)
+        tokens[9] = fxClamp(0.45 * volumePersistenceRecent + 0.35 * driftRecent + 0.20 * (driftRecent - driftTail), -4.0, 4.0)
+        tokens[10] = fxClamp(0.25 * macroPreRecent +
+            0.12 * macroPostRecent +
+            0.22 * macroImportanceRecent +
+            0.18 * macroSurpriseRecent +
+            0.13 * macroZRecent +
+            0.10 * macroCurrencyRecent, -6.0, 6.0)
+        tokens[11] = fxClamp(0.28 * macroAbsRecent +
+            0.15 * macroRevisionRecent +
+            0.10 * macroProvenanceRecent +
+            0.27 * mtf.mainBody +
+            0.20 * mtf.contextBody, -4.0, 6.0)
+        tokens[12] = fxClamp(mtf.mainVolumePressure - mtf.contextVolumePressure, -4.0, 4.0)
+        tokens[13] = fxClamp(retRecent - retTail, -4.0, 4.0)
+        tokens[14] = fxClamp(volumeLogRecent - volumeLogTail, -6.0, 6.0)
+        tokens[15] = fxClamp(0.40 * windowFeatureStd(window, featureIndex: 5, declaredWindowSize: size) +
+            0.35 * windowFeatureStd(window, featureIndex: 80, declaredWindowSize: size) +
+            0.25 * windowFeatureStd(window, featureIndex: 79, declaredWindowSize: size), 0.0, 6.0)
+        return tokens
+    }
+
     private static func baseInput(
         x: [Double],
         domainHash: Double,
@@ -424,6 +650,72 @@ public enum PluginSharedTransferPayloadTools {
 
     private static func macroFeature(_ x: [Double], _ relativeIndex: Int) -> Double {
         feature(x, FXDataEngineConstants.macroEventFeatureOffset + relativeIndex)
+    }
+
+    private static func payloadValue(_ payload: [Double], _ index: Int) -> Double {
+        guard index >= 0, index < payload.count else { return 0.0 }
+        return fxSafeFinite(payload[index])
+    }
+
+    private static func recentMTFSummary(
+        _ window: [[Double]],
+        segmentLength: Int,
+        declaredWindowSize: Int
+    ) -> (mainBody: Double, mainVolumePressure: Double, contextBody: Double, contextVolumePressure: Double) {
+        var mainBody = 0.0
+        var mainVolumePressure = 0.0
+        for slot in 0..<FXDataEngineConstants.mainMTFTimeframeCount {
+            let base = FXDataEngineConstants.mainMTFFeatureOffset +
+                slot * FXDataEngineConstants.mtfStateFeaturesPerTimeframe
+            mainBody += windowFeatureSegmentMean(
+                window,
+                featureIndex: base,
+                segmentStart: 0,
+                segmentLength: segmentLength,
+                declaredWindowSize: declaredWindowSize
+            )
+            mainVolumePressure += windowFeatureSegmentMean(
+                window,
+                featureIndex: base + 3,
+                segmentStart: 0,
+                segmentLength: segmentLength,
+                declaredWindowSize: declaredWindowSize
+            )
+        }
+        let mainCount = Double(max(FXDataEngineConstants.mainMTFTimeframeCount, 1))
+        mainBody /= mainCount
+        mainVolumePressure /= mainCount
+
+        var contextBody = 0.0
+        var contextVolumePressure = 0.0
+        var contextUsed = 0
+        for slot in 0..<FXDataEngineConstants.contextTopSymbols {
+            for timeframeSlot in 0..<FXDataEngineConstants.contextMTFTimeframeCount {
+                let base = FXDataEngineConstants.contextMTFFeatureOffset +
+                    slot * FXDataEngineConstants.contextSlotMTFFeatures +
+                    timeframeSlot * FXDataEngineConstants.mtfStateFeaturesPerTimeframe
+                contextBody += windowFeatureSegmentMean(
+                    window,
+                    featureIndex: base,
+                    segmentStart: 0,
+                    segmentLength: segmentLength,
+                    declaredWindowSize: declaredWindowSize
+                )
+                contextVolumePressure += windowFeatureSegmentMean(
+                    window,
+                    featureIndex: base + 3,
+                    segmentStart: 0,
+                    segmentLength: segmentLength,
+                    declaredWindowSize: declaredWindowSize
+                )
+                contextUsed += 1
+            }
+        }
+        if contextUsed > 0 {
+            contextBody /= Double(contextUsed)
+            contextVolumePressure /= Double(contextUsed)
+        }
+        return (mainBody, mainVolumePressure, contextBody, contextVolumePressure)
     }
 
     private static func feature(_ x: [Double], _ featureIndex: Int) -> Double {

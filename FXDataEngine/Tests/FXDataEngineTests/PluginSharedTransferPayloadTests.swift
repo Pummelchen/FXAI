@@ -240,6 +240,119 @@ final class PluginSharedTransferPayloadTests: XCTestCase {
             0.10 * mean(window, FXDataEngineConstants.macroEventFeatureOffset + 19), 0.0, 6.0), accuracy: 1e-12)
     }
 
+    func testTemporalBucketsAndBarFeatureExtraction() {
+        XCTAssertEqual(PluginSharedTransferPayloadTools.domainBucket(domainHash: -0.5), 0)
+        XCTAssertEqual(PluginSharedTransferPayloadTools.domainBucket(domainHash: 1.0), 7)
+        XCTAssertEqual(PluginSharedTransferPayloadTools.horizonBucket(horizonMinutes: 0), 0)
+        XCTAssertEqual(PluginSharedTransferPayloadTools.horizonBucket(horizonMinutes: 3), 1)
+        XCTAssertEqual(PluginSharedTransferPayloadTools.horizonBucket(horizonMinutes: 31), 4)
+        XCTAssertEqual(PluginSharedTransferPayloadTools.horizonBucket(horizonMinutes: 721), 7)
+
+        let window = [
+            row([
+                (0, 5.0), (3, -5.0), (5, 7.0), (10, -5.0), (41, 7.0), (62, -5.0),
+                (80, 9.0), (82, 9.0), (72, 5.0), (78, -5.0),
+                (FXDataEngineConstants.macroEventFeatureOffset + 2, 0.8),
+                (FXDataEngineConstants.macroEventFeatureOffset + 3, 2.0),
+                (FXDataEngineConstants.macroEventFeatureOffset + 14, -0.5),
+                (FXDataEngineConstants.macroEventFeatureOffset + 15, 1.0),
+                (FXDataEngineConstants.macroEventFeatureOffset + 19, 0.4)
+            ])
+        ]
+        let barFeatures = PluginSharedTransferPayloadTools.barFeatures(window, barIndex: 0)
+
+        XCTAssertEqual(barFeatures.count, FXDataEngineConstants.sharedTransferBarFeatures)
+        XCTAssertEqual(barFeatures[0], 4.0, accuracy: 0.0)
+        XCTAssertEqual(barFeatures[1], -4.0, accuracy: 0.0)
+        XCTAssertEqual(barFeatures[2], 6.0, accuracy: 0.0)
+        XCTAssertEqual(barFeatures[3], -4.0, accuracy: 0.0)
+        XCTAssertEqual(barFeatures[4], 6.0, accuracy: 0.0)
+        XCTAssertEqual(barFeatures[5], -4.0, accuracy: 0.0)
+        XCTAssertEqual(barFeatures[6], 8.0, accuracy: 0.0)
+        XCTAssertEqual(barFeatures[7], 8.0, accuracy: 0.0)
+        XCTAssertEqual(barFeatures[8], 4.0, accuracy: 0.0)
+        XCTAssertEqual(barFeatures[9], -4.0, accuracy: 0.0)
+        XCTAssertEqual(barFeatures[10], 0.70 * 0.8 + 0.30 * 0.4, accuracy: 1e-12)
+        XCTAssertEqual(barFeatures[11], 0.50 * 2.0 + 0.30 * 1.0 + 0.20 * -0.5, accuracy: 1e-12)
+        XCTAssertEqual(PluginSharedTransferPayloadTools.barFeatures(window, barIndex: 1), Array(repeating: 0.0, count: 12))
+    }
+
+    func testSequenceTokensUsePayloadFallbackWhenWindowIsEmpty() {
+        var payload = Array(repeating: 0.0, count: FXDataEngineConstants.sharedTransferFeatures)
+        for index in 0..<payload.count {
+            payload[index] = Double(index) / 10.0
+        }
+
+        let tokens = PluginSharedTransferPayloadTools.sequenceTokens(payload: payload, window: [])
+
+        XCTAssertEqual(tokens.count, FXDataEngineConstants.sharedTransferSequenceTokens)
+        XCTAssertEqual(tokens[0], 2.0, accuracy: 1e-12)
+        XCTAssertEqual(tokens[7], 2.7, accuracy: 1e-12)
+        XCTAssertEqual(tokens[8], 0.50 * 1.1 + 0.50 * 1.2, accuracy: 1e-12)
+        XCTAssertEqual(tokens[9], 0.55 * 1.3 + 0.45 * 1.4, accuracy: 1e-12)
+        XCTAssertEqual(tokens[10], 0.50 * 1.5 + 0.50 * 1.6, accuracy: 1e-12)
+        XCTAssertEqual(tokens[11], 0.50 * 1.7 + 0.50 * 1.8, accuracy: 1e-12)
+        XCTAssertEqual(tokens[12], 0.60 * 0.6 + 0.40 * 0.7, accuracy: 1e-12)
+        XCTAssertEqual(tokens[13], 0.50 * 0.4 + 0.50 * 0.8, accuracy: 1e-12)
+        XCTAssertEqual(tokens[14], 1.9, accuracy: 1e-12)
+        XCTAssertEqual(tokens[15], (abs(tokens[0]) + abs(tokens[3]) + abs(tokens[7])) / 3.0, accuracy: 1e-12)
+    }
+
+    func testSequenceTokensUseWindowSegmentsAndVolumePressure() {
+        let window = [
+            temporalRow(
+                [(0, 1.0), (1, 0.4), (2, 0.5), (3, 0.4), (5, 2.0), (10, 0.3), (62, 0.5),
+                 (64, 0.2), (65, 0.6), (72, 0.1), (73, 0.3), (74, 0.5), (78, 0.4),
+                 (79, 0.2), (80, 0.6), (81, 0.2), (FXDataEngineConstants.macroEventFeatureOffset + 0, 0.2),
+                 (FXDataEngineConstants.macroEventFeatureOffset + 1, 0.1), (FXDataEngineConstants.macroEventFeatureOffset + 2, 0.4),
+                 (FXDataEngineConstants.macroEventFeatureOffset + 3, 0.5), (FXDataEngineConstants.macroEventFeatureOffset + 4, 0.3),
+                 (FXDataEngineConstants.macroEventFeatureOffset + 6, 0.2), (FXDataEngineConstants.macroEventFeatureOffset + 7, 0.1),
+                 (FXDataEngineConstants.macroEventFeatureOffset + 8, 0.4), (FXDataEngineConstants.macroEventFeatureOffset + 9, 0.5)],
+                mainBody: 0.2,
+                mainVolumePressure: 0.3,
+                contextBody: 0.1,
+                contextVolumePressure: 0.05
+            ),
+            temporalRow(
+                [(0, 0.5), (1, 0.3), (2, 0.4), (3, 0.2), (5, 1.0), (10, 0.1), (62, 0.3),
+                 (64, 0.4), (65, 0.2), (72, 0.2), (73, 0.1), (74, 0.3), (78, 0.6),
+                 (79, 0.4), (80, 0.4), (81, 0.4), (FXDataEngineConstants.macroEventFeatureOffset + 0, 0.1),
+                 (FXDataEngineConstants.macroEventFeatureOffset + 1, 0.2), (FXDataEngineConstants.macroEventFeatureOffset + 2, 0.2),
+                 (FXDataEngineConstants.macroEventFeatureOffset + 3, 0.3), (FXDataEngineConstants.macroEventFeatureOffset + 4, 0.2),
+                 (FXDataEngineConstants.macroEventFeatureOffset + 6, 0.4), (FXDataEngineConstants.macroEventFeatureOffset + 7, 0.3),
+                 (FXDataEngineConstants.macroEventFeatureOffset + 8, 0.2), (FXDataEngineConstants.macroEventFeatureOffset + 9, 0.1)],
+                mainBody: 0.2,
+                mainVolumePressure: 0.3,
+                contextBody: 0.1,
+                contextVolumePressure: 0.05
+            ),
+            temporalRow([(1, 0.2), (2, 0.3), (5, 0.5), (10, -0.1), (79, 0.1), (80, 0.1)],
+                        mainBody: 0.2,
+                        mainVolumePressure: 0.3,
+                        contextBody: 0.1,
+                        contextVolumePressure: 0.05),
+            temporalRow([(1, 0.1), (2, 0.1), (5, 0.25), (10, -0.3), (79, 0.0), (80, 0.0)],
+                        mainBody: 0.2,
+                        mainVolumePressure: 0.3,
+                        contextBody: 0.1,
+                        contextVolumePressure: 0.05)
+        ]
+
+        let tokens = PluginSharedTransferPayloadTools.sequenceTokens(payload: [], window: window)
+
+        XCTAssertEqual(tokens[0], 0.75, accuracy: 1e-12)
+        XCTAssertEqual(tokens[1], 0.15, accuracy: 1e-12)
+        XCTAssertEqual(tokens[2], 0.20, accuracy: 1e-12)
+        XCTAssertEqual(tokens[3], 0.30 + 0.35 * (0.75 - 0.20), accuracy: 1e-12)
+        XCTAssertEqual(tokens[4], 0.65 * 1.5 + 0.35 * (1.5 - 0.375), accuracy: 1e-12)
+        XCTAssertEqual(tokens[5], 0.60 * 0.5 + 0.25 * 0.3 + 0.15 * (0.5 - 0.05), accuracy: 1e-12)
+        XCTAssertEqual(tokens[7], 0.45 * 0.4 + 0.30 * 0.3 + 0.25 * 0.4, accuracy: 1e-12)
+        XCTAssertEqual(tokens[12], 0.25, accuracy: 1e-12)
+        XCTAssertEqual(tokens[13], 0.55, accuracy: 1e-12)
+        XCTAssertEqual(tokens[14], 0.45, accuracy: 1e-12)
+        XCTAssertEqual(tokens[15], fxClamp(0.40 * std(window, 5) + 0.35 * std(window, 80) + 0.25 * std(window, 79), 0.0, 6.0), accuracy: 1e-12)
+    }
+
     private func expectedContextBlend(
         _ contexts: [(Double, Double, Double, Double)],
         coverage: Double
@@ -318,6 +431,35 @@ final class PluginSharedTransferPayloadTests: XCTestCase {
         var values = Array(repeating: 0.0, count: FXDataEngineConstants.aiFeatures)
         for pair in pairs {
             set(&values, pair.0, pair.1)
+        }
+        return RuntimeTransferTools.modelInputVector(features: values)
+    }
+
+    private func temporalRow(
+        _ pairs: [(Int, Double)],
+        mainBody: Double,
+        mainVolumePressure: Double,
+        contextBody: Double,
+        contextVolumePressure: Double
+    ) -> [Double] {
+        var values = Array(repeating: 0.0, count: FXDataEngineConstants.aiFeatures)
+        for pair in pairs {
+            set(&values, pair.0, pair.1)
+        }
+        for slot in 0..<FXDataEngineConstants.mainMTFTimeframeCount {
+            let base = FXDataEngineConstants.mainMTFFeatureOffset +
+                slot * FXDataEngineConstants.mtfStateFeaturesPerTimeframe
+            set(&values, base, mainBody)
+            set(&values, base + 3, mainVolumePressure)
+        }
+        for slot in 0..<FXDataEngineConstants.contextTopSymbols {
+            for timeframeSlot in 0..<FXDataEngineConstants.contextMTFTimeframeCount {
+                let base = FXDataEngineConstants.contextMTFFeatureOffset +
+                    slot * FXDataEngineConstants.contextSlotMTFFeatures +
+                    timeframeSlot * FXDataEngineConstants.mtfStateFeaturesPerTimeframe
+                set(&values, base, contextBody)
+                set(&values, base + 3, contextVolumePressure)
+            }
         }
         return RuntimeTransferTools.modelInputVector(features: values)
     }
