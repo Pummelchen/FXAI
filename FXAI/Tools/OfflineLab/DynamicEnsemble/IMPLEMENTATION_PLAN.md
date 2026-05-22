@@ -160,7 +160,7 @@ For each plugin:
 - recent empirical quality from existing FXAI meta memory
 - calibration shrink based on confidence vs reliability gap and context regret
 - disagreement penalty relative to current ensemble center
-- cost stress penalty from spread/min-move conditions
+- cost stress penalty from price-cost/min-move conditions
 - NewsPulse compatibility penalty
 - Rates Engine compatibility penalty
 - Microstructure compatibility penalty

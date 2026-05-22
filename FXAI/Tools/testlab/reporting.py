@@ -223,7 +223,7 @@ def build_suggestions(name, family, rows, oracle, findings):
     if "walkforward overfit" in issue_names:
         suggestions.append("The walk-forward gap is too wide. Tighten promotion gates, reduce model variance, and prefer configurations that hold up after purge and embargo.")
     if "walkforward unstable" in issue_names:
-        suggestions.append("Walk-forward stability is weak. Improve fold consistency, reduce sensitivity to regime edges, and harden the model against execution and spread shifts.")
+        suggestions.append("Walk-forward stability is weak. Improve fold consistency, reduce sensitivity to regime edges, and harden the model against execution and price-cost shifts.")
     if "walkforward weak edge" in issue_names:
         suggestions.append("Out-of-sample edge is not robust enough. The live candidate needs stronger post-cost edge or more aggressive rejection of marginal trades.")
 

@@ -26,7 +26,7 @@ Phase 1 through Phase 6 are implemented here:
 - Adaptive Router surface for live regime state, plugin routing weights, suppressed plugins, posture reasons, and replay transitions
 - Dynamic Ensemble surface for post-inference plugin trust, participation weights, suppression state, and routed final action context
 - Probabilistic Calibration surface for calibrated probabilities, expected move quantiles, edge-after-costs, selected tier support, and abstention reasons
-- Execution Quality surface for expected spread, slippage stress, fill quality, latency sensitivity, liquidity fragility, replay transitions, and current execution-state reasons
+- Execution Quality surface for expected price-cost, slippage stress, fill quality, latency sensitivity, liquidity fragility, replay transitions, and current execution-state reasons
 - promotion center for champions, tiers, and set paths
 - Research OS control for Turso environment diagnostics, branch and PITR flows, audit-log visibility, analog vector browsing, and recovery command generation
 - advanced visualization surfaces with Metal-backed heatmaps, world-plan charts, family stress maps, artifact diff surfaces, and promotion/attribution timelines

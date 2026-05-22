@@ -2,14 +2,14 @@
 
 This subsystem is the final decision-quality layer for FXAI.
 
-It does not replace plugins, the Adaptive Router, or the Dynamic Ensemble. It consumes the routed ensemble output, applies a deterministic calibration tier, estimates tradeable move and edge after costs, and can force `SKIP` when the evidence is not strong enough after spread, slippage, uncertainty, and current risk context.
+It does not replace plugins, the Adaptive Router, or the Dynamic Ensemble. It consumes the routed ensemble output, applies a deterministic calibration tier, estimates tradeable move and edge after costs, and can force `SKIP` when the evidence is not strong enough after price-cost, slippage, uncertainty, and current risk context.
 
 ## Phase 1 Scope
 
 - ensemble-level probability calibration
 - hierarchical tier selection with pair, session, regime, and global fallback
 - expected-move scaling with uncertainty-aware quantile shrinkage
-- edge-after-costs calculation using spread, slippage, uncertainty, and execution-risk penalties
+- edge-after-costs calculation using price-cost, slippage, uncertainty, and execution-risk penalties
 - explicit abstention reason codes
 - append-only runtime history for replay and audit
 - GUI visibility for calibrated probabilities, move distribution, tier support, and final abstention reasons

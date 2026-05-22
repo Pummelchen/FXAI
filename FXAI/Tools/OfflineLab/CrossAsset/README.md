@@ -115,6 +115,6 @@ Phase 1 uses the shared cross-asset state in a gating-first way:
 - Adaptive Router absorbs macro/liquidity stress into regime reasons
 - Dynamic Ensemble downweights participation when cross-asset stress is stale or blocking
 - Probabilistic Calibration adds cross-asset uncertainty and risk penalties
-- Execution Quality adds cross-asset stress into spread/slippage/latency scoring
+- Execution Quality adds cross-asset stress into price-cost/slippage/latency scoring
 - Trade Risk can block or caution entries using the pair-level cross-asset gate
 - the macOS GUI exposes a dedicated Cross Asset surface for operator visibility

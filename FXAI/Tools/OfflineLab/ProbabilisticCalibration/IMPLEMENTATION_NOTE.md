@@ -68,7 +68,7 @@ The runtime stage:
 - selects the most specific reliable calibrator tier
 - applies a conservative logistic-affine probability mapping
 - shrinks move estimates using calibrator memory
-- prices spread, slippage, fill/risk, and uncertainty explicitly
+- accounts for price-cost, slippage, fill/risk, and uncertainty explicitly
 - abstains when edge after costs does not clear the configured floor
 - writes machine-readable reason codes and fallback flags
 

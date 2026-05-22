@@ -89,6 +89,6 @@ Examples:
 - trend-friendly plugins are stronger in persistent directional phases
 - range-oriented plugins are stronger in mean-reverting phases
 - macro-sensitive plugins matter more in event and risk-repricing regimes
-- fragile plugins should be trusted less when spread or liquidity conditions degrade
+- fragile plugins should be trusted less when price-cost or liquidity conditions degrade
 
 Adaptive Router gives FXAI one consistent, auditable place to make those decisions.

@@ -79,7 +79,7 @@ The new subsystem extends those rails instead of replacing them.
 
 ## Intentional Deviations From The Generic Plan
 
-- The live regime classifier will run inside MQL instead of Python. This is necessary because the current state depends on live spread, volatility, session, and runtime NewsPulse consumption already available in the EA.
+- The live regime classifier currently runs inside the legacy MQL runtime instead of Python. During the Swift migration, its broker-cost input is represented as price-cost state alongside volatility, session, and runtime NewsPulse consumption.
 - The offline Python side will not classify live regime directly. It will generate the adaptive priors, thresholds, and replay reports that the runtime consumes.
 - Existing plugin interfaces will remain unchanged. Routing is applied above plugin inference at the current ensemble/meta score stage.
 - The existing 12 internal `FXAI_GetRegimeId(...)` buckets are retained as low-level calibration state. The new subsystem adds a higher-level operator-facing regime taxonomy on top of them.
