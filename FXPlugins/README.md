@@ -31,7 +31,10 @@ contracts:
   horizon, min-move, and price-cost context to plugin-local PyTorch/TensorFlow
   code. The included backend has a pure-Python fallback for contract tests and
   selects PyTorch MPS or TensorFlow Metal acceleration when those frameworks are
-  installed.
+  installed. Training calls persist lightweight online state under
+  `FXAI_PLUGIN_STATE_DIR`, or `~/.fxai/plugins/state` when the environment
+  variable is not set. The backend follows the FXDataEngine volume contract:
+  volume-derived features are used only when `dataHasVolume` is true.
 
 Run the local verification gate with:
 

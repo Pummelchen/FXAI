@@ -82,20 +82,67 @@ final class GeneratedPluginAdapterTests: XCTestCase {
 
         for definition in FXAIGeneratedPluginDefinition.all {
             var adapter = FXAIGeneratedPluginAdapter(definition: definition)
-            let before = try adapter.predict(buyRequest, hyperParameters: HyperParameters())
             for _ in 0..<16 {
                 try adapter.train(Self.trainRequest(from: buyRequest, label: .buy, movePoints: 2.5), hyperParameters: HyperParameters())
                 try adapter.train(Self.trainRequest(from: sellRequest, label: .sell, movePoints: 2.0), hyperParameters: HyperParameters())
             }
-            let after = try adapter.predict(buyRequest, hyperParameters: HyperParameters())
+            let afterBuy = try adapter.predict(buyRequest, hyperParameters: HyperParameters())
+            let afterSell = try adapter.predict(sellRequest, hyperParameters: HyperParameters())
 
             XCTAssertGreaterThan(
-                after.classProbabilities[LabelClass.buy.rawValue],
-                before.classProbabilities[LabelClass.buy.rawValue],
-                "training did not improve buy similarity for \(definition.aiName)"
+                afterBuy.classProbabilities[LabelClass.buy.rawValue],
+                afterSell.classProbabilities[LabelClass.buy.rawValue],
+                "training did not separate buy and sell samples for \(definition.aiName)"
             )
-            XCTAssertNoThrow(try after.validate(), definition.aiName)
+            XCTAssertNoThrow(try afterBuy.validate(), definition.aiName)
+            XCTAssertNoThrow(try afterSell.validate(), definition.aiName)
         }
+    }
+
+    func testGeneratedAdapterResetClearsOnlineRuntimeState() throws {
+        let definition = try XCTUnwrap(FXAIGeneratedPluginDefinition.all.first { $0.aiName == "lin_sgd" })
+        let request = Self.predictRequest(dataHasVolume: true)
+        var adapter = FXAIGeneratedPluginAdapter(definition: definition)
+        let before = try adapter.predict(request, hyperParameters: HyperParameters())
+
+        for _ in 0..<20 {
+            try adapter.train(Self.trainRequest(from: request, label: .buy, movePoints: 3.0), hyperParameters: HyperParameters())
+        }
+        let trained = try adapter.predict(request, hyperParameters: HyperParameters())
+        XCTAssertNotEqual(trained.classProbabilities, before.classProbabilities)
+
+        adapter.reset()
+        let reset = try adapter.predict(request, hyperParameters: HyperParameters())
+        for index in 0..<LabelClass.allCases.count {
+            XCTAssertEqual(reset.classProbabilities[index], before.classProbabilities[index], accuracy: 1.0e-12)
+        }
+    }
+
+    func testSequenceFamilyUsesWindowContext() throws {
+        let definition = try XCTUnwrap(FXAIGeneratedPluginDefinition.all.first { $0.aiName == "ai_lstm" })
+        let flatWindow = Self.window(rows: 7) { _, _ in 0.0 }
+        let trendWindow = Self.window(rows: 7) { row, feature in
+            switch feature {
+            case 0, 3, 7:
+                return 0.12 - 0.015 * Double(row)
+            case 8:
+                return -0.08 + 0.010 * Double(row)
+            default:
+                return 0.0
+            }
+        }
+        let flatRequest = Self.predictRequest(dataHasVolume: true, sequenceBars: 8, xWindow: flatWindow)
+        let trendRequest = Self.predictRequest(dataHasVolume: true, sequenceBars: 8, xWindow: trendWindow)
+        let adapter = FXAIGeneratedPluginAdapter(definition: definition)
+
+        let flatPrediction = try adapter.predict(flatRequest, hyperParameters: HyperParameters())
+        let trendPrediction = try adapter.predict(trendRequest, hyperParameters: HyperParameters())
+
+        XCTAssertNotEqual(flatPrediction.classProbabilities, trendPrediction.classProbabilities)
+        XCTAssertGreaterThan(
+            trendPrediction.classProbabilities[LabelClass.buy.rawValue],
+            flatPrediction.classProbabilities[LabelClass.buy.rawValue]
+        )
     }
 
     func testAccelerationPlansClassifyAppleSiliconBackends() throws {
@@ -108,7 +155,11 @@ final class GeneratedPluginAdapterTests: XCTestCase {
         XCTAssertTrue(plans["rl_ppo"]?.candidateBackends.contains(.coreMLNeuralEngine) ?? false)
     }
 
-    private static func predictRequest(dataHasVolume: Bool) -> PredictRequestV4 {
+    private static func predictRequest(
+        dataHasVolume: Bool,
+        sequenceBars: Int = 1,
+        xWindow: [[Double]] = []
+    ) -> PredictRequestV4 {
         var features = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
         features[0] = 0.09
         features[3] = 0.04
@@ -122,15 +173,25 @@ final class GeneratedPluginAdapterTests: XCTestCase {
             context: PluginContextV4(
                 sessionBucket: 2,
                 horizonMinutes: 5,
-                sequenceBars: 1,
+                sequenceBars: sequenceBars,
                 priceCostPoints: 0.20,
                 minMovePoints: 0.50,
                 pointValue: 1.0,
                 sampleTimeUTC: 1_800_018_000,
                 dataHasVolume: dataHasVolume
             ),
-            x: features
+            windowSize: xWindow.count,
+            x: features,
+            xWindow: xWindow
         )
+    }
+
+    private static func window(rows: Int, value: (Int, Int) -> Double) -> [[Double]] {
+        (0..<rows).map { row in
+            (0..<FXDataEngineConstants.aiWeights).map { feature in
+                value(row, feature)
+            }
+        }
     }
 
     private static func trainRequest(from request: PredictRequestV4, label: LabelClass, movePoints: Double) -> TrainRequestV4 {

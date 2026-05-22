@@ -3,10 +3,7 @@ import Foundation
 
 public struct FXAIGeneratedPluginAdapter: FXAIPlannedPlugin {
     public let definition: FXAIGeneratedPluginDefinition
-    private var classCentroids: [[Double]]
-    private var classMass: [Double]
-    private var moveEMA: Double
-    private var trainedSteps: Int
+    private var runtime: FXAIFamilyPluginRuntime
 
     public var manifest: PluginManifestV4 {
         PluginManifestV4(
@@ -37,23 +34,11 @@ public struct FXAIGeneratedPluginAdapter: FXAIPlannedPlugin {
 
     public init(definition: FXAIGeneratedPluginDefinition) {
         self.definition = definition
-        self.classCentroids = Array(
-            repeating: Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights),
-            count: LabelClass.allCases.count
-        )
-        self.classMass = Array(repeating: 1.0e-6, count: LabelClass.allCases.count)
-        self.moveEMA = 1.0
-        self.trainedSteps = 0
+        self.runtime = FXAIFamilyPluginRuntime(definition: definition)
     }
 
     public mutating func reset() {
-        classCentroids = Array(
-            repeating: Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights),
-            count: LabelClass.allCases.count
-        )
-        classMass = Array(repeating: 1.0e-6, count: LabelClass.allCases.count)
-        moveEMA = 1.0
-        trainedSteps = 0
+        runtime = FXAIFamilyPluginRuntime(definition: definition)
     }
 
     public func selfTest() -> Bool {
@@ -63,54 +48,13 @@ public struct FXAIGeneratedPluginAdapter: FXAIPlannedPlugin {
     public mutating func train(_ request: TrainRequestV4, hyperParameters: HyperParameters) throws {
         try request.validate()
         try PluginContractTools.validateCompatibility(manifest: manifest, context: request.context)
-        let labelIndex = request.labelClass.rawValue
-        let sampleWeight = fxClamp(request.sampleWeight, 0.0, 8.0)
-        guard sampleWeight > 0.0 else { return }
-
-        let features = Self.clippedFeatures(request.x)
-        let existingMass = max(classMass[labelIndex], 1.0e-6)
-        let alpha = fxClamp(sampleWeight / (existingMass + sampleWeight), 0.005, 0.25)
-        for index in 0..<features.count {
-            classCentroids[labelIndex][index] = (1.0 - alpha) * classCentroids[labelIndex][index] + alpha * features[index]
-        }
-        classMass[labelIndex] = min(existingMass + sampleWeight, 1_000_000.0)
-        let moveTarget = max(abs(fxSafeFinite(request.movePoints)), request.context.minMovePoints, 1.0)
-        let moveAlpha = fxClamp(0.02 * sampleWeight, 0.005, 0.20)
-        moveEMA = (1.0 - moveAlpha) * moveEMA + moveAlpha * moveTarget
-        trainedSteps += 1
+        runtime.train(request, definition: definition, hyperParameters: hyperParameters)
     }
 
     public func predict(_ request: PredictRequestV4, hyperParameters: HyperParameters) throws -> PredictionV4 {
         try request.validate()
         try PluginContractTools.validateCompatibility(manifest: manifest, context: request.context)
-
-        let edge = definition.profile.edge(request) + learnedEdge(request)
-        let volumeSignal = request.context.dataHasVolume ? FXAIGeneratedPluginAdapter.feature(request, 6) : 0.0
-        let volumeLift = request.context.dataHasVolume ? 0.10 * fxClamp(abs(volumeSignal), 0.0, 1.0) : 0.0
-        let rawStrength = abs(edge) * definition.profile.strengthScale + volumeLift
-        let strength = fxClamp(rawStrength, 0.0, 1.0)
-
-        if strength < definition.profile.skipThreshold {
-            return FXAIGeneratedPluginAdapter.prediction(
-                label: .skip,
-                strength: 0.0,
-                moveSeed: 0.0,
-                reliability: definition.profile.baseReliability + 0.05 * volumeLift
-            )
-        }
-
-        let label: LabelClass = edge >= 0.0 ? .buy : .sell
-        let moveSeed = max(
-            request.context.minMovePoints,
-            request.context.priceCostPoints,
-            max(abs(edge) * definition.profile.moveScale, moveEMA)
-        )
-        return FXAIGeneratedPluginAdapter.prediction(
-            label: label,
-            strength: strength,
-            moveSeed: moveSeed,
-            reliability: definition.profile.baseReliability + 0.20 * volumeLift
-        )
+        return runtime.predict(request, definition: definition, hyperParameters: hyperParameters)
     }
 
     public static func generatedPlugins() -> [FXAIGeneratedPluginAdapter] {
@@ -121,79 +65,6 @@ public struct FXAIGeneratedPluginAdapter: FXAIPlannedPlugin {
         generatedPlugins().map(\.accelerationPlan)
     }
 
-    private static func prediction(label: LabelClass, strength: Double, moveSeed: Double, reliability: Double) -> PredictionV4 {
-        let clampedStrength = fxClamp(strength, 0.0, 1.0)
-        let directional = fxClamp(0.54 + 0.38 * clampedStrength, 0.54, 0.92)
-        let opposite = 0.06
-        let skip = max(0.06, 1.0 - directional - opposite)
-        let probabilities: [Double]
-        switch label {
-        case .buy:
-            probabilities = normalize([opposite, directional, skip])
-        case .sell:
-            probabilities = normalize([directional, opposite, skip])
-        case .skip:
-            probabilities = [0.09, 0.09, 0.82]
-        }
-
-        let meanMove = label == .skip ? 0.0 : max(1.0, moveSeed)
-        let sigma = max(0.10, 0.32 * meanMove)
-        let q25 = max(0.0, meanMove - 0.55 * sigma)
-        let q50 = max(q25, meanMove)
-        let q75 = max(q50, meanMove + 0.55 * sigma)
-        return PredictionV4(
-            classProbabilities: probabilities,
-            moveMeanPoints: meanMove,
-            moveQ25Points: q25,
-            moveQ50Points: q50,
-            moveQ75Points: q75,
-            mfeMeanPoints: meanMove,
-            maeMeanPoints: max(0.0, 0.35 * meanMove),
-            hitTimeFraction: 1.0,
-            pathRisk: probabilities[LabelClass.skip.rawValue],
-            fillRisk: 0.0,
-            confidence: max(probabilities[LabelClass.buy.rawValue], probabilities[LabelClass.sell.rawValue]),
-            reliability: fxClamp(reliability, 0.0, 1.0)
-        )
-    }
-
-    private static func clippedFeatures(_ x: [Double]) -> [Double] {
-        var output = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
-        for index in 0..<output.count {
-            let value = index < x.count ? fxSafeFinite(x[index]) : 0.0
-            output[index] = fxClamp(value, -8.0, 8.0)
-        }
-        return output
-    }
-
-    private func learnedEdge(_ request: PredictRequestV4) -> Double {
-        guard trainedSteps > 0 else { return 0.0 }
-        let features = Self.clippedFeatures(request.x)
-        let sellSimilarity = cosine(features, classCentroids[LabelClass.sell.rawValue])
-        let buySimilarity = cosine(features, classCentroids[LabelClass.buy.rawValue])
-        let skipSimilarity = max(cosine(features, classCentroids[LabelClass.skip.rawValue]), 0.0)
-        let directional = buySimilarity - sellSimilarity
-        return fxClamp(0.25 * directional * (1.0 - 0.35 * skipSimilarity), -0.35, 0.35)
-    }
-
-    private func cosine(_ lhs: [Double], _ rhs: [Double]) -> Double {
-        var dot = 0.0
-        var lhsNorm = 0.0
-        var rhsNorm = 0.0
-        for index in 0..<min(lhs.count, rhs.count) {
-            dot += lhs[index] * rhs[index]
-            lhsNorm += lhs[index] * lhs[index]
-            rhsNorm += rhs[index] * rhs[index]
-        }
-        guard lhsNorm > 1.0e-12, rhsNorm > 1.0e-12 else { return 0.0 }
-        return fxClamp(dot / sqrt(lhsNorm * rhsNorm), -1.0, 1.0)
-    }
-
-    private static func normalize(_ values: [Double]) -> [Double] {
-        let sum = values.reduce(0.0, +)
-        guard sum > 0.0 else { return [0.09, 0.09, 0.82] }
-        return values.map { $0 / sum }
-    }
 }
 
 public struct FXAIGeneratedPluginDefinition: Sendable, Hashable {

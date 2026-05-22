@@ -12,8 +12,14 @@ from __future__ import annotations
 
 import json
 import math
+import os
+from pathlib import Path
+import re
 import sys
 from typing import Any
+
+
+VOLUME_FEATURE_INDEXES = (6, 68, 69, 70, 71, 74, 75, 76, 77, 78, 80, 81, 82, 83)
 
 
 def _safe_float(value: Any) -> float:
@@ -32,6 +38,15 @@ def _feature(values: list[Any], index: int) -> float:
     return _safe_float(values[index])
 
 
+def _sanitize_features(values: list[Any], data_has_volume: bool) -> list[float]:
+    features = [max(-8.0, min(_safe_float(value), 8.0)) for value in values]
+    if not data_has_volume:
+        for index in VOLUME_FEATURE_INDEXES:
+            if index < len(features):
+                features[index] = 0.0
+    return features
+
+
 def _framework_edge(framework: str, values: list[Any], data_has_volume: bool) -> float:
     if framework == "pyTorch":
         edge = _torch_edge(values)
@@ -48,6 +63,103 @@ def _framework_edge(framework: str, values: list[Any], data_has_volume: bool) ->
         + (0.10 * _feature(values, 6) if data_has_volume else 0.0)
         + 0.04 * _feature(values, 12)
     )
+
+
+def _state_dir() -> Path:
+    raw = os.environ.get("FXAI_PLUGIN_STATE_DIR")
+    if raw:
+        return Path(raw).expanduser()
+    return Path.home() / ".fxai" / "plugins" / "state"
+
+
+def _safe_token(value: Any) -> str:
+    token = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value or "model"))
+    return token.strip("._") or "model"
+
+
+def _state_path(model_identifier: Any, framework: Any) -> Path:
+    return _state_dir() / f"{_safe_token(model_identifier)}.{_safe_token(framework)}.json"
+
+
+def _initial_state() -> dict[str, Any]:
+    return {
+        "steps": 0,
+        "moveEMA": 1.0,
+        "classMass": [1.0e-6, 1.0e-6, 1.0e-6],
+        "classCentroids": [],
+    }
+
+
+def _load_state(model_identifier: Any, framework: Any) -> dict[str, Any]:
+    path = _state_path(model_identifier, framework)
+    if not path.exists():
+        return _initial_state()
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return _initial_state()
+    if not isinstance(state, dict):
+        return _initial_state()
+    base = _initial_state()
+    base.update(state)
+    return base
+
+
+def _save_state(model_identifier: Any, framework: Any, state: dict[str, Any]) -> None:
+    path = _state_path(model_identifier, framework)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, separators=(",", ":"), sort_keys=True), encoding="utf-8")
+
+
+def _ensure_centroids(state: dict[str, Any], feature_count: int) -> list[list[float]]:
+    centroids = state.get("classCentroids")
+    if not isinstance(centroids, list) or len(centroids) != 3:
+        centroids = []
+    normalized: list[list[float]] = []
+    for class_index in range(3):
+        source = centroids[class_index] if class_index < len(centroids) and isinstance(centroids[class_index], list) else []
+        row = [_safe_float(source[index]) if index < len(source) else 0.0 for index in range(feature_count)]
+        normalized.append(row)
+    state["classCentroids"] = normalized
+    return normalized
+
+
+def _label_index(value: Any) -> int:
+    if isinstance(value, int):
+        return max(0, min(value, 2))
+    if isinstance(value, str):
+        lowered = value.lower()
+        if "sell" in lowered:
+            return 0
+        if "buy" in lowered:
+            return 1
+        if "skip" in lowered:
+            return 2
+    return 2
+
+
+def _state_edge(state: dict[str, Any], values: list[Any]) -> float:
+    if int(_safe_float(state.get("steps", 0))) <= 0:
+        return 0.0
+    features = [_safe_float(value) for value in values]
+    centroids = _ensure_centroids(state, len(features))
+    buy = _cosine(features, centroids[1])
+    sell = _cosine(features, centroids[0])
+    skip = max(_cosine(features, centroids[2]), 0.0)
+    return max(-0.35, min(0.35, 0.25 * (buy - sell) * (1.0 - 0.35 * skip)))
+
+
+def _cosine(lhs: list[float], rhs: list[float]) -> float:
+    dot = 0.0
+    lhs_norm = 0.0
+    rhs_norm = 0.0
+    for left, right in zip(lhs, rhs):
+        dot += left * right
+        lhs_norm += left * left
+        rhs_norm += right * right
+    if lhs_norm <= 1.0e-12 or rhs_norm <= 1.0e-12:
+        return 0.0
+    return max(-1.0, min(1.0, dot / math.sqrt(lhs_norm * rhs_norm)))
 
 
 def _torch_edge(values: list[Any]) -> float | None:
@@ -73,7 +185,7 @@ def _tensorflow_edge(values: list[Any]) -> float | None:
     return float(tf.reduce_sum(tensor * weights).numpy())
 
 
-def _prediction(edge: float, min_move: float, price_cost: float) -> dict[str, Any]:
+def _prediction(edge: float, min_move: float, price_cost: float, move_ema: float = 1.0) -> dict[str, Any]:
     strength = max(0.0, min(abs(edge) * 3.5, 1.0))
     if strength < 0.08:
         return {
@@ -100,7 +212,7 @@ def _prediction(edge: float, min_move: float, price_cost: float) -> dict[str, An
         probs = [directional, opposite, skip]
     total = sum(probs)
     probs = [p / total for p in probs]
-    move = max(1.0, min_move, price_cost, abs(edge) * 100.0)
+    move = max(1.0, min_move, price_cost, move_ema, abs(edge) * 100.0)
     sigma = max(0.10, 0.32 * move)
     return {
         "classProbabilities": probs,
@@ -123,16 +235,45 @@ def _handle_predict(command: dict[str, Any]) -> dict[str, Any]:
     context_min_move = max(0.0, _safe_float(payload.get("minMovePoints", 0.0)))
     context_price_cost = max(0.0, _safe_float(payload.get("priceCostPoints", 0.0)))
     values = payload.get("x") or []
-    edge = _framework_edge(str(payload.get("framework", "")), values, bool(payload.get("dataHasVolume", False)))
+    data_has_volume = bool(payload.get("dataHasVolume", False))
+    features = _sanitize_features(values, data_has_volume)
+    framework = str(payload.get("framework", ""))
+    state = _load_state(payload.get("modelIdentifier"), framework)
+    edge = _framework_edge(framework, features, data_has_volume) + _state_edge(state, features)
+    move_ema = max(1.0, _safe_float(state.get("moveEMA", 1.0)))
     return {
         "ok": True,
-        "prediction": _prediction(edge, context_min_move, context_price_cost),
+        "prediction": _prediction(edge, context_min_move, context_price_cost, move_ema),
         "error": None,
     }
 
 
 def _handle_train(command: dict[str, Any]) -> dict[str, Any]:
-    _ = command.get("training") or {}
+    training = command.get("training") or {}
+    inference = training.get("inference") or {}
+    values = inference.get("x") or []
+    features = _sanitize_features(values, bool(inference.get("dataHasVolume", False)))
+    framework = str(inference.get("framework", ""))
+    state = _load_state(inference.get("modelIdentifier"), framework)
+    centroids = _ensure_centroids(state, len(features))
+    masses = state.get("classMass")
+    if not isinstance(masses, list) or len(masses) != 3:
+        masses = [1.0e-6, 1.0e-6, 1.0e-6]
+    masses = [max(_safe_float(value), 1.0e-6) for value in masses[:3]]
+    label = _label_index(training.get("labelClass"))
+    sample_weight = max(0.0, min(_safe_float(training.get("sampleWeight", 1.0)), 8.0))
+    if sample_weight > 0.0:
+        alpha = max(0.005, min(sample_weight / (masses[label] + sample_weight), 0.25))
+        for index, feature in enumerate(features):
+            centroids[label][index] = (1.0 - alpha) * centroids[label][index] + alpha * feature
+        masses[label] = min(masses[label] + sample_weight, 1_000_000.0)
+        move_target = max(abs(_safe_float(training.get("movePoints", 0.0))), _safe_float(inference.get("minMovePoints", 0.0)), 1.0)
+        move_alpha = max(0.005, min(0.02 * sample_weight, 0.20))
+        state["moveEMA"] = (1.0 - move_alpha) * _safe_float(state.get("moveEMA", 1.0)) + move_alpha * move_target
+        state["steps"] = int(_safe_float(state.get("steps", 0))) + 1
+    state["classMass"] = masses
+    state["classCentroids"] = centroids
+    _save_state(inference.get("modelIdentifier"), framework, state)
     return {"ok": True, "prediction": None, "error": None}
 
 

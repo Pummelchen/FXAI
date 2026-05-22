@@ -280,7 +280,13 @@ Revision from pass 2:
   availability, horizon, min-move, and price-cost context.
 - `Python/fxai_plugin_backend.py` provides the generic PyTorch/TensorFlow
   backend entrypoint, including PyTorch MPS / TensorFlow Metal dispatch when the
-  frameworks are installed and a pure-Python fallback for local contract tests.
+  frameworks are installed, persisted online backend state, volume-availability
+  gating, and a pure-Python fallback for local contract tests.
+- Generated adapters now route through a shared Swift family runtime with
+  online class heads, move heads, context calibration, sequence-window state,
+  tree-style stumps, memory retrieval slots, and mixture experts. This gives all
+  59 non-handwritten plugins executable family-specific behavior while
+  per-plugin parity fixtures are built.
 
 Remaining parity work after this wave is plugin-specific: replace generated
 surrogate bodies with direct Swift, Metal, PyTorch, or TensorFlow implementations
