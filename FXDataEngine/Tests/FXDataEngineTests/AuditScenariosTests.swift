@@ -215,4 +215,64 @@ final class AuditScenariosTests: XCTestCase {
             bars
         )
     }
+
+    func testGenerateSyntheticScenarioSeriesBuildsAsSeriesMTFContextAndVolume() throws {
+        let spec = AuditScenarioTools.scenarioSpec(scenarioID: 5)
+        let generated = try XCTUnwrap(AuditScenarioTools.generateSyntheticScenarioSeries(
+            spec: spec,
+            bars: 512,
+            seed: 42,
+            point: 0.0001
+        ))
+        let repeated = try XCTUnwrap(AuditScenarioTools.generateSyntheticScenarioSeries(
+            spec: spec,
+            bars: 512,
+            seed: 42,
+            point: 0.0001
+        ))
+
+        XCTAssertEqual(generated.primary.count, 512)
+        XCTAssertTrue(generated.primary.isConsistent)
+        XCTAssertGreaterThan(generated.primary.timeUTC[0], generated.primary.timeUTC[511])
+        XCTAssertGreaterThan(generated.primary.close[0], generated.primary.close[511])
+        XCTAssertEqual(generated.primary.close[0], repeated.primary.close[0], accuracy: 0.0)
+        XCTAssertTrue(generated.primary.volume.allSatisfy { $0 > 0.0 })
+        XCTAssertTrue(generated.primary.fillRiskPoints.allSatisfy { $0 > 0.0 })
+
+        XCTAssertEqual(generated.m5.close.count, 102)
+        XCTAssertEqual(generated.m15.close.count, 34)
+        XCTAssertEqual(generated.m30.close.count, 17)
+        XCTAssertEqual(generated.h1.close.count, 8)
+        XCTAssertEqual(generated.m5.alignedIndexMap.count, 512)
+        XCTAssertGreaterThan(generated.m5.alignedIndexMap.filter { $0 >= 0 }.count, 0)
+
+        XCTAssertEqual(generated.contexts.count, 3)
+        XCTAssertTrue(generated.contexts.allSatisfy(\.isConsistent))
+        XCTAssertEqual(generated.contextFeatures.count, 512)
+        XCTAssertEqual(
+            generated.contextFeatures.extra.count,
+            512 * FXDataEngineConstants.contextExtraFeatures
+        )
+    }
+
+    func testGenerateSyntheticScenarioSeriesRejectsUnsupportedInputs() {
+        XCTAssertNil(AuditScenarioTools.generateSyntheticScenarioSeries(
+            spec: AuditScenarioTools.scenarioSpec(scenarioID: 0),
+            bars: 511,
+            seed: 1,
+            point: 0.0001
+        ))
+        XCTAssertNil(AuditScenarioTools.generateSyntheticScenarioSeries(
+            spec: AuditScenarioTools.scenarioSpec(scenarioID: 0),
+            bars: 512,
+            seed: 1,
+            point: 0.0
+        ))
+        XCTAssertNil(AuditScenarioTools.generateSyntheticScenarioSeries(
+            spec: AuditScenarioTools.scenarioSpec(scenarioID: 8),
+            bars: 512,
+            seed: 1,
+            point: 0.0001
+        ))
+    }
 }

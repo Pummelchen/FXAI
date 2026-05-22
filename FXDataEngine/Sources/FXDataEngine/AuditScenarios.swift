@@ -140,6 +140,72 @@ public struct AuditScenarioDoubleBar: Codable, Hashable, Sendable {
     }
 }
 
+public struct AuditCloseTimeframeSeries: Codable, Hashable, Sendable {
+    public var timeUTC: [Int64]
+    public var close: [Double]
+    public var alignedIndexMap: [Int]
+
+    public init(timeUTC: [Int64] = [], close: [Double] = [], alignedIndexMap: [Int] = []) {
+        self.timeUTC = timeUTC
+        self.close = close.map { fxSafeFinite($0) }
+        self.alignedIndexMap = alignedIndexMap
+    }
+}
+
+public struct AuditGeneratedScenarioSeries: Codable, Hashable, Sendable {
+    public var primary: AuditAsSeriesOHLCV
+    public var m5: AuditCloseTimeframeSeries
+    public var m15: AuditCloseTimeframeSeries
+    public var m30: AuditCloseTimeframeSeries
+    public var h1: AuditCloseTimeframeSeries
+    public var contexts: [AuditAsSeriesOHLCV]
+    public var contextFeatures: AuditContextFeatureSet
+
+    public init(
+        primary: AuditAsSeriesOHLCV,
+        m5: AuditCloseTimeframeSeries,
+        m15: AuditCloseTimeframeSeries,
+        m30: AuditCloseTimeframeSeries,
+        h1: AuditCloseTimeframeSeries,
+        contexts: [AuditAsSeriesOHLCV],
+        contextFeatures: AuditContextFeatureSet
+    ) {
+        self.primary = primary
+        self.m5 = m5
+        self.m15 = m15
+        self.m30 = m30
+        self.h1 = h1
+        self.contexts = contexts
+        self.contextFeatures = contextFeatures
+    }
+}
+
+struct AuditScenarioRandomGenerator: Sendable {
+    private var state: UInt64 = 881_726_454
+
+    init(seed: UInt64) {
+        self.state = seed == 0 ? 881_726_454 : seed
+    }
+
+    mutating func nextUInt64() -> UInt64 {
+        state ^= state &<< 13
+        state ^= state >> 7
+        state ^= state &<< 17
+        return state
+    }
+
+    mutating func nextUnit() -> Double {
+        let value = nextUInt64() % 2_147_483_647
+        return fxClamp(Double(value) / 2_147_483_646.0, 0.0, 1.0)
+    }
+
+    mutating func nextNormal() -> Double {
+        let u1 = max(nextUnit(), 1e-9)
+        let u2 = nextUnit()
+        return sqrt(-2.0 * log(u1)) * cos(2.0 * Double.pi * u2)
+    }
+}
+
 public enum AuditScenarioTools {
     public static func worldPlanFile(symbol: String) -> String {
         "\(ControlPlaneConstants.promotionsDirectory)/fxai_world_plan_" +
@@ -547,6 +613,422 @@ public enum AuditScenarioTools {
                 3.0
             )
             previousTransformedClose = bar.close
+        }
+
+        return output
+    }
+
+    public static func generateSyntheticScenarioSeries(
+        spec: AuditScenarioSpec,
+        bars: Int,
+        seed: UInt64,
+        point: Double
+    ) -> AuditGeneratedScenarioSeries? {
+        guard bars >= 512, point > 0.0, spec.id < 8 else { return nil }
+
+        var rng = AuditScenarioRandomGenerator(seed: seed ^ (UInt64(max(spec.id + 1, 0)) &* 2_654_435_761))
+        let startUTC: Int64 = 1_704_067_200
+        let anchor = 1.10000
+        let pt = max(point, 1e-5)
+        var chronologicalBars: [AuditScenarioDoubleBar] = []
+        var context1Bars: [AuditScenarioDoubleBar] = []
+        var context2Bars: [AuditScenarioDoubleBar] = []
+        var context3Bars: [AuditScenarioDoubleBar] = []
+        chronologicalBars.reserveCapacity(bars)
+        context1Bars.reserveCapacity(bars)
+        context2Bars.reserveCapacity(bars)
+        context3Bars.reserveCapacity(bars)
+
+        var previous = anchor
+        var previousSigma = spec.sigmaPerBar
+        var previousReturn = 0.0
+        var previousShockStrength = 0.0
+        var contextPrevious1 = anchor * 0.97
+        var contextPrevious2 = anchor * 1.03
+        var contextPrevious3 = anchor * 0.91
+
+        for offset in 0..<bars {
+            let timestampUTC = startUTC + Int64(60 * offset)
+            let sessionEdge = sessionEdgeStrength(timestampUTC: timestampUTC)
+            let edgeFocus = fxClamp(spec.worldSessionEdgeFocus, 0.0, 1.5)
+            let persistence = fxClamp(spec.worldTrendPersistence, 0.0, 1.0)
+            let shockMemory = fxClamp(spec.worldShockMemory, 0.0, 1.0)
+            let shockDecay = fxClamp(spec.worldShockDecay, 0.0, 1.5)
+            let recoveryBias = fxClamp(spec.worldRecoveryBias, -1.0, 1.0)
+            let transitionBurst = fxClamp(spec.worldRegimeTransitionBurst, 0.0, 1.0)
+            let transitionEntropy = fxClamp(spec.worldTransitionEntropy, 0.0, 1.0)
+            let meanRevertBias = fxClamp(spec.worldMeanRevertBias, 0.0, 1.0)
+            let volatilityClusterBias = fxClamp(spec.worldVolatilityClusterBias, 0.0, 1.0)
+            let hour = hourOf(timestampUTC: timestampUTC)
+            let sessionSigmaScaleValue = sessionSigmaScale(spec: spec, hour: hour)
+            let sessionFillRiskScaleValue = sessionFillRiskScale(spec: spec, hour: hour)
+
+            var sigma = spec.sigmaPerBar
+            sigma *= sessionSigmaScaleValue
+            if spec.volatilityCluster > 0.0 {
+                sigma = max(
+                    1e-6,
+                    spec.volatilityCluster * previousSigma +
+                        (1.0 - spec.volatilityCluster) * spec.sigmaPerBar * (0.5 + 1.5 * rng.nextUnit())
+                )
+                previousSigma = sigma
+            }
+            sigma *= fxClamp(spec.worldSigmaScale, 0.50, 3.00) *
+                (1.0 + 0.28 * edgeFocus * sessionEdge +
+                 0.14 * volatilityClusterBias * previousShockStrength +
+                 0.08 * transitionEntropy)
+
+            var drift = spec.driftPerBar + spec.worldDriftBias
+            if spec.id == 7, offset > bars / 2 {
+                drift = -spec.driftPerBar * 1.25
+                sigma *= 1.8
+            }
+
+            var returnValue = drift + sigma * rng.nextNormal()
+            let persistenceBias = (persistence - 0.50) * (0.35 - 0.18 * meanRevertBias) * abs(previousReturn)
+            if previousReturn >= 0.0 {
+                returnValue += persistenceBias
+            } else {
+                returnValue -= persistenceBias
+            }
+            if previousShockStrength > 0.0 {
+                let shockTerm = previousShockStrength * (0.22 * shockMemory - 0.16 * recoveryBias)
+                if previousReturn >= 0.0 {
+                    returnValue += shockTerm
+                } else {
+                    returnValue -= shockTerm
+                }
+            }
+            if spec.meanRevertStrength > 0.0 {
+                returnValue += spec.meanRevertStrength * ((anchor - previous) / max(previous, point))
+            }
+            if spec.spikeProbability > 0.0, rng.nextUnit() < spec.spikeProbability {
+                returnValue += spec.spikeScale * sigma * rng.nextNormal()
+            }
+            let liveGapProbability = fxClamp(spec.worldGapProbability + 0.10 * transitionBurst, 0.0, 0.40)
+            if spec.worldGapProbability > 0.0, rng.nextUnit() < liveGapProbability {
+                returnValue += spec.worldGapScale * sigma * (rng.nextUnit() < 0.5 ? -1.0 : 1.0)
+            }
+            let liveFlipProbability = fxClamp(
+                spec.worldFlipProbability +
+                    0.14 * meanRevertBias +
+                    0.10 * transitionBurst +
+                    0.08 * transitionEntropy,
+                0.0,
+                0.65
+            )
+            if spec.worldFlipProbability > 0.0, rng.nextUnit() < liveFlipProbability {
+                returnValue *= -1.0
+            }
+
+            if spec.id == 5 {
+                returnValue = abs(drift) + 0.10 * sigma * abs(rng.nextNormal())
+            } else if spec.id == 6 {
+                returnValue = -(abs(drift) + 0.10 * sigma * abs(rng.nextNormal()))
+            }
+
+            let open = previous
+            var close = previous * (1.0 + returnValue)
+            if close <= point {
+                close = previous + 10.0 * point
+            }
+
+            var wick = max(
+                abs(close - open) * (0.30 + 0.40 * rng.nextUnit()),
+                point * (2.0 + 8.0 * rng.nextUnit())
+            )
+            wick *= 1.0 + 0.18 * edgeFocus * sessionEdge + 0.10 * previousShockStrength
+            let high = max(open, close) + wick
+            let low = max(point, min(open, close) - wick)
+            let fillRisk = syntheticFillRisk(
+                spec: spec,
+                sessionScale: sessionFillRiskScaleValue,
+                sessionEdge: sessionEdge,
+                edgeFocus: edgeFocus,
+                volatilityRatio: abs(returnValue) / max(sigma, 1e-6),
+                rng: &rng,
+                multiplier: 1.0,
+                shockEligible: true
+            )
+            let volume = syntheticVolume(
+                returnValue: returnValue,
+                sigma: sigma,
+                sessionEdge: sessionEdge,
+                liquidityStress: spec.worldLiquidityStress,
+                edgeFocus: edgeFocus,
+                shockStrength: previousShockStrength
+            )
+
+            chronologicalBars.append(normalizeSyntheticBar(
+                AuditScenarioDoubleBar(
+                    timestampUTC: timestampUTC,
+                    open: open,
+                    high: high,
+                    low: low,
+                    close: close,
+                    volume: volume,
+                    fillRiskPoints: fillRisk
+                ),
+                point: pt
+            ))
+
+            let contextNoise1 = 0.35 * sigma * rng.nextNormal()
+            let contextNoise2 = 0.45 * sigma * rng.nextNormal()
+            let contextNoise3 = 0.55 * sigma * rng.nextNormal()
+            let correlationBias = fxClamp(spec.worldContextCorrelationBias, -1.0, 1.0)
+            let contextReturn1 = (0.80 + 0.15 * correlationBias) * returnValue + contextNoise1
+            let contextReturn2 = (-0.45 + 0.20 * correlationBias) * returnValue + contextNoise2
+            let contextReturn3 = (0.35 + 0.25 * correlationBias) * returnValue + 0.50 * contextNoise3
+
+            let contextBar1 = syntheticContextBar(
+                timestampUTC: timestampUTC,
+                open: contextPrevious1,
+                returnValue: contextReturn1,
+                fallbackPrice: open,
+                point: point,
+                sigma: sigma,
+                wickBase: 1.5,
+                wickRange: 5.0,
+                fillRiskMultiplier: 0.95 + 0.18 * fxClamp(abs(contextReturn1) / max(sigma, 1e-6), 0.0, 2.0),
+                volumeBase: volume,
+                spec: spec,
+                sessionFillRiskScale: sessionFillRiskScaleValue,
+                sessionEdge: sessionEdge,
+                edgeFocus: edgeFocus,
+                rng: &rng
+            )
+            let contextBar2 = syntheticContextBar(
+                timestampUTC: timestampUTC,
+                open: contextPrevious2,
+                returnValue: contextReturn2,
+                fallbackPrice: open,
+                point: point,
+                sigma: sigma,
+                wickBase: 1.5,
+                wickRange: 5.5,
+                fillRiskMultiplier: 0.88 + 0.12 * fxClamp(abs(contextReturn2) / max(sigma, 1e-6), 0.0, 2.0),
+                volumeBase: volume,
+                spec: spec,
+                sessionFillRiskScale: sessionFillRiskScaleValue,
+                sessionEdge: sessionEdge,
+                edgeFocus: edgeFocus,
+                rng: &rng
+            )
+            let contextBar3 = syntheticContextBar(
+                timestampUTC: timestampUTC,
+                open: contextPrevious3,
+                returnValue: contextReturn3,
+                fallbackPrice: open,
+                point: point,
+                sigma: sigma,
+                wickBase: 1.5,
+                wickRange: 6.0,
+                fillRiskMultiplier: 1.02 + 0.16 * fxClamp(abs(contextReturn3) / max(sigma, 1e-6), 0.0, 2.0),
+                volumeBase: volume,
+                spec: spec,
+                sessionFillRiskScale: sessionFillRiskScaleValue,
+                sessionEdge: sessionEdge,
+                edgeFocus: edgeFocus,
+                rng: &rng
+            )
+            context1Bars.append(contextBar1)
+            context2Bars.append(contextBar2)
+            context3Bars.append(contextBar3)
+            contextPrevious1 = contextBar1.close
+            contextPrevious2 = contextBar2.close
+            contextPrevious3 = contextBar3.close
+
+            previousReturn = previous > point ? (close - previous) / previous : 0.0
+            previousShockStrength = fxClamp(
+                (abs(previousReturn) / max(sigma, 1e-6)) *
+                    (1.0 - 0.25 * shockDecay) +
+                    0.10 * transitionEntropy,
+                0.0,
+                3.0
+            )
+            previous = close
+        }
+
+        let primary = AuditContextSeriesTools.reverseChronologicalBarsToSeries(chronologicalBars)
+        let contextSeries = [
+            AuditContextSeriesTools.reverseChronologicalBarsToSeries(context1Bars),
+            AuditContextSeriesTools.reverseChronologicalBarsToSeries(context2Bars),
+            AuditContextSeriesTools.reverseChronologicalBarsToSeries(context3Bars)
+        ]
+        let m5Aggregate = AuditContextSeriesTools.aggregateCloseTimeframe(chronologicalBars: chronologicalBars, step: 5)
+        let m15Aggregate = AuditContextSeriesTools.aggregateCloseTimeframe(chronologicalBars: chronologicalBars, step: 15)
+        let m30Aggregate = AuditContextSeriesTools.aggregateCloseTimeframe(chronologicalBars: chronologicalBars, step: 30)
+        let h1Aggregate = AuditContextSeriesTools.aggregateCloseTimeframe(chronologicalBars: chronologicalBars, step: 60)
+        let contextFeatures = AuditContextSeriesTools.buildContextFeatures(
+            mainClose: primary.close,
+            point: point,
+            contexts: contextSeries
+        )
+
+        return AuditGeneratedScenarioSeries(
+            primary: primary,
+            m5: AuditCloseTimeframeSeries(
+                timeUTC: m5Aggregate.timeUTC,
+                close: m5Aggregate.close,
+                alignedIndexMap: buildAlignedIndexMapAsSeries(
+                    referenceTimeUTC: primary.timeUTC,
+                    targetTimeUTC: m5Aggregate.timeUTC,
+                    maxLagSeconds: 2 * 5 * 60
+                )
+            ),
+            m15: AuditCloseTimeframeSeries(
+                timeUTC: m15Aggregate.timeUTC,
+                close: m15Aggregate.close,
+                alignedIndexMap: buildAlignedIndexMapAsSeries(
+                    referenceTimeUTC: primary.timeUTC,
+                    targetTimeUTC: m15Aggregate.timeUTC,
+                    maxLagSeconds: 2 * 15 * 60
+                )
+            ),
+            m30: AuditCloseTimeframeSeries(
+                timeUTC: m30Aggregate.timeUTC,
+                close: m30Aggregate.close,
+                alignedIndexMap: buildAlignedIndexMapAsSeries(
+                    referenceTimeUTC: primary.timeUTC,
+                    targetTimeUTC: m30Aggregate.timeUTC,
+                    maxLagSeconds: 2 * 30 * 60
+                )
+            ),
+            h1: AuditCloseTimeframeSeries(
+                timeUTC: h1Aggregate.timeUTC,
+                close: h1Aggregate.close,
+                alignedIndexMap: buildAlignedIndexMapAsSeries(
+                    referenceTimeUTC: primary.timeUTC,
+                    targetTimeUTC: h1Aggregate.timeUTC,
+                    maxLagSeconds: 2 * 60 * 60
+                )
+            ),
+            contexts: contextSeries,
+            contextFeatures: contextFeatures
+        )
+    }
+
+    private static func syntheticFillRisk(
+        spec: AuditScenarioSpec,
+        sessionScale: Double,
+        sessionEdge: Double,
+        edgeFocus: Double,
+        volatilityRatio: Double,
+        rng: inout AuditScenarioRandomGenerator,
+        multiplier: Double,
+        shockEligible: Bool
+    ) -> Double {
+        var scale = fxClamp(spec.worldFillRiskScale, 0.50, 4.00) *
+            sessionScale *
+            multiplier *
+            (0.85 + 0.30 * rng.nextUnit() +
+             0.18 * fxClamp(spec.worldLiquidityStress, 0.0, 3.0) +
+             0.16 * edgeFocus * sessionEdge +
+             0.06 * fxClamp(volatilityRatio, 0.0, 2.0))
+        if shockEligible,
+           rng.nextUnit() < fxClamp(spec.worldLiquidityShockProbability, 0.0, 0.50) {
+            scale *= fxClamp(spec.worldLiquidityShockScale, 1.0, 8.0)
+        }
+        return max(0.25, spec.fillRiskPoints * scale)
+    }
+
+    private static func syntheticVolume(
+        returnValue: Double,
+        sigma: Double,
+        sessionEdge: Double,
+        liquidityStress: Double,
+        edgeFocus: Double,
+        shockStrength: Double
+    ) -> Double {
+        let movement = fxClamp(abs(returnValue) / max(sigma, 1e-6), 0.0, 6.0)
+        let stress = fxClamp(liquidityStress, 0.0, 3.0)
+        let scale = fxClamp(
+            1.0 + 0.18 * movement + 0.10 * edgeFocus * sessionEdge + 0.08 * shockStrength - 0.14 * stress,
+            0.15,
+            4.0
+        )
+        return max(1.0, 100.0 * scale)
+    }
+
+    private static func syntheticContextBar(
+        timestampUTC: Int64,
+        open: Double,
+        returnValue: Double,
+        fallbackPrice: Double,
+        point: Double,
+        sigma: Double,
+        wickBase: Double,
+        wickRange: Double,
+        fillRiskMultiplier: Double,
+        volumeBase: Double,
+        spec: AuditScenarioSpec,
+        sessionFillRiskScale: Double,
+        sessionEdge: Double,
+        edgeFocus: Double,
+        rng: inout AuditScenarioRandomGenerator
+    ) -> AuditScenarioDoubleBar {
+        var close = open * (1.0 + returnValue)
+        if close <= point {
+            close = max(open, fallbackPrice)
+        }
+        let wick = max(
+            abs(close - open) * (0.25 + 0.35 * rng.nextUnit()),
+            point * (wickBase + wickRange * rng.nextUnit())
+        )
+        let fillRisk = syntheticFillRisk(
+            spec: spec,
+            sessionScale: sessionFillRiskScale,
+            sessionEdge: sessionEdge,
+            edgeFocus: edgeFocus,
+            volatilityRatio: abs(returnValue) / max(sigma, 1e-6),
+            rng: &rng,
+            multiplier: fillRiskMultiplier,
+            shockEligible: false
+        )
+        let volumeScale = fxClamp(
+            0.80 + 0.20 * rng.nextUnit() - 0.08 * fxClamp(spec.worldLiquidityStress, 0.0, 3.0),
+            0.15,
+            2.0
+        )
+        return normalizeSyntheticBar(
+            AuditScenarioDoubleBar(
+                timestampUTC: timestampUTC,
+                open: open,
+                high: max(open, close) + wick,
+                low: max(point, min(open, close) - wick),
+                close: close,
+                volume: max(1.0, volumeBase * volumeScale),
+                fillRiskPoints: fillRisk
+            ),
+            point: point
+        )
+    }
+
+    private static func buildAlignedIndexMapAsSeries(
+        referenceTimeUTC: [Int64],
+        targetTimeUTC: [Int64],
+        maxLagSeconds: Int
+    ) -> [Int] {
+        var output = Array(repeating: -1, count: referenceTimeUTC.count)
+        guard !referenceTimeUTC.isEmpty, !targetTimeUTC.isEmpty else { return output }
+        var targetIndex = 0
+
+        for referenceIndex in referenceTimeUTC.indices {
+            let referenceTime = referenceTimeUTC[referenceIndex]
+            guard referenceTime > 0 else { continue }
+            while targetIndex < targetTimeUTC.count, targetTimeUTC[targetIndex] > referenceTime {
+                targetIndex += 1
+            }
+            if targetIndex >= targetTimeUTC.count {
+                break
+            }
+
+            let lag = referenceTime - targetTimeUTC[targetIndex]
+            guard lag >= 0 else { continue }
+            if maxLagSeconds > 0, lag > Int64(maxLagSeconds) {
+                continue
+            }
+            output[referenceIndex] = targetIndex
         }
 
         return output
