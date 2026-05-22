@@ -67,10 +67,10 @@ public struct FeatureCore: Sendable {
             throw FXDataEngineError.invalidRequest("sample index is outside primary series")
         }
 
-        let raw = buildFeatureVector(universe: bundle.universe, sampleIndex: sampleIndex)
+        let raw = buildFeatureVector(bundle: bundle, sampleIndex: sampleIndex)
         let previousIndex = sampleIndex > 0 ? sampleIndex - 1 : -1
         let previous = previousIndex >= 0
-            ? buildFeatureVector(universe: bundle.universe, sampleIndex: previousIndex)
+            ? buildFeatureVector(bundle: bundle, sampleIndex: previousIndex)
             : Array(repeating: 0.0, count: FXDataEngineConstants.aiFeatures)
         return FeatureCoreFrame(
             valid: true,
@@ -85,14 +85,41 @@ public struct FeatureCore: Sendable {
         )
     }
 
+    public func buildFeatureVector(bundle: DataCoreBundle, sampleIndex: Int? = nil) -> [Double] {
+        let resolvedSampleIndex = sampleIndex ?? bundle.sampleIndex
+        return buildFeatureVector(
+            universe: bundle.universe,
+            sampleIndex: resolvedSampleIndex,
+            contextAggregates: resolvedSampleIndex <= bundle.sampleIndex ? bundle.contextAggregates : nil
+        )
+    }
+
     public func buildFeatureVector(universe: MarketUniverse, sampleIndex: Int) -> [Double] {
+        let contextSymbols = universe.contextSeries().map(\.metadata.logicalSymbol)
+        let contextAggregates = DataCoreContextAggregator.build(
+            universe: universe,
+            upToIndex: sampleIndex,
+            contextSymbols: contextSymbols
+        )
+        return buildFeatureVector(
+            universe: universe,
+            sampleIndex: sampleIndex,
+            contextAggregates: contextAggregates
+        )
+    }
+
+    private func buildFeatureVector(
+        universe: MarketUniverse,
+        sampleIndex: Int,
+        contextAggregates: DataCoreContextAggregates?
+    ) -> [Double] {
         let primary = universe.primary
         var features = Array(repeating: 0.0, count: FXDataEngineConstants.aiFeatures)
         guard sampleIndex >= 0, sampleIndex < primary.count else { return features }
 
         let hasVolume = Self.hasUsableVolume(universe)
         fillPriceFeatures(&features, series: primary, index: sampleIndex)
-        fillContextFeatures(&features, universe: universe, index: sampleIndex)
+        fillContextFeatures(&features, universe: universe, index: sampleIndex, contextAggregates: contextAggregates)
         fillTimeFeatures(&features, timestamp: primary.utcTimestamps[sampleIndex])
         fillOHLCGeometryFeatures(&features, series: primary, index: sampleIndex)
         fillMovingAverageFeatures(&features, series: primary, index: sampleIndex)
@@ -118,7 +145,23 @@ public struct FeatureCore: Sendable {
         features[5] = returnStd(series, index, window: 10)
     }
 
-    private func fillContextFeatures(_ features: inout [Double], universe: MarketUniverse, index: Int) {
+    private func fillContextFeatures(
+        _ features: inout [Double],
+        universe: MarketUniverse,
+        index: Int,
+        contextAggregates: DataCoreContextAggregates?
+    ) {
+        if let contextAggregates,
+           contextAggregates.hasCompleteSample(index) {
+            fillAggregatedContextFeatures(
+                &features,
+                primary: universe.primary,
+                index: index,
+                contextAggregates: contextAggregates
+            )
+            return
+        }
+
         let contexts = universe.contextSeries().prefix(FXDataEngineConstants.contextTopSymbols)
         var returns: [Double] = []
         var topRows: [(series: M1OHLCVSeries, ret: Double, corr: Double)] = []
@@ -145,6 +188,40 @@ public struct FeatureCore: Sendable {
         features[63] = fxClamp(1.0 - features[11], 0.0, 1.0)
         features[64] = features[10] == 0 ? 0.0 : fxClampSignedUnit(features[10] - features[0])
         features[65] = fxClamp(Double(returns.count) / Double(FXDataEngineConstants.contextTopSymbols), 0.0, 1.0)
+    }
+
+    private func fillAggregatedContextFeatures(
+        _ features: inout [Double],
+        primary: M1OHLCVSeries,
+        index: Int,
+        contextAggregates: DataCoreContextAggregates
+    ) {
+        let volatilityUnit = max(rollingAbsRawReturn(primary, index, window: 20), 1e-6)
+
+        features[10] = contextAggregates.mean[index] / volatilityUnit
+        features[11] = contextAggregates.standardDeviation[index] / volatilityUnit
+        features[12] = fxClampSignedUnit((contextAggregates.upRatio[index] - 0.5) * 2.0)
+
+        for slot in 0..<FXDataEngineConstants.contextTopSymbols {
+            let base = 50 + slot * 4
+            let extraBase = slot * FXDataEngineConstants.contextBaseSymbolFeatures
+            features[base] = contextAggregates.extraValue(sampleIndex: index, featureIndex: extraBase) / volatilityUnit
+            features[base + 1] = contextAggregates.extraValue(sampleIndex: index, featureIndex: extraBase + 1) / volatilityUnit
+            features[base + 2] = contextAggregates.extraValue(sampleIndex: index, featureIndex: extraBase + 2) / volatilityUnit
+            features[base + 3] = fxClampSignedUnit(
+                contextAggregates.extraValue(sampleIndex: index, featureIndex: extraBase + 3)
+            )
+        }
+
+        let sharedOffset = FXDataEngineConstants.contextSharedOffset
+        let sharedUtility = contextAggregates.extraValue(sampleIndex: index, featureIndex: sharedOffset)
+        let sharedStability = contextAggregates.extraValue(sampleIndex: index, featureIndex: sharedOffset + 1, default: 0.5)
+        let sharedLead = contextAggregates.extraValue(sampleIndex: index, featureIndex: sharedOffset + 2, default: 0.5)
+        let sharedCoverage = contextAggregates.extraValue(sampleIndex: index, featureIndex: sharedOffset + 3)
+        features[62] = fxClampSignedUnit(sharedUtility)
+        features[63] = fxClampSignedUnit((sharedStability * 2.0) - 1.0)
+        features[64] = fxClampSignedUnit((sharedLead * 2.0) - 1.0)
+        features[65] = fxClampSignedUnit((sharedCoverage * 2.0) - 1.0)
     }
 
     private func fillTimeFeatures(_ features: inout [Double], timestamp: Int64) {
@@ -299,6 +376,27 @@ public struct FeatureCore: Sendable {
 }
 
 private extension FeatureCore {
+    func rawReturn(_ series: M1OHLCVSeries, _ index: Int, _ lookback: Int) -> Double {
+        let prior = index - lookback
+        guard prior >= 0, index >= 0, index < series.count else { return 0.0 }
+        let old = Double(series.close[prior])
+        let new = Double(series.close[index])
+        guard old > 0 else { return 0.0 }
+        return (new - old) / old
+    }
+
+    func rollingAbsRawReturn(_ series: M1OHLCVSeries, _ index: Int, window: Int) -> Double {
+        guard window >= 2, index > 0, index < series.count else { return 0.0 }
+        let start = max(1, index - window + 1)
+        var sum = 0.0
+        var count = 0
+        for row in start...index {
+            sum += abs(rawReturn(series, row, 1))
+            count += 1
+        }
+        return count > 0 ? sum / Double(count) : 0.0
+    }
+
     func normalizedReturn(_ series: M1OHLCVSeries, _ index: Int, _ lookback: Int) -> Double {
         let prior = index - lookback
         guard prior >= 0 else { return 0.0 }
@@ -529,6 +627,19 @@ private extension FeatureCore {
             fxClamp(range / max(close, 1.0) * 1_000.0, 0.0, 1.0),
             volumePressure
         ]
+    }
+}
+
+private extension DataCoreContextAggregates {
+    func hasCompleteSample(_ sampleIndex: Int) -> Bool {
+        guard sampleIndex >= 0,
+              sampleIndex < mean.count,
+              sampleIndex < standardDeviation.count,
+              sampleIndex < upRatio.count else {
+            return false
+        }
+        let requiredExtraCount = (sampleIndex + 1) * FXDataEngineConstants.contextExtraFeatures
+        return requiredExtraCount <= extra.count
     }
 }
 
