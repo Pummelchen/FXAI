@@ -139,6 +139,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 - Done: Audit suite orchestration slice: Swift now parses audit scenario/plugin selections, resolves plugin factories by name/id/all, dispatches synthetic, FXDatabase-backed market, and adversarial scenarios through the protocol runner, builds report documents, and writes reset/append TSV reports. Real FXPlugins backend execution remains phase-10 integration work.
 - Done: Audit adversarial scenario slice: Swift now probes an `FXAIPluginV4` over a larger FXDatabase M1 OHLCV market window, trains during probing, scores weak samples with no-spread fill-risk and macro/session pressure, selects a high-weakness as-series window, and feeds `market_adversarial` through the suite runner. Real FXPlugins backend execution remains phase-10 integration work.
 - Done: Test harness result slice: `test_harness.mqh` suite reset, case append, pass/fail totals, first-failure legacy reason, JSON escaping, and deterministic JSON document rendering are ported as Swift audit/test utilities.
+- Done: Plugin contract suite slice: `plugin_contract_suite.mqh` deterministic default hyperparameters, predict-request fixture construction, synthetic M1 OHLCV fixture construction, finite prediction checks, registry/factory validation, manifest/self-test checks, optional state roundtrip, optional synthetic-series support, and suite result assembly are ported over `FXAIPluginV4`. Real backend execution remains FXPlugins work.
 
 ## Start Order
 
