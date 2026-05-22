@@ -221,6 +221,144 @@ public struct RiskControlPlaneOverlayState: Codable, Hashable, Sendable {
     }
 }
 
+public struct RiskServicePolicyConfig: Codable, Hashable, Sendable {
+    public var newsPulseEnabled: Bool
+    public var newsPulseBlockOnUnknown: Bool
+    public var newsPulseCautionLotScale: Double
+    public var newsPulseCautionEnterProbabilityBuffer: Double
+    public var ratesEngineEnabled: Bool
+    public var ratesEngineBlockOnUnknown: Bool
+    public var ratesEngineCautionLotScale: Double
+    public var ratesEngineCautionEnterProbabilityBuffer: Double
+    public var crossAssetEnabled: Bool
+    public var crossAssetBlockOnUnknown: Bool
+    public var crossAssetCautionLotScale: Double
+    public var crossAssetCautionEnterProbabilityBuffer: Double
+    public var microstructureEnabled: Bool
+    public var microstructureBlockOnUnknown: Bool
+    public var microstructureCautionLotScale: Double
+    public var microstructureCautionEnterProbabilityBuffer: Double
+    public var executionQualityEnabled: Bool
+    public var executionQualityBlockOnUnknown: Bool
+    public var executionQualityCautionLotScale: Double
+    public var executionQualityStressedLotScale: Double
+    public var executionQualityCautionEnterProbabilityBuffer: Double
+    public var executionQualityStressedEnterProbabilityBuffer: Double
+    public var pairNetworkEnabled: Bool
+    public var pairNetworkAutoApply: Bool
+
+    public init(
+        newsPulseEnabled: Bool = true,
+        newsPulseBlockOnUnknown: Bool = true,
+        newsPulseCautionLotScale: Double = 0.65,
+        newsPulseCautionEnterProbabilityBuffer: Double = 0.05,
+        ratesEngineEnabled: Bool = true,
+        ratesEngineBlockOnUnknown: Bool = true,
+        ratesEngineCautionLotScale: Double = 0.75,
+        ratesEngineCautionEnterProbabilityBuffer: Double = 0.04,
+        crossAssetEnabled: Bool = true,
+        crossAssetBlockOnUnknown: Bool = true,
+        crossAssetCautionLotScale: Double = 0.78,
+        crossAssetCautionEnterProbabilityBuffer: Double = 0.03,
+        microstructureEnabled: Bool = true,
+        microstructureBlockOnUnknown: Bool = true,
+        microstructureCautionLotScale: Double = 0.72,
+        microstructureCautionEnterProbabilityBuffer: Double = 0.04,
+        executionQualityEnabled: Bool = true,
+        executionQualityBlockOnUnknown: Bool = true,
+        executionQualityCautionLotScale: Double = 0.82,
+        executionQualityStressedLotScale: Double = 0.58,
+        executionQualityCautionEnterProbabilityBuffer: Double = 0.04,
+        executionQualityStressedEnterProbabilityBuffer: Double = 0.08,
+        pairNetworkEnabled: Bool = true,
+        pairNetworkAutoApply: Bool = true
+    ) {
+        self.newsPulseEnabled = newsPulseEnabled
+        self.newsPulseBlockOnUnknown = newsPulseBlockOnUnknown
+        self.newsPulseCautionLotScale = newsPulseCautionLotScale
+        self.newsPulseCautionEnterProbabilityBuffer = newsPulseCautionEnterProbabilityBuffer
+        self.ratesEngineEnabled = ratesEngineEnabled
+        self.ratesEngineBlockOnUnknown = ratesEngineBlockOnUnknown
+        self.ratesEngineCautionLotScale = ratesEngineCautionLotScale
+        self.ratesEngineCautionEnterProbabilityBuffer = ratesEngineCautionEnterProbabilityBuffer
+        self.crossAssetEnabled = crossAssetEnabled
+        self.crossAssetBlockOnUnknown = crossAssetBlockOnUnknown
+        self.crossAssetCautionLotScale = crossAssetCautionLotScale
+        self.crossAssetCautionEnterProbabilityBuffer = crossAssetCautionEnterProbabilityBuffer
+        self.microstructureEnabled = microstructureEnabled
+        self.microstructureBlockOnUnknown = microstructureBlockOnUnknown
+        self.microstructureCautionLotScale = microstructureCautionLotScale
+        self.microstructureCautionEnterProbabilityBuffer = microstructureCautionEnterProbabilityBuffer
+        self.executionQualityEnabled = executionQualityEnabled
+        self.executionQualityBlockOnUnknown = executionQualityBlockOnUnknown
+        self.executionQualityCautionLotScale = executionQualityCautionLotScale
+        self.executionQualityStressedLotScale = executionQualityStressedLotScale
+        self.executionQualityCautionEnterProbabilityBuffer = executionQualityCautionEnterProbabilityBuffer
+        self.executionQualityStressedEnterProbabilityBuffer = executionQualityStressedEnterProbabilityBuffer
+        self.pairNetworkEnabled = pairNetworkEnabled
+        self.pairNetworkAutoApply = pairNetworkAutoApply
+    }
+}
+
+public struct RiskServiceOverlayState: Codable, Hashable, Sendable {
+    public var newsPulse: NewsPulsePairState?
+    public var ratesEngine: RatesEnginePairState?
+    public var crossAsset: CrossAssetPairState?
+    public var microstructure: MicrostructurePairState?
+    public var executionQuality: ExecutionQualityPairState?
+    public var pairNetwork: PairNetworkDecisionState?
+
+    public init(
+        newsPulse: NewsPulsePairState? = nil,
+        ratesEngine: RatesEnginePairState? = nil,
+        crossAsset: CrossAssetPairState? = nil,
+        microstructure: MicrostructurePairState? = nil,
+        executionQuality: ExecutionQualityPairState? = nil,
+        pairNetwork: PairNetworkDecisionState? = nil
+    ) {
+        self.newsPulse = newsPulse
+        self.ratesEngine = ratesEngine
+        self.crossAsset = crossAsset
+        self.microstructure = microstructure
+        self.executionQuality = executionQuality
+        self.pairNetwork = pairNetwork
+    }
+}
+
+public struct RiskServiceOverlayResult: Codable, Hashable, Sendable {
+    public var decision: RiskPolicyDecision
+    public var newsPulseCaution: Bool
+    public var ratesEngineCaution: Bool
+    public var crossAssetCaution: Bool
+    public var microstructureCaution: Bool
+    public var executionQualityCaution: Bool
+    public var executionQualityStressed: Bool
+    public var pairNetworkSizeMultiplier: Double
+    public var lotMultiplier: Double
+
+    public init(
+        decision: RiskPolicyDecision = RiskPolicyDecision(),
+        newsPulseCaution: Bool = false,
+        ratesEngineCaution: Bool = false,
+        crossAssetCaution: Bool = false,
+        microstructureCaution: Bool = false,
+        executionQualityCaution: Bool = false,
+        executionQualityStressed: Bool = false,
+        pairNetworkSizeMultiplier: Double = 1.0,
+        lotMultiplier: Double = 1.0
+    ) {
+        self.decision = decision
+        self.newsPulseCaution = newsPulseCaution
+        self.ratesEngineCaution = ratesEngineCaution
+        self.crossAssetCaution = crossAssetCaution
+        self.microstructureCaution = microstructureCaution
+        self.executionQualityCaution = executionQualityCaution
+        self.executionQualityStressed = executionQualityStressed
+        self.pairNetworkSizeMultiplier = pairNetworkSizeMultiplier
+        self.lotMultiplier = lotMultiplier
+    }
+}
+
 public struct RiskPolicyDecision: Codable, Hashable, Sendable {
     public var allowed: Bool
     public var reason: String
@@ -481,6 +619,249 @@ public enum RiskPolicyTools {
             hardCapLot: hardCapLot,
             riskBudgetLot: riskBudgetLot
         )
+    }
+
+    public static func serviceOverlay(
+        signal: RiskPolicySignalState,
+        services: RiskServiceOverlayState,
+        config: RiskServicePolicyConfig = RiskServicePolicyConfig(),
+        systemHealth: SystemHealthState? = nil
+    ) -> RiskServiceOverlayResult {
+        var result = RiskServiceOverlayResult()
+
+        func blocked(_ reason: String) -> RiskServiceOverlayResult {
+            var blockedResult = result
+            blockedResult.decision = RiskPolicyDecision(allowed: false, reason: reason)
+            blockedResult.lotMultiplier = 1.0
+            return blockedResult
+        }
+
+        if config.newsPulseEnabled {
+            let state = services.newsPulse
+            let available = state?.available == true
+            if !available || state?.ready != true {
+                if config.newsPulseBlockOnUnknown {
+                    return blocked("risk_newspulse_unknown")
+                }
+            } else if let state {
+                if state.stale {
+                    if config.newsPulseBlockOnUnknown {
+                        return blocked("risk_newspulse_stale")
+                    }
+                } else if state.tradeGate == "BLOCK" {
+                    return blocked("risk_newspulse_block")
+                } else if state.tradeGate == "CAUTION" {
+                    result.newsPulseCaution = true
+                    let cautionBuffer = state.cautionEnterProbabilityBuffer >= 0.0
+                        ? state.cautionEnterProbabilityBuffer
+                        : fxClamp(config.newsPulseCautionEnterProbabilityBuffer, 0.0, 0.25)
+                    let cautionEnterFloor = fxClamp(0.05 + cautionBuffer, 0.05, 0.95)
+                    if signal.policyEnterProb < cautionEnterFloor {
+                        return blocked("risk_newspulse_caution_floor")
+                    }
+                }
+            }
+        }
+
+        if config.ratesEngineEnabled {
+            let state = services.ratesEngine
+            let available = state?.available == true
+            if !available || state?.ready != true {
+                if config.ratesEngineBlockOnUnknown {
+                    return blocked("risk_rates_unknown")
+                }
+            } else if let state {
+                if state.stale {
+                    if config.ratesEngineBlockOnUnknown {
+                        return blocked("risk_rates_stale")
+                    }
+                    result.ratesEngineCaution = true
+                } else if state.tradeGate == "BLOCK" {
+                    return blocked("risk_rates_block")
+                } else if state.tradeGate == "CAUTION" {
+                    result.ratesEngineCaution = true
+                    let cautionBuffer = fxClamp(config.ratesEngineCautionEnterProbabilityBuffer, 0.0, 0.25)
+                    let cautionEnterFloor = fxClamp(0.05 + cautionBuffer, 0.05, 0.95)
+                    if signal.policyEnterProb < cautionEnterFloor {
+                        return blocked("risk_rates_caution_floor")
+                    }
+                }
+            }
+        }
+
+        if config.crossAssetEnabled {
+            let state = services.crossAsset
+            let available = state?.available == true
+            if !available || state?.ready != true {
+                if config.crossAssetBlockOnUnknown {
+                    return blocked("risk_cross_asset_unknown")
+                }
+            } else if let state {
+                if state.stale {
+                    if config.crossAssetBlockOnUnknown {
+                        return blocked("risk_cross_asset_stale")
+                    }
+                    result.crossAssetCaution = true
+                } else if state.tradeGate == "BLOCK" {
+                    return blocked("risk_cross_asset_block")
+                } else if state.tradeGate == "CAUTION" {
+                    result.crossAssetCaution = true
+                    let cautionBuffer = fxClamp(config.crossAssetCautionEnterProbabilityBuffer, 0.0, 0.25)
+                    let cautionEnterFloor = fxClamp(0.05 + cautionBuffer, 0.05, 0.95)
+                    if signal.policyEnterProb < cautionEnterFloor {
+                        return blocked("risk_cross_asset_caution_floor")
+                    }
+                }
+            }
+        }
+
+        if config.microstructureEnabled {
+            let state = services.microstructure
+            let available = state?.available == true
+            if !available || state?.ready != true {
+                if config.microstructureBlockOnUnknown {
+                    return blocked("risk_microstructure_unknown")
+                }
+                result.microstructureCaution = true
+            } else if let state {
+                if state.stale {
+                    if config.microstructureBlockOnUnknown {
+                        return blocked("risk_microstructure_stale")
+                    }
+                    result.microstructureCaution = true
+                } else if state.tradeGate == "BLOCK" {
+                    return blocked("risk_microstructure_block")
+                } else if state.tradeGate == "CAUTION" {
+                    result.microstructureCaution = true
+                }
+                if result.microstructureCaution {
+                    let cautionBuffer = state.cautionEnterProbabilityBuffer >= 0.0
+                        ? state.cautionEnterProbabilityBuffer
+                        : fxClamp(config.microstructureCautionEnterProbabilityBuffer, 0.0, 0.25)
+                    let cautionEnterFloor = fxClamp(0.05 + cautionBuffer, 0.05, 0.95)
+                    if signal.policyEnterProb < cautionEnterFloor {
+                        return blocked("risk_microstructure_caution_floor")
+                    }
+                }
+            }
+        }
+
+        if config.executionQualityEnabled {
+            let state = services.executionQuality
+            let available = state?.available == true
+            if !available || state?.ready != true {
+                if config.executionQualityBlockOnUnknown {
+                    return blocked("risk_execution_quality_unknown")
+                }
+                result.executionQualityCaution = true
+            } else if let state {
+                if state.stale || state.dataStale {
+                    if config.executionQualityBlockOnUnknown {
+                        return blocked("risk_execution_quality_stale")
+                    }
+                    result.executionQualityCaution = true
+                } else if state.executionState == "BLOCKED" {
+                    return blocked("risk_execution_quality_block")
+                } else if state.executionState == "STRESSED" {
+                    result.executionQualityCaution = true
+                    result.executionQualityStressed = true
+                } else if state.executionState == "CAUTION" {
+                    result.executionQualityCaution = true
+                }
+            }
+            if result.executionQualityCaution {
+                let stateBuffer = state?.cautionEnterProbabilityBuffer ?? -1.0
+                let cautionBuffer: Double
+                if stateBuffer < 0.0 || !available || state?.ready != true {
+                    cautionBuffer = fxClamp(
+                        result.executionQualityStressed
+                            ? config.executionQualityStressedEnterProbabilityBuffer
+                            : config.executionQualityCautionEnterProbabilityBuffer,
+                        0.0,
+                        0.35
+                    )
+                } else {
+                    cautionBuffer = stateBuffer
+                }
+                let cautionEnterFloor = fxClamp(0.05 + cautionBuffer, 0.05, 0.99)
+                if signal.policyEnterProb < cautionEnterFloor {
+                    return blocked(
+                        result.executionQualityStressed
+                            ? "risk_execution_quality_stressed_floor"
+                            : "risk_execution_quality_caution_floor"
+                    )
+                }
+            }
+        }
+
+        if config.pairNetworkEnabled,
+           config.pairNetworkAutoApply,
+           let state = services.pairNetwork,
+           state.ready {
+            switch state.decision {
+            case "BLOCK_CONTRADICTORY":
+                return blocked("risk_pair_network_contradiction")
+            case "BLOCK_CONCENTRATION":
+                return blocked("risk_pair_network_concentration")
+            case "SUPPRESS_REDUNDANT":
+                return blocked("risk_pair_network_redundant")
+            case "PREFER_ALTERNATIVE_EXPRESSION":
+                return blocked("risk_pair_network_prefer_expression")
+            case "ALLOW_REDUCED":
+                result.pairNetworkSizeMultiplier = fxClamp(state.recommendedSizeMultiplier, 0.05, 1.0)
+            default:
+                break
+            }
+        }
+
+        var lotMultiplier = 1.0
+        if config.newsPulseEnabled, result.newsPulseCaution {
+            let stateScale = services.newsPulse?.cautionLotScale ?? -1.0
+            let cautionLotScale = stateScale >= 0.0 ? stateScale : fxClamp(config.newsPulseCautionLotScale, 0.10, 1.00)
+            lotMultiplier *= fxClamp(cautionLotScale, 0.10, 1.00)
+        }
+        if config.ratesEngineEnabled, result.ratesEngineCaution {
+            lotMultiplier *= fxClamp(config.ratesEngineCautionLotScale, 0.10, 1.00)
+        }
+        if config.crossAssetEnabled, result.crossAssetCaution {
+            lotMultiplier *= fxClamp(config.crossAssetCautionLotScale, 0.10, 1.00)
+        }
+        if config.microstructureEnabled, result.microstructureCaution {
+            let stateScale = services.microstructure?.cautionLotScale ?? -1.0
+            let cautionLotScale = stateScale >= 0.0 ? stateScale : fxClamp(config.microstructureCautionLotScale, 0.10, 1.00)
+            lotMultiplier *= fxClamp(cautionLotScale, 0.10, 1.00)
+        }
+        if config.executionQualityEnabled, result.executionQualityCaution {
+            let state = services.executionQuality
+            let available = state?.available == true
+            var cautionLotScale = state?.cautionLotScale ?? 0.0
+            if cautionLotScale <= 0.0 ||
+                !available ||
+                state?.ready != true ||
+                (state?.executionState != "CAUTION" &&
+                    state?.executionState != "STRESSED" &&
+                    state?.executionState != "BLOCKED") {
+                cautionLotScale = fxClamp(
+                    result.executionQualityStressed
+                        ? config.executionQualityStressedLotScale
+                        : config.executionQualityCautionLotScale,
+                    0.05,
+                    1.00
+                )
+            }
+            lotMultiplier *= fxClamp(cautionLotScale, 0.05, 1.00)
+        }
+        if config.pairNetworkEnabled {
+            lotMultiplier *= fxClamp(result.pairNetworkSizeMultiplier, 0.05, 1.00)
+        }
+        if let systemHealth,
+           systemHealth.ready,
+           systemHealth.posture == .caution {
+            lotMultiplier *= fxClamp(0.70 + 0.30 * systemHealth.healthScore, 0.40, 1.00)
+        }
+
+        result.lotMultiplier = lotMultiplier
+        return result
     }
 
     public static func regimeKillSwitch(

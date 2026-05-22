@@ -395,4 +395,151 @@ final class RiskPolicyTests: XCTestCase {
         XCTAssertEqual(invalid.requestedLot, 0.0)
         XCTAssertEqual(invalid.reason, "risk_lot_invalid")
     }
+
+    func testServiceOverlayBlocksAndCautionFloorsInLegacyOrder() {
+        XCTAssertEqual(
+            RiskPolicyTools.serviceOverlay(
+                signal: RiskPolicySignalState(policyEnterProb: 0.80),
+                services: RiskServiceOverlayState(),
+                config: RiskServicePolicyConfig()
+            ).decision.reason,
+            "risk_newspulse_unknown"
+        )
+
+        let newsCaution = NewsPulsePairState(
+            ready: true,
+            available: true,
+            stale: false,
+            tradeGate: "CAUTION",
+            cautionEnterProbabilityBuffer: 0.10
+        )
+        XCTAssertEqual(
+            RiskPolicyTools.serviceOverlay(
+                signal: RiskPolicySignalState(policyEnterProb: 0.12),
+                services: RiskServiceOverlayState(newsPulse: newsCaution),
+                config: RiskServicePolicyConfig(
+                    ratesEngineEnabled: false,
+                    crossAssetEnabled: false,
+                    microstructureEnabled: false,
+                    executionQualityEnabled: false,
+                    pairNetworkEnabled: false
+                )
+            ).decision.reason,
+            "risk_newspulse_caution_floor"
+        )
+
+        var pairNetwork = PairNetworkDecisionState(ready: true, decision: "BLOCK_CONCENTRATION")
+        XCTAssertEqual(
+            RiskPolicyTools.serviceOverlay(
+                signal: RiskPolicySignalState(policyEnterProb: 0.80),
+                services: RiskServiceOverlayState(pairNetwork: pairNetwork),
+                config: RiskServicePolicyConfig(
+                    newsPulseEnabled: false,
+                    ratesEngineEnabled: false,
+                    crossAssetEnabled: false,
+                    microstructureEnabled: false,
+                    executionQualityEnabled: false
+                )
+            ).decision.reason,
+            "risk_pair_network_concentration"
+        )
+
+        pairNetwork.decision = "ALLOW"
+        let executionStressed = ExecutionQualityPairState(
+            ready: true,
+            available: true,
+            stale: false,
+            dataStale: false,
+            cautionEnterProbabilityBuffer: 0.20,
+            executionState: "STRESSED"
+        )
+        XCTAssertEqual(
+            RiskPolicyTools.serviceOverlay(
+                signal: RiskPolicySignalState(policyEnterProb: 0.10),
+                services: RiskServiceOverlayState(executionQuality: executionStressed, pairNetwork: pairNetwork),
+                config: RiskServicePolicyConfig(
+                    newsPulseEnabled: false,
+                    ratesEngineEnabled: false,
+                    crossAssetEnabled: false,
+                    microstructureEnabled: false
+                )
+            ).decision.reason,
+            "risk_execution_quality_stressed_floor"
+        )
+    }
+
+    func testServiceOverlayLotMultiplierCombinesLegacyCautionScales() {
+        let news = NewsPulsePairState(
+            ready: true,
+            available: true,
+            stale: false,
+            tradeGate: "CAUTION",
+            cautionLotScale: 0.50,
+            cautionEnterProbabilityBuffer: 0.0
+        )
+        let rates = RatesEnginePairState(
+            ready: true,
+            available: true,
+            stale: true
+        )
+        let crossAsset = CrossAssetPairState(
+            ready: true,
+            available: true,
+            stale: false,
+            tradeGate: "CAUTION"
+        )
+        let micro = MicrostructurePairState(
+            ready: true,
+            available: true,
+            stale: false,
+            tradeGate: "CAUTION",
+            cautionLotScale: 0.60,
+            cautionEnterProbabilityBuffer: 0.0
+        )
+        let execution = ExecutionQualityPairState(
+            ready: true,
+            available: true,
+            stale: false,
+            dataStale: false,
+            cautionLotScale: 0.40,
+            executionState: "STRESSED"
+        )
+        let pairNetwork = PairNetworkDecisionState(
+            ready: true,
+            decision: "ALLOW_REDUCED",
+            recommendedSizeMultiplier: 0.50
+        )
+        let systemHealth = SystemHealthState(
+            ready: true,
+            healthScore: 0.50,
+            posture: .caution
+        )
+
+        let result = RiskPolicyTools.serviceOverlay(
+            signal: RiskPolicySignalState(policyEnterProb: 0.90),
+            services: RiskServiceOverlayState(
+                newsPulse: news,
+                ratesEngine: rates,
+                crossAsset: crossAsset,
+                microstructure: micro,
+                executionQuality: execution,
+                pairNetwork: pairNetwork
+            ),
+            config: RiskServicePolicyConfig(
+                ratesEngineBlockOnUnknown: false,
+                crossAssetBlockOnUnknown: false
+            ),
+            systemHealth: systemHealth
+        )
+
+        XCTAssertTrue(result.decision.allowed)
+        XCTAssertTrue(result.newsPulseCaution)
+        XCTAssertTrue(result.ratesEngineCaution)
+        XCTAssertTrue(result.crossAssetCaution)
+        XCTAssertTrue(result.microstructureCaution)
+        XCTAssertTrue(result.executionQualityCaution)
+        XCTAssertTrue(result.executionQualityStressed)
+        XCTAssertEqual(result.pairNetworkSizeMultiplier, 0.50, accuracy: 1e-12)
+        XCTAssertEqual(result.lotMultiplier, 0.029835, accuracy: 1e-12)
+    }
 }
