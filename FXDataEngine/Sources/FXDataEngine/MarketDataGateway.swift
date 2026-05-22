@@ -59,6 +59,112 @@ public struct FXDatabaseMarketHistoryRequest: Codable, Hashable, Sendable {
     }
 }
 
+public struct MarketOHLCVBar: Codable, Hashable, Sendable {
+    public let utcTimestamp: Int64
+    public let timeframe: MarketTimeframe
+    public let open: Int64
+    public let high: Int64
+    public let low: Int64
+    public let close: Int64
+    public let volume: UInt64
+
+    public init(
+        utcTimestamp: Int64,
+        timeframe: MarketTimeframe,
+        open: Int64,
+        high: Int64,
+        low: Int64,
+        close: Int64,
+        volume: UInt64 = 0
+    ) {
+        self.utcTimestamp = utcTimestamp
+        self.timeframe = timeframe
+        self.open = open
+        self.high = high
+        self.low = low
+        self.close = close
+        self.volume = volume
+    }
+}
+
+public struct MarketTimeframeOHLCVSeries: Sendable {
+    public let metadata: FXMarketMetadata
+    public let utcTimestamps: ContiguousArray<Int64>
+    public let open: ContiguousArray<Int64>
+    public let high: ContiguousArray<Int64>
+    public let low: ContiguousArray<Int64>
+    public let close: ContiguousArray<Int64>
+    public let volume: ContiguousArray<UInt64>
+
+    @inlinable public var count: Int { utcTimestamps.count }
+    @inlinable public var isEmpty: Bool { count == 0 }
+    @inlinable public var hasVolume: Bool { volume.contains { $0 > 0 } }
+
+    public init(
+        metadata: FXMarketMetadata,
+        utcTimestamps: ContiguousArray<Int64>,
+        open: ContiguousArray<Int64>,
+        high: ContiguousArray<Int64>,
+        low: ContiguousArray<Int64>,
+        close: ContiguousArray<Int64>,
+        volume: ContiguousArray<UInt64>
+    ) throws {
+        guard (0...10).contains(metadata.digits) else {
+            throw FXDataEngineError.validation("digits must be in 0...10")
+        }
+        let rowCount = utcTimestamps.count
+        guard open.count == rowCount,
+              high.count == rowCount,
+              low.count == rowCount,
+              close.count == rowCount,
+              volume.count == rowCount else {
+            throw FXDataEngineError.validation("OHLCV columns must have equal length")
+        }
+
+        let stepSeconds = Int64(metadata.timeframe.minutes * 60)
+        for index in 0..<rowCount {
+            let timestamp = utcTimestamps[index]
+            guard timestamp > 0, timestamp % stepSeconds == 0 else {
+                throw FXDataEngineError.validation("\(metadata.timeframe.rawValue) timestamp at row \(index) must be positive and timeframe-aligned")
+            }
+            if index > 0, timestamp <= utcTimestamps[index - 1] {
+                throw FXDataEngineError.validation("utc timestamps must be strictly increasing")
+            }
+            guard open[index] > 0, high[index] > 0, low[index] > 0, close[index] > 0 else {
+                throw FXDataEngineError.validation("OHLC prices must be positive at row \(index)")
+            }
+            guard high[index] >= open[index],
+                  high[index] >= close[index],
+                  high[index] >= low[index],
+                  low[index] <= open[index],
+                  low[index] <= close[index] else {
+                throw FXDataEngineError.validation("OHLC invariant failed at row \(index)")
+            }
+        }
+
+        self.metadata = metadata
+        self.utcTimestamps = utcTimestamps
+        self.open = open
+        self.high = high
+        self.low = low
+        self.close = close
+        self.volume = volume
+    }
+
+    @inlinable
+    public func bar(at index: Int) -> MarketOHLCVBar {
+        MarketOHLCVBar(
+            utcTimestamp: utcTimestamps[index],
+            timeframe: metadata.timeframe,
+            open: open[index],
+            high: high[index],
+            low: low[index],
+            close: close[index],
+            volume: volume[index]
+        )
+    }
+}
+
 public struct FXDatabaseMarketDataLoader: Sendable {
     public init() {}
 
@@ -160,6 +266,28 @@ public enum MarketDataGateway {
         exact: Bool = false
     ) throws -> M1OHLCVSeries {
         try series.window(endingAtOrBefore: timestampUTC, count: count, exact: exact)
+    }
+
+    public static func resample(
+        _ series: M1OHLCVSeries,
+        to timeframe: MarketTimeframe,
+        includePartialBuckets: Bool = false
+    ) throws -> MarketTimeframeOHLCVSeries {
+        try series.resampled(to: timeframe, includePartialBuckets: includePartialBuckets)
+    }
+
+    public static func alignedIndexMap(
+        referenceM1: M1OHLCVSeries,
+        target: MarketTimeframeOHLCVSeries,
+        maxLagSeconds: Int,
+        upToIndex: Int? = nil
+    ) -> [Int] {
+        DataCoreAlignment.buildAlignedIndexMap(
+            referenceTimesAscending: referenceM1.utcTimestamps,
+            targetTimesAscending: target.utcTimestamps,
+            maxLagSeconds: maxLagSeconds,
+            upToIndex: upToIndex
+        )
     }
 }
 
@@ -266,5 +394,93 @@ public extension M1OHLCVSeries {
             firstUTC: firstUTC,
             lastUTC: lastUTC
         )
+    }
+
+    func resampled(to timeframe: MarketTimeframe, includePartialBuckets: Bool = false) throws -> MarketTimeframeOHLCVSeries {
+        if timeframe == .m1 {
+            return try MarketTimeframeOHLCVSeries(
+                metadata: metadata,
+                utcTimestamps: utcTimestamps,
+                open: open,
+                high: high,
+                low: low,
+                close: close,
+                volume: volume
+            )
+        }
+
+        let stepSeconds = Int64(timeframe.minutes * 60)
+        var outTime = ContiguousArray<Int64>()
+        var outOpen = ContiguousArray<Int64>()
+        var outHigh = ContiguousArray<Int64>()
+        var outLow = ContiguousArray<Int64>()
+        var outClose = ContiguousArray<Int64>()
+        var outVolume = ContiguousArray<UInt64>()
+
+        var bucketStart: Int64?
+        var bucketOpen: Int64 = 0
+        var bucketHigh: Int64 = 0
+        var bucketLow: Int64 = 0
+        var bucketClose: Int64 = 0
+        var bucketVolume: UInt64 = 0
+        var bucketCount = 0
+
+        func appendBucketIfNeeded() {
+            guard let bucketStart else { return }
+            guard includePartialBuckets || bucketCount == timeframe.minutes else { return }
+            outTime.append(bucketStart)
+            outOpen.append(bucketOpen)
+            outHigh.append(bucketHigh)
+            outLow.append(bucketLow)
+            outClose.append(bucketClose)
+            outVolume.append(bucketVolume)
+        }
+
+        for index in 0..<count {
+            let currentBucket = (utcTimestamps[index] / stepSeconds) * stepSeconds
+            if bucketStart != currentBucket {
+                appendBucketIfNeeded()
+                bucketStart = currentBucket
+                bucketOpen = open[index]
+                bucketHigh = high[index]
+                bucketLow = low[index]
+                bucketClose = close[index]
+                bucketVolume = volume[index]
+                bucketCount = 1
+            } else {
+                bucketHigh = max(bucketHigh, high[index])
+                bucketLow = min(bucketLow, low[index])
+                bucketClose = close[index]
+                bucketVolume = bucketVolume.saturatingAdd(volume[index])
+                bucketCount += 1
+            }
+        }
+        appendBucketIfNeeded()
+
+        return try MarketTimeframeOHLCVSeries(
+            metadata: FXMarketMetadata(
+                brokerSourceId: metadata.brokerSourceId,
+                sourceOrigin: metadata.sourceOrigin,
+                logicalSymbol: metadata.logicalSymbol,
+                providerSymbol: metadata.providerSymbol,
+                timeframe: timeframe,
+                digits: metadata.digits,
+                firstUTC: outTime.first,
+                lastUTC: outTime.last
+            ),
+            utcTimestamps: outTime,
+            open: outOpen,
+            high: outHigh,
+            low: outLow,
+            close: outClose,
+            volume: outVolume
+        )
+    }
+}
+
+private extension UInt64 {
+    func saturatingAdd(_ other: UInt64) -> UInt64 {
+        let result = addingReportingOverflow(other)
+        return result.overflow ? UInt64.max : result.partialValue
     }
 }

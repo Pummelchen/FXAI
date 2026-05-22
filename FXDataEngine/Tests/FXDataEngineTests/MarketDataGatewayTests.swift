@@ -75,6 +75,42 @@ final class MarketDataGatewayTests: XCTestCase {
         }
     }
 
+    func testMarketGatewayResamplesM1ToM5WithSummedVolumeAndDropsPartialByDefault() throws {
+        let series = try M1OHLCVSeries(response: makeResponse(count: 12))
+        let m5 = try MarketDataGateway.resample(series, to: .m5)
+
+        XCTAssertEqual(m5.metadata.timeframe, .m5)
+        XCTAssertEqual(m5.count, 2)
+        XCTAssertEqual(m5.utcTimestamps[0], series.utcTimestamps[0])
+        XCTAssertEqual(m5.open[0], series.open[0])
+        XCTAssertEqual(m5.close[0], series.close[4])
+        XCTAssertEqual(m5.high[0], series.high[4])
+        XCTAssertEqual(m5.low[0], series.low[0])
+        XCTAssertEqual(m5.volume[0], 510)
+        XCTAssertEqual(m5.open[1], series.open[5])
+        XCTAssertEqual(m5.close[1], series.close[9])
+        XCTAssertEqual(m5.volume[1], 535)
+        XCTAssertTrue(m5.hasVolume)
+    }
+
+    func testMarketGatewayResamplingCanIncludePartialBucketsAndAlignToM1() throws {
+        let series = try M1OHLCVSeries(response: makeResponse(count: 12))
+        let m5 = try MarketDataGateway.resample(series, to: .m5, includePartialBuckets: true)
+        let map = MarketDataGateway.alignedIndexMap(
+            referenceM1: series,
+            target: m5,
+            maxLagSeconds: 299,
+            upToIndex: 8
+        )
+
+        XCTAssertEqual(m5.count, 3)
+        XCTAssertEqual(m5.utcTimestamps[2], series.utcTimestamps[10])
+        XCTAssertEqual(m5.close[2], series.close[11])
+        XCTAssertEqual(m5.volume[2], 221)
+        XCTAssertEqual(Array(map[0...8]), [0, 0, 0, 0, 0, 1, 1, 1, 1])
+        XCTAssertEqual(map[9], -1)
+    }
+
     private func makeResponse(
         sourceOrigin: String = "MT5",
         providerSymbol: String = "EURUSD",
