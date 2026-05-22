@@ -225,6 +225,66 @@ final class PluginContractTests: XCTestCase {
         XCTAssertEqual(performance.lastTimeUTC, 1_800_019_000)
     }
 
+    func testPluginPersistenceMetadataMatchesLegacyStateTagsAndPaths() throws {
+        let stateless = PluginManifestV4(
+            aiID: 6,
+            aiName: "Rule/Base",
+            family: .ruleBased,
+            referenceTier: .ruleBaseline
+        )
+        let replay = PluginManifestV4(
+            aiID: 7,
+            aiName: "Replay:Plugin",
+            family: .transformer,
+            capabilityMask: [.selfTest, .onlineLearning, .replay, .windowContext],
+            minSequenceBars: 2,
+            maxSequenceBars: 16
+        )
+        let nativeDescriptor = PluginPersistenceDescriptor(
+            supportsPersistentState: true,
+            stateVersion: 12,
+            supportsDeterministicReplayCheckpoint: true,
+            supportsNativeParameterSnapshot: true
+        )
+
+        XCTAssertEqual(PluginPersistenceConstants.directory, "FXAI/Runtime/Plugins")
+        XCTAssertEqual(PluginPersistenceConstants.artifactVersion, 12)
+        XCTAssertEqual(
+            PluginPersistenceTools.stateFile(symbol: "EUR/USD:live", aiName: "Replay:Plugin"),
+            "FXAI/Runtime/Plugins/fxai_plugin_EUR_USD_live_Replay_Plugin.bin"
+        )
+        XCTAssertEqual(PluginPersistenceTools.depthTag(manifest: stateless), "stateless")
+        XCTAssertEqual(PluginPersistenceTools.defaultReferenceTier(aiID: AIModelID.chronos.rawValue), .surrogate)
+        XCTAssertEqual(PluginPersistenceTools.defaultReferenceTier(aiID: AIModelID.lightgbm.rawValue), .compressedNative)
+        XCTAssertEqual(PluginPersistenceTools.defaultReferenceTier(aiID: AIModelID.buyOnly.rawValue), .ruleBaseline)
+        XCTAssertEqual(PluginPersistenceTools.coverageTag(manifest: stateless), "compressed_native")
+        XCTAssertEqual(PluginPersistenceTools.depthTag(manifest: replay), "deterministic_replay")
+        XCTAssertEqual(PluginPersistenceTools.coverageTag(manifest: replay), "native_replay")
+        XCTAssertEqual(PluginPersistenceTools.depthTag(manifest: replay, descriptor: nativeDescriptor), "native_parameters")
+        XCTAssertEqual(PluginPersistenceTools.coverageTag(manifest: replay, descriptor: nativeDescriptor), "native_model")
+
+        let replayRow = try PluginPersistenceTools.coverageManifestRow(
+            manifest: replay,
+            symbol: "EUR/USD:live",
+            stateFileSize: 2048
+        )
+        XCTAssertEqual(replayRow.coverageTag, "native_replay")
+        XCTAssertEqual(replayRow.checkpointDepth, "deterministic_replay")
+        XCTAssertTrue(replayRow.nativeRequired)
+        XCTAssertFalse(replayRow.promotionReady)
+        XCTAssertEqual(replayRow.stateFileSize, 2048)
+        XCTAssertEqual(replayRow.stateFile, "FXAI/Runtime/Plugins/fxai_plugin_EUR_USD_live_Replay_Plugin.bin")
+
+        let nativeRow = try PluginPersistenceTools.coverageManifestRow(
+            manifest: replay,
+            symbol: "EURUSD",
+            descriptor: nativeDescriptor
+        )
+        XCTAssertEqual(nativeRow.coverageTag, "native_model")
+        XCTAssertEqual(nativeRow.checkpointDepth, "native_parameters")
+        XCTAssertTrue(nativeRow.promotionReady)
+    }
+
     func testMLPayloadCarriesVolumeAvailability() {
         let x = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
         let context = PluginContextV4(dataHasVolume: true)
