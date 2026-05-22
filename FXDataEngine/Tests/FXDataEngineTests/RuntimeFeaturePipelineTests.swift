@@ -178,6 +178,23 @@ final class RuntimeFeaturePipelineTests: XCTestCase {
         XCTAssertEqual(transferInput.rawX[0], 1.0, accuracy: 0.0)
         XCTAssertEqual(transferInput.rawX[1], 0.10, accuracy: 1e-12)
         XCTAssertGreaterThanOrEqual(transferInput.windowSize, 2)
+
+        let sharedPayload = RuntimeTransferTools.sharedTransferPayload(
+            input: transferInput,
+            domainHash: 0.50,
+            horizonMinutes: 13
+        )
+        XCTAssertEqual(sharedPayload.count, FXDataEngineConstants.sharedTransferFeatures)
+        XCTAssertEqual(sharedPayload[0], 1.0, accuracy: 0.0)
+
+        let directPayload = RuntimeTransferTools.currentSharedTransferPayload(
+            features: features,
+            samples: [ignoredFirst, validSecond],
+            horizonMinutes: 13,
+            symbol: "EURUSD",
+            domainHash: 0.50
+        )
+        XCTAssertEqual(directPayload, sharedPayload)
     }
 
     private func sample(valid: Bool, marker: Double) -> RuntimeArtifactPreparedSample {

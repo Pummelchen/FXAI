@@ -522,6 +522,39 @@ public enum RuntimeTransferTools {
             )
         )
     }
+
+    public static func sharedTransferPayload(
+        input: RuntimeTransferInputState,
+        domainHash: Double,
+        horizonMinutes: Int
+    ) -> [Double] {
+        PluginSharedTransferPayloadTools.buildInput(
+            x: input.rawX,
+            window: input.sharedWindow,
+            declaredWindowSize: input.windowSize,
+            domainHash: domainHash,
+            horizonMinutes: horizonMinutes
+        )
+    }
+
+    public static func currentSharedTransferPayload(
+        features: [Double],
+        samples: [RuntimeArtifactPreparedSample],
+        horizonMinutes: Int,
+        symbol: String,
+        domainHash: Double
+    ) -> [Double] {
+        sharedTransferPayload(
+            input: currentTransferInput(
+                features: features,
+                samples: samples,
+                horizonMinutes: horizonMinutes,
+                symbol: symbol
+            ),
+            domainHash: domainHash,
+            horizonMinutes: horizonMinutes
+        )
+    }
 }
 
 private func fxClampedInt(_ value: Int, lower: Int, upper: Int) -> Int {
