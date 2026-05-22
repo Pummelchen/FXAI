@@ -45,6 +45,16 @@ Important MT5 socket note: standard MQL5 sockets are client-oriented. The sample
 - MetaTrader 5 running under Wine on macOS.
 - The EA copied/compiled inside MT5.
 
+## MT5 Experts EA Sync
+
+The canonical FXDatabase bridge EA lives at `FXDatabase/EA/FXDatabase.mq5`. The main MT5 Experts folder should contain exactly that EA as `FXDatabase.mq5`; the old `FXExport` location is no longer used.
+
+After updating the source EA, copy it once into the main MT5 Experts folder:
+
+```bash
+cp FXDatabase/EA/FXDatabase.mq5 "$HOME/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXDatabase.mq5"
+```
+
 ## Build And Test
 
 From the package directory:
