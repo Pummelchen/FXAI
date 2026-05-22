@@ -76,7 +76,26 @@ final class AuditSuiteTests: XCTestCase {
         XCTAssertEqual(nonEmptyReportLines(result.reportDocument).count, 1)
     }
 
-    func testAuditSuiteSkipsAdversarialScenarioUntilDedicatedGeneratorExists() throws {
+    func testAuditAdversarialGeneratorBuildsSelectedMarketWindow() throws {
+        var plugin = SuiteAlwaysBuyPlugin(aiID: 5, name: "SuiteBuy")
+        let generated = try XCTUnwrap(AuditAdversarialTools.generateScenario(
+            plugin: &plugin,
+            marketSeries: try makeMarketSeries(count: 800),
+            configuration: AuditAdversarialConfiguration(
+                bars: 128,
+                horizonMinutes: 8,
+                pointValue: 0.0001,
+                maxEvaluationSamples: 16,
+                minEvaluationSamples: 4
+            )
+        ))
+
+        XCTAssertEqual(generated.primary.count, 128)
+        XCTAssertTrue(generated.primary.isConsistent)
+        XCTAssertGreaterThan(plugin.trainCount, 0)
+    }
+
+    func testAuditSuiteRunsAdversarialScenarioWhenMarketSeriesIsAvailable() throws {
         let plugin = AuditPluginFactory(makePlugin: { SuiteAlwaysBuyPlugin(aiID: 5, name: "SuiteBuy") })
         let result = try AuditSuiteTools.runSuite(
             plugins: [plugin],
@@ -85,12 +104,13 @@ final class AuditSuiteTests: XCTestCase {
                 scenarioList: "{market_adversarial}",
                 runner: AuditRunnerConfiguration(horizonMinutes: 8, maxSamples: 4)
             ),
-            marketSeries: try makeMarketSeries(count: 64)
+            marketSeries: try makeMarketSeries(count: 2_200)
         )
 
         XCTAssertEqual(result.attemptedRuns, 1)
-        XCTAssertEqual(result.skippedRuns, 1)
-        XCTAssertEqual(result.metrics.count, 0)
+        XCTAssertEqual(result.skippedRuns, 0)
+        XCTAssertEqual(result.metrics.count, 1)
+        XCTAssertEqual(result.metrics[0].scenario, "market_adversarial")
     }
 
     func testAuditSuiteReportWriterResetsAndAppendsRowsWithoutDuplicateHeader() throws {
@@ -168,6 +188,7 @@ final class AuditSuiteTests: XCTestCase {
 
 private struct SuiteAlwaysBuyPlugin: FXAIPluginV4 {
     let manifest: PluginManifestV4
+    var trainCount = 0
 
     init(aiID: Int, name: String) {
         self.manifest = PluginManifestV4(
@@ -184,6 +205,7 @@ private struct SuiteAlwaysBuyPlugin: FXAIPluginV4 {
 
     mutating func train(_ request: TrainRequestV4, hyperParameters: HyperParameters) throws {
         try request.validate()
+        trainCount += 1
     }
 
     func predict(_ request: PredictRequestV4, hyperParameters: HyperParameters) throws -> PredictionV4 {

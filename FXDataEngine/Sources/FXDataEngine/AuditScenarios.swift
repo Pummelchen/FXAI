@@ -667,6 +667,26 @@ public enum AuditScenarioTools {
         )
     }
 
+    public static func generatedScenarioSeries(
+        chronologicalBars: [AuditScenarioDoubleBar],
+        point: Double
+    ) -> AuditGeneratedScenarioSeries? {
+        guard !chronologicalBars.isEmpty else { return nil }
+        let primary = AuditContextSeriesTools.reverseChronologicalBarsToSeries(chronologicalBars)
+        guard primary.isConsistent, primary.count > 0 else { return nil }
+        let contexts = [
+            AuditContextSeriesTools.deriveContextSeriesFromBase(point: point, base: primary, transformID: 0),
+            AuditContextSeriesTools.deriveContextSeriesFromBase(point: point, base: primary, transformID: 1),
+            AuditContextSeriesTools.deriveContextSeriesFromBase(point: point, base: primary, transformID: 2)
+        ]
+        return buildGeneratedScenarioSeries(
+            primary: primary,
+            chronologicalBars: chronologicalBars,
+            point: point,
+            contexts: contexts
+        )
+    }
+
     public static func generateSyntheticScenarioSeries(
         spec: AuditScenarioSpec,
         bars: Int,
@@ -1032,7 +1052,7 @@ public enum AuditScenarioTools {
         return fxClamp(max(highShock, lowShock), 0.0, 12.0)
     }
 
-    private static func marketScenarioBars(
+    public static func marketScenarioBars(
         from marketSeries: M1OHLCVSeries,
         range: Range<Int>,
         point: Double

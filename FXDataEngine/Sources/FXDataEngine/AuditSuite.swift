@@ -30,6 +30,11 @@ public struct AuditPluginFactory: Sendable {
         _ configuration: AuditRunnerConfiguration,
         _ hyperParameters: HyperParameters
     ) throws -> AuditScenarioMetrics
+    private let generateAdversarialBody: @Sendable (
+        _ marketSeries: M1OHLCVSeries,
+        _ configuration: AuditAdversarialConfiguration,
+        _ hyperParameters: HyperParameters
+    ) throws -> AuditGeneratedScenarioSeries?
 
     public init<Plugin: FXAIPluginV4>(
         manifest: PluginManifestV4,
@@ -42,6 +47,15 @@ public struct AuditPluginFactory: Sendable {
                 plugin: &plugin,
                 generated: generated,
                 spec: spec,
+                configuration: configuration,
+                hyperParameters: hyperParameters
+            )
+        }
+        self.generateAdversarialBody = { marketSeries, configuration, hyperParameters in
+            var plugin = makePlugin()
+            return try AuditAdversarialTools.generateScenario(
+                plugin: &plugin,
+                marketSeries: marketSeries,
                 configuration: configuration,
                 hyperParameters: hyperParameters
             )
@@ -62,6 +76,14 @@ public struct AuditPluginFactory: Sendable {
         hyperParameters: HyperParameters = HyperParameters()
     ) throws -> AuditScenarioMetrics {
         try runScenarioBody(generated, spec, configuration, hyperParameters)
+    }
+
+    public func generateAdversarialScenario(
+        marketSeries: M1OHLCVSeries,
+        configuration: AuditAdversarialConfiguration,
+        hyperParameters: HyperParameters = HyperParameters()
+    ) throws -> AuditGeneratedScenarioSeries? {
+        try generateAdversarialBody(marketSeries, configuration, hyperParameters)
     }
 
     public func matches(token rawToken: String) -> Bool {
@@ -203,13 +225,15 @@ public enum AuditSuiteTools {
                     scenarioID: scenarioID,
                     worldPlanTSV: worldPlanTSV
                 )
-                guard let generated = generatedScenario(
+                let generated = try generatedScenario(
+                    plugin: plugin,
                     spec: spec,
-                    bars: configuration.bars,
+                    suiteConfiguration: configuration,
                     seed: scenarioSeed(base: configuration.seed, aiID: plugin.manifest.aiID),
-                    point: configuration.runner.pointValue,
-                    marketSeries: marketSeries
-                ) else {
+                    marketSeries: marketSeries,
+                    hyperParameters: hyperParameters
+                )
+                guard let generated else {
                     result.skippedRuns += 1
                     if configuration.stopOnFailure {
                         result.failedRuns += 1
@@ -273,28 +297,51 @@ public enum AuditSuiteTools {
     }
 
     private static func generatedScenario(
+        plugin: AuditPluginFactory,
         spec: AuditScenarioSpec,
-        bars: Int,
+        suiteConfiguration: AuditSuiteConfiguration,
         seed: UInt64,
-        point: Double,
-        marketSeries: M1OHLCVSeries?
-    ) -> AuditGeneratedScenarioSeries? {
+        marketSeries: M1OHLCVSeries?,
+        hyperParameters: HyperParameters
+    ) throws -> AuditGeneratedScenarioSeries? {
+        let point = suiteConfiguration.runner.pointValue
+        if spec.id == 15 {
+            guard let marketSeries else { return nil }
+            return try plugin.generateAdversarialScenario(
+                marketSeries: marketSeries,
+                configuration: AuditAdversarialConfiguration(
+                    bars: suiteConfiguration.bars,
+                    horizonMinutes: suiteConfiguration.runner.horizonMinutes,
+                    pointValue: point,
+                    priceCostPoints: suiteConfiguration.runner.priceCostPoints,
+                    evThresholdPoints: suiteConfiguration.runner.evThresholdPoints,
+                    normalizationMethod: suiteConfiguration.runner.normalizationMethod,
+                    maxEvaluationSamples: suiteConfiguration.runner.maxSamples,
+                    minEvaluationSamples: slimMinEvaluationSamples(for: suiteConfiguration)
+                ),
+                hyperParameters: hyperParameters
+            )
+        }
         if spec.id < 8 {
             return AuditScenarioTools.generateSyntheticScenarioSeries(
                 spec: spec,
-                bars: bars,
+                bars: suiteConfiguration.bars,
                 seed: seed,
                 point: point
             )
         }
-        guard spec.id != 15 else { return nil }
         guard let marketSeries else { return nil }
         return AuditScenarioTools.generateMarketScenarioSeries(
             spec: spec,
             marketSeries: marketSeries,
-            bars: bars,
+            bars: suiteConfiguration.bars,
             point: point
         )
+    }
+
+    private static func slimMinEvaluationSamples(for configuration: AuditSuiteConfiguration) -> Int? {
+        guard configuration.runner.maxSamples != Int.max else { return nil }
+        return max(1, min(configuration.runner.maxSamples, max(96, configuration.bars / 6)))
     }
 }
 
