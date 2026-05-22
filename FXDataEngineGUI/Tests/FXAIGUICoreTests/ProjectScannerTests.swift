@@ -64,8 +64,10 @@ struct ProjectScannerTests {
 
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("FXDataEngine", isDirectory: true), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXPlugins/Linear", isDirectory: true), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXPlugins/Sequence", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXPlugins/lin_sgd", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXPlugins/ai_mlp", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXPlugins/lin_pa", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("FXPlugins/ai_qcew", isDirectory: true), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("FXBacktest", isDirectory: true), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("FXDatabase", isDirectory: true), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("FXDataEngine/Tools/Baselines", isDirectory: true), withIntermediateDirectories: true)
@@ -83,7 +85,7 @@ struct ProjectScannerTests {
                 family: .linear
             )
             """.utf8
-        ).write(to: root.appendingPathComponent("FXPlugins/Linear/LinearFixture.swift"))
+        ).write(to: root.appendingPathComponent("FXPlugins/lin_sgd/LinearFixture.swift"))
         try Data(
             """
             public let manifest = PluginManifestV4(
@@ -92,7 +94,7 @@ struct ProjectScannerTests {
                 family: .transformer
             )
             """.utf8
-        ).write(to: root.appendingPathComponent("FXPlugins/Sequence/SequenceFixture.swift"))
+        ).write(to: root.appendingPathComponent("FXPlugins/ai_mlp/SequenceFixture.swift"))
         try Data(
             """
             enum LinearPluginDefinitions {
@@ -101,7 +103,7 @@ struct ProjectScannerTests {
                 ]
             }
             """.utf8
-        ).write(to: root.appendingPathComponent("FXPlugins/Linear/LinearPluginFixture.swift"))
+        ).write(to: root.appendingPathComponent("FXPlugins/lin_pa/LinearPluginFixture.swift"))
         try Data(
             """
             enum SequencePluginDefinitions {
@@ -110,7 +112,7 @@ struct ProjectScannerTests {
                 ]
             }
             """.utf8
-        ).write(to: root.appendingPathComponent("FXPlugins/Sequence/SequencePluginFixture.swift"))
+        ).write(to: root.appendingPathComponent("FXPlugins/ai_qcew/SequencePluginFixture.swift"))
         try Data("{\"plugins\":{}}".utf8).write(to: root.appendingPathComponent("FXDataEngine/Tools/Baselines/example.summary.json"))
         try Data(
             """

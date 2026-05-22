@@ -72,13 +72,15 @@ plugins in this request.
 
 ## Directory Plan
 
-1. Preserve the former plugin family and identifier structure in the root
-   `FXPlugins` Swift package.
+1. Keep `FXPlugins` flat: `API/` is the only shared folder and every plugin
+   lives directly under `FXPlugins/<plugin_id>/`.
 2. Retire the old MQL5 files after the Swift package exposes every plugin ID
    through a contract-tested implementation or backend plan.
 3. Add a SwiftPM package in root `FXPlugins`.
-4. Put Swift sources under `FXPlugins/<Family>/<PluginID>/`, mirroring the
-   former MQL5 plugin zoo and giving every plugin its own codebase.
+4. Put all plugin-owned Swift, Metal, Python, model assets, and backend glue
+   under the plugin's own folder, for example `FXPlugins/lin_sgd/` or
+   `FXPlugins/ai_lstm/`. Only shared registry/tests/docs/backend API hooks live
+   under `FXPlugins/API/`.
 5. Add package tests under `FXPlugins/API/Tests/FXAIPluginsTests/<Area>/`.
 6. Keep plugin identifiers identical to legacy `AIName()` values.
 7. Every Swift plugin implements or adapts to `FXAIPluginV4`.
@@ -197,8 +199,8 @@ Each plugin step:
 | trend_xsmom_rank | Trend | Trend/trend_xsmom_rank.mqh | Cross-sectional momentum rank plugin | Accelerate sorting/reductions, Metal not first | No |
 | wm_cfx | World | World/wm_cfx.mqh | Currency factor world model | Accelerate graph/matrix ops; Metal later | Maybe after model stabilization |
 | wm_graph | World | World/wm_graph.mqh | Graph world model | Accelerate graph ops; PyTorch Geometric alternative if needed | Maybe after model stabilization |
-| MovingAverageCross | FXBacktest demo | Demo/fxbacktest_moving_average_cross/MovingAverageCrossFXDataEnginePlugin.swift | FXDataEngine adapter now independent of FXBacktest-local plugin code | Metal candidate for future FXDataEngine batch/sweep work; Swift scalar adapter now active | No |
-| FXStupid | FXBacktest demo | Demo/fxbacktest_fxstupid/FXStupidFXDataEnginePlugin.swift | FXDataEngine adapter now independent of FXBacktest-local plugin code | Stateful scalar adapter; no Metal until its order-control flow is redesigned | No |
+| MovingAverageCross | FXBacktest demo | FXPlugins/fxbacktest_moving_average_cross/MovingAverageCrossFXDataEnginePlugin.swift | FXDataEngine adapter now independent of FXBacktest-local plugin code | Metal candidate for future FXDataEngine batch/sweep work; Swift scalar adapter now active | No |
+| FXStupid | FXBacktest demo | FXPlugins/fxbacktest_fxstupid/FXStupidFXDataEnginePlugin.swift | FXDataEngine adapter now independent of FXBacktest-local plugin code | Stateful scalar adapter; no Metal until its order-control flow is redesigned | No |
 
 ## Review Pass 1
 
@@ -251,7 +253,7 @@ Revision from pass 2:
 
 ## Immediate Coding Plan
 
-1. Preserve the plugin family structure in root `FXPlugins`.
+1. Use the flat plugin-owned layout in root `FXPlugins`.
 2. Add a root `FXPlugins/Package.swift` package.
 3. Add shared Swift support:
    - `PluginAccelerationPlan`

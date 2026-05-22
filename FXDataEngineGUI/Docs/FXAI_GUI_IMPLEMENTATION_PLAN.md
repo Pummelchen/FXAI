@@ -54,7 +54,7 @@ The terminal remains first-class. The GUI is an optional operator layer that:
 The GUI should be built around FXAI’s actual artifact surfaces:
 
 - project tree: `FXDataEngine/`, `FXPlugins/`, `FXBacktest/`, `FXDatabase/`, `FXDataEngine/Tools/`
-- Swift plugin zoo families under `FXPlugins/<Family>/`
+- flat Swift plugin zoo folders under `FXPlugins/<plugin_id>/`, with shared access code under `FXPlugins/API/`
 - baselines under `FXDataEngine/Tools/Baselines/`
 - Offline Lab profiles, ResearchOS, distillation, and bundle artifacts
 - Swift package build/test status for `FXDataEngine`, `FXPlugins`, `FXBacktest`, and `FXDatabase`

@@ -124,14 +124,20 @@ public struct ProjectScanner {
 
         var descriptors: [PluginDescriptor] = []
         let directNames = regexCaptures(pattern: #"aiName:\s*"([^"]+)""#, text: source)
-        let sourceFamily = pluginFamilyName(for: sourceFile, sourceRoot: sourceRoot)
+        let sourceFamily = pluginFolderName(for: sourceFile, sourceRoot: sourceRoot)
+        let manifestFamily = regexCaptures(pattern: #"family:\s*\.([A-Za-z0-9_]+)"#, text: source).first
         descriptors.append(contentsOf: directNames.map { name in
-            PluginDescriptor(name: name, family: sourceFamily, sourcePath: sourceFile, sourceKind: .file)
+            let family = pluginFamily(pluginName: name)
+                ?? manifestPluginFamily(manifestFamily)
+                ?? sourceFamily
+                ?? "Plugin"
+            return PluginDescriptor(name: name, family: family, sourcePath: sourceFile, sourceKind: .file)
         })
 
         let descriptorPattern = #"(?m)^\s*(?:FXAIPluginImplementationDescriptor\.)?(linear|tree|sequence|distribution|statistical|factor|trend|mixture|memory|world|reinforcement)\(\.[^,]+,\s*"([^"]+)""#
         for match in regexCapturePairs(pattern: descriptorPattern, text: source) {
-            let family = sourceFamily == "API" ? descriptorPluginFamily(match.first) : sourceFamily
+            let family = pluginFamily(pluginName: match.second)
+                ?? descriptorPluginFamily(match.first)
             descriptors.append(
                 PluginDescriptor(
                     name: match.second,
@@ -145,8 +151,9 @@ public struct ProjectScanner {
         return descriptors
     }
 
-    private func pluginFamilyName(for sourceFile: URL, sourceRoot: URL) -> String {
-        pluginRelativeComponents(for: sourceFile, sourceRoot: sourceRoot).first ?? "Swift"
+    private func pluginFolderName(for sourceFile: URL, sourceRoot: URL) -> String? {
+        let folderName = pluginRelativeComponents(for: sourceFile, sourceRoot: sourceRoot).first
+        return folderName == "API" ? nil : folderName
     }
 
     private func pluginRelativeComponents(for sourceFile: URL, sourceRoot: URL) -> [String] {
@@ -175,6 +182,38 @@ public struct ProjectScanner {
         case "reinforcement": return "RL"
         default: return "Plugin"
         }
+    }
+
+    private func manifestPluginFamily(_ familyName: String?) -> String? {
+        switch familyName {
+        case "linear": return "Linear"
+        case "tree": return "Tree"
+        case "recurrent", "convolutional", "transformer", "stateSpace": return "Sequence"
+        case "distributional": return "Distribution"
+        case "mixture": return "Mixture"
+        case "retrieval": return "Memory"
+        case "worldModel": return "World"
+        case "ruleBased": return "Rule"
+        case "other": return "Stat"
+        default: return nil
+        }
+    }
+
+    private func pluginFamily(pluginName: String) -> String? {
+        if pluginName.hasPrefix("ai_") { return "Sequence" }
+        if pluginName.hasPrefix("dist_") { return "Distribution" }
+        if pluginName.hasPrefix("factor_") { return "Factor" }
+        if pluginName.hasPrefix("fxbacktest_") { return "Demo" }
+        if pluginName.hasPrefix("lin_") { return "Linear" }
+        if pluginName.hasPrefix("mem_") { return "Memory" }
+        if pluginName.hasPrefix("mix_") { return "Mixture" }
+        if pluginName.hasPrefix("rl_") { return "RL" }
+        if pluginName.hasPrefix("rule_") { return "Rule" }
+        if pluginName.hasPrefix("stat_") { return "Stat" }
+        if pluginName.hasPrefix("tree_") { return "Tree" }
+        if pluginName.hasPrefix("trend_") { return "Trend" }
+        if pluginName.hasPrefix("wm_") { return "World" }
+        return nil
     }
 
     private func regexCaptures(pattern: String, text: String) -> [String] {

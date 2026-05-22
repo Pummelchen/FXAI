@@ -8,9 +8,8 @@ Converted plugins should consume the Swift FXDataEngine OHLCV contracts and use 
 
 ## Layout
 
-- `Rule/`, `Linear/`, `Tree/`, `Sequence/`, `Distribution/`, `Stat/`, `Factor/`, `Trend/`, `Mixture/`, `Memory/`, `World/`, `RL/`: converted plugin zoo families matching the former MQL5 plugin inventory. Every plugin now lives in its own folder under its family and owns its manifest, acceleration declaration, and Swift adapter code.
-- `Demo/`: the two FXBacktest demo/reference adapters connected to the same FXDataEngine plugin contract.
 - `API/`: non-plugin package surface only: registry, tests, docs, and backend process hooks. Shared implementation primitives live in `FXDataEngine`; plugin folders should not depend on shared plugin-zoo helpers.
+- `<plugin_id>/`: every plugin lives directly under `FXPlugins` in its own folder named after its manifest `aiName`, for example `lin_sgd/`, `ai_lstm/`, `tree_xgb_fast/`, `rule_m1sync/`, and `fxbacktest_moving_average_cross/`. All plugin-specific Swift, Metal, Python, model assets, and state adapters belong inside that plugin folder.
 - `Package.swift`: SwiftPM boundary for the zoo. There is no longer a root `Sources/`, `Tests/`, or `Python/` staging layout.
 
 ## Current Swift Coverage
