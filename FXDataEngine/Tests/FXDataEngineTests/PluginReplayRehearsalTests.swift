@@ -105,6 +105,34 @@ final class PluginReplayRehearsalTests: XCTestCase {
         try selected[0].trainRequest.validate()
     }
 
+    func testReplayBufferStoresRequestsWithLegacyRingHeadBehavior() throws {
+        var buffer = PluginReplayBufferState(capacity: 2)
+        XCTAssertEqual(buffer.capacity, 2)
+        XCTAssertEqual(buffer.activeEntries.count, 0)
+
+        let first = entry(priority: 1.0, regimeID: 0, horizonMinutes: 5, labelClass: .buy, sampleTimeUTC: 1_300)
+        let second = entry(priority: 2.0, regimeID: 1, horizonMinutes: 5, labelClass: .sell, sampleTimeUTC: 1_301)
+        let third = entry(priority: 3.0, regimeID: 0, horizonMinutes: 15, labelClass: .skip, sampleTimeUTC: 1_302)
+
+        XCTAssertEqual(buffer.store(first.trainRequest, priority: first.priority), 0)
+        XCTAssertEqual(buffer.store(second.trainRequest, priority: second.priority), 1)
+        XCTAssertEqual(buffer.store(third.trainRequest, priority: third.priority), 0)
+        XCTAssertEqual(buffer.activeEntries.count, 2)
+        XCTAssertEqual(buffer.entries[0].context.horizonMinutes, 15)
+        XCTAssertEqual(buffer.entries[1].context.horizonMinutes, 5)
+
+        let selected = buffer.selectedCandidates(regimeID: 0, horizonMinutes: 15, replaySteps: 2)
+        XCTAssertEqual(selected.count, 2)
+        XCTAssertEqual(selected[0].sourceIndex, 0)
+        XCTAssertEqual(selected[0].score, 4.40, accuracy: 1e-12)
+        XCTAssertEqual(selected[1].sourceIndex, 1)
+
+        buffer.reset()
+        XCTAssertEqual(buffer.activeEntries.count, 0)
+        XCTAssertEqual(buffer.store(second.trainRequest, priority: second.priority), 0)
+        XCTAssertEqual(buffer.entries[0].labelClass, .sell)
+    }
+
     private func entry(
         valid: Bool = true,
         priority: Double,

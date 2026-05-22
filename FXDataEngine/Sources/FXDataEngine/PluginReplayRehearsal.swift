@@ -155,6 +155,112 @@ public struct PluginReplayRehearsalCandidate: Codable, Hashable, Sendable {
     }
 }
 
+public struct PluginReplayBufferState: Codable, Hashable, Sendable {
+    public var capacity: Int
+    public private(set) var head: Int
+    public private(set) var size: Int
+    public private(set) var entries: [PluginReplayRehearsalEntry]
+
+    public init(
+        capacity: Int = FXDataEngineConstants.pluginReplayCapacity,
+        head: Int = 0,
+        size: Int = 0,
+        entries: [PluginReplayRehearsalEntry] = []
+    ) {
+        self.capacity = max(1, capacity)
+        self.head = head
+        self.size = size
+        self.entries = entries
+        normalizeShape()
+    }
+
+    public mutating func reset() {
+        head = 0
+        size = 0
+        entries = Array(repeating: Self.emptyEntry(), count: capacity)
+    }
+
+    @discardableResult
+    public mutating func store(_ request: TrainRequestV4, priority: Double) -> Int {
+        normalizeShape()
+        let slot = head
+        entries[slot] = PluginReplayRehearsalEntry(
+            valid: request.valid,
+            priority: priority,
+            context: request.context,
+            labelClass: request.labelClass,
+            movePoints: request.movePoints,
+            sampleWeight: request.sampleWeight,
+            mfePoints: request.mfePoints,
+            maePoints: request.maePoints,
+            timeToHitFraction: request.timeToHitFraction,
+            pathFlags: request.pathFlags,
+            pathRisk: request.pathRisk,
+            fillRisk: request.fillRisk,
+            maskedStepTarget: request.maskedStepTarget,
+            nextVolumeTarget: request.nextVolumeTarget,
+            regimeShiftTarget: request.regimeShiftTarget,
+            contextLeadTarget: request.contextLeadTarget,
+            x: request.x,
+            xWindow: request.xWindow,
+            windowSize: request.windowSize
+        )
+        head = (head + 1) % capacity
+        if size < capacity {
+            size += 1
+        }
+        return slot
+    }
+
+    public var activeEntries: [PluginReplayRehearsalEntry] {
+        normalizeEntries(entries).prefix(size).map { $0 }
+    }
+
+    public func selectedCandidates(
+        regimeID: Int,
+        horizonMinutes: Int,
+        replaySteps: Int = FXDataEngineConstants.pluginReplaySteps
+    ) -> [PluginReplayRehearsalCandidate] {
+        PluginReplayRehearsalTools.selectedCandidates(
+            entries: activeEntries,
+            regimeID: regimeID,
+            horizonMinutes: horizonMinutes,
+            replaySteps: replaySteps
+        )
+    }
+
+    private mutating func normalizeShape() {
+        capacity = max(1, capacity)
+        if head < 0 || head >= capacity {
+            head = 0
+        }
+        size = min(max(0, size), capacity)
+        entries = normalizeEntries(entries)
+    }
+
+    private func normalizeEntries(_ source: [PluginReplayRehearsalEntry]) -> [PluginReplayRehearsalEntry] {
+        if source.count == capacity {
+            return source
+        }
+        if source.count > capacity {
+            return Array(source.prefix(capacity))
+        }
+        return source + Array(repeating: Self.emptyEntry(), count: capacity - source.count)
+    }
+
+    private static func emptyEntry() -> PluginReplayRehearsalEntry {
+        PluginReplayRehearsalEntry(
+            valid: false,
+            priority: 0.0,
+            context: PluginContextV4(),
+            labelClass: .skip,
+            movePoints: 0.0,
+            sampleWeight: 0.0,
+            x: []
+        )
+    }
+}
+
 public enum PluginReplayRehearsalTools {
     public static func selectedCandidates(
         entries: [PluginReplayRehearsalEntry],
