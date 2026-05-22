@@ -3,139 +3,299 @@ from __future__ import annotations
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def _read(rel_path: str) -> str:
     return (ROOT / rel_path).read_text(encoding="utf-8")
 
 
-def test_normalization_enum_exposes_exact_buffer_variants():
-    core = _read("FXDataEngine/Engine/core.mqh")
-    assert "#define FXAI_NORM_METHOD_COUNT 17" in core
-    assert "FXAI_NORM_MINMAX_BUFFER2" in core
-    assert "FXAI_NORM_MINMAX_BUFFER3" in core
-    assert "#define FXAI_UNIT_RANGE_FLOOR 0.0001" in core
-    assert "#define FXAI_UNIT_RANGE_CEIL 0.9999" in core
-    assert "#define FXAI_SIGNED_UNIT_RANGE_FLOOR -0.9999" in core
-    assert "#define FXAI_SIGNED_UNIT_RANGE_CEIL 0.9999" in core
-    assert "double FXAI_ClampUnitOpen(const double v)" in core
-    assert "double FXAI_ClampSignedUnitOpen(const double v)" in core
+def _assert_tokens(text: str, tokens: list[str]) -> None:
+    for token in tokens:
+        assert token in text
 
 
-def test_feature_norm_implements_fitted_and_adaptive_layers():
-    feature_norm = _read("FXDataEngine/Engine/feature_norm.mqh")
-    required_tokens = [
-        "#define FXAI_NORM_QUANTILE_KNOTS 17",
-        "bool g_fxai_norm_fit_ready[FXAI_MAX_HORIZONS][FXAI_NORM_METHOD_COUNT];",
-        "bool FXAI_MethodUsesFittedStats(",
-        "bool FXAI_MethodUsesAdaptivePayloadNormalization(",
-        "bool FXAI_FitFeatureNormalizationMethodForRange(",
-        "void FXAI_ApplyFeatureNormalizationEx(",
-        "void FXAI_ApplyPayloadAdaptiveNormalization(",
-        "double FXAI_SignedLog1P(",
-        "return FXAI_ClampUnitOpen((v - lo_b) / den);",
-        "out_v = (has_prev && cur > prev ? FXAI_UNIT_RANGE_CEIL : FXAI_UNIT_RANGE_FLOOR);",
-    ]
-    for token in required_tokens:
-        assert token in feature_norm
+def test_swift_normalization_enum_exposes_exact_buffer_variants():
+    constants = _read("FXDataEngine/Sources/FXDataEngine/Constants.swift")
+    core_types = _read("FXDataEngine/Sources/FXDataEngine/CoreTypes.swift")
+    normalization = _read("FXDataEngine/Sources/FXDataEngine/Normalization.swift")
+
+    _assert_tokens(
+        constants,
+        [
+            "public static let normMethodCount = 17",
+            "public static let unitRangeFloor = 0.0001",
+            "public static let unitRangeCeil = 0.9999",
+            "public static let signedUnitRangeFloor = -0.9999",
+            "public static let signedUnitRangeCeil = 0.9999",
+            "public func fxClampUnit(_ value: Double) -> Double",
+            "public func fxClampSignedUnit(_ value: Double) -> Double",
+        ],
+    )
+    _assert_tokens(
+        core_types,
+        [
+            "public enum FeatureNormalizationMethod: Int, Codable, Sendable, CaseIterable",
+            "case existing = 0",
+            "case minMaxBuffer5",
+            "case changePercent",
+            "case binary01",
+            "case logReturn",
+            "case relativeChangePercent",
+            "case candleGeometry",
+            "case volatilityStdReturns",
+            "case atrNatrUnit",
+            "case zScore",
+            "case robustMedianIQR",
+            "case quantileToNormal",
+            "case powerYeoJohnson",
+            "case revin",
+            "case dain",
+            "case minMaxBuffer2",
+            "case minMaxBuffer3",
+        ],
+    )
+    _assert_tokens(
+        normalization,
+        [
+            "case .minMaxBuffer2:",
+            "case .minMaxBuffer3:",
+            "case .binary01:",
+            "value = hasPrevious ? (current > prior ? 1.0 : 0.0) : 0.0",
+            "out[index] = fxClampSignedUnit(value)",
+        ],
+    )
 
 
-def test_bounded_feature_emitters_use_open_interval_clamps():
-    feature_math = _read("FXDataEngine/Engine/feature_math.mqh")
-    feature_build = _read("FXDataEngine/Engine/feature_build.mqh")
-    event_macro = _read("FXDataEngine/Engine/event_macro.mqh")
+def test_swift_normalization_implements_fitted_and_adaptive_layers():
+    normalization_state = _read("FXDataEngine/Sources/FXDataEngine/NormalizationState.swift")
+    runtime_sections = _read("FXDataEngine/Sources/FXDataEngine/RuntimeArtifactSections.swift")
 
-    math_tokens = [
-        "upper_wick_norm = FXAI_ClampUnitOpen(upper_wick / den_range);",
-        "lower_wick_norm = FXAI_ClampUnitOpen(lower_wick / den_range);",
-    ]
-    for token in math_tokens:
-        assert token in feature_math
+    _assert_tokens(
+        normalization_state,
+        [
+            "public static let candidateMax = FXDataEngineConstants.normalizationCandidateMax",
+            "public static func normalizationMethodCandidates(",
+            "var usesAdaptivePayloadNormalization: Bool",
+            "self == .revin || self == .dain",
+            "var usesFittedStats: Bool",
+            "var usesRollingNormalizationHistory: Bool",
+            "public mutating func applyGroupWindows(",
+            "public mutating func record(",
+            "public mutating func fit(",
+            "public func featureStats(",
+        ],
+    )
+    _assert_tokens(
+        runtime_sections,
+        [
+            "public static let normalizationQuantileKnots = 17",
+            "public enum RuntimeNormalizationWindowsCodec",
+            "public enum RuntimeNormalizationWindowConfigCodec",
+            "public enum RuntimeNormalizationHistoryCodec",
+            "public enum RuntimeNormalizationFitCodec",
+        ],
+    )
 
-    build_tokens = [
-        "return FXAI_ClampUnitOpen(1.0 - d / radius);",
-        "return FXAI_ClampSignedUnitOpen(0.60 * asia_to_eu + 0.80 * eu_to_us - 0.70 * us_to_roll);",
-        "return FXAI_ClampUnitOpen(0.70 * overlap + 0.30 * FXAI_CyclicHourPulse(hour_value, 15.0, 2.0));",
-        "triple_swap_bias = FXAI_ClampSignedUnitOpen(day_bias * (0.35 + 0.65 * roll_bias));",
-        "spread_rank20 = FXAI_ClampSignedUnitOpen(2.0 * ((double)rank_le / (double)MathMax(used, 1)) - 1.0);",
-        "features[12] = FXAI_ClampSignedUnitOpen((ctx_up_ratio - 0.5) * 2.0);",
-        "features[15] = FXAI_ClampSignedUnitOpen(((double)weekday - 3.0) / 2.0);",
-        "features[16] = FXAI_ClampSignedUnitOpen(((double)hh - 11.5) / 11.5);",
-        "features[17] = FXAI_ClampSignedUnitOpen(((double)mm - 29.5) / 29.5);",
-        "features[40] = FXAI_ClampSignedUnitOpen((rsi14 - 50.0) / 50.0);",
-        "features[base_f + 3] = FXAI_ClampSignedUnitOpen(ctx_corr);",
-        "features[62] = FXAI_ClampSignedUnitOpen(shared_util);",
-        "features[63] = FXAI_ClampSignedUnitOpen(2.0 * shared_stability - 1.0);",
-        "features[64] = FXAI_ClampSignedUnitOpen(2.0 * shared_lead - 1.0);",
-        "features[65] = FXAI_ClampSignedUnitOpen(2.0 * shared_coverage - 1.0);",
-        "features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 14] = FXAI_ClampSignedUnitOpen(macro_state.policy_divergence);",
-        "features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 15] = FXAI_ClampSignedUnitOpen(macro_state.policy_pressure);",
-        "features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 16] = FXAI_ClampSignedUnitOpen(macro_state.inflation_pressure);",
-        "features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 17] = FXAI_ClampSignedUnitOpen(macro_state.labor_pressure);",
-        "features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 18] = FXAI_ClampSignedUnitOpen(macro_state.growth_pressure);",
-        "features[FXAI_MACRO_EVENT_FEATURE_OFFSET + 19] = FXAI_ClampUnitOpen(macro_state.state_quality);",
-        "features[83] = FXAI_ClampSignedUnitOpen(spread_rank20);",
-    ]
-    for token in build_tokens:
-        assert token in feature_build
 
-    macro_tokens = [
-        "out.policy_divergence = FXAI_ClampSignedUnitOpen(policy_norm - 0.35 * inflation_norm + 0.20 * growth_norm);",
-        "out.policy_pressure = FXAI_ClampSignedUnitOpen(0.70 * policy_norm + 0.30 * inflation_norm);",
-        "out.inflation_pressure = FXAI_ClampSignedUnitOpen(inflation_norm);",
-        "out.labor_pressure = FXAI_ClampSignedUnitOpen(labor_norm);",
-        "out.growth_pressure = FXAI_ClampSignedUnitOpen(0.78 * growth_norm + 0.22 * trade_norm);",
-        "out.carry_pressure = FXAI_ClampSignedUnitOpen(0.60 * out.policy_pressure +",
-        "out.event_decay = FXAI_ClampUnitOpen(out.event_decay);",
-        "double family_diversity = FXAI_ClampUnitOpen((double)family_hits / 5.0);",
-        "double density = FXAI_ClampUnitOpen(coverage_weight / 2.0);",
-        "out.state_quality = FXAI_ClampUnitOpen(0.34 * trust_mean +",
-        "pre_embargo = FXAI_ClampUnitOpen(pre_embargo);",
-        "post_embargo = FXAI_ClampUnitOpen(post_embargo);",
-        "event_importance = FXAI_ClampUnitOpen(event_importance);",
-        "event_class_bias = FXAI_ClampSignedUnitOpen(event_class_bias);",
-        "currency_relevance = FXAI_ClampUnitOpen(currency_relevance);",
-        "provenance_trust = FXAI_ClampUnitOpen(provenance_trust);",
-        "rates_activity = FXAI_ClampUnitOpen(rates_activity);",
-        "inflation_activity = FXAI_ClampUnitOpen(inflation_activity);",
-        "labor_activity = FXAI_ClampUnitOpen(labor_activity);",
-        "growth_activity = FXAI_ClampUnitOpen(growth_activity);",
-    ]
-    for token in macro_tokens:
-        assert token in event_macro
+def test_swift_feature_pipeline_uses_volume_instead_of_legacy_spread_rank():
+    feature_pipeline = _read("FXDataEngine/Sources/FXDataEngine/FeaturePipeline.swift")
+    feature_schema = _read("FXDataEngine/Sources/FXDataEngine/FeatureSchema.swift")
+    build_tools = _read("FXDataEngine/Sources/FXDataEngine/FeatureBuildTools.swift")
+
+    _assert_tokens(
+        feature_pipeline,
+        [
+            "let hasVolume = Self.hasUsableVolume(universe)",
+            "fillVolumeAwareMicrostructureFeatures(&features, universe: universe, index: sampleIndex, hasVolume: hasVolume)",
+            "features[6] = mean20 > 0 ? fxClamp((log1p(vol) / log1p(mean20)) - 1.0, -1.0, 1.0) : 0.0",
+            "features[68] = std20 > 0 ? fxClampSignedUnit((vol - mean20) / std20 / 4.0) : 0.0",
+            "features[75] = vol > 0 ? 1.0 : 0.0",
+            "features[83] = volumeRank(series, index, window: 20)",
+            "func volumeRank(_ series: M1OHLCVSeries, _ index: Int, window: Int) -> Double",
+            "func timeframeState(_ series: M1OHLCVSeries, index: Int, window: Int, hasVolume: Bool) -> [Double]",
+        ],
+    )
+    _assert_tokens(
+        feature_schema,
+        [
+            "case 6: \"volume_norm\"",
+            "case 68: \"volume_shock\"",
+            "case 74: \"volume_session_activity\"",
+            "case 80: \"volume_log\"",
+            "case 83: \"volume_rank_20\"",
+            "case 3: \"volume_pressure\"",
+        ],
+    )
+    assert "spread" not in feature_pipeline.lower()
+    assert "spread" not in feature_schema.lower()
+    assert "spread" not in build_tools.lower()
+
+
+def test_swift_bounded_feature_emitters_use_open_interval_clamps():
+    feature_math = _read("FXDataEngine/Sources/FXDataEngine/FeatureMath.swift")
+    feature_pipeline = _read("FXDataEngine/Sources/FXDataEngine/FeaturePipeline.swift")
+    feature_build = _read("FXDataEngine/Sources/FXDataEngine/FeatureBuildTools.swift")
+    event_macro = _read("FXDataEngine/Sources/FXDataEngine/MacroEvents.swift")
+
+    _assert_tokens(
+        feature_math,
+        [
+            "self.upperWickNorm = fxClampUnit(upperWickNorm)",
+            "self.lowerWickNorm = fxClampUnit(lowerWickNorm)",
+        ],
+    )
+    _assert_tokens(
+        feature_build,
+        [
+            "return fxClampUnit(1.0 - distance / radius)",
+            "return fxClampSignedUnit(0.60 * asiaToEurope + 0.80 * europeToUS - 0.70 * usToRollover)",
+            "return fxClampUnit(0.70 * overlap + 0.30 * cyclicHourPulse(hourValue: hour, centerHour: 15.0, radiusHours: 2.0))",
+            "let tripleSwapBias = fxClampSignedUnit(dayBias * (0.35 + 0.65 * rollBias))",
+        ],
+    )
+    _assert_tokens(
+        feature_pipeline,
+        [
+            "features[12] = fxClampSignedUnit((contextAggregates.upRatio[index] - 0.5) * 2.0)",
+            "features[15] = fxClampSignedUnit((Double(weekday) - 3.0) / 2.0)",
+            "features[16] = fxClampSignedUnit((Double(hour) - 11.5) / 11.5)",
+            "features[17] = fxClampSignedUnit((Double(minute) - 29.5) / 29.5)",
+            "features[62] = fxClampSignedUnit(sharedUtility)",
+            "features[63] = fxClampSignedUnit((sharedStability * 2.0) - 1.0)",
+            "features[64] = fxClampSignedUnit((sharedLead * 2.0) - 1.0)",
+            "features[65] = fxClampSignedUnit((sharedCoverage * 2.0) - 1.0)",
+            "features[67] = fxClampSignedUnit(features[20] - features[19])",
+        ],
+    )
+    _assert_tokens(
+        event_macro,
+        [
+            "self.eventClassBias = fxClampSignedUnit(eventClassBias)",
+            "self.ratesActivity = unitClamp(ratesActivity)",
+            "let policyDivergence = fxClampSignedUnit(policyNorm - 0.35 * inflationNorm + 0.20 * growthNorm)",
+            "let policyPressure = fxClampSignedUnit(0.70 * policyNorm + 0.30 * inflationNorm)",
+            "let growthPressure = fxClampSignedUnit(0.78 * growthNorm + 0.22 * tradeNorm)",
+            "let familyDiversity = fxClampUnit(Double(familyHits) / 5.0)",
+            "let density = fxClampUnit(coverageWeight / 2.0)",
+            "let stateQuality = fxClampUnit(",
+            "features[FXDataEngineConstants.macroEventFeatureOffset + index] = vector[index]",
+        ],
+    )
 
 
 def test_training_pipeline_uses_horizon_aware_fit_and_payload_transform():
-    engine_training = _read("FXDataEngine/Engine/engine_training.mqh")
-    normalization_core = _read("FXDataEngine/Engine/Core/core_normalization_core.mqh")
-    assert "FXAI_FitFeatureNormalizationMethodForRange(method_id," in engine_training
-    assert "FXAI_DataCoreBindArrayBundle(predict_snapshot," in engine_training
-    assert "FXAI_FeatureCoreBuildFrameFromBundle(bundle, 0, horizon_minutes, norm_method, feature_frame)" in engine_training
-    assert "FXAI_NormalizationCoreBuildInputFrameFromFeatureFrame(feature_frame, norm_frame)" in engine_training
-    assert "FXAI_NormalizationCoreFinalizeTrainRequest(manifest, s3)" in engine_training
-    assert "caches[sz].horizon_minutes = horizon_minutes;" in engine_training
-    assert "bool FXAI_NormalizationCoreBuildPayloadFrame(" in normalization_core
-    assert "bool FXAI_NormalizationCoreFinalizePredictRequest(" in normalization_core
-    assert "bool FXAI_NormalizationCoreFinalizeTrainRequest(" in normalization_core
+    data_engine = _read("FXDataEngine/Sources/FXDataEngine/FXDataEngine.swift")
+    feature_pipeline = _read("FXDataEngine/Sources/FXDataEngine/FeaturePipeline.swift")
+    normalization_core = _read("FXDataEngine/Sources/FXDataEngine/Normalization.swift")
+    training_samples = _read("FXDataEngine/Sources/FXDataEngine/TrainingSamples.swift")
+
+    _assert_tokens(
+        data_engine,
+        [
+            "let featureFrame = try featureCore.buildFrame(",
+            "let normalizationFrame = try normalizationCore.buildInputFrame(from: featureFrame)",
+            "let payloadFrame = try normalizationCore.buildPayloadFrame(",
+            "PreparedTrainingPayload(",
+        ],
+    )
+    _assert_tokens(
+        feature_pipeline,
+        [
+            "public func buildFrame(bundle: DataCoreBundle, request: FeatureCoreRequest? = nil) throws -> FeatureCoreFrame",
+            "horizonMinutes: max(1, request?.horizonMinutes ?? 1)",
+            "normalizationMethod: request?.normalizationMethod ?? .existing",
+        ],
+    )
+    _assert_tokens(
+        normalization_core,
+        [
+            "public func buildInputFrame(from featureFrame: FeatureCoreFrame) throws -> NormalizationCoreFrame",
+            "public func buildPayloadFrame(_ request: NormalizationPayloadRequest) throws -> NormalizationPayloadFrame",
+            "public func finalizePredictRequest(manifest: PluginManifestV4, request: PredictRequestV4) throws -> PredictRequestV4",
+            "public func finalizeTrainRequest(manifest: PluginManifestV4, request: TrainRequestV4) throws -> TrainRequestV4",
+        ],
+    )
+    _assert_tokens(
+        training_samples,
+        [
+            "public struct PreparedSampleNormalizationCacheRequest",
+            "public static func routedNormalizationSampleCacheRequests(",
+            "public static func cachedPreparedSample(",
+            "public static func cachedPreparedSampleWindow(",
+        ],
+    )
 
 
 def test_warmup_normalization_fits_candidates_on_train_only_split():
-    warmup_norm = _read("FXDataEngine/Engine/Warmup/warmup_normalization.mqh")
-    assert "bool FXAI_DeriveNormCandidateSplit(" in warmup_norm
-    assert "train_start,\n                                                    train_end," in warmup_norm
-    assert "FXAI_ScoreNormMethodCandidate(ai_idx,\n                                                      method_id," in warmup_norm
+    warmup = _read("FXDataEngine/Sources/FXDataEngine/Warmup.swift")
+    warmup_tests = _read("FXDataEngine/Tests/FXDataEngineTests/WarmupTests.swift")
+
+    _assert_tokens(
+        warmup,
+        [
+            "public static func normalizationCandidateSplit(",
+            "let validationStart = startIndex",
+            "var purge = horizonMinutes + 240",
+            "let trainingStart = validationEnd + purge + 1",
+            "guard trainingEnd - trainingStart >= 100 else { return nil }",
+        ],
+    )
+    _assert_tokens(
+        warmup_tests,
+        [
+            "WarmupTools.normalizationCandidateSplit(horizonMinutes: 13, startIndex: 0, endIndex: 599)",
+            "XCTAssertNil(WarmupTools.normalizationCandidateSplit(horizonMinutes: 13, startIndex: 0, endIndex: 239))",
+        ],
+    )
 
 
 def test_runtime_artifacts_persist_normalization_fits():
-    runtime_artifacts = _read("FXDataEngine/Engine/runtime_artifacts.mqh")
-    assert "#define FXAI_RUNTIME_ARTIFACT_VERSION 15" in runtime_artifacts
-    assert "FileWriteInteger(handle, (g_fxai_norm_fit_inited ? 1 : 0));" in runtime_artifacts
-    assert "g_fxai_norm_fit_inited = (FileReadInteger(handle) != 0);" in runtime_artifacts
+    runtime_artifacts = _read("FXDataEngine/Sources/FXDataEngine/RuntimeArtifacts.swift")
+    runtime_sections = _read("FXDataEngine/Sources/FXDataEngine/RuntimeArtifactSections.swift")
+    runtime_tests = _read("FXDataEngine/Tests/FXDataEngineTests/RuntimeArtifactsTests.swift")
+    normalization_tests = _read("FXDataEngine/Tests/FXDataEngineTests/NormalizationStateTests.swift")
+
+    _assert_tokens(
+        runtime_artifacts,
+        [
+            "public static let version = 15",
+            "public var normalizationMethodCount: Int",
+            "public var normalizationRollWindowMax: Int",
+            "normalizationMethodCount: Int = FXDataEngineConstants.normMethodCount",
+        ],
+    )
+    _assert_tokens(
+        runtime_sections,
+        [
+            "case normalizationWindows",
+            "case normalizationWindowConfig",
+            "case normalizationHistory",
+            "case normalizationFit",
+            "public enum RuntimeNormalizationFitCodec",
+            "for horizon in 0..<RuntimeArtifactConstants.maxHorizons",
+            "for methodID in 0..<FXDataEngineConstants.normMethodCount",
+        ],
+    )
+    _assert_tokens(
+        runtime_tests,
+        [
+            "XCTAssertEqual(header.version, 15)",
+            "XCTAssertEqual(header.normalizationMethodCount, 17)",
+        ],
+    )
+    _assert_tokens(
+        normalization_tests,
+        [
+            "func testNormalizationFitCodecRoundTripsLegacySection() throws",
+            "let encoded = try RuntimeNormalizationFitCodec.encode(fit)",
+            "let decoded = try RuntimeNormalizationFitCodec.decode(from: encoded)",
+        ],
+    )
 
 
 def test_tooling_accepts_new_normalization_id_range():
-    promotion = _read("Tools/offline_lab/promotion.py")
-    audit_run = _read("Tools/testlab/audit_run.py")
+    promotion = _read("FXAI/Tools/offline_lab/promotion.py")
+    audit_run = _read("FXAI/Tools/testlab/audit_run.py")
     assert '"AI_FeatureNormalization": (0, 0, 16, "N")' in promotion
     assert "||0||0||16||N" in audit_run

@@ -5,6 +5,9 @@ from pathlib import Path
 from testlab.toolchain import load_toolchain_config
 
 
+ROOT = Path(__file__).resolve().parents[3]
+
+
 def test_toolchain_config_reads_fxai_toml_and_env_override(tmp_path: Path):
     project_root = tmp_path / "FXAI"
     project_root.mkdir(parents=True)
@@ -39,21 +42,27 @@ def test_toolchain_config_reads_fxai_toml_and_env_override(tmp_path: Path):
     assert config.gui_release_archive == "Custom.zip"
 
 
-def test_toolchain_config_builds_wine_compile_arguments(tmp_path: Path):
+def test_toolchain_config_supports_headless_swift_offline_profile(tmp_path: Path):
     project_root = tmp_path / "FXAI"
     config = load_toolchain_config(
         project_root_hint=project_root,
         env={
-            "FXAI_TOOLCHAIN_PROFILE": "macos_wine",
+            "FXAI_TOOLCHAIN_PROFILE": "headless_ci",
             "FXAI_PROJECT_ROOT": str(project_root),
-            "FXAI_MT5_ROOT": str(project_root / "mt5"),
-            "FXAI_WINE": str(project_root / "wine64"),
+            "FXAI_RUNTIME_DIR": str(project_root / "runtime"),
         },
     )
 
-    cmd = config.metaeditor_compile_command(project_root / "FXDataEngine/FXAI.mq5", project_root / "compile.log")
+    assert config.profile == "headless_ci"
+    assert not config.uses_wine
+    assert config.project_root == project_root
+    assert config.runtime_dir == project_root / "runtime"
+    assert config.default_db == project_root / "Tools/OfflineLab/fxai_offline_lab.turso.db"
 
-    assert cmd[0] == str(project_root / "wine64")
-    assert cmd[1] == str(project_root / "mt5" / "MetaEditor64.exe")
-    assert cmd[2].startswith("/compile:Z:\\")
-    assert cmd[3].startswith("/log:Z:\\")
+
+def test_swift_package_declares_current_language_and_platform_standard():
+    package = (ROOT / "FXDataEngine/Package.swift").read_text(encoding="utf-8")
+
+    assert "// swift-tools-version: 6.3" in package
+    assert '.macOS("26.0")' in package
+    assert "swiftLanguageModes: [.v6]" in package

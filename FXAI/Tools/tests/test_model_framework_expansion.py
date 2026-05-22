@@ -5,100 +5,134 @@ import re
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
-NEW_PLUGINS = {
-    "stat_msgarch": ("AI_STAT_MSGARCH", "FXPlugins/Stat/stat_msgarch.mqh"),
-    "stat_arimax_garch": ("AI_STAT_ARIMAX_GARCH", "FXPlugins/Stat/stat_arimax_garch.mqh"),
-    "tree_rf": ("AI_TREE_RF", "FXPlugins/Tree/tree_rf.mqh"),
-    "stat_coint_vecm": ("AI_STAT_COINT_VECM", "FXPlugins/Stat/stat_coint_vecm.mqh"),
-    "stat_ou_spread": ("AI_STAT_OU_SPREAD", "FXPlugins/Stat/stat_ou_spread.mqh"),
-    "rl_ppo": ("AI_RL_PPO", "FXPlugins/RL/rl_ppo.mqh"),
-    "stat_microflow_proxy": ("AI_STAT_MICROFLOW_PROXY", "FXPlugins/Stat/stat_microflow_proxy.mqh"),
-    "stat_hmm_regime": ("AI_STAT_HMM_REGIME", "FXPlugins/Stat/stat_hmm_regime.mqh"),
-    "lin_elastic_logit": ("AI_LIN_ELASTIC_LOGIT", "FXPlugins/Linear/lin_elastic_logit.mqh"),
-    "lin_profit_logit": ("AI_LIN_PROFIT_LOGIT", "FXPlugins/Linear/lin_profit_logit.mqh"),
-    "ai_cnn_lstm": ("AI_CNN_LSTM", "FXPlugins/Sequence/ai_cnn_lstm.mqh"),
-    "ai_attn_cnn_bilstm": ("AI_ATTN_CNN_BILSTM", "FXPlugins/Sequence/ai_attn_cnn_bilstm.mqh"),
-    "stat_emd_hht": ("AI_STAT_EMD_HHT", "FXPlugins/Stat/stat_emd_hht.mqh"),
-    "stat_vmd": ("AI_STAT_VMD", "FXPlugins/Stat/stat_vmd.mqh"),
-    "stat_tvp_kalman": ("AI_STAT_TVP_KALMAN", "FXPlugins/Stat/stat_tvp_kalman.mqh"),
-    "factor_pca_panel": ("AI_FACTOR_PCA_PANEL", "FXPlugins/Factor/factor_pca_panel.mqh"),
-    "factor_ppp_value": ("AI_FACTOR_PPP_VALUE", "FXPlugins/Factor/factor_ppp_value.mqh"),
-    "factor_carry": ("AI_FACTOR_CARRY", "FXPlugins/Factor/factor_carry.mqh"),
-    "factor_cmv_panel": ("AI_FACTOR_CMV_PANEL", "FXPlugins/Factor/factor_cmv_panel.mqh"),
-    "trend_tsmom_vol": ("AI_TREND_TSMOM_VOL", "FXPlugins/Trend/trend_tsmom_vol.mqh"),
-    "trend_xsmom_rank": ("AI_TREND_XSMOM_RANK", "FXPlugins/Trend/trend_xsmom_rank.mqh"),
-    "trend_vol_breakout": ("AI_TREND_VOL_BREAKOUT", "FXPlugins/Trend/trend_vol_breakout.mqh"),
-    "stat_xrate_consistency": ("AI_STAT_XRATE_CONSISTENCY", "FXPlugins/Stat/stat_xrate_consistency.mqh"),
-    "ai_gru": ("AI_GRU", "FXPlugins/Sequence/ai_gru.mqh"),
-    "ai_bilstm": ("AI_BILSTM", "FXPlugins/Sequence/ai_bilstm.mqh"),
-    "ai_lstm_tcn": ("AI_LSTM_TCN", "FXPlugins/Sequence/ai_lstm_tcn.mqh"),
-    "ai_mythos_rdt": ("AI_MYTHOS_RDT", "FXPlugins/Sequence/ai_mythos_rdt.mqh"),
+CONVERTED_MODEL_CASES = {
+    "stat_msgarch": "statMSGARCH",
+    "stat_arimax_garch": "statARIMAXGARCH",
+    "tree_rf": "treeRF",
+    "stat_coint_vecm": "statCointVECM",
+    "stat_ou_spread": "statOUSpread",
+    "rl_ppo": "rlPPO",
+    "stat_microflow_proxy": "statMicroflowProxy",
+    "stat_hmm_regime": "statHMMRegime",
+    "lin_elastic_logit": "linElasticLogit",
+    "lin_profit_logit": "linProfitLogit",
+    "ai_cnn_lstm": "cnnLSTM",
+    "ai_attn_cnn_bilstm": "attnCNNBiLSTM",
+    "stat_emd_hht": "statEMDHHT",
+    "stat_vmd": "statVMD",
+    "stat_tvp_kalman": "statTVPKalman",
+    "factor_pca_panel": "factorPCAPanel",
+    "factor_ppp_value": "factorPPPValue",
+    "factor_carry": "factorCarry",
+    "factor_cmv_panel": "factorCMVPanel",
+    "trend_tsmom_vol": "trendTSMOMVol",
+    "trend_xsmom_rank": "trendXSMOMRank",
+    "trend_vol_breakout": "trendVolBreakout",
+    "stat_xrate_consistency": "statXRateConsistency",
+    "ai_gru": "gru",
+    "ai_bilstm": "bilstm",
+    "ai_lstm_tcn": "lstmTCN",
+    "ai_mythos_rdt": "mythosRDT",
 }
 
 
-def _read(rel: str) -> str:
-    return (ROOT / rel).read_text(encoding="utf-8")
+def _read(rel_path: str) -> str:
+    return (ROOT / rel_path).read_text(encoding="utf-8")
 
 
-def test_ai_count_matches_registry_expansion() -> None:
-    core = _read("FXDataEngine/Engine/core.mqh")
-    api = _read("FXDataEngine/API/api.mqh")
-    count = int(re.search(r"#define FXAI_AI_COUNT\s+(\d+)", core).group(1))
-    enum_names = re.findall(r"\bAI_[A-Z0-9_]+\b", core.split("enum ENUM_AI_TYPE", 1)[1].split("};", 1)[0])
-    include_paths = re.findall(r'#include "\.\.\\\.\.\\(FXPlugins\\[^"]+\.mqh)"', api)
-    create_cases = re.findall(r"case \(int\)AI_[A-Z0-9_]+: plugin = new [A-Za-z0-9_]+\(\); break;", api)
-    assert count == 63
-    assert len(enum_names) == count
-    assert len(include_paths) == count
-    assert len(create_cases) == count
-    assert "plugin.Reset();" in api
-
-
-def test_new_plugins_are_registered_and_expose_contract_methods() -> None:
-    core = _read("FXDataEngine/Engine/core.mqh")
-    api = _read("FXDataEngine/API/api.mqh")
-    for plugin_name, (enum_name, rel_path) in NEW_PLUGINS.items():
-        source = ROOT / rel_path
-        assert source.exists(), rel_path
-        text = source.read_text(encoding="utf-8")
-        include_path = rel_path.replace("/", "\\")
-        assert enum_name in core
-        assert f'#include "..\\..\\{include_path}"' in api
-        assert f"case (int){enum_name}: plugin = new " in api
-        assert f'return "{plugin_name}";' in text
-        for token in ("AIId(", "AIName(", "Describe("):
-            assert token in text, f"{rel_path} missing {token}"
-
-
-def test_framework_common_contains_required_algorithmic_guards() -> None:
-    text = _read("FXPlugins/Common/fxai_framework_model.mqh")
-    required_tokens = [
-        "HMMForward",
-        "MSGARCHMargin",
-        "RandomForestMargin",
-        "KalmanMargin",
-        "PCAMargin",
-        "SequenceMargin",
-        "FXAI_FW_KIND_GRU",
-        "FXAI_FW_KIND_BILSTM",
-        "FXAI_FW_KIND_LSTM_TCN",
-        "NormalizeClassDistribution(out.class_probs)",
-        "MathMax(h, 1e-8)",
-        "rowsum",
-        "cost_points",
-    ]
-    for token in required_tokens:
+def _assert_tokens(text: str, tokens: list[str]) -> None:
+    for token in tokens:
         assert token in text
-    assert "ResolveCostPoints(z)" not in text
+
+
+def test_ai_count_matches_swift_registry_expansion() -> None:
+    constants = _read("FXDataEngine/Sources/FXDataEngine/Constants.swift")
+    core_types = _read("FXDataEngine/Sources/FXDataEngine/CoreTypes.swift")
+    count = int(re.search(r"public static let aiCount = (\d+)", constants).group(1))
+    enum_body = core_types.split("public enum AIModelID", 1)[1].split("public var usesDeepNormalizationCandidates", 1)[0]
+    enum_cases = re.findall(r"case ([A-Za-z0-9_]+)", enum_body)
+
+    assert count == 63
+    assert len(enum_cases) == count
+    for swift_case in CONVERTED_MODEL_CASES.values():
+        assert swift_case in enum_cases
+
+
+def test_swift_plugin_contract_exposes_volume_and_backend_requirements() -> None:
+    contracts = _read("FXDataEngine/Sources/FXDataEngine/PluginContracts.swift")
+    ml_backend = _read("FXDataEngine/Sources/FXDataEngine/MLBackend.swift")
+    fxplugins_readme = _read("FXPlugins/README.md")
+
+    _assert_tokens(
+        contracts,
+        [
+            "public struct PluginManifestV4",
+            "public var requiresVolumeWhenAvailable: Bool",
+            "requiresVolumeWhenAvailable: Bool = true",
+            "public protocol FXAIPluginV4: Sendable",
+            "var manifest: PluginManifestV4 { get }",
+            "mutating func train(",
+            "func predict(",
+            "func selfTest() -> Bool",
+        ],
+    )
+    _assert_tokens(
+        ml_backend,
+        [
+            "case pyTorch",
+            "case tensorFlow",
+            "public protocol ExternalMLBackend",
+            "public struct PythonMLBackendBridge",
+            "precondition(framework == .pyTorch || framework == .tensorFlow",
+            "public let usesVolumeFeatures: Bool",
+            "dataHasVolume: request.context.dataHasVolume",
+        ],
+    )
+    _assert_tokens(
+        fxplugins_readme,
+        [
+            "AI plugins own model execution.",
+            "PyTorch or TensorFlow backend",
+            "Swift FXDataEngine OHLCV contracts",
+            "use volume-derived features whenever the loaded dataset has nonzero volume",
+        ],
+    )
+
+
+def test_framework_common_contains_required_swift_algorithmic_guards() -> None:
+    support = _read("FXDataEngine/Sources/FXDataEngine/PluginSupport.swift")
+    contracts = _read("FXDataEngine/Sources/FXDataEngine/PluginContracts.swift")
+    _assert_tokens(
+        support,
+        [
+            "public static func moveEdgeWeight(movePoints: Double, priceCostPoints: Double) -> Double",
+            "let edge = move - priceCost",
+            "return fxClamp(0.50 + edge / denominator, 0.25, 4.00)",
+            "public static func moveSampleWeight(",
+            "qualityTargets: PluginQualityTargets? = nil",
+            "return baseWeight * fxClamp(quality, 0.45, 1.85)",
+            "public static func computeReplayPriority(",
+            "let edge = max(abs(fxSafeFinite(movePoints)) - max(fxSafeFinite(priceCostPoints), 0.0), 0.0)",
+        ],
+    )
+    _assert_tokens(
+        contracts,
+        [
+            "guard priceCostPoints.isFinite, priceCostPoints >= 0 else",
+            "guard minMovePoints.isFinite, minMovePoints >= 0 else",
+            "public static func validateCompatibility(manifest: PluginManifestV4, context: PluginContextV4) throws",
+        ],
+    )
+    assert "ResolveCostPoints" not in support
 
 
 def test_new_plugin_oracles_exist() -> None:
-    data = json.loads(_read("Tools/plugin_oracles.json"))
+    data = json.loads(_read("FXAI/Tools/plugin_oracles.json"))
     plugins = data["plugins"]
-    for plugin_name in NEW_PLUGINS:
+    for plugin_name in CONVERTED_MODEL_CASES:
         entry = plugins.get(plugin_name)
         assert entry, plugin_name
         assert entry.get("identity")
@@ -106,7 +140,7 @@ def test_new_plugin_oracles_exist() -> None:
 
 
 def test_router_config_knows_new_regime_and_trend_plugins() -> None:
-    data = json.loads(_read("Tools/OfflineLab/AdaptiveRouter/adaptive_router_config.json"))
+    data = json.loads(_read("FXAI/Tools/OfflineLab/AdaptiveRouter/adaptive_router_config.json"))
     overrides = data["plugin_overrides"]
     for plugin_name in (
         "stat_msgarch",
@@ -123,7 +157,7 @@ def test_router_config_knows_new_regime_and_trend_plugins() -> None:
         assert token in pattern_text
 
 
-def test_new_runtime_plugins_do_not_bypass_market_data_gateway() -> None:
+def test_swift_model_framework_does_not_call_mt5_market_data() -> None:
     forbidden = (
         "CopyRates(",
         "CopyOpen(",
@@ -136,7 +170,7 @@ def test_new_runtime_plugins_do_not_bypass_market_data_gateway() -> None:
         "iClose(",
         "MarketBookGet(",
     )
-    for _, rel_path in NEW_PLUGINS.values():
-        text = _read(rel_path)
+    for path in (ROOT / "FXDataEngine/Sources/FXDataEngine").rglob("*.swift"):
+        text = path.read_text(encoding="utf-8")
         for token in forbidden:
-            assert token not in text, f"{rel_path} bypasses DataCore/market gateway with {token}"
+            assert token not in text, f"{path.relative_to(ROOT).as_posix()} bypasses FXDatabase with {token}"

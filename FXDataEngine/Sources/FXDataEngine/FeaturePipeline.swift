@@ -270,24 +270,56 @@ public struct FeatureCore: Sendable {
         for (slot, window) in slots {
             features[slot] = movingAverageEdge(series, index, window: min(window, 500))
         }
-        features[38] = movingAverageEdge(series, index, window: 100)
-        features[39] = movingAverageEdge(series, index, window: 200)
     }
 
     private func fillVolatilityFeatures(_ features: inout [Double], series: M1OHLCVSeries, index: Int) {
-        features[40] = rsi(series, index, window: 14)
-        features[41] = atrUnit(series, index, window: 14)
+        let close = recentSeries(series.close, index: index, count: 1_300)
+        let high = recentSeries(series.high, index: index, count: 80)
+        let low = recentSeries(series.low, index: index, count: 80)
+        let open = recentSeries(series.open, index: index, count: 80)
+        let volatilityClose = Array(close.prefix(80))
+        let currentClose = Double(series.close[index])
+
+        features[38] = movingAverageEdgeValue(
+            current: currentClose,
+            average: FeatureMath.qsdemaAsSeries(close, startIndex: 0, period: 100)
+        )
+        features[39] = movingAverageEdgeValue(
+            current: currentClose,
+            average: FeatureMath.qsdemaAsSeries(close, startIndex: 0, period: 200)
+        )
+
+        let rsi14 = FeatureMath.rsiAsSeries(volatilityClose, startIndex: 0, period: 14)
+        let atr14 = FeatureMath.atrAsSeries(high: high, low: low, close: volatilityClose, startIndex: 0, period: 14)
+        let natr14 = currentClose > 0 ? (atr14 / currentClose) * 1_000.0 : 0.0
+        features[40] = fxClampSignedUnit((rsi14 - 50.0) / 50.0)
+        features[41] = fxClamp(natr14, 0.0, 1.0)
         features[42] = features[41]
-        features[43] = parkinsonVol(series, index, window: 20)
-        features[44] = rogersSatchellVol(series, index, window: 20)
-        features[45] = garmanKlassVol(series, index, window: 20)
+        features[43] = fxClamp(FeatureMath.parkinsonVolAsSeries(high: high, low: low, startIndex: 0, period: 20) * 100.0, 0.0, 1.0)
+        features[44] = fxClamp(
+            FeatureMath.rogersSatchellVolAsSeries(open: open, high: high, low: low, close: volatilityClose, startIndex: 0, period: 20) * 100.0,
+            0.0,
+            1.0
+        )
+        features[45] = fxClamp(
+            FeatureMath.garmanKlassVolAsSeries(open: open, high: high, low: low, close: volatilityClose, startIndex: 0, period: 20) * 100.0,
+            0.0,
+            1.0
+        )
     }
 
     private func fillFilterFeatures(_ features: inout [Double], series: M1OHLCVSeries, index: Int) {
-        features[46] = movingAverageEdge(series, index, window: 21)
-        features[47] = abs(closeZScore(series, index, window: 21)) > 0.75 ? 1.0 : 0.0
-        features[48] = movingAverageEdge(series, index, window: 34)
-        features[49] = movingAverageEdge(series, index, window: 20)
+        let close = recentSeries(series.close, index: index, count: 120)
+        let currentClose = Double(series.close[index])
+        let median21 = FeatureMath.rollingMedianAsSeries(close, startIndex: 0, period: 21)
+        let mad21 = FeatureMath.rollingMADAsSeries(close, startIndex: 0, period: 21, median: median21)
+        let kalman34 = FeatureMath.kalmanEstimateAsSeries(close, startIndex: 0, period: 34)
+        let superSmoother20 = FeatureMath.ehlersSuperSmootherAsSeries(close, startIndex: 0, period: 20)
+
+        features[46] = movingAverageEdgeValue(current: currentClose, average: median21)
+        features[47] = fxClampSignedUnit((currentClose - median21) / max(1.4826 * mad21, 1.0))
+        features[48] = movingAverageEdgeValue(current: currentClose, average: kalman34)
+        features[49] = movingAverageEdgeValue(current: currentClose, average: superSmoother20)
     }
 
     private func fillVolumeAwareMicrostructureFeatures(
@@ -449,81 +481,23 @@ private extension FeatureCore {
         return fxClampSignedUnit((Double(series.close[index]) - mean) / mean * 100.0)
     }
 
+    func movingAverageEdgeValue(current: Double, average: Double) -> Double {
+        guard current > 0.0, average > 0.0 else { return 0.0 }
+        return fxClampSignedUnit((current - average) / average * 100.0)
+    }
+
     func closeValues(_ series: M1OHLCVSeries, index: Int, window: Int) -> [Double] {
         guard index >= 0, index < series.count else { return [] }
         let start = max(0, index - max(1, window) + 1)
         return (start...index).map { Double(series.close[$0]) }
     }
 
-    func rsi(_ series: M1OHLCVSeries, _ index: Int, window: Int) -> Double {
-        guard index > 0 else { return 0.5 }
-        let start = max(1, index - max(1, window) + 1)
-        var gain = 0.0
-        var loss = 0.0
-        for row in start...index {
-            let delta = Double(series.close[row] - series.close[row - 1])
-            if delta >= 0 { gain += delta } else { loss += abs(delta) }
+    func recentSeries(_ values: ContiguousArray<Int64>, index: Int, count: Int) -> [Double] {
+        guard index >= 0, index < values.count, count > 0 else { return [] }
+        let resolvedCount = min(count, index + 1)
+        return (0..<resolvedCount).map { offset in
+            Double(values[index - offset])
         }
-        guard gain + loss > 0 else { return 0.5 }
-        return fxClamp(gain / (gain + loss), 0.0, 1.0)
-    }
-
-    func atrUnit(_ series: M1OHLCVSeries, _ index: Int, window: Int) -> Double {
-        guard index >= 0 else { return 0.0 }
-        let start = max(0, index - max(1, window) + 1)
-        var ranges: [Double] = []
-        ranges.reserveCapacity(index - start + 1)
-        for row in start...index {
-            ranges.append(Double(max(series.high[row] - series.low[row], 0)) / max(Double(series.close[row]), 1.0))
-        }
-        return fxClamp(ranges.mean * 1_000.0, 0.0, 1.0)
-    }
-
-    func parkinsonVol(_ series: M1OHLCVSeries, _ index: Int, window: Int) -> Double {
-        let start = max(0, index - max(1, window) + 1)
-        var values: [Double] = []
-        for row in start...index {
-            let high = Double(series.high[row])
-            let low = Double(series.low[row])
-            if high > 0, low > 0 {
-                let logRange = log(high / low)
-                values.append(logRange * logRange)
-            }
-        }
-        return fxClamp(sqrt(values.mean / (4.0 * log(2.0))) * 100.0, 0.0, 1.0)
-    }
-
-    func rogersSatchellVol(_ series: M1OHLCVSeries, _ index: Int, window: Int) -> Double {
-        let start = max(0, index - max(1, window) + 1)
-        var values: [Double] = []
-        for row in start...index {
-            let open = Double(series.open[row])
-            let high = Double(series.high[row])
-            let low = Double(series.low[row])
-            let close = Double(series.close[row])
-            if open > 0, high > 0, low > 0, close > 0 {
-                let value = log(high / close) * log(high / open) + log(low / close) * log(low / open)
-                values.append(max(0.0, value))
-            }
-        }
-        return fxClamp(sqrt(values.mean) * 100.0, 0.0, 1.0)
-    }
-
-    func garmanKlassVol(_ series: M1OHLCVSeries, _ index: Int, window: Int) -> Double {
-        let start = max(0, index - max(1, window) + 1)
-        var values: [Double] = []
-        for row in start...index {
-            let open = Double(series.open[row])
-            let high = Double(series.high[row])
-            let low = Double(series.low[row])
-            let close = Double(series.close[row])
-            if open > 0, high > 0, low > 0, close > 0 {
-                let range = log(high / low)
-                let body = log(close / open)
-                values.append(max(0.0, 0.5 * range * range - (2.0 * log(2.0) - 1.0) * body * body))
-            }
-        }
-        return fxClamp(sqrt(values.mean) * 100.0, 0.0, 1.0)
     }
 
     func volumeMean(_ series: M1OHLCVSeries, _ index: Int, window: Int) -> Double {

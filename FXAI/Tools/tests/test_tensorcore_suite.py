@@ -3,48 +3,89 @@ from __future__ import annotations
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def _read(rel_path: str) -> str:
     return (ROOT / rel_path).read_text(encoding="utf-8")
 
 
-def test_tensorcore_suite_is_promoted_to_dedicated_test_surface():
-    suite = _read("FXDataEngine/Tests/TensorCore/tensorcore_suite.mqh")
-    required_tokens = [
-        "void FXAI_TensorCoreRunSuite(FXAITestSuiteResult &suite)",
-        "FXAI_TensorCoreTestKernelBlocks(",
-        "FXAI_TensorCoreTestAdamWConvergence(",
-        "FXAI_TensorCoreTestRMSPropConvergence(",
-        "tensor_ops_sequence_and_normalization",
-        "optimizer_adamw_convergence",
-        "optimizer_rmsprop_convergence",
-    ]
-    for token in required_tokens:
-        assert token in suite
+def _assert_tokens(text: str, tokens: list[str]) -> None:
+    for token in tokens:
+        assert token in text
 
 
-def test_tensorcore_runner_and_audit_runner_wire_the_suite():
-    runner = _read("FXDataEngine/Tests/FXAI_TensorCoreRunner.mq5")
-    audit = _read("FXDataEngine/Tests/FXAI_AuditRunner.mq5")
-    audit_wrapper = _read("FXDataEngine/Tests/audit_tensor.mqh")
-    harness = _read("FXDataEngine/Tests/TestHarness/test_harness.mqh")
+def test_tensor_work_is_declared_as_plugin_backend_bridge_not_mql_tensorcore():
+    ml_backend = _read("FXDataEngine/Sources/FXDataEngine/MLBackend.swift")
+    plugins_readme = _read("FXPlugins/README.md")
 
-    assert '#include "audit_core.mqh"' in runner
-    assert "FXAI_TestWriteCombinedReport(" in runner
-    assert "Audit_RunTensorKernelSanity" in audit
-    assert "FXAI_AuditTensorKernelSelfTest(" in audit
-    assert "FXAI_TensorCoreRunSuite(suite);" in audit_wrapper
-    assert "struct FXAITestSuiteResult" in harness
-    assert "void FXAI_TestSuiteAppendJson(" in harness
+    _assert_tokens(
+        ml_backend,
+        [
+            "public enum MLFramework: String, Codable, Hashable, Sendable",
+            "case pyTorch",
+            "case tensorFlow",
+            "public enum MLBackendMode",
+            "case externalPython(framework: MLFramework, executable: String, module: String)",
+            "public protocol ExternalMLBackend",
+            "public struct PythonMLBackendBridge",
+            "precondition(framework == .pyTorch || framework == .tensorFlow",
+        ],
+    )
+    _assert_tokens(
+        plugins_readme,
+        [
+            "When a converted plugin needs tensor training or inference",
+            "plugin-local PyTorch or TensorFlow backend",
+            "rather than re-creating the old MQL5 `TensorCore` inside Swift FXDataEngine",
+        ],
+    )
 
 
-def test_testlab_exposes_tensorcore_compile_gate():
-    cli = _read("Tools/testlab/cli.py")
-    verify = _read("Tools/testlab/verify.py")
+def test_tensor_payloads_preserve_ohlcv_volume_contract():
+    ml_backend = _read("FXDataEngine/Sources/FXDataEngine/MLBackend.swift")
+    contracts = _read("FXDataEngine/Sources/FXDataEngine/PluginContracts.swift")
 
-    assert 'compile-tensorcore' in cli
-    assert 'Path("FXDataEngine/Tests/FXAI_TensorCoreRunner.mq5")' in cli
-    assert '"compile_tensorcore"' in verify
-    assert 'Path("FXDataEngine/Tests/FXAI_TensorCoreRunner.mq5")' in verify
+    _assert_tokens(
+        ml_backend,
+        [
+            "public let dataHasVolume: Bool",
+            "public let nextVolumeTarget: Double",
+            "dataHasVolume: request.context.dataHasVolume",
+            "self.nextVolumeTarget = request.nextVolumeTarget",
+            "public static func inferencePayload(",
+        ],
+    )
+    _assert_tokens(
+        contracts,
+        [
+            "public var dataHasVolume: Bool",
+            "public let nextVolumeTarget: Double",
+            "guard nextVolumeTarget.isFinite, nextVolumeTarget >= 0 else",
+        ],
+    )
+
+
+def test_swift_package_owns_the_new_tensor_boundary():
+    package = _read("FXDataEngine/Package.swift")
+    cli = _read("FXDataEngine/Sources/FXDataEngineCLI/main.swift")
+
+    _assert_tokens(
+        package,
+        [
+            "// swift-tools-version: 6.3",
+            ".macOS(\"26.0\")",
+            ".library(name: \"FXDataEngine\", targets: [\"FXDataEngine\"])",
+            ".executable(name: \"FXDataEngineCLI\", targets: [\"FXDataEngineCLI\"])",
+            "swiftLanguageModes: [.v6]",
+        ],
+    )
+    _assert_tokens(
+        cli,
+        [
+            "MetalAccelerationDevice.probe()",
+            "FeatureCore.hasUsableVolume(",
+            "OHLCV contract active",
+            "Metal available=",
+        ],
+    )

@@ -1,29 +1,84 @@
 from pathlib import Path
-import re
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
-def _read(relpath: str) -> str:
-    return (PROJECT_ROOT / relpath).read_text(encoding="utf-8")
+def _read(rel_path: str) -> str:
+    return (PROJECT_ROOT / rel_path).read_text(encoding="utf-8")
 
 
-def test_cycle_recovery_stays_symbol_scoped():
-    fxai = _read("FXDataEngine/FXAI.mq5")
-    assert "FXAI_RecoverManagedCycleState(_Symbol);" in fxai
-    assert "CycleStartTime = FXAI_GetOldestPositionTime(managed_symbol);" in fxai
-    assert re.search(r"datetime FXAI_GetOldestPositionTime\(const string symbol = \"\"\)", fxai)
+def _assert_tokens(text: str, tokens: list[str]) -> None:
+    for token in tokens:
+        assert token in text
 
 
-def test_last_order_request_tracks_symbol_and_pending_order_lifecycle():
-    fxai = _read("FXDataEngine/FXAI.mq5")
-    execution = _read("FXDataEngine/Engine/Runtime/Trade/runtime_trade_execution.mqh")
-    health = _read("FXDataEngine/Engine/Runtime/runtime_system_health.mqh")
+def test_cycle_recovery_stays_symbol_scoped_in_swift_runtime():
+    runtime_cycle = _read("FXDataEngine/Sources/FXDataEngine/RuntimeCycle.swift")
+    lifecycle_reset = _read("FXDataEngine/Sources/FXDataEngine/LifecycleReset.swift")
+    runtime_tests = _read("FXDataEngine/Tests/FXDataEngineTests/RuntimeCycleTests.swift")
 
-    assert 'string   g_last_order_request_symbol = "";' in fxai
-    assert "g_last_order_request_order_ticket = result.order;" in execution
-    assert "g_last_order_request_uses_pending_order = plan.use_pending;" in execution
-    assert "deal_symbol != g_last_order_request_symbol" in fxai
-    assert "g_last_order_request_uses_pending_order" in health
-    assert "cleared_completed_pending_request" in health
+    _assert_tokens(
+        runtime_cycle,
+        [
+            "public var symbol: String",
+            "public var lastSymbol: String",
+            "let requiresStateReset = input.lastSymbol != input.symbol",
+            "reason: \"signal_cache_hit\"",
+            "reason: \"continue\"",
+        ],
+    )
+    _assert_tokens(
+        lifecycle_reset,
+        [
+            "public var symbol: String",
+            "public static func buildResetPlan(",
+            "symbol: symbol",
+            "signalCache: RuntimeSignalCache.reset",
+            "warmupDone: !aiWarmupEnabled",
+        ],
+    )
+    _assert_tokens(
+        runtime_tests,
+        [
+            "lastSymbol: \"GBPUSD\"",
+            "XCTAssertTrue(plan.requiresStateReset)",
+            "XCTAssertEqual(plan.reason, \"signal_cache_hit\")",
+        ],
+    )
+
+
+def test_order_request_lifecycle_is_explicit_in_swift_trade_plan():
+    execution_plan = _read("FXDataEngine/Sources/FXDataEngine/TradeExecutionPlan.swift")
+    system_health = _read("FXDataEngine/Sources/FXDataEngine/SystemHealth.swift")
+    execution_tests = _read("FXDataEngine/Tests/FXDataEngineTests/TradeExecutionPlanTests.swift")
+
+    _assert_tokens(
+        execution_plan,
+        [
+            "public var previousOrderRequestPending: Bool",
+            "previousOrderRequestPending: Bool = false",
+            "self.previousOrderRequestPending = previousOrderRequestPending",
+            "previousOrderRequestPending: Bool",
+            "return previousOrderRequestPending",
+            "plan.usePending = true",
+            "plan.usePending = false",
+            "plan.expiryTimeUTC = input.market.generatedAtUTC > 0 ? input.market.generatedAtUTC + 20 * 60 : 0",
+        ],
+    )
+    _assert_tokens(
+        system_health,
+        [
+            "public struct SystemHealthState",
+            "public enum SystemHealthPosture",
+            "public static func refresh(",
+        ],
+    )
+    _assert_tokens(
+        execution_tests,
+        [
+            "newsPulseTradeGate: \"CAUTION\"",
+            "XCTAssertTrue(plan.usePending)",
+            "XCTAssertEqual(plan.mode, \"SELL_STOP\")",
+        ],
+    )

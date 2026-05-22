@@ -4,11 +4,8 @@ from pathlib import Path
 import re
 
 
-ROOT = Path(__file__).resolve().parents[2]
-ALLOWED_RAW_MARKET_DATA_FILES = {
-    "FXDataEngine/Engine/market_data_gateway.mqh",
-}
-FORBIDDEN_RAW_PATTERNS = (
+ROOT = Path(__file__).resolve().parents[3]
+FORBIDDEN_MT5_MARKET_PATTERNS = (
     r"\bCopyRates\s*\(",
     r"\bCopyTicksRange\s*\(",
     r"\bCopyTicks\s*\(",
@@ -25,72 +22,124 @@ def _read(rel_path: str) -> str:
     return (ROOT / rel_path).read_text(encoding="utf-8")
 
 
-def _iter_code_files() -> list[str]:
-    rel_paths: list[str] = []
-    for rel_root in ("FXDataEngine/Engine", "FXPlugins", "FXDataEngine/Services", "FXDataEngine/Tests", "FXDataEngine/API"):
-        root = ROOT / rel_root
-        for path in root.rglob("*"):
-            if path.suffix.lower() not in {".mq5", ".mqh"}:
-                continue
-            rel_paths.append(path.relative_to(ROOT).as_posix())
-    rel_paths.append("FXDataEngine/FXAI.mq5")
-    return sorted(set(rel_paths))
+def _assert_tokens(text: str, tokens: list[str]) -> None:
+    for token in tokens:
+        assert token in text
 
 
-def test_raw_market_data_apis_are_isolated_to_gateway():
+def _iter_swift_code_files() -> list[Path]:
+    roots = [
+        ROOT / "FXDataEngine/Sources/FXDataEngine",
+        ROOT / "FXDataEngine/Sources/FXDataEngineCLI",
+        ROOT / "FXDataEngine/Tests/FXDataEngineTests",
+    ]
+    paths: list[Path] = []
+    for root in roots:
+        paths.extend(path for path in root.rglob("*.swift") if path.is_file())
+    return sorted(paths)
+
+
+def test_mt5_market_data_apis_are_absent_from_swift_data_engine():
     offenders: list[str] = []
-    for rel_path in _iter_code_files():
-        if rel_path in ALLOWED_RAW_MARKET_DATA_FILES:
-            continue
-        text = _read(rel_path)
-        for pattern in FORBIDDEN_RAW_PATTERNS:
+    for path in _iter_swift_code_files():
+        text = path.read_text(encoding="utf-8")
+        for pattern in FORBIDDEN_MT5_MARKET_PATTERNS:
             if re.search(pattern, text):
-                offenders.append(f"{rel_path}: {pattern}")
-    assert not offenders, "raw MT5 market-data API bypasses found:\n" + "\n".join(offenders)
+                offenders.append(f"{path.relative_to(ROOT).as_posix()}: {pattern}")
+    assert not offenders, "MT5 market-data API calls remain in Swift FXDataEngine:\n" + "\n".join(offenders)
 
 
-def test_data_pipeline_includes_single_market_data_gateway():
-    data_pipeline = _read("FXDataEngine/Engine/data_pipeline.mqh")
-    gateway = _read("FXDataEngine/Engine/market_data_gateway.mqh")
-    data_io = _read("FXDataEngine/Engine/data_io.mqh")
+def test_market_data_gateway_uses_fxdatabase_ohlcv_contract():
+    gateway = _read("FXDataEngine/Sources/FXDataEngine/MarketDataGateway.swift")
+    market_data = _read("FXDataEngine/Sources/FXDataEngine/MarketData.swift")
 
-    assert '#include "market_data_gateway.mqh"' in data_pipeline
-    assert "bool FXAI_MarketDataPull(" in gateway
-    assert "bool FXAI_MarketDataCopyRatesByPos(" in gateway
-    assert "bool FXAI_MarketDataGetLatestTick(" in gateway
-    assert "FXAI_MarketDataCopyRatesByPos(symbol, tf, 1, needed, rates_arr)" in data_io
-    assert "FXAI_MarketDataBarTime(symbol, tf, 1, cur_bar_time)" in data_io
-    assert "FXAI_MarketDataBarShift(symbol, tf, last_bar_time, true, shift)" in data_io
+    _assert_tokens(
+        gateway,
+        [
+            "import FXBacktestAPI",
+            "public struct FXDatabaseMarketHistoryRequest",
+            "public struct FXDatabaseMarketUniverseRequest",
+            "public struct FXDatabaseMarketDataLoader",
+            "public func apiRequest() -> FXBacktestM1HistoryRequest",
+            ".loadM1History(request.apiRequest())",
+            "return try M1OHLCVSeries(response: response)",
+            "requireAlignedTimestamps: Bool = true",
+        ],
+    )
+    _assert_tokens(
+        market_data,
+        [
+            "public struct M1OHLCVSeries: Sendable",
+            "public let volume: ContiguousArray<UInt64>",
+            "@inlinable public var hasVolume: Bool { volume.contains { $0 > 0 } }",
+            "FXBacktestM1HistoryResponse",
+        ],
+    )
+    assert "spread" not in market_data.lower()
 
 
-def test_prediction_path_consumers_use_gateway_and_core_pipeline_only():
-    runtime = _read("FXDataEngine/Engine/Runtime/runtime_feature_pipeline_block.mqh")
-    rule_m1sync = _read("FXPlugins/Rule/rule_m1sync.mqh")
-    factor_context = _read("FXDataEngine/Engine/Runtime/runtime_factor_context.mqh")
-    feature_norm = _read("FXDataEngine/Engine/feature_norm.mqh")
-    feature_build = _read("FXDataEngine/Engine/feature_build.mqh")
+def test_prediction_path_consumers_use_core_pipeline_only():
+    pipeline = _read("FXDataEngine/Sources/FXDataEngine/FXDataEngine.swift")
+    invocation = _read("FXDataEngine/Sources/FXDataEngine/PluginInvocation.swift")
+    runtime = _read("FXDataEngine/Sources/FXDataEngine/RuntimeFeaturePipeline.swift")
 
-    assert "FXAI_DataCoreRefreshLiveBundle(" in runtime
-    assert "FXAI_MarketDataCopyRatesByPos(symbol, PERIOD_M1, shift, bars, live_rates)" in rule_m1sync
-    assert "FXAI_MarketDataBarShift(symbol, PERIOD_M1, ctx_time, true, shift)" in rule_m1sync
-    assert "FXAI_MarketDataGetLatestTick(symbol, tick)" in rule_m1sync
-    assert "FXAI_MarketDataBarClose(symbol, PERIOD_D1, shift_now, now_close)" in factor_context
-    for text in (feature_norm, feature_build):
-        for pattern in FORBIDDEN_RAW_PATTERNS:
-            assert not re.search(pattern, text)
+    _assert_tokens(
+        pipeline,
+        [
+            "public let dataCore: DataCore",
+            "public let featureCore: FeatureCore",
+            "public let normalizationCore: NormalizationCore",
+            "let dataBundle = try dataCore.buildBundle(request: dataRequest, universe: universe)",
+            "let featureFrame = try featureCore.buildFrame(",
+            "let normalizationFrame = try normalizationCore.buildInputFrame(from: featureFrame)",
+            "let payloadFrame = try normalizationCore.buildPayloadFrame(",
+            "dataHasVolume: featureFrame.hasVolume",
+        ],
+    )
+    _assert_tokens(
+        invocation,
+        [
+            "try PluginContractTools.validateCompatibility(manifest: manifest, context: request.context)",
+            "try plugin.train(request, hyperParameters: hyperParameters)",
+            "return try plugin.predict(request, hyperParameters: hyperParameters)",
+        ],
+    )
+    _assert_tokens(
+        runtime,
+        [
+            "public struct RuntimeFeaturePipelineRequirement",
+            "public struct RuntimeFeaturePipelinePlan",
+            "public enum RuntimeFeaturePipelineTools",
+            "public static func bootstrapRequirement(",
+        ],
+    )
 
 
 def test_normalization_pipeline_remains_causal_and_train_split_safe():
-    feature_norm = _read("FXDataEngine/Engine/feature_norm.mqh")
-    warmup_norm = _read("FXDataEngine/Engine/Warmup/warmup_normalization.mqh")
-    build_loop = "for(int i=end; i>=start; i--)"
-    out_assign = "out_features[f] = out_v;"
-    hist_write = "g_fxai_norm_hist[method_idx][f][h] = cur;"
+    normalization_state = _read("FXDataEngine/Sources/FXDataEngine/NormalizationState.swift")
+    warmup = _read("FXDataEngine/Sources/FXDataEngine/Warmup.swift")
 
-    assert build_loop in feature_norm
-    assert "FXAI_FeatureCoreBuildFrame(bundle, feature_request, feature_frame)" in feature_norm
-    assert out_assign in feature_norm
-    assert hist_write in feature_norm
-    assert feature_norm.index(out_assign) < feature_norm.index(hist_write)
-    assert "bool FXAI_DeriveNormCandidateSplit(" in warmup_norm
-    assert "train_start,\n                                                    train_end," in warmup_norm
+    _assert_tokens(
+        normalization_state,
+        [
+            "public mutating func prepareForSample(",
+            "let rewind =",
+            "let configChanged =",
+            "state.lastSampleTimeUTC = sampleTimeUTC",
+            "public mutating func record(",
+            "state.values[offset] = fxSafeFinite(value)",
+            "public func recentValues(",
+        ],
+    )
+    assert normalization_state.index("public mutating func prepareForSample(") < normalization_state.index(
+        "public mutating func record("
+    )
+    _assert_tokens(
+        warmup,
+        [
+            "public static func normalizationCandidateSplit(",
+            "let validationStart = startIndex",
+            "let trainingStart = validationEnd + purge + 1",
+            "guard trainingEnd - trainingStart >= 100 else { return nil }",
+        ],
+    )

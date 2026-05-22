@@ -1,37 +1,41 @@
 from __future__ import annotations
 
 from pathlib import Path
-import re
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def _read(rel_path: str) -> str:
     return (ROOT / rel_path).read_text(encoding="utf-8")
 
 
-def test_requested_signal_math_helpers_exist():
-    feature_math = _read("FXDataEngine/Engine/feature_math.mqh")
-    required_helpers = [
-        "double FXAI_QSDEMAAt(",
-        "double FXAI_RSIAt(",
-        "double FXAI_ATRAt(",
-        "double FXAI_ParkinsonVolAt(",
-        "double FXAI_RollingMedianAt(",
-        "double FXAI_RollingMADAt(",
-        "double FXAI_RogersSatchellVolAt(",
-        "double FXAI_GarmanKlassVolAt(",
-        "double FXAI_KalmanEstimateAt(",
-        "double FXAI_EhlersSuperSmootherAt(",
-    ]
-
-    for helper_signature in required_helpers:
-        assert helper_signature in feature_math
+def _assert_tokens(text: str, tokens: list[str]) -> None:
+    for token in tokens:
+        assert token in text
 
 
-def test_requested_signals_are_registered_in_feature_schema():
-    registry = _read("FXDataEngine/Engine/feature_registry.mqh")
+def test_requested_signal_math_helpers_exist_in_swift():
+    feature_math = _read("FXDataEngine/Sources/FXDataEngine/FeatureMath.swift")
+    _assert_tokens(
+        feature_math,
+        [
+            "public static func qsdemaAsSeries(",
+            "public static func rsiAsSeries(",
+            "public static func atrAsSeries(",
+            "public static func parkinsonVolAsSeries(",
+            "public static func rollingMedianAsSeries(",
+            "public static func rollingMADAsSeries(",
+            "public static func rogersSatchellVolAsSeries(",
+            "public static func garmanKlassVolAsSeries(",
+            "public static func kalmanEstimateAsSeries(",
+            "public static func ehlersSuperSmootherAsSeries(",
+        ],
+    )
+
+
+def test_requested_signals_are_registered_in_swift_feature_schema():
+    registry = _read("FXDataEngine/Sources/FXDataEngine/FeatureSchema.swift")
     expected_names = {
         38: "qsdema100_edge",
         39: "qsdema200_edge",
@@ -48,29 +52,33 @@ def test_requested_signals_are_registered_in_feature_schema():
     }
 
     for feature_index, feature_name in expected_names.items():
-        expected_line = f'case {feature_index}: return "{feature_name}";'
-        assert expected_line in registry
+        assert f'case {feature_index}: "{feature_name}"' in registry
 
 
-def test_requested_signals_are_emitted_by_canonical_feature_builder():
-    feature_build = _read("FXDataEngine/Engine/feature_build.mqh")
-    expected_assignments = {
-        38: r"features\[38\]\s*=\s*FXAI_MAEdgeFeature\(c,\s*qsdema_100,\s*vol_unit\);",
-        39: r"features\[39\]\s*=\s*FXAI_MAEdgeFeature\(c,\s*qsdema_200,\s*vol_unit\);",
-        40: r"features\[40\]\s*=\s*FXAI_ClampSignedUnitOpen\(\(rsi14\s*-\s*50\.0\)\s*/\s*50\.0\);",
-        41: r"features\[41\]\s*=\s*\(c\s*>\s*0\.0\s*\?\s*\(\(atr14\s*/\s*c\)\s*/\s*vol_unit\)\s*:\s*0\.0\);",
-        42: r"features\[42\]\s*=\s*natr14;",
-        43: r"features\[43\]\s*=\s*\(vol_unit\s*>\s*0\.0\s*\?\s*\(parkinson20\s*/\s*vol_unit\)\s*:\s*0\.0\);",
-        44: r"features\[44\]\s*=\s*\(vol_unit\s*>\s*0\.0\s*\?\s*\(rs20\s*/\s*vol_unit\)\s*:\s*0\.0\);",
-        45: r"features\[45\]\s*=\s*\(vol_unit\s*>\s*0\.0\s*\?\s*\(gk20\s*/\s*vol_unit\)\s*:\s*0\.0\);",
-        46: r"features\[46\]\s*=\s*FXAI_MAEdgeFeature\(c,\s*med21,\s*vol_unit\);",
-        47: r"features\[47\]\s*=\s*\(c\s*-\s*med21\)\s*/\s*hampel_denom;",
-        48: r"features\[48\]\s*=\s*FXAI_MAEdgeFeature\(c,\s*kalman34,\s*vol_unit\);",
-        49: r"features\[49\]\s*=\s*FXAI_MAEdgeFeature\(c,\s*ss20,\s*vol_unit\);",
-    }
-
-    for feature_index, pattern in expected_assignments.items():
-        assert re.search(pattern, feature_build), feature_index
-
-    assert "double med21 = FXAI_RollingMedianAt(main_m1, i, 21);" in feature_build
-    assert "double mad21 = FXAI_RollingMADAt(main_m1, i, 21, med21);" in feature_build
+def test_requested_signals_are_emitted_by_swift_feature_pipeline():
+    feature_pipeline = _read("FXDataEngine/Sources/FXDataEngine/FeaturePipeline.swift")
+    _assert_tokens(
+        feature_pipeline,
+        [
+            "features[38] = movingAverageEdgeValue(",
+            "FeatureMath.qsdemaAsSeries(close, startIndex: 0, period: 100)",
+            "features[39] = movingAverageEdgeValue(",
+            "FeatureMath.qsdemaAsSeries(close, startIndex: 0, period: 200)",
+            "let rsi14 = FeatureMath.rsiAsSeries(volatilityClose, startIndex: 0, period: 14)",
+            "features[40] = fxClampSignedUnit((rsi14 - 50.0) / 50.0)",
+            "let atr14 = FeatureMath.atrAsSeries(high: high, low: low, close: volatilityClose, startIndex: 0, period: 14)",
+            "features[41] = fxClamp(natr14, 0.0, 1.0)",
+            "features[42] = features[41]",
+            "features[43] = fxClamp(FeatureMath.parkinsonVolAsSeries(high: high, low: low, startIndex: 0, period: 20) * 100.0, 0.0, 1.0)",
+            "FeatureMath.rogersSatchellVolAsSeries(open: open, high: high, low: low, close: volatilityClose, startIndex: 0, period: 20)",
+            "FeatureMath.garmanKlassVolAsSeries(open: open, high: high, low: low, close: volatilityClose, startIndex: 0, period: 20)",
+            "let median21 = FeatureMath.rollingMedianAsSeries(close, startIndex: 0, period: 21)",
+            "let mad21 = FeatureMath.rollingMADAsSeries(close, startIndex: 0, period: 21, median: median21)",
+            "features[46] = movingAverageEdgeValue(current: currentClose, average: median21)",
+            "features[47] = fxClampSignedUnit((currentClose - median21) / max(1.4826 * mad21, 1.0))",
+            "let kalman34 = FeatureMath.kalmanEstimateAsSeries(close, startIndex: 0, period: 34)",
+            "features[48] = movingAverageEdgeValue(current: currentClose, average: kalman34)",
+            "let superSmoother20 = FeatureMath.ehlersSuperSmootherAsSeries(close, startIndex: 0, period: 20)",
+            "features[49] = movingAverageEdgeValue(current: currentClose, average: superSmoother20)",
+        ],
+    )

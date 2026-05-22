@@ -94,6 +94,29 @@ final class FeatureBuildToolsTests: XCTestCase {
         XCTAssertEqual(frame.raw[73], FeatureBuildTools.sessionOverlap(sampleTimeUTC: sampleTime), accuracy: 1e-12)
     }
 
+    func testFeatureCoreEmitsRequestedAdvancedSignalSlots() throws {
+        let sampleTime = utc(2024, 1, 3, 13, 30)
+        let series = try makeSeriesEnding(at: sampleTime, count: 1_400)
+        let universe = try MarketUniverse(series: [series])
+        let bundle = try DataCore().buildBundle(
+            request: DataCoreRequest(symbol: "EURUSD", neededBars: 1_300),
+            universe: universe
+        )
+        let frame = try FeatureCore().buildFrame(bundle: bundle)
+
+        for index in 38...49 {
+            XCTAssertTrue(frame.raw[index].isFinite, "feature \(index) should be finite")
+            XCTAssertGreaterThanOrEqual(frame.raw[index], FXDataEngineConstants.signedUnitRangeFloor)
+            XCTAssertLessThanOrEqual(frame.raw[index], FXDataEngineConstants.signedUnitRangeCeil)
+        }
+        XCTAssertNotEqual(frame.raw[38], 0.0, accuracy: 1e-12)
+        XCTAssertNotEqual(frame.raw[39], 0.0, accuracy: 1e-12)
+        XCTAssertNotEqual(frame.raw[46], 0.0, accuracy: 1e-12)
+        XCTAssertNotEqual(frame.raw[47], 0.0, accuracy: 1e-12)
+        XCTAssertNotEqual(frame.raw[48], 0.0, accuracy: 1e-12)
+        XCTAssertNotEqual(frame.raw[49], 0.0, accuracy: 1e-12)
+    }
+
     private func utc(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int) -> Int64 {
         var components = DateComponents()
         components.calendar = Calendar(identifier: .gregorian)
