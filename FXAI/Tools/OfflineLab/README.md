@@ -3,7 +3,7 @@
 `fxai_offline_lab.py` is the Turso-backed offline control loop for FXAI.
 
 It does not replace the MT5 model engine. MT5 and MQL5 still execute the real plugins. The offline lab adds:
-- exact-window `M1 OHLC + spread` export from MT5
+- exact-window M1 OHLCV export, with legacy MT5 `spread_points` treated only as a compatibility price-cost source until FXDatabase is the only provider
 - Turso storage for exported bars, tuning runs, scenario metrics, promoted configs, branch/PITR metadata, audit-log events, and native research vectors
 - repeated model-zoo tuning on 3/6/12-month windows
 - automatic promotion of best parameter packs per symbol and plugin
@@ -15,9 +15,9 @@ It does not replace the MT5 model engine. MT5 and MQL5 still execute the real pl
 - NewsPulse shared-news infrastructure for MT5 calendar export, GDELT fusion, runtime gating, and operator visibility
 - Rates Engine shared macro infrastructure for front-end differentials, policy-path proxies, curve state, NewsPulse enrichment, and runtime rates-aware gating
 - Cross-Asset shared macro/liquidity infrastructure for rates-aware global context, equity-risk, commodity shock, volatility stress, dollar-liquidity stress, pair-level gating, and GUI visibility
-- Microstructure shared execution-state infrastructure for MT5 tick-flow, spread-dynamics, liquidity-stress, stop-run proxy detection, session handoff, runtime gating, and replay visibility
+- Microstructure shared execution-state infrastructure for MT5 tick-flow, price-cost/liquidity stress, stop-run proxy detection, session handoff, runtime gating, and replay visibility
 - Probabilistic Calibration shared decision-quality infrastructure for calibrated ensemble probabilities, cost-aware edge filtering, abstention reasons, and replay visibility
-- Execution-Quality shared execution-intelligence infrastructure for forecasted spread widening, slippage stress, fill quality, latency sensitivity, liquidity fragility, and runtime execution-state controls
+- Execution-Quality shared execution-intelligence infrastructure for forecasted price-cost widening, slippage stress, fill quality, latency sensitivity, liquidity fragility, and runtime execution-state controls
 - ready-to-use MT5 `.set` files so no parameter copy/paste is needed
 
 Main commands from the repo root:
@@ -116,7 +116,7 @@ Notes:
 - `prob-calibration-validate` writes the default calibration config and tier-memory exports used by the MT5 runtime, validates thresholds, and confirms the calibration layer can boot cleanly.
 - `prob-calibration-replay-report` summarizes recent calibrated final actions, tier usage, abstention counts, edge-after-costs ranges, and top abstention reasons from append-only runtime history.
 - `execution-quality-validate` writes the default execution-quality config and tier-memory exports used by the MT5 runtime, validates thresholds, and confirms the execution forecaster can boot cleanly.
-- `execution-quality-replay-report` summarizes recent execution-state transitions, spread or slippage stress, liquidity-fragility changes, and execution-quality reasons from append-only runtime history.
+- `execution-quality-replay-report` summarizes recent execution-state transitions, price-cost or slippage stress, liquidity-fragility changes, and execution-quality reasons from append-only runtime history.
 - `fxai_testlab.py verify-all` is the one-command platform verification path: Python tests, deterministic fixture checks, and clean MT5 compiles.
 - Exact-window datasets store the effective exported first and last bar range, so later tuning and promotion stay aligned to the data that was actually ingested.
 - Turso access uses bounded open retry so overlapping admin and control-loop calls fail cleanly instead of drifting silently.

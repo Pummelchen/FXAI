@@ -21,7 +21,7 @@ DEFAULT_HORIZON_CANDIDATES = [3, 5, 8, 13, 21, 34]
 DEFAULT_M1SYNC_CANDIDATES = [2, 3, 5, 8]
 DEFAULT_EXECUTION_PROFILES = ["default", "tight-fx", "prime-ecn", "retail-fx", "stress"]
 EXPORT_EXPERT = r"FXAI\FXDataEngine\Tests\FXAI_OfflineExportRunner.ex5"
-OFFLINE_SCHEMA_VERSION = 6
+OFFLINE_SCHEMA_VERSION = 7
 OFFLINE_ARTIFACT_SCHEMA_VERSION = 2
 OFFLINE_MACRO_SCHEMA_MIN = 2
 RESEARCH_VECTOR_DIMS = 16
@@ -468,7 +468,7 @@ CREATE TABLE IF NOT EXISTS world_simulator_plans (
     artifact_sha256 TEXT NOT NULL DEFAULT '',
     sigma_scale REAL NOT NULL DEFAULT 1.0,
     drift_bias REAL NOT NULL DEFAULT 0.0,
-    spread_scale REAL NOT NULL DEFAULT 1.0,
+    fill_risk_scale REAL NOT NULL DEFAULT 1.0,
     gap_prob REAL NOT NULL DEFAULT 0.0,
     gap_scale REAL NOT NULL DEFAULT 0.0,
     flip_prob REAL NOT NULL DEFAULT 0.0,

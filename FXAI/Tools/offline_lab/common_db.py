@@ -92,6 +92,10 @@ def ensure_table_column(conn: libsql.Connection, table: str, column: str, spec: 
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {spec}")
 
 
+def table_columns(conn: libsql.Connection, table: str) -> set[str]:
+    return {str(row["name"]).lower() for row in query_all(conn, f"PRAGMA table_info({table})")}
+
+
 def set_metadata(conn: libsql.Connection, key: str, value: str) -> None:
     conn.execute(
         """
@@ -248,6 +252,17 @@ def connect_db(db_path: Path) -> libsql.Connection:
             ensure_table_column(conn, "shadow_fleet_observations", "portfolio_pressure", "REAL NOT NULL DEFAULT 0.0")
             ensure_table_column(conn, "shadow_fleet_observations", "control_plane_score", "REAL NOT NULL DEFAULT 0.0")
             ensure_table_column(conn, "shadow_fleet_observations", "portfolio_supervisor_score", "REAL NOT NULL DEFAULT 0.0")
+            ensure_table_column(conn, "world_simulator_plans", "fill_risk_scale", "REAL NOT NULL DEFAULT 1.0")
+            world_plan_columns = table_columns(conn, "world_simulator_plans")
+            if "spread_scale" in world_plan_columns and "fill_risk_scale" in world_plan_columns:
+                conn.execute(
+                    """
+                    UPDATE world_simulator_plans
+                       SET fill_risk_scale = spread_scale
+                     WHERE fill_risk_scale = 1.0
+                       AND spread_scale != 1.0
+                    """
+                )
             conn.execute("DROP INDEX IF EXISTS idx_tuning_runs_lookup")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_tuning_runs_lookup "

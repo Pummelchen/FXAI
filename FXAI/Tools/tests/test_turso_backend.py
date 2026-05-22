@@ -12,7 +12,7 @@ from offline_lab.db_backend import (
     connect_backend,
     register_connection_config,
 )
-from offline_lab.common import OfflineLabError, close_db, connect_db, query_one
+from offline_lab.common import OfflineLabError, close_db, commit_db, connect_db, query_all, query_one
 from offline_lab.environment import bootstrap_environment, validate_environment
 from offline_lab.fixtures import patched_paths
 from offline_lab.vector_store import latest_symbol_shadow_neighbors, refresh_research_vectors
@@ -43,6 +43,59 @@ def test_turso_queries_use_explicit_mapping_helpers():
             assert row is not None
             assert row["meta_key"] == "row_test"
             assert row["meta_value"] == "ok"
+
+
+def test_world_simulator_plan_schema_uses_fill_risk_scale_and_migrates_legacy_spread_scale():
+    with tempfile.TemporaryDirectory(prefix="fxai_world_schema_") as tmp_dir:
+        with patched_paths(Path(tmp_dir)) as paths:
+            conn = connect_db(paths["default_db"])
+            fresh_columns = {str(row["name"]) for row in query_all(conn, "PRAGMA table_info(world_simulator_plans)")}
+            assert "fill_risk_scale" in fresh_columns
+            assert "spread_scale" not in fresh_columns
+
+            conn.execute("DROP TABLE world_simulator_plans")
+            conn.execute(
+                """
+                CREATE TABLE world_simulator_plans (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    profile_name TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    artifact_path TEXT NOT NULL DEFAULT '',
+                    artifact_sha256 TEXT NOT NULL DEFAULT '',
+                    sigma_scale REAL NOT NULL DEFAULT 1.0,
+                    drift_bias REAL NOT NULL DEFAULT 0.0,
+                    spread_scale REAL NOT NULL DEFAULT 1.0,
+                    gap_prob REAL NOT NULL DEFAULT 0.0,
+                    gap_scale REAL NOT NULL DEFAULT 0.0,
+                    flip_prob REAL NOT NULL DEFAULT 0.0,
+                    context_corr_bias REAL NOT NULL DEFAULT 0.0,
+                    liquidity_stress REAL NOT NULL DEFAULT 0.0,
+                    macro_focus REAL NOT NULL DEFAULT 0.0,
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    created_at INTEGER NOT NULL,
+                    UNIQUE(profile_name, symbol)
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO world_simulator_plans(profile_name, symbol, spread_scale, created_at)
+                VALUES('legacy', 'EURUSD', 2.4, 1700000000)
+                """
+            )
+            commit_db(conn)
+            close_db(conn)
+
+            conn = connect_db(paths["default_db"])
+            migrated = query_one(
+                conn,
+                "SELECT fill_risk_scale, spread_scale FROM world_simulator_plans WHERE profile_name = 'legacy'",
+            )
+            close_db(conn)
+
+            assert migrated is not None
+            assert float(migrated["fill_risk_scale"]) == 2.4
+            assert float(migrated["spread_scale"]) == 2.4
 
 
 def test_environment_reports_turso_dependencies():

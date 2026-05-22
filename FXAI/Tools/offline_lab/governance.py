@@ -435,7 +435,7 @@ def write_world_simulator_plans(conn: libsql.Connection,
         conn.execute(
             """
             INSERT INTO world_simulator_plans(profile_name, symbol, artifact_path, artifact_sha256,
-                                              sigma_scale, drift_bias, spread_scale, gap_prob, gap_scale, flip_prob,
+                                              sigma_scale, drift_bias, fill_risk_scale, gap_prob, gap_scale, flip_prob,
                                               context_corr_bias, liquidity_stress, macro_focus, payload_json, created_at)
             VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(profile_name, symbol) DO UPDATE SET
@@ -443,7 +443,7 @@ def write_world_simulator_plans(conn: libsql.Connection,
                 artifact_sha256=excluded.artifact_sha256,
                 sigma_scale=excluded.sigma_scale,
                 drift_bias=excluded.drift_bias,
-                spread_scale=excluded.spread_scale,
+                fill_risk_scale=excluded.fill_risk_scale,
                 gap_prob=excluded.gap_prob,
                 gap_scale=excluded.gap_scale,
                 flip_prob=excluded.flip_prob,
