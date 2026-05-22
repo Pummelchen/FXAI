@@ -29,6 +29,7 @@ public enum FXDataEngineConstants {
     public static let sharedTransferBarFeatures = 12
     public static let sharedTransferStateFeatures = sharedTransferBarFeatures
     public static let sharedTransferDomainBuckets = 8
+    public static let executionTraceBars = 12
     public static let brokerExecutionTraceCapacity = 192
     public static let brokerExecutionSymbolBuckets = 12
     public static let brokerExecutionSideCount = 3

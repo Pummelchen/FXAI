@@ -300,6 +300,118 @@ public enum ExecutionReplayTools {
         )
     }
 
+    public static func buildTraceStats(
+        series: M1OHLCVSeries,
+        index: Int,
+        horizonMinutes: Int,
+        pointValue: Double = 1.0
+    ) -> ExecutionTraceStats {
+        let safePoint = pointValue > 0.0 ? pointValue : 0.0
+        guard index >= 0, index < series.count, safePoint > 0.0 else {
+            return ExecutionTraceStats()
+        }
+
+        var steps = max(horizonMinutes, 1)
+        steps = min(steps, 1_440)
+        steps = min(steps, FXDataEngineConstants.executionTraceBars)
+        if index < steps {
+            steps = index
+        }
+        if steps < 1 {
+            steps = 1
+        }
+
+        let lowerBound = max(0, index - steps)
+        let windowIndices = Array((lowerBound...index).reversed())
+        let entryRange = max(Double(series.high[index] - series.low[index]) / safePoint, 0.25)
+        let positiveVolumes = windowIndices
+            .map { Double(series.volume[$0]) }
+            .filter { $0 > 0.0 }
+        let hasVolume = !positiveVolumes.isEmpty
+        let entryVolume = Double(series.volume[index])
+        let volumeReference: Double
+        if entryVolume > 0.0 {
+            volumeReference = entryVolume
+        } else if hasVolume {
+            volumeReference = max(positiveVolumes.reduce(0.0, +) / Double(positiveVolumes.count), 1.0)
+        } else {
+            volumeReference = 1.0
+        }
+
+        var liquiditySum = 0.0
+        var liquidityPeak = 1.0
+        var rangeSum = 0.0
+        var bodySum = 0.0
+        var gapSum = 0.0
+        var reversalCount = 0
+        var previousDirection = 0.0
+        var sessionSum = 0.0
+        var rolloverSum = 0.0
+        var used = 0
+
+        for (step, barIndex) in windowIndices.enumerated() {
+            used += 1
+
+            let liquidityRatio: Double
+            if hasVolume {
+                let volume = Double(series.volume[barIndex])
+                liquidityRatio = volume > 0.0 ? volumeReference / max(volume, 1.0) : 1.0
+            } else {
+                liquidityRatio = 1.0
+            }
+            liquiditySum += liquidityRatio
+            liquidityPeak = max(liquidityPeak, liquidityRatio)
+
+            let rangePoints = max(Double(series.high[barIndex] - series.low[barIndex]) / safePoint, 0.0)
+            rangeSum += rangePoints
+            let bodyEfficiency = abs(Double(series.close[barIndex] - series.open[barIndex])) /
+                max(Double(series.high[barIndex] - series.low[barIndex]), safePoint)
+            bodySum += fxClamp(bodyEfficiency, 0.0, 1.0)
+
+            if barIndex + 1 < series.count {
+                let gapPoints = abs(Double(series.open[barIndex] - series.close[barIndex + 1])) / safePoint
+                gapSum += gapPoints
+            }
+
+            let barDirection = fxSign(Double(series.close[barIndex] - series.open[barIndex]))
+            if step > 0,
+               abs(barDirection) > 1e-9,
+               abs(previousDirection) > 1e-9,
+               barDirection != previousDirection {
+                reversalCount += 1
+            }
+            if abs(barDirection) > 1e-9 {
+                previousDirection = barDirection
+            }
+
+            let dateParts = utcDateParts(timestamp: series.utcTimestamps[barIndex])
+            let hourValue = Double(dateParts.hour) + Double(dateParts.minute) / 60.0
+            let asiaToEurope = fxClamp(1.0 - abs(hourValue - 7.0) / 2.5, 0.0, 1.0)
+            let europeToUS = fxClamp(1.0 - abs(hourValue - 13.0) / 2.5, 0.0, 1.0)
+            let usToRollover = fxClamp(1.0 - abs(hourValue - 21.0) / 2.5, 0.0, 1.0)
+            sessionSum += fxClamp(0.60 * asiaToEurope + 0.80 * europeToUS - 0.70 * usToRollover, -1.0, 1.0)
+
+            var rolloverDistance = abs(hourValue - 23.0)
+            if rolloverDistance > 12.0 {
+                rolloverDistance = 24.0 - rolloverDistance
+            }
+            rolloverSum += fxClamp(1.0 - rolloverDistance / 3.0, 0.0, 1.0)
+        }
+
+        let usedCount = max(Double(used), 1.0)
+        let meanLiquidity = hasVolume ? liquiditySum / usedCount : 1.0
+        return ExecutionTraceStats(
+            liquidityMeanRatio: fxClamp(meanLiquidity, 0.5, 6.0),
+            liquidityPeakRatio: hasVolume ? fxClamp(liquidityPeak, 1.0, 10.0) : 1.0,
+            rangeMeanRatio: fxClamp((rangeSum / usedCount) / entryRange, 0.25, 8.0),
+            bodyEfficiency: fxClamp(bodySum / usedCount, 0.0, 1.0),
+            gapRatio: fxClamp((gapSum / usedCount) / entryRange, 0.0, 8.0),
+            reversalRatio: fxClamp(Double(reversalCount) / max(Double(steps), 1.0), 0.0, 1.0),
+            sessionTransitionExposure: fxClamp(0.5 + 0.5 * (sessionSum / usedCount), 0.0, 1.0),
+            rolloverExposure: fxClamp(rolloverSum / usedCount, 0.0, 1.0)
+        )
+    }
+
     public static func buildReplayFrame(
         profile: ExecutionProfile,
         sampleTimeUTC: Int64,

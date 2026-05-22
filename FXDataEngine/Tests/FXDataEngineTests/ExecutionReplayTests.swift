@@ -2,6 +2,57 @@ import XCTest
 @testable import FXDataEngine
 
 final class ExecutionReplayTests: XCTestCase {
+    private func traceSeries(volumes: [UInt64]) throws -> M1OHLCVSeries {
+        let start = Int64(1_704_092_100)
+        var utc: [Int64] = []
+        var open: [Int64] = []
+        var high: [Int64] = []
+        var low: [Int64] = []
+        var close: [Int64] = []
+        var resolvedVolume: [UInt64] = []
+
+        for index in 0..<14 {
+            let base = Int64(1_000 + index)
+            utc.append(start + Int64(index * 60))
+            open.append(base)
+            high.append(base + 5)
+            low.append(base - 5)
+            close.append(base + 1)
+            resolvedVolume.append(index < volumes.count ? volumes[index] : 0)
+        }
+
+        let overrides: [Int: (Int64, Int64, Int64, Int64)] = [
+            8: (1_000, 1_012, 996, 1_008),
+            9: (1_008, 1_010, 996, 998),
+            10: (998, 1_005, 994, 1_002),
+            11: (1_002, 1_009, 1_000, 1_007),
+            12: (1_007, 1_016, 1_001, 1_004),
+            13: (1_004, 1_014, 1_000, 1_012)
+        ]
+        for (index, value) in overrides {
+            open[index] = value.0
+            high[index] = value.1
+            low[index] = value.2
+            close[index] = value.3
+        }
+
+        return try M1OHLCVSeries(
+            metadata: FXMarketMetadata(
+                brokerSourceId: "fixture",
+                sourceOrigin: "unit-test",
+                logicalSymbol: "EURUSD",
+                timeframe: .m1,
+                digits: 5
+            ),
+            utcTimestamps: ContiguousArray(utc),
+            open: ContiguousArray(open),
+            high: ContiguousArray(high),
+            low: ContiguousArray(low),
+            close: ContiguousArray(close),
+            volume: ContiguousArray(resolvedVolume)
+        )
+    }
+
     func testExecutionProfilePresetsAndEntryCostMatchLegacyFormula() {
         let prime = ExecutionProfile.preset(.primeECN)
         XCTAssertEqual(prime.profileID, .primeECN)
@@ -98,5 +149,40 @@ final class ExecutionReplayTests: XCTestCase {
             0.29426,
             accuracy: 1e-12
         )
+    }
+
+    func testTraceStatsUseVolumeLiquidityAndOHLCGeometry() throws {
+        let series = try traceSeries(volumes: [
+            300, 300, 300, 300, 300, 300, 300, 300,
+            75, 200, 300, 100, 150, 300
+        ])
+        let trace = ExecutionReplayTools.buildTraceStats(
+            series: series,
+            index: 13,
+            horizonMinutes: 5
+        )
+
+        XCTAssertEqual(trace.liquidityMeanRatio, 2.0833333333333335, accuracy: 1e-12)
+        XCTAssertEqual(trace.liquidityPeakRatio, 4.0, accuracy: 1e-12)
+        XCTAssertEqual(trace.rangeMeanRatio, 0.9404761904761905, accuracy: 1e-12)
+        XCTAssertEqual(trace.bodyEfficiency, 0.48415103415103417, accuracy: 1e-12)
+        XCTAssertEqual(trace.gapRatio, 0.2857142857142857, accuracy: 1e-12)
+        XCTAssertEqual(trace.reversalRatio, 0.8, accuracy: 1e-12)
+        XCTAssertEqual(trace.sessionTransitionExposure, 0.789, accuracy: 1e-12)
+        XCTAssertEqual(trace.rolloverExposure, 0.0, accuracy: 0.0)
+    }
+
+    func testTraceStatsKeepNeutralLiquidityWhenVolumeMissing() throws {
+        let series = try traceSeries(volumes: Array(repeating: 0, count: 14))
+        let trace = ExecutionReplayTools.buildTraceStats(
+            series: series,
+            index: 13,
+            horizonMinutes: 5
+        )
+
+        XCTAssertEqual(trace.liquidityMeanRatio, 1.0, accuracy: 0.0)
+        XCTAssertEqual(trace.liquidityPeakRatio, 1.0, accuracy: 0.0)
+        XCTAssertEqual(trace.rangeMeanRatio, 0.9404761904761905, accuracy: 1e-12)
+        XCTAssertEqual(trace.reversalRatio, 0.8, accuracy: 1e-12)
     }
 }
