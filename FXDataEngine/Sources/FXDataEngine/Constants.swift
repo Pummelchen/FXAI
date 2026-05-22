@@ -43,6 +43,7 @@ public enum FXDataEngineConstants {
     public static let normalizationCandidateMax = 12
     public static let horizonPolicyFeatures = 48
     public static let horizonPolicyHidden = 16
+    public static let stackFeatures = 84
     public static let unitRangeFloor = 0.0001
     public static let unitRangeCeil = 0.9999
     public static let signedUnitRangeFloor = -0.9999
