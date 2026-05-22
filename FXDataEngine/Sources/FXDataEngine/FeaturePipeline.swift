@@ -228,14 +228,16 @@ public struct FeatureCore: Sendable {
         let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        let weekday = calendar.component(.weekday, from: date)
+        var weekday = calendar.component(.weekday, from: date) - 1
+        if weekday < 1 { weekday = 1 }
+        if weekday > 5 { weekday = 5 }
         let hour = calendar.component(.hour, from: date)
         let minute = calendar.component(.minute, from: date)
-        features[15] = fxClamp((Double(weekday) - 1.0) / 6.0, 0.0, 1.0)
-        features[16] = fxClamp(Double(hour) / 23.0, 0.0, 1.0)
-        features[17] = fxClamp(Double(minute) / 59.0, 0.0, 1.0)
-        features[72] = sessionTransitionScore(hour: hour, minute: minute)
-        features[73] = sessionOverlapScore(hour: hour)
+        features[15] = fxClampSignedUnit((Double(weekday) - 3.0) / 2.0)
+        features[16] = fxClampSignedUnit((Double(hour) - 11.5) / 11.5)
+        features[17] = fxClampSignedUnit((Double(minute) - 29.5) / 29.5)
+        features[72] = FeatureBuildTools.sessionTransition(sampleTimeUTC: timestamp)
+        features[73] = FeatureBuildTools.sessionOverlap(sampleTimeUTC: timestamp)
     }
 
     private func fillOHLCGeometryFeatures(_ features: inout [Double], series: M1OHLCVSeries, index: Int) {
@@ -561,18 +563,6 @@ private extension FeatureCore {
         let mean = volumeMean(series, index, window: sessionWindow)
         guard mean > 0 else { return 0.0 }
         return fxClamp(Double(series.volume[index]) / mean, 0.0, 2.0) / 2.0
-    }
-
-    func sessionTransitionScore(hour: Int, minute: Int) -> Double {
-        let transitionHours = [0, 7, 12, 13, 16, 21]
-        let distance = transitionHours.map { abs(($0 * 60) - (hour * 60 + minute)) }.min() ?? 1_440
-        return fxClamp(1.0 - Double(min(distance, 120)) / 120.0, 0.0, 1.0)
-    }
-
-    func sessionOverlapScore(hour: Int) -> Double {
-        if (12...16).contains(hour) { return 1.0 }
-        if (7...20).contains(hour) { return 0.5 }
-        return 0.0
     }
 
     func rollingCorrelation(_ a: M1OHLCVSeries, _ b: M1OHLCVSeries, _ index: Int, window: Int) -> Double {
