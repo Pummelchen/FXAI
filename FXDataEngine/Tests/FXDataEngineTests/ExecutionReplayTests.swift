@@ -97,7 +97,7 @@ final class ExecutionReplayTests: XCTestCase {
                 profile: stress,
                 roundTripCostPoints: 4.0,
                 liquidityStressPoints: 2.0,
-                pathFlags: [.dualHit, .spreadStress]
+                pathFlags: [.dualHit, .liquidityStress]
             ),
             1.61,
             accuracy: 1e-12

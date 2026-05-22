@@ -13,11 +13,14 @@ public struct ReplaySampleFlags: OptionSet, Codable, Hashable, Sendable {
 
     public static let dualHit = ReplaySampleFlags(rawValue: SamplePathFlags.dualHit.rawValue)
     public static let killedEarly = ReplaySampleFlags(rawValue: SamplePathFlags.killedEarly.rawValue)
-    public static let legacySpreadStress = ReplaySampleFlags(rawValue: SamplePathFlags.spreadStress.rawValue)
+    public static let liquidityStress = ReplaySampleFlags(rawValue: SamplePathFlags.liquidityStress.rawValue)
     public static let slowHit = ReplaySampleFlags(rawValue: SamplePathFlags.slowHit.rawValue)
     public static let falsePositive = ReplaySampleFlags(rawValue: 16)
     public static let missedMove = ReplaySampleFlags(rawValue: 32)
     public static let wrongDirection = ReplaySampleFlags(rawValue: 64)
+
+    @available(*, deprecated, message: "Use liquidityStress; raw value 4 is retained for legacy MQL artifact compatibility.")
+    public static let legacySpreadStress = liquidityStress
 }
 
 public struct ReplayReservoirEntry: Codable, Hashable, Sendable {

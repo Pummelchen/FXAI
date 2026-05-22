@@ -2,16 +2,18 @@ import XCTest
 @testable import FXDataEngine
 
 final class ReplayReservoirTests: XCTestCase {
-    func testNoSpreadReplayPriorityUsesPathAndFillRisk() {
+    func testLiquidityStressReplayPriorityUsesPathAndFillRisk() {
         let sample = runtimeSample(
             labelClass: .buy,
             sampleWeight: 1.4,
             qualityScore: 1.7,
             pathRisk: 0.30,
             fillRisk: 0.25,
-            pathFlags: [.dualHit, .spreadStress, .slowHit]
+            pathFlags: [.dualHit, .liquidityStress, .slowHit]
         )
 
+        XCTAssertEqual(SamplePathFlags.liquidityStress.rawValue, 4)
+        XCTAssertEqual(ReplaySampleFlags.liquidityStress.rawValue, 4)
         XCTAssertEqual(ReplayReservoirState.priority(for: sample), 2.65, accuracy: 1e-12)
     }
 
@@ -57,7 +59,7 @@ final class ReplayReservoirTests: XCTestCase {
         XCTAssertTrue(reservoir.entries.contains { $0.used && $0.sample.sampleTimeUTC == 102 })
     }
 
-    func testReplayBoostAndSelectionMatchLegacyDeterministicScoringWithoutSpread() {
+    func testReplayBoostAndSelectionMatchLegacyDeterministicScoringWithLiquidityInputs() {
         var reservoir = ReplayReservoirState()
         let slot = TrainingSampleTools.horizonSlot(horizonMinutes: 5)
         let skip = runtimeSample(labelClass: .skip, regimeID: 0, horizonMinutes: 5, horizonSlot: slot, sampleTimeUTC: 200)

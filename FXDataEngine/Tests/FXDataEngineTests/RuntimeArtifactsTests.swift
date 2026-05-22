@@ -147,8 +147,8 @@ final class RuntimeArtifactsTests: XCTestCase {
         XCTAssertEqual(encoded.prefix(20), Data([1, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 15, 0, 0, 0, 3, 0, 0, 0]))
         XCTAssertEqual(decoded.valid, true)
         XCTAssertEqual(decoded.labelClass, .buy)
-        XCTAssertEqual(decoded.spreadStress, 0.0)
-        XCTAssertEqual(decoded.traceSpreadMeanRatio, 0.0)
+        XCTAssertEqual(decoded.liquidityStress, 0.0)
+        XCTAssertEqual(decoded.traceLiquidityMeanRatio, 0.0)
         XCTAssertEqual(decoded.traceGapRatio, 0.30, accuracy: 1e-12)
         XCTAssertEqual(decoded.traceReversalRatio, 0.30, accuracy: 1e-12)
         XCTAssertEqual(decoded.preparedTrainingSample.fillRisk, 0.0, accuracy: 1e-12)
@@ -164,8 +164,34 @@ final class RuntimeArtifactsTests: XCTestCase {
         var fillRiskSample = sample
         fillRiskSample.fillRisk = 0.25
         let fillRiskRuntimeSample = RuntimeArtifactPreparedSample(sample: fillRiskSample)
-        XCTAssertEqual(fillRiskRuntimeSample.spreadStress, 0.0, accuracy: 1e-12)
+        XCTAssertEqual(fillRiskRuntimeSample.liquidityStress, 0.0, accuracy: 1e-12)
         XCTAssertEqual(fillRiskRuntimeSample.preparedTrainingSample.fillRisk, 0.25, accuracy: 1e-12)
+    }
+
+    func testPreparedSampleJSONDecodesLegacyStressKeysAndEncodesLiquidityNames() throws {
+        let legacyJSON = Data("""
+        {
+          "valid": true,
+          "labelClass": 1,
+          "spreadStress": 0.7,
+          "traceSpreadMeanRatio": 0.8,
+          "traceSpreadPeakRatio": 1.2,
+          "x": [1.0, 0.25, -0.5]
+        }
+        """.utf8)
+
+        let decoded = try JSONDecoder().decode(RuntimeArtifactPreparedSample.self, from: legacyJSON)
+        XCTAssertTrue(decoded.valid)
+        XCTAssertEqual(decoded.labelClass, .buy)
+        XCTAssertEqual(decoded.liquidityStress, 0.7, accuracy: 1e-12)
+        XCTAssertEqual(decoded.traceLiquidityMeanRatio, 0.8, accuracy: 1e-12)
+        XCTAssertEqual(decoded.traceLiquidityPeakRatio, 1.2, accuracy: 1e-12)
+
+        let encoded = String(data: try JSONEncoder().encode(decoded), encoding: .utf8) ?? ""
+        XCTAssertTrue(encoded.contains("\"liquidityStress\""))
+        XCTAssertTrue(encoded.contains("\"traceLiquidityMeanRatio\""))
+        XCTAssertFalse(encoded.contains("\"spreadStress\""))
+        XCTAssertFalse(encoded.contains("\"traceSpreadMeanRatio\""))
     }
 
     func testFeatureDriftCodecRoundTripsLegacyGroupShape() throws {

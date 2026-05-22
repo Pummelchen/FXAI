@@ -221,7 +221,7 @@ public enum ExecutionReplayTools {
         if pathFlags.contains(.slowHit) {
             slippage += max(profile.slowHitPenalty, 0.0)
         }
-        if pathFlags.contains(.spreadStress) {
+        if pathFlags.contains(.liquidityStress) {
             slippage += max(profile.liquidityShockPenalty, 0.0)
         }
         return min(slippage, 12.0)
@@ -259,7 +259,7 @@ public enum ExecutionReplayTools {
         let stress = fxClamp(liquidityStressPoints, 0.0, 4.0)
         var fillPenalty = max(profile.fillPenaltyPoints, 0.0) +
             max(profile.partialFillPenalty, 0.0) * (0.20 + 0.20 * stress)
-        if pathFlags.contains(.spreadStress) {
+        if pathFlags.contains(.liquidityStress) {
             fillPenalty += 0.10 * max(roundTripCostPoints, 0.0) + 0.12 * stress
         }
         if pathFlags.contains(.dualHit) {
@@ -528,8 +528,8 @@ public enum ExecutionReplayTools {
         if pathFlags.contains(.dualHit) {
             frame.eventFlags.insert(.dualHit)
         }
-        if pathFlags.contains(.spreadStress) || trace.liquidityPeakRatio > 1.35 {
-            frame.eventFlags.insert(.spreadStress)
+        if pathFlags.contains(.liquidityStress) || trace.liquidityPeakRatio > 1.35 {
+            frame.eventFlags.insert(.liquidityStress)
         }
 
         if scenarioID == 11 {
@@ -544,7 +544,7 @@ public enum ExecutionReplayTools {
             frame.latencyAddPoints += 0.20 + 0.10 * stress + 0.06 * traceGap
             frame.rejectProbability = fxClamp(frame.rejectProbability + 0.08, 0.0, 0.50)
             frame.partialFillProbability = fxClamp(frame.partialFillProbability + 0.14, 0.0, 0.99)
-            frame.eventFlags.insert(.spreadStress)
+            frame.eventFlags.insert(.liquidityStress)
         } else if scenarioID == 13 {
             frame.slippageMultiplier += 0.04 + 0.02 * traceReversal
             frame.fillMultiplier += 0.03 + 0.02 * bodyPenalty

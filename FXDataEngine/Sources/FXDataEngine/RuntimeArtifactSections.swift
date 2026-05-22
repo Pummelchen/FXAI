@@ -573,9 +573,9 @@ public struct RuntimeArtifactPreparedSample: Codable, Hashable, Sendable {
     public var qualityScore: Double
     public var mfePoints: Double
     public var maePoints: Double
-    public var spreadStress: Double
-    public var traceSpreadMeanRatio: Double
-    public var traceSpreadPeakRatio: Double
+    public var liquidityStress: Double
+    public var traceLiquidityMeanRatio: Double
+    public var traceLiquidityPeakRatio: Double
     public var traceRangeMeanRatio: Double
     public var traceBodyEfficiency: Double
     public var traceGapRatio: Double
@@ -593,6 +593,43 @@ public struct RuntimeArtifactPreparedSample: Codable, Hashable, Sendable {
     public var sampleTimeUTC: Int64
     public var x: [Double]
 
+    private enum CodingKeys: String, CodingKey {
+        case valid
+        case labelClass
+        case regimeID
+        case horizonMinutes
+        case horizonSlot
+        case movePoints
+        case minMovePoints
+        case costPoints
+        case sampleWeight
+        case qualityScore
+        case mfePoints
+        case maePoints
+        case liquidityStress
+        case traceLiquidityMeanRatio
+        case traceLiquidityPeakRatio
+        case legacySpreadStress = "spreadStress"
+        case legacyTraceSpreadMeanRatio = "traceSpreadMeanRatio"
+        case legacyTraceSpreadPeakRatio = "traceSpreadPeakRatio"
+        case traceRangeMeanRatio
+        case traceBodyEfficiency
+        case traceGapRatio
+        case traceReversalRatio
+        case traceSessionTransition
+        case traceRollover
+        case timeToHitFraction
+        case pathFlags
+        case maskedStepTarget
+        case nextVolumeTarget
+        case regimeShiftTarget
+        case contextLeadTarget
+        case pointValue
+        case domainHash
+        case sampleTimeUTC
+        case x
+    }
+
     public init(
         valid: Bool = false,
         labelClass: LabelClass = .skip,
@@ -606,9 +643,9 @@ public struct RuntimeArtifactPreparedSample: Codable, Hashable, Sendable {
         qualityScore: Double = 1.0,
         mfePoints: Double = 0.0,
         maePoints: Double = 0.0,
-        spreadStress: Double = 0.0,
-        traceSpreadMeanRatio: Double = 0.0,
-        traceSpreadPeakRatio: Double = 0.0,
+        liquidityStress: Double = 0.0,
+        traceLiquidityMeanRatio: Double = 0.0,
+        traceLiquidityPeakRatio: Double = 0.0,
         traceRangeMeanRatio: Double = 1.0,
         traceBodyEfficiency: Double = 0.5,
         traceGapRatio: Double = 0.0,
@@ -638,9 +675,9 @@ public struct RuntimeArtifactPreparedSample: Codable, Hashable, Sendable {
         self.qualityScore = fxClamp(qualityScore, 0.0, 4.0)
         self.mfePoints = max(0.0, fxSafeFinite(mfePoints))
         self.maePoints = max(0.0, fxSafeFinite(maePoints))
-        self.spreadStress = max(0.0, fxSafeFinite(spreadStress))
-        self.traceSpreadMeanRatio = max(0.0, fxSafeFinite(traceSpreadMeanRatio))
-        self.traceSpreadPeakRatio = max(0.0, fxSafeFinite(traceSpreadPeakRatio))
+        self.liquidityStress = max(0.0, fxSafeFinite(liquidityStress))
+        self.traceLiquidityMeanRatio = max(0.0, fxSafeFinite(traceLiquidityMeanRatio))
+        self.traceLiquidityPeakRatio = max(0.0, fxSafeFinite(traceLiquidityPeakRatio))
         self.traceRangeMeanRatio = max(0.0, fxSafeFinite(traceRangeMeanRatio))
         self.traceBodyEfficiency = fxClamp(traceBodyEfficiency, 0.0, 1.0)
         self.traceGapRatio = fxClamp(traceGapRatio, 0.0, 1.0)
@@ -659,6 +696,102 @@ public struct RuntimeArtifactPreparedSample: Codable, Hashable, Sendable {
         self.x = Self.artifactVector(x)
     }
 
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let liquidity = try container.decodeIfPresent(Double.self, forKey: .liquidityStress) ??
+            container.decodeIfPresent(Double.self, forKey: .legacySpreadStress) ?? 0.0
+        let traceLiquidityMean = try container.decodeIfPresent(Double.self, forKey: .traceLiquidityMeanRatio) ??
+            container.decodeIfPresent(Double.self, forKey: .legacyTraceSpreadMeanRatio) ?? 0.0
+        let traceLiquidityPeak = try container.decodeIfPresent(Double.self, forKey: .traceLiquidityPeakRatio) ??
+            container.decodeIfPresent(Double.self, forKey: .legacyTraceSpreadPeakRatio) ?? 0.0
+        self.init(
+            valid: try container.decodeIfPresent(Bool.self, forKey: .valid) ?? false,
+            labelClass: try container.decodeIfPresent(LabelClass.self, forKey: .labelClass) ?? .skip,
+            regimeID: try container.decodeIfPresent(Int.self, forKey: .regimeID) ?? 0,
+            horizonMinutes: try container.decodeIfPresent(Int.self, forKey: .horizonMinutes) ?? 1,
+            horizonSlot: try container.decodeIfPresent(Int.self, forKey: .horizonSlot) ?? 0,
+            movePoints: try container.decodeIfPresent(Double.self, forKey: .movePoints) ?? 0.0,
+            minMovePoints: try container.decodeIfPresent(Double.self, forKey: .minMovePoints) ?? 0.0,
+            costPoints: try container.decodeIfPresent(Double.self, forKey: .costPoints) ?? 0.0,
+            sampleWeight: try container.decodeIfPresent(Double.self, forKey: .sampleWeight) ?? 1.0,
+            qualityScore: try container.decodeIfPresent(Double.self, forKey: .qualityScore) ?? 1.0,
+            mfePoints: try container.decodeIfPresent(Double.self, forKey: .mfePoints) ?? 0.0,
+            maePoints: try container.decodeIfPresent(Double.self, forKey: .maePoints) ?? 0.0,
+            liquidityStress: liquidity,
+            traceLiquidityMeanRatio: traceLiquidityMean,
+            traceLiquidityPeakRatio: traceLiquidityPeak,
+            traceRangeMeanRatio: try container.decodeIfPresent(Double.self, forKey: .traceRangeMeanRatio) ?? 1.0,
+            traceBodyEfficiency: try container.decodeIfPresent(Double.self, forKey: .traceBodyEfficiency) ?? 0.5,
+            traceGapRatio: try container.decodeIfPresent(Double.self, forKey: .traceGapRatio) ?? 0.0,
+            traceReversalRatio: try container.decodeIfPresent(Double.self, forKey: .traceReversalRatio) ?? 0.0,
+            traceSessionTransition: try container.decodeIfPresent(Double.self, forKey: .traceSessionTransition) ?? 0.0,
+            traceRollover: try container.decodeIfPresent(Double.self, forKey: .traceRollover) ?? 0.0,
+            timeToHitFraction: try container.decodeIfPresent(Double.self, forKey: .timeToHitFraction) ?? 1.0,
+            pathFlags: try container.decodeIfPresent(SamplePathFlags.self, forKey: .pathFlags) ?? [],
+            maskedStepTarget: try container.decodeIfPresent(Double.self, forKey: .maskedStepTarget) ?? 0.0,
+            nextVolumeTarget: try container.decodeIfPresent(Double.self, forKey: .nextVolumeTarget) ?? 0.0,
+            regimeShiftTarget: try container.decodeIfPresent(Double.self, forKey: .regimeShiftTarget) ?? 0.0,
+            contextLeadTarget: try container.decodeIfPresent(Double.self, forKey: .contextLeadTarget) ?? 0.5,
+            pointValue: try container.decodeIfPresent(Double.self, forKey: .pointValue) ?? 1.0,
+            domainHash: try container.decodeIfPresent(Double.self, forKey: .domainHash) ?? 0.0,
+            sampleTimeUTC: try container.decodeIfPresent(Int64.self, forKey: .sampleTimeUTC) ?? 0,
+            x: try container.decodeIfPresent([Double].self, forKey: .x) ?? Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(valid, forKey: .valid)
+        try container.encode(labelClass, forKey: .labelClass)
+        try container.encode(regimeID, forKey: .regimeID)
+        try container.encode(horizonMinutes, forKey: .horizonMinutes)
+        try container.encode(horizonSlot, forKey: .horizonSlot)
+        try container.encode(movePoints, forKey: .movePoints)
+        try container.encode(minMovePoints, forKey: .minMovePoints)
+        try container.encode(costPoints, forKey: .costPoints)
+        try container.encode(sampleWeight, forKey: .sampleWeight)
+        try container.encode(qualityScore, forKey: .qualityScore)
+        try container.encode(mfePoints, forKey: .mfePoints)
+        try container.encode(maePoints, forKey: .maePoints)
+        try container.encode(liquidityStress, forKey: .liquidityStress)
+        try container.encode(traceLiquidityMeanRatio, forKey: .traceLiquidityMeanRatio)
+        try container.encode(traceLiquidityPeakRatio, forKey: .traceLiquidityPeakRatio)
+        try container.encode(traceRangeMeanRatio, forKey: .traceRangeMeanRatio)
+        try container.encode(traceBodyEfficiency, forKey: .traceBodyEfficiency)
+        try container.encode(traceGapRatio, forKey: .traceGapRatio)
+        try container.encode(traceReversalRatio, forKey: .traceReversalRatio)
+        try container.encode(traceSessionTransition, forKey: .traceSessionTransition)
+        try container.encode(traceRollover, forKey: .traceRollover)
+        try container.encode(timeToHitFraction, forKey: .timeToHitFraction)
+        try container.encode(pathFlags, forKey: .pathFlags)
+        try container.encode(maskedStepTarget, forKey: .maskedStepTarget)
+        try container.encode(nextVolumeTarget, forKey: .nextVolumeTarget)
+        try container.encode(regimeShiftTarget, forKey: .regimeShiftTarget)
+        try container.encode(contextLeadTarget, forKey: .contextLeadTarget)
+        try container.encode(pointValue, forKey: .pointValue)
+        try container.encode(domainHash, forKey: .domainHash)
+        try container.encode(sampleTimeUTC, forKey: .sampleTimeUTC)
+        try container.encode(x, forKey: .x)
+    }
+
+    @available(*, deprecated, message: "Use liquidityStress; binary slot is retained for legacy MQL artifact compatibility.")
+    public var spreadStress: Double {
+        get { liquidityStress }
+        set { liquidityStress = max(0.0, fxSafeFinite(newValue)) }
+    }
+
+    @available(*, deprecated, message: "Use traceLiquidityMeanRatio.")
+    public var traceSpreadMeanRatio: Double {
+        get { traceLiquidityMeanRatio }
+        set { traceLiquidityMeanRatio = max(0.0, fxSafeFinite(newValue)) }
+    }
+
+    @available(*, deprecated, message: "Use traceLiquidityPeakRatio.")
+    public var traceSpreadPeakRatio: Double {
+        get { traceLiquidityPeakRatio }
+        set { traceLiquidityPeakRatio = max(0.0, fxSafeFinite(newValue)) }
+    }
+
     public init(sample: PreparedTrainingSample) {
         self.init(
             valid: sample.valid,
@@ -673,9 +806,9 @@ public struct RuntimeArtifactPreparedSample: Codable, Hashable, Sendable {
             qualityScore: sample.qualityScore,
             mfePoints: sample.mfePoints,
             maePoints: sample.maePoints,
-            spreadStress: 0.0,
-            traceSpreadMeanRatio: 2.0 * sample.fillRisk,
-            traceSpreadPeakRatio: 0.0,
+            liquidityStress: 0.0,
+            traceLiquidityMeanRatio: 2.0 * sample.fillRisk,
+            traceLiquidityPeakRatio: 0.0,
             traceRangeMeanRatio: 1.0,
             traceBodyEfficiency: 0.5,
             traceGapRatio: sample.pathRisk,
@@ -718,7 +851,7 @@ public struct RuntimeArtifactPreparedSample: Codable, Hashable, Sendable {
             timeToHitFraction: timeToHitFraction,
             pathFlags: pathFlags,
             pathRisk: fxClamp(0.5 * traceReversalRatio + 0.5 * traceGapRatio, 0.0, 1.0),
-            fillRisk: fxClamp(traceSpreadMeanRatio / 2.0, 0.0, 1.0),
+            fillRisk: fxClamp(traceLiquidityMeanRatio / 2.0, 0.0, 1.0),
             maskedStepTarget: maskedStepTarget,
             nextVolumeTarget: nextVolumeTarget,
             regimeShiftTarget: regimeShiftTarget,
@@ -753,9 +886,9 @@ public enum RuntimeArtifactPreparedSampleCodec {
         writer.appendDouble(sample.qualityScore)
         writer.appendDouble(sample.mfePoints)
         writer.appendDouble(sample.maePoints)
-        writer.appendDouble(sample.spreadStress)
-        writer.appendDouble(sample.traceSpreadMeanRatio)
-        writer.appendDouble(sample.traceSpreadPeakRatio)
+        writer.appendDouble(sample.liquidityStress)
+        writer.appendDouble(sample.traceLiquidityMeanRatio)
+        writer.appendDouble(sample.traceLiquidityPeakRatio)
         writer.appendDouble(sample.traceRangeMeanRatio)
         writer.appendDouble(sample.traceBodyEfficiency)
         writer.appendDouble(sample.traceGapRatio)
@@ -794,9 +927,9 @@ public enum RuntimeArtifactPreparedSampleCodec {
         let quality = try reader.readDouble()
         let mfe = try reader.readDouble()
         let mae = try reader.readDouble()
-        let spreadStress = try reader.readDouble()
-        let traceSpreadMean = try reader.readDouble()
-        let traceSpreadPeak = try reader.readDouble()
+        let liquidityStress = try reader.readDouble()
+        let traceLiquidityMean = try reader.readDouble()
+        let traceLiquidityPeak = try reader.readDouble()
         let traceRangeMean = try reader.readDouble()
         let traceBody = try reader.readDouble()
         let traceGap = try reader.readDouble()
@@ -829,9 +962,9 @@ public enum RuntimeArtifactPreparedSampleCodec {
             qualityScore: quality,
             mfePoints: mfe,
             maePoints: mae,
-            spreadStress: spreadStress,
-            traceSpreadMeanRatio: traceSpreadMean,
-            traceSpreadPeakRatio: traceSpreadPeak,
+            liquidityStress: liquidityStress,
+            traceLiquidityMeanRatio: traceLiquidityMean,
+            traceLiquidityPeakRatio: traceLiquidityPeak,
             traceRangeMeanRatio: traceRangeMean,
             traceBodyEfficiency: traceBody,
             traceGapRatio: traceGap,

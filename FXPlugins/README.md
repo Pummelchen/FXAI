@@ -6,4 +6,4 @@ AI plugins own model execution. When a converted plugin needs tensor training or
 
 Converted plugins should consume the Swift FXDataEngine OHLCV contracts and use volume-derived features whenever the loaded dataset has nonzero volume.
 
-The current MT5/MQL5 plugin implementation remains under `FXAI/FXPlugins/`.
+The current MT5/MQL5 plugin implementation remains under `FXAI/FXPlugins/` and still depends on the legacy MQL5 FXDataEngine API headers. Those files must be converted or retired before the old MQL5 `FXAI/FXDataEngine` folder can be deleted.

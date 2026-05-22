@@ -9,8 +9,11 @@ public struct SamplePathFlags: OptionSet, Codable, Sendable, Hashable {
 
     public static let dualHit = SamplePathFlags(rawValue: 1)
     public static let killedEarly = SamplePathFlags(rawValue: 2)
-    public static let spreadStress = SamplePathFlags(rawValue: 4)
+    public static let liquidityStress = SamplePathFlags(rawValue: 4)
     public static let slowHit = SamplePathFlags(rawValue: 8)
+
+    @available(*, deprecated, message: "Use liquidityStress; raw value 4 is retained for legacy MQL artifact compatibility.")
+    public static let spreadStress = liquidityStress
 }
 
 public struct TripleBarrierLabelResult: Codable, Hashable, Sendable {
@@ -638,9 +641,14 @@ public enum TrainingSampleTools {
         return fxClamp(risk, 0.0, 1.0)
     }
 
-    public static func fillRisk(spreadStressPoints: Double, minMovePoints: Double, costPoints: Double) -> Double {
+    public static func fillRisk(liquidityStressPoints: Double, minMovePoints: Double, costPoints: Double) -> Double {
         let denominator = max(minMovePoints + max(costPoints, 0.0), 0.25)
-        return fxClamp(abs(spreadStressPoints) / denominator, 0.0, 1.0)
+        return fxClamp(abs(liquidityStressPoints) / denominator, 0.0, 1.0)
+    }
+
+    @available(*, deprecated, message: "Use fillRisk(liquidityStressPoints:minMovePoints:costPoints:).")
+    public static func fillRisk(spreadStressPoints: Double, minMovePoints: Double, costPoints: Double) -> Double {
+        fillRisk(liquidityStressPoints: spreadStressPoints, minMovePoints: minMovePoints, costPoints: costPoints)
     }
 
     public static func staticRegimeID(series: M1OHLCVSeries, index: Int) -> Int {

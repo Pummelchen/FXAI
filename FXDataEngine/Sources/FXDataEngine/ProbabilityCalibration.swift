@@ -1433,7 +1433,7 @@ public enum ProbabilityCalibrationTools {
     ) -> SamplePathFlags {
         var flags: SamplePathFlags = []
         if state.newsRiskBlock || state.ratesRiskBlock || state.microstructureStress {
-            flags.insert(.spreadStress)
+            flags.insert(.liquidityStress)
         }
         if inputs.pathRisk >= 0.72 ||
             (inputs.microstructureState.ready &&

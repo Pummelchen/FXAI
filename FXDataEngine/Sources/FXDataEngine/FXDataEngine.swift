@@ -162,7 +162,7 @@ public struct FXDataEnginePipeline: Sendable {
         let quality = trainingQuality(
             label: label,
             minMovePoints: minMovePoints,
-            spreadStress: 0.0
+            liquidityStress: 0.0
         )
         let sampleWeight = fxClamp(
             (label.labelClass == .skip ? 0.85 : 1.20) *
@@ -187,7 +187,7 @@ public struct FXDataEnginePipeline: Sendable {
             timeToHitFraction: label.timeToHitFraction,
             pathFlags: label.pathFlags,
             pathRisk: pathRisk,
-            fillRisk: TrainingSampleTools.fillRisk(spreadStressPoints: 0.0, minMovePoints: minMovePoints, costPoints: minMovePoints),
+            fillRisk: TrainingSampleTools.fillRisk(liquidityStressPoints: 0.0, minMovePoints: minMovePoints, costPoints: minMovePoints),
             maskedStepTarget: maskedStepTarget(series: primary, index: dataBundle.sampleIndex),
             nextVolumeTarget: nextVolatilityTarget(series: primary, index: dataBundle.sampleIndex, horizonMinutes: horizon, fallback: abs(label.realizedMovePoints)),
             regimeShiftTarget: regimeShiftTarget(series: primary, index: dataBundle.sampleIndex, horizonMinutes: horizon),
@@ -312,11 +312,11 @@ public struct FXDataEnginePipeline: Sendable {
     private func trainingQuality(
         label: TripleBarrierLabelResult,
         minMovePoints: Double,
-        spreadStress: Double
+        liquidityStress: Double
     ) -> Double {
         let quality: Double
         if label.labelClass == .skip {
-            quality = 0.75 - (0.10 * spreadStress)
+            quality = 0.75 - (0.10 * liquidityStress)
         } else {
             let mfeRatio = label.mfePoints / max(minMovePoints, 0.50)
             let adverseRatio = label.maePoints / max(label.mfePoints, minMovePoints)
@@ -325,7 +325,7 @@ public struct FXDataEnginePipeline: Sendable {
                 0.20 * fxClamp(mfeRatio, 0.0, 4.0) +
                 0.20 * speedBonus -
                 0.15 * fxClamp(adverseRatio, 0.0, 3.0) -
-                0.10 * spreadStress
+                0.10 * liquidityStress
             if label.pathFlags.contains(.dualHit) { directionalQuality -= 0.12 }
             if label.pathFlags.contains(.killedEarly) { directionalQuality -= 0.10 }
             quality = directionalQuality
