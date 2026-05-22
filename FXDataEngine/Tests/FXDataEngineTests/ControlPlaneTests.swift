@@ -170,4 +170,124 @@ final class ControlPlaneTests: XCTestCase {
         let invalid = ControlPlaneSnapshot.parse(tsv: "login\t42\nsymbol\tEURUSD\n")
         XCTAssertFalse(invalid.valid)
     }
+
+    func testPortfolioSupervisorProfileClampsLegacyDefaults() {
+        let profile = PortfolioSupervisorProfile.parse(tsv: """
+        profile_name\tportfolio
+        gross_budget_bias\t0.1
+        correlated_budget_bias\t9.0
+        directional_budget_bias\t0.1
+        capital_risk_cap_pct\t20
+        macro_overlap_cap\t0
+        concentration_cap\t9
+        supervisor_weight\t2
+        hard_block_score\t0.1
+        policy_enter_floor\t2
+        policy_no_trade_ceiling\t0
+        """, loadedAtUTC: 1_704_067_200)
+
+        XCTAssertTrue(profile.ready)
+        XCTAssertEqual(profile.profileName, "portfolio")
+        XCTAssertEqual(profile.grossBudgetBias, 0.40)
+        XCTAssertEqual(profile.correlatedBudgetBias, 1.60)
+        XCTAssertEqual(profile.directionalBudgetBias, 0.40)
+        XCTAssertEqual(profile.capitalRiskCapPct, 10.0)
+        XCTAssertEqual(profile.macroOverlapCap, 0.10)
+        XCTAssertEqual(profile.concentrationCap, 2.0)
+        XCTAssertEqual(profile.supervisorWeight, 1.0)
+        XCTAssertEqual(profile.hardBlockScore, 0.20)
+        XCTAssertEqual(profile.policyEnterFloor, 0.95)
+        XCTAssertEqual(profile.policyNoTradeCeiling, 0.10)
+        XCTAssertEqual(profile.loadedAtUTC, 1_704_067_200)
+    }
+
+    func testSupervisorServiceStateClampsBudgetFallbackAndFreshness() {
+        let state = SupervisorServiceState.parse(tsv: """
+        symbol\t__GLOBAL__
+        generated_at\t1000
+        expires_at\t0
+        snapshot_count\t20000
+        gross_pressure\t3
+        directional_long_pressure\t3
+        directional_short_pressure\t3
+        macro_pressure\t3
+        concentration_pressure\t3
+        freshness_penalty\t3
+        pressure_velocity\t-3
+        gross_velocity\t3
+        budget_multiplier\t0.5
+        add_multiplier\t2
+        reduce_bias\t2
+        exit_bias\t2
+        entry_floor\t2
+        block_score\t0.1
+        supervisor_score\t4
+        """, nowUTC: 1_200)
+
+        XCTAssertTrue(state.ready)
+        XCTAssertEqual(state.resolvedSymbol("EURUSD").symbol, "EURUSD")
+        XCTAssertEqual(state.snapshotCount, 10_000)
+        XCTAssertEqual(state.grossPressure, 2.0)
+        XCTAssertEqual(state.macroPressure, 1.5)
+        XCTAssertEqual(state.concentrationPressure, 1.0)
+        XCTAssertEqual(state.freshnessPenalty, 1.0)
+        XCTAssertEqual(state.pressureVelocity, -1.0)
+        XCTAssertEqual(state.grossVelocity, 1.0)
+        XCTAssertEqual(state.longEntryBudgetMultiplier, 0.5)
+        XCTAssertEqual(state.shortEntryBudgetMultiplier, 0.5)
+        XCTAssertEqual(state.addMultiplier, 1.40)
+        XCTAssertEqual(state.reduceBias, 1.0)
+        XCTAssertEqual(state.exitBias, 1.0)
+        XCTAssertEqual(state.entryFloor, 0.95)
+        XCTAssertEqual(state.blockScore, 0.20)
+        XCTAssertEqual(state.supervisorScore, 3.0)
+
+        let stale = SupervisorServiceState.parse(tsv: "symbol\tEURUSD\ngenerated_at\t1000\n", nowUTC: 1_300)
+        XCTAssertFalse(stale.ready)
+    }
+
+    func testSupervisorCommandStateDirectionHelpersAndFreshness() {
+        let state = SupervisorCommandState.parse(symbol: "EURUSD", tsv: """
+        symbol\t__GLOBAL__
+        generated_at\t1000
+        entry_budget_mult\t0.5
+        hold_budget_mult\t9
+        add_cap_mult\t0
+        reduce_bias\t2
+        exit_bias\t2
+        tighten_bias\t2
+        timeout_bias\t2
+        long_block\t1
+        short_block\t0
+        block_score\t9
+        max_active_models\t999
+        champion_only\t1
+        """, nowUTC: 1_200)
+
+        XCTAssertTrue(state.ready)
+        XCTAssertEqual(state.resolvedSymbol("EURUSD").symbol, "EURUSD")
+        XCTAssertEqual(state.longEntryBudgetMultiplier, 0.5)
+        XCTAssertEqual(state.shortEntryBudgetMultiplier, 0.5)
+        XCTAssertEqual(state.entryBudgetMultiplier(for: 1), 0.5)
+        XCTAssertEqual(state.entryBudgetMultiplier(for: 0), 0.5)
+        XCTAssertEqual(state.holdBudgetMultiplier, 1.20)
+        XCTAssertEqual(state.addCapMultiplier, 0.05)
+        XCTAssertEqual(state.reduceBias, 1.0)
+        XCTAssertEqual(state.exitBias, 1.0)
+        XCTAssertEqual(state.tightenBias, 1.0)
+        XCTAssertEqual(state.timeoutBias, 1.0)
+        XCTAssertEqual(state.blockScore, 3.0)
+        XCTAssertEqual(state.maxActiveModels, FXDataEngineConstants.aiCount)
+        XCTAssertTrue(state.championOnly)
+        XCTAssertTrue(state.blocksDirection(1))
+        XCTAssertFalse(state.blocksDirection(0))
+        XCTAssertFalse(state.blocksDirection(-1))
+
+        let expired = SupervisorCommandState.parse(
+            symbol: "EURUSD",
+            tsv: "generated_at\t1000\nexpires_at\t1100\n",
+            nowUTC: 1_101
+        )
+        XCTAssertFalse(expired.ready)
+    }
 }

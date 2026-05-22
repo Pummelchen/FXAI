@@ -624,3 +624,295 @@ public struct ControlPlaneAggregate: Codable, Hashable, Sendable {
 
     public init() {}
 }
+
+public enum ControlPlaneFreshness {
+    public static func artifactFresh(
+        generatedAtUTC: Int64,
+        expiresAtUTC: Int64,
+        fallbackTTLSeconds: Int,
+        nowUTC: Int64
+    ) -> Bool {
+        guard nowUTC > 0 else { return true }
+        if expiresAtUTC > 0, nowUTC > expiresAtUTC {
+            return false
+        }
+        if generatedAtUTC > 0,
+           fallbackTTLSeconds > 0,
+           nowUTC > generatedAtUTC,
+           nowUTC - generatedAtUTC > Int64(fallbackTTLSeconds) {
+            return false
+        }
+        return true
+    }
+}
+
+public struct PortfolioSupervisorProfile: Codable, Hashable, Sendable {
+    public var ready = false
+    public var profileName = ""
+    public var grossBudgetBias = 1.0
+    public var correlatedBudgetBias = 1.0
+    public var directionalBudgetBias = 1.0
+    public var capitalRiskCapPct = 1.20
+    public var macroOverlapCap = 0.92
+    public var concentrationCap = 0.82
+    public var supervisorWeight = 0.45
+    public var hardBlockScore = 1.08
+    public var policyEnterFloor = 0.42
+    public var policyNoTradeCeiling = 0.74
+    public var loadedAtUTC: Int64 = 0
+
+    public init() {}
+
+    public static func parse(tsv: String, loadedAtUTC: Int64 = 0) -> PortfolioSupervisorProfile {
+        let doc = ControlPlaneKeyValueDocument(tsv: tsv)
+        var profile = PortfolioSupervisorProfile()
+        profile.profileName = doc.string("profile_name", default: profile.profileName)
+        profile.grossBudgetBias = doc.double("gross_budget_bias", default: profile.grossBudgetBias)
+        profile.correlatedBudgetBias = doc.double("correlated_budget_bias", default: profile.correlatedBudgetBias)
+        profile.directionalBudgetBias = doc.double("directional_budget_bias", default: profile.directionalBudgetBias)
+        profile.capitalRiskCapPct = doc.double("capital_risk_cap_pct", default: profile.capitalRiskCapPct)
+        profile.macroOverlapCap = doc.double("macro_overlap_cap", default: profile.macroOverlapCap)
+        profile.concentrationCap = doc.double("concentration_cap", default: profile.concentrationCap)
+        profile.supervisorWeight = doc.double("supervisor_weight", default: profile.supervisorWeight)
+        profile.hardBlockScore = doc.double("hard_block_score", default: profile.hardBlockScore)
+        profile.policyEnterFloor = doc.double("policy_enter_floor", default: profile.policyEnterFloor)
+        profile.policyNoTradeCeiling = doc.double("policy_no_trade_ceiling", default: profile.policyNoTradeCeiling)
+        return profile.normalized(loadedAtUTC: loadedAtUTC)
+    }
+
+    public func normalized(loadedAtUTC: Int64? = nil) -> PortfolioSupervisorProfile {
+        var profile = self
+        profile.grossBudgetBias = fxClamp(profile.grossBudgetBias, 0.40, 1.60)
+        profile.correlatedBudgetBias = fxClamp(profile.correlatedBudgetBias, 0.40, 1.60)
+        profile.directionalBudgetBias = fxClamp(profile.directionalBudgetBias, 0.40, 1.60)
+        profile.capitalRiskCapPct = fxClamp(profile.capitalRiskCapPct, 0.10, 10.0)
+        profile.macroOverlapCap = fxClamp(profile.macroOverlapCap, 0.10, 2.0)
+        profile.concentrationCap = fxClamp(profile.concentrationCap, 0.10, 2.0)
+        profile.supervisorWeight = fxClamp(profile.supervisorWeight, 0.0, 1.0)
+        profile.hardBlockScore = fxClamp(profile.hardBlockScore, 0.20, 3.0)
+        profile.policyEnterFloor = fxClamp(profile.policyEnterFloor, 0.10, 0.95)
+        profile.policyNoTradeCeiling = fxClamp(profile.policyNoTradeCeiling, 0.10, 0.99)
+        profile.ready = true
+        if let loadedAtUTC {
+            profile.loadedAtUTC = loadedAtUTC
+        }
+        return profile
+    }
+}
+
+public struct SupervisorServiceState: Codable, Hashable, Sendable {
+    public var ready = false
+    public var profileName = ""
+    public var symbol = ""
+    public var generatedAtUTC: Int64 = 0
+    public var expiresAtUTC: Int64 = 0
+    public var snapshotCount = 0
+    public var grossPressure = 0.0
+    public var directionalLongPressure = 0.0
+    public var directionalShortPressure = 0.0
+    public var macroPressure = 0.0
+    public var concentrationPressure = 0.0
+    public var freshnessPenalty = 0.0
+    public var pressureVelocity = 0.0
+    public var grossVelocity = 0.0
+    public var longEntryBudgetMultiplier = 1.0
+    public var shortEntryBudgetMultiplier = 1.0
+    public var budgetMultiplier = 1.0
+    public var addMultiplier = 1.0
+    public var reduceBias = 0.0
+    public var exitBias = 0.0
+    public var entryFloor = 0.42
+    public var blockScore = 1.10
+    public var supervisorScore = 0.0
+    public var loadedAtUTC: Int64 = 0
+
+    public init(symbol: String = "") {
+        self.symbol = symbol
+    }
+
+    public static func parse(tsv: String, nowUTC: Int64, loadedAtUTC: Int64? = nil) -> SupervisorServiceState {
+        let doc = ControlPlaneKeyValueDocument(tsv: tsv)
+        var state = SupervisorServiceState()
+        state.profileName = doc.string("profile_name", default: state.profileName)
+        state.symbol = doc.string("symbol", default: state.symbol)
+        state.generatedAtUTC = doc.int64("generated_at", default: state.generatedAtUTC)
+        state.expiresAtUTC = doc.int64("expires_at", default: state.expiresAtUTC)
+        state.snapshotCount = doc.int("snapshot_count", default: state.snapshotCount)
+        state.grossPressure = doc.double("gross_pressure", default: state.grossPressure)
+        state.directionalLongPressure = doc.double("directional_long_pressure", default: state.directionalLongPressure)
+        state.directionalShortPressure = doc.double("directional_short_pressure", default: state.directionalShortPressure)
+        state.macroPressure = doc.double("macro_pressure", default: state.macroPressure)
+        state.concentrationPressure = doc.double("concentration_pressure", default: state.concentrationPressure)
+        state.freshnessPenalty = doc.double("freshness_penalty", default: state.freshnessPenalty)
+        state.pressureVelocity = doc.double("pressure_velocity", default: state.pressureVelocity)
+        state.grossVelocity = doc.double("gross_velocity", default: state.grossVelocity)
+        state.longEntryBudgetMultiplier = doc.double("long_entry_budget_mult", default: state.longEntryBudgetMultiplier)
+        state.shortEntryBudgetMultiplier = doc.double("short_entry_budget_mult", default: state.shortEntryBudgetMultiplier)
+        state.budgetMultiplier = doc.double("budget_multiplier", default: state.budgetMultiplier)
+        state.addMultiplier = doc.double("add_multiplier", default: state.addMultiplier)
+        state.reduceBias = doc.double("reduce_bias", default: state.reduceBias)
+        state.exitBias = doc.double("exit_bias", default: state.exitBias)
+        state.entryFloor = doc.double("entry_floor", default: state.entryFloor)
+        state.blockScore = doc.double("block_score", default: state.blockScore)
+        state.supervisorScore = doc.double("supervisor_score", default: state.supervisorScore)
+        return state.normalized(nowUTC: nowUTC, loadedAtUTC: loadedAtUTC ?? nowUTC)
+    }
+
+    public func normalized(nowUTC: Int64, loadedAtUTC: Int64? = nil) -> SupervisorServiceState {
+        var state = self
+        state.snapshotCount = Int(fxClamp(Double(state.snapshotCount), 0.0, 10_000.0))
+        state.grossPressure = fxClamp(state.grossPressure, 0.0, 2.0)
+        state.directionalLongPressure = fxClamp(state.directionalLongPressure, 0.0, 2.0)
+        state.directionalShortPressure = fxClamp(state.directionalShortPressure, 0.0, 2.0)
+        state.macroPressure = fxClamp(state.macroPressure, 0.0, 1.5)
+        state.concentrationPressure = fxClamp(state.concentrationPressure, 0.0, 1.0)
+        state.freshnessPenalty = fxClamp(state.freshnessPenalty, 0.0, 1.0)
+        state.pressureVelocity = fxClamp(state.pressureVelocity, -1.0, 1.0)
+        state.grossVelocity = fxClamp(state.grossVelocity, -1.0, 1.0)
+        state.longEntryBudgetMultiplier = fxClamp(state.longEntryBudgetMultiplier, 0.10, 1.20)
+        state.shortEntryBudgetMultiplier = fxClamp(state.shortEntryBudgetMultiplier, 0.10, 1.20)
+        state.budgetMultiplier = fxClamp(state.budgetMultiplier, 0.10, 1.20)
+        if abs(state.longEntryBudgetMultiplier - 1.0) < 1e-6,
+           abs(state.shortEntryBudgetMultiplier - 1.0) < 1e-6,
+           abs(state.budgetMultiplier - 1.0) > 1e-6 {
+            state.longEntryBudgetMultiplier = state.budgetMultiplier
+            state.shortEntryBudgetMultiplier = state.budgetMultiplier
+        }
+        state.addMultiplier = fxClamp(state.addMultiplier, 0.10, 1.40)
+        state.reduceBias = fxClamp(state.reduceBias, 0.0, 1.0)
+        state.exitBias = fxClamp(state.exitBias, 0.0, 1.0)
+        state.entryFloor = fxClamp(state.entryFloor, 0.10, 0.95)
+        state.blockScore = fxClamp(state.blockScore, 0.20, 3.0)
+        state.supervisorScore = fxClamp(state.supervisorScore, 0.0, 3.0)
+        state.ready = !state.symbol.isEmpty && ControlPlaneFreshness.artifactFresh(
+            generatedAtUTC: state.generatedAtUTC,
+            expiresAtUTC: state.expiresAtUTC,
+            fallbackTTLSeconds: 240,
+            nowUTC: nowUTC
+        )
+        if let loadedAtUTC {
+            state.loadedAtUTC = loadedAtUTC
+        }
+        return state
+    }
+
+    public func resolvedSymbol(_ symbol: String) -> SupervisorServiceState {
+        var state = self
+        if state.symbol.isEmpty || state.symbol == "__GLOBAL__" {
+            state.symbol = symbol
+        }
+        return state
+    }
+}
+
+public struct SupervisorCommandState: Codable, Hashable, Sendable {
+    public var ready = false
+    public var profileName = ""
+    public var symbol = ""
+    public var generatedAtUTC: Int64 = 0
+    public var expiresAtUTC: Int64 = 0
+    public var entryBudgetMultiplier = 1.0
+    public var longEntryBudgetMultiplier = 1.0
+    public var shortEntryBudgetMultiplier = 1.0
+    public var holdBudgetMultiplier = 1.0
+    public var addCapMultiplier = 1.0
+    public var reduceBias = 0.0
+    public var exitBias = 0.0
+    public var tightenBias = 0.0
+    public var timeoutBias = 0.0
+    public var longBlock = false
+    public var shortBlock = false
+    public var blockScore = 1.10
+    public var maxActiveModels = 12
+    public var championOnly = false
+    public var loadedAtUTC: Int64 = 0
+
+    public init(symbol: String = "") {
+        self.symbol = symbol
+    }
+
+    public static func parse(symbol: String, tsv: String, nowUTC: Int64, loadedAtUTC: Int64? = nil) -> SupervisorCommandState {
+        let doc = ControlPlaneKeyValueDocument(tsv: tsv)
+        var state = SupervisorCommandState(symbol: symbol)
+        state.profileName = doc.string("profile_name", default: state.profileName)
+        state.symbol = doc.string("symbol", default: state.symbol)
+        state.generatedAtUTC = doc.int64("generated_at", default: state.generatedAtUTC)
+        state.expiresAtUTC = doc.int64("expires_at", default: state.expiresAtUTC)
+        state.entryBudgetMultiplier = doc.double("entry_budget_mult", default: state.entryBudgetMultiplier)
+        state.longEntryBudgetMultiplier = doc.double("long_entry_budget_mult", default: state.longEntryBudgetMultiplier)
+        state.shortEntryBudgetMultiplier = doc.double("short_entry_budget_mult", default: state.shortEntryBudgetMultiplier)
+        state.holdBudgetMultiplier = doc.double("hold_budget_mult", default: state.holdBudgetMultiplier)
+        state.addCapMultiplier = doc.double("add_cap_mult", default: state.addCapMultiplier)
+        state.reduceBias = doc.double("reduce_bias", default: state.reduceBias)
+        state.exitBias = doc.double("exit_bias", default: state.exitBias)
+        state.tightenBias = doc.double("tighten_bias", default: state.tightenBias)
+        state.timeoutBias = doc.double("timeout_bias", default: state.timeoutBias)
+        state.longBlock = doc.bool("long_block", default: state.longBlock)
+        state.shortBlock = doc.bool("short_block", default: state.shortBlock)
+        state.blockScore = doc.double("block_score", default: state.blockScore)
+        state.maxActiveModels = doc.int("max_active_models", default: state.maxActiveModels)
+        state.championOnly = doc.bool("champion_only", default: state.championOnly)
+        return state.normalized(nowUTC: nowUTC, loadedAtUTC: loadedAtUTC ?? nowUTC)
+    }
+
+    public func normalized(nowUTC: Int64, loadedAtUTC: Int64? = nil) -> SupervisorCommandState {
+        var state = self
+        state.entryBudgetMultiplier = fxClamp(state.entryBudgetMultiplier, 0.10, 1.20)
+        state.longEntryBudgetMultiplier = fxClamp(state.longEntryBudgetMultiplier, 0.10, 1.20)
+        state.shortEntryBudgetMultiplier = fxClamp(state.shortEntryBudgetMultiplier, 0.10, 1.20)
+        if abs(state.longEntryBudgetMultiplier - 1.0) < 1e-6,
+           abs(state.shortEntryBudgetMultiplier - 1.0) < 1e-6,
+           abs(state.entryBudgetMultiplier - 1.0) > 1e-6 {
+            state.longEntryBudgetMultiplier = state.entryBudgetMultiplier
+            state.shortEntryBudgetMultiplier = state.entryBudgetMultiplier
+        }
+        state.holdBudgetMultiplier = fxClamp(state.holdBudgetMultiplier, 0.10, 1.20)
+        state.addCapMultiplier = fxClamp(state.addCapMultiplier, 0.05, 1.20)
+        state.reduceBias = fxClamp(state.reduceBias, 0.0, 1.0)
+        state.exitBias = fxClamp(state.exitBias, 0.0, 1.0)
+        state.tightenBias = fxClamp(state.tightenBias, 0.0, 1.0)
+        state.timeoutBias = fxClamp(state.timeoutBias, 0.0, 1.0)
+        state.blockScore = fxClamp(state.blockScore, 0.20, 3.0)
+        state.maxActiveModels = Int(fxClamp(Double(state.maxActiveModels), 1.0, Double(FXDataEngineConstants.aiCount)))
+        state.ready = ControlPlaneFreshness.artifactFresh(
+            generatedAtUTC: state.generatedAtUTC,
+            expiresAtUTC: state.expiresAtUTC,
+            fallbackTTLSeconds: 240,
+            nowUTC: nowUTC
+        )
+        if let loadedAtUTC {
+            state.loadedAtUTC = loadedAtUTC
+        }
+        return state
+    }
+
+    public func resolvedSymbol(_ symbol: String) -> SupervisorCommandState {
+        var state = self
+        if state.symbol == "__GLOBAL__" {
+            state.symbol = symbol
+        }
+        return state
+    }
+
+    public func blocksDirection(_ direction: Int) -> Bool {
+        guard ready else { return false }
+        if direction == 1 {
+            return longBlock
+        }
+        if direction == 0 {
+            return shortBlock
+        }
+        return longBlock && shortBlock
+    }
+
+    public func entryBudgetMultiplier(for direction: Int) -> Double {
+        guard ready else { return 1.0 }
+        if direction == 1 {
+            return fxClamp(longEntryBudgetMultiplier, 0.10, 1.20)
+        }
+        if direction == 0 {
+            return fxClamp(shortEntryBudgetMultiplier, 0.10, 1.20)
+        }
+        return fxClamp(entryBudgetMultiplier, 0.10, 1.20)
+    }
+}

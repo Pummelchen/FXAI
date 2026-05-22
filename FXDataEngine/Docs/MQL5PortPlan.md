@@ -35,12 +35,18 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 
 - `Engine/Core`: partially ported. Core constants, feature groups, plugin families, data request basics, feature schema, and normalization concepts exist in Swift; analog memory, broker execution, regime graph, runtime perf, and model-context details remain.
 - `Engine` root: partially ported. Feature registry/build/norm exist only as a first slice; event macro, data pipeline/sample preparation, meta calibration/reliability/policy/stacker/horizon, and runtime artifacts remain.
-- `Runtime/ControlPlane`: not ported before this plan. First Swift slice should add DTOs, path helpers, and TSV parsing.
+- `Runtime/ControlPlane`: partially ported. Swift now has profile/snapshot DTOs, safe path helpers, TSV parsing, adaptive/student router weight helpers, portfolio supervisor defaults, supervisor service/command state parsing, freshness checks, and command direction/budget helpers. Peer aggregate scoring and file-backed loaders remain.
 - `Runtime/Trade`: not ported. Must be split between FXBacktest simulation and FXDataEngine policy/risk DTOs.
 - `Runtime` stages: not ported. Must be rebuilt with plugin mockability before real PyTorch/TensorFlow backends.
 - `Lifecycle` and `Warmup`: not ported. Must be moved after data/sample contracts stabilize.
 - `Services`: not ported. MT5 service collectors should become offline data-provider inputs or deterministic readers.
 - `Tests`: not ported, except current Swift tests for the first OHLCV/volume contract slice.
+
+## Port Progress
+
+- Done: control-plane foundations: deployment, portfolio supervisor, student router, adaptive router, supervisor service, supervisor command, snapshot DTOs, MQL-style TSV parsing, clamping/defaults, safe paths, and direction/budget helper behavior.
+- Done: runtime artifact foundations: runtime artifact paths, version/header contract, runtime stage names, persistence coverage manifest row logic, feature registry manifest rows, feature clip bounds, and stateful checkpoint promotion readiness logic.
+- Remaining in phase 3: file-backed profile repositories, control-plane snapshot aggregation, full runtime performance/macro/shadow manifest writers, and binary runtime artifact persistence.
 
 ## Start Order
 
