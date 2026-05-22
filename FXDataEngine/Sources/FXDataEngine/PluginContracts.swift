@@ -481,6 +481,23 @@ public extension FXAIPluginV4 {
 }
 
 public enum PluginContractTools {
+    public static func validateCompatibility(manifest: PluginManifestV4, context: PluginContextV4) throws {
+        guard context.horizonMinutes >= manifest.minHorizonMinutes,
+              context.horizonMinutes <= manifest.maxHorizonMinutes else {
+            throw FXDataEngineError.validation("ctx.horizon_manifest")
+        }
+        guard context.sequenceBars >= manifest.minSequenceBars,
+              context.sequenceBars <= manifest.maxSequenceBars else {
+            throw FXDataEngineError.validation("ctx.sequence_manifest")
+        }
+
+        let expectsWindow = manifest.capabilityMask.contains(.windowContext) ||
+            manifest.capabilityMask.contains(.stateful)
+        guard expectsWindow || context.sequenceBars == 1 else {
+            throw FXDataEngineError.validation("ctx.sequence_unexpected")
+        }
+    }
+
     public static func symbolHash01(_ symbol: String) -> Double {
         let bytes = Array(symbol.uppercased().utf8)
         var hash: UInt64 = 14_695_981_039_346_656_037
