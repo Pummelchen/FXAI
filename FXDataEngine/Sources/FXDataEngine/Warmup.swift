@@ -54,8 +54,175 @@ public struct WarmupBucketStats: Codable, Hashable, Sendable {
     }
 }
 
+public struct WarmupThresholdPair: Codable, Hashable, Sendable {
+    public var buy: Double
+    public var sell: Double
+
+    public init(buy: Double, sell: Double) {
+        self.buy = buy
+        self.sell = sell
+    }
+}
+
+public struct WarmupExecutionPlan: Codable, Hashable, Sendable {
+    public var samples: Int
+    public var loops: Int
+    public var trainEpochs: Int
+    public var folds: Int
+    public var minimumTrades: Int
+    public var baseHorizonMinutes: Int
+    public var horizons: [Int]
+    public var maxHorizonMinutes: Int
+    public var featureLookback: Int
+    public var neededBars: Int
+    public var thresholds: WarmupThresholdPair
+    public var evThresholdPoints: Double
+    public var costBufferPoints: Double
+    public var evLookbackSamples: Int
+    public var aiHint: Int
+    public var transferSampleCap: Int
+    public var portfolioEvaluationCap: Int
+
+    public init(
+        samples: Int,
+        loops: Int,
+        trainEpochs: Int,
+        folds: Int,
+        minimumTrades: Int,
+        baseHorizonMinutes: Int,
+        horizons: [Int],
+        maxHorizonMinutes: Int,
+        featureLookback: Int,
+        neededBars: Int,
+        thresholds: WarmupThresholdPair,
+        evThresholdPoints: Double,
+        costBufferPoints: Double,
+        evLookbackSamples: Int,
+        aiHint: Int,
+        transferSampleCap: Int,
+        portfolioEvaluationCap: Int
+    ) {
+        self.samples = samples
+        self.loops = loops
+        self.trainEpochs = trainEpochs
+        self.folds = folds
+        self.minimumTrades = minimumTrades
+        self.baseHorizonMinutes = baseHorizonMinutes
+        self.horizons = horizons
+        self.maxHorizonMinutes = maxHorizonMinutes
+        self.featureLookback = featureLookback
+        self.neededBars = neededBars
+        self.thresholds = thresholds
+        self.evThresholdPoints = evThresholdPoints
+        self.costBufferPoints = costBufferPoints
+        self.evLookbackSamples = evLookbackSamples
+        self.aiHint = aiHint
+        self.transferSampleCap = transferSampleCap
+        self.portfolioEvaluationCap = portfolioEvaluationCap
+    }
+}
+
 public enum WarmupTools {
     public static let missingScore = -1e9
+
+    public static func sanitizeThresholdPair(buyThreshold: Double, sellThreshold: Double) -> WarmupThresholdPair {
+        var buy = fxClamp(buyThreshold, 0.50, 0.95)
+        var sell = fxClamp(sellThreshold, 0.05, 0.50)
+
+        if sell >= buy {
+            sell = fxClamp(sell, 0.05, 0.49)
+            buy = fxClamp(max(buy, sell + 0.01), 0.50, 0.95)
+            if sell >= buy {
+                sell = 0.49
+                buy = 0.50
+            }
+        }
+
+        return WarmupThresholdPair(buy: buy, sell: sell)
+    }
+
+    public static func resolveExecutionPlan(
+        warmupSamples: Int,
+        warmupLoops: Int,
+        trainEpochs: Int,
+        warmupFolds: Int,
+        warmupMinimumTrades: Int,
+        predictionTargetMinutes: Int,
+        configuredHorizons: [Int],
+        multiHorizon: Bool,
+        buyThreshold: Double,
+        sellThreshold: Double,
+        evThresholdPoints: Double,
+        costBufferPoints: Double,
+        evLookbackSamples: Int,
+        aiType: Int,
+        ensemble: Bool,
+        maxHorizons: Int = RuntimeArtifactConstants.maxHorizons,
+        featureLookback: Int = 10
+    ) -> WarmupExecutionPlan {
+        let samples = min(max(warmupSamples, 2_000), 50_000)
+        let loops = min(max(warmupLoops, 10), 500)
+        let epochs = min(max(trainEpochs, 1), 5)
+        let folds = min(max(warmupFolds, 2), 5)
+        let minimumTrades = min(max(warmupMinimumTrades, 20), 2_000)
+        let baseHorizon = HorizonTools.clampHorizon(predictionTargetMinutes)
+        let horizonLimit = max(1, maxHorizons)
+
+        var horizons: [Int] = []
+        if multiHorizon, !configuredHorizons.isEmpty {
+            for horizon in configuredHorizons.prefix(horizonLimit) {
+                horizons.append(HorizonTools.clampHorizon(horizon))
+            }
+        }
+        if horizons.isEmpty {
+            horizons.append(baseHorizon)
+        }
+
+        var hasPrimary = false
+        var maxHorizon = baseHorizon
+        for horizon in horizons {
+            if horizon == baseHorizon {
+                hasPrimary = true
+            }
+            if horizon > maxHorizon {
+                maxHorizon = horizon
+            }
+        }
+
+        if !hasPrimary, horizons.count < horizonLimit {
+            horizons.append(baseHorizon)
+            if baseHorizon > maxHorizon {
+                maxHorizon = baseHorizon
+            }
+        }
+
+        let lookback = max(0, featureLookback)
+        let neededBars = samples + maxHorizon + lookback
+        let evLookback = min(max(evLookbackSamples, 20), 400)
+        let aiHint = ensemble || aiType < -1 || aiType >= FXDataEngineConstants.aiCount ? -1 : aiType
+        let transferCap = min(640, max(128, samples / 6))
+        let portfolioCap = min(160, max(64, samples / 12))
+
+        return WarmupExecutionPlan(
+            samples: samples,
+            loops: loops,
+            trainEpochs: epochs,
+            folds: folds,
+            minimumTrades: minimumTrades,
+            baseHorizonMinutes: baseHorizon,
+            horizons: horizons,
+            maxHorizonMinutes: maxHorizon,
+            featureLookback: lookback,
+            neededBars: neededBars,
+            thresholds: sanitizeThresholdPair(buyThreshold: buyThreshold, sellThreshold: sellThreshold),
+            evThresholdPoints: fxClamp(evThresholdPoints, 0.0, 100.0),
+            costBufferPoints: max(0.0, fxSafeFinite(costBufferPoints)),
+            evLookbackSamples: evLookback,
+            aiHint: aiHint,
+            transferSampleCap: transferCap,
+            portfolioEvaluationCap: portfolioCap
+        )
+    }
 
     public static func scoreBucket(_ stats: WarmupBucketStats) -> Double {
         guard stats.trades > 0 else { return missingScore }
