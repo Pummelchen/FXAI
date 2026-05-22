@@ -159,6 +159,56 @@ public struct PreparedSampleWindow: Codable, Hashable, Sendable {
     }
 }
 
+public struct PreparedSampleNormalizationCache: Sendable {
+    public var method: FeatureNormalizationMethod
+    public var horizonMinutes: Int
+    public var fitStartIndex: Int
+    public var fitEndIndex: Int
+    public var ready: Bool
+    public var samples: [PreparedTrainingSample]
+
+    public init(
+        method: FeatureNormalizationMethod,
+        horizonMinutes: Int,
+        fitStartIndex: Int,
+        fitEndIndex: Int,
+        ready: Bool = true,
+        samples: [PreparedTrainingSample] = []
+    ) {
+        self.method = method
+        self.horizonMinutes = TrainingSampleTools.clampHorizon(horizonMinutes)
+        self.fitStartIndex = fitStartIndex
+        self.fitEndIndex = fitEndIndex
+        self.ready = ready
+        self.samples = samples
+    }
+}
+
+public struct PreparedSampleNormalizationCacheRequest: Codable, Hashable, Sendable {
+    public var method: FeatureNormalizationMethod
+    public var horizonMinutes: Int
+    public var sampleStartIndex: Int
+    public var sampleEndIndex: Int
+    public var fitStartIndex: Int
+    public var fitEndIndex: Int
+
+    public init(
+        method: FeatureNormalizationMethod,
+        horizonMinutes: Int,
+        sampleStartIndex: Int,
+        sampleEndIndex: Int,
+        fitStartIndex: Int,
+        fitEndIndex: Int
+    ) {
+        self.method = method
+        self.horizonMinutes = TrainingSampleTools.clampHorizon(horizonMinutes)
+        self.sampleStartIndex = sampleStartIndex
+        self.sampleEndIndex = sampleEndIndex
+        self.fitStartIndex = fitStartIndex
+        self.fitEndIndex = fitEndIndex
+    }
+}
+
 public struct TrainingDatasetRequest: Sendable {
     public var startIndex: Int?
     public var endIndex: Int?
@@ -227,6 +277,159 @@ public enum TrainingSampleTools {
             let sample = samples[index]
             if !sample.valid { break }
             rows.append(sample.x)
+        }
+        return PreparedSampleWindow(rows: rows)
+    }
+
+    public static func findNormalizationSampleCache(
+        method: FeatureNormalizationMethod,
+        horizonMinutes: Int,
+        fitStartIndex: Int,
+        fitEndIndex: Int,
+        caches: [PreparedSampleNormalizationCache]
+    ) -> Int? {
+        let horizon = clampHorizon(horizonMinutes)
+        return caches.firstIndex {
+            $0.ready &&
+                $0.method == method &&
+                $0.horizonMinutes == horizon &&
+                $0.fitStartIndex == fitStartIndex &&
+                $0.fitEndIndex == fitEndIndex
+        }
+    }
+
+    public static func routedNormalizationSampleCacheRequests(
+        aiID: Int,
+        startIndex: Int,
+        endIndex: Int,
+        horizonMinutes: Int,
+        samples: [PreparedTrainingSample],
+        routingState: AITrainingRoutingState,
+        currentMethod: FeatureNormalizationMethod,
+        configuredHorizons: [Int] = defaultConfiguredHorizons
+    ) -> [PreparedSampleNormalizationCacheRequest] {
+        guard AIModelID(rawValue: aiID) != nil, !samples.isEmpty else {
+            return []
+        }
+
+        let start = max(startIndex, 0)
+        let end = min(endIndex, samples.count - 1)
+        guard end >= start else { return [] }
+
+        var needed: Set<FeatureNormalizationMethod> = []
+        var requests: [PreparedSampleNormalizationCacheRequest] = []
+
+        func appendIfNeeded(_ method: FeatureNormalizationMethod) {
+            guard !needed.contains(method) else { return }
+            needed.insert(method)
+            requests.append(
+                PreparedSampleNormalizationCacheRequest(
+                    method: method,
+                    horizonMinutes: horizonMinutes,
+                    sampleStartIndex: startIndex,
+                    sampleEndIndex: endIndex,
+                    fitStartIndex: startIndex,
+                    fitEndIndex: endIndex
+                )
+            )
+        }
+
+        for index in start...end {
+            let sample = samples[index]
+            guard sample.valid else { continue }
+            let method = AIHyperParameterTools.routedNormalizationMethod(
+                aiID: aiID,
+                regimeID: sample.regimeID,
+                horizonMinutes: sample.horizonMinutes,
+                state: routingState,
+                currentMethod: currentMethod,
+                configuredHorizons: configuredHorizons
+            )
+            appendIfNeeded(method)
+        }
+
+        let defaultMethod = AIHyperParameterTools.routedNormalizationMethod(
+            aiID: aiID,
+            regimeID: 0,
+            horizonMinutes: horizonMinutes,
+            state: routingState,
+            currentMethod: currentMethod,
+            configuredHorizons: configuredHorizons
+        )
+        appendIfNeeded(defaultMethod)
+
+        return requests
+    }
+
+    public static func cachedPreparedSample(
+        aiID: Int,
+        referenceSample: PreparedTrainingSample,
+        sampleIndex: Int,
+        caches: [PreparedSampleNormalizationCache],
+        routingState: AITrainingRoutingState,
+        currentMethod: FeatureNormalizationMethod,
+        configuredHorizons: [Int] = defaultConfiguredHorizons
+    ) -> PreparedTrainingSample {
+        let method = AIHyperParameterTools.routedNormalizationMethod(
+            aiID: aiID,
+            regimeID: referenceSample.regimeID,
+            horizonMinutes: referenceSample.horizonMinutes,
+            state: routingState,
+            currentMethod: currentMethod,
+            configuredHorizons: configuredHorizons
+        )
+        guard let cache = caches.first(where: {
+            $0.ready &&
+                $0.method == method &&
+                $0.horizonMinutes == referenceSample.horizonMinutes
+        }) else {
+            var invalid = referenceSample
+            invalid.valid = false
+            return invalid
+        }
+
+        guard sampleIndex >= 0, sampleIndex < cache.samples.count else {
+            var invalid = referenceSample
+            invalid.valid = false
+            return invalid
+        }
+
+        return cache.samples[sampleIndex]
+    }
+
+    public static func cachedPreparedSampleWindow(
+        aiID: Int,
+        samples: [PreparedTrainingSample],
+        anchorIndex: Int,
+        caches: [PreparedSampleNormalizationCache],
+        requestedBars: Int,
+        routingState: AITrainingRoutingState,
+        currentMethod: FeatureNormalizationMethod,
+        configuredHorizons: [Int] = defaultConfiguredHorizons
+    ) -> PreparedSampleWindow {
+        let sequence = min(max(requestedBars, 1), FXDataEngineConstants.maxSequenceBars)
+        guard anchorIndex > 0, anchorIndex < samples.count else {
+            return PreparedSampleWindow()
+        }
+
+        var rows: [[Double]] = []
+        rows.reserveCapacity(sequence)
+        for offset in 1...sequence {
+            let index = anchorIndex - offset
+            if index < 0 || index >= samples.count { break }
+            let sample = samples[index]
+            if !sample.valid { break }
+            let cached = cachedPreparedSample(
+                aiID: aiID,
+                referenceSample: sample,
+                sampleIndex: index,
+                caches: caches,
+                routingState: routingState,
+                currentMethod: currentMethod,
+                configuredHorizons: configuredHorizons
+            )
+            if !cached.valid { break }
+            rows.append(cached.x)
         }
         return PreparedSampleWindow(rows: rows)
     }
