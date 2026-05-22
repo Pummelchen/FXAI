@@ -39,7 +39,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 - `Runtime/Trade`: not ported. Must be split between FXBacktest simulation and FXDataEngine policy/risk DTOs.
 - `Runtime` stages: partially ported. Time-context helpers, router model-cap pressure logic, and final signal reason/intensity math are available as deterministic Swift contracts; broader feature/model/transfer/policy orchestration still needs plugin mockability before real PyTorch/TensorFlow backends.
 - `Lifecycle` and `Warmup`: not ported. Must be moved after data/sample contracts stabilize.
-- `Services`: partially ported. NewsPulse, Rates Engine, and Cross Asset pair-state TSV readers are available in Swift, including calendar-cache fallback for NewsPulse; remaining MT5 service collectors should become offline data-provider inputs or deterministic readers.
+- `Services`: partially ported. NewsPulse, Rates Engine, Cross Asset, and Microstructure pair-state TSV readers are available in Swift, including calendar-cache fallback for NewsPulse; remaining MT5 service collectors should become offline data-provider inputs or deterministic readers.
 - `Tests`: not ported, except current Swift tests for the first OHLCV/volume contract slice.
 
 ## Port Progress
@@ -78,6 +78,7 @@ This plan tracks the remaining non-tensor MQL5 FXDataEngine surface that must mo
 - Done: NewsPulse service-state reader: `runtime_trade_newspulse.mqh` symbol-map parsing, supported-currency heuristic pair IDs, flat pair snapshot parsing, max-six reason de-duplication, freshness/stale handling, value clamps, and calendar-cache fallback are ported as pure Swift inputs.
 - Done: Rates Engine service-state reader: `runtime_trade_rates_engine.mqh` symbol-map parsing, NewsPulse pair-id fallback, flat pair snapshot parsing, max-six reason de-duplication, freshness/stale handling, value clamps, and string defaults are ported as pure Swift inputs.
 - Done: Cross Asset service-state reader: `runtime_trade_cross_asset_state.mqh` symbol-map parsing, NewsPulse pair-id fallback, global score plus pair snapshot parsing, max-eight reason de-duplication, and legacy stale-on-missing-clock/generated-time behavior are ported as pure Swift inputs.
+- Done: Microstructure service-state reader: `runtime_trade_microstructure.mqh` symbol-map parsing, NewsPulse pair-id fallback, flat pair snapshot parsing, max-six reason de-duplication, freshness/stale handling, value clamps, string defaults, and un-clamped caution overrides are ported as pure Swift inputs. Legacy spread/tick fields remain isolated to this service-state contract and are not part of the M1 OHLCV market-data contract.
 
 ## Start Order
 
