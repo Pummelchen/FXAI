@@ -236,11 +236,32 @@ public enum TrainingSampleTools {
         evThresholdPoints: Double,
         tradeKillerMinutes: Int? = nil
     ) -> TripleBarrierLabelResult {
+        buildTripleBarrierLabel(
+            series: series,
+            index: index,
+            horizonMinutes: horizonMinutes,
+            roundTripCostPoints: roundTripCostPoints,
+            evThresholdPoints: evThresholdPoints,
+            maxFutureIndex: series.count - 1,
+            tradeKillerMinutes: tradeKillerMinutes
+        )
+    }
+
+    public static func buildTripleBarrierLabel(
+        series: M1OHLCVSeries,
+        index: Int,
+        horizonMinutes: Int,
+        roundTripCostPoints: Double,
+        evThresholdPoints: Double,
+        maxFutureIndex: Int,
+        tradeKillerMinutes: Int? = nil
+    ) -> TripleBarrierLabelResult {
         let horizon = clampHorizon(horizonMinutes)
         guard index >= 0, index < series.count, horizon >= 1 else {
             return TripleBarrierLabelResult()
         }
-        let maxStep = min(horizon, series.count - 1 - index)
+        let boundedFutureIndex = min(maxFutureIndex, series.count - 1)
+        let maxStep = min(horizon, boundedFutureIndex - index)
         guard maxStep >= 1 else { return TripleBarrierLabelResult() }
 
         let entry = series.close[index]
