@@ -79,6 +79,9 @@ public extension ReferenceTier {
 }
 
 public struct RuntimeArtifactHeader: Codable, Hashable, Sendable {
+    public static let binaryFieldCount = 10
+    public static let binaryByteCount = binaryFieldCount * MemoryLayout<Int32>.size
+
     public var version: Int
     public var featureCount: Int
     public var normalizationMethodCount: Int
@@ -116,6 +119,130 @@ public struct RuntimeArtifactHeader: Codable, Hashable, Sendable {
 
     public var isCompatibleWithCurrentContract: Bool {
         self == RuntimeArtifactHeader()
+    }
+
+    public var binaryFields: [Int] {
+        [
+            version,
+            featureCount,
+            normalizationMethodCount,
+            normalizationRollWindowMax,
+            replayCapacity,
+            aiCount,
+            regimeCount,
+            maxHorizons,
+            conformalDepth,
+            reliabilityPendingCapacity
+        ]
+    }
+}
+
+public struct RuntimeArtifactEnvelope: Codable, Hashable, Sendable {
+    public var header: RuntimeArtifactHeader
+    public var payload: Data
+
+    public init(header: RuntimeArtifactHeader = RuntimeArtifactHeader(), payload: Data = Data()) {
+        self.header = header
+        self.payload = payload
+    }
+
+    public var payloadByteCount: Int {
+        payload.count
+    }
+
+    public var isCompatibleWithCurrentContract: Bool {
+        header.isCompatibleWithCurrentContract
+    }
+}
+
+public enum RuntimeArtifactBinaryCodec {
+    public static func encodeHeader(_ header: RuntimeArtifactHeader) throws -> Data {
+        var data = Data()
+        data.reserveCapacity(RuntimeArtifactHeader.binaryByteCount)
+        for value in header.binaryFields {
+            try appendInt32(value, to: &data)
+        }
+        return data
+    }
+
+    public static func decodeHeader(from data: Data) throws -> RuntimeArtifactHeader {
+        guard data.count >= RuntimeArtifactHeader.binaryByteCount else {
+            throw FXDataEngineError.validation(
+                "runtime artifact header is \(data.count) bytes, need \(RuntimeArtifactHeader.binaryByteCount)"
+            )
+        }
+        let fields = try decodeHeaderFields(from: data)
+        return RuntimeArtifactHeader(
+            version: fields[0],
+            featureCount: fields[1],
+            normalizationMethodCount: fields[2],
+            normalizationRollWindowMax: fields[3],
+            replayCapacity: fields[4],
+            aiCount: fields[5],
+            regimeCount: fields[6],
+            maxHorizons: fields[7],
+            conformalDepth: fields[8],
+            reliabilityPendingCapacity: fields[9]
+        )
+    }
+
+    public static func encodeEnvelope(_ envelope: RuntimeArtifactEnvelope) throws -> Data {
+        var data = try encodeHeader(envelope.header)
+        data.append(envelope.payload)
+        return data
+    }
+
+    public static func decodeEnvelope(from data: Data) throws -> RuntimeArtifactEnvelope {
+        let header = try decodeHeader(from: data)
+        let payloadStart = RuntimeArtifactHeader.binaryByteCount
+        let payload = data.count > payloadStart ? data.subdata(in: payloadStart..<data.count) : Data()
+        return RuntimeArtifactEnvelope(header: header, payload: payload)
+    }
+
+    private static func decodeHeaderFields(from data: Data) throws -> [Int] {
+        let bytes = [UInt8](data.prefix(RuntimeArtifactHeader.binaryByteCount))
+        var output: [Int] = []
+        output.reserveCapacity(RuntimeArtifactHeader.binaryFieldCount)
+        for offset in stride(from: 0, to: RuntimeArtifactHeader.binaryByteCount, by: MemoryLayout<Int32>.size) {
+            output.append(Int(readInt32(bytes: bytes, offset: offset)))
+        }
+        return output
+    }
+
+    private static func appendInt32(_ value: Int, to data: inout Data) throws {
+        guard value >= Int(Int32.min), value <= Int(Int32.max) else {
+            throw FXDataEngineError.validation("runtime artifact integer field exceeds int32 range")
+        }
+        var raw = Int32(value).littleEndian
+        withUnsafeBytes(of: &raw) {
+            data.append(contentsOf: $0)
+        }
+    }
+
+    private static func readInt32(bytes: [UInt8], offset: Int) -> Int32 {
+        var raw = UInt32(bytes[offset])
+        raw |= UInt32(bytes[offset + 1]) << 8
+        raw |= UInt32(bytes[offset + 2]) << 16
+        raw |= UInt32(bytes[offset + 3]) << 24
+        return Int32(bitPattern: raw)
+    }
+}
+
+public enum RuntimeArtifactSavePolicy {
+    public static let defaultMinSaveIntervalSeconds: Int64 = 900
+
+    public static func shouldSave(
+        dirty: Bool,
+        lastSaveTimeUTC: Int64,
+        barTimeUTC: Int64,
+        nowUTC: Int64,
+        minIntervalSeconds: Int64 = defaultMinSaveIntervalSeconds
+    ) -> Bool {
+        guard dirty else { return false }
+        let effectiveNow = barTimeUTC > 0 ? barTimeUTC : nowUTC
+        guard effectiveNow > 0 else { return true }
+        guard lastSaveTimeUTC > 0 else { return true }
+        return (effectiveNow - lastSaveTimeUTC) >= minIntervalSeconds
     }
 }
 
@@ -943,6 +1070,34 @@ public struct RuntimeArtifactFileRepository {
         )
         let text = RuntimeArtifactTSV.document(header: header, rows: rows)
         try text.write(to: fileURL, atomically: true, encoding: .utf8)
+    }
+
+    public func fileSize(relativePath: String) throws -> Int64? {
+        let fileURL = url(for: relativePath)
+        guard fileManager.fileExists(atPath: fileURL.path) else { return nil }
+        let attributes = try fileManager.attributesOfItem(atPath: fileURL.path)
+        return (attributes[.size] as? NSNumber)?.int64Value
+    }
+
+    public func readRuntimeArtifact(symbol: String) throws -> RuntimeArtifactEnvelope? {
+        let fileURL = url(for: RuntimeArtifactPaths.runtimeArtifactFile(symbol: symbol))
+        guard fileManager.fileExists(atPath: fileURL.path) else { return nil }
+        let data = try Data(contentsOf: fileURL)
+        return try RuntimeArtifactBinaryCodec.decodeEnvelope(from: data)
+    }
+
+    public func writeRuntimeArtifact(symbol: String, envelope: RuntimeArtifactEnvelope) throws {
+        let fileURL = url(for: RuntimeArtifactPaths.runtimeArtifactFile(symbol: symbol))
+        try fileManager.createDirectory(
+            at: fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let data = try RuntimeArtifactBinaryCodec.encodeEnvelope(envelope)
+        try data.write(to: fileURL, options: .atomic)
+    }
+
+    public func runtimeArtifactFileSize(symbol: String) throws -> Int64? {
+        try fileSize(relativePath: RuntimeArtifactPaths.runtimeArtifactFile(symbol: symbol))
     }
 
     public func writePersistenceManifest(symbol: String, rows: [PersistenceCoverageManifestRow]) throws {

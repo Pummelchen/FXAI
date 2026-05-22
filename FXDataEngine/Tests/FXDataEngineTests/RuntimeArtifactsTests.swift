@@ -61,6 +61,58 @@ final class RuntimeArtifactsTests: XCTestCase {
         XCTAssertFalse(incompatible.isCompatibleWithCurrentContract)
     }
 
+    func testRuntimeArtifactBinaryCodecPreservesMQLHeaderAndPayload() throws {
+        let header = RuntimeArtifactHeader()
+        let encodedHeader = try RuntimeArtifactBinaryCodec.encodeHeader(header)
+
+        XCTAssertEqual(encodedHeader.count, RuntimeArtifactHeader.binaryByteCount)
+        XCTAssertEqual(Array(encodedHeader.prefix(8)), [15, 0, 0, 0, 180, 0, 0, 0])
+        XCTAssertEqual(try RuntimeArtifactBinaryCodec.decodeHeader(from: encodedHeader), header)
+
+        let payload = Data([0xAA, 0xBB, 0xCC, 0xDD])
+        let envelope = RuntimeArtifactEnvelope(header: header, payload: payload)
+        let decoded = try RuntimeArtifactBinaryCodec.decodeEnvelope(
+            from: try RuntimeArtifactBinaryCodec.encodeEnvelope(envelope)
+        )
+        XCTAssertEqual(decoded.header, header)
+        XCTAssertEqual(decoded.payload, payload)
+        XCTAssertTrue(decoded.isCompatibleWithCurrentContract)
+        XCTAssertEqual(decoded.payloadByteCount, 4)
+
+        var incompatibleHeader = header
+        incompatibleHeader.featureCount = 999
+        let incompatibleEnvelope = RuntimeArtifactEnvelope(header: incompatibleHeader, payload: Data())
+        XCTAssertFalse(incompatibleEnvelope.isCompatibleWithCurrentContract)
+        XCTAssertThrowsError(try RuntimeArtifactBinaryCodec.decodeHeader(from: Data(count: 12)))
+    }
+
+    func testRuntimeArtifactSavePolicyMatchesLegacyDirtyThrottle() {
+        XCTAssertFalse(RuntimeArtifactSavePolicy.shouldSave(
+            dirty: false,
+            lastSaveTimeUTC: 1_000,
+            barTimeUTC: 2_000,
+            nowUTC: 2_000
+        ))
+        XCTAssertFalse(RuntimeArtifactSavePolicy.shouldSave(
+            dirty: true,
+            lastSaveTimeUTC: 1_000,
+            barTimeUTC: 1_899,
+            nowUTC: 1_899
+        ))
+        XCTAssertTrue(RuntimeArtifactSavePolicy.shouldSave(
+            dirty: true,
+            lastSaveTimeUTC: 1_000,
+            barTimeUTC: 1_900,
+            nowUTC: 1_900
+        ))
+        XCTAssertTrue(RuntimeArtifactSavePolicy.shouldSave(
+            dirty: true,
+            lastSaveTimeUTC: 0,
+            barTimeUTC: 0,
+            nowUTC: 0
+        ))
+    }
+
     func testFeatureManifestRowsUseSwiftVolumeContractAndLegacyClipBounds() {
         let volume = FeatureRegistryManifestRow(featureIndex: 6)
         XCTAssertEqual(volume.featureName, "volume_norm")
@@ -222,6 +274,16 @@ final class RuntimeArtifactsTests: XCTestCase {
     func testRuntimeArtifactFileRepositoryWritesTSVManifests() throws {
         let (root, repository) = try temporaryRepository()
         defer { try? FileManager.default.removeItem(at: root) }
+
+        let envelope = RuntimeArtifactEnvelope(payload: Data([1, 2, 3, 4, 5]))
+        try repository.writeRuntimeArtifact(symbol: "EUR/USD", envelope: envelope)
+        let loadedEnvelope = try XCTUnwrap(repository.readRuntimeArtifact(symbol: "EUR/USD"))
+        XCTAssertEqual(loadedEnvelope.header, RuntimeArtifactHeader())
+        XCTAssertEqual(loadedEnvelope.payload, envelope.payload)
+        XCTAssertEqual(
+            try repository.runtimeArtifactFileSize(symbol: "EUR/USD"),
+            Int64(RuntimeArtifactHeader.binaryByteCount + envelope.payload.count)
+        )
 
         let persistence = PersistenceCoverageManifestRow(
             aiID: 2,
