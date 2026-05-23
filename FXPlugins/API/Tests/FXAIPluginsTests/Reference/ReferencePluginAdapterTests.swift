@@ -174,6 +174,7 @@ final class ReferencePluginAdapterTests: XCTestCase {
         AIModelID.factorPCAPanel.rawValue,
         AIModelID.factorPPPValue.rawValue,
         AIModelID.trendTSMOMVol.rawValue,
+        AIModelID.trendVolBreakout.rawValue,
         AIModelID.trendXSMOMRank.rawValue,
         AIModelID.linElasticLogit.rawValue,
         AIModelID.linProfitLogit.rawValue,
