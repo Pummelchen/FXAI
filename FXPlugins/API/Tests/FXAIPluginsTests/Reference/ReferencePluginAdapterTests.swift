@@ -150,6 +150,7 @@ final class ReferencePluginAdapterTests: XCTestCase {
         AIModelID.randomNoSkip.rawValue,
         AIModelID.demoMovingAverageCross.rawValue,
         AIModelID.demoFXStupid.rawValue,
+        AIModelID.enhash.rawValue,
         AIModelID.ftrlLogit.rawValue,
         AIModelID.sgdLogit.rawValue
     ]
