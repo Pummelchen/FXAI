@@ -1,82 +1,163 @@
 # FXAI
 
-FXAI is a trading-system framework that has moved its data-engine, plugin, and offline backtest surface from the original MT5/MQL5 runtime into native Swift and Metal packages. The remaining MT5 bridge is the FXDatabase exporter EA, which exists only to collect M1 OHLCV data for the Swift stack.
+FXAI is becoming a pure Swift, Metal, PyTorch, and TensorFlow research and execution stack for FX data, backtesting, plugin evaluation, demo trading, and live trading. The old MT5/MQL5 runtime is being retired. MT5 can remain a data or execution endpoint where needed, but the source of truth is now the Swift project structure in this repository.
 
-FXAI is not a single black-box strategy. It is a governed decision framework: shared data contracts, model plugins, runtime risk layers, audit gates, promotion artifacts, and an optional GUI all work from the same source of truth.
+FXAI is organized around one strict rule: only FXDatabase may touch ClickHouse directly. Every other project talks to FXDatabase through an API.
 
-FXBacktest and FXDatabase are now first-class FXAI subprojects included as ordinary tracked source in `FXBacktest/` and `FXDatabase/`. Clone FXAI normally; no submodule initialization is required for the Swift projects:
+## Project Map
 
-```bash
-git clone https://github.com/Pummelchen/FXAI.git
+```text
+External sources
+  MT5, IBKR/TWS, Yahoo Finance, TradingView, broker files, future feeds
+      |
+      v
+FXImporter
+  Connects to external data providers and normalizes incoming history/live data.
+      |
+      v
+FXDatabase
+  Owns ClickHouse access, validation, storage, deletion, SineTest data, and all database APIs.
+      |
+      +--> FXBacktest
+      |      Requests historical and backtest data through FXDatabase APIs only.
+      |      Calls FXDataEngine and FXPlugins to run CPU/Metal/PyTorch/TensorFlow/NLP backtests.
+      |
+      +--> FXDataEngine
+      |      Post-processes M1 OHLCV data, builds features, contexts, labels, audits, and plugin payloads.
+      |
+      +--> FXDataEngineGUI
+             Operator UI for runtime state, reports, promotion review, and project workflows.
+
+FXPlugins
+  Flat plugin zoo. Each plugin owns its CPU code and optional Metal, PyTorch, TensorFlow, or NLP code.
+
+Future agents
+  FXBacktestAgent: remote Mac worker that pulls backtest batches over TCP and reports results.
+  FXDemoAgent: applies selected backtest parameters to demo accounts across supported terminals/brokers.
+  FXLiveAgent: applies approved parameters to live accounts across supported terminals/brokers.
 ```
 
-## Swift Standard
+## Core Boundaries
 
-All Swift projects and subprojects in FXAI use the current local Apple toolchain standard: Swift tools 6.3, Swift language mode 6, Xcode 26.5, and macOS 26 as the deployment floor. New Swift packages should follow that baseline unless the repo standard is intentionally upgraded.
+- `FXImporter` pulls or receives external market data and hands normalized data to FXDatabase.
+- `FXDatabase` is the only database authority. It owns ClickHouse, validation, migrations, ingestion, storage, deletion, and access APIs.
+- `FXBacktest` never reads ClickHouse directly. It asks FXDatabase for history, stores backtest results through FXDatabase, and calls plugins through the FXAI contracts.
+- `FXDataEngine` turns raw M1 OHLCV into features, labels, context payloads, audit data, and plugin-ready requests.
+- `FXPlugins` is a flat plugin zoo. Each plugin folder owns its own implementation and accelerator folders.
+- `FXBacktestAgent`, `FXDemoAgent`, and `FXLiveAgent` are future distributed runtime projects, not data owners.
 
-## User Matrix Benefits
+## Data Contract
 
-| User | Core Benefit | Start Here |
-|---|---|---|
-| Live Trader | See whether a trade is allowed, cautioned, blocked, or abstained before trusting a signal. | [FXDataEngineGUI](FXDataEngineGUI/README.md) |
-| Demo Trader | Learn how the full control plane behaves under real market conditions without risking capital. | [FXDataEngine](FXDataEngine/README.md) |
-| Backtester | Run scenario-aware Swift/Metal evaluations instead of comparing isolated tester runs by headline score only. | [FXBacktest](FXBacktest/README.md) |
-| EA Researcher | Improve models, labels, calibration, routing, and promotion decisions with lineage and evidence. | [Offline Lab](FXDataEngine/Tools/OfflineLab/README.md) |
-| System Architect | Operate services, artifacts, release gates, recovery, and platform health without hidden machine assumptions. | [FXDataEngine](FXDataEngine/README.md) |
+The core historical data contract is `M1 OHLCV`.
 
-## Core Benefits
+- M1 open, high, low, close are mandatory.
+- Volume is optional by provider, but when `volume > 0` exists, FXDataEngine and plugins must use it.
+- Spread is no longer part of the offline backtest contract.
+- SineTest is a virtual FXDatabase security used by the test suite to prove plugins and accelerators can handle a simple predictable series without crashing.
 
-- Swift-first runtime direction: FXDataEngine, FXPlugins, FXBacktest, FXDatabase, and the agent folders are the active source surfaces for the migration away from MT5 execution.
-- One canonical historical market contract: verified `M1 OHLCV` from FXDatabase, with MT5 raw data access isolated behind the FXDatabase bridge and FXAI data pipeline. Spread is not part of this offline contract; volume is used by plugins whenever the dataset provides nonzero values.
-- Native Swift backtesting: FXBacktest consumes FXDatabase history and can run CPU, Metal, or hybrid CPU+Metal optimization paths for converted plugins.
-- Plugin-based model layer: statistical, tree, linear, sequence, factor, trend, regime, policy, and ensemble families share one prediction contract.
-- Runtime control plane: NewsPulse, Rates Engine, Cross Asset, Microstructure, Adaptive Router, Dynamic Ensemble, Probabilistic Calibration, Execution Quality, Drift Governance, Pair Network, and System Health layers can explain or suppress unsafe trades.
-- Audit and promotion discipline: candidates are checked through repeatable compile, deterministic, pytest, audit, benchmark, and release-gate workflows before promotion.
-- Practical operator surfaces: terminal commands remain first-class, and the optional GUI provides role-based dashboards, report browsing, run builders, promotion review, and recovery guidance.
+## User Benefits
 
-## What Users Can Do With FXAI
+| User type | What FXAI gives them |
+| --- | --- |
+| Backtest researcher | A Swift/Metal offline backtest stack that can run many plugin families without depending on MT5 Strategy Tester. |
+| Plugin developer | A clear plugin API, flat plugin folders, CPU references, and optional Metal/PyTorch/TensorFlow/NLP acceleration paths inside each plugin. |
+| Data operator | One ingestion path into FXDatabase, one ClickHouse authority, and no hidden direct database access from backtests or agents. |
+| Demo trader | A future FXDemoAgent path for applying proven backtest parameters to demo accounts before capital is at risk. |
+| Live trader | A future FXLiveAgent path where live execution is separated from research and gated by FXAI data, plugin, and risk contracts. |
+| Fleet operator | A future FXBacktestAgent model where other Macs can pull TCP batch work like MT5 backtest agents and return results to FXBacktest. |
+| System architect | A repo layout where data import, database authority, feature engineering, plugins, backtesting, UI, and agents have separate ownership. |
 
-- Check the live state of a symbol and understand the reason behind `ALLOW`, `CAUTION`, `BLOCK`, or `ABSTAIN`.
-- Run Swift-native FXBacktest jobs and audit scenarios with shared assumptions instead of manually comparing inconsistent settings.
-- Research and promote better candidates with Offline Lab, benchmark cards, model-family scorecards, and strategy-profile manifests.
-- Inspect service health for news, rates, cross-asset, microstructure, calendar, factor context, calibration, execution, drift, and portfolio-conflict layers.
-- Use the GUI to arrange dashboards, save layouts, start common workflows, and recover from missing or stale artifacts.
+## Main Projects
+
+| Folder | Role |
+| --- | --- |
+| `FXImporter/` | External data source connectors. Current sources include MT5 bridge and Yahoo Finance history; future sources include IBKR/TWS, TradingView, broker files, and other feeds. |
+| `FXDatabase/` | ClickHouse gatekeeper, database configuration, ingestion, verification, SineTest data, and FXBacktest database APIs. |
+| `FXDataEngine/` | Data post-processing, feature and label contracts, audit tools, runtime artifacts, and plugin payload preparation. |
+| `FXPlugins/` | Converted plugin zoo. Plugins stay flat at the root of this folder, with accelerator code under each plugin folder. |
+| `FXBacktest/` | Swift/Metal offline backtest framework that uses FXDatabase APIs and calls plugins through FXDataEngine contracts. |
+| `FXDataEngineGUI/` | macOS SwiftUI operator interface for dashboards, reports, promotion review, and workflow access. |
+| `FXBacktestAgent/` | Future distributed backtest worker for remote Macs over TCP. |
+| `FXDemoAgent/` | Future demo-account execution agent for MT5, IBKR, TradingView, and other account types. |
+| `FXLiveAgent/` | Future live-account execution agent with the same broker/terminal abstraction as demo, but stricter approval and safety gates. |
+
+## Plugin Zoo
+
+`FXPlugins/` is intentionally flat. Every plugin has its own folder and owns its own implementation details:
+
+```text
+FXPlugins/plugin_name/
+  CPU/
+  Metal/
+  PyTorch/
+  TensorFlow/
+  NLP/
+  PluginNamePlugin.swift
+```
+
+Only shared API and registry code belongs under `FXPlugins/API/`. Plugin-specific Metal kernels, Python models, tokenizers, or NLP logic stay inside the plugin's own folder.
+
+## Current Runtime Standard
+
+- macOS deployment floor: macOS 26.
+- Swift tools: current repo standard is Swift tools 6.3 with Swift language mode 6.
+- Metal: Apple GPU acceleration is validated through runtime compilation and plugin-local buffer parity tests.
+- PyTorch: plugin backends prefer Apple Silicon MPS when available.
+- TensorFlow: plugin backends use TensorFlow and check for available local devices; TensorFlow Metal is installed when available.
+- CoreML/Neural Engine: not declared by plugins until real export, load, prediction, and parity tests exist.
+
+## Install
+
+Run the macOS installer from the repo root:
+
+```bash
+Scripts/install_macos26.sh
+```
+
+The installer is Bash 3 compatible for macOS. It installs Homebrew dependencies, checks Xcode/Command Line Tools for Swift and Metal, scans this repo for Python imports, and installs matching Python packages with no hard version pins.
+
+Use a dry run to see what it would do:
+
+```bash
+DRY_RUN=1 Scripts/install_macos26.sh
+```
+
+## Verification
+
+Useful checks after setup:
+
+```bash
+swift test --package-path FXDatabase
+swift test --package-path FXDataEngine
+swift test --package-path FXPlugins
+swift test --package-path FXBacktest
+swift build -c release --package-path FXDatabase
+swift build -c release --package-path FXDataEngine
+swift build -c release --package-path FXPlugins
+swift build -c release --package-path FXBacktest
+```
+
+The strongest plugin certification check is inside the FXPlugins suite. It verifies registry coverage, volume contracts, SineTest runtime behavior, CPU/reference evidence, FXDatabase-only data access, Metal compile/runtime parity, PyTorch/TensorFlow live train-predict-persistence-load, NLP text/no-text behavior, and CoreML exclusion.
 
 ## Documentation
 
-The old in-repo handbook has been retired. Documentation now lives with the project that owns the code or artifact flow.
+User-focused docs are mirrored in `Wiki/` for the GitHub wiki:
 
-Recommended first pages:
+- [Wiki Home](Wiki/Home.md)
+- [Architecture](Wiki/Architecture.md)
+- [User Roles](Wiki/User-Roles.md)
+- [Installation](Wiki/Installation.md)
+- [Project Map](Wiki/Project-Map.md)
 
+Project-local docs remain next to the code they describe:
+
+- [FXImporter](FXImporter/README.md)
+- [FXDatabase](FXDatabase/README.md)
 - [FXDataEngine](FXDataEngine/README.md)
-- [FXDataEngine MQL5 Port Plan](FXDataEngine/Docs/MQL5PortPlan.md)
-- [FXDataEngineGUI](FXDataEngineGUI/README.md)
 - [FXPlugins](FXPlugins/README.md)
-- [FXBacktest Subproject](FXBacktest/README.md)
-- [FXDatabase Subproject](FXDatabase/README.md)
+- [FXBacktest](FXBacktest/README.md)
+- [FXDataEngineGUI](FXDataEngineGUI/README.md)
 
-## Swift And Metal Migration
+## Operating Principle
 
-FXBacktest and FXDatabase are the foundation for the pure Swift stack. FXDatabase owns verified historical M1 OHLCV data and the one remaining MT5 exporter bridge. FXDataEngine owns the ported data-engine contracts and the former FXAI toolchain under `FXDataEngine/Tools`, FXPlugins owns converted plugin execution adapters, and FXBacktest owns strategy simulation, optimization, plugin evaluation, and Metal acceleration. Legacy FXAI MQL5 source has been retired from this repository.
-
-Subsystem guides:
-
-- [Offline Lab](FXDataEngine/Tools/OfflineLab/README.md)
-- [Benchmarks](FXDataEngine/Tools/Benchmarks/benchmark_matrix.md)
-- [Promotion Criteria](FXDataEngine/Tools/Benchmarks/promotion_criteria.md)
-- [Release Notes](FXDataEngine/Tools/Benchmarks/ReleaseNotes/reference_release_notes.md)
-- [NewsPulse](FXDataEngine/Tools/OfflineLab/NewsPulse/README.md)
-- [Rates Engine](FXDataEngine/Tools/OfflineLab/RatesEngine/README.md)
-- [Cross Asset](FXDataEngine/Tools/OfflineLab/CrossAsset/README.md)
-- [Microstructure](FXDataEngine/Tools/OfflineLab/Microstructure/README.md)
-- [Adaptive Router](FXDataEngine/Tools/OfflineLab/AdaptiveRouter/README.md)
-- [Dynamic Ensemble](FXDataEngine/Tools/OfflineLab/DynamicEnsemble/README.md)
-- [Probabilistic Calibration](FXDataEngine/Tools/OfflineLab/ProbabilisticCalibration/README.md)
-- [Execution Quality](FXDataEngine/Tools/OfflineLab/ExecutionQuality/README.md)
-- [Label Engine](FXDataEngine/Tools/OfflineLab/LabelEngine/README.md)
-- [Drift Governance](FXDataEngine/Tools/OfflineLab/DriftGovernance/README.md)
-- [Pair Network](FXDataEngine/Tools/OfflineLab/PairNetwork/README.md)
-
-## Operating Boundary
-
-FXAI can improve decision quality, auditability, and operational discipline. It does not guarantee profit. A model score is not a trade by itself; FXAI is designed to evaluate the score against costs, uncertainty, event risk, liquidity, regime, execution quality, drift, and portfolio conflict before action.
+FXAI is a decision framework, not a profit guarantee. A plugin score is not a trade by itself. FXAI is designed to control data quality, feature preparation, backtest evidence, model selection, execution routing, and operational safety before demo or live trading uses any result.

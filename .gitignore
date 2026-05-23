@@ -47,6 +47,9 @@ FXDatabase/Package.resolved
 FXBacktest/.build/
 FXBacktest/.swiftpm/
 FXBacktest/Package.resolved
+FXImporter/.build/
+FXImporter/.swiftpm/
+FXImporter/Package.resolved
 FXPlugins/.build/
 FXPlugins/.swiftpm/
 FXPlugins/Package.resolved
