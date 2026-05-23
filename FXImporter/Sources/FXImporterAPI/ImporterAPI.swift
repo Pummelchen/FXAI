@@ -33,6 +33,7 @@ public struct FXImporterConnectorDescriptor: Codable, Hashable, Sendable {
 public struct FXImporterCapabilities: Codable, Hashable, Sendable {
     public let supportsSymbolDiscovery: Bool
     public let supportsHistoricalM1OHLC: Bool
+    public let supportsHistoricalD1OHLC: Bool
     public let supportsLiveM1OHLC: Bool
     public let providesBrokerServerTime: Bool
     public let providesVolume: Bool
@@ -40,12 +41,14 @@ public struct FXImporterCapabilities: Codable, Hashable, Sendable {
     public init(
         supportsSymbolDiscovery: Bool,
         supportsHistoricalM1OHLC: Bool,
+        supportsHistoricalD1OHLC: Bool = false,
         supportsLiveM1OHLC: Bool,
         providesBrokerServerTime: Bool,
         providesVolume: Bool
     ) {
         self.supportsSymbolDiscovery = supportsSymbolDiscovery
         self.supportsHistoricalM1OHLC = supportsHistoricalM1OHLC
+        self.supportsHistoricalD1OHLC = supportsHistoricalD1OHLC
         self.supportsLiveM1OHLC = supportsLiveM1OHLC
         self.providesBrokerServerTime = providesBrokerServerTime
         self.providesVolume = providesVolume
@@ -126,12 +129,101 @@ public struct FXImporterM1Batch: Codable, Hashable, Sendable {
     }
 }
 
+public struct FXImporterD1HistoryRequest: Codable, Hashable, Sendable {
+    public let sourceSymbol: String
+    public let fromSourceTimestamp: Int64
+    public let toSourceTimestampExclusive: Int64
+    public let maxBars: Int
+    public let includeAdjustedClose: Bool
+
+    public init(
+        sourceSymbol: String,
+        fromSourceTimestamp: Int64,
+        toSourceTimestampExclusive: Int64,
+        maxBars: Int,
+        includeAdjustedClose: Bool = true
+    ) {
+        self.sourceSymbol = sourceSymbol
+        self.fromSourceTimestamp = fromSourceTimestamp
+        self.toSourceTimestampExclusive = toSourceTimestampExclusive
+        self.maxBars = maxBars
+        self.includeAdjustedClose = includeAdjustedClose
+    }
+}
+
+public struct FXImporterD1Bar: Codable, Hashable, Sendable {
+    public let sourceSymbol: String
+    public let sourceTimestamp: Int64
+    public let utcTimestamp: Int64?
+    public let open: String
+    public let high: String
+    public let low: String
+    public let close: String
+    public let adjustedClose: String?
+    public let volume: UInt64
+
+    public init(
+        sourceSymbol: String,
+        sourceTimestamp: Int64,
+        utcTimestamp: Int64?,
+        open: String,
+        high: String,
+        low: String,
+        close: String,
+        adjustedClose: String? = nil,
+        volume: UInt64 = 0
+    ) {
+        self.sourceSymbol = sourceSymbol
+        self.sourceTimestamp = sourceTimestamp
+        self.utcTimestamp = utcTimestamp
+        self.open = open
+        self.high = high
+        self.low = low
+        self.close = close
+        self.adjustedClose = adjustedClose
+        self.volume = volume
+    }
+}
+
+public struct FXImporterD1Batch: Codable, Hashable, Sendable {
+    public let request: FXImporterD1HistoryRequest
+    public let bars: [FXImporterD1Bar]
+    public let sourceComplete: Bool
+
+    public init(request: FXImporterD1HistoryRequest, bars: [FXImporterD1Bar], sourceComplete: Bool) {
+        self.request = request
+        self.bars = bars
+        self.sourceComplete = sourceComplete
+    }
+}
+
+public enum FXImporterConnectorError: Error, CustomStringConvertible, Sendable {
+    case unsupportedCapability(connectorID: String, capability: String)
+
+    public var description: String {
+        switch self {
+        case .unsupportedCapability(let connectorID, let capability):
+            return "Connector \(connectorID) does not support \(capability)."
+        }
+    }
+}
+
 public protocol FXImporterConnector: Sendable {
     var descriptor: FXImporterConnectorDescriptor { get }
 
     func health() async throws -> FXImporterHealth
     func symbols() async throws -> [FXImporterSymbol]
     func fetchM1History(_ request: FXImporterM1HistoryRequest) async throws -> FXImporterM1Batch
+    func fetchD1History(_ request: FXImporterD1HistoryRequest) async throws -> FXImporterD1Batch
+}
+
+public extension FXImporterConnector {
+    func fetchD1History(_ request: FXImporterD1HistoryRequest) async throws -> FXImporterD1Batch {
+        throw FXImporterConnectorError.unsupportedCapability(
+            connectorID: descriptor.id,
+            capability: "D1 historical OHLC"
+        )
+    }
 }
 
 public struct FXImporterHealth: Codable, Hashable, Sendable {

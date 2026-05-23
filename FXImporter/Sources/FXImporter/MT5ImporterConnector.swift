@@ -42,6 +42,7 @@ public struct MT5ImporterConnector: FXImporterConnector {
             capabilities: FXImporterCapabilities(
                 supportsSymbolDiscovery: false,
                 supportsHistoricalM1OHLC: true,
+                supportsHistoricalD1OHLC: false,
                 supportsLiveM1OHLC: true,
                 providesBrokerServerTime: true,
                 providesVolume: false

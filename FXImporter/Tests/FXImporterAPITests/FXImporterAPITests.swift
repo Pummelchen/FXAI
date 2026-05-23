@@ -35,6 +35,24 @@ final class FXImporterAPITests: XCTestCase {
         XCTAssertEqual(descriptor.kind, .metaTrader5)
         XCTAssertFalse(descriptor.capabilities.supportsSymbolDiscovery)
         XCTAssertTrue(descriptor.capabilities.supportsHistoricalM1OHLC)
+        XCTAssertFalse(descriptor.capabilities.supportsHistoricalD1OHLC)
         XCTAssertFalse(descriptor.capabilities.providesVolume)
+    }
+
+    func testD1BarKeepsAdjustedCloseAndVolumeForDailyHistoryProviders() {
+        let bar = FXImporterD1Bar(
+            sourceSymbol: "AAPL",
+            sourceTimestamp: 1_704_067_200,
+            utcTimestamp: 1_704_067_200,
+            open: "180.10",
+            high: "182.50",
+            low: "179.95",
+            close: "181.20",
+            adjustedClose: "180.75",
+            volume: 55_000_000
+        )
+
+        XCTAssertEqual(bar.adjustedClose, "180.75")
+        XCTAssertEqual(bar.volume, 55_000_000)
     }
 }
