@@ -152,6 +152,7 @@ final class ReferencePluginAdapterTests: XCTestCase {
         AIModelID.demoFXStupid.rawValue,
         AIModelID.enhash.rawValue,
         AIModelID.ftrlLogit.rawValue,
+        AIModelID.paLinear.rawValue,
         AIModelID.sgdLogit.rawValue
     ]
 
