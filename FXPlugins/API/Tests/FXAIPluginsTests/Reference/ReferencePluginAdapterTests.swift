@@ -152,6 +152,7 @@ final class ReferencePluginAdapterTests: XCTestCase {
         AIModelID.demoFXStupid.rawValue,
         AIModelID.catboost.rawValue,
         AIModelID.lightgbm.rawValue,
+        AIModelID.treeRF.rawValue,
         AIModelID.xgbFast.rawValue,
         AIModelID.xgboost.rawValue,
         AIModelID.moeConformal.rawValue,

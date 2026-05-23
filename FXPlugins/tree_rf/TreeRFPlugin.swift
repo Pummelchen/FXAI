@@ -2,33 +2,49 @@ import FXDataEngine
 import Foundation
 
 public struct TreeRFPlugin: FXAIPlannedPlugin {
-    private static let descriptor = FXAIPluginImplementationDescriptor.tree(.treeRF, "tree_rf")
-    private var runtime: FXAIReferencePluginRuntime
+    private static let pluginManifest = PluginManifestV4(
+        aiID: AIModelID.treeRF.rawValue,
+        aiName: "tree_rf",
+        family: .tree,
+        referenceTier: PluginPersistenceTools.defaultReferenceTier(aiID: AIModelID.treeRF.rawValue),
+        capabilityMask: [.selfTest, .onlineLearning, .replay, .multiHorizon, .nativeDistribution],
+        featureSchema: .tree,
+        featureGroups: [.price, .multiTimeframe, .volatility, .context, .volume, .filters],
+        minHorizonMinutes: 1,
+        maxHorizonMinutes: 240,
+        minSequenceBars: 1,
+        maxSequenceBars: 1,
+        requiresVolumeWhenAvailable: true
+    )
 
-    public var manifest: PluginManifestV4 { Self.descriptor.manifest }
-    public var accelerationPlan: FXPluginAccelerationPlan { Self.descriptor.accelerationPlan }
+    private var cpu: TreeRFCPUModel
+
+    public var manifest: PluginManifestV4 { Self.pluginManifest }
+    public var accelerationPlan: FXPluginAccelerationPlan { TreeRFMetal.descriptor }
 
     public init() {
-        self.runtime = FXAIReferencePluginRuntime(descriptor: Self.descriptor)
+        self.cpu = TreeRFCPUModel()
     }
 
     public mutating func reset() {
-        runtime = FXAIReferencePluginRuntime(descriptor: Self.descriptor)
+        cpu.reset()
     }
 
     public func selfTest() -> Bool {
-        (try? manifest.validate()) != nil && !Self.descriptor.primaryBackends.isEmpty
+        (try? manifest.validate()) != nil &&
+            accelerationPlan.primaryBackends.contains(.metal) &&
+            accelerationPlan.primaryBackends.contains(.accelerate)
     }
 
     public mutating func train(_ request: TrainRequestV4, hyperParameters: HyperParameters) throws {
         try request.validate()
         try PluginContractTools.validateCompatibility(manifest: manifest, context: request.context)
-        runtime.train(request, descriptor: Self.descriptor, hyperParameters: hyperParameters)
+        cpu.train(request, hyperParameters: hyperParameters)
     }
 
     public func predict(_ request: PredictRequestV4, hyperParameters: HyperParameters) throws -> PredictionV4 {
         try request.validate()
         try PluginContractTools.validateCompatibility(manifest: manifest, context: request.context)
-        return runtime.predict(request, descriptor: Self.descriptor, hyperParameters: hyperParameters)
+        return cpu.predict(request, hyperParameters: hyperParameters)
     }
 }
