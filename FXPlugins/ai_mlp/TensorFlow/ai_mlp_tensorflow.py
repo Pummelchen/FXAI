@@ -1,86 +1,148 @@
-"""TensorFlow/Metal backend for ai_mlp.
-
-This plugin-local module mirrors the Swift CPU feature contract for batched
-sequence inference. It uses TensorFlow on CPU or tensorflow-metal when the
-runtime is installed on Apple Silicon.
-"""
+"""TensorFlow/Keras reference backend for FXAI ai_mlp."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Optional
+
 import tensorflow as tf
 
-FEATURES = 24
-HIDDEN = 16
-CLASSES = 3
-ARCH_ID = 9
-VOLUME_INDEXES = [6, 68, 69, 70, 71, 74, 75, 76, 77, 78, 80, 81, 82, 83]
+PLUGIN_NAME = "ai_mlp"
+ARCHITECTURE_MODE = "MLP"
+FEATURE_COUNT = 32
+CLASS_COUNT = 3
+HIDDEN_COUNT = 48
+QUANTILES = (0.10, 0.25, 0.50, 0.75, 0.90)
+VOLUME_FEATURE_INDEXES = (6, 68, 69, 70, 71, 74, 75, 76, 77, 78, 80, 81, 82, 83)
 
 
-def prepare_features(features: Iterable[Iterable[float]] | tf.Tensor, data_has_volume: bool = True) -> tf.Tensor:
-    x = tf.convert_to_tensor(features, dtype=tf.float32)
+def _to_sequence(batch: Iterable[Iterable[float]], data_has_volume: bool = True) -> tf.Tensor:
+    x = tf.convert_to_tensor(list(batch), dtype=tf.float32)
     if len(x.shape) == 1:
-        x = tf.expand_dims(x, 0)
-    x = tf.clip_by_value(x, -50.0, 50.0)
+        x = tf.reshape(x, (1, 1, -1))
+    elif len(x.shape) == 2:
+        x = tf.expand_dims(x, axis=1)
+    if int(x.shape[-1]) < FEATURE_COUNT:
+        x = tf.pad(x, [[0, 0], [0, 0], [0, FEATURE_COUNT - int(x.shape[-1])]])
+    x = tf.clip_by_value(x[..., :FEATURE_COUNT], -8.0, 8.0)
     if not data_has_volume:
-        updates = []
-        for idx in VOLUME_INDEXES:
-            if idx < x.shape[-1]:
-                updates.append(idx)
-        if updates:
-            mask = tf.ones_like(x)
-            for idx in updates:
-                mask = tf.tensor_scatter_nd_update(mask, [[0, idx]], [0.0]) if x.shape[0] == 1 else mask
-            cols = [tf.zeros_like(x[:, i:i+1]) if i in updates else x[:, i:i+1] for i in range(x.shape[-1])]
-            x = tf.concat(cols, axis=-1)
+        indexes = [idx for idx in VOLUME_FEATURE_INDEXES if idx < FEATURE_COUNT]
+        mask = tf.ones((FEATURE_COUNT,), dtype=tf.float32)
+        mask = tf.tensor_scatter_nd_update(mask, [[idx] for idx in indexes], tf.zeros((len(indexes),), dtype=tf.float32))
+        x = x * mask
     return x
 
 
-def _col(x: tf.Tensor, index: int) -> tf.Tensor:
-    if index >= x.shape[-1]:
-        return tf.zeros(tf.shape(x)[:-1], dtype=x.dtype)
-    return x[..., index]
+class PredictionHeads(tf.keras.layers.Layer):
+    def __init__(self) -> None:
+        super().__init__()
+        self.class_head = tf.keras.Sequential([tf.keras.layers.LayerNormalization(), tf.keras.layers.Dense(HIDDEN_COUNT, activation="gelu"), tf.keras.layers.Dense(CLASS_COUNT)])
+        self.move_head = tf.keras.Sequential([tf.keras.layers.LayerNormalization(), tf.keras.layers.Dense(1, activation="softplus")])
+        self.quantile_head = tf.keras.Sequential([tf.keras.layers.LayerNormalization(), tf.keras.layers.Dense(len(QUANTILES), activation="softplus")])
+
+    def call(self, encoded: tf.Tensor) -> tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
+        return self.class_head(encoded), tf.squeeze(self.move_head(encoded), axis=-1), tf.cumsum(self.quantile_head(encoded), axis=-1)
 
 
-def build_features(x: tf.Tensor, horizon_minutes: int = 30, sequence_bars: int = 32, session_bucket: int = 0) -> tf.Tensor:
-    arch = tf.sin(_col(x, 1) * (0.35 + 0.03 * ARCH_ID))
-    values = [
-        tf.ones_like(_col(x, 1)), _col(x, 1), _col(x, 2), _col(x, 3), _col(x, 4), _col(x, 7), _col(x, 12),
-        tf.clip_by_value(0.65 * _col(x, 40) + 0.35 * _col(x, 6), -8.0, 8.0),
-        _col(x, 1), tf.abs(_col(x, 4)), tf.abs(_col(x, 3) - _col(x, 1)), _col(x, 7),
-        _col(x, 1), _col(x, 2), _col(x, 78), _col(x, 83),
-        tf.fill(tf.shape(_col(x, 1)), max(0.0, min(float(horizon_minutes) / 60.0, 2.0))),
-        tf.fill(tf.shape(_col(x, 1)), max(0.0, min(float(session_bucket) / 5.0, 1.0))),
-        tf.fill(tf.shape(_col(x, 1)), max(0.0, min(float(sequence_bars) / 128.0, 2.0))),
-        arch, tf.tanh(_col(x, 2) + arch), tf.tanh(_col(x, 3) - arch), _col(x, 1) - _col(x, 2), _col(x, 2) - _col(x, 3)
-    ]
-    return tf.clip_by_value(tf.stack(values, axis=-1), -8.0, 8.0)
+class CausalTCNBlock(tf.keras.layers.Layer):
+    def __init__(self, dilation: int) -> None:
+        super().__init__()
+        self.conv1 = tf.keras.layers.Conv1D(HIDDEN_COUNT, 3, padding="causal", dilation_rate=dilation, activation="gelu")
+        self.conv2 = tf.keras.layers.Conv1D(HIDDEN_COUNT, 3, padding="causal", dilation_rate=dilation)
+        self.norm = tf.keras.layers.LayerNormalization()
+
+    def call(self, x: tf.Tensor) -> tf.Tensor:
+        return tf.nn.gelu(self.norm(x + self.conv2(self.conv1(x))))
+
+
+class AIMLPTensorFlowModel(tf.keras.Model):
+    def __init__(self) -> None:
+        super().__init__()
+        self.architecture = ARCHITECTURE_MODE
+        self.heads = PredictionHeads()
+        self.norm = tf.keras.layers.LayerNormalization()
+        self.encoder = tf.keras.Sequential([tf.keras.layers.LayerNormalization(), tf.keras.layers.Dense(HIDDEN_COUNT, activation="gelu"), tf.keras.layers.Dropout(0.05), tf.keras.layers.Dense(HIDDEN_COUNT, activation="gelu")])
+        self.lstm = tf.keras.layers.LSTM(HIDDEN_COUNT, return_sequences=True, return_state=True, dropout=0.05)
+        self.gru = tf.keras.layers.GRU(HIDDEN_COUNT, return_sequences=True, return_state=True, dropout=0.05)
+        self.bilstm = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(HIDDEN_COUNT // 2, return_sequences=True, dropout=0.05))
+        self.conv1 = tf.keras.layers.Conv1D(HIDDEN_COUNT, 3, padding="same", activation="gelu")
+        self.conv2 = tf.keras.layers.Conv1D(HIDDEN_COUNT, 3, padding="same", activation="gelu")
+        self.attention = tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=HIDDEN_COUNT // 4)
+        self.tcn_blocks = [CausalTCNBlock(1), CausalTCNBlock(2), CausalTCNBlock(4), CausalTCNBlock(8)]
+        self.gate = tf.keras.layers.Dense(HIDDEN_COUNT, activation="sigmoid")
+        self.residual = tf.keras.layers.Dense(HIDDEN_COUNT, activation="tanh")
+
+    def call(self, x: tf.Tensor, training: bool = False) -> tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
+        arch = self.architecture
+        if arch == "MLP":
+            encoded = self.encoder(x[:, -1, :], training=training)
+        elif arch == "LSTM":
+            output, hidden, cell = self.lstm(self.norm(x), training=training)
+            self.last_hidden_state = hidden
+            self.last_cell_state = cell
+            encoded = output[:, -1, :]
+        elif arch == "LSTMG":
+            output, hidden, cell = self.lstm(self.norm(x), training=training)
+            current = x[:, -1, :]
+            gate = self.gate(tf.concat([current, output[:, -1, :]], axis=-1))
+            self.last_gate = gate
+            encoded = gate * output[:, -1, :] + (1.0 - gate) * self.residual(current)
+        elif arch == "GRU":
+            output, hidden = self.gru(self.norm(x), training=training)
+            self.last_hidden_state = hidden
+            encoded = output[:, -1, :]
+        elif arch == "BILSTM":
+            encoded = self.bilstm(self.norm(x), training=training)[:, -1, :]
+        elif arch == "LSTM_TCN":
+            y, _, _ = self.lstm(self.norm(x), training=training)
+            for block in self.tcn_blocks[:3]:
+                y = block(y)
+            encoded = y[:, -1, :]
+        elif arch == "CNN_LSTM":
+            y = self.conv2(self.conv1(x))
+            y, _, _ = self.lstm(y, training=training)
+            encoded = y[:, -1, :]
+        elif arch == "ATTN_CNN_BILSTM":
+            y = self.bilstm(self.conv2(self.conv1(x)), training=training)
+            encoded = self.attention(y, y, training=training)[:, -1, :]
+        elif arch == "TCN":
+            y = self.conv1(x)
+            for block in self.tcn_blocks:
+                y = block(y)
+            encoded = y[:, -1, :]
+        else:
+            raise ValueError(f"unsupported architecture {arch}")
+        return self.heads(encoded)
 
 
 @dataclass
-class SequenceTensorFlowState:
-    w1: tf.Tensor
-    b1: tf.Tensor
-    head: tf.Tensor
-    move: tf.Tensor
+class AIMLPTensorFlowState:
+    model: AIMLPTensorFlowModel
+    optimizer: tf.keras.optimizers.Optimizer
 
     @classmethod
-    def seeded(cls) -> "SequenceTensorFlowState":
-        tf.random.set_seed(20_000 + ARCH_ID)
-        return cls(
-            tf.random.normal((HIDDEN, FEATURES), stddev=0.08),
-            tf.random.normal((HIDDEN,), stddev=0.03),
-            tf.random.normal((CLASSES, HIDDEN + 1), stddev=0.04),
-            tf.abs(tf.random.normal((HIDDEN + 1,), stddev=0.02)),
-        )
+    def create(cls, lr: float = 3.0e-4) -> "AIMLPTensorFlowState":
+        return cls(model=AIMLPTensorFlowModel(), optimizer=tf.keras.optimizers.AdamW(learning_rate=lr, weight_decay=1.0e-4))
 
 
-def predict_batch(features: Iterable[Iterable[float]] | tf.Tensor, *, data_has_volume: bool = True, horizon_minutes: int = 30, sequence_bars: int = 32, session_bucket: int = 0, state: SequenceTensorFlowState | None = None) -> dict[str, tf.Tensor]:
-    state = state or SequenceTensorFlowState.seeded()
-    x = prepare_features(features, data_has_volume=data_has_volume)
-    z = build_features(x, horizon_minutes, sequence_bars, session_bucket)
-    hidden = tf.tanh(tf.linalg.matmul(z, state.w1, transpose_b=True) + state.b1)
-    hidden_bias = tf.concat([tf.ones((tf.shape(hidden)[0], 1), dtype=hidden.dtype), hidden], axis=-1)
-    probabilities = tf.nn.softmax(tf.clip_by_value(tf.linalg.matmul(hidden_bias, state.head, transpose_b=True), -30.0, 30.0), axis=-1)
-    move = tf.maximum(tf.linalg.matvec(hidden_bias, state.move), 0.0)
-    return {"class_probabilities": probabilities, "expected_move_points": move, "hidden": hidden}
+def predict_batch(batch: Iterable[Iterable[float]], state: Optional[AIMLPTensorFlowState] = None, data_has_volume: bool = True) -> dict[str, list[list[float]] | list[float] | str]:
+    state = state or AIMLPTensorFlowState.create()
+    logits, move, quantiles = state.model(_to_sequence(batch, data_has_volume=data_has_volume), training=False)
+    return {"plugin": PLUGIN_NAME, "architecture": ARCHITECTURE_MODE, "class_probabilities": tf.nn.softmax(logits, axis=-1).numpy().tolist(), "move_mean_points": move.numpy().tolist(), "move_quantiles": quantiles.numpy().tolist()}
+
+
+def train_step(batch: Iterable[Iterable[float]], labels: Iterable[int], moves: Iterable[float], state: Optional[AIMLPTensorFlowState] = None, lr: float = 3.0e-4, data_has_volume: bool = True) -> AIMLPTensorFlowState:
+    state = state or AIMLPTensorFlowState.create(lr=lr)
+    x = _to_sequence(batch, data_has_volume=data_has_volume)
+    y = tf.convert_to_tensor((list(labels) or [2] * int(x.shape[0]))[: int(x.shape[0])], dtype=tf.int32)
+    m = tf.abs(tf.convert_to_tensor((list(moves) or [1.0] * int(x.shape[0]))[: int(x.shape[0])], dtype=tf.float32))
+    with tf.GradientTape() as tape:
+        logits, move, quantiles = state.model(x, training=True)
+        ce = tf.reduce_mean(tf.keras.losses.sparse_categorical_crossentropy(y, logits, from_logits=True))
+        move_loss = tf.reduce_mean(tf.keras.losses.huber(m, move))
+        q = tf.reshape(tf.constant(QUANTILES, dtype=tf.float32), (1, -1))
+        error = tf.reshape(m, (-1, 1)) - quantiles
+        pinball = tf.reduce_mean(tf.maximum(q * error, (q - 1.0) * error))
+        loss = ce + 0.05 * move_loss + 0.02 * pinball
+    grads = tape.gradient(loss, state.model.trainable_variables)
+    state.optimizer.apply_gradients(zip(grads, state.model.trainable_variables))
+    return state

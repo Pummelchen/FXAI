@@ -124,6 +124,8 @@ def predict_batch(
     x = torch.as_tensor(features, dtype=torch.float32, device=device)
     if x.ndim == 1:
         x = x.unsqueeze(0)
+    elif x.ndim == 3:
+        x = x[:, -1, :]
     if not data_has_volume:
         volume_indexes = [6, 68, 69, 70, 71, 74, 75, 76, 77, 78, 80, 81, 82, 83]
         valid_indexes = [index for index in volume_indexes if index < x.shape[-1]]

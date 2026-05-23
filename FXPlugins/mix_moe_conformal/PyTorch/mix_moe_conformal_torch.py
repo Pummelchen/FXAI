@@ -31,6 +31,8 @@ def prepare_features(features: Iterable[Iterable[float]] | torch.Tensor, data_ha
     x = torch.as_tensor(features, dtype=torch.float32)
     if x.ndim == 1:
         x = x.unsqueeze(0)
+    elif x.ndim == 3:
+        x = x[:, -1, :]
     x = torch.clamp(x, -50.0, 50.0)
     if not data_has_volume:
         volume_indexes = [6, 68, 69, 70, 71, 74, 75, 76, 77, 78, 80, 81, 82, 83]
