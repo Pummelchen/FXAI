@@ -19,13 +19,13 @@ contracts:
 
 - 4 hand-ported legacy rule plugins.
 - 2 former FXBacktest demo adapters: `fxbacktest_moving_average_cross` and `fxbacktest_fxstupid`.
-- 16 full plugin-owned native conversions: `lin_sgd`, `lin_ftrl`, `lin_enhash`, `lin_pa`,
+- 17 full plugin-owned native conversions: `lin_sgd`, `lin_ftrl`, `lin_enhash`, `lin_pa`,
   `lin_elastic_logit`, `lin_profit_logit`, `dist_quantile`, `mem_retrdiff`, `mix_loffm`,
   `mix_moe_conformal`, `tree_xgb_fast`, `tree_xgb`, `tree_catboost`, `tree_lgbm`, and
-  `tree_rf`, plus `stat_msgarch`,
+  `tree_rf`, plus `stat_msgarch` and `stat_arimax_garch`,
   with Swift CPU code under each plugin's `CPU/` folder and accelerator sources under plugin-owned
   `Metal/` or `PyTorch/` folders where suitable.
-- 43 Swift reference adapters for the remaining legacy plugins, each in its own plugin folder with
+- 42 Swift reference adapters for the remaining legacy plugins, each in its own plugin folder with
   volume-aware online centroid learning, deterministic fallback prediction, and explicit Apple Silicon
   backend metadata for Swift SIMD, Accelerate, Metal, PyTorch MPS,
   TensorFlow Metal, or Core ML / Neural Engine candidates.
