@@ -57,15 +57,18 @@ public struct MT5ImporterConnector: FXImporterConnector {
     }
 
     public func health() async throws -> FXImporterHealth {
+        try validateLatestAPI()
         let snapshot = try bridge.serverTimeSnapshot()
         return FXImporterHealth(isConnected: true, sourceClockTimestamp: snapshot.timeTradeServer)
     }
 
     public func symbols() async throws -> [FXImporterSymbol] {
+        try validateLatestAPI()
         throw MT5ImporterConnectorError.symbolDiscoveryUnsupported
     }
 
     public func fetchM1History(_ request: FXImporterM1HistoryRequest) async throws -> FXImporterM1Batch {
+        try validateLatestAPI()
         let response = try bridge.ratesRange(
             mt5Symbol: request.sourceSymbol,
             fromMT5ServerTs: request.fromSourceTimestamp,

@@ -51,7 +51,7 @@ public struct MLInferencePayload: Codable, Hashable, Sendable {
     public let eventTexts: [String]
 
     public init(
-        apiVersion: Int = FXDataEngineConstants.apiVersionV4,
+        apiVersion: Int = FXDataEngineConstants.latestPluginAPIVersion,
         modelIdentifier: String,
         framework: MLFramework,
         dataHasVolume: Bool,
@@ -102,7 +102,7 @@ public struct MLInferencePayload: Codable, Hashable, Sendable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
-            apiVersion: try container.decodeIfPresent(Int.self, forKey: .apiVersion) ?? FXDataEngineConstants.apiVersionV4,
+            apiVersion: try container.decode(Int.self, forKey: .apiVersion),
             modelIdentifier: try container.decode(String.self, forKey: .modelIdentifier),
             framework: try container.decode(MLFramework.self, forKey: .framework),
             dataHasVolume: try container.decodeIfPresent(Bool.self, forKey: .dataHasVolume) ?? false,
@@ -116,6 +116,44 @@ public struct MLInferencePayload: Codable, Hashable, Sendable {
             textEvents: try container.decodeIfPresent([PluginTextEventV4].self, forKey: .textEvents) ?? [],
             eventTexts: try container.decodeIfPresent([String].self, forKey: .eventTexts) ?? []
         )
+    }
+
+    public func validateLatestAPI() throws {
+        guard apiVersion == FXDataEngineConstants.latestPluginAPIVersion else {
+            throw FXDataEngineError.validation("mlPayload.apiVersion")
+        }
+        guard !modelIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw FXDataEngineError.validation("mlPayload.modelIdentifier")
+        }
+        guard horizonMinutes > 0 else {
+            throw FXDataEngineError.validation("mlPayload.horizonMinutes")
+        }
+        guard (1...FXDataEngineConstants.maxSequenceBars).contains(sequenceBars) else {
+            throw FXDataEngineError.validation("mlPayload.sequenceBars")
+        }
+        guard priceCostPoints.isFinite, priceCostPoints >= 0 else {
+            throw FXDataEngineError.validation("mlPayload.priceCostPoints")
+        }
+        guard minMovePoints.isFinite, minMovePoints >= 0 else {
+            throw FXDataEngineError.validation("mlPayload.minMovePoints")
+        }
+        try PredictRequestV4.validateInput(x)
+        guard xWindow.count <= FXDataEngineConstants.maxSequenceBars else {
+            throw FXDataEngineError.validation("mlPayload.xWindow")
+        }
+        for row in xWindow {
+            try PredictRequestV4.validateInput(row)
+        }
+        try tokenizerContract.validate()
+        guard textEvents.count <= PluginContextV4.maxTextEvents else {
+            throw FXDataEngineError.validation("mlPayload.textEvents.count")
+        }
+        for event in textEvents {
+            try event.validate()
+        }
+        guard eventTexts.count <= PluginContextV4.maxTextEvents else {
+            throw FXDataEngineError.validation("mlPayload.eventTexts.count")
+        }
     }
 }
 
@@ -132,6 +170,19 @@ public struct MLTrainingPayload: Codable, Hashable, Sendable {
         self.movePoints = request.movePoints
         self.sampleWeight = request.sampleWeight
         self.nextVolumeTarget = request.nextVolumeTarget
+    }
+
+    public func validateLatestAPI() throws {
+        try inference.validateLatestAPI()
+        guard movePoints.isFinite else {
+            throw FXDataEngineError.validation("mlTraining.movePoints")
+        }
+        guard sampleWeight.isFinite, sampleWeight >= 0 else {
+            throw FXDataEngineError.validation("mlTraining.sampleWeight")
+        }
+        guard nextVolumeTarget.isFinite, nextVolumeTarget >= 0 else {
+            throw FXDataEngineError.validation("mlTraining.nextVolumeTarget")
+        }
     }
 }
 
@@ -303,8 +354,10 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
     }
 
     public func predict(_ payload: MLInferencePayload) async throws -> PredictionV4 {
+        try payload.validateLatestAPI()
         let command = PythonMLBackendCommand(operation: "predict", inference: payload, training: nil)
         let response = try await run(command)
+        try Self.validateLatestAPI(response)
         guard response.ok else {
             throw FXDataEngineError.externalBackend(response.error ?? "Python backend returned failure")
         }
@@ -319,8 +372,10 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
     }
 
     public func train(_ payload: MLTrainingPayload) async throws {
+        try payload.validateLatestAPI()
         let command = PythonMLBackendCommand(operation: "train", inference: nil, training: payload)
         let response = try await run(command)
+        try Self.validateLatestAPI(response)
         guard response.ok else {
             throw FXDataEngineError.externalBackend(response.error ?? "Python backend returned failure")
         }
@@ -330,8 +385,10 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
     }
 
     public func predictSynchronously(_ payload: MLInferencePayload) throws -> PredictionV4 {
+        try payload.validateLatestAPI()
         let command = PythonMLBackendCommand(operation: "predict", inference: payload, training: nil)
         let response = try runSynchronously(command)
+        try Self.validateLatestAPI(response)
         guard response.ok else {
             throw FXDataEngineError.externalBackend(response.error ?? "Python backend returned failure")
         }
@@ -346,8 +403,10 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
     }
 
     public func trainSynchronously(_ payload: MLTrainingPayload) throws {
+        try payload.validateLatestAPI()
         let command = PythonMLBackendCommand(operation: "train", inference: nil, training: payload)
         let response = try runSynchronously(command)
+        try Self.validateLatestAPI(response)
         guard response.ok else {
             throw FXDataEngineError.externalBackend(response.error ?? "Python backend returned failure")
         }
@@ -425,15 +484,37 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
         }
         return try JSONDecoder().decode(PythonMLBackendResponse.self, from: output)
     }
+
+    private static func validateLatestAPI(_ response: PythonMLBackendResponse) throws {
+        guard response.apiVersion == FXDataEngineConstants.latestPluginAPIVersion else {
+            throw FXDataEngineError.externalBackend(
+                "Python backend API version \(response.apiVersion) is not supported; expected \(FXDataEngineConstants.latestPluginAPIVersion)"
+            )
+        }
+    }
 }
 
 private struct PythonMLBackendCommand: Codable, Sendable {
+    let apiVersion: Int
     let operation: String
     let inference: MLInferencePayload?
     let training: MLTrainingPayload?
+
+    init(
+        operation: String,
+        inference: MLInferencePayload?,
+        training: MLTrainingPayload?,
+        apiVersion: Int = FXDataEngineConstants.latestPluginAPIVersion
+    ) {
+        self.apiVersion = apiVersion
+        self.operation = operation
+        self.inference = inference
+        self.training = training
+    }
 }
 
 private struct PythonMLBackendResponse: Codable, Sendable {
+    let apiVersion: Int
     let ok: Bool
     let prediction: PredictionV4?
     let error: String?

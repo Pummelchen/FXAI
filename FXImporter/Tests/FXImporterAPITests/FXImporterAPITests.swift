@@ -33,10 +33,33 @@ final class FXImporterAPITests: XCTestCase {
         )
 
         XCTAssertEqual(descriptor.kind, .metaTrader5)
+        XCTAssertEqual(descriptor.apiVersion, FXImporterAPIV1.latestVersion)
+        XCTAssertNoThrow(try descriptor.validateLatestAPI())
         XCTAssertFalse(descriptor.capabilities.supportsSymbolDiscovery)
         XCTAssertTrue(descriptor.capabilities.supportsHistoricalM1OHLC)
         XCTAssertFalse(descriptor.capabilities.supportsHistoricalD1OHLC)
         XCTAssertFalse(descriptor.capabilities.providesVolume)
+    }
+
+    func testConnectorDescriptorRejectsStaleAPIVersion() {
+        let descriptor = FXImporterConnectorDescriptor(
+            apiVersion: "fximporter.connector.v0",
+            id: "stale",
+            displayName: "Stale Connector",
+            kind: .custom,
+            version: "1.0",
+            capabilities: FXImporterCapabilities(
+                supportsSymbolDiscovery: true,
+                supportsHistoricalM1OHLC: false,
+                supportsLiveM1OHLC: false,
+                providesBrokerServerTime: false,
+                providesVolume: false
+            )
+        )
+
+        XCTAssertThrowsError(try descriptor.validateLatestAPI()) { error in
+            XCTAssertTrue(String(describing: error).contains(FXImporterAPIV1.latestVersion))
+        }
     }
 
     func testD1BarKeepsAdjustedCloseAndVolumeForDailyHistoryProviders() {

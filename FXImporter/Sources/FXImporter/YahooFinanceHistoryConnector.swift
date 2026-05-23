@@ -64,21 +64,25 @@ public struct YahooFinanceHistoryConnector: FXImporterConnector {
     }
 
     public func health() async throws -> FXImporterHealth {
-        FXImporterHealth(
+        try validateLatestAPI()
+        return FXImporterHealth(
             isConnected: true,
             message: "Stateless connector; network and provider status are verified during each D1 history fetch."
         )
     }
 
     public func symbols() async throws -> [FXImporterSymbol] {
+        try validateLatestAPI()
         throw YahooFinanceHistoryConnectorError.symbolDiscoveryUnsupported
     }
 
     public func fetchM1History(_ request: FXImporterM1HistoryRequest) async throws -> FXImporterM1Batch {
+        try validateLatestAPI()
         throw YahooFinanceHistoryConnectorError.m1HistoryUnsupported
     }
 
     public func fetchD1History(_ request: FXImporterD1HistoryRequest) async throws -> FXImporterD1Batch {
+        try validateLatestAPI()
         try Self.validate(request)
         let chartRequest = try Self.makeChartRequest(baseURL: baseURL, request: request)
         let (data, statusCode) = try await loadData(chartRequest)

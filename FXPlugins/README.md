@@ -6,6 +6,8 @@ AI plugins own model execution. When a converted plugin needs tensor training or
 
 Converted plugins should consume the Swift FXDataEngine OHLCV contracts and use volume-derived features whenever the loaded dataset has nonzero volume.
 
+The shared FXDataEngine/FXPlugins runtime API latest version is `4`, and the tokenizer contract latest version is `fxai-tokenizer-v1`. Plugin manifests, contexts, predictions, and Python accelerator bridge payloads must carry those latest versions. Older versions are rejected instead of being compatibility-shimmed.
+
 ## Layout
 
 - `API/`: non-plugin package surface only: registry, tests, docs, and backend process hooks. Shared implementation primitives live in `FXDataEngine`; plugin folders should not depend on shared plugin-zoo helpers.

@@ -1,4 +1,5 @@
 import FXImporter
+import FXImporterAPI
 import XCTest
 
 final class YahooFinanceHistoryConnectorTests: XCTestCase {
@@ -6,6 +7,8 @@ final class YahooFinanceHistoryConnectorTests: XCTestCase {
         let connector = YahooFinanceHistoryConnector()
 
         XCTAssertEqual(connector.descriptor.kind, .yahooFinanceHistory)
+        XCTAssertEqual(connector.descriptor.apiVersion, FXImporterAPIV1.latestVersion)
+        XCTAssertNoThrow(try connector.descriptor.validateLatestAPI())
         XCTAssertFalse(connector.descriptor.capabilities.supportsHistoricalM1OHLC)
         XCTAssertTrue(connector.descriptor.capabilities.supportsHistoricalD1OHLC)
         XCTAssertFalse(connector.descriptor.capabilities.supportsLiveM1OHLC)

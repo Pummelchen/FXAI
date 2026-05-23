@@ -64,19 +64,22 @@ import json
 import sys
 
 command = json.loads(sys.stdin.read() or "{}")
+assert command["apiVersion"] == 4
 
 if command.get("operation") == "train":
     training = command.get("training") or {}
     inference = training.get("inference") or {}
+    assert inference["apiVersion"] == 4
     assert inference["framework"] == "pyTorch"
     assert inference["dataHasVolume"] is True
     assert abs(inference["priceCostPoints"] - 0.7) < 0.0001
     assert abs(inference["minMovePoints"] - 1.5) < 0.0001
     assert inference["eventTexts"][0].startswith("USD growth")
     assert inference["tokenizerContract"]["version"] == "fxai-tokenizer-v1"
-    print(json.dumps({"ok": True, "prediction": None, "error": None}))
+    print(json.dumps({"apiVersion": 4, "ok": True, "prediction": None, "error": None}))
 else:
     inference = command.get("inference") or {}
+    assert inference["apiVersion"] == 4
     assert inference["modelIdentifier"] == "bridge_test"
     assert inference["framework"] == "pyTorch"
     assert inference["horizonMinutes"] == 15
@@ -87,8 +90,10 @@ else:
     assert inference["eventTexts"][0].startswith("USD growth")
     assert inference["textEvents"][0]["source"] == "calendar"
     print(json.dumps({
+        "apiVersion": 4,
         "ok": True,
         "prediction": {
+            "apiVersion": 4,
             "classProbabilities": [0.1, 0.8, 0.1],
             "moveMeanPoints": 2.0,
             "moveQ25Points": 1.5,
@@ -159,5 +164,36 @@ else:
         let syncPrediction = try bridge.predictSynchronously(payload)
         XCTAssertEqual(syncPrediction.classProbabilities[1], 0.8, accuracy: 0.0001)
         try bridge.trainSynchronously(MLTrainingPayload(inference: payload, request: trainRequest))
+    }
+
+    func testMLPayloadRequiresLatestAPIVersion() throws {
+        var x = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
+        x[0] = 1.0
+        let payload = MLInferencePayload(
+            apiVersion: FXDataEngineConstants.latestPluginAPIVersion - 1,
+            modelIdentifier: "stale_payload",
+            framework: .pyTorch,
+            dataHasVolume: false,
+            x: x,
+            xWindow: []
+        )
+
+        XCTAssertThrowsError(try payload.validateLatestAPI()) { error in
+            XCTAssertEqual(String(describing: error), "validation failed: mlPayload.apiVersion")
+        }
+    }
+
+    func testMLPayloadDecodingRequiresExplicitAPIVersion() {
+        let json = """
+        {
+          "modelIdentifier": "missing-api-version",
+          "framework": "pyTorch",
+          "dataHasVolume": false,
+          "x": \(Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)),
+          "xWindow": []
+        }
+        """.data(using: .utf8)!
+
+        XCTAssertThrowsError(try JSONDecoder().decode(MLInferencePayload.self, from: json))
     }
 }

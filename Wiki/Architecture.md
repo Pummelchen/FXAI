@@ -54,6 +54,20 @@ FXDatabase is the only project allowed to import or implement ClickHouse access.
 
 This prevents hidden database paths, inconsistent schemas, and backtest runs that cannot be reproduced.
 
+## API Version Boundary
+
+Every project-to-project API has one supported latest version. FXAI does not support older API versions in parallel. A caller using an older version is rejected at descriptor or request validation time.
+
+| Boundary | Latest version |
+| --- | --- |
+| FXImporter connector API | `fximporter.connector.v1` |
+| FXDatabase FXBacktest API | `fxdatabase.fxbacktest.v1` |
+| FXBacktest plugin API | `fxbacktest.plugin-api.v1` |
+| FXBacktest plugin acceleration API | `fxbacktest.plugin-acceleration.v1` |
+| FXBacktest plugin IR | `fxbacktest.plugin-ir.v1` |
+| FXDataEngine / FXPlugins API | `4` |
+| FXDataEngine tokenizer contract | `fxai-tokenizer-v1` |
+
 ## Plugin Boundary
 
 `FXPlugins` is flat by design. A plugin owns its implementation folder and all plugin-specific accelerator code.

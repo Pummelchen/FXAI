@@ -2,6 +2,8 @@ import Foundation
 
 public enum FXBacktestPluginAPIVersion: String, Codable, Sendable {
     case v1 = "fxbacktest.plugin-api.v1"
+
+    public static let latest: FXBacktestPluginAPIVersion = .v1
 }
 
 public struct FXBacktestPluginDescriptor: Codable, Hashable, Identifiable, Sendable {
@@ -18,7 +20,7 @@ public struct FXBacktestPluginDescriptor: Codable, Hashable, Identifiable, Senda
         id: String,
         displayName: String,
         version: String,
-        apiVersion: FXBacktestPluginAPIVersion = .v1,
+        apiVersion: FXBacktestPluginAPIVersion = .latest,
         summary: String,
         author: String,
         supportsCPU: Bool = true,
@@ -32,6 +34,28 @@ public struct FXBacktestPluginDescriptor: Codable, Hashable, Identifiable, Senda
         self.author = author
         self.supportsCPU = supportsCPU
         self.supportsMetal = supportsMetal
+    }
+
+    public func validateLatestAPI() throws {
+        guard apiVersion == FXBacktestPluginAPIVersion.latest else {
+            throw FXBacktestError.invalidParameter(
+                "Unsupported FXBacktest plugin API \(apiVersion.rawValue); expected latest \(FXBacktestPluginAPIVersion.latest.rawValue)."
+            )
+        }
+        for (label, value) in [
+            ("plugin id", id),
+            ("display name", displayName),
+            ("version", version),
+            ("summary", summary),
+            ("author", author)
+        ] {
+            guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw FXBacktestError.invalidParameter("\(label) must not be empty.")
+            }
+        }
+        guard supportsCPU || supportsMetal else {
+            throw FXBacktestError.invalidParameter("\(displayName) must support at least one execution backend.")
+        }
     }
 }
 

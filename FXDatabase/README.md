@@ -486,7 +486,7 @@ API identity:
 
 | Field | Value |
 | --- | --- |
-| Version | `fxdatabase.fxbacktest.v1` |
+| Latest version | `fxdatabase.fxbacktest.v1` |
 | Status | `GET /v1/status` |
 | M1 history | `POST /v1/history/m1` |
 | Result schema | `POST /v1/backtest/results/schema` |
@@ -496,6 +496,8 @@ API identity:
 | Result purge | `POST /v1/backtest/results/purge` |
 | Result read | `POST /v1/backtest/results/runs/get`, `POST /v1/backtest/results/passes/get` |
 | Transport | Local HTTP, default `http://127.0.0.1:5066` |
+
+Only the latest API version is accepted. Requests with any other `api_version` are rejected before database access.
 
 Example history request:
 

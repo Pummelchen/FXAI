@@ -13,4 +13,6 @@ Shared API:
 - `Sources/FXImporterAPI`: provider-neutral connector descriptors, capabilities, symbols, health, M1 OHLC batch DTOs, and D1 OHLC batch DTOs.
 - `Sources/FXImporter`: umbrella module that re-exports the importer API and current MT5 bridge, plus `MT5ImporterConnector` for mapping MT5 bridge responses into the provider-neutral M1 batch contract and `YahooFinanceHistoryConnector` for D1 historical web data.
 
+The connector API latest version is `fximporter.connector.v1`. Each connector descriptor must declare that version and pass `validateLatestAPI()` before health, symbol, or history calls are accepted. Older connector API versions are not supported.
+
 Future connectors such as Interactive Brokers Client Portal/TWS, TradingView-compatible licensed feeds, or broker-specific feeds should live under this project and expose their data through `FXImporterAPI`. FXDatabase remains responsible for canonical storage, UTC authority, validation, and ClickHouse integration.

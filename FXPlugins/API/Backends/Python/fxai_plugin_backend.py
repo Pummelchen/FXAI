@@ -20,6 +20,8 @@ from typing import Any
 
 
 VOLUME_FEATURE_INDEXES = (6, 68, 69, 70, 71, 74, 75, 76, 77, 78, 80, 81, 82, 83)
+FXAI_PLUGIN_API_VERSION = 4
+FXAI_TOKENIZER_API_VERSION = "fxai-tokenizer-v1"
 
 
 def _safe_float(value: Any) -> float:
@@ -30,6 +32,17 @@ def _safe_float(value: Any) -> float:
     if not math.isfinite(result):
         return 0.0
     return result
+
+
+def _require_latest_api(command: dict[str, Any]) -> None:
+    if int(command.get("apiVersion", -1)) != FXAI_PLUGIN_API_VERSION:
+        raise ValueError(f"unsupported FXAI plugin API version; expected {FXAI_PLUGIN_API_VERSION}")
+    payload = command.get("inference") or (command.get("training") or {}).get("inference") or {}
+    if int(payload.get("apiVersion", -1)) != FXAI_PLUGIN_API_VERSION:
+        raise ValueError(f"unsupported FXAI inference API version; expected {FXAI_PLUGIN_API_VERSION}")
+    tokenizer = payload.get("tokenizerContract") or {}
+    if str(tokenizer.get("version", "")) != FXAI_TOKENIZER_API_VERSION:
+        raise ValueError(f"unsupported FXAI tokenizer API version; expected {FXAI_TOKENIZER_API_VERSION}")
 
 
 def _feature(values: list[Any], index: int) -> float:
@@ -189,6 +202,7 @@ def _prediction(edge: float, min_move: float, price_cost: float, move_ema: float
     strength = max(0.0, min(abs(edge) * 3.5, 1.0))
     if strength < 0.08:
         return {
+            "apiVersion": FXAI_PLUGIN_API_VERSION,
             "classProbabilities": [0.09, 0.09, 0.82],
             "moveMeanPoints": 0.0,
             "moveQ25Points": 0.0,
@@ -215,6 +229,7 @@ def _prediction(edge: float, min_move: float, price_cost: float, move_ema: float
     move = max(1.0, min_move, price_cost, move_ema, abs(edge) * 100.0)
     sigma = max(0.10, 0.32 * move)
     return {
+        "apiVersion": FXAI_PLUGIN_API_VERSION,
         "classProbabilities": probs,
         "moveMeanPoints": move,
         "moveQ25Points": max(0.0, move - 0.55 * sigma),
@@ -242,6 +257,7 @@ def _handle_predict(command: dict[str, Any]) -> dict[str, Any]:
     edge = _framework_edge(framework, features, data_has_volume) + _state_edge(state, features)
     move_ema = max(1.0, _safe_float(state.get("moveEMA", 1.0)))
     return {
+        "apiVersion": FXAI_PLUGIN_API_VERSION,
         "ok": True,
         "prediction": _prediction(edge, context_min_move, context_price_cost, move_ema),
         "error": None,
@@ -274,13 +290,14 @@ def _handle_train(command: dict[str, Any]) -> dict[str, Any]:
     state["classMass"] = masses
     state["classCentroids"] = centroids
     _save_state(inference.get("modelIdentifier"), framework, state)
-    return {"ok": True, "prediction": None, "error": None}
+    return {"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": True, "prediction": None, "error": None}
 
 
 def main() -> int:
     operation = sys.argv[1] if len(sys.argv) > 1 else "predict"
     try:
         command = json.loads(sys.stdin.read() or "{}")
+        _require_latest_api(command)
         if operation == "train" or command.get("operation") == "train":
             response = _handle_train(command)
         else:
@@ -288,7 +305,7 @@ def main() -> int:
         print(json.dumps(response, separators=(",", ":")))
         return 0
     except Exception as exc:
-        print(json.dumps({"ok": False, "prediction": None, "error": str(exc)}))
+        print(json.dumps({"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": False, "prediction": None, "error": str(exc)}))
         return 1
 
 

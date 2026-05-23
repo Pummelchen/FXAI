@@ -2,6 +2,7 @@ import Foundation
 
 public enum FXBacktestAPIV1 {
     public static let version = "fxdatabase.fxbacktest.v1"
+    public static let latestVersion = version
     public static let statusPath = "/v1/status"
     public static let m1HistoryPath = "/v1/history/m1"
     public static let resultSchemaPath = "/v1/backtest/results/schema"
@@ -27,7 +28,7 @@ public struct FXBacktestAPIStatusResponse: Codable, Equatable, Sendable {
         case status
     }
 
-    public init(apiVersion: String = FXBacktestAPIV1.version, service: String = "FXDatabase", status: String = "ok") {
+    public init(apiVersion: String = FXBacktestAPIV1.latestVersion, service: String = "FXDatabase", status: String = "ok") {
         self.apiVersion = apiVersion
         self.service = service
         self.status = status
@@ -58,7 +59,7 @@ public struct FXBacktestM1HistoryRequest: Codable, Equatable, Sendable {
     }
 
     public init(
-        apiVersion: String = FXBacktestAPIV1.version,
+        apiVersion: String = FXBacktestAPIV1.latestVersion,
         brokerSourceId: String,
         sourceOrigin: String = "MT5",
         logicalSymbol: String,
@@ -93,7 +94,7 @@ public struct FXBacktestM1HistoryRequest: Codable, Equatable, Sendable {
     }
 
     public func validate() throws {
-        guard apiVersion == FXBacktestAPIV1.version else {
+        guard apiVersion == FXBacktestAPIV1.latestVersion else {
             throw FXBacktestAPIValidationError.unsupportedVersion(apiVersion)
         }
         guard !brokerSourceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -216,7 +217,7 @@ public struct FXBacktestM1HistoryResponse: Codable, Equatable, Sendable {
     }
 
     public init(
-        apiVersion: String = FXBacktestAPIV1.version,
+        apiVersion: String = FXBacktestAPIV1.latestVersion,
         metadata: FXBacktestM1HistoryMetadata,
         utcTimestamps: [Int64],
         open: [Int64],
@@ -236,7 +237,7 @@ public struct FXBacktestM1HistoryResponse: Codable, Equatable, Sendable {
     }
 
     public func validate() throws {
-        guard apiVersion == FXBacktestAPIV1.version else {
+        guard apiVersion == FXBacktestAPIV1.latestVersion else {
             throw FXBacktestAPIValidationError.unsupportedVersion(apiVersion)
         }
         let count = utcTimestamps.count
@@ -313,7 +314,7 @@ public struct FXBacktestAPIErrorResponse: Codable, Equatable, Sendable {
         case error
     }
 
-    public init(apiVersion: String = FXBacktestAPIV1.version, code: String, message: String) {
+    public init(apiVersion: String = FXBacktestAPIV1.latestVersion, code: String, message: String) {
         self.apiVersion = apiVersion
         self.error = FXBacktestAPIErrorBody(code: code, message: message)
     }
@@ -331,7 +332,7 @@ public enum FXBacktestAPIValidationError: Error, Equatable, CustomStringConverti
     public var description: String {
         switch self {
         case .unsupportedVersion(let version):
-            return "Unsupported FXBacktest API version '\(version)'; expected '\(FXBacktestAPIV1.version)'."
+            return "Unsupported FXBacktest API version '\(version)'; expected '\(FXBacktestAPIV1.latestVersion)'."
         case .invalidField(let reason):
             return "Invalid FXBacktest API field: \(reason)."
         }
@@ -345,7 +346,7 @@ public struct FXBacktestResultSchemaRequest: Codable, Equatable, Sendable {
         case apiVersion = "api_version"
     }
 
-    public init(apiVersion: String = FXBacktestAPIV1.version) {
+    public init(apiVersion: String = FXBacktestAPIV1.latestVersion) {
         self.apiVersion = apiVersion
     }
 
@@ -382,7 +383,7 @@ public struct FXBacktestResultRunStartRequest: Codable, Equatable, Sendable {
     }
 
     public init(
-        apiVersion: String = FXBacktestAPIV1.version,
+        apiVersion: String = FXBacktestAPIV1.latestVersion,
         runId: String,
         pluginId: String,
         engine: String,
@@ -529,7 +530,7 @@ public struct FXBacktestResultPassAppendRequest: Codable, Equatable, Sendable {
         case results
     }
 
-    public init(apiVersion: String = FXBacktestAPIV1.version, runId: String, results: [FXBacktestResultPassDTO]) {
+    public init(apiVersion: String = FXBacktestAPIV1.latestVersion, runId: String, results: [FXBacktestResultPassDTO]) {
         self.apiVersion = apiVersion
         self.runId = runId
         self.results = results
@@ -564,7 +565,7 @@ public struct FXBacktestResultRunCompleteRequest: Codable, Equatable, Sendable {
     }
 
     public init(
-        apiVersion: String = FXBacktestAPIV1.version,
+        apiVersion: String = FXBacktestAPIV1.latestVersion,
         runId: String,
         completedPasses: UInt64,
         elapsedSeconds: Double,
@@ -598,7 +599,7 @@ public struct FXBacktestResultPurgeRequest: Codable, Equatable, Sendable {
         case olderThanDays = "older_than_days"
     }
 
-    public init(apiVersion: String = FXBacktestAPIV1.version, all: Bool = false, olderThanDays: Int? = nil) {
+    public init(apiVersion: String = FXBacktestAPIV1.latestVersion, all: Bool = false, olderThanDays: Int? = nil) {
         self.apiVersion = apiVersion
         self.all = all
         self.olderThanDays = olderThanDays
@@ -627,7 +628,7 @@ public struct FXBacktestResultRunGetRequest: Codable, Equatable, Sendable {
         case runId = "run_id"
     }
 
-    public init(apiVersion: String = FXBacktestAPIV1.version, runId: String) {
+    public init(apiVersion: String = FXBacktestAPIV1.latestVersion, runId: String) {
         self.apiVersion = apiVersion
         self.runId = runId
     }
@@ -651,7 +652,7 @@ public struct FXBacktestResultPassesGetRequest: Codable, Equatable, Sendable {
         case limit
     }
 
-    public init(apiVersion: String = FXBacktestAPIV1.version, runId: String, offset: Int = 0, limit: Int = 1_000) {
+    public init(apiVersion: String = FXBacktestAPIV1.latestVersion, runId: String, offset: Int = 0, limit: Int = 1_000) {
         self.apiVersion = apiVersion
         self.runId = runId
         self.offset = offset
@@ -686,7 +687,7 @@ public struct FXBacktestResultMutationResponse: Codable, Equatable, Sendable {
     }
 
     public init(
-        apiVersion: String = FXBacktestAPIV1.version,
+        apiVersion: String = FXBacktestAPIV1.latestVersion,
         status: String = "ok",
         runId: String? = nil,
         affectedRows: Int? = nil,
@@ -724,7 +725,7 @@ public struct FXBacktestResultPurgeResponse: Codable, Equatable, Sendable {
         case report
     }
 
-    public init(apiVersion: String = FXBacktestAPIV1.version, report: FXBacktestResultPurgeReport) {
+    public init(apiVersion: String = FXBacktestAPIV1.latestVersion, report: FXBacktestResultPurgeReport) {
         self.apiVersion = apiVersion
         self.report = report
     }
@@ -809,7 +810,7 @@ public struct FXBacktestResultRunGetResponse: Codable, Equatable, Sendable {
         case run
     }
 
-    public init(apiVersion: String = FXBacktestAPIV1.version, run: FXBacktestResultRunRecord?) {
+    public init(apiVersion: String = FXBacktestAPIV1.latestVersion, run: FXBacktestResultRunRecord?) {
         self.apiVersion = apiVersion
         self.run = run
     }
@@ -831,7 +832,7 @@ public struct FXBacktestResultPassesGetResponse: Codable, Equatable, Sendable {
     }
 
     public init(
-        apiVersion: String = FXBacktestAPIV1.version,
+        apiVersion: String = FXBacktestAPIV1.latestVersion,
         runId: String,
         offset: Int,
         limit: Int,
@@ -847,7 +848,7 @@ public struct FXBacktestResultPassesGetResponse: Codable, Equatable, Sendable {
 
 extension FXBacktestAPIV1 {
     static func validateVersion(_ apiVersion: String) throws {
-        guard apiVersion == version else {
+        guard apiVersion == latestVersion else {
             throw FXBacktestAPIValidationError.unsupportedVersion(apiVersion)
         }
     }

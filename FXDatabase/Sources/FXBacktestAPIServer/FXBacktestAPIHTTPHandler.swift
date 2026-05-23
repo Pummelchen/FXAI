@@ -117,7 +117,7 @@ public struct FXBacktestAPIHTTPHandler: Sendable {
         do {
             return try error(status: status, code: code, message: message)
         } catch {
-            let fallback = #"{"api_version":"\#(FXBacktestAPIV1.version)","error":{"code":"encoding_error","message":"Could not encode API error response"}}"#
+            let fallback = #"{"api_version":"\#(FXBacktestAPIV1.latestVersion)","error":{"code":"encoding_error","message":"Could not encode API error response"}}"#
             return FXBacktestHTTPResponse(statusCode: 500, body: Data(fallback.utf8))
         }
     }

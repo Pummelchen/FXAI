@@ -33,7 +33,7 @@ public struct FXDatabaseBacktestResultService: FXBacktestResultProviding {
           \(Self.sqlString(request.brokerSourceId)),
           \(Self.sqlString(request.primarySymbol.uppercased())),
           [\(symbolsSQL)],
-          \(Self.sqlString(FXBacktestAPIV1.version)),
+          \(Self.sqlString(FXBacktestAPIV1.latestVersion)),
           \(Self.sqlString(request.settingsJSON)),
           \(Self.sqlString(request.parameterSpaceJSON)),
           'running',

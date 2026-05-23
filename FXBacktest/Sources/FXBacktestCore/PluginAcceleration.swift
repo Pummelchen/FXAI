@@ -11,6 +11,13 @@ public enum PluginAccelerationSafety: String, Codable, CaseIterable, Sendable {
     case unsupportedForPlugin
 }
 
+public enum PluginAccelerationAPIV1 {
+    public static let version = "fxbacktest.plugin-acceleration.v1"
+    public static let irVersion = "fxbacktest.plugin-ir.v1"
+    public static let latestVersion = version
+    public static let latestIRVersion = irVersion
+}
+
 public struct PluginAccelerationInputColumn: Codable, Hashable, Sendable {
     public let symbol: String?
     public let field: String
@@ -41,7 +48,7 @@ public struct PluginAccelerationIR: Codable, Hashable, Sendable {
     public let operations: [PluginAccelerationIROperation]
 
     public init(
-        version: String = "fxbacktest.plugin-ir.v1",
+        version: String = PluginAccelerationAPIV1.latestIRVersion,
         requiredColumns: [PluginAccelerationInputColumn],
         operations: [PluginAccelerationIROperation]
     ) {
@@ -61,7 +68,7 @@ public struct PluginAccelerationDescriptor: Codable, Hashable, Sendable {
 
     public init(
         pluginIdentifier: String,
-        apiVersion: String = "fxbacktest.plugin-acceleration.v1",
+        apiVersion: String = PluginAccelerationAPIV1.latestVersion,
         supportedBackends: [PluginAccelerationBackend] = [.swiftScalar],
         safety: PluginAccelerationSafety = .deterministicWholePass,
         metalEntryPoint: String? = nil,
@@ -84,8 +91,10 @@ public struct PluginAccelerationPipeline: Sendable {
     public init() {}
 
     public func validate(_ descriptor: PluginAccelerationDescriptor) throws {
-        guard descriptor.apiVersion == "fxbacktest.plugin-acceleration.v1" else {
-            throw FXBacktestError.invalidParameter("Unsupported plugin acceleration API \(descriptor.apiVersion).")
+        guard descriptor.apiVersion == PluginAccelerationAPIV1.latestVersion else {
+            throw FXBacktestError.invalidParameter(
+                "Unsupported plugin acceleration API \(descriptor.apiVersion); expected latest \(PluginAccelerationAPIV1.latestVersion)."
+            )
         }
         guard !descriptor.pluginIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw FXBacktestError.invalidParameter("Acceleration descriptor plugin id must not be empty.")
@@ -99,8 +108,10 @@ public struct PluginAccelerationPipeline: Sendable {
             }
         }
         if let ir = descriptor.ir {
-            guard ir.version == "fxbacktest.plugin-ir.v1" else {
-                throw FXBacktestError.invalidParameter("Unsupported plugin IR \(ir.version).")
+            guard ir.version == PluginAccelerationAPIV1.latestIRVersion else {
+                throw FXBacktestError.invalidParameter(
+                    "Unsupported plugin IR \(ir.version); expected latest \(PluginAccelerationAPIV1.latestIRVersion)."
+                )
             }
             guard !ir.operations.isEmpty else {
                 throw FXBacktestError.invalidParameter("Plugin IR must contain at least one operation.")

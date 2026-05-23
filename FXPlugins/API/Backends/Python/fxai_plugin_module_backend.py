@@ -20,6 +20,8 @@ from typing import Any
 
 
 VOLUME_FEATURE_INDEXES = (6, 68, 69, 70, 71, 74, 75, 76, 77, 78, 80, 81, 82, 83)
+FXAI_PLUGIN_API_VERSION = 4
+FXAI_TOKENIZER_API_VERSION = "fxai-tokenizer-v1"
 
 
 def _safe_float(value: Any) -> float:
@@ -30,6 +32,17 @@ def _safe_float(value: Any) -> float:
     if not math.isfinite(result):
         return 0.0
     return result
+
+
+def _require_latest_api(command: dict[str, Any]) -> None:
+    if int(command.get("apiVersion", -1)) != FXAI_PLUGIN_API_VERSION:
+        raise ValueError(f"unsupported FXAI plugin API version; expected {FXAI_PLUGIN_API_VERSION}")
+    payload = command.get("inference") or (command.get("training") or {}).get("inference") or {}
+    if int(payload.get("apiVersion", -1)) != FXAI_PLUGIN_API_VERSION:
+        raise ValueError(f"unsupported FXAI inference API version; expected {FXAI_PLUGIN_API_VERSION}")
+    tokenizer = payload.get("tokenizerContract") or {}
+    if str(tokenizer.get("version", "")) != FXAI_TOKENIZER_API_VERSION:
+        raise ValueError(f"unsupported FXAI tokenizer API version; expected {FXAI_TOKENIZER_API_VERSION}")
 
 
 def _safe_token(value: Any) -> str:
@@ -222,6 +235,7 @@ def _prediction(probabilities: list[float], move: float, quantiles: list[float])
     q50 = max(q50, q25)
     q75 = max(q75, q50)
     return {
+        "apiVersion": FXAI_PLUGIN_API_VERSION,
         "classProbabilities": probabilities,
         "moveMeanPoints": max(0.0, move),
         "moveQ25Points": q25,
@@ -287,7 +301,7 @@ def _handle_predict(command: dict[str, Any]) -> dict[str, Any]:
         state = _load_state(plugin_name, framework, model_identifier)
         result = _call_predict_batch(module, features, state, bool(payload.get("dataHasVolume", False)))
         prediction = _prediction_from_module_result(result)
-    return {"ok": True, "prediction": prediction, "error": None}
+    return {"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": True, "prediction": prediction, "error": None}
 
 
 def _handle_train(command: dict[str, Any]) -> dict[str, Any]:
@@ -297,7 +311,7 @@ def _handle_train(command: dict[str, Any]) -> dict[str, Any]:
     model_identifier = inference.get("modelIdentifier")
     plugin_name, backend_path = _resolve_backend_path(model_identifier, framework)
     if framework == "foundationNLP":
-        return {"ok": True, "prediction": None, "error": None}
+        return {"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": True, "prediction": None, "error": None}
     _prepare_framework(framework)
     module = _load_module(plugin_name, backend_path)
     features = _features(inference)
@@ -306,18 +320,19 @@ def _handle_train(command: dict[str, Any]) -> dict[str, Any]:
     state = _load_state(plugin_name, framework, model_identifier)
     state = _call_train_step(module, features, label, move, state, bool(inference.get("dataHasVolume", False)))
     _save_state(plugin_name, framework, model_identifier, state)
-    return {"ok": True, "prediction": None, "error": None}
+    return {"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": True, "prediction": None, "error": None}
 
 
 def main() -> int:
     operation = sys.argv[1] if len(sys.argv) > 1 else "predict"
     try:
         command = json.loads(sys.stdin.read() or "{}")
+        _require_latest_api(command)
         response = _handle_train(command) if operation == "train" or command.get("operation") == "train" else _handle_predict(command)
         print(json.dumps(response, separators=(",", ":")))
         return 0
     except Exception as exc:
-        print(json.dumps({"ok": False, "prediction": None, "error": str(exc)}))
+        print(json.dumps({"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": False, "prediction": None, "error": str(exc)}))
         return 1
 
 

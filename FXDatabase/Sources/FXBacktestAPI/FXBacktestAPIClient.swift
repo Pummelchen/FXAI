@@ -17,7 +17,7 @@ public struct FXBacktestAPIClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let data = try await perform(request)
         let response = try JSONDecoder().decode(FXBacktestAPIStatusResponse.self, from: data)
-        guard response.apiVersion == FXBacktestAPIV1.version else {
+        guard response.apiVersion == FXBacktestAPIV1.latestVersion else {
             throw FXBacktestAPIClientError.apiVersionMismatch(response.apiVersion)
         }
         return response
@@ -103,7 +103,7 @@ public struct FXBacktestAPIClient: Sendable {
     }
 
     private func validateAPIVersion(_ apiVersion: String) throws {
-        guard apiVersion == FXBacktestAPIV1.version else {
+        guard apiVersion == FXBacktestAPIV1.latestVersion else {
             throw FXBacktestAPIClientError.apiVersionMismatch(apiVersion)
         }
     }
@@ -161,7 +161,7 @@ public enum FXBacktestAPIClientError: Error, Equatable, CustomStringConvertible,
         case .invalidResponse(let reason):
             return "Invalid FXDatabase API response: \(reason)"
         case .apiVersionMismatch(let version):
-            return "FXDatabase API version mismatch: got \(version), expected \(FXBacktestAPIV1.version)"
+            return "FXDatabase API version mismatch: got \(version), expected \(FXBacktestAPIV1.latestVersion)"
         case .httpStatus(let status, let body):
             return "FXDatabase API HTTP \(status): \(body)"
         case .server(let code, let message):

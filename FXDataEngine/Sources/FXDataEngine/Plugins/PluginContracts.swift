@@ -89,7 +89,7 @@ public struct PluginManifestV4: Codable, Hashable, Sendable {
     public var requiresVolumeWhenAvailable: Bool
 
     public init(
-        apiVersion: Int = FXDataEngineConstants.apiVersionV4,
+        apiVersion: Int = FXDataEngineConstants.latestPluginAPIVersion,
         aiID: Int,
         aiName: String,
         family: AIFamily,
@@ -120,7 +120,7 @@ public struct PluginManifestV4: Codable, Hashable, Sendable {
     }
 
     public func validate() throws {
-        guard apiVersion == FXDataEngineConstants.apiVersionV4 else {
+        guard apiVersion == FXDataEngineConstants.latestPluginAPIVersion else {
             throw FXDataEngineError.validation("manifest.apiVersion")
         }
         guard (0..<FXDataEngineConstants.aiCount).contains(aiID) else {
@@ -186,7 +186,7 @@ public struct PluginTokenizerContractV4: Codable, Hashable, Sendable {
     }
 
     public func validate() throws {
-        guard !version.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard version == Self.defaultVersion else {
             throw FXDataEngineError.validation("ctx.tokenizer.version")
         }
         guard (1...4).contains(minNGram), (minNGram...4).contains(maxNGram) else {
@@ -302,7 +302,7 @@ public struct PluginContextV4: Codable, Hashable, Sendable {
     }
 
     public init(
-        apiVersion: Int = FXDataEngineConstants.apiVersionV4,
+        apiVersion: Int = FXDataEngineConstants.latestPluginAPIVersion,
         regimeID: Int = 0,
         sessionBucket: Int = 0,
         horizonMinutes: Int = 1,
@@ -338,7 +338,7 @@ public struct PluginContextV4: Codable, Hashable, Sendable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
-            apiVersion: try container.decodeIfPresent(Int.self, forKey: .apiVersion) ?? FXDataEngineConstants.apiVersionV4,
+            apiVersion: try container.decode(Int.self, forKey: .apiVersion),
             regimeID: try container.decodeIfPresent(Int.self, forKey: .regimeID) ?? 0,
             sessionBucket: try container.decodeIfPresent(Int.self, forKey: .sessionBucket) ?? 0,
             horizonMinutes: try container.decodeIfPresent(Int.self, forKey: .horizonMinutes) ?? 1,
@@ -357,7 +357,7 @@ public struct PluginContextV4: Codable, Hashable, Sendable {
     }
 
     public func validate() throws {
-        guard apiVersion == FXDataEngineConstants.apiVersionV4 else {
+        guard apiVersion == FXDataEngineConstants.latestPluginAPIVersion else {
             throw FXDataEngineError.validation("ctx.apiVersion")
         }
         guard (0..<FXDataEngineConstants.pluginRegimeBuckets).contains(regimeID) else {
@@ -555,6 +555,7 @@ public struct TrainRequestV4: Sendable {
 }
 
 public struct PredictionV4: Codable, Hashable, Sendable {
+    public var apiVersion: Int
     public var classProbabilities: [Double]
     public var moveMeanPoints: Double
     public var moveQ25Points: Double
@@ -569,6 +570,7 @@ public struct PredictionV4: Codable, Hashable, Sendable {
     public var reliability: Double
 
     public init(
+        apiVersion: Int = FXDataEngineConstants.latestPluginAPIVersion,
         classProbabilities: [Double] = [0.1, 0.1, 0.8],
         moveMeanPoints: Double = 0,
         moveQ25Points: Double = 0,
@@ -582,6 +584,7 @@ public struct PredictionV4: Codable, Hashable, Sendable {
         confidence: Double = 0,
         reliability: Double = 0
     ) {
+        self.apiVersion = apiVersion
         self.classProbabilities = classProbabilities
         self.moveMeanPoints = moveMeanPoints
         self.moveQ25Points = moveQ25Points
@@ -597,6 +600,9 @@ public struct PredictionV4: Codable, Hashable, Sendable {
     }
 
     public func validate() throws {
+        guard apiVersion == FXDataEngineConstants.latestPluginAPIVersion else {
+            throw FXDataEngineError.validation("pred.apiVersion")
+        }
         guard classProbabilities.count == 3,
               classProbabilities.allSatisfy({ $0.isFinite && $0 >= 0 }) else {
             throw FXDataEngineError.validation("pred.classProbabilities")
@@ -652,6 +658,11 @@ public extension FXAIPluginV4 {
 
 public enum PluginContractTools {
     public static func validateCompatibility(manifest: PluginManifestV4, context: PluginContextV4) throws {
+        try manifest.validate()
+        try context.validate()
+        guard manifest.apiVersion == context.apiVersion else {
+            throw FXDataEngineError.validation("ctx.apiVersion_manifest")
+        }
         guard context.horizonMinutes >= manifest.minHorizonMinutes,
               context.horizonMinutes <= manifest.maxHorizonMinutes else {
             throw FXDataEngineError.validation("ctx.horizon_manifest")

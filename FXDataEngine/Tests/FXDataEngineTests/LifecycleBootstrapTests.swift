@@ -26,7 +26,7 @@ final class LifecycleBootstrapTests: XCTestCase {
         XCTAssertEqual(probe.aiID, 4)
         XCTAssertTrue(probe.requiresPredict)
         XCTAssertTrue(probe.requiresSelfTest)
-        XCTAssertEqual(probe.predictRequest.context.apiVersion, FXDataEngineConstants.apiVersionV4)
+        XCTAssertEqual(probe.predictRequest.context.apiVersion, FXDataEngineConstants.latestPluginAPIVersion)
         XCTAssertEqual(probe.predictRequest.context.regimeID, 0)
         XCTAssertEqual(probe.predictRequest.context.sessionBucket, 3)
         XCTAssertEqual(probe.predictRequest.context.horizonMinutes, 5)

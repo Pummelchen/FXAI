@@ -6,6 +6,11 @@ import FXBacktestAPIServer
 import XCTest
 
 final class FXBacktestAPITests: XCTestCase {
+    func testLatestBacktestAPIVersionTracksOnlySupportedVersion() {
+        XCTAssertEqual(FXBacktestAPIV1.latestVersion, FXBacktestAPIV1.version)
+        XCTAssertEqual(FXBacktestAPIStatusResponse().apiVersion, FXBacktestAPIV1.latestVersion)
+    }
+
     func testHistoryRequestRequiresV1VersionAndMinuteAlignedRange() throws {
         XCTAssertThrowsError(try FXBacktestM1HistoryRequest(
             apiVersion: "old",
@@ -45,7 +50,7 @@ final class FXBacktestAPITests: XCTestCase {
         let statusResponse = await handler.handle(method: "GET", path: FXBacktestAPIV1.statusPath, body: Data())
         XCTAssertEqual(statusResponse.statusCode, 200)
         let status = try JSONDecoder().decode(FXBacktestAPIStatusResponse.self, from: statusResponse.body)
-        XCTAssertEqual(status.apiVersion, FXBacktestAPIV1.version)
+        XCTAssertEqual(status.apiVersion, FXBacktestAPIV1.latestVersion)
 
         let request = FXBacktestM1HistoryRequest(
             brokerSourceId: "demo",
@@ -60,7 +65,7 @@ final class FXBacktestAPITests: XCTestCase {
         let historyResponse = await handler.handle(method: "POST", path: FXBacktestAPIV1.m1HistoryPath, body: body)
         XCTAssertEqual(historyResponse.statusCode, 200)
         let history = try JSONDecoder().decode(FXBacktestM1HistoryResponse.self, from: historyResponse.body)
-        XCTAssertEqual(history.apiVersion, FXBacktestAPIV1.version)
+        XCTAssertEqual(history.apiVersion, FXBacktestAPIV1.latestVersion)
         XCTAssertEqual(history.metadata.rowCount, 2)
         XCTAssertEqual(history.utcTimestamps, [1_704_067_200, 1_704_067_260])
     }
@@ -82,7 +87,7 @@ final class FXBacktestAPITests: XCTestCase {
 
         XCTAssertEqual(response.statusCode, 400)
         let error = try JSONDecoder().decode(FXBacktestAPIErrorResponse.self, from: response.body)
-        XCTAssertEqual(error.apiVersion, FXBacktestAPIV1.version)
+        XCTAssertEqual(error.apiVersion, FXBacktestAPIV1.latestVersion)
         XCTAssertEqual(error.error.code, "invalid_request")
     }
 
@@ -126,7 +131,7 @@ final class FXBacktestAPITests: XCTestCase {
 
         XCTAssertEqual(response.statusCode, 400)
         let error = try JSONDecoder().decode(FXBacktestAPIErrorResponse.self, from: response.body)
-        XCTAssertEqual(error.apiVersion, FXBacktestAPIV1.version)
+        XCTAssertEqual(error.apiVersion, FXBacktestAPIV1.latestVersion)
         XCTAssertEqual(error.error.code, "invalid_request")
     }
 
@@ -206,7 +211,7 @@ final class FXBacktestAPITests: XCTestCase {
 
         XCTAssertEqual(response.statusCode, 503)
         let error = try JSONDecoder().decode(FXBacktestAPIErrorResponse.self, from: response.body)
-        XCTAssertEqual(error.apiVersion, FXBacktestAPIV1.version)
+        XCTAssertEqual(error.apiVersion, FXBacktestAPIV1.latestVersion)
         XCTAssertEqual(error.error.code, "result_store_unavailable")
     }
 

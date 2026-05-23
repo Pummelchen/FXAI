@@ -24,10 +24,10 @@ public struct FXDatabaseConnectivityAgent: Sendable {
         let started = Date()
         do {
             let response = try await statusLoader(connection)
-            guard response.apiVersion == FXBacktestAPIV1.version else {
+            guard response.apiVersion == FXBacktestAPIV1.latestVersion else {
                 return Self.descriptor.outcome(
                     status: .failed,
-                    message: "FXDatabase API version mismatch: got \(response.apiVersion), expected \(FXBacktestAPIV1.version).",
+                    message: "FXDatabase API version mismatch: got \(response.apiVersion), expected \(FXBacktestAPIV1.latestVersion).",
                     details: ["service=\(response.service)", "status=\(response.status)"],
                     startedAtUtc: started
                 )
@@ -400,23 +400,7 @@ public struct PluginValidationAgent: Sendable {
 
     private func validateOrThrow(plugin: AnyFXBacktestPlugin) throws {
         let descriptor = plugin.descriptor
-        guard descriptor.apiVersion == .v1 else {
-            throw FXBacktestError.invalidParameter("Unsupported plugin API \(descriptor.apiVersion.rawValue).")
-        }
-        for (label, value) in [
-            ("plugin id", descriptor.id),
-            ("display name", descriptor.displayName),
-            ("version", descriptor.version),
-            ("summary", descriptor.summary),
-            ("author", descriptor.author)
-        ] {
-            guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw FXBacktestError.invalidParameter("\(label) must not be empty.")
-            }
-        }
-        guard descriptor.supportsCPU || descriptor.supportsMetal else {
-            throw FXBacktestError.invalidParameter("\(descriptor.displayName) must support at least one execution backend.")
-        }
+        try descriptor.validateLatestAPI()
         guard !plugin.parameterDefinitions.isEmpty else {
             throw FXBacktestError.invalidParameter("\(descriptor.displayName) must define at least one optimizable input.")
         }

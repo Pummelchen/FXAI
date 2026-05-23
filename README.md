@@ -46,6 +46,24 @@ Future agents
 - `FXPlugins` is a flat plugin zoo. Each plugin folder owns its own implementation and accelerator folders.
 - `FXBacktestAgent`, `FXDemoAgent`, and `FXLiveAgent` are future distributed runtime projects, not data owners.
 
+## API Version Policy
+
+Every public project boundary carries an explicit latest API version. FXAI does not keep older API versions active. If an API advances from v1 to v2, every caller must be updated to v2 before it can use that API again.
+
+Current latest versions:
+
+| Boundary | Latest version |
+| --- | --- |
+| FXImporter connector API | `fximporter.connector.v1` |
+| FXDatabase FXBacktest API | `fxdatabase.fxbacktest.v1` |
+| FXBacktest plugin API | `fxbacktest.plugin-api.v1` |
+| FXBacktest plugin acceleration API | `fxbacktest.plugin-acceleration.v1` |
+| FXBacktest plugin IR | `fxbacktest.plugin-ir.v1` |
+| FXDataEngine / FXPlugins API | `4` |
+| FXDataEngine tokenizer contract | `fxai-tokenizer-v1` |
+
+Swift descriptors, request DTOs, plugin manifests, contexts, predictions, and Python accelerator bridge payloads reject non-latest versions during validation.
+
 ## Data Contract
 
 The core historical data contract is `M1 OHLCV`.

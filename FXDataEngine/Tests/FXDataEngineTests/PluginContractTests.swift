@@ -23,6 +23,52 @@ final class PluginContractTests: XCTestCase {
         XCTAssertThrowsError(try invalid.validate())
     }
 
+    func testPluginContractsRequireLatestAPIVersion() throws {
+        let staleManifest = PluginManifestV4(
+            apiVersion: FXDataEngineConstants.latestPluginAPIVersion - 1,
+            aiID: 2,
+            aiName: "Stale",
+            family: .linear
+        )
+        XCTAssertThrowsError(try staleManifest.validate()) { error in
+            XCTAssertEqual(String(describing: error), "validation failed: manifest.apiVersion")
+        }
+
+        let staleContext = PluginContextV4(apiVersion: FXDataEngineConstants.latestPluginAPIVersion - 1)
+        XCTAssertThrowsError(try staleContext.validate()) { error in
+            XCTAssertEqual(String(describing: error), "validation failed: ctx.apiVersion")
+        }
+
+        let staleTokenizer = PluginTokenizerContractV4(version: "fxai-tokenizer-v0")
+        XCTAssertThrowsError(try staleTokenizer.validate()) { error in
+            XCTAssertEqual(String(describing: error), "validation failed: ctx.tokenizer.version")
+        }
+
+        let stalePrediction = PredictionV4(apiVersion: FXDataEngineConstants.latestPluginAPIVersion - 1)
+        XCTAssertThrowsError(try stalePrediction.validate()) { error in
+            XCTAssertEqual(String(describing: error), "validation failed: pred.apiVersion")
+        }
+    }
+
+    func testPluginContextDecodingRequiresExplicitAPIVersion() {
+        let json = """
+        {
+          "regimeID": 0,
+          "sessionBucket": 0,
+          "horizonMinutes": 1,
+          "featureSchema": 1,
+          "normalizationMethod": 0,
+          "sequenceBars": 1,
+          "pointValue": 1.0,
+          "domainHash": 0.25,
+          "sampleTimeUTC": 1800020000,
+          "dataHasVolume": true
+        }
+        """.data(using: .utf8)!
+
+        XCTAssertThrowsError(try JSONDecoder().decode(PluginContextV4.self, from: json))
+    }
+
     func testPredictRequestValidationChecksWindowContract() throws {
         let x = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
         let context = PluginContextV4(sequenceBars: 2, dataHasVolume: true)

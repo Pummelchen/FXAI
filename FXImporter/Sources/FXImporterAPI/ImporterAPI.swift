@@ -1,5 +1,10 @@
 import Foundation
 
+public enum FXImporterAPIV1 {
+    public static let version = "fximporter.connector.v1"
+    public static let latestVersion = version
+}
+
 public enum FXImporterSourceKind: String, Codable, CaseIterable, Sendable {
     case metaTrader5 = "METATRADER5"
     case interactiveBrokersTWS = "INTERACTIVE_BROKERS_TWS"
@@ -9,6 +14,7 @@ public enum FXImporterSourceKind: String, Codable, CaseIterable, Sendable {
 }
 
 public struct FXImporterConnectorDescriptor: Codable, Hashable, Sendable {
+    public let apiVersion: String
     public let id: String
     public let displayName: String
     public let kind: FXImporterSourceKind
@@ -16,17 +22,44 @@ public struct FXImporterConnectorDescriptor: Codable, Hashable, Sendable {
     public let capabilities: FXImporterCapabilities
 
     public init(
+        apiVersion: String = FXImporterAPIV1.latestVersion,
         id: String,
         displayName: String,
         kind: FXImporterSourceKind,
         version: String,
         capabilities: FXImporterCapabilities
     ) {
+        self.apiVersion = apiVersion
         self.id = id
         self.displayName = displayName
         self.kind = kind
         self.version = version
         self.capabilities = capabilities
+    }
+
+    public func validateLatestAPI() throws {
+        guard apiVersion == FXImporterAPIV1.latestVersion else {
+            throw FXImporterConnectorError.unsupportedAPIVersion(
+                connectorID: id,
+                got: apiVersion,
+                expected: FXImporterAPIV1.latestVersion
+            )
+        }
+        for (label, value) in [
+            ("id", id),
+            ("displayName", displayName),
+            ("version", version)
+        ] {
+            guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw FXImporterConnectorError.invalidDescriptor("\(label) must not be empty")
+            }
+        }
+        guard capabilities.supportsSymbolDiscovery ||
+              capabilities.supportsHistoricalM1OHLC ||
+              capabilities.supportsHistoricalD1OHLC ||
+              capabilities.supportsLiveM1OHLC else {
+            throw FXImporterConnectorError.invalidDescriptor("connector must expose at least one usable data capability")
+        }
     }
 }
 
@@ -199,11 +232,17 @@ public struct FXImporterD1Batch: Codable, Hashable, Sendable {
 
 public enum FXImporterConnectorError: Error, CustomStringConvertible, Sendable {
     case unsupportedCapability(connectorID: String, capability: String)
+    case unsupportedAPIVersion(connectorID: String, got: String, expected: String)
+    case invalidDescriptor(String)
 
     public var description: String {
         switch self {
         case .unsupportedCapability(let connectorID, let capability):
             return "Connector \(connectorID) does not support \(capability)."
+        case .unsupportedAPIVersion(let connectorID, let got, let expected):
+            return "Connector \(connectorID) uses unsupported FXImporter API version \(got); expected latest \(expected)."
+        case .invalidDescriptor(let reason):
+            return "Invalid FXImporter connector descriptor: \(reason)."
         }
     }
 }
@@ -218,7 +257,12 @@ public protocol FXImporterConnector: Sendable {
 }
 
 public extension FXImporterConnector {
+    func validateLatestAPI() throws {
+        try descriptor.validateLatestAPI()
+    }
+
     func fetchD1History(_ request: FXImporterD1HistoryRequest) async throws -> FXImporterD1Batch {
+        try validateLatestAPI()
         throw FXImporterConnectorError.unsupportedCapability(
             connectorID: descriptor.id,
             capability: "D1 historical OHLC"

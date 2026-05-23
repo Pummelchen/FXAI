@@ -67,7 +67,7 @@ public final class FXBacktestAPIServer: @unchecked Sendable {
             let response = await handler.handle(method: request.method, path: request.path, body: request.body)
             try writeResponse(response, clientFD: clientFD)
         } catch {
-            let body = #"{"api_version":"\#(FXBacktestAPIV1.version)","error":{"code":"bad_http_request","message":"\#(Self.jsonEscaped(String(describing: error)))"}}"#
+            let body = #"{"api_version":"\#(FXBacktestAPIV1.latestVersion)","error":{"code":"bad_http_request","message":"\#(Self.jsonEscaped(String(describing: error)))"}}"#
             let response = FXBacktestHTTPResponse(statusCode: 400, body: Data(body.utf8))
             do {
                 try writeResponse(response, clientFD: clientFD)

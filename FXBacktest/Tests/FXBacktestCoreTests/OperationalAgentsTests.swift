@@ -6,7 +6,7 @@ import XCTest
 final class OperationalAgentsTests: XCTestCase {
     func testFXDatabaseConnectivityAcceptsMatchingAPIVersion() async throws {
         let agent = FXDatabaseConnectivityAgent(statusLoader: { _ in
-            FXBacktestAPIStatusResponse(apiVersion: FXBacktestAPIV1.version, service: "FXDatabase", status: "ok")
+            FXBacktestAPIStatusResponse(apiVersion: FXBacktestAPIV1.latestVersion, service: "FXDatabase", status: "ok")
         })
 
         let outcome = try await agent.check(connection: FXDatabaseConnectionSettings())
@@ -40,9 +40,17 @@ final class OperationalAgentsTests: XCTestCase {
         let agent = PluginValidationAgent()
 
         for plugin in FXBacktestPluginRegistry.availablePlugins {
+            XCTAssertEqual(plugin.descriptor.apiVersion, .latest)
             let outcome = agent.validate(plugin: plugin)
             XCTAssertEqual(outcome.status, .ok, outcome.message)
         }
+    }
+
+    func testPluginValidationRejectsInvalidLatestAPIDescriptor() {
+        let outcome = PluginValidationAgent().validate(plugin: AnyFXBacktestPlugin(InvalidDescriptorTestPlugin()))
+
+        XCTAssertEqual(outcome.status, .failed)
+        XCTAssertTrue(outcome.message.contains("must support at least one execution backend"))
     }
 
     func testOptimizationCoordinatorRejectsMetalForCPUOnlyPlugin() throws {
@@ -197,5 +205,27 @@ private struct CPUOnlyTestPlugin: FXBacktestPluginV1 {
             profitFactor: 0,
             barsProcessed: market.count
         )
+    }
+}
+
+private struct InvalidDescriptorTestPlugin: FXBacktestPluginV1 {
+    let descriptor = FXBacktestPluginDescriptor(
+        id: "com.fxbacktest.tests.invalid.v1",
+        displayName: "Invalid Test",
+        version: "1.0.0",
+        summary: "Invalid test plugin.",
+        author: "FXBacktestTests",
+        supportsCPU: false,
+        supportsMetal: false
+    )
+
+    let parameterDefinitions: [ParameterDefinition] = []
+
+    func runPass(
+        market: OhlcDataSeries,
+        parameters: ParameterVector,
+        context: BacktestContext
+    ) throws -> BacktestPassResult {
+        throw FXBacktestError.invalidParameter("not executable")
     }
 }

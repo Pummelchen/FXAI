@@ -40,6 +40,7 @@ public enum FXDataEngineConstants {
     public static let brokerExecutionEventKindCount = 4
     public static let aiMLPHidden = 12
     public static let apiVersionV4 = 4
+    public static let latestPluginAPIVersion = apiVersionV4
     public static let maxSequenceBars = 96
     public static let maxContextSymbols = 48
     public static let pluginRegimeBuckets = 12

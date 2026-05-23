@@ -247,7 +247,7 @@ Use `agents` in the resident prompt to inspect the latest outcome:
 
 FXBacktest consumes FXDatabase only through the dedicated FXBacktest API v1:
 
-- API version: `fxdatabase.fxbacktest.v1`
+- Latest API version: `fxdatabase.fxbacktest.v1`
 - Status endpoint: `GET /v1/status`
 - M1 history endpoint: `POST /v1/history/m1`
 - Result schema endpoint: `POST /v1/backtest/results/schema`
@@ -258,6 +258,8 @@ FXBacktest consumes FXDatabase only through the dedicated FXBacktest API v1:
 - Result read endpoints: `POST /v1/backtest/results/runs/get`, `POST /v1/backtest/results/passes/get`
 
 FXBacktest imports the small `FXDatabaseFXBacktestAPI` SwiftPM product for v1 DTOs and the HTTP client. That module does not expose ClickHouse, FXDatabase internals, or the old direct history provider.
+
+FXBacktest validates the latest FXDatabase API version, plugin API version, plugin acceleration API version, and plugin IR version before execution. Older versions are not supported in parallel.
 
 The data path is:
 
