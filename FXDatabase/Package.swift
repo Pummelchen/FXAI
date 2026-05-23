@@ -7,6 +7,7 @@ let package = Package(
         .macOS("26.0")
     ],
     products: [
+        .library(name: "FXDatabaseBacktestCore", targets: ["BacktestCore"]),
         .library(name: "FXDatabaseFXBacktestAPI", targets: ["FXBacktestAPI"]),
         .executable(name: "FXDatabase", targets: ["FXDatabaseCLI"])
     ],
@@ -39,7 +40,7 @@ let package = Package(
         .testTarget(name: "VerificationTests", dependencies: ["Domain", "Verification", "TimeMapping"]),
         .testTarget(name: "OperationsTests", dependencies: ["Domain", "Config", "ClickHouse", "TimeMapping", "Operations"]),
         .testTarget(name: "BacktestTests", dependencies: ["Domain", "ClickHouse", "BacktestCore"]),
-        .testTarget(name: "FXBacktestAPITests", dependencies: ["FXBacktestAPI", "FXBacktestAPIServer", "ClickHouse"])
+        .testTarget(name: "FXBacktestAPITests", dependencies: ["FXBacktestAPI", "FXBacktestAPIServer", "ClickHouse", "Config", "Domain"])
     ],
     swiftLanguageModes: [.v6]
 )

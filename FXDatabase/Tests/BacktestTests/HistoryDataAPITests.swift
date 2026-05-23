@@ -181,6 +181,45 @@ final class HistoryDataAPITests: XCTestCase {
         }
     }
 
+    func testSineWaveAgentGeneratesHourlyM1SineTestSecurity() async throws {
+        let start = UtcSecond(rawValue: 1_704_067_200)
+        let end = UtcSecond(rawValue: start.rawValue + 61 * 60)
+        let request = try SineWaveAgent.request(
+            brokerSourceId: try BrokerSourceId("demo"),
+            utcStartInclusive: start,
+            utcEndExclusive: end
+        )
+
+        let series = try await SineWaveAgent().loadM1Ohlc(request)
+
+        XCTAssertEqual(series.metadata.sourceOrigin, .synthetic)
+        XCTAssertEqual(series.metadata.logicalSymbol, SineTestSecurity.logicalSymbol)
+        XCTAssertEqual(series.metadata.digits, SineTestSecurity.digits)
+        XCTAssertEqual(series.count, 61)
+        XCTAssertEqual(series.utcTimestamps.first, start.rawValue)
+        XCTAssertEqual(series.utcTimestamps.last, start.rawValue + 60 * 60)
+        XCTAssertEqual(series.open[0], 1_000_000)
+        XCTAssertEqual(series.high[0], 1_000_000)
+        XCTAssertEqual(series.open[30], 1)
+        XCTAssertEqual(series.low[30], 1)
+        XCTAssertEqual(series.open[60], 1_000_000)
+        XCTAssertEqual(series.high[60], 1_000_000)
+        XCTAssertTrue(series.volume.allSatisfy { $0 > 0 })
+    }
+
+    func testSineWaveAgentEnforcesRowLimit() async throws {
+        let start = UtcSecond(rawValue: 1_704_067_200)
+        let request = try SineWaveAgent.request(
+            utcStartInclusive: start,
+            utcEndExclusive: UtcSecond(rawValue: start.rawValue + 3 * 60),
+            maximumRows: 2
+        )
+
+        await XCTAssertThrowsErrorAsync(try await SineWaveAgent().loadM1Ohlc(request)) { error in
+            XCTAssertEqual(error as? HistoryDataError, .rowLimitExceeded(limit: 2))
+        }
+    }
+
     private func metadata() throws -> BarSeriesMetadata {
         BarSeriesMetadata(
             brokerSourceId: try BrokerSourceId("demo"),

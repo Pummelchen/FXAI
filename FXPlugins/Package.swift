@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "FXAIPlugins", targets: ["FXAIPlugins"])
     ],
     dependencies: [
+        .package(path: "../FXDatabase"),
         .package(path: "../FXDataEngine")
     ],
     targets: [
@@ -70,7 +71,10 @@ let package = Package(
         ),
         .testTarget(
             name: "FXAIPluginsTests",
-            dependencies: ["FXAIPlugins"],
+            dependencies: [
+                "FXAIPlugins",
+                .product(name: "FXDatabaseBacktestCore", package: "FXDatabase")
+            ],
             path: "API/Tests/FXAIPluginsTests"
         )
     ],

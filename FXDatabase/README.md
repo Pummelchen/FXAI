@@ -38,6 +38,7 @@ The system has three parts:
    - Runs backfill, live updates, MT5 cross-check verification, canonical-only repair, and history-data readiness checks.
    - Serves FXBacktest API v1 on a local HTTP endpoint after the same readiness gates pass.
    - Exposes SwiftPM library products:
+     - `FXDatabaseBacktestCore`: verified backtest-core data contracts plus the deterministic `SineWaveAgent` used by runtime smoke tests.
      - `FXDatabaseFXBacktestAPI`: shared v1 request/response DTOs and a small HTTP client for FXBacktest.
 
 Important MT5 socket note: standard MQL5 sockets are client-oriented. The sample EA therefore connects to the Swift listener. The Swift transport also supports outbound client mode for future bridge variants.
@@ -203,6 +204,8 @@ Paths are resolved relative to the package working directory unless absolute. Lo
 ```
 
 The program does not guess suffixes or prefixes. If your broker uses `EURUSDm`, configure it explicitly. `source_origin` is stored in ClickHouse and is part of checkpoints, batch IDs, canonical keys, verified coverage, data certificates, verification results, repair logs, and FXBacktest API requests. `startcheck` also syncs the broker-specific `symbol_data_sources` table from this config, keyed by `broker_source_id`, `logical_symbol`, `source_origin`, and priority. MT5 is the first supported origin; future sources can use their own uppercase source origin values.
+
+`SINETEST` is the reserved virtual test security served by FXDatabase without ClickHouse or MT5 readiness gates. It uses `source_origin = "SYNTHETIC"`, provider symbol `SineTest`, and 6 scaled digits. The generated M1 OHLCV stream is a deterministic one-hour sine/cosine cycle in the 0..1 range, with the open/high at exactly `1.000000` on every full UTC hour and the mathematical zero trough clamped to one scaled tick so the positive-price OHLC contract remains valid. Volume is always nonzero, so FXDataEngine and FXPlugins smoke tests exercise the volume-aware code path.
 
 ### Broker Time
 

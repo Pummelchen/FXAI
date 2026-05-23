@@ -1,4 +1,6 @@
 import ClickHouse
+import Config
+import Domain
 import FXBacktestAPI
 import FXBacktestAPIServer
 import XCTest
@@ -260,6 +262,32 @@ final class FXBacktestAPITests: XCTestCase {
         XCTAssertTrue(sql.contains { $0.contains("ALTER TABLE `fxdatabase_test`.`fxbacktest_pass_results` DELETE WHERE 1") })
     }
 
+    func testHistoryServiceServesSineTestAsVirtualSecurityWithoutClickHouseReadiness() async throws {
+        let clickHouse = NeverCalledClickHouse()
+        let service = FXDatabaseBacktestHistoryService(config: try Self.makeConfig(), clickHouse: clickHouse)
+        let start = 1_704_067_200
+        let response = try await service.loadM1History(FXBacktestM1HistoryRequest(
+            brokerSourceId: "any-virtual-broker",
+            logicalSymbol: "SINETEST",
+            utcStartInclusive: Int64(start),
+            utcEndExclusive: Int64(start + 61 * 60),
+            expectedMT5Symbol: "SineTest",
+            expectedDigits: 6
+        ))
+
+        try response.validate()
+        XCTAssertEqual(response.metadata.sourceOrigin, "SYNTHETIC")
+        XCTAssertEqual(response.metadata.logicalSymbol, "SINETEST")
+        XCTAssertEqual(response.metadata.mt5Symbol, "SineTest")
+        XCTAssertEqual(response.metadata.rowCount, 61)
+        XCTAssertEqual(response.open[0], 1_000_000)
+        XCTAssertEqual(response.open[30], 1)
+        XCTAssertEqual(response.open[60], 1_000_000)
+        XCTAssertTrue(response.volume.allSatisfy { $0 > 0 })
+        let executeCount = await clickHouse.executeCount()
+        XCTAssertEqual(executeCount, 0)
+    }
+
     func testHTTPHandlerDoesNotExposeExecutionSpecEndpoint() async throws {
         let handler = FXBacktestAPIHTTPHandler(historyProvider: MockHistoryProvider())
 
@@ -272,6 +300,41 @@ final class FXBacktestAPITests: XCTestCase {
         XCTAssertEqual(response.statusCode, 404)
         let error = try JSONDecoder().decode(FXBacktestAPIErrorResponse.self, from: response.body)
         XCTAssertEqual(error.error.code, "not_found")
+    }
+
+    private static func makeConfig() throws -> ConfigBundle {
+        let appData = """
+        {
+          "chunk_size": 50000,
+          "live_scan_interval_seconds": 10,
+          "log_level": "normal",
+          "strict_symbol_failures": false,
+          "verifier_random_ranges": 0
+        }
+        """.data(using: .utf8)!
+        return ConfigBundle(
+            app: try JSONDecoder().decode(AppConfigFile.self, from: appData),
+            clickHouse: ClickHouseConfig(
+                url: URL(string: "http://localhost:8123")!,
+                database: "fxdatabase_test",
+                username: nil,
+                password: nil,
+                requestTimeoutSeconds: 10,
+                retryCount: 0
+            ),
+            mt5Bridge: MT5BridgeConfig(
+                mode: .listen,
+                host: "127.0.0.1",
+                port: 5055,
+                connectTimeoutSeconds: 10,
+                requestTimeoutSeconds: 10
+            ),
+            brokerTime: BrokerTimeConfig(
+                brokerSourceId: try BrokerSourceId("configured-broker"),
+                offsetSegments: []
+            ),
+            symbols: SymbolConfig(symbols: [])
+        )
     }
 }
 
@@ -360,5 +423,18 @@ private actor RecordingResultClickHouse: ClickHouseClientProtocol {
 
     func sql() -> [String] {
         recordedSQL
+    }
+}
+
+private actor NeverCalledClickHouse: ClickHouseClientProtocol {
+    private var count = 0
+
+    func execute(_: ClickHouseQuery) async throws -> String {
+        count += 1
+        return ""
+    }
+
+    func executeCount() -> Int {
+        count
     }
 }

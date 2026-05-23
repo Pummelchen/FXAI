@@ -2,6 +2,7 @@ import Foundation
 
 public struct DataSourceOrigin: RawRepresentable, Codable, Hashable, Sendable, Comparable, CustomStringConvertible {
     public static let mt5 = DataSourceOrigin(rawValueUnchecked: "MT5")
+    public static let synthetic = DataSourceOrigin(rawValueUnchecked: "SYNTHETIC")
 
     public let rawValue: String
 

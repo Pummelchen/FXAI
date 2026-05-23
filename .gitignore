@@ -1,4 +1,6 @@
 *.ex5
+__pycache__/
+*.pyc
 FXDataEngine/Tools/OfflineLab/fxai_offline_lab.turso.db
 FXDataEngine/Tools/OfflineLab/offline_lab.sqlite
 FXDataEngine/Tools/OfflineLab/Profiles/*

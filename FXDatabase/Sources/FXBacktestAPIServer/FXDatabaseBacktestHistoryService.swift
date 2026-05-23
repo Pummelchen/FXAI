@@ -28,6 +28,10 @@ public struct FXDatabaseBacktestHistoryService: FXBacktestHistoryProviding {
             throw FXBacktestAPIServiceError.invalidRequest(String(describing: error))
         }
 
+        if SineTestSecurity.matches(logicalSymbol) {
+            return try await loadSineTestHistory(request, brokerSourceId: brokerSourceId)
+        }
+
         guard config.brokerTime.isAutomatic || brokerSourceId == config.brokerTime.brokerSourceId else {
             throw FXBacktestAPIServiceError.brokerMismatch(
                 expected: config.brokerTime.brokerSourceId.rawValue,
@@ -103,6 +107,68 @@ public struct FXDatabaseBacktestHistoryService: FXBacktestHistoryProviding {
             return response
         } catch let error as FXBacktestAPIServiceError {
             throw error
+        } catch {
+            throw FXBacktestAPIServiceError.historyUnavailable(String(describing: error))
+        }
+    }
+
+    private func loadSineTestHistory(
+        _ request: FXBacktestM1HistoryRequest,
+        brokerSourceId: BrokerSourceId
+    ) async throws -> FXBacktestM1HistoryResponse {
+        if let expectedMT5Symbol = request.expectedMT5Symbol,
+           !SineTestSecurity.acceptsProviderSymbol(expectedMT5Symbol) {
+            throw FXBacktestAPIServiceError.mt5SymbolMismatch(
+                expected: SineTestSecurity.displayName,
+                actual: expectedMT5Symbol
+            )
+        }
+        if let expectedDigits = request.expectedDigits,
+           expectedDigits != SineTestSecurity.digits.rawValue {
+            throw FXBacktestAPIServiceError.digitsMismatch(
+                expected: SineTestSecurity.digits.rawValue,
+                actual: expectedDigits
+            )
+        }
+
+        do {
+            let series = try await SineWaveAgent().loadM1Ohlc(HistoricalOhlcRequest(
+                brokerSourceId: brokerSourceId,
+                sourceOrigin: SineTestSecurity.sourceOrigin,
+                logicalSymbol: SineTestSecurity.logicalSymbol,
+                utcStartInclusive: UtcSecond(rawValue: request.utcStartInclusive),
+                utcEndExclusive: UtcSecond(rawValue: request.utcEndExclusive),
+                expectedMT5Symbol: SineTestSecurity.providerSymbol,
+                expectedDigits: SineTestSecurity.digits,
+                maximumRows: request.maximumRows
+            ))
+            let response = FXBacktestM1HistoryResponse(
+                metadata: FXBacktestM1HistoryMetadata(
+                    brokerSourceId: series.metadata.brokerSourceId.rawValue,
+                    sourceOrigin: series.metadata.sourceOrigin.rawValue,
+                    logicalSymbol: series.metadata.logicalSymbol.rawValue,
+                    mt5Symbol: SineTestSecurity.providerSymbol.rawValue,
+                    timeframe: series.metadata.timeframe.rawValue,
+                    digits: series.metadata.digits.rawValue,
+                    requestedUtcStart: request.utcStartInclusive,
+                    requestedUtcEndExclusive: request.utcEndExclusive,
+                    firstUtc: series.metadata.firstUtc?.rawValue,
+                    lastUtc: series.metadata.lastUtc?.rawValue,
+                    rowCount: series.count
+                ),
+                utcTimestamps: series.utcTimestamps,
+                open: series.open,
+                high: series.high,
+                low: series.low,
+                close: series.close,
+                volume: series.volume
+            )
+            try response.validate()
+            return response
+        } catch let error as FXBacktestAPIServiceError {
+            throw error
+        } catch let error as HistoryDataError {
+            throw FXBacktestAPIServiceError.historyUnavailable(error.description)
         } catch {
             throw FXBacktestAPIServiceError.historyUnavailable(String(describing: error))
         }

@@ -46,6 +46,10 @@ contracts:
   route train/predict through the selected external backend while retaining explicit
   CPU fallback. Test runs can set `FXAI_FORCE_PYTORCH_CPU=1` for deterministic
   Python smoke tests when Apple MPS is not stable for a specific model.
+- The runtime test suite consumes FXDatabase's virtual `SINETEST` security from
+  `SineWaveAgent` and checks every plugin on deterministic M1 OHLCV sine-wave data,
+  including accelerator runtime selection with CPU fallback for unavailable local
+  Metal/PyTorch/TensorFlow/NLP backends.
 - Reference-grade Swift fixtures now live inside the owning plugin folders for
   statistical models, factor/trend panel contracts, linear learners, tree
   learners, distribution models, and memory retrieval. The focused suites
