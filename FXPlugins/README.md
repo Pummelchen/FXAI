@@ -37,6 +37,12 @@ contracts:
   `FXAI_PLUGIN_STATE_DIR`, or `~/.fxai/plugins/state` when the environment
   variable is not set. The backend follows the FXDataEngine volume contract:
   volume-derived features are used only when `dataHasVolume` is true.
+- Reference-grade Swift fixtures now live inside the owning plugin folders for
+  statistical models, factor/trend panel contracts, linear learners, tree
+  learners, distribution models, and memory retrieval. The focused suites
+  `Wave2StatisticalReferenceTests`, `Wave3FactorTrendReferenceTests`, and
+  `Wave4ReferenceParityTests` pin the reference equations and volume-gating
+  behavior described in `API/Docs/PLUGIN_99_REFERENCE_IMPLEMENTATION_PLAN.md`.
 
 Run the local verification gate with:
 

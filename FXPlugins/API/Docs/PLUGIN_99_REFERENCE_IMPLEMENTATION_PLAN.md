@@ -162,10 +162,85 @@ Verified:
 - `swift test --package-path FXPlugins --scratch-path /tmp/fxai-swiftpm/FXPlugins`
   with 429 tests passing.
 
-Remaining waves:
+### 2026-05-23 Wave 2 Completed: Statistical Reference Math
 
-- Wave 2: statistical reference math in Swift/Accelerate for ARIMAX/GARCH,
-  Johansen/VECM, EMD/HHT, VMD, MSGARCH, full Kalman, HMM EM, OU MLE, and
-  cross-rate graph cycles.
-- Wave 3: factor/trend panel contracts and FXDatabase data-source enrichment.
-- Wave 4: tree/linear/dist/memory golden parity fixtures and stress tests.
+Implemented plugin-local Swift reference math for:
+
+- `stat_arimax_garch`: ARIMAX design-matrix fitting and GARCH likelihood grid
+  evaluation.
+- `stat_coint_vecm`: pair cointegration OLS, residual ADF diagnostic,
+  error-correction speeds, spread z-scores, and VECM next-step deltas.
+- `stat_emd_hht`: EMD sifting with IMF extraction, envelopes, analytic-signal
+  Hilbert summary, instantaneous amplitude, and instantaneous frequency.
+- `stat_hmm_regime`: log-space Baum-Welch EM, posterior normalization, and
+  Viterbi decoding.
+- `stat_msgarch`: Markov-switching GARCH filtered probabilities, variance
+  recursion, and likelihood.
+- `stat_ou_spread`: OU MLE-style mean-reversion estimate, half-life, and
+  z-score.
+- `stat_tvp_kalman`: full matrix predict/update Kalman reference with
+  covariance propagation and missing-observation handling.
+- `stat_vmd`: deterministic spectral VMD-style mode updates, center-frequency
+  tracking, reconstruction, residuals, and convergence norms.
+- `stat_xrate_consistency`: normalized quote graph, triangle/cycle scoring,
+  implied-vs-quoted rates, and basis-point imbalance.
+
+Verified by `Wave2StatisticalReferenceTests`, covering synthetic recovery,
+positive variance/likelihood invariants, log-space HMM posterior sums, Kalman
+missing-data behavior, VECM beta/residual diagnostics, EMD/HHT and VMD
+decomposition, and triangular FX consistency.
+
+### 2026-05-23 Wave 3 Completed: Factor And Trend Panel Contracts
+
+Implemented plugin-local reference contracts for:
+
+- `factor_carry`: cross-currency rate/forward carry normalization with explicit
+  liquidity weighting only when `dataHasVolume` is true.
+- `factor_cmv_panel`: cross-sectional momentum, value, and volume exposure
+  normalization with volume fully gated by dataset volume availability.
+- `factor_pca_panel`: covariance accumulation, power-iteration first principal
+  component, orthonormal loadings, scores, and explained variance ratio.
+- `factor_ppp_value`: PPP/fair-value misvaluation z-scores with stale-data
+  half-life decay.
+- `trend_tsmom_vol`: time-series momentum, realized volatility targeting,
+  liquidity confidence, and final leverage cap after volume adjustment.
+- `trend_xsmom_rank`: cross-sectional momentum ranking, neutralization,
+  average tie ranks, and balanced long/short weights.
+- `trend_vol_breakout`: ATR, prior-window breakout bands, stops, targets, and
+  direction.
+
+Verified by `Wave3FactorTrendReferenceTests`, including volume-gating checks,
+PCA orthogonality, PPP staleness, final leverage cap, rank balance, and ATR
+breakout behavior.
+
+### 2026-05-23 Wave 4 Completed: Linear, Tree, Distribution, And Memory Parity
+
+Implemented plugin-local reference fixtures for:
+
+- `lin_sgd`: canonical multinomial logistic softmax SGD update.
+- `lin_ftrl`: FTRL-Proximal z/n state, L1 shrinkage, and binary logistic
+  update.
+- `lin_enhash`: deterministic field interaction hashing and collision
+  diagnostics.
+- `lin_pa`: Crammer-Singer PA, PA-I, and PA-II margin updates.
+- `lin_elastic_logit`: proximal elastic-net logistic step.
+- `lin_profit_logit`: profit-weighted logistic loss and asymmetric gradients.
+- `dist_quantile`: pinball loss, coverage, and monotonic quantile projection.
+- `mem_retrdiff`: exact Euclidean top-k retrieval and deterministic recency
+  eviction.
+- `tree_xgb_fast`: XGBoost split gain, leaf weight, and missing-direction
+  comparison.
+- `tree_xgb`: multiclass gradient/hessian reference and missing-value routing.
+- `tree_lgbm`: histogram binning, best-split scan, and deterministic DART mask.
+- `tree_catboost`: ordered CTRs without target leakage and symmetric-tree leaf
+  indexing.
+- `tree_rf`: deterministic bootstrap/OOB sample and Gini split scan.
+
+Verified by `Wave4ReferenceParityTests`, covering canonical update equations,
+collision determinism, quantile monotonicity, exact nearest-neighbor retrieval,
+boosting gain math, ordered CTR leakage prevention, histogram split gain, DART
+determinism, and random-forest OOB/split invariants.
+
+Remaining waves: none. The 99 percent plan now has implementation coverage
+across framework backends, statistical reference math, factor/trend panel
+contracts, and linear/tree/distribution/memory parity fixtures.
