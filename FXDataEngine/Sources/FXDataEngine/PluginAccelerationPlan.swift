@@ -7,7 +7,26 @@ public enum FXPluginAccelerationBackend: String, Codable, Hashable, Sendable, Ca
     case metal
     case pyTorchMPS
     case tensorFlowMetal
+    case foundationNLP
     case coreMLNeuralEngine
+
+    public var isCPUOnly: Bool {
+        switch self {
+        case .swiftScalar, .swiftSIMD, .accelerate:
+            return true
+        case .metal, .pyTorchMPS, .tensorFlowMetal, .foundationNLP, .coreMLNeuralEngine:
+            return false
+        }
+    }
+
+    public var requiresExternalPython: Bool {
+        switch self {
+        case .pyTorchMPS, .tensorFlowMetal:
+            return true
+        case .swiftScalar, .swiftSIMD, .accelerate, .metal, .foundationNLP, .coreMLNeuralEngine:
+            return false
+        }
+    }
 }
 
 public struct FXPluginAccelerationPlan: Codable, Hashable, Sendable {
@@ -38,11 +57,40 @@ public struct FXPluginAccelerationPlan: Codable, Hashable, Sendable {
             .metal,
             .pyTorchMPS,
             .tensorFlowMetal,
+            .foundationNLP,
             .coreMLNeuralEngine
         ]).isEmpty
+    }
+
+    public var declaredBackends: [FXPluginAccelerationBackend] {
+        var seen = Set<FXPluginAccelerationBackend>()
+        return (primaryBackends + candidateBackends).filter { seen.insert($0).inserted }
+    }
+
+    public func declares(_ backend: FXPluginAccelerationBackend) -> Bool {
+        declaredBackends.contains(backend)
+    }
+
+    public var cpuFallbackBackend: FXPluginAccelerationBackend? {
+        declaredBackends.first(where: \.isCPUOnly)
     }
 }
 
 public protocol FXAIPlannedPlugin: FXAIPluginV4 {
     var accelerationPlan: FXPluginAccelerationPlan { get }
+}
+
+public extension FXAIPlannedPlugin {
+    func resolveRuntimeBackend(
+        mode: FXPluginRuntimeMode = .automatic,
+        fallbackPolicy: FXPluginRuntimeFallbackPolicy = .fallBackToCPU,
+        environment: FXPluginRuntimeEnvironment = .local
+    ) throws -> FXPluginRuntimeResolution {
+        try FXPluginRuntimeResolver.resolve(
+            plan: accelerationPlan,
+            mode: mode,
+            fallbackPolicy: fallbackPolicy,
+            environment: environment
+        )
+    }
 }

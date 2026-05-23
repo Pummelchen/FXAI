@@ -37,6 +37,15 @@ contracts:
   `FXAI_PLUGIN_STATE_DIR`, or `~/.fxai/plugins/state` when the environment
   variable is not set. The backend follows the FXDataEngine volume contract:
   volume-derived features are used only when `dataHasVolume` is true.
+- Live accelerator routing is tracked in `API/Docs/PLUGIN_100_LIVE_RUNTIME_COMPLETION_PLAN.md`.
+  `FXPluginRuntimeResolver` selects CPU, Metal, PyTorch, TensorFlow, Foundation NLP,
+  or CoreML/Neural Engine candidates from each plugin acceleration plan. The
+  plugin-local dispatcher `API/Backends/Python/fxai_plugin_module_backend.py`
+  loads a plugin's own `PyTorch/`, `TensorFlow/`, or `NLP/` implementation through
+  the Swift bridge. `FXAIAcceleratedPluginRuntime` can wrap any planned plugin and
+  route train/predict through the selected external backend while retaining explicit
+  CPU fallback. Test runs can set `FXAI_FORCE_PYTORCH_CPU=1` for deterministic
+  Python smoke tests when Apple MPS is not stable for a specific model.
 - Reference-grade Swift fixtures now live inside the owning plugin folders for
   statistical models, factor/trend panel contracts, linear learners, tree
   learners, distribution models, and memory retrieval. The focused suites
@@ -50,4 +59,4 @@ Run the local verification gate with:
 swift test
 ```
 
-The legacy MQL5 plugin reference files have been removed from the repository. The current source of truth is this plugin-owned Swift zoo, the full conversion plan in `API/Docs/FULL_PLUGIN_CONVERSION_PLAN.md`, the reference-grade implementation audit in `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_AUDIT.md`, and the 99 percent reference implementation plan in `API/Docs/PLUGIN_99_REFERENCE_IMPLEMENTATION_PLAN.md`.
+The legacy MQL5 plugin reference files have been removed from the repository. The current source of truth is this plugin-owned Swift zoo, the full conversion plan in `API/Docs/FULL_PLUGIN_CONVERSION_PLAN.md`, the reference-grade implementation audit in `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_AUDIT.md`, the 99 percent reference implementation plan in `API/Docs/PLUGIN_99_REFERENCE_IMPLEMENTATION_PLAN.md`, and the 100 percent live runtime completion plan in `API/Docs/PLUGIN_100_LIVE_RUNTIME_COMPLETION_PLAN.md`.

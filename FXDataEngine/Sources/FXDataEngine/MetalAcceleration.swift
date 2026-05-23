@@ -49,3 +49,47 @@ public struct MetalFeatureKernelDescriptor: Codable, Hashable, Sendable {
         self.usesOHLCV = usesOHLCV
     }
 }
+
+public struct MetalKernelCompilationResult: Codable, Hashable, Sendable {
+    public let deviceName: String
+    public let functionName: String
+    public let sourceByteCount: Int
+
+    public init(deviceName: String, functionName: String, sourceByteCount: Int) {
+        self.deviceName = deviceName
+        self.functionName = functionName
+        self.sourceByteCount = sourceByteCount
+    }
+}
+
+public enum MetalKernelCompiler {
+    public static func compile(
+        source: String,
+        functionName: String,
+        sourceLabel: String = "plugin-kernel"
+    ) throws -> MetalKernelCompilationResult {
+        guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw FXDataEngineError.validation("metal.\(sourceLabel).source")
+        }
+        guard !functionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw FXDataEngineError.validation("metal.\(sourceLabel).function")
+        }
+
+        #if canImport(Metal)
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw FXDataEngineError.externalBackend("Metal device is not available")
+        }
+        let library = try device.makeLibrary(source: source, options: nil)
+        guard library.makeFunction(name: functionName) != nil else {
+            throw FXDataEngineError.externalBackend("Metal function \(functionName) is missing in \(sourceLabel)")
+        }
+        return MetalKernelCompilationResult(
+            deviceName: device.name,
+            functionName: functionName,
+            sourceByteCount: source.utf8.count
+        )
+        #else
+        throw FXDataEngineError.externalBackend("Metal framework is not available")
+        #endif
+    }
+}

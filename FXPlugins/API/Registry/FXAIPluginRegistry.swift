@@ -78,4 +78,13 @@ public enum FXAIPluginRegistry {
             .compactMap { ($0 as? any FXAIPlannedPlugin)?.accelerationPlan }
             .sorted { $0.pluginName < $1.pluginName }
     }
+
+    public static func acceleratedRuntimes(
+        configuration: FXAIPluginRuntimeConfiguration = FXAIPluginRuntimeConfiguration()
+    ) -> [FXAIAcceleratedPluginRuntime] {
+        availablePlugins()
+            .compactMap { $0 as? any FXAIPlannedPlugin }
+            .map { FXAIAcceleratedPluginRuntime(plugin: $0, configuration: configuration) }
+            .sorted { $0.manifest.aiID < $1.manifest.aiID }
+    }
 }

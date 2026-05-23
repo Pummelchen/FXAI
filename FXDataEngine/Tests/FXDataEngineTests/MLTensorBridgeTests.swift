@@ -142,5 +142,9 @@ else:
             x: x
         )
         try await bridge.train(MLTrainingPayload(inference: payload, request: trainRequest))
+
+        let syncPrediction = try bridge.predictSynchronously(payload)
+        XCTAssertEqual(syncPrediction.classProbabilities[1], 0.8, accuracy: 0.0001)
+        try bridge.trainSynchronously(MLTrainingPayload(inference: payload, request: trainRequest))
     }
 }

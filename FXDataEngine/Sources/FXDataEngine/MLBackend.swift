@@ -5,6 +5,7 @@ public enum MLFramework: String, Codable, Hashable, Sendable {
     case metal
     case pyTorch
     case tensorFlow
+    case foundationNLP
 }
 
 public enum MLBackendMode: Codable, Hashable, Sendable {
@@ -261,11 +262,22 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
     public let descriptor: MLBackendDescriptor
     private let executable: String
     private let module: String
+    private let environment: [String: String]
 
-    public init(framework: MLFramework, executable: String = "python3", module: String, modelIdentifier: String) {
-        precondition(framework == .pyTorch || framework == .tensorFlow, "Python bridge supports PyTorch or TensorFlow")
+    public init(
+        framework: MLFramework,
+        executable: String = "python3",
+        module: String,
+        modelIdentifier: String,
+        environment: [String: String] = [:]
+    ) {
+        precondition(
+            framework == .pyTorch || framework == .tensorFlow || framework == .foundationNLP,
+            "Python bridge supports PyTorch, TensorFlow, or Foundation NLP"
+        )
         self.executable = executable
         self.module = module
+        self.environment = environment
         self.descriptor = MLBackendDescriptor(
             mode: .externalPython(framework: framework, executable: executable, module: module),
             modelIdentifier: modelIdentifier
@@ -299,6 +311,33 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
         }
     }
 
+    public func predictSynchronously(_ payload: MLInferencePayload) throws -> PredictionV4 {
+        let command = PythonMLBackendCommand(operation: "predict", inference: payload, training: nil)
+        let response = try runSynchronously(command)
+        guard response.ok else {
+            throw FXDataEngineError.externalBackend(response.error ?? "Python backend returned failure")
+        }
+        if let error = response.error {
+            throw FXDataEngineError.externalBackend(error)
+        }
+        guard let prediction = response.prediction else {
+            throw FXDataEngineError.externalBackend("Python backend did not return a prediction")
+        }
+        try prediction.validate()
+        return prediction
+    }
+
+    public func trainSynchronously(_ payload: MLTrainingPayload) throws {
+        let command = PythonMLBackendCommand(operation: "train", inference: nil, training: payload)
+        let response = try runSynchronously(command)
+        guard response.ok else {
+            throw FXDataEngineError.externalBackend(response.error ?? "Python backend returned failure")
+        }
+        if let error = response.error {
+            throw FXDataEngineError.externalBackend(error)
+        }
+    }
+
     private func run(_ command: PythonMLBackendCommand) async throws -> PythonMLBackendResponse {
         try await Task.detached(priority: .utility) {
             let input = try JSONEncoder().encode(command)
@@ -308,6 +347,9 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
                 process.arguments = [self.executable, self.module, command.operation]
             } else {
                 process.arguments = [self.executable, "-m", self.module, command.operation]
+            }
+            if !self.environment.isEmpty {
+                process.environment = ProcessInfo.processInfo.environment.merging(self.environment) { _, new in new }
             }
 
             let stdin = Pipe()
@@ -330,6 +372,40 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
             }
             return try JSONDecoder().decode(PythonMLBackendResponse.self, from: output)
         }.value
+    }
+
+    private func runSynchronously(_ command: PythonMLBackendCommand) throws -> PythonMLBackendResponse {
+        let input = try JSONEncoder().encode(command)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        if module.contains("/") || module.hasSuffix(".py") {
+            process.arguments = [executable, module, command.operation]
+        } else {
+            process.arguments = [executable, "-m", module, command.operation]
+        }
+        if !environment.isEmpty {
+            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+        }
+
+        let stdin = Pipe()
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardInput = stdin
+        process.standardOutput = stdout
+        process.standardError = stderr
+
+        try process.run()
+        stdin.fileHandleForWriting.write(input)
+        try stdin.fileHandleForWriting.close()
+        process.waitUntilExit()
+
+        let output = stdout.fileHandleForReading.readDataToEndOfFile()
+        let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
+        guard process.terminationStatus == 0 else {
+            let message = String(data: errorData, encoding: .utf8) ?? "Python backend failed"
+            throw FXDataEngineError.externalBackend(message.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return try JSONDecoder().decode(PythonMLBackendResponse.self, from: output)
     }
 }
 
@@ -368,5 +444,32 @@ public enum MLBackendFactory {
             x: request.x,
             xWindow: request.xWindow
         )
+    }
+
+    public static func trainingPayload(
+        descriptor: MLBackendDescriptor,
+        request: TrainRequestV4
+    ) -> MLTrainingPayload {
+        let inference = MLInferencePayload(
+            modelIdentifier: descriptor.modelIdentifier,
+            framework: framework(for: descriptor),
+            dataHasVolume: request.context.dataHasVolume,
+            horizonMinutes: request.context.horizonMinutes,
+            sequenceBars: request.context.sequenceBars,
+            priceCostPoints: request.context.priceCostPoints,
+            minMovePoints: request.context.minMovePoints,
+            x: request.x,
+            xWindow: request.xWindow
+        )
+        return MLTrainingPayload(inference: inference, request: request)
+    }
+
+    private static func framework(for descriptor: MLBackendDescriptor) -> MLFramework {
+        switch descriptor.mode {
+        case .inProcess(let resolved):
+            return resolved
+        case .externalPython(let resolved, _, _):
+            return resolved
+        }
     }
 }
