@@ -332,4 +332,4 @@ Remaining work:
   implemented.
 - Add parity fixtures for every plugin-specific algorithm body before replacing
   its reference adapter.
-- Keep the repository MQL5-free except for `FXDatabase/EA/FXDatabase.mq5`.
+- Keep the repository MQL5-free except for `FXImporter/Connectors/MetaTrader5/EA/FXDatabase.mq5`.

@@ -8,7 +8,7 @@ This record tracks how the former non-tensor MQL5 FXDataEngine surface was moved
 - Ported non-tensor MQL5 files: 119 files, about 53k lines, mapped in the deletion-gate disposition audit below.
 - Current Swift package surface: OHLCV market contracts, volume-aware feature contracts, normalization payloads, plugin request DTOs, ML backend descriptors, Metal capability descriptors, runtime policy DTOs, audit utilities, lifecycle planning, warmup planning, and FXDatabase-backed sample preparation.
 - Explicit exclusion: old MQL5 `TensorCore` was not part of this Swift data-engine parity gate. Tensor training and inference move to FXPlugins through PyTorch or TensorFlow backends.
-- Deletion result: the legacy `FXAI/FXDataEngine` tree has been removed. The only remaining MT5 source in the repository is `FXDatabase/EA/FXDatabase.mq5`, the FXDatabase data exporter.
+- Deletion result: the legacy `FXAI/FXDataEngine` tree has been removed. The only remaining MT5 source in the repository is `FXImporter/Connectors/MetaTrader5/EA/FXDatabase.mq5`, the FXDatabase data exporter EA owned by FXImporter.
 
 ## Migration Boundaries
 

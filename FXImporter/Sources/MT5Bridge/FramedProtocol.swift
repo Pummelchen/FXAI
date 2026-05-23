@@ -1,4 +1,3 @@
-import Domain
 import Foundation
 
 public enum ProtocolError: Error, Equatable, CustomStringConvertible, Sendable {
@@ -52,15 +51,31 @@ public struct ProtocolMessage<Payload: Decodable & Sendable>: Sendable {
     public let schemaVersion: Int
     public let requestId: String
     public let command: MT5Command
-    public let timestampSentUtc: UtcSecond
+    public let timestampSentUtc: ProtocolTimestampUtc
     public let payload: Payload
 
-    public init(schemaVersion: Int, requestId: String, command: MT5Command, timestampSentUtc: UtcSecond, payload: Payload) {
+    public init(schemaVersion: Int, requestId: String, command: MT5Command, timestampSentUtc: ProtocolTimestampUtc, payload: Payload) {
         self.schemaVersion = schemaVersion
         self.requestId = requestId
         self.command = command
         self.timestampSentUtc = timestampSentUtc
         self.payload = payload
+    }
+}
+
+public struct ProtocolTimestampUtc: RawRepresentable, Codable, Hashable, Sendable, Comparable, CustomStringConvertible {
+    public let rawValue: Int64
+
+    public init(rawValue: Int64) {
+        self.rawValue = rawValue
+    }
+
+    public var description: String {
+        String(rawValue)
+    }
+
+    public static func < (lhs: ProtocolTimestampUtc, rhs: ProtocolTimestampUtc) -> Bool {
+        lhs.rawValue < rhs.rawValue
     }
 }
 
@@ -82,7 +97,7 @@ public struct FramedProtocolCodec: Sendable {
     public func encode<Payload: Encodable>(
         command: MT5Command,
         requestId: String,
-        timestampSentUtc: UtcSecond,
+        timestampSentUtc: ProtocolTimestampUtc,
         payload: Payload,
         errorCode: String? = nil,
         errorMessage: String? = nil
@@ -121,7 +136,7 @@ public struct FramedProtocolCodec: Sendable {
         guard !requestId.isEmpty else { throw ProtocolError.invalidField("request_id") }
         let commandText = try Self.requiredString("command", in: object)
         guard let command = MT5Command(rawValue: commandText) else { throw ProtocolError.unknownCommand(commandText) }
-        let timestampSentUtc = UtcSecond(rawValue: try Self.requiredInt64("timestamp_sent_utc", in: object))
+        let timestampSentUtc = ProtocolTimestampUtc(rawValue: try Self.requiredInt64("timestamp_sent_utc", in: object))
         let expectedPayloadLength = try Self.requiredInt("payload_length", in: object)
         guard expectedPayloadLength >= 0, expectedPayloadLength <= maxFrameBytes else {
             throw ProtocolError.invalidField("payload_length")
@@ -165,7 +180,7 @@ public struct FramedProtocolCodec: Sendable {
     }
 
     public static func payloadChecksum(_ data: Data) -> String {
-        var hash = FNV1a64()
+        var hash = ProtocolFNV1a64()
         hash.append(data)
         return "fnv64:" + String(format: "%016llx", hash.value)
     }
@@ -302,5 +317,22 @@ public struct FrameParser: Sendable {
         }
 
         return frames
+    }
+}
+
+private struct ProtocolFNV1a64: Sendable {
+    private static let offsetBasis: UInt64 = 0xcbf29ce484222325
+    private static let prime: UInt64 = 0x100000001b3
+    private(set) var value: UInt64 = Self.offsetBasis
+
+    mutating func append(_ data: Data) {
+        for byte in data {
+            append(byte)
+        }
+    }
+
+    private mutating func append(_ byte: UInt8) {
+        value ^= UInt64(byte)
+        value &*= Self.prime
     }
 }

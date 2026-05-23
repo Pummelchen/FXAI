@@ -16,16 +16,21 @@ The implementation is intentionally defensive:
 
 ## Architecture
 
-The system has two parts:
+The system has three parts:
 
-1. `EA/FXDatabase.mq5`
+1. `../FXImporter/Connectors/MetaTrader5/EA/FXDatabase.mq5`
    - Runs inside MetaTrader 5.
    - Connects to the Swift process over localhost TCP.
    - Uses MT5 history APIs such as `CopyRates`.
    - Sends M1 OHLC only. Swift stores MT5 M1 volume as `0` by policy.
    - Does not make database, checkpoint, UTC, verification, or repair decisions.
 
-2. `FXDatabase`
+2. `../FXImporter/Sources/MT5Bridge`
+   - Owns the MT5 socket protocol, framed JSON codec, request DTOs, and response DTOs.
+   - Exposes raw connector data without depending on FXDatabase domain types.
+   - Is consumed by FXDatabase through the `MT5Bridge` SwiftPM product.
+
+3. `FXDatabase`
    - Swift terminal executable.
    - Listens for or connects to the MT5 bridge.
    - Validates and converts MT5 data.
@@ -47,12 +52,12 @@ Important MT5 socket note: standard MQL5 sockets are client-oriented. The sample
 
 ## MT5 Experts EA Sync
 
-The canonical FXDatabase bridge EA lives at `FXDatabase/EA/FXDatabase.mq5`. The main MT5 Experts folder should contain exactly that EA as `FXDatabase.mq5`; the old `FXExport` location is no longer used.
+The canonical FXDatabase bridge EA lives at `FXImporter/Connectors/MetaTrader5/EA/FXDatabase.mq5`. The main MT5 Experts folder should contain exactly that EA as `FXDatabase.mq5`; the old `FXExport` location is no longer used.
 
 After updating the source EA, copy it once into the main MT5 Experts folder:
 
 ```bash
-cp FXDatabase/EA/FXDatabase.mq5 "$HOME/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXDatabase.mq5"
+cp FXImporter/Connectors/MetaTrader5/EA/FXDatabase.mq5 "$HOME/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/FXDatabase.mq5"
 ```
 
 ## Build And Test
@@ -307,13 +312,13 @@ Raw audit rows are append-only. A crash/retry may leave repeated raw audit attem
 
 ## MT5 EA Setup
 
-Keep `EA/FXDatabase.mq5` under the MT5 `MQL5/Experts` tree and let `startcheck` compile it through MetaEditor:
+Keep `FXImporter/Connectors/MetaTrader5/EA/FXDatabase.mq5` as the repository source and keep a copied `FXDatabase.mq5` under the MT5 `MQL5/Experts` tree. `startcheck` compiles the repository source through MetaEditor:
 
 ```text
 > startcheck --config-dir Config --migrations-dir Migrations --skip-bridge
 ```
 
-If your package is outside the MT5 Experts tree, copy `EA/FXDatabase.mq5` into `MQL5/Experts` first or set `FXDATABASE_METAEDITOR`, `FXDATABASE_WINE`, and `FXDATABASE_WINEPREFIX` so the terminal compile check can find the MT5 toolchain.
+If your package is outside the MT5 Experts tree, copy `FXImporter/Connectors/MetaTrader5/EA/FXDatabase.mq5` into `MQL5/Experts/FXDatabase.mq5` first or set `FXDATABASE_METAEDITOR`, `FXDATABASE_WINE`, and `FXDATABASE_WINEPREFIX` so the terminal compile check can find the MT5 toolchain.
 
 Attach it to a chart and enable socket/network permissions required by your MT5/Wine setup. Configure:
 

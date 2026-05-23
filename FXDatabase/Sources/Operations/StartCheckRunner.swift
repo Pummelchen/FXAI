@@ -445,7 +445,7 @@ private enum StartCheckGuidance {
             return "Next action: confirm `/Applications/MetaTrader 5.app` exists, or set FXDATABASE_WINE and FXDATABASE_METAEDITOR before running startcheck."
         }
         if case StartCheckError.eaCompileFailed = error {
-            return "Next action: open MetaEditor, compile `FXDatabase/EA/FXDatabase.mq5`, fix reported errors, then rerun startcheck."
+            return "Next action: open MetaEditor, compile `FXImporter/Connectors/MetaTrader5/EA/FXDatabase.mq5`, fix reported errors, then rerun startcheck."
         }
         if case StartCheckError.offsetCoverageGaps = error {
             return "Next action: rerun startcheck with the EA connected. Known broker policies are inserted automatically after live EA verification; unknown brokers or mismatched policies require audited active `confidence='verified'` broker_time_offsets rows for the exact MT5 company/server/account."
@@ -549,9 +549,10 @@ public struct MetaEditorCompiler: Sendable {
     }
 
     private func locateFXDatabaseSource() throws -> URL {
+        let repositoryRoot = workingDirectory.deletingLastPathComponent()
         let candidates = [
-            workingDirectory.appendingPathComponent("EA/FXDatabase.mq5"),
-            workingDirectory.appendingPathComponent("FXDatabase/EA/FXDatabase.mq5")
+            workingDirectory.appendingPathComponent("FXImporter/Connectors/MetaTrader5/EA/FXDatabase.mq5"),
+            repositoryRoot.appendingPathComponent("FXImporter/Connectors/MetaTrader5/EA/FXDatabase.mq5")
         ]
         if let candidate = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
             return candidate
