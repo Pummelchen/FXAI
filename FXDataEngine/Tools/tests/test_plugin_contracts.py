@@ -16,8 +16,8 @@ def _assert_tokens(text: str, tokens: list[str]) -> None:
 
 
 def test_swift_plugin_protocol_covers_manifest_lifecycle_predict_and_train():
-    contracts = _read("FXDataEngine/Sources/FXDataEngine/PluginContracts.swift")
-    invocation = _read("FXDataEngine/Sources/FXDataEngine/PluginInvocation.swift")
+    contracts = _read("FXDataEngine/Sources/FXDataEngine/Plugins/PluginContracts.swift")
+    invocation = _read("FXDataEngine/Sources/FXDataEngine/Plugins/PluginInvocation.swift")
 
     _assert_tokens(
         contracts,
@@ -43,7 +43,7 @@ def test_swift_plugin_protocol_covers_manifest_lifecycle_predict_and_train():
 
 
 def test_swift_plugin_manifest_and_context_contracts_are_volume_aware():
-    contracts = _read("FXDataEngine/Sources/FXDataEngine/PluginContracts.swift")
+    contracts = _read("FXDataEngine/Sources/FXDataEngine/Plugins/PluginContracts.swift")
     tests = _read("FXDataEngine/Tests/FXDataEngineTests/PluginContractTests.swift")
 
     _assert_tokens(
@@ -70,7 +70,7 @@ def test_swift_plugin_manifest_and_context_contracts_are_volume_aware():
 
 
 def test_plugin_contract_suite_exercises_lifecycle_predict_state_and_synthetic_series_paths():
-    suite = _read("FXDataEngine/Sources/FXDataEngine/PluginContractSuite.swift")
+    suite = _read("FXDataEngine/Sources/FXDataEngine/Plugins/PluginContractSuite.swift")
     suite_tests = _read("FXDataEngine/Tests/FXDataEngineTests/PluginContractSuiteTests.swift")
 
     _assert_tokens(
@@ -99,7 +99,7 @@ def test_plugin_contract_suite_exercises_lifecycle_predict_state_and_synthetic_s
 
 
 def test_audit_runner_can_gate_on_plugin_contract_sanity():
-    suite = _read("FXDataEngine/Sources/FXDataEngine/PluginContractSuite.swift")
+    suite = _read("FXDataEngine/Sources/FXDataEngine/Plugins/PluginContractSuite.swift")
     tests = _read("FXDataEngine/Tests/FXDataEngineTests/PluginContractSuiteTests.swift")
     _assert_tokens(
         suite,

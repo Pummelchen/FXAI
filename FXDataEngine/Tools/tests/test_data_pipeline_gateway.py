@@ -50,8 +50,8 @@ def test_mt5_market_data_apis_are_absent_from_swift_data_engine():
 
 
 def test_market_data_gateway_uses_fxdatabase_ohlcv_contract():
-    gateway = _read("FXDataEngine/Sources/FXDataEngine/MarketDataGateway.swift")
-    market_data = _read("FXDataEngine/Sources/FXDataEngine/MarketData.swift")
+    gateway = _read("FXDataEngine/Sources/FXDataEngine/MarketData/MarketDataGateway.swift")
+    market_data = _read("FXDataEngine/Sources/FXDataEngine/MarketData/MarketData.swift")
 
     _assert_tokens(
         gateway,
@@ -79,9 +79,9 @@ def test_market_data_gateway_uses_fxdatabase_ohlcv_contract():
 
 
 def test_prediction_path_consumers_use_core_pipeline_only():
-    pipeline = _read("FXDataEngine/Sources/FXDataEngine/FXDataEngine.swift")
-    invocation = _read("FXDataEngine/Sources/FXDataEngine/PluginInvocation.swift")
-    runtime = _read("FXDataEngine/Sources/FXDataEngine/RuntimeFeaturePipeline.swift")
+    pipeline = _read("FXDataEngine/Sources/FXDataEngine/Core/FXDataEngine.swift")
+    invocation = _read("FXDataEngine/Sources/FXDataEngine/Plugins/PluginInvocation.swift")
+    runtime = _read("FXDataEngine/Sources/FXDataEngine/Features/RuntimeFeaturePipeline.swift")
 
     _assert_tokens(
         pipeline,
@@ -91,7 +91,8 @@ def test_prediction_path_consumers_use_core_pipeline_only():
             "public let normalizationCore: NormalizationCore",
             "let dataBundle = try dataCore.buildBundle(request: dataRequest, universe: universe)",
             "let featureFrame = try featureCore.buildFrame(",
-            "let normalizationFrame = try normalizationCore.buildInputFrame(from: featureFrame)",
+            "let normalizationFrame = try normalizationCore.buildInputFrame(",
+            "from: featureFrame",
             "let payloadFrame = try normalizationCore.buildPayloadFrame(",
             "dataHasVolume: featureFrame.hasVolume",
         ],
@@ -116,8 +117,8 @@ def test_prediction_path_consumers_use_core_pipeline_only():
 
 
 def test_normalization_pipeline_remains_causal_and_train_split_safe():
-    normalization_state = _read("FXDataEngine/Sources/FXDataEngine/NormalizationState.swift")
-    warmup = _read("FXDataEngine/Sources/FXDataEngine/Warmup.swift")
+    normalization_state = _read("FXDataEngine/Sources/FXDataEngine/Normalization/NormalizationState.swift")
+    warmup = _read("FXDataEngine/Sources/FXDataEngine/Lifecycle/Warmup.swift")
 
     _assert_tokens(
         normalization_state,

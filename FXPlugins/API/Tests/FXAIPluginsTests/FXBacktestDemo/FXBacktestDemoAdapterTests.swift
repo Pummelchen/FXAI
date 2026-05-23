@@ -103,6 +103,67 @@ final class FXBacktestDemoAdapterTests: XCTestCase {
         XCTAssertNoThrow(try skipPrediction.validate())
     }
 
+    func testFX7ManifestAndAccelerationPlan() throws {
+        let plugin = FX7FXDataEnginePlugin()
+        let plan = plugin.accelerationPlan
+
+        XCTAssertEqual(plugin.manifest.aiID, AIModelID.demoFX7.rawValue)
+        XCTAssertEqual(plugin.manifest.aiName, "fx7")
+        XCTAssertEqual(plugin.manifest.family, .ruleBased)
+        XCTAssertEqual(plugin.manifest.referenceTier, .ruleBaseline)
+        XCTAssertTrue(plugin.manifest.capabilityMask.contains(.windowContext))
+        XCTAssertTrue(plugin.manifest.capabilityMask.contains(.multiHorizon))
+        XCTAssertTrue(plugin.manifest.capabilityMask.contains(.selfTest))
+        XCTAssertTrue(plugin.manifest.requiresVolumeWhenAvailable)
+        XCTAssertNoThrow(try plugin.manifest.validate())
+        XCTAssertTrue(plugin.selfTest())
+        XCTAssertEqual(plan.primaryBackends, [.swiftScalar, .metal])
+        XCTAssertEqual(plan.candidateBackends, [.swiftSIMD, .accelerate])
+        XCTAssertTrue(plan.usesVolumeWhenAvailable)
+        XCTAssertTrue(plan.declaresHardwareAcceleration)
+        let metalFile = Self.pluginRoot("fx7")
+            .appendingPathComponent("Metal/FX7Metal.swift")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: metalFile.path))
+    }
+
+    func testFX7PredictsDirectionalAndSkipSignals() throws {
+        let plugin = FX7FXDataEnginePlugin()
+
+        let buyPrediction = try plugin.predict(
+            Self.request(features: Self.features(
+                shortReturn: 0.08,
+                slope: 0.05,
+                volumeSignal: 0.60,
+                fastReturn: 0.14,
+                slowReturn: 0.03
+            )),
+            hyperParameters: HyperParameters()
+        )
+        let sellPrediction = try plugin.predict(
+            Self.request(features: Self.features(
+                shortReturn: -0.08,
+                slope: -0.05,
+                volumeSignal: -0.60,
+                fastReturn: -0.14,
+                slowReturn: -0.03
+            )),
+            hyperParameters: HyperParameters()
+        )
+        let skipPrediction = try plugin.predict(
+            Self.request(features: Self.features()),
+            hyperParameters: HyperParameters()
+        )
+
+        XCTAssertGreaterThan(buyPrediction.classProbabilities[LabelClass.buy.rawValue], buyPrediction.classProbabilities[LabelClass.sell.rawValue])
+        XCTAssertGreaterThan(sellPrediction.classProbabilities[LabelClass.sell.rawValue], sellPrediction.classProbabilities[LabelClass.buy.rawValue])
+        XCTAssertGreaterThan(skipPrediction.classProbabilities[LabelClass.skip.rawValue], 0.80)
+        XCTAssertGreaterThan(buyPrediction.moveMeanPoints, 1.0)
+        XCTAssertGreaterThan(sellPrediction.moveMeanPoints, 1.0)
+        XCTAssertNoThrow(try buyPrediction.validate())
+        XCTAssertNoThrow(try sellPrediction.validate())
+        XCTAssertNoThrow(try skipPrediction.validate())
+    }
+
     func testRegistryExposesConvertedRuleAndFXBacktestDemoPlugins() {
         let pluginNames = Set(FXAIPluginRegistry.availablePlugins().map(\.manifest.aiName))
         let planNames = Set(FXAIPluginRegistry.accelerationPlans().map(\.pluginName))
@@ -115,6 +176,7 @@ final class FXBacktestDemoAdapterTests: XCTestCase {
         XCTAssertTrue(pluginNames.contains("rule_m1sync"))
         XCTAssertTrue(pluginNames.contains("fxbacktest_moving_average_cross"))
         XCTAssertTrue(pluginNames.contains("fxbacktest_fxstupid"))
+        XCTAssertTrue(pluginNames.contains("fx7"))
     }
 
     private static func request(features: [Double], dataHasVolume: Bool = true) -> PredictRequestV4 {

@@ -3,18 +3,18 @@
 ## Repo Mapping
 
 - Drift metrics, policy config, math, DB persistence, report building, and runtime summaries live in:
-  - `<FXAI_ROOT>/Tools/offline_lab/drift_governance.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/drift_governance_config.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/drift_governance_math.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/drift_governance_contracts.py`
-- Schema support is in `<FXAI_ROOT>/Tools/offline_lab/common_schema.py`.
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/drift_governance.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/drift_governance_config.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/drift_governance_math.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/drift_governance_contracts.py`
+- Schema support is in `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/common_schema.py`.
 - CLI entry points are wired through:
-  - `<FXAI_ROOT>/Tools/offline_lab/cli_parser.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/cli_commands.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/cli_parser.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/cli_commands.py`
 - Runtime integration is non-invasive and currently happens through:
-  - `<FXAI_ROOT>/Tools/offline_lab/student_router.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/adaptive_router.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/governance.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/student_router.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/adaptive_router.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/governance.py`
 - GUI ingestion and display are in:
   - `<FXAI_ROOT>/FXGUI/Sources/FXGUICore/Services/DriftGovernanceArtifactReader.swift`
   - `<FXAI_ROOT>/FXGUI/Sources/FXGUIApp/Features/DriftGovernance/DriftGovernanceView.swift`

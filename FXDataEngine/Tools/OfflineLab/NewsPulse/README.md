@@ -22,7 +22,7 @@ NewsPulse has four parts:
 1. `FXDataEngine/Services/FXAI_NewsPulseCalendar.mq5`
    MT5 Service that exports Economic Calendar changes into `FILE_COMMON`.
 
-2. `Tools/offline_lab/newspulse_*.py`
+2. `Tools/OfflineLab/offline_lab/newspulse_*.py`
    Python collector, GDELT query layer, optional official-feed rail, fusion logic, daemon loop, replay helpers, and service install helpers.
 
 3. `FXDataEngine/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`

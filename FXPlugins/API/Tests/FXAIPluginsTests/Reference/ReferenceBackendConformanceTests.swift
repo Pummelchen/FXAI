@@ -79,7 +79,7 @@ final class ReferenceBackendConformanceTests: XCTestCase {
         let text = try String(contentsOf: planURL, encoding: .utf8)
         let rows = text.components(separatedBy: .newlines).filter { $0.hasPrefix("| `") }
 
-        XCTAssertEqual(rows.count, 65)
+        XCTAssertEqual(rows.count, 66)
         XCTAssertTrue(text.contains("Revision Pass 1"))
         XCTAssertTrue(text.contains("Revision Pass 2"))
         XCTAssertTrue(text.contains("AI/RL/world plugins"))

@@ -16,9 +16,9 @@ def _assert_tokens(text: str, tokens: list[str]) -> None:
 
 
 def test_swift_normalization_enum_exposes_exact_buffer_variants():
-    constants = _read("FXDataEngine/Sources/FXDataEngine/Constants.swift")
-    core_types = _read("FXDataEngine/Sources/FXDataEngine/CoreTypes.swift")
-    normalization = _read("FXDataEngine/Sources/FXDataEngine/Normalization.swift")
+    constants = _read("FXDataEngine/Sources/FXDataEngine/Core/Constants.swift")
+    core_types = _read("FXDataEngine/Sources/FXDataEngine/Core/CoreTypes.swift")
+    normalization = _read("FXDataEngine/Sources/FXDataEngine/Normalization/Normalization.swift")
 
     _assert_tokens(
         constants,
@@ -68,8 +68,8 @@ def test_swift_normalization_enum_exposes_exact_buffer_variants():
 
 
 def test_swift_normalization_implements_fitted_and_adaptive_layers():
-    normalization_state = _read("FXDataEngine/Sources/FXDataEngine/NormalizationState.swift")
-    runtime_sections = _read("FXDataEngine/Sources/FXDataEngine/RuntimeArtifactSections.swift")
+    normalization_state = _read("FXDataEngine/Sources/FXDataEngine/Normalization/NormalizationState.swift")
+    runtime_sections = _read("FXDataEngine/Sources/FXDataEngine/RuntimeArtifacts/RuntimeArtifactSections.swift")
 
     _assert_tokens(
         normalization_state,
@@ -99,9 +99,9 @@ def test_swift_normalization_implements_fitted_and_adaptive_layers():
 
 
 def test_swift_feature_pipeline_uses_volume_instead_of_legacy_spread_rank():
-    feature_pipeline = _read("FXDataEngine/Sources/FXDataEngine/FeaturePipeline.swift")
-    feature_schema = _read("FXDataEngine/Sources/FXDataEngine/FeatureSchema.swift")
-    build_tools = _read("FXDataEngine/Sources/FXDataEngine/FeatureBuildTools.swift")
+    feature_pipeline = _read("FXDataEngine/Sources/FXDataEngine/Features/FeaturePipeline.swift")
+    feature_schema = _read("FXDataEngine/Sources/FXDataEngine/Features/FeatureSchema.swift")
+    build_tools = _read("FXDataEngine/Sources/FXDataEngine/Features/FeatureBuildTools.swift")
 
     _assert_tokens(
         feature_pipeline,
@@ -133,10 +133,10 @@ def test_swift_feature_pipeline_uses_volume_instead_of_legacy_spread_rank():
 
 
 def test_swift_bounded_feature_emitters_use_open_interval_clamps():
-    feature_math = _read("FXDataEngine/Sources/FXDataEngine/FeatureMath.swift")
-    feature_pipeline = _read("FXDataEngine/Sources/FXDataEngine/FeaturePipeline.swift")
-    feature_build = _read("FXDataEngine/Sources/FXDataEngine/FeatureBuildTools.swift")
-    event_macro = _read("FXDataEngine/Sources/FXDataEngine/MacroEvents.swift")
+    feature_math = _read("FXDataEngine/Sources/FXDataEngine/Features/FeatureMath.swift")
+    feature_pipeline = _read("FXDataEngine/Sources/FXDataEngine/Features/FeaturePipeline.swift")
+    feature_build = _read("FXDataEngine/Sources/FXDataEngine/Features/FeatureBuildTools.swift")
+    event_macro = _read("FXDataEngine/Sources/FXDataEngine/Services/MacroEvents.swift")
 
     _assert_tokens(
         feature_math,
@@ -185,16 +185,17 @@ def test_swift_bounded_feature_emitters_use_open_interval_clamps():
 
 
 def test_training_pipeline_uses_horizon_aware_fit_and_payload_transform():
-    data_engine = _read("FXDataEngine/Sources/FXDataEngine/FXDataEngine.swift")
-    feature_pipeline = _read("FXDataEngine/Sources/FXDataEngine/FeaturePipeline.swift")
-    normalization_core = _read("FXDataEngine/Sources/FXDataEngine/Normalization.swift")
-    training_samples = _read("FXDataEngine/Sources/FXDataEngine/TrainingSamples.swift")
+    data_engine = _read("FXDataEngine/Sources/FXDataEngine/Core/FXDataEngine.swift")
+    feature_pipeline = _read("FXDataEngine/Sources/FXDataEngine/Features/FeaturePipeline.swift")
+    normalization_core = _read("FXDataEngine/Sources/FXDataEngine/Normalization/Normalization.swift")
+    training_samples = _read("FXDataEngine/Sources/FXDataEngine/Lifecycle/TrainingSamples.swift")
 
     _assert_tokens(
         data_engine,
         [
             "let featureFrame = try featureCore.buildFrame(",
-            "let normalizationFrame = try normalizationCore.buildInputFrame(from: featureFrame)",
+            "let normalizationFrame = try normalizationCore.buildInputFrame(",
+            "from: featureFrame",
             "let payloadFrame = try normalizationCore.buildPayloadFrame(",
             "PreparedTrainingPayload(",
         ],
@@ -210,7 +211,9 @@ def test_training_pipeline_uses_horizon_aware_fit_and_payload_transform():
     _assert_tokens(
         normalization_core,
         [
-            "public func buildInputFrame(from featureFrame: FeatureCoreFrame) throws -> NormalizationCoreFrame",
+            "public func buildInputFrame(",
+            "from featureFrame: FeatureCoreFrame",
+            ") throws -> NormalizationCoreFrame",
             "public func buildPayloadFrame(_ request: NormalizationPayloadRequest) throws -> NormalizationPayloadFrame",
             "public func finalizePredictRequest(manifest: PluginManifestV4, request: PredictRequestV4) throws -> PredictRequestV4",
             "public func finalizeTrainRequest(manifest: PluginManifestV4, request: TrainRequestV4) throws -> TrainRequestV4",
@@ -228,7 +231,7 @@ def test_training_pipeline_uses_horizon_aware_fit_and_payload_transform():
 
 
 def test_warmup_normalization_fits_candidates_on_train_only_split():
-    warmup = _read("FXDataEngine/Sources/FXDataEngine/Warmup.swift")
+    warmup = _read("FXDataEngine/Sources/FXDataEngine/Lifecycle/Warmup.swift")
     warmup_tests = _read("FXDataEngine/Tests/FXDataEngineTests/WarmupTests.swift")
 
     _assert_tokens(
@@ -251,8 +254,8 @@ def test_warmup_normalization_fits_candidates_on_train_only_split():
 
 
 def test_runtime_artifacts_persist_normalization_fits():
-    runtime_artifacts = _read("FXDataEngine/Sources/FXDataEngine/RuntimeArtifacts.swift")
-    runtime_sections = _read("FXDataEngine/Sources/FXDataEngine/RuntimeArtifactSections.swift")
+    runtime_artifacts = _read("FXDataEngine/Sources/FXDataEngine/RuntimeArtifacts/RuntimeArtifacts.swift")
+    runtime_sections = _read("FXDataEngine/Sources/FXDataEngine/RuntimeArtifacts/RuntimeArtifactSections.swift")
     runtime_tests = _read("FXDataEngine/Tests/FXDataEngineTests/RuntimeArtifactsTests.swift")
     normalization_tests = _read("FXDataEngine/Tests/FXDataEngineTests/NormalizationStateTests.swift")
 
@@ -295,7 +298,7 @@ def test_runtime_artifacts_persist_normalization_fits():
 
 
 def test_tooling_accepts_new_normalization_id_range():
-    promotion = _read("FXDataEngine/Tools/offline_lab/promotion.py")
+    promotion = _read("FXDataEngine/Tools/OfflineLab/offline_lab/promotion.py")
     audit_run = _read("FXDataEngine/Tools/testlab/audit_run.py")
     assert '"AI_FeatureNormalization": (0, 0, 16, "N")' in promotion
     assert "||0||0||16||N" in audit_run

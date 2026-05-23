@@ -2,15 +2,15 @@
 
 ## Repo Mapping
 
-- Canonical training data source: `<FXAI_ROOT>/Tools/offline_lab/exporter.py`
-- Canonical dataset tables: `datasets` and `dataset_bars` in `<FXAI_ROOT>/Tools/offline_lab/common_schema.py`
-- Existing offline orchestration entry points: `<FXAI_ROOT>/Tools/offline_lab/cli_parser.py` and `<FXAI_ROOT>/Tools/offline_lab/cli_commands.py`
+- Canonical training data source: `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/exporter.py`
+- Canonical dataset tables: `datasets` and `dataset_bars` in `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/common_schema.py`
+- Existing offline orchestration entry points: `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/cli_parser.py` and `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/cli_commands.py`
 - Existing cost/execution context reused by label construction:
   - `<FXAI_ROOT>/Tools/testlab/shared.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/prob_calibration_math.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/execution_quality_math.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/prob_calibration_math.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/execution_quality_math.py`
 - Existing operator/reporting surfaces extended:
-  - `<FXAI_ROOT>/Tools/offline_lab/dashboard.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/dashboard.py`
   - `<FXAI_ROOT>/FXGUI/Sources/FXGUIApp`
 
 ## What Was Added

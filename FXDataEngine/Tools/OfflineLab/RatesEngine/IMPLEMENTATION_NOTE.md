@@ -2,11 +2,11 @@
 
 ## Repo Mapping
 
-- Python artifact engine lives under `<FXAI_ROOT>/Tools/offline_lab`.
+- Python artifact engine lives under `<FXAI_ROOT>/Tools/OfflineLab/offline_lab`.
 - Shared runtime artifacts live under `FILE_COMMON/FXAI/Runtime`, matching NewsPulse and Adaptive Router.
 - Runtime consumption lands in `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/Trade`.
 - GUI integration follows the existing artifact-reader pattern under `<FXAI_ROOT>/FXGUI/Sources/FXGUICore/Services` and `<FXAI_ROOT>/FXGUI/Sources/FXGUIApp/Features`.
-- Operator/dashboard integration follows `<FXAI_ROOT>/Tools/offline_lab/dashboard.py`.
+- Operator/dashboard integration follows `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/dashboard.py`.
 
 ## Phase-1 Repo Reality
 

@@ -65,10 +65,10 @@ FXBacktest demo/reference plugins to connect to `FXDataEngine`:
 
 - `MovingAverageCross`
 - `FXStupid`
+- `FX7`
 
-`FX7` is already a serious FXBacktest conversion plugin and should be handled in
-the later FXBacktest integration wave, not counted as one of the two demo
-plugins in this request.
+`FX7` is now a plugin-zoo resident under `FXPlugins/fx7`: the backtest-native
+source is owned there, and FXDataEngine receives a separate Swift/Metal adapter.
 
 ## Directory Plan
 
@@ -201,13 +201,14 @@ Each plugin step:
 | wm_graph | World | World/wm_graph.mqh | Graph world model | Accelerate graph ops; PyTorch Geometric alternative if needed | Maybe after model stabilization |
 | MovingAverageCross | FXBacktest demo | FXPlugins/fxbacktest_moving_average_cross/MovingAverageCrossFXDataEnginePlugin.swift | FXDataEngine adapter now independent of FXBacktest-local plugin code | Swift scalar adapter plus Metal batch/sweep kernel | Metal implemented |
 | FXStupid | FXBacktest demo | FXPlugins/fxbacktest_fxstupid/FXStupidFXDataEnginePlugin.swift | FXDataEngine adapter now independent of FXBacktest-local plugin code | Stateful scalar adapter; no Metal until its order-control flow is redesigned | No |
+| FX7 | FXBacktest plugin | FXPlugins/fx7/CPU/FX7FXDataEnginePlugin.swift | Backtest-native source plus FXDataEngine scoring adapter now live under the plugin zoo | Swift scalar adapter plus Metal signal scorer; Swift SIMD/Accelerate candidates | Metal implemented |
 
 ## Review Pass 1
 
 Findings:
 
-- The inventory count of 63 matches `FXDataEngineConstants.aiCount` and the
-  `AIModelID` enum count.
+- The legacy inventory count remains 63; the active Swift registry now adds
+  the two FXBacktest demos plus FX7 for 66 `AIModelID` cases.
 - The root `FXPlugins` folder is now the converted Swift package and should not
   contain legacy MQL5 source.
 - Several plugin names contain "spread"; those are not bid/ask spread
@@ -268,7 +269,7 @@ Revision from pass 2:
 
 - Root `FXPlugins` is now a SwiftPM package depending on `FXDataEngine`.
 - The four legacy rule plugins are Swift-native and contract-tested.
-- The two FXBacktest demo plugins are exposed through `FXDataEngine`
+- The two FXBacktest demo plugins and FX7 are exposed through `FXDataEngine`
   adapters.
 - The remaining 59 legacy plugin identifiers are exposed through plugin-owned
   Swift adapter folders with volume-aware online learning and deterministic
@@ -307,16 +308,17 @@ Completed first Swift wave on 2026-05-23:
 - Added and tested FXDataEngine adapters for the two FXBacktest demo plugins:
   `MovingAverageCross` and `FXStupid`.
 - Removed the now-duplicated FXBacktest-local demo plugin implementations after
-  the adapters became independent; FXBacktest keeps only backtest-native FX7.
-- Extended `AIModelID` and the FXDataEngine model count from 63 to 65 so the two
-  demo adapters have stable model identifiers.
+  the adapters became independent; FX7 source ownership moved to `FXPlugins/fx7`
+  while FXBacktest keeps a source link for its native plugin target.
+- Extended `AIModelID` and the FXDataEngine model count from 63 to 66 so the two
+  demo adapters and FX7 have stable model identifiers.
 
 Completed full Swift adapter wave on 2026-05-23:
 
 - Added plugin-owned Swift `FXAIPluginV4` adapters for the other 59 legacy MQL5
   plugins.
-- `FXAIPluginRegistry` now exposes all 65 model IDs: 63 legacy FXAI plugins plus
-  the 2 FXBacktest demo adapters.
+- `FXAIPluginRegistry` now exposes all 66 model IDs: 63 legacy FXAI plugins plus
+  the 2 FXBacktest demo adapters and FX7.
 - Every reference adapter has a validated manifest, volume-aware online
   centroid learning, deterministic fallback prediction, and explicit Apple
   Silicon backend metadata.

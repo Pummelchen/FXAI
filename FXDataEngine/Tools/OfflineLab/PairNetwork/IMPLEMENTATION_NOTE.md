@@ -3,13 +3,13 @@
 ## Repo Mapping
 
 - Offline Lab contracts, config, math, graph construction, and resolver logic live in:
-  - `<FXAI_ROOT>/Tools/offline_lab/pair_network_contracts.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/pair_network_config.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/pair_network_math.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/pair_network.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/pair_network_contracts.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/pair_network_config.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/pair_network_math.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/pair_network.py`
 - CLI entry points are wired through:
-  - `<FXAI_ROOT>/Tools/offline_lab/cli_parser.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/cli_commands.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/cli_parser.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/cli_commands.py`
 - Runtime integration is in:
   - `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/Trade/runtime_trade_pair_network.mqh`
   - `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/Trade/runtime_trade_risk.mqh`

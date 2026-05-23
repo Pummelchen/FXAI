@@ -351,6 +351,9 @@ public enum FXAIPluginMetalBackendDiscovery {
         if functionName == "moving_average_cross_signal_grid" {
             return try executeMovingAverageProbe(bundle: bundle, functionName: functionName)
         }
+        if functionName == "fx7_core_signal_score" {
+            return try executeFX7Probe(bundle: bundle, functionName: functionName)
+        }
         if functionName == "rule_m1sync_chain_scan" {
             return try executeM1SyncProbe(bundle: bundle, functionName: functionName)
         }
@@ -434,6 +437,56 @@ public enum FXAIPluginMetalBackendDiscovery {
             outputArgumentIndex: 4,
             threadGrid: MetalKernelThreadGrid(width: close.count, height: 1),
             expected: expected
+        )
+    }
+
+    private static func executeFX7Probe(
+        bundle: FXAIPluginMetalKernelBundle,
+        functionName: String
+    ) throws -> FXAIPluginMetalRuntimeProbeResult {
+        let featureCount = max(FXDataEngineConstants.aiWeights, 48)
+        let windowLength = 8
+        var features = Array(repeating: Float(0), count: featureCount)
+        features[0] = 0.08
+        features[3] = 0.05
+        features[4] = 0.18
+        features[6] = 0.60
+        features[7] = 0.14
+        features[8] = 0.03
+        features[12] = 0.20
+        features[40] = 0.65
+
+        var window = Array(repeating: Float(0), count: windowLength * featureCount)
+        for row in 0..<windowLength {
+            let decay = Float(row) * 0.01
+            window[row * featureCount + 3] = 0.05 - decay
+            window[row * featureCount + 7] = 0.14 - decay
+        }
+
+        let expected = fx7Expected(
+            features: features,
+            window: window,
+            featureCount: featureCount,
+            windowLength: windowLength,
+            hasVolume: true,
+            costScale: 0.01
+        )
+        return try executeAndValidate(
+            bundle: bundle,
+            functionName: functionName,
+            arguments: [
+                .floatArray(features),
+                .floatArray(window),
+                .outputFloat(count: expected.count),
+                .uintScalar(UInt32(featureCount)),
+                .uintScalar(UInt32(windowLength)),
+                .boolScalar(true),
+                .floatScalar(0.01)
+            ],
+            outputArgumentIndex: 2,
+            threadGrid: MetalKernelThreadGrid(width: 1),
+            expected: expected,
+            tolerance: 0.0005
         )
     }
 
@@ -735,6 +788,61 @@ public enum FXAIPluginMetalBackendDiscovery {
             let volumeBoost = hasVolume ? 0.10 * clamp(abs(volumeSignal[bar]), 0, 1) : 0
             return clamp(abs(normalizedEdge) * 32 + volumeBoost, 0, 1)
         }
+    }
+
+    private static func fx7Expected(
+        features: [Float],
+        window: [Float],
+        featureCount: Int,
+        windowLength: Int,
+        hasVolume: Bool,
+        costScale: Float
+    ) -> [Float] {
+        let shortReturn = read(features, featureCount, 0)
+        let mediumSlope = read(features, featureCount, 3)
+        let fastReturn = read(features, featureCount, 7)
+        let slowReturn = read(features, featureCount, 8)
+        let volatility = max(abs(read(features, featureCount, 4)) + 0.50 * abs(read(features, featureCount, 5)), 0.01)
+        let contextSignal = read(features, featureCount, 12)
+        let volume = hasVolume ? clamp(0.65 * read(features, featureCount, 40) + 0.35 * read(features, featureCount, 6), -1, 1) : 0
+
+        let rows = min(windowLength, 16)
+        var weighted: Float = 0
+        var weightSum: Float = 0
+        for row in 0..<rows {
+            let weight = 1.0 / Float(row + 1)
+            weighted += weight * (0.55 * windowFeature(window, featureCount, row, 7) + 0.45 * windowFeature(window, featureCount, row, 3))
+            weightSum += weight
+        }
+        let windowMomentum = weightSum > 0 ? clamp(weighted / weightSum, -1, 1) : 0
+
+        let mtfEdge = fastReturn - slowReturn
+        let trendInput = 0.38 * fastReturn + 0.30 * slowReturn + 0.18 * mediumSlope + 0.09 * shortReturn + 0.05 * windowMomentum
+        let trend = tanh(2.4 * trendInput)
+        let breakout = tanh(4.0 * mtfEdge)
+        let signs = [shortReturn, mediumSlope, fastReturn, slowReturn, windowMomentum]
+            .map { $0 > 0 ? Float(1) : ($0 < 0 ? Float(-1) : Float(0)) }
+        let nonZeroSigns = signs.filter { $0 != 0 }
+        let alignment = nonZeroSigns.isEmpty ? Float(0) : clamp(nonZeroSigns.reduce(0, +) / Float(nonZeroSigns.count), -1, 1)
+        let efficiency = clamp(abs(mtfEdge) / (volatility + abs(shortReturn) + 0.01), 0, 2)
+        let volGate = 1.0 / (1.0 + max(volatility - 1.50, 0) * 0.60)
+        let panicPenalty = clamp(max(volatility - 1.80, 0) * 0.25, 0, 0.45)
+        let reversalPenalty = clamp(max(0, -trend * shortReturn) * 0.35, 0, 0.35)
+        let rawEdge = 0.56 * trend + 0.20 * breakout + 0.08 * alignment + 0.06 * contextSignal + (hasVolume ? 0.08 * volume : 0)
+        let costGate = 1.0 / (1.0 + exp(-8.0 * (abs(rawEdge) - max(costScale, 0.001))))
+        let rawSign = rawEdge > 0 ? Float(1) : (rawEdge < 0 ? Float(-1) : Float(0))
+        let edge = clamp(rawEdge * volGate * costGate - rawSign * (panicPenalty + reversalPenalty), -1, 1)
+        let confidence = clamp(
+            0.25 +
+                0.30 * abs(edge) +
+                0.18 * min(efficiency, 1) +
+                0.12 * abs(alignment) +
+                0.08 * abs(volume) +
+                0.07 * costGate,
+            0,
+            1
+        )
+        return [edge, confidence, volatility, volume]
     }
 
     private static let runtimeProbeKernelSource = """

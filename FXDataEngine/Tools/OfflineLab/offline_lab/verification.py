@@ -29,7 +29,7 @@ def _load_text(path: Path) -> str:
 
 
 def _golden_dir() -> Path:
-    return Path(__file__).resolve().parents[1] / "tests" / "golden"
+    return Path(__file__).resolve().parents[2] / "tests" / "golden"
 
 
 def _write_golden(path: Path, text: str) -> None:
@@ -168,11 +168,13 @@ def run_pytest_suite(repo_root: Path) -> dict[str, object]:
     cmd = [sys.executable, "-m", "pytest", "Tools/tests", "-q"]
     env = os.environ.copy()
     repo_tools = str(data_engine_root / "Tools")
+    offline_lab_root = str(data_engine_root / "Tools" / "OfflineLab")
     existing_pythonpath = str(env.get("PYTHONPATH", "") or "").strip()
+    pythonpath_parts = [repo_tools, offline_lab_root]
+    if existing_pythonpath:
+        pythonpath_parts.append(existing_pythonpath)
     env["PYTHONPATH"] = (
-        repo_tools
-        if not existing_pythonpath
-        else os.pathsep.join([repo_tools, existing_pythonpath])
+        os.pathsep.join(pythonpath_parts)
     )
     proc = subprocess.run(
         cmd,

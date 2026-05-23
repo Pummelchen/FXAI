@@ -11,7 +11,7 @@ def _read(rel_path: str) -> str:
 
 
 def test_swift_market_series_pins_canonical_m1_ohlcv_contract():
-    contracts = _read("FXDataEngine/Sources/FXDataEngine/MarketData.swift")
+    contracts = _read("FXDataEngine/Sources/FXDataEngine/MarketData/MarketData.swift")
     for token in (
         "public struct M1OHLCVBar",
         "public struct M1OHLCVSeries",
@@ -29,7 +29,7 @@ def test_swift_market_series_pins_canonical_m1_ohlcv_contract():
 
 
 def test_swift_gateway_preserves_volume_from_fxdatabase_response():
-    gateway = _read("FXDataEngine/Sources/FXDataEngine/MarketDataGateway.swift")
+    gateway = _read("FXDataEngine/Sources/FXDataEngine/MarketData/MarketDataGateway.swift")
 
     assert "volume: outVolume" in gateway
     assert "bucketVolume = volume[index]" in gateway
@@ -38,7 +38,7 @@ def test_swift_gateway_preserves_volume_from_fxdatabase_response():
 
 
 def test_swift_offline_export_uses_ohlcv_tsv_header_without_legacy_cost_columns():
-    offline_export = _read("FXDataEngine/Sources/FXDataEngine/OfflineExport.swift")
+    offline_export = _read("FXDataEngine/Sources/FXDataEngine/MarketData/OfflineExport.swift")
 
     assert 'var lines = ["time_unix\\topen\\thigh\\tlow\\tclose\\tvolume"]' in offline_export
     assert "String(series.volume[index])" in offline_export

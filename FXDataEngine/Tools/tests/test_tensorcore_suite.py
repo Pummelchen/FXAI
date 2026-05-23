@@ -16,7 +16,7 @@ def _assert_tokens(text: str, tokens: list[str]) -> None:
 
 
 def test_tensor_work_is_declared_as_plugin_backend_bridge_not_mql_tensorcore():
-    ml_backend = _read("FXDataEngine/Sources/FXDataEngine/MLBackend.swift")
+    ml_backend = _read("FXDataEngine/Sources/FXDataEngine/Core/MLBackend.swift")
     plugins_readme = _read("FXPlugins/README.md")
 
     _assert_tokens(
@@ -29,7 +29,9 @@ def test_tensor_work_is_declared_as_plugin_backend_bridge_not_mql_tensorcore():
             "case externalPython(framework: MLFramework, executable: String, module: String)",
             "public protocol ExternalMLBackend",
             "public struct PythonMLBackendBridge",
-            "precondition(framework == .pyTorch || framework == .tensorFlow",
+            "precondition(",
+            "framework == .pyTorch",
+            "framework == .tensorFlow",
         ],
     )
     _assert_tokens(
@@ -43,8 +45,8 @@ def test_tensor_work_is_declared_as_plugin_backend_bridge_not_mql_tensorcore():
 
 
 def test_tensor_payloads_preserve_ohlcv_volume_contract():
-    ml_backend = _read("FXDataEngine/Sources/FXDataEngine/MLBackend.swift")
-    contracts = _read("FXDataEngine/Sources/FXDataEngine/PluginContracts.swift")
+    ml_backend = _read("FXDataEngine/Sources/FXDataEngine/Core/MLBackend.swift")
+    contracts = _read("FXDataEngine/Sources/FXDataEngine/Plugins/PluginContracts.swift")
 
     _assert_tokens(
         ml_backend,

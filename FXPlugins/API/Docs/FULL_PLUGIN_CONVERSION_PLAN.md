@@ -45,15 +45,15 @@ Recovered legacy files:
 - 64 top-level legacy plugin/common files:
   - 63 old MQL5 plugins.
   - 1 shared old `Common/fxai_framework_model.mqh`.
-- 2 Swift-era FXBacktest demo plugins are part of the current 65-plugin package.
+- 2 Swift-era FXBacktest demo plugins plus FX7 are part of the current 66-plugin package.
 
 Current state:
 
-- 65 root plugin folders exist under `FXPlugins`.
+- 66 root plugin folders exist under `FXPlugins`.
 - 59 plugins now have plugin-local `CPU/` implementations plus accelerator
   folders where the matrix requires them.
-- 4 rule plugins and the 2 FXBacktest demos remain scalar Swift adapters with
-  plugin-specific CPU logic.
+- 4 rule plugins, the 2 FXBacktest demos, and FX7 remain Swift adapters with
+  plugin-specific CPU logic; FX7 also owns a Metal signal scorer.
 - 0 plugins delegate to `FXAIReferencePluginRuntime`.
 - The former Swift wrapper layer has been removed from the plugin zoo.
 
@@ -121,11 +121,13 @@ Finish proper plugin-local structure for:
 - `rule_m1sync`
 - `fxbacktest_moving_average_cross`
 - `fxbacktest_fxstupid`
+- `fx7`
 
 These require CPU only except:
 
 - `rule_m1sync`: implemented Metal batched chain scanner.
 - `fxbacktest_moving_average_cross`: implemented Metal batched parameter sweep.
+- `fx7`: implemented Metal signal scorer for the FXDataEngine adapter.
 
 ### Wave 2: Native Linear And Distribution Plugins
 
@@ -184,6 +186,7 @@ Legend:
 | `rule_m1sync` | `Rule/rule_m1sync.mqh` | M1 OHLC chain sync with volume confirmation. | CPU, Metal batch scanner. |
 | `fxbacktest_moving_average_cross` | Swift demo | Moving-average cross signal adapter. | CPU, Metal parameter sweep. |
 | `fxbacktest_fxstupid` | Swift demo | Stateful demo direction adapter. | CPU. |
+| `fx7` | Swift backtest plugin | FX7 signal-timeframe momentum, regime, volatility, volume, and cost-gate adapter. | CPU, Metal signal scorer. |
 | `lin_sgd` | `Linear/lin_sgd.mqh` | SGD multiclass model, hashed interactions, Adam moments, calibration, move head. | CPU, Metal batch interactions. |
 | `lin_ftrl` | `Linear/lin_ftrl.mqh` | Native 3-class FTRL-prox, calibration, move head. | CPU, Metal optional batch scoring. |
 | `lin_enhash` | `Linear/lin_enhash.mqh` | ENHash/FTRL hashed online learner, calibration, quality heads. | CPU, Metal hash scoring. |

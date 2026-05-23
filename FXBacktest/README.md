@@ -29,7 +29,7 @@ Sources/
   FXBacktest/                 SwiftUI macOS app
   FXBacktestCore/             engine, data model, FXDatabase loader, plugin API
   FXBacktestPlugins/          converted EA plugins
-    FX7.swift                 FX7 OHLC signal-timeframe CPU plugin and single-symbol Metal kernel
+    FX7.swift                 source link to FXPlugins/fx7/Backtest/FX7.swift
 Tests/
   FXBacktestCoreTests/        engine, sweep, and Metal smoke tests
 ```
@@ -47,7 +47,7 @@ Important files:
 - `Sources/FXBacktestCore/FXDatabaseHistoryLoader.swift`: FXDatabase FXBacktest API v1 client bridge.
 - `Sources/FXBacktestCore/BacktestResultStore.swift`: FXDatabase result API bridge and purge support.
 - `Sources/FXBacktestCore/PluginAcceleration.swift`: plugin acceleration descriptor and IR v1.
-- `Sources/FXBacktestPlugins/FX7.swift`: converted FX7 OHLC-only plugin with MQL5-style closed signal-bar feature timing, CPU universe support, and a Metal kernel for single-symbol sweeps.
+- `Sources/FXBacktestPlugins/FX7.swift`: source link to `../FXPlugins/fx7/Backtest/FX7.swift`, the plugin-owned FX7 OHLC-only backtest implementation with closed signal-bar feature timing, CPU universe support, and a Metal kernel for single-symbol sweeps.
 
 ## Requirements
 
@@ -381,7 +381,7 @@ The live optimization table follows the MT5 tester shape: fixed metric columns f
 
 ### Retired Demo Plugins
 
-The former FXBacktest-local `MovingAverageCross` and `FXStupid` demo plugins have been moved into the repo-root `FXPlugins` package as FXDataEngine adapters. FXBacktest now keeps only backtest-native plugins, currently FX7.
+The former FXBacktest-local `MovingAverageCross` and `FXStupid` demo plugins have been moved into the repo-root `FXPlugins` package as FXDataEngine adapters. FX7 now also has source ownership in `FXPlugins/fx7`; FXBacktest keeps a source link so its native plugin target and tests continue to build without creating a SwiftPM package cycle.
 
 ### FX7
 

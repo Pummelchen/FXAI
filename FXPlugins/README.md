@@ -9,21 +9,22 @@ Converted plugins should consume the Swift FXDataEngine OHLCV contracts and use 
 ## Layout
 
 - `API/`: non-plugin package surface only: registry, tests, docs, and backend process hooks. Shared implementation primitives live in `FXDataEngine`; plugin folders should not depend on shared plugin-zoo helpers.
-- `<plugin_id>/`: every plugin lives directly under `FXPlugins` in its own folder named after its manifest `aiName`, for example `lin_sgd/`, `ai_lstm/`, `tree_xgb_fast/`, `rule_m1sync/`, and `fxbacktest_moving_average_cross/`. All plugin-specific Swift, Metal, Python, model assets, and state adapters belong inside that plugin folder.
+- `<plugin_id>/`: every plugin lives directly under `FXPlugins` in its own folder named after its manifest `aiName`, for example `lin_sgd/`, `ai_lstm/`, `tree_xgb_fast/`, `rule_m1sync/`, `fxbacktest_moving_average_cross/`, and `fx7/`. All plugin-specific Swift, Metal, Python, model assets, and state adapters belong inside that plugin folder.
 - `Package.swift`: SwiftPM boundary for the zoo. There is no longer a root `Sources/`, `Tests/`, or `Python/` staging layout.
 
 ## Current Swift Coverage
 
-Root `FXPlugins` now exposes all 65 FXAI model IDs through Swift `FXAIPluginV4`
+Root `FXPlugins` now exposes all 66 FXAI model IDs through Swift `FXAIPluginV4`
 contracts:
 
 - 4 hand-ported legacy rule plugins.
 - 2 former FXBacktest demo adapters: `fxbacktest_moving_average_cross` and `fxbacktest_fxstupid`.
+- 1 FXBacktest-native FX7 adapter with plugin-owned backtest source plus Swift/Metal FXDataEngine scoring.
 - 59 plugin-owned native conversions with Swift CPU code under each plugin's `CPU/`
   folder and accelerator sources under plugin-owned `Metal/`, `PyTorch/`, `TensorFlow/`,
   or `NLP/` folders where suitable.
-- 6 Swift rule/demo adapters. `rule_m1sync` and
-  `fxbacktest_moving_average_cross` now include plugin-local Metal batch kernels;
+- 7 Swift rule/demo/backtest adapters. `rule_m1sync`,
+  `fxbacktest_moving_average_cross`, and `fx7` now include plugin-local Metal batch kernels;
   `rule_buyonly`, `rule_sellonly`, `rule_random`, and `fxbacktest_fxstupid`
   remain scalar-only by design.
 - No plugin in `FXPlugins` delegates to `FXAIReferencePluginRuntime`; the old wrapper layer

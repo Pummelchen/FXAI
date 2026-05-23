@@ -16,7 +16,7 @@ def _assert_tokens(text: str, tokens: list[str]) -> None:
 
 
 def test_requested_signal_math_helpers_exist_in_swift():
-    feature_math = _read("FXDataEngine/Sources/FXDataEngine/FeatureMath.swift")
+    feature_math = _read("FXDataEngine/Sources/FXDataEngine/Features/FeatureMath.swift")
     _assert_tokens(
         feature_math,
         [
@@ -35,7 +35,7 @@ def test_requested_signal_math_helpers_exist_in_swift():
 
 
 def test_requested_signals_are_registered_in_swift_feature_schema():
-    registry = _read("FXDataEngine/Sources/FXDataEngine/FeatureSchema.swift")
+    registry = _read("FXDataEngine/Sources/FXDataEngine/Features/FeatureSchema.swift")
     expected_names = {
         38: "qsdema100_edge",
         39: "qsdema200_edge",
@@ -56,7 +56,7 @@ def test_requested_signals_are_registered_in_swift_feature_schema():
 
 
 def test_requested_signals_are_emitted_by_swift_feature_pipeline():
-    feature_pipeline = _read("FXDataEngine/Sources/FXDataEngine/FeaturePipeline.swift")
+    feature_pipeline = _read("FXDataEngine/Sources/FXDataEngine/Features/FeaturePipeline.swift")
     _assert_tokens(
         feature_pipeline,
         [

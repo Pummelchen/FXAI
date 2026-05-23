@@ -14,8 +14,8 @@ def _assert_tokens(text: str, tokens: list[str]) -> None:
 
 
 def test_cycle_recovery_stays_symbol_scoped_in_swift_runtime():
-    runtime_cycle = _read("FXDataEngine/Sources/FXDataEngine/RuntimeCycle.swift")
-    lifecycle_reset = _read("FXDataEngine/Sources/FXDataEngine/LifecycleReset.swift")
+    runtime_cycle = _read("FXDataEngine/Sources/FXDataEngine/Runtime/RuntimeCycle.swift")
+    lifecycle_reset = _read("FXDataEngine/Sources/FXDataEngine/Lifecycle/LifecycleReset.swift")
     runtime_tests = _read("FXDataEngine/Tests/FXDataEngineTests/RuntimeCycleTests.swift")
 
     _assert_tokens(
@@ -49,8 +49,8 @@ def test_cycle_recovery_stays_symbol_scoped_in_swift_runtime():
 
 
 def test_order_request_lifecycle_is_explicit_in_swift_trade_plan():
-    execution_plan = _read("FXDataEngine/Sources/FXDataEngine/TradeExecutionPlan.swift")
-    system_health = _read("FXDataEngine/Sources/FXDataEngine/SystemHealth.swift")
+    execution_plan = _read("FXDataEngine/Sources/FXDataEngine/Runtime/TradeExecutionPlan.swift")
+    system_health = _read("FXDataEngine/Sources/FXDataEngine/Runtime/SystemHealth.swift")
     execution_tests = _read("FXDataEngine/Tests/FXDataEngineTests/TradeExecutionPlanTests.swift")
 
     _assert_tokens(

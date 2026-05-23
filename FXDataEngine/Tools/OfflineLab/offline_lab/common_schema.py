@@ -5,7 +5,9 @@ from pathlib import Path
 
 import fxai_testlab as testlab
 
-OFFLINE_DIR = Path(__file__).resolve().parent.parent / "OfflineLab"
+PACKAGE_DIR = Path(__file__).resolve().parent
+OFFLINE_DIR = PACKAGE_DIR.parent
+TOOLS_DIR = OFFLINE_DIR.parent
 DEFAULT_DB = testlab.DEFAULT_DB_PATH
 RUNS_DIR = OFFLINE_DIR / "Runs"
 PROFILES_DIR = OFFLINE_DIR / "Profiles"

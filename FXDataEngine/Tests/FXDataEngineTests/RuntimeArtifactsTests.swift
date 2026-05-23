@@ -50,7 +50,7 @@ final class RuntimeArtifactsTests: XCTestCase {
         XCTAssertEqual(header.normalizationMethodCount, 17)
         XCTAssertEqual(header.normalizationRollWindowMax, 512)
         XCTAssertEqual(header.replayCapacity, 384)
-        XCTAssertEqual(header.aiCount, 65)
+        XCTAssertEqual(header.aiCount, 66)
         XCTAssertEqual(header.regimeCount, 12)
         XCTAssertEqual(header.maxHorizons, 8)
         XCTAssertEqual(header.conformalDepth, 96)

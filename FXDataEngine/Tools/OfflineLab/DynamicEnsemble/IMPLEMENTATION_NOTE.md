@@ -5,7 +5,7 @@
 - Runtime aggregation seam: `FXDataEngine/Engine/Runtime/runtime_model_stage_block.mqh`
 - Final policy seam: `FXDataEngine/Engine/Runtime/runtime_policy_stage_block.mqh`
 - Context priors: Adaptive Router, NewsPulse, Rates Engine, Microstructure
-- Offline Lab config/report pattern: `Tools/offline_lab/*`
+- Offline Lab config/report pattern: `Tools/OfflineLab/offline_lab/*`
 - GUI artifact-reader pattern: `FXGUI/Sources/FXGUICore/Services/*ArtifactReader.swift`
 
 ## Phase-1 design

@@ -38,6 +38,7 @@ CONVERTED_MODEL_CASES = {
     "ai_mythos_rdt": "mythosRDT",
     "fxbacktest_moving_average_cross": "demoMovingAverageCross",
     "fxbacktest_fxstupid": "demoFXStupid",
+    "fx7": "demoFX7",
 }
 
 
@@ -51,21 +52,21 @@ def _assert_tokens(text: str, tokens: list[str]) -> None:
 
 
 def test_ai_count_matches_swift_registry_expansion() -> None:
-    constants = _read("FXDataEngine/Sources/FXDataEngine/Constants.swift")
-    core_types = _read("FXDataEngine/Sources/FXDataEngine/CoreTypes.swift")
+    constants = _read("FXDataEngine/Sources/FXDataEngine/Core/Constants.swift")
+    core_types = _read("FXDataEngine/Sources/FXDataEngine/Core/CoreTypes.swift")
     count = int(re.search(r"public static let aiCount = (\d+)", constants).group(1))
     enum_body = core_types.split("public enum AIModelID", 1)[1].split("public var usesDeepNormalizationCandidates", 1)[0]
     enum_cases = re.findall(r"case ([A-Za-z0-9_]+)", enum_body)
 
-    assert count == 65
+    assert count == 66
     assert len(enum_cases) == count
     for swift_case in CONVERTED_MODEL_CASES.values():
         assert swift_case in enum_cases
 
 
 def test_swift_plugin_contract_exposes_volume_and_backend_requirements() -> None:
-    contracts = _read("FXDataEngine/Sources/FXDataEngine/PluginContracts.swift")
-    ml_backend = _read("FXDataEngine/Sources/FXDataEngine/MLBackend.swift")
+    contracts = _read("FXDataEngine/Sources/FXDataEngine/Plugins/PluginContracts.swift")
+    ml_backend = _read("FXDataEngine/Sources/FXDataEngine/Core/MLBackend.swift")
     fxplugins_readme = _read("FXPlugins/README.md")
 
     _assert_tokens(
@@ -88,7 +89,9 @@ def test_swift_plugin_contract_exposes_volume_and_backend_requirements() -> None
             "case tensorFlow",
             "public protocol ExternalMLBackend",
             "public struct PythonMLBackendBridge",
-            "precondition(framework == .pyTorch || framework == .tensorFlow",
+            "precondition(",
+            "framework == .pyTorch",
+            "framework == .tensorFlow",
             "public let usesVolumeFeatures: Bool",
             "dataHasVolume: request.context.dataHasVolume",
         ],
@@ -105,8 +108,8 @@ def test_swift_plugin_contract_exposes_volume_and_backend_requirements() -> None
 
 
 def test_framework_common_contains_required_swift_algorithmic_guards() -> None:
-    support = _read("FXDataEngine/Sources/FXDataEngine/PluginSupport.swift")
-    contracts = _read("FXDataEngine/Sources/FXDataEngine/PluginContracts.swift")
+    support = _read("FXDataEngine/Sources/FXDataEngine/Plugins/PluginSupport.swift")
+    contracts = _read("FXDataEngine/Sources/FXDataEngine/Plugins/PluginContracts.swift")
     _assert_tokens(
         support,
         [

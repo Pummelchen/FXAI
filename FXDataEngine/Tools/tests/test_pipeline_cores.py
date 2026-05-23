@@ -16,7 +16,7 @@ def _assert_tokens(text: str, tokens: list[str]) -> None:
 
 
 def test_swift_data_pipeline_exposes_dedicated_cores_and_contracts():
-    pipeline = _read("FXDataEngine/Sources/FXDataEngine/FXDataEngine.swift")
+    pipeline = _read("FXDataEngine/Sources/FXDataEngine/Core/FXDataEngine.swift")
     _assert_tokens(
         pipeline,
         [
@@ -32,11 +32,11 @@ def test_swift_data_pipeline_exposes_dedicated_cores_and_contracts():
 
 
 def test_swift_core_pipeline_contracts_define_stage_structures():
-    data_core = _read("FXDataEngine/Sources/FXDataEngine/DataCore.swift")
-    feature_core = _read("FXDataEngine/Sources/FXDataEngine/FeaturePipeline.swift")
-    normalization_core = _read("FXDataEngine/Sources/FXDataEngine/Normalization.swift")
-    training_samples = _read("FXDataEngine/Sources/FXDataEngine/TrainingSamples.swift")
-    market_data = _read("FXDataEngine/Sources/FXDataEngine/MarketData.swift")
+    data_core = _read("FXDataEngine/Sources/FXDataEngine/Core/DataCore.swift")
+    feature_core = _read("FXDataEngine/Sources/FXDataEngine/Features/FeaturePipeline.swift")
+    normalization_core = _read("FXDataEngine/Sources/FXDataEngine/Normalization/Normalization.swift")
+    training_samples = _read("FXDataEngine/Sources/FXDataEngine/Lifecycle/TrainingSamples.swift")
+    market_data = _read("FXDataEngine/Sources/FXDataEngine/MarketData/MarketData.swift")
 
     _assert_tokens(
         data_core,
@@ -82,9 +82,9 @@ def test_swift_core_pipeline_contracts_define_stage_structures():
 
 
 def test_swift_core_stage_files_expose_unified_api():
-    data_core = _read("FXDataEngine/Sources/FXDataEngine/DataCore.swift")
-    feature_core = _read("FXDataEngine/Sources/FXDataEngine/FeaturePipeline.swift")
-    normalization_core = _read("FXDataEngine/Sources/FXDataEngine/Normalization.swift")
+    data_core = _read("FXDataEngine/Sources/FXDataEngine/Core/DataCore.swift")
+    feature_core = _read("FXDataEngine/Sources/FXDataEngine/Features/FeaturePipeline.swift")
+    normalization_core = _read("FXDataEngine/Sources/FXDataEngine/Normalization/Normalization.swift")
 
     _assert_tokens(
         data_core,
@@ -107,7 +107,9 @@ def test_swift_core_stage_files_expose_unified_api():
     _assert_tokens(
         normalization_core,
         [
-            "public func buildInputFrame(from featureFrame: FeatureCoreFrame) throws -> NormalizationCoreFrame",
+            "public func buildInputFrame(",
+            "from featureFrame: FeatureCoreFrame",
+            ") throws -> NormalizationCoreFrame",
             "public func buildPayloadFrame(_ request: NormalizationPayloadRequest) throws -> NormalizationPayloadFrame",
             "public func finalizePredictRequest(manifest: PluginManifestV4, request: PredictRequestV4) throws -> PredictRequestV4",
             "public func finalizeTrainRequest(manifest: PluginManifestV4, request: TrainRequestV4) throws -> TrainRequestV4",
@@ -116,17 +118,18 @@ def test_swift_core_stage_files_expose_unified_api():
 
 
 def test_runtime_training_and_audit_paths_use_swift_pipeline_cores():
-    pipeline = _read("FXDataEngine/Sources/FXDataEngine/FXDataEngine.swift")
-    audit_samples = _read("FXDataEngine/Sources/FXDataEngine/AuditSamples.swift")
-    audit_runner = _read("FXDataEngine/Sources/FXDataEngine/AuditRunner.swift")
-    lifecycle_bootstrap = _read("FXDataEngine/Sources/FXDataEngine/LifecycleBootstrap.swift")
+    pipeline = _read("FXDataEngine/Sources/FXDataEngine/Core/FXDataEngine.swift")
+    audit_samples = _read("FXDataEngine/Sources/FXDataEngine/Audit/AuditSamples.swift")
+    audit_runner = _read("FXDataEngine/Sources/FXDataEngine/Audit/AuditRunner.swift")
+    lifecycle_bootstrap = _read("FXDataEngine/Sources/FXDataEngine/Lifecycle/LifecycleBootstrap.swift")
 
     _assert_tokens(
         pipeline,
         [
             "let dataBundle = try dataCore.buildBundle(request: dataRequest, universe: universe)",
             "let featureFrame = try featureCore.buildFrame(",
-            "let normalizationFrame = try normalizationCore.buildInputFrame(from: featureFrame)",
+            "let normalizationFrame = try normalizationCore.buildInputFrame(",
+            "from: featureFrame",
             "let payloadFrame = try normalizationCore.buildPayloadFrame(",
             "return PreparedTrainingPayload(",
         ],
@@ -174,9 +177,9 @@ def test_mql_shortcut_paths_are_removed_from_swift_pipeline_callers():
 
 
 def test_audit_harness_uses_native_swift_context_contracts():
-    audit_context = _read("FXDataEngine/Sources/FXDataEngine/AuditContextSeries.swift")
-    audit_suite = _read("FXDataEngine/Sources/FXDataEngine/AuditSuite.swift")
-    audit_utilities = _read("FXDataEngine/Sources/FXDataEngine/AuditUtilities.swift")
+    audit_context = _read("FXDataEngine/Sources/FXDataEngine/Audit/AuditContextSeries.swift")
+    audit_suite = _read("FXDataEngine/Sources/FXDataEngine/Audit/AuditSuite.swift")
+    audit_utilities = _read("FXDataEngine/Sources/FXDataEngine/Audit/AuditUtilities.swift")
 
     _assert_tokens(
         audit_context,

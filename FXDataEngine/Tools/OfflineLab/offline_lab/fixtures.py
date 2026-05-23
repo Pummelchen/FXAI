@@ -170,7 +170,7 @@ def patched_paths(base_dir: Path):
         runs_dir,
     ]:
         ensure_dir(path)
-    source_strategy_catalog = Path(__file__).resolve().parents[1] / "OfflineLab" / "Profiles" / "strategy_profiles.json"
+    source_strategy_catalog = Path(__file__).resolve().parents[1] / "Profiles" / "strategy_profiles.json"
     if source_strategy_catalog.exists():
         shutil.copy2(source_strategy_catalog, strategy_profile_catalog)
 

@@ -22,10 +22,10 @@ Phase 1 is routing-first and audit-first. It does not force retraining of the pl
 
 ## Main Files
 
-- `Tools/offline_lab/adaptive_router_contracts.py`
-- `Tools/offline_lab/adaptive_router_config.py`
-- `Tools/offline_lab/adaptive_router.py`
-- `Tools/offline_lab/adaptive_router_replay.py`
+- `Tools/OfflineLab/offline_lab/adaptive_router_contracts.py`
+- `Tools/OfflineLab/offline_lab/adaptive_router_config.py`
+- `Tools/OfflineLab/offline_lab/adaptive_router.py`
+- `Tools/OfflineLab/offline_lab/adaptive_router_replay.py`
 - `FXDataEngine/Engine/Runtime/runtime_adaptive_router_stage.mqh`
 - `FXDataEngine/Engine/Runtime/runtime_model_stage_block.mqh`
 - `FXDataEngine/Engine/Runtime/runtime_policy_stage_block.mqh`

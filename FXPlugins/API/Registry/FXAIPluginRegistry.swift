@@ -68,7 +68,8 @@ public enum FXAIPluginRegistry {
             RuleRandomPlugin(),
             RuleM1SyncPlugin(),
             MovingAverageCrossFXDataEnginePlugin(),
-            FXStupidFXDataEnginePlugin()
+            FXStupidFXDataEnginePlugin(),
+            FX7FXDataEnginePlugin()
         ]
         return plugins.sorted { $0.manifest.aiID < $1.manifest.aiID }
     }

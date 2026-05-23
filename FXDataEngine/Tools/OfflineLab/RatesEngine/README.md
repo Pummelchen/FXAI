@@ -35,13 +35,13 @@ Curve shape is only true-market in phase 1 when manual numeric curve inputs are 
 
 ## Main Files
 
-- `Tools/offline_lab/rates_engine_contracts.py`
-- `Tools/offline_lab/rates_engine_config.py`
-- `Tools/offline_lab/rates_engine_inputs.py`
-- `Tools/offline_lab/rates_engine.py`
-- `Tools/offline_lab/rates_engine_daemon.py`
-- `Tools/offline_lab/rates_engine_newspulse.py`
-- `Tools/offline_lab/rates_engine_replay.py`
+- `Tools/OfflineLab/offline_lab/rates_engine_contracts.py`
+- `Tools/OfflineLab/offline_lab/rates_engine_config.py`
+- `Tools/OfflineLab/offline_lab/rates_engine_inputs.py`
+- `Tools/OfflineLab/offline_lab/rates_engine.py`
+- `Tools/OfflineLab/offline_lab/rates_engine_daemon.py`
+- `Tools/OfflineLab/offline_lab/rates_engine_newspulse.py`
+- `Tools/OfflineLab/offline_lab/rates_engine_replay.py`
 - `FXDataEngine/Engine/Runtime/Trade/runtime_trade_rates_engine.mqh`
 - `FXGUI/Sources/FXGUICore/Services/RatesEngineArtifactReader.swift`
 - `FXGUI/Sources/FXGUIApp/Features/RatesEngine/RatesEngineView.swift`

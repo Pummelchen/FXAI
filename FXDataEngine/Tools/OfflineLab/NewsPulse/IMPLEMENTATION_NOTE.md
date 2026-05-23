@@ -10,17 +10,17 @@ This note maps the NewsPulse design onto the actual FXAI repository structure.
   - Exports calendar feed and state into `FILE_COMMON/FXAI/Runtime/`.
 
 - Python collectors, fusion, policy, and daemon:
-  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_contracts.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_config.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_policy.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_calendar.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_gdelt.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_official.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_story.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_replay.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_fusion.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_daemon.py`
-  - `<FXAI_ROOT>/Tools/offline_lab/newspulse_service.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/newspulse_contracts.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/newspulse_config.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/newspulse_policy.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/newspulse_calendar.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/newspulse_gdelt.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/newspulse_official.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/newspulse_story.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/newspulse_replay.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/newspulse_fusion.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/newspulse_daemon.py`
+  - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/newspulse_service.py`
 
 - Runtime gating adapter:
   - `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
@@ -47,7 +47,7 @@ NewsPulse is shared execution and observability infrastructure. It does not belo
 
 The actual repo already has:
 - `FXDataEngine/Services/` for MT5 background work
-- `Tools/offline_lab/` for machine-local daemons and shared research/runtime artifacts
+- `Tools/OfflineLab/offline_lab/` for machine-local daemons and shared research/runtime artifacts
 - `FXDataEngine/Engine/Runtime/Trade/` for execution overlays
 - `FXGUI/` for operator surfaces
 

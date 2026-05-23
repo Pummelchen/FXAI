@@ -2,9 +2,9 @@
 
 ### Relevant Existing Paths
 
-- `Tools/offline_lab/rates_engine*.py`
+- `Tools/OfflineLab/offline_lab/rates_engine*.py`
   Existing rates / term-structure subsystem. This is reused as the authoritative FXAI-native rates context instead of rebuilding front-end or curve logic.
-- `Tools/offline_lab/microstructure_*.py` and `FXDataEngine/Services/FXAI_MicrostructureProbe.mq5`
+- `Tools/OfflineLab/offline_lab/microstructure_*.py` and `FXDataEngine/Services/FXAI_MicrostructureProbe.mq5`
   Existing shared-subsystem pattern for MT5 service export, FILE_COMMON artifacts, local status mirroring, replay, and service installation.
 - `FXDataEngine/Engine/Runtime/Trade/runtime_trade_rates_engine.mqh`
   Existing shared flat-snapshot reader pattern for pair-level runtime state.
@@ -20,7 +20,7 @@
   Existing operator-artifact ingestion pattern.
 - `FXGUI/Sources/FXGUIApp/Features/*`
   Existing GUI surface pattern for subsystem-specific operator views.
-- `Tools/offline_lab/market_universe.py`
+- `Tools/OfflineLab/offline_lab/market_universe.py`
   Existing FX-only tradable universe plus indicator-only context symbol inventory. This is reused to seed the cross-asset proxy universe.
 - `FXDataEngine/Engine/Lifecycle/lifecycle_context_symbols.mqh`
   Existing broader MT5 context-symbol conventions. The new subsystem borrows those proxy expectations for DXY, yields, volatility, and equity/commodity proxies.
@@ -32,7 +32,7 @@
      `FXDataEngine/Services/FXAI_CrossAssetProbe.mq5`
      exports live context-symbol proxy state into `FILE_COMMON/FXAI/Runtime`.
    - Python engine:
-     `Tools/offline_lab/cross_asset_*.py`
+     `Tools/OfflineLab/offline_lab/cross_asset_*.py`
      consumes the probe snapshot plus the existing rates-engine snapshot, computes normalized feature blocks and pair-level state, and writes canonical cross-asset artifacts.
 
 2. The rates engine remains the source of truth for:
@@ -80,12 +80,12 @@
 ### Files Added / Changed
 
 - Added:
-  - `Tools/offline_lab/cross_asset_contracts.py`
-  - `Tools/offline_lab/cross_asset_config.py`
-  - `Tools/offline_lab/cross_asset_math.py`
-  - `Tools/offline_lab/cross_asset_engine.py`
-  - `Tools/offline_lab/cross_asset_service.py`
-  - `Tools/offline_lab/cross_asset_replay.py`
+  - `Tools/OfflineLab/offline_lab/cross_asset_contracts.py`
+  - `Tools/OfflineLab/offline_lab/cross_asset_config.py`
+  - `Tools/OfflineLab/offline_lab/cross_asset_math.py`
+  - `Tools/OfflineLab/offline_lab/cross_asset_engine.py`
+  - `Tools/OfflineLab/offline_lab/cross_asset_service.py`
+  - `Tools/OfflineLab/offline_lab/cross_asset_replay.py`
   - `FXDataEngine/Services/FXAI_CrossAssetProbe.mq5`
   - `FXDataEngine/Engine/Runtime/Trade/runtime_trade_cross_asset_state.mqh`
   - `FXGUI/Sources/FXGUICore/Models/CrossAssetModels.swift`

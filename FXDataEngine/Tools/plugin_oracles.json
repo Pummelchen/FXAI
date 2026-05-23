@@ -937,6 +937,28 @@
           "bias_abs_max": 0.80
         }
       }
+    },
+    "fx7": {
+      "identity": "FX7 plugin-zoo adapter for volume-aware multi-timeframe momentum, regime, panic, novelty, and execution-cost gating.",
+      "recommendations": [
+        "Keep CPU and Metal scoring numerically close because FX7 is used as a high-signal bridge between FXBacktest and FXDataEngine.",
+        "Use volume as a confidence and bias input only when FXDatabase reports nonzero dataset volume."
+      ],
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.30
+        },
+        "drift_up": {
+          "trend_align_min": 0.30
+        },
+        "random_walk": {
+          "active_ratio_max": 0.50,
+          "skip_ratio_min": 0.45
+        },
+        "vol_cluster": {
+          "conf_drift_max": 0.22
+        }
+      }
     }
   }
 }

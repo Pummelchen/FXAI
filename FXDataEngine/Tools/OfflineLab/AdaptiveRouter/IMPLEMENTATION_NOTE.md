@@ -12,9 +12,9 @@ This note maps the subsystem design onto the actual FXAI codebase.
 - Existing control-plane artifact rails: `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/ControlPlane/runtime_control_plane_types.mqh` and `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/ControlPlane/runtime_control_plane_profiles.mqh`
 - Existing live NewsPulse runtime context: `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
 - Existing plugin empirical route memory: `<FXAI_ROOT>/FXDataEngine/Engine/meta_calibration.mqh`
-- Existing shadow-fleet / research telemetry: `<FXAI_ROOT>/Tools/offline_lab/shadow_fleet.py`
-- Existing student-router artifact generation: `<FXAI_ROOT>/Tools/offline_lab/student_router.py`
-- Existing operator dashboard export: `<FXAI_ROOT>/Tools/offline_lab/dashboard.py`
+- Existing shadow-fleet / research telemetry: `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/shadow_fleet.py`
+- Existing student-router artifact generation: `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/student_router.py`
+- Existing operator dashboard export: `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/dashboard.py`
 - Existing GUI runtime reader and monitor: `<FXAI_ROOT>/FXGUI/Sources/FXGUICore/Services/RuntimeArtifactReader.swift` and `<FXAI_ROOT>/FXGUI/Sources/FXGUIApp/Features/Runtime/RuntimeMonitorView.swift`
 
 ## Repo-Aware Design Choice
@@ -30,7 +30,7 @@ The new subsystem extends those rails instead of replacing them.
 
 ### Offline Lab / Turso side
 
-- A new Adaptive Router config and contract layer under `Tools/offline_lab`
+- A new Adaptive Router config and contract layer under `Tools/OfflineLab/offline_lab`
 - A new `adaptive_router_profiles` Turso table
 - Profile generation that combines:
   - static family/plugin regime priors

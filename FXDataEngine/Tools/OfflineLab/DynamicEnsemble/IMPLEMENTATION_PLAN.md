@@ -45,7 +45,7 @@ This means phase 1 does not need a separate live online-learning daemon. It can 
 The Dynamic Ensemble must consume these outputs, not rebuild them.
 
 ### Existing Offline Lab / GUI patterns to reuse
-- contracts/config/replay helpers under `Tools/offline_lab/*`
+- contracts/config/replay helpers under `Tools/OfflineLab/offline_lab/*`
 - local docs/config under `Tools/OfflineLab/<Subsystem>/`
 - GUI reader in `FXGUI/Sources/FXGUICore/Services/*ArtifactReader.swift`
 - GUI models in `FXGUI/Sources/FXGUICore/Models/*`
@@ -203,9 +203,9 @@ Use quality to drive:
 
 ## Offline Lab Scope
 Add:
-- `Tools/offline_lab/dynamic_ensemble_contracts.py`
-- `Tools/offline_lab/dynamic_ensemble_config.py`
-- `Tools/offline_lab/dynamic_ensemble_replay.py`
+- `Tools/OfflineLab/offline_lab/dynamic_ensemble_contracts.py`
+- `Tools/OfflineLab/offline_lab/dynamic_ensemble_config.py`
+- `Tools/OfflineLab/offline_lab/dynamic_ensemble_replay.py`
 
 Add CLI commands:
 - `dynamic-ensemble-validate`
