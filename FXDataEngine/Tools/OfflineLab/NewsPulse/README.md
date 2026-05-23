@@ -28,7 +28,7 @@ NewsPulse has four parts:
 3. `FXDataEngine/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
    MT5 runtime adapter that reads the flat snapshot and applies pair-level gates.
 
-4. `FXDataEngineGUI/Sources/.../NewsPulse*.swift`
+4. `FXGUI/Sources/.../NewsPulse*.swift`
    macOS GUI surface for source health, currency heatmap, pair risk, watchlists, broker-symbol mappings, gate timelines, and recent tape.
 
 Implementation mapping note:

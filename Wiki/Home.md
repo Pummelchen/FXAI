@@ -1,6 +1,6 @@
 # FXAI Wiki
 
-FXAI is the Swift, Metal, PyTorch, and TensorFlow successor to the old MT5/MQL5 FXAI stack. The project is now organized as a set of focused subprojects with one database authority and a flat plugin zoo.
+FXAI is a Swift, Metal, PyTorch, and TensorFlow stack organized as focused subprojects with one database authority and a flat plugin zoo.
 
 ## The Short Version
 
@@ -9,7 +9,7 @@ FXImporter gets data from external sources. FXDatabase validates and stores it i
 ```text
 FXImporter -> FXDatabase -> FXDataEngine -> FXPlugins -> FXBacktest
                   |
-                  +-> FXDataEngineGUI
+                  +-> FXGUI
                   +-> future FXBacktestAgent / FXDemoAgent / FXLiveAgent
 ```
 

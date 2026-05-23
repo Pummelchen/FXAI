@@ -1,6 +1,6 @@
 # FXAI
 
-FXAI is becoming a pure Swift, Metal, PyTorch, and TensorFlow research and execution stack for FX data, backtesting, plugin evaluation, demo trading, and live trading. The old MT5/MQL5 runtime is being retired. MT5 can remain a data or execution endpoint where needed, but the source of truth is now the Swift project structure in this repository.
+FXAI is a pure Swift, Metal, PyTorch, and TensorFlow research and execution stack for FX data, backtesting, plugin evaluation, demo trading, and live trading. MT5 can remain a data or execution endpoint where needed, but the source of truth is the Swift project structure in this repository.
 
 FXAI is organized around one strict rule: only FXDatabase may touch ClickHouse directly. Every other project talks to FXDatabase through an API.
 
@@ -25,7 +25,7 @@ FXDatabase
       +--> FXDataEngine
       |      Post-processes M1 OHLCV data, builds features, contexts, labels, audits, and plugin payloads.
       |
-      +--> FXDataEngineGUI
+      +--> FXGUI
              Operator UI for runtime state, reports, promotion review, and project workflows.
 
 FXPlugins
@@ -76,7 +76,7 @@ The core historical data contract is `M1 OHLCV`.
 | `FXDataEngine/` | Data post-processing, feature and label contracts, audit tools, runtime artifacts, and plugin payload preparation. |
 | `FXPlugins/` | Converted plugin zoo. Plugins stay flat at the root of this folder, with accelerator code under each plugin folder. |
 | `FXBacktest/` | Swift/Metal offline backtest framework that uses FXDatabase APIs and calls plugins through FXDataEngine contracts. |
-| `FXDataEngineGUI/` | macOS SwiftUI operator interface for dashboards, reports, promotion review, and workflow access. |
+| `FXGUI/` | macOS SwiftUI operator interface for dashboards, reports, promotion review, and workflow access. |
 | `FXBacktestAgent/` | Future distributed backtest worker for remote Macs over TCP. |
 | `FXDemoAgent/` | Future demo-account execution agent for MT5, IBKR, TradingView, and other account types. |
 | `FXLiveAgent/` | Future live-account execution agent with the same broker/terminal abstraction as demo, but stricter approval and safety gates. |
@@ -131,10 +131,12 @@ swift test --package-path FXDatabase
 swift test --package-path FXDataEngine
 swift test --package-path FXPlugins
 swift test --package-path FXBacktest
+swift test --package-path FXGUI
 swift build -c release --package-path FXDatabase
 swift build -c release --package-path FXDataEngine
 swift build -c release --package-path FXPlugins
 swift build -c release --package-path FXBacktest
+swift build -c release --package-path FXGUI
 ```
 
 The strongest plugin certification check is inside the FXPlugins suite. It verifies registry coverage, volume contracts, SineTest runtime behavior, CPU/reference evidence, FXDatabase-only data access, Metal compile/runtime parity, PyTorch/TensorFlow live train-predict-persistence-load, NLP text/no-text behavior, and CoreML exclusion.
@@ -156,7 +158,7 @@ Project-local docs remain next to the code they describe:
 - [FXDataEngine](FXDataEngine/README.md)
 - [FXPlugins](FXPlugins/README.md)
 - [FXBacktest](FXBacktest/README.md)
-- [FXDataEngineGUI](FXDataEngineGUI/README.md)
+- [FXGUI](FXGUI/README.md)
 
 ## Operating Principle
 

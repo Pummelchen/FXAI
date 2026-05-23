@@ -416,7 +416,7 @@ def load_toolchain_config(
         config_paths=gui_config,
         env=merged_env,
         base_dir=project_root,
-        env_key="FXAI_GUI_MINIMUM_MACOS",
+        env_key="FXGUI_MINIMUM_MACOS",
         default_value="14.0",
         source_map=source_map,
     )
@@ -425,8 +425,8 @@ def load_toolchain_config(
         config_paths=gui_config,
         env=merged_env,
         base_dir=project_root,
-        env_key="FXAI_GUI_RELEASE_ARCHIVE",
-        default_value="FXAIGUI-macos.zip",
+        env_key="FXGUI_RELEASE_ARCHIVE",
+        default_value="FXGUI-macos.zip",
         source_map=source_map,
     )
 

@@ -93,9 +93,9 @@ Deferred to later phases:
 
 The GUI gets a dedicated surface following the existing dedicated-page pattern used by Dynamic Ensemble:
 
-- core models in `FXDataEngineGUI/Sources/FXAIGUICore/Models`
-- artifact reader in `FXDataEngineGUI/Sources/FXAIGUICore/Services`
-- page in `FXDataEngineGUI/Sources/FXAIGUIApp/Features`
+- core models in `FXGUI/Sources/FXGUICore/Models`
+- artifact reader in `FXGUI/Sources/FXGUICore/Services`
+- page in `FXGUI/Sources/FXGUIApp/Features`
 
 The page exposes:
 

@@ -7,7 +7,7 @@ default_db = "Tools/OfflineLab/fxai_offline_lab.turso.db"
 
 [gui]
 minimum_macos = "14.0"
-release_archive = "FXAIGUI-macos.zip"
+release_archive = "FXGUI-macos.zip"
 
 [profiles.headless_ci.paths]
 common_files = "FILE_COMMON"

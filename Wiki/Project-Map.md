@@ -9,7 +9,7 @@
 | `FXDataEngine/` | Post-processing and feature layer. Converts M1 OHLCV into labels, context, audit artifacts, and plugin request payloads. |
 | `FXPlugins/` | Flat plugin zoo. Each plugin owns its own CPU and optional accelerator implementations. |
 | `FXBacktest/` | Offline Swift/Metal backtest framework. Uses FXDatabase APIs and calls plugins through FXDataEngine/plugin contracts. |
-| `FXDataEngineGUI/` | macOS SwiftUI GUI for operator-facing dashboards, reports, and workflow access. |
+| `FXGUI/` | macOS SwiftUI GUI for operator-facing dashboards, reports, and workflow access. |
 
 ## Future Agent Projects
 

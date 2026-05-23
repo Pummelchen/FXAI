@@ -47,9 +47,9 @@ The Dynamic Ensemble must consume these outputs, not rebuild them.
 ### Existing Offline Lab / GUI patterns to reuse
 - contracts/config/replay helpers under `Tools/offline_lab/*`
 - local docs/config under `Tools/OfflineLab/<Subsystem>/`
-- GUI reader in `FXDataEngineGUI/Sources/FXAIGUICore/Services/*ArtifactReader.swift`
-- GUI models in `FXDataEngineGUI/Sources/FXAIGUICore/Models/*`
-- GUI view in `FXDataEngineGUI/Sources/FXAIGUIApp/Features/*`
+- GUI reader in `FXGUI/Sources/FXGUICore/Services/*ArtifactReader.swift`
+- GUI models in `FXGUI/Sources/FXGUICore/Models/*`
+- GUI view in `FXGUI/Sources/FXGUIApp/Features/*`
 
 ## Phase-1 Scope
 
@@ -232,7 +232,7 @@ Add:
 
 Integrate into:
 - `SidebarDestination.swift`
-- `FXAIGUIModel.swift`
+- `FXGUIModel.swift`
 - `FXAIRootView.swift`
 - saved workspace selection state
 - validation fixtures
@@ -265,7 +265,7 @@ GUI should show:
 Update:
 - repo `README.md`
 - `FXDataEngine/README.md`
-- `FXDataEngineGUI/README.md`
+- `FXGUI/README.md`
 - `FXDataEngine/Tools/OfflineLab/README.md`
 - root-level project documentation that references Dynamic Ensemble
 

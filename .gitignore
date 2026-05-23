@@ -35,9 +35,9 @@ FXDataEngine/Tools/OfflineLab/PairNetwork/Reports/
 FXDataEngine/Tools/OfflineLab/PairNetwork/pair_network_status.json
 FXDataEngine/Tools/OfflineLab/PairNetwork/pair_network_history.ndjson
 FXDataEngine/Tools/Runtime/drift_governance_summary.json
-FXDataEngineGUI/.build/
-FXDataEngineGUI/.swiftpm/
-FXDataEngineGUI/Artifacts/
+FXGUI/.build/
+FXGUI/.swiftpm/
+FXGUI/Artifacts/
 FXDataEngine/.build/
 FXDataEngine/.swiftpm/
 FXDataEngine/.env

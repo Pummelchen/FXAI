@@ -7,8 +7,8 @@
   - producer under `Tools/offline_lab/*` or `FXDataEngine/Services/*`
   - runtime artifact in `FILE_COMMON/FXAI/Runtime`
   - MQL runtime adapter under `FXDataEngine/Engine/Runtime/Trade/*`
-  - GUI reader under `FXDataEngineGUI/Sources/FXAIGUICore/Services/*`
-  - GUI surface under `FXDataEngineGUI/Sources/FXAIGUIApp/Features/*`
+  - GUI reader under `FXGUI/Sources/FXGUICore/Services/*`
+  - GUI surface under `FXGUI/Sources/FXGUIApp/Features/*`
 - Trade gating composition already lives in `FXDataEngine/Engine/Runtime/Trade/runtime_trade_risk.mqh`.
 - Adaptive regime routing already computes a coarse `liquidity_stress` heuristic in `FXDataEngine/Engine/Runtime/runtime_adaptive_router_stage.mqh`, so the new microstructure layer can upgrade that context instead of inventing a parallel risk concept.
 - The FX-only tradable universe is already stored in Offline Lab metadata and modeled in `Tools/offline_lab/market_universe.py`.
@@ -36,7 +36,7 @@ The microstructure engine is implemented as an **MT5 Service** during the legacy
   History replay summarizer for operator review and audit alignment.
 - `FXDataEngine/Engine/Runtime/Trade/runtime_trade_microstructure.mqh`
   MQL runtime reader for the shared microstructure flat artifact plus risk-side globals.
-- GUI reader/model/view additions under `FXDataEngineGUI/Sources/.../Microstructure*`
+- GUI reader/model/view additions under `FXGUI/Sources/.../Microstructure*`
   Operator-visible microstructure diagnostics integrated into the existing GUI shell.
 
 ## Repo-Specific Deviations From the Original Concept

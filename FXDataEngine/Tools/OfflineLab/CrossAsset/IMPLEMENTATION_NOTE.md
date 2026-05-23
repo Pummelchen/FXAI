@@ -16,9 +16,9 @@
   Existing calibrated final-decision layer. Cross-asset state is added as uncertainty/risk context, not as fresh alpha logic.
 - `FXDataEngine/Engine/Runtime/runtime_execution_quality_stage.mqh`
   Existing execution-condition forecaster. Cross-asset stress is added as a global execution-context modifier.
-- `FXDataEngineGUI/Sources/FXAIGUICore/Services/*ArtifactReader.swift`
+- `FXGUI/Sources/FXGUICore/Services/*ArtifactReader.swift`
   Existing operator-artifact ingestion pattern.
-- `FXDataEngineGUI/Sources/FXAIGUIApp/Features/*`
+- `FXGUI/Sources/FXGUIApp/Features/*`
   Existing GUI surface pattern for subsystem-specific operator views.
 - `Tools/offline_lab/market_universe.py`
   Existing FX-only tradable universe plus indicator-only context symbol inventory. This is reused to seed the cross-asset proxy universe.
@@ -88,9 +88,9 @@
   - `Tools/offline_lab/cross_asset_replay.py`
   - `FXDataEngine/Services/FXAI_CrossAssetProbe.mq5`
   - `FXDataEngine/Engine/Runtime/Trade/runtime_trade_cross_asset_state.mqh`
-  - `FXDataEngineGUI/Sources/FXAIGUICore/Models/CrossAssetModels.swift`
-  - `FXDataEngineGUI/Sources/FXAIGUICore/Services/CrossAssetArtifactReader.swift`
-  - `FXDataEngineGUI/Sources/FXAIGUIApp/Features/CrossAsset/CrossAssetView.swift`
+  - `FXGUI/Sources/FXGUICore/Models/CrossAssetModels.swift`
+  - `FXGUI/Sources/FXGUICore/Services/CrossAssetArtifactReader.swift`
+  - `FXGUI/Sources/FXGUIApp/Features/CrossAsset/CrossAssetView.swift`
   - `Tools/OfflineLab/CrossAsset/README.md`
   - `Tools/tests/test_cross_asset.py`
 

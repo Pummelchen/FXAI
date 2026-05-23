@@ -16,8 +16,8 @@
   - `<FXAI_ROOT>/Tools/offline_lab/adaptive_router.py`
   - `<FXAI_ROOT>/Tools/offline_lab/governance.py`
 - GUI ingestion and display are in:
-  - `<FXAI_ROOT>/FXDataEngineGUI/Sources/FXAIGUICore/Services/DriftGovernanceArtifactReader.swift`
-  - `<FXAI_ROOT>/FXDataEngineGUI/Sources/FXAIGUIApp/Features/DriftGovernance/DriftGovernanceView.swift`
+  - `<FXAI_ROOT>/FXGUI/Sources/FXGUICore/Services/DriftGovernanceArtifactReader.swift`
+  - `<FXAI_ROOT>/FXGUI/Sources/FXGUIApp/Features/DriftGovernance/DriftGovernanceView.swift`
 
 ## Phase-1 Scope
 
@@ -40,4 +40,4 @@
 - `python3 Tools/fxai_offline_lab.py drift-governance-run`
 - `python3 Tools/fxai_offline_lab.py drift-governance-report`
 - `python3 -m pytest FXDataEngine/Tools/tests/test_drift_governance.py FXDataEngine/Tools/tests/test_dashboard.py FXDataEngine/Tools/tests/test_adaptive_router.py FXDataEngine/Tools/tests/test_cli_smoke.py FXDataEngine/Tools/tests/test_offline_fixture_golden.py -q`
-- `cd FXDataEngineGUI && swift test && swift build`
+- `cd FXGUI && swift test && swift build`

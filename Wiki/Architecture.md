@@ -24,7 +24,7 @@ FXDatabase
       |      Requests data and stores results through FXDatabase APIs.
       |      Calls plugins through the FXAI plugin contracts.
       |
-      +--> FXDataEngineGUI
+      +--> FXGUI
              Reads artifacts and gives operators a workflow surface.
 ```
 
@@ -37,7 +37,7 @@ FXDatabase
 | `FXDataEngine` | Post-processing, feature engineering, label preparation, audit tools, and plugin payload contracts. |
 | `FXPlugins` | Flat plugin zoo with plugin-local CPU, Metal, PyTorch, TensorFlow, and NLP implementations. |
 | `FXBacktest` | Offline Swift/Metal backtesting and optimization. It does not own raw database access. |
-| `FXDataEngineGUI` | macOS operator interface for reports, dashboards, promotion review, and workflow actions. |
+| `FXGUI` | macOS operator interface for reports, dashboards, promotion review, and workflow actions. |
 | `FXBacktestAgent` | Future remote Mac worker that pulls backtest batches over TCP and reports results. |
 | `FXDemoAgent` | Future demo-account execution agent for approved backtest parameters. |
 | `FXLiveAgent` | Future live-account execution agent with stricter approval, safety, and broker controls. |

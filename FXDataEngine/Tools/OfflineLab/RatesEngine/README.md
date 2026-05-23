@@ -43,8 +43,8 @@ Curve shape is only true-market in phase 1 when manual numeric curve inputs are 
 - `Tools/offline_lab/rates_engine_newspulse.py`
 - `Tools/offline_lab/rates_engine_replay.py`
 - `FXDataEngine/Engine/Runtime/Trade/runtime_trade_rates_engine.mqh`
-- `FXDataEngineGUI/Sources/FXAIGUICore/Services/RatesEngineArtifactReader.swift`
-- `FXDataEngineGUI/Sources/FXAIGUIApp/Features/RatesEngine/RatesEngineView.swift`
+- `FXGUI/Sources/FXGUICore/Services/RatesEngineArtifactReader.swift`
+- `FXGUI/Sources/FXGUIApp/Features/RatesEngine/RatesEngineView.swift`
 
 ## Artifacts
 

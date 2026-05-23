@@ -22,7 +22,7 @@ from .shared import (
 def _stage_copy_ignore(directory: str, names: list[str]) -> set[str]:
     ignored: set[str] = set()
     current = Path(directory)
-    if current.name == "FXDataEngineGUI":
+    if current.name == "FXGUI":
         for candidate in (".build", ".swiftpm", "Package.resolved"):
             if candidate in names:
                 ignored.add(candidate)
