@@ -22,7 +22,7 @@ final class AILSTMGPluginTests: XCTestCase {
         XCTAssertTrue(plan.primaryBackends.contains(.accelerate))
         XCTAssertTrue(plan.primaryBackends.contains(.pyTorchMPS))
         XCTAssertTrue(plan.primaryBackends.contains(.tensorFlowMetal))
-        XCTAssertTrue(plan.candidateBackends.contains(.metal))
+        XCTAssertFalse(plan.declaredBackends.contains(.metal))
         XCTAssertFalse(plan.candidateBackends.contains(.coreMLNeuralEngine))
         XCTAssertTrue(plan.usesVolumeWhenAvailable)
     }

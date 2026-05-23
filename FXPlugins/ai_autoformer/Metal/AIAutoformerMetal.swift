@@ -40,9 +40,9 @@ public enum AIAutoformerMetal {
 
     public static let descriptor = FXPluginAccelerationPlan(
         pluginName: "ai_autoformer",
-        primaryBackends: [.swiftScalar, .accelerate, .pyTorchMPS, .metal],
+        primaryBackends: [.swiftScalar, .accelerate, .pyTorchMPS],
         candidateBackends: [],
         usesVolumeWhenAvailable: true,
-        notes: "Plugin-local Metal kernel source for ai_autoformer batched feature projection and softmax inference. It is independent of the Swift CPU fallback and uses OHLCV feature tensors supplied by FXDataEngine."
+        notes: "Plugin-local Metal projection kernel source for ai_autoformer. It is retained as non-runtime research code until full sequence-model parity kernels are implemented and verified against the Swift CPU and Python backends."
     )
 }

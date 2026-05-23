@@ -43,7 +43,7 @@ above 99% by adding model-specific reference hooks:
 | `mix_loffm` | 99.1 | 99.1 | Latent online factor/expert gating, PyTorch backend, persistence smoke. |
 | `mix_moe_conformal` | 99.1 | 99.1 | MoE routing, conformal rings, calibration, PyTorch backend, coverage fixtures. |
 | `rl_ppo` | 98.0 | 99.2 | Actor-critic PPO, GAE, clipped loss, offline FX rollout reward/accounting, PyTorch/MPS runtime. |
-| `ai_autoformer` | 99.1 | 99.1 | Decomposition/autocorrelation backend, sequence CPU fallback, Metal helper, runtime evidence. |
+| `ai_autoformer` | 99.1 | 99.1 | Decomposition/autocorrelation backend, sequence CPU fallback, non-runtime Metal projection source, runtime evidence. |
 | `ai_chronos` | 98.1 | 99.2 | Chronos-style tokenization, causal transformer, NLP event merger, PyTorch/MPS runtime. |
 | `ai_geodesic` | 99.1 | 99.1 | Geodesic/RBF attention over feature landmarks, volume-gated CPU and PyTorch paths. |
 | `ai_lstm` | 99.2 | 99.2 | LSTM hidden/cell state, sequence training, Swift fallback, PyTorch/TensorFlow backends. |

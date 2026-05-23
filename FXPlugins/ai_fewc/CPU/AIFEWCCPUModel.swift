@@ -289,17 +289,17 @@ public struct AIFEWCCPUModel: Sendable {
     }
 
     private func hiddenActivations(features: [Double], window: [[Double]]) -> [Double] {
-        var hidden = Array(repeating: 0.0, count: Self.hiddenCount)
-        let recurrence = 0.70 * windowEnergy(window) + 0.30 * recurrentSummary()
-        for h in 0..<Self.hiddenCount {
-            var value = hiddenBias[h]
-            for i in 0..<Self.featureCount {
-                value += hiddenWeights[h][i] * features[i]
-            }
-            value += 0.04 * recurrence * Self.seed(h + 17, Self.architectureID + 5)
-            hidden[h] = tanh(fxClamp(value, -18.0, 18.0))
-        }
-        return hidden
+        FXAISequenceReferenceEncoders.encode(
+            architectureMode: Self.architectureMode,
+            features: features,
+            window: window,
+            recurrentState: recurrentState,
+            hiddenBias: hiddenBias,
+            hiddenWeights: hiddenWeights,
+            hiddenCount: Self.hiddenCount,
+            featureCount: Self.featureCount,
+            architectureID: Self.architectureID
+        )
     }
 
     private mutating func updateRecurrentState(hidden: [Double]) {

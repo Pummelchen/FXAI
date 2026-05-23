@@ -150,6 +150,47 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
         try bridge.trainSynchronously(MLBackendFactory.trainingPayload(descriptor: bridge.descriptor, request: request))
     }
 
+    func testPyTorchModuleBackendUsesSequenceWindowWhenTorchIsInstalled() throws {
+        guard Self.pythonCanImport("torch") else {
+            throw XCTSkip("PyTorch is not installed for this runner")
+        }
+        let temporaryDirectory = try Self.makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let bridge = Self.pythonBridge(framework: .pyTorch, modelIdentifier: "ai_lstm", stateDirectory: temporaryDirectory)
+        let upWindowPrediction = try bridge.predictSynchronously(Self.sequencePayload(windowDirection: 1.0))
+        let downWindowPrediction = try bridge.predictSynchronously(Self.sequencePayload(windowDirection: -1.0))
+
+        try upWindowPrediction.validate()
+        try downWindowPrediction.validate()
+        let probabilityDelta = zip(upWindowPrediction.classProbabilities, downWindowPrediction.classProbabilities)
+            .map { abs($0 - $1) }
+            .reduce(0.0, +)
+        let moveDelta = abs(upWindowPrediction.moveMeanPoints - downWindowPrediction.moveMeanPoints)
+        XCTAssertGreaterThan(probabilityDelta + moveDelta, 1.0e-7)
+    }
+
+    func testPyTorchColdPredictionsAreDeterministicWhenTorchIsInstalled() throws {
+        guard Self.pythonCanImport("torch") else {
+            throw XCTSkip("PyTorch is not installed for this runner")
+        }
+        let temporaryDirectory = try Self.makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let bridge = Self.pythonBridge(framework: .pyTorch, modelIdentifier: "ai_lstm", stateDirectory: temporaryDirectory)
+        let payload = Self.sequencePayload(windowDirection: 1.0)
+        let first = try bridge.predictSynchronously(payload)
+        let second = try bridge.predictSynchronously(payload)
+
+        for (lhs, rhs) in zip(first.classProbabilities, second.classProbabilities) {
+            XCTAssertEqual(lhs, rhs, accuracy: 1.0e-12)
+        }
+        XCTAssertEqual(first.moveMeanPoints, second.moveMeanPoints, accuracy: 1.0e-12)
+        XCTAssertEqual(first.moveQ25Points, second.moveQ25Points, accuracy: 1.0e-12)
+        XCTAssertEqual(first.moveQ50Points, second.moveQ50Points, accuracy: 1.0e-12)
+        XCTAssertEqual(first.moveQ75Points, second.moveQ75Points, accuracy: 1.0e-12)
+    }
+
     func testAcceleratedRuntimeWrapsNLPPluginThroughExternalBackend() throws {
         let temporaryDirectory = try Self.makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
@@ -236,6 +277,50 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
         values[8] = -0.04
         values[12] = 0.22
         return values
+    }
+
+    private static func sequencePayload(windowDirection: Double) -> MLInferencePayload {
+        var current = sampleFeatures(volume: 0.8)
+        current[1] = 0.0
+        current[2] = 0.0
+        let window = (0..<16).map { index -> [Double] in
+            var row = sampleFeatures(volume: 0.8)
+            let step = Double(index + 1) / 16.0
+            row[1] = windowDirection * step * 2.0
+            row[2] = windowDirection * step
+            row[7] = windowDirection * 0.25
+            row[12] = windowDirection * 0.40
+            return row
+        }
+        return MLInferencePayload(
+            modelIdentifier: "ai_lstm",
+            framework: .pyTorch,
+            dataHasVolume: true,
+            horizonMinutes: 15,
+            sequenceBars: window.count + 1,
+            priceCostPoints: 0.5,
+            minMovePoints: 1.0,
+            x: current,
+            xWindow: window
+        )
+    }
+
+    private static func pythonBridge(
+        framework: MLFramework,
+        modelIdentifier: String,
+        stateDirectory: URL
+    ) -> PythonMLBackendBridge {
+        PythonMLBackendBridge(
+            framework: framework,
+            executable: "python3",
+            module: FXAIPluginBackendDiscovery.moduleBackendURL.path,
+            modelIdentifier: modelIdentifier,
+            environment: [
+                "FXAI_PLUGIN_ROOT": FXAIPluginBackendDiscovery.pluginRootURL.path,
+                "FXAI_PLUGIN_STATE_DIR": stateDirectory.path,
+                "FXAI_FORCE_PYTORCH_CPU": "1"
+            ]
+        )
     }
 
     private static func predictRequest() -> PredictRequestV4 {

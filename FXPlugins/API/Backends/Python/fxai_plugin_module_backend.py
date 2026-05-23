@@ -9,11 +9,13 @@ its folder and converts the module result back into `PredictionV4` JSON.
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import math
 import os
 from pathlib import Path
 import pickle
+import random
 import re
 import sys
 from typing import Any
@@ -22,6 +24,7 @@ from typing import Any
 VOLUME_FEATURE_INDEXES = (6, 68, 69, 70, 71, 74, 75, 76, 77, 78, 80, 81, 82, 83)
 FXAI_PLUGIN_API_VERSION = 4
 FXAI_TOKENIZER_API_VERSION = "fxai-tokenizer-v1"
+MAX_SEQUENCE_BARS = 512
 
 
 def _safe_float(value: Any) -> float:
@@ -111,6 +114,46 @@ def _prepare_framework(framework: str) -> None:
             torch.backends.mps.is_available = lambda: False
 
 
+def _stable_seed(plugin_name: str, framework: str, model_identifier: Any) -> int:
+    material = f"{plugin_name}|{framework}|{_safe_token(model_identifier)}".encode("utf-8")
+    digest = hashlib.sha256(material).digest()
+    seed = int.from_bytes(digest[:8], "big") % 2_147_483_647
+    return seed if seed > 0 else 1
+
+
+def _seed_framework(plugin_name: str, framework: str, model_identifier: Any) -> None:
+    seed = _stable_seed(plugin_name, framework, model_identifier)
+    random.seed(seed)
+    try:
+        import numpy as np
+
+        np.random.seed(seed % (2**32 - 1))
+    except Exception:
+        pass
+
+    if framework == "pyTorch":
+        try:
+            import torch
+
+            torch.manual_seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
+            if hasattr(torch, "use_deterministic_algorithms"):
+                try:
+                    torch.use_deterministic_algorithms(True, warn_only=True)
+                except TypeError:
+                    torch.use_deterministic_algorithms(True)
+        except Exception:
+            pass
+    elif framework == "tensorFlow":
+        try:
+            import tensorflow as tf
+
+            tf.random.set_seed(seed)
+        except Exception:
+            pass
+
+
 def _state_path(plugin_name: str, framework: str, model_identifier: Any) -> Path:
     return _state_dir() / f"{plugin_name}.{framework}.{_safe_token(model_identifier)}.pkl"
 
@@ -148,15 +191,42 @@ def _save_state(plugin_name: str, framework: str, model_identifier: Any, state: 
         return
 
 
-def _features(payload: dict[str, Any]) -> list[float]:
-    data_has_volume = bool(payload.get("dataHasVolume", False))
-    raw = payload.get("x") or []
+def _sanitized_feature_row(raw: Any, data_has_volume: bool, target_length: int | None = None) -> list[float]:
+    if not isinstance(raw, list):
+        raw = []
     values = [max(-8.0, min(_safe_float(value), 8.0)) for value in raw]
+    if target_length is not None:
+        if len(values) < target_length:
+            values.extend([0.0] * (target_length - len(values)))
+        elif len(values) > target_length:
+            values = values[:target_length]
     if not data_has_volume:
         for index in VOLUME_FEATURE_INDEXES:
             if index < len(values):
                 values[index] = 0.0
     return values
+
+
+def _features(payload: dict[str, Any]) -> list[float]:
+    return _sanitized_feature_row(payload.get("x") or [], bool(payload.get("dataHasVolume", False)))
+
+
+def _sequence(payload: dict[str, Any]) -> list[list[float]]:
+    data_has_volume = bool(payload.get("dataHasVolume", False))
+    current = _features(payload)
+    target_length = len(current)
+    sequence: list[list[float]] = []
+    for row in payload.get("xWindow") or []:
+        if isinstance(row, list):
+            sequence.append(_sanitized_feature_row(row, data_has_volume, target_length))
+    sequence.append(current)
+
+    try:
+        requested_bars = int(payload.get("sequenceBars", len(sequence)))
+    except (TypeError, ValueError):
+        requested_bars = len(sequence)
+    limit = max(1, min(requested_bars, MAX_SEQUENCE_BARS))
+    return sequence[-limit:]
 
 
 def _label_index(value: Any) -> int:
@@ -273,18 +343,30 @@ def _nlp_prediction(module: Any, features: list[float], payload: dict[str, Any])
     return _edge_prediction(edge, payload)
 
 
-def _call_train_step(module: Any, features: list[float], label: int, move: float, state: Any, data_has_volume: bool) -> Any:
+def _call_train_step(
+    module: Any,
+    sequence: list[list[float]],
+    label: int,
+    move: float,
+    state: Any,
+    data_has_volume: bool
+) -> Any:
     try:
-        return module.train_step([features], [label], [move], state=state, data_has_volume=data_has_volume)
+        return module.train_step([sequence], [label], [move], state=state, data_has_volume=data_has_volume)
     except TypeError:
-        return module.train_step([features], [label], [move], state=state)
+        return module.train_step([sequence], [label], [move], state=state)
 
 
-def _call_predict_batch(module: Any, features: list[float], state: Any, data_has_volume: bool) -> dict[str, Any]:
+def _call_predict_batch(
+    module: Any,
+    sequence: list[list[float]],
+    state: Any,
+    data_has_volume: bool
+) -> dict[str, Any]:
     try:
-        return module.predict_batch([features], state=state, data_has_volume=data_has_volume)
+        return module.predict_batch([sequence], state=state, data_has_volume=data_has_volume)
     except TypeError:
-        return module.predict_batch([features], state=state)
+        return module.predict_batch([sequence], state=state)
 
 
 def _handle_predict(command: dict[str, Any]) -> dict[str, Any]:
@@ -293,13 +375,14 @@ def _handle_predict(command: dict[str, Any]) -> dict[str, Any]:
     model_identifier = payload.get("modelIdentifier")
     plugin_name, backend_path = _resolve_backend_path(model_identifier, framework)
     _prepare_framework(framework)
+    _seed_framework(plugin_name, framework, model_identifier)
     module = _load_module(plugin_name, backend_path)
     features = _features(payload)
     if framework == "foundationNLP":
         prediction = _nlp_prediction(module, features, payload)
     else:
         state = _load_state(plugin_name, framework, model_identifier)
-        result = _call_predict_batch(module, features, state, bool(payload.get("dataHasVolume", False)))
+        result = _call_predict_batch(module, _sequence(payload), state, bool(payload.get("dataHasVolume", False)))
         prediction = _prediction_from_module_result(result)
     return {"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": True, "prediction": prediction, "error": None}
 
@@ -313,12 +396,12 @@ def _handle_train(command: dict[str, Any]) -> dict[str, Any]:
     if framework == "foundationNLP":
         return {"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": True, "prediction": None, "error": None}
     _prepare_framework(framework)
+    _seed_framework(plugin_name, framework, model_identifier)
     module = _load_module(plugin_name, backend_path)
-    features = _features(inference)
     label = _label_index(training.get("labelClass"))
     move = abs(_safe_float(training.get("movePoints", 0.0)))
     state = _load_state(plugin_name, framework, model_identifier)
-    state = _call_train_step(module, features, label, move, state, bool(inference.get("dataHasVolume", False)))
+    state = _call_train_step(module, _sequence(inference), label, move, state, bool(inference.get("dataHasVolume", False)))
     _save_state(plugin_name, framework, model_identifier, state)
     return {"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": True, "prediction": None, "error": None}
 

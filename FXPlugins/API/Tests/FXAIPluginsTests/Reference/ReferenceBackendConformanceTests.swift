@@ -1,4 +1,5 @@
 import XCTest
+@testable import FXAIPlugins
 
 final class ReferenceBackendConformanceTests: XCTestCase {
     func testPyTorchBackendsContainReferenceLayerFamilies() throws {
@@ -68,6 +69,26 @@ final class ReferenceBackendConformanceTests: XCTestCase {
             XCTAssertTrue(text.contains("_ngrams"), "\(plugin) NLP backend missing n-gram extraction")
             XCTAssertTrue(text.contains("currency_focus"), "\(plugin) NLP backend missing FX currency focus feature")
             XCTAssertTrue(text.contains("novelty"), "\(plugin) NLP backend missing novelty feature")
+        }
+    }
+
+    func testSequenceReferencePlansDoNotDeclareProjectionOnlyMetalBackends() throws {
+        let plans = Dictionary(uniqueKeysWithValues: FXAIPluginRegistry.accelerationPlans().map { ($0.pluginName, $0) })
+        let sequencePlugins = [
+            "ai_lstm",
+            "ai_lstmg",
+            "ai_cnn_lstm",
+            "ai_attn_cnn_bilstm",
+            "ai_lstm_tcn",
+            "ai_tft",
+            "ai_tst",
+            "ai_patchtst",
+            "ai_autoformer"
+        ]
+
+        for pluginName in sequencePlugins {
+            let plan = try XCTUnwrap(plans[pluginName], pluginName)
+            XCTAssertFalse(plan.declaredBackends.contains(.metal), "\(pluginName) must not expose projection-only Metal as runtime backend")
         }
     }
 

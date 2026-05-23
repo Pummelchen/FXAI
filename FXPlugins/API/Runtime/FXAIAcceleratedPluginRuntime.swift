@@ -171,3 +171,460 @@ private extension MLBackendDescriptor {
         }
     }
 }
+
+enum FXAISequenceReferenceEncoders {
+    static func encode(
+        architectureMode: String,
+        features: [Double],
+        window: [[Double]],
+        recurrentState: [Double],
+        hiddenBias: [Double],
+        hiddenWeights: [[Double]],
+        hiddenCount: Int,
+        featureCount: Int,
+        architectureID: Int
+    ) -> [Double] {
+        let current = normalized(features, featureCount: featureCount)
+        let sequence = Array(window.suffix(511).map { normalized($0, featureCount: featureCount) }) + [current]
+        let projected = dense(
+            current,
+            hiddenBias: hiddenBias,
+            hiddenWeights: hiddenWeights,
+            hiddenCount: hiddenCount,
+            featureCount: featureCount
+        )
+
+        let encoded: [Double]
+        let weight: Double
+        switch architectureMode {
+        case "recurrent", "gatedRecurrent", "gru", "trendReversalRecurrent":
+            encoded = recurrent(
+                sequence,
+                recurrentState: recurrentState,
+                hiddenCount: hiddenCount,
+                featureCount: featureCount,
+                architectureID: architectureID,
+                gated: architectureMode != "recurrent"
+            )
+            weight = 0.58
+        case "bidirectional":
+            let forward = recurrent(
+                sequence,
+                recurrentState: recurrentState,
+                hiddenCount: hiddenCount,
+                featureCount: featureCount,
+                architectureID: architectureID,
+                gated: true
+            )
+            let backward = recurrent(
+                Array(sequence.reversed()),
+                recurrentState: recurrentState,
+                hiddenCount: hiddenCount,
+                featureCount: featureCount,
+                architectureID: architectureID + 11,
+                gated: true
+            )
+            encoded = blend(forward, backward, weight: 0.5)
+            weight = 0.62
+        case "cnnLSTM", "lstmTCN", "tcn":
+            encoded = recurrent(
+                causalConvolution(sequence, featureCount: featureCount, architectureID: architectureID),
+                recurrentState: recurrentState,
+                hiddenCount: hiddenCount,
+                featureCount: featureCount,
+                architectureID: architectureID + 19,
+                gated: true
+            )
+            weight = 0.64
+        case "attentionCNNBiLSTM":
+            let convolved = causalConvolution(sequence, featureCount: featureCount, architectureID: architectureID)
+            let forwardTrace = recurrentTrace(
+                convolved,
+                recurrentState: recurrentState,
+                hiddenCount: hiddenCount,
+                featureCount: featureCount,
+                architectureID: architectureID + 23,
+                gated: true
+            )
+            let backwardTrace = recurrentTrace(
+                Array(convolved.reversed()),
+                recurrentState: recurrentState,
+                hiddenCount: hiddenCount,
+                featureCount: featureCount,
+                architectureID: architectureID + 31,
+                gated: true
+            ).reversed()
+            encoded = attentionPool(Array(zip(forwardTrace, backwardTrace).map { blend($0, $1, weight: 0.5) }))
+            weight = 0.68
+        case "transformer", "temporalFusionTransformer", "geodesicAttention":
+            encoded = attention(
+                sequence,
+                hiddenBias: hiddenBias,
+                hiddenWeights: hiddenWeights,
+                hiddenCount: hiddenCount,
+                featureCount: featureCount,
+                architectureID: architectureID
+            )
+            weight = 0.66
+        case "patchTransformer", "causalTokenForecaster", "foundationForecaster":
+            encoded = patch(
+                sequence,
+                hiddenBias: hiddenBias,
+                hiddenWeights: hiddenWeights,
+                hiddenCount: hiddenCount,
+                featureCount: featureCount,
+                architectureID: architectureID
+            )
+            weight = 0.64
+        case "autoformer":
+            encoded = autoformer(
+                sequence,
+                hiddenBias: hiddenBias,
+                hiddenWeights: hiddenWeights,
+                hiddenCount: hiddenCount,
+                featureCount: featureCount,
+                architectureID: architectureID
+            )
+            weight = 0.66
+        case "s4", "stmn", "fewc", "gha", "tensorTesseract":
+            encoded = stateSpace(
+                sequence,
+                recurrentState: recurrentState,
+                hiddenCount: hiddenCount,
+                featureCount: featureCount,
+                architectureID: architectureID
+            )
+            weight = 0.60
+        default:
+            encoded = dense(
+                temporalMean(sequence, featureCount: featureCount),
+                hiddenBias: hiddenBias,
+                hiddenWeights: hiddenWeights,
+                hiddenCount: hiddenCount,
+                featureCount: featureCount
+            )
+            weight = 0.46
+        }
+
+        return blend(projected, encoded, weight: weight).map { tanh(fxClamp(fxSafeFinite($0), -18.0, 18.0)) }
+    }
+
+    private static func normalized(_ row: [Double], featureCount: Int) -> [Double] {
+        (0..<featureCount).map { index in
+            fxClamp(fxSafeFinite(index < row.count ? row[index] : 0.0), -8.0, 8.0)
+        }
+    }
+
+    private static func dense(
+        _ row: [Double],
+        hiddenBias: [Double],
+        hiddenWeights: [[Double]],
+        hiddenCount: Int,
+        featureCount: Int
+    ) -> [Double] {
+        (0..<hiddenCount).map { h in
+            let weights = h < hiddenWeights.count ? hiddenWeights[h] : []
+            var value = h < hiddenBias.count ? hiddenBias[h] : 0.0
+            for i in 0..<featureCount {
+                value += (i < weights.count ? weights[i] : 0.0) * row[i]
+            }
+            return tanh(fxClamp(value, -18.0, 18.0))
+        }
+    }
+
+    private static func recurrent(
+        _ sequence: [[Double]],
+        recurrentState: [Double],
+        hiddenCount: Int,
+        featureCount: Int,
+        architectureID: Int,
+        gated: Bool
+    ) -> [Double] {
+        recurrentTrace(
+            sequence,
+            recurrentState: recurrentState,
+            hiddenCount: hiddenCount,
+            featureCount: featureCount,
+            architectureID: architectureID,
+            gated: gated
+        ).last ?? Array(repeating: 0.0, count: hiddenCount)
+    }
+
+    private static func recurrentTrace(
+        _ sequence: [[Double]],
+        recurrentState: [Double],
+        hiddenCount: Int,
+        featureCount: Int,
+        architectureID: Int,
+        gated: Bool
+    ) -> [[Double]] {
+        var hidden = Array(repeating: 0.0, count: hiddenCount)
+        var cell = Array(repeating: 0.0, count: hiddenCount)
+        for h in 0..<min(hiddenCount, recurrentState.count) {
+            hidden[h] = fxClamp(fxSafeFinite(recurrentState[h]), -4.0, 4.0)
+        }
+
+        var trace: [[Double]] = []
+        for row in sequence {
+            var nextHidden = hidden
+            var nextCell = cell
+            for h in 0..<hiddenCount {
+                let input = projection(row, hiddenIndex: h, featureCount: featureCount, architectureID: architectureID)
+                let recurrent = 0.40 * hidden[h] + 0.18 * hidden[(h + hiddenCount - 1) % hiddenCount]
+                if gated {
+                    let inputGate = sigmoid(0.92 * input + 0.28 * recurrent + 0.10 * seed(architectureID, h, 1))
+                    let forgetGate = sigmoid(0.72 * recurrent - 0.18 * abs(input) + 0.55 + 0.06 * seed(architectureID, h, 2))
+                    let outputGate = sigmoid(0.82 * input + 0.32 * recurrent + 0.08 * seed(architectureID, h, 3))
+                    let candidate = tanh(fxClamp(input + 0.52 * recurrent + 0.05 * seed(architectureID, h, 4), -18.0, 18.0))
+                    nextCell[h] = fxClamp(forgetGate * cell[h] + inputGate * candidate, -8.0, 8.0)
+                    nextHidden[h] = outputGate * tanh(nextCell[h])
+                } else {
+                    nextHidden[h] = tanh(fxClamp(input + 0.55 * recurrent, -18.0, 18.0))
+                }
+            }
+            hidden = nextHidden
+            cell = nextCell
+            trace.append(hidden)
+        }
+        return trace
+    }
+
+    private static func causalConvolution(_ sequence: [[Double]], featureCount: Int, architectureID: Int) -> [[Double]] {
+        var output = sequence
+        for index in sequence.indices {
+            for feature in 0..<featureCount {
+                let current = sequence[index][feature]
+                let previous = index > 0 ? sequence[index - 1][feature] : current
+                let previous2 = index > 1 ? sequence[index - 2][feature] : previous
+                output[index][feature] = fxClamp(
+                    0.56 * current + 0.29 * previous + 0.15 * previous2 + 0.03 * seed(architectureID, feature, index % 17),
+                    -8.0,
+                    8.0
+                )
+            }
+        }
+        return output
+    }
+
+    private static func attention(
+        _ sequence: [[Double]],
+        hiddenBias: [Double],
+        hiddenWeights: [[Double]],
+        hiddenCount: Int,
+        featureCount: Int,
+        architectureID: Int
+    ) -> [Double] {
+        let states = sequence.map {
+            dense(
+                $0,
+                hiddenBias: hiddenBias,
+                hiddenWeights: hiddenWeights,
+                hiddenCount: hiddenCount,
+                featureCount: featureCount
+            )
+        }
+        var query = states.last ?? Array(repeating: 0.0, count: hiddenCount)
+        for h in 0..<hiddenCount {
+            query[h] += 0.04 * seed(architectureID, h, sequence.count)
+        }
+        return attentionPool(states, query: query)
+    }
+
+    private static func patch(
+        _ sequence: [[Double]],
+        hiddenBias: [Double],
+        hiddenWeights: [[Double]],
+        hiddenCount: Int,
+        featureCount: Int,
+        architectureID: Int
+    ) -> [Double] {
+        let patchSize = max(2, min(16, sequence.count / 4 + 1))
+        var projected: [[Double]] = []
+        var start = 0
+        while start < sequence.count {
+            let end = min(sequence.count, start + patchSize)
+            projected.append(
+                dense(
+                    mean(Array(sequence[start..<end]), featureCount: featureCount),
+                    hiddenBias: hiddenBias,
+                    hiddenWeights: hiddenWeights,
+                    hiddenCount: hiddenCount,
+                    featureCount: featureCount
+                )
+            )
+            start = end
+        }
+        let tokenBias = (0..<hiddenCount).map { 0.05 * seed(architectureID, $0, patchSize) }
+        return blend(attentionPool(projected), tokenBias, weight: 0.16)
+    }
+
+    private static func autoformer(
+        _ sequence: [[Double]],
+        hiddenBias: [Double],
+        hiddenWeights: [[Double]],
+        hiddenCount: Int,
+        featureCount: Int,
+        architectureID: Int
+    ) -> [Double] {
+        let trend = exponentialMean(sequence, featureCount: featureCount, decay: 0.86)
+        let current = sequence.last ?? trend
+        let seasonal = zip(current, trend).map { fxClamp($0 - $1, -8.0, 8.0) }
+        let lag = autocorrelationLag(sequence, featureCount: featureCount)
+        let lagged = lag < sequence.count ? sequence[sequence.count - 1 - lag] : trend
+        let decomposed = (0..<featureCount).map {
+            fxClamp(0.46 * trend[$0] + 0.34 * seasonal[$0] + 0.20 * lagged[$0], -8.0, 8.0)
+        }
+        let projected = dense(
+            decomposed,
+            hiddenBias: hiddenBias,
+            hiddenWeights: hiddenWeights,
+            hiddenCount: hiddenCount,
+            featureCount: featureCount
+        )
+        let lagSignal = (0..<hiddenCount).map { 0.04 * seed(architectureID, $0, lag) }
+        return blend(projected, lagSignal, weight: 0.18)
+    }
+
+    private static func stateSpace(
+        _ sequence: [[Double]],
+        recurrentState: [Double],
+        hiddenCount: Int,
+        featureCount: Int,
+        architectureID: Int
+    ) -> [Double] {
+        var state = Array(repeating: 0.0, count: hiddenCount)
+        for h in 0..<min(hiddenCount, recurrentState.count) {
+            state[h] = fxClamp(fxSafeFinite(recurrentState[h]), -4.0, 4.0)
+        }
+        for row in sequence {
+            for h in 0..<hiddenCount {
+                let decay = 0.62 + 0.24 * sigmoid(seed(architectureID, h, 5))
+                let input = projection(row, hiddenIndex: h, featureCount: featureCount, architectureID: architectureID)
+                state[h] = tanh(fxClamp(decay * state[h] + (1.0 - decay) * input, -18.0, 18.0))
+            }
+        }
+        return state
+    }
+
+    private static func temporalMean(_ sequence: [[Double]], featureCount: Int) -> [Double] {
+        guard let recent = sequence.last else { return Array(repeating: 0.0, count: featureCount) }
+        let average = mean(sequence, featureCount: featureCount)
+        return (0..<featureCount).map { fxClamp(0.62 * recent[$0] + 0.38 * average[$0], -8.0, 8.0) }
+    }
+
+    private static func attentionPool(_ states: [[Double]], query: [Double]? = nil) -> [Double] {
+        guard let first = states.first else { return [] }
+        let hiddenCount = first.count
+        let queryVector = query ?? states.last ?? first
+        let scale = 1.0 / sqrt(max(Double(hiddenCount), 1.0))
+        let logits = states.enumerated().map { index, state in
+            scale * dot(queryVector, state) - 0.008 * Double(states.count - 1 - index)
+        }
+        let weights = softmax(logits)
+        var pooled = Array(repeating: 0.0, count: hiddenCount)
+        for (state, weight) in zip(states, weights) {
+            for h in 0..<hiddenCount {
+                pooled[h] += weight * state[h]
+            }
+        }
+        return pooled
+    }
+
+    private static func mean(_ rows: [[Double]], featureCount: Int) -> [Double] {
+        guard !rows.isEmpty else { return Array(repeating: 0.0, count: featureCount) }
+        var result = Array(repeating: 0.0, count: featureCount)
+        for row in rows {
+            for index in 0..<featureCount {
+                result[index] += index < row.count ? row[index] : 0.0
+            }
+        }
+        return result.map { fxClamp($0 / Double(rows.count), -8.0, 8.0) }
+    }
+
+    private static func exponentialMean(_ rows: [[Double]], featureCount: Int, decay: Double) -> [Double] {
+        guard let first = rows.first else { return Array(repeating: 0.0, count: featureCount) }
+        var state = first
+        for row in rows.dropFirst() {
+            for index in 0..<featureCount {
+                state[index] = decay * state[index] + (1.0 - decay) * row[index]
+            }
+        }
+        return state.map { fxClamp($0, -8.0, 8.0) }
+    }
+
+    private static func autocorrelationLag(_ rows: [[Double]], featureCount: Int) -> Int {
+        guard rows.count >= 4 else { return 1 }
+        let maxLag = min(24, rows.count / 2)
+        var bestLag = 1
+        var bestScore = -Double.greatestFiniteMagnitude
+        for lag in 1...maxLag {
+            var score = 0.0
+            var count = 0
+            for index in lag..<rows.count {
+                for feature in 0..<min(featureCount, 8) {
+                    score += rows[index][feature] * rows[index - lag][feature]
+                    count += 1
+                }
+            }
+            let normalized = score / max(Double(count), 1.0)
+            if normalized > bestScore {
+                bestScore = normalized
+                bestLag = lag
+            }
+        }
+        return bestLag
+    }
+
+    private static func projection(_ row: [Double], hiddenIndex: Int, featureCount: Int, architectureID: Int) -> Double {
+        var value = 0.0
+        for i in 0..<featureCount {
+            value += seed(architectureID, hiddenIndex + 1, i + 3) * row[i]
+        }
+        return fxClamp(value / sqrt(max(Double(featureCount), 1.0)), -8.0, 8.0)
+    }
+
+    private static func blend(_ lhs: [Double], _ rhs: [Double], weight: Double) -> [Double] {
+        let count = max(lhs.count, rhs.count)
+        let rightWeight = fxClamp(weight, 0.0, 1.0)
+        let leftWeight = 1.0 - rightWeight
+        return (0..<count).map { index in
+            let left = index < lhs.count ? lhs[index] : 0.0
+            let right = index < rhs.count ? rhs[index] : 0.0
+            return fxClamp(leftWeight * left + rightWeight * right, -18.0, 18.0)
+        }
+    }
+
+    private static func dot(_ lhs: [Double], _ rhs: [Double]) -> Double {
+        var value = 0.0
+        for index in 0..<min(lhs.count, rhs.count) {
+            value += lhs[index] * rhs[index]
+        }
+        return value
+    }
+
+    private static func softmax(_ logits: [Double]) -> [Double] {
+        guard !logits.isEmpty else { return [] }
+        let maximum = logits.max() ?? 0.0
+        let expValues = logits.map { exp(fxClamp($0 - maximum, -35.0, 35.0)) }
+        let total = expValues.reduce(0.0, +)
+        guard total > 0.0 else {
+            return Array(repeating: 1.0 / Double(logits.count), count: logits.count)
+        }
+        return expValues.map { $0 / total }
+    }
+
+    private static func sigmoid(_ value: Double) -> Double {
+        1.0 / (1.0 + exp(-fxClamp(value, -35.0, 35.0)))
+    }
+
+    private static func seed(_ a: Int, _ b: Int, _ c: Int) -> Double {
+        var x = UInt64(bitPattern: Int64(a &* 73_856_093))
+        x ^= UInt64(bitPattern: Int64(b &* 19_349_663))
+        x ^= UInt64(bitPattern: Int64(c &* 83_492_791))
+        x &+= 0x9E37_79B9_7F4A_7C15
+        x = (x ^ (x >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        x = (x ^ (x >> 27)) &* 0x94D0_49BB_1331_11EB
+        x ^= x >> 31
+        return Double(x & 0xFFFF_FFFF) / Double(UInt32.max) * 2.0 - 1.0
+    }
+}
