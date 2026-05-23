@@ -56,7 +56,7 @@ public enum AIMLPMetal {
     public static let descriptor = FXPluginAccelerationPlan(
         pluginName: "ai_mlp",
         primaryBackends: [.swiftScalar, .accelerate, .metal, .pyTorchMPS, .tensorFlowMetal],
-        candidateBackends: [.coreMLNeuralEngine],
+        candidateBackends: [],
         usesVolumeWhenAvailable: true,
         notes: "Plugin-local Metal kernels for ai_mlp dense hidden projection, class logits, and softmax. CPU remains the deterministic reference path."
     )

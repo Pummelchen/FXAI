@@ -46,6 +46,9 @@ public struct MLInferencePayload: Codable, Hashable, Sendable {
     public let minMovePoints: Double
     public let x: [Double]
     public let xWindow: [[Double]]
+    public let tokenizerContract: PluginTokenizerContractV4
+    public let textEvents: [PluginTextEventV4]
+    public let eventTexts: [String]
 
     public init(
         apiVersion: Int = FXDataEngineConstants.apiVersionV4,
@@ -57,7 +60,10 @@ public struct MLInferencePayload: Codable, Hashable, Sendable {
         priceCostPoints: Double = 0.0,
         minMovePoints: Double = 0.0,
         x: [Double],
-        xWindow: [[Double]]
+        xWindow: [[Double]],
+        tokenizerContract: PluginTokenizerContractV4 = PluginTokenizerContractV4(),
+        textEvents: [PluginTextEventV4] = [],
+        eventTexts: [String] = []
     ) {
         self.apiVersion = apiVersion
         self.modelIdentifier = modelIdentifier
@@ -69,6 +75,12 @@ public struct MLInferencePayload: Codable, Hashable, Sendable {
         self.minMovePoints = max(0.0, fxSafeFinite(minMovePoints))
         self.x = x
         self.xWindow = xWindow
+        self.tokenizerContract = tokenizerContract
+        self.textEvents = Array(textEvents.prefix(PluginContextV4.maxTextEvents))
+        let cleanedEventTexts = eventTexts.map {
+            String($0.trimmingCharacters(in: .whitespacesAndNewlines).prefix(PluginTextEventV4.maxTextLength))
+        }.filter { !$0.isEmpty }
+        self.eventTexts = Array((cleanedEventTexts.isEmpty ? self.textEvents.map(\.mergedText) : cleanedEventTexts).prefix(PluginContextV4.maxTextEvents))
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -82,6 +94,9 @@ public struct MLInferencePayload: Codable, Hashable, Sendable {
         case minMovePoints
         case x
         case xWindow
+        case tokenizerContract
+        case textEvents
+        case eventTexts
     }
 
     public init(from decoder: Decoder) throws {
@@ -96,7 +111,10 @@ public struct MLInferencePayload: Codable, Hashable, Sendable {
             priceCostPoints: try container.decodeIfPresent(Double.self, forKey: .priceCostPoints) ?? 0.0,
             minMovePoints: try container.decodeIfPresent(Double.self, forKey: .minMovePoints) ?? 0.0,
             x: try container.decode([Double].self, forKey: .x),
-            xWindow: try container.decodeIfPresent([[Double]].self, forKey: .xWindow) ?? []
+            xWindow: try container.decodeIfPresent([[Double]].self, forKey: .xWindow) ?? [],
+            tokenizerContract: try container.decodeIfPresent(PluginTokenizerContractV4.self, forKey: .tokenizerContract) ?? PluginTokenizerContractV4(),
+            textEvents: try container.decodeIfPresent([PluginTextEventV4].self, forKey: .textEvents) ?? [],
+            eventTexts: try container.decodeIfPresent([String].self, forKey: .eventTexts) ?? []
         )
     }
 }
@@ -442,7 +460,9 @@ public enum MLBackendFactory {
             priceCostPoints: request.context.priceCostPoints,
             minMovePoints: request.context.minMovePoints,
             x: request.x,
-            xWindow: request.xWindow
+            xWindow: request.xWindow,
+            tokenizerContract: request.context.tokenizerContract,
+            textEvents: request.context.textEvents
         )
     }
 
@@ -459,7 +479,9 @@ public enum MLBackendFactory {
             priceCostPoints: request.context.priceCostPoints,
             minMovePoints: request.context.minMovePoints,
             x: request.x,
-            xWindow: request.xWindow
+            xWindow: request.xWindow,
+            tokenizerContract: request.context.tokenizerContract,
+            textEvents: request.context.textEvents
         )
         return MLTrainingPayload(inference: inference, request: request)
     }

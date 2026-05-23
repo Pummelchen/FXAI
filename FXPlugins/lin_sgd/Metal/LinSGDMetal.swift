@@ -9,14 +9,14 @@ public enum LinSGDMetal {
     using namespace metal;
 
     kernel void lin_sgd_linear_logits(
-        device const double *features [[buffer(0)]],
-        device const double *weights [[buffer(1)]],
-        device double *logits [[buffer(2)]],
+        device const float *features [[buffer(0)]],
+        device const float *weights [[buffer(1)]],
+        device float *logits [[buffer(2)]],
         constant uint &featureCount [[buffer(3)]],
         uint classIndex [[thread_position_in_grid]]
     ) {
         if (classIndex >= 3) { return; }
-        double value = 0.0;
+        float value = 0.0;
         for (uint i = 0; i < featureCount; ++i) {
             value += weights[classIndex * featureCount + i] * features[i];
         }

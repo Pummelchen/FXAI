@@ -150,3 +150,61 @@ def predict_batch(
     probs = torch.clamp(probs, 0.0005, 0.9995)
     probs = probs / torch.sum(probs, dim=-1, keepdim=True)
     return {"class_probabilities": probs, "expert_gates": gates}
+
+
+def train_step(
+    features: Iterable[Iterable[float]] | torch.Tensor,
+    labels: Iterable[int],
+    moves: Iterable[float],
+    state: LoffmTorchState | None = None,
+    lr: float = 0.03,
+    session_bucket: int = 0,
+    data_has_volume: bool = True,
+) -> LoffmTorchState:
+    state = state or LoffmTorchState.seeded()
+    device = state.gate_weights.device
+    x = torch.as_tensor(features, dtype=torch.float32, device=device)
+    if x.ndim == 1:
+        x = x.unsqueeze(0)
+    elif x.ndim == 3:
+        x = x[:, -1, :]
+    if not data_has_volume:
+        volume_indexes = [6, 68, 69, 70, 71, 74, 75, 76, 77, 78, 80, 81, 82, 83]
+        valid_indexes = [index for index in volume_indexes if index < x.shape[-1]]
+        if valid_indexes:
+            x = x.clone()
+            x[..., valid_indexes] = 0.0
+    derived = build_derived(x, session_bucket=session_bucket)
+    prediction = predict_batch(x, session_bucket=session_bucket, data_has_volume=data_has_volume, state=state)
+    probabilities = prediction["class_probabilities"]
+    gates = prediction["expert_gates"]
+    raw_labels = list(labels)
+    if not raw_labels:
+        raw_labels = [2] * x.shape[0]
+    target = torch.tensor(raw_labels[: x.shape[0]], dtype=torch.long, device=device).clamp(0, 2)
+    moves_tensor = torch.tensor(list(moves) or [1.0] * x.shape[0], dtype=torch.float32, device=device).abs().clamp_min(0.10)
+    if moves_tensor.numel() < x.shape[0]:
+        moves_tensor = torch.cat([moves_tensor, moves_tensor[-1:].repeat(x.shape[0] - moves_tensor.numel())])
+    one_hot = torch.nn.functional.one_hot(target, num_classes=3).to(dtype=torch.float32)
+    error = one_hot - probabilities
+    signed_direction = error[:, 1] - error[:, 0]
+    trade_pressure = error[:, 0] + error[:, 1] - error[:, 2]
+    skip_pressure = error[:, 2] - 0.5 * (error[:, 0] + error[:, 1])
+    expert_credit = gates * (0.5 + 0.5 * torch.abs(signed_direction).unsqueeze(-1))
+    latent_train = torch.zeros((x.shape[0], EXPERTS, LATENT), dtype=torch.float32, device=device)
+    latent_train[..., 0] = 1.0
+    latent_train[..., 1:9] = derived[:, None, 1:9]
+    state.direction_weights += lr * torch.mean(
+        expert_credit.unsqueeze(-1)
+        * signed_direction.view(-1, 1, 1)
+        * moves_tensor.clamp(max=10.0).view(-1, 1, 1)
+        * latent_train,
+        dim=0,
+    )
+    state.gate_weights += lr * torch.mean(expert_credit.unsqueeze(-1) * trade_pressure.view(-1, 1, 1) * derived[:, None, :], dim=0)
+    state.skip_weights += lr * torch.mean(gates.unsqueeze(-1) * skip_pressure.view(-1, 1, 1) * derived[:, None, :], dim=0)
+    state.usage_ema = 0.98 * state.usage_ema + 0.02 * torch.mean(gates, dim=0)
+    hit = torch.sum(probabilities * one_hot, dim=-1)
+    state.hit_ema = 0.98 * state.hit_ema + 0.02 * torch.mean(gates * hit.unsqueeze(-1), dim=0).clamp(0.0, 1.0)
+    state.confidence_ema = 0.98 * state.confidence_ema + 0.02 * torch.mean(gates * torch.max(probabilities, dim=-1).values.unsqueeze(-1), dim=0)
+    return state

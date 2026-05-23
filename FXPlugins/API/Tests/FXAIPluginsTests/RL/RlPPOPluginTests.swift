@@ -21,7 +21,7 @@ final class RlPPOPluginTests: XCTestCase {
         XCTAssertTrue(plan.primaryBackends.contains(.swiftScalar))
         XCTAssertTrue(plan.primaryBackends.contains(.accelerate))
         XCTAssertTrue(plan.primaryBackends.contains(.pyTorchMPS))
-        XCTAssertTrue(plan.candidateBackends.contains(.coreMLNeuralEngine))
+        XCTAssertFalse(plan.candidateBackends.contains(.coreMLNeuralEngine))
         XCTAssertTrue(plan.usesVolumeWhenAvailable)
     }
 

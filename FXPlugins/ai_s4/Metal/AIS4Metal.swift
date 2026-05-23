@@ -41,7 +41,7 @@ public enum AIS4Metal {
     public static let descriptor = FXPluginAccelerationPlan(
         pluginName: "ai_s4",
         primaryBackends: [.swiftScalar, .accelerate, .pyTorchMPS, .metal],
-        candidateBackends: [.coreMLNeuralEngine],
+        candidateBackends: [],
         usesVolumeWhenAvailable: true,
         notes: "Plugin-local Metal kernel source for ai_s4 batched feature projection and softmax inference. It is independent of the Swift CPU fallback and uses OHLCV feature tensors supplied by FXDataEngine."
     )

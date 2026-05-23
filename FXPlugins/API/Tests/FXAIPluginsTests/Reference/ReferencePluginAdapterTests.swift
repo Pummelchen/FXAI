@@ -131,7 +131,7 @@ final class ReferencePluginAdapterTests: XCTestCase {
         XCTAssertTrue(plans["ai_lstm"]?.primaryBackends.contains(.tensorFlowMetal) ?? false)
         XCTAssertTrue(plans["tree_xgb_fast"]?.primaryBackends.contains(.metal) ?? false)
         XCTAssertTrue(plans["stat_tvp_kalman"]?.primaryBackends.contains(.accelerate) ?? false)
-        XCTAssertTrue(plans["rl_ppo"]?.candidateBackends.contains(.coreMLNeuralEngine) ?? false)
+        XCTAssertFalse(plans["rl_ppo"]?.candidateBackends.contains(.coreMLNeuralEngine) ?? false)
     }
 
     private static let nonReferenceIDs: Set<Int> = Set(AIModelID.allCases.map(\.rawValue))

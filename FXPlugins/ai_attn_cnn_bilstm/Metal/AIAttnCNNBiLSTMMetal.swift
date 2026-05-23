@@ -41,7 +41,7 @@ public enum AIAttnCNNBiLSTMMetal {
     public static let descriptor = FXPluginAccelerationPlan(
         pluginName: "ai_attn_cnn_bilstm",
         primaryBackends: [.swiftScalar, .accelerate, .tensorFlowMetal, .pyTorchMPS, .metal],
-        candidateBackends: [.coreMLNeuralEngine],
+        candidateBackends: [],
         usesVolumeWhenAvailable: true,
         notes: "Plugin-local Metal kernel source for ai_attn_cnn_bilstm batched feature projection and softmax inference. It is independent of the Swift CPU fallback and uses OHLCV feature tensors supplied by FXDataEngine."
     )

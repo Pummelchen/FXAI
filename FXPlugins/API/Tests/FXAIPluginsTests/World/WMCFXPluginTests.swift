@@ -21,7 +21,7 @@ final class WMCFXPluginTests: XCTestCase {
         XCTAssertTrue(plan.primaryBackends.contains(.swiftScalar))
         XCTAssertTrue(plan.primaryBackends.contains(.accelerate))
         XCTAssertTrue(plan.candidateBackends.contains(.pyTorchMPS))
-        XCTAssertTrue(plan.candidateBackends.contains(.coreMLNeuralEngine))
+        XCTAssertFalse(plan.candidateBackends.contains(.coreMLNeuralEngine))
         XCTAssertTrue(plan.usesVolumeWhenAvailable)
     }
 

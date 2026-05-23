@@ -41,7 +41,7 @@ public enum AITSTMetal {
     public static let descriptor = FXPluginAccelerationPlan(
         pluginName: "ai_tst",
         primaryBackends: [.swiftScalar, .accelerate, .pyTorchMPS, .metal],
-        candidateBackends: [.coreMLNeuralEngine],
+        candidateBackends: [],
         usesVolumeWhenAvailable: true,
         notes: "Plugin-local Metal kernel source for ai_tst batched feature projection and softmax inference. It is independent of the Swift CPU fallback and uses OHLCV feature tensors supplied by FXDataEngine."
     )

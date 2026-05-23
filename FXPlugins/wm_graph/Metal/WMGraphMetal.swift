@@ -41,7 +41,7 @@ public enum WMGraphMetal {
     public static let descriptor = FXPluginAccelerationPlan(
         pluginName: "wm_graph",
         primaryBackends: [.swiftScalar, .accelerate, .pyTorchMPS, .metal],
-        candidateBackends: [.coreMLNeuralEngine],
+        candidateBackends: [],
         usesVolumeWhenAvailable: true,
         notes: "Plugin-local Metal kernel source for wm_graph batched feature projection and softmax inference. It is independent of the Swift CPU fallback and uses OHLCV feature tensors supplied by FXDataEngine."
     )

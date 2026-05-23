@@ -72,6 +72,8 @@ if command.get("operation") == "train":
     assert inference["dataHasVolume"] is True
     assert abs(inference["priceCostPoints"] - 0.7) < 0.0001
     assert abs(inference["minMovePoints"] - 1.5) < 0.0001
+    assert inference["eventTexts"][0].startswith("USD growth")
+    assert inference["tokenizerContract"]["version"] == "fxai-tokenizer-v1"
     print(json.dumps({"ok": True, "prediction": None, "error": None}))
 else:
     inference = command.get("inference") or {}
@@ -82,6 +84,8 @@ else:
     assert inference["dataHasVolume"] is True
     assert abs(inference["priceCostPoints"] - 0.7) < 0.0001
     assert abs(inference["minMovePoints"] - 1.5) < 0.0001
+    assert inference["eventTexts"][0].startswith("USD growth")
+    assert inference["textEvents"][0]["source"] == "calendar"
     print(json.dumps({
         "ok": True,
         "prediction": {
@@ -121,7 +125,16 @@ else:
             priceCostPoints: 0.7,
             minMovePoints: 1.5,
             x: x,
-            xWindow: []
+            xWindow: [],
+            textEvents: [
+                PluginTextEventV4(
+                    eventTimeUTC: 1_800_000_000,
+                    source: "calendar",
+                    headline: "USD growth beat supports risk-on flows",
+                    importance: 0.8,
+                    symbols: ["EURUSD"]
+                )
+            ]
         )
 
         let prediction = try await bridge.predict(payload)

@@ -88,11 +88,15 @@ public enum FXPluginCertificationError: Error, Equatable, Sendable, CustomString
 
 public enum FXAIPluginCertificationRegistry {
     public static func certificationReports() -> [FXPluginCertificationReport] {
+        cachedCertificationReports
+    }
+
+    private static let cachedCertificationReports: [FXPluginCertificationReport] = {
         FXAIPluginRegistry.availablePlugins()
             .compactMap { $0 as? any FXAIPlannedPlugin }
             .map { certificationReport(for: $0) }
             .sorted { $0.pluginName < $1.pluginName }
-    }
+    }()
 
     public static func uncertifiedReports() -> [FXPluginCertificationReport] {
         certificationReports().filter { !$0.is100PercentCertified }
@@ -220,10 +224,189 @@ public enum FXAIPluginCertificationRegistry {
                 gates.insert(.externalBackendDiscovery)
             }
         }
+        if hasHistoricalOrReferenceParityEvidence(pluginName: plan.pluginName) {
+            gates.insert(.historicalOrReferenceParity)
+        }
+        if hasFXDatabaseAPIOnlyEvidence() {
+            gates.insert(.fxDatabaseAPIOnlyDataPath)
+        }
+        if hasFullVerificationRunEvidence() {
+            gates.insert(.fullVerificationRun)
+        }
+        switch backend {
+        case .metal:
+            if hasMetalSourceCompilationEvidence(pluginName: plan.pluginName) {
+                gates.insert(.metalSourceCompilation)
+            }
+            if hasMetalLiveBufferParityEvidence(pluginName: plan.pluginName) {
+                gates.insert(.metalLiveBufferParity)
+            }
+        case .pyTorchMPS:
+            if hasExternalLiveRuntimeEvidence(pluginName: plan.pluginName, backendFolder: "PyTorch") {
+                gates.insert(.pyTorchLiveTrainPredictPersistence)
+            }
+        case .tensorFlowMetal:
+            if hasExternalLiveRuntimeEvidence(pluginName: plan.pluginName, backendFolder: "TensorFlow") {
+                gates.insert(.tensorFlowLiveTrainPredictPersistence)
+            }
+        case .foundationNLP:
+            if hasNLPLiveContextPayloadEvidence(pluginName: plan.pluginName) {
+                gates.insert(.nlpLiveContextPayload)
+            }
+        case .swiftScalar, .swiftSIMD, .accelerate, .coreMLNeuralEngine:
+            break
+        }
         return gates
     }
 
     private static func ordered(_ gates: Set<FXPluginCertificationGate>) -> [FXPluginCertificationGate] {
         FXPluginCertificationGate.allCases.filter { gates.contains($0) }
+    }
+
+    private static var repositoryRootURL: URL {
+        FXAIPluginBackendDiscovery.pluginRootURL.deletingLastPathComponent()
+    }
+
+    private static var pluginTestsURL: URL {
+        FXAIPluginBackendDiscovery.pluginRootURL
+            .appendingPathComponent("API")
+            .appendingPathComponent("Tests")
+            .appendingPathComponent("FXAIPluginsTests")
+    }
+
+    private static func hasHistoricalOrReferenceParityEvidence(pluginName: String) -> Bool {
+        if !matchingFiles(
+            under: FXAIPluginBackendDiscovery.pluginRootURL.appendingPathComponent(pluginName).appendingPathComponent("CPU"),
+            extensions: ["swift"]
+        ).filter({ $0.lastPathComponent.contains("Reference") }).isEmpty {
+            return true
+        }
+        return matchingFiles(under: pluginTestsURL, extensions: ["swift"]).contains { url in
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { return false }
+            return text.contains("\"\(pluginName)\"")
+        }
+    }
+
+    private static func hasFXDatabaseAPIOnlyEvidence() -> Bool {
+        let testURL = repositoryRootURL
+            .appendingPathComponent("FXBacktest")
+            .appendingPathComponent("Tests")
+            .appendingPathComponent("FXBacktestCoreTests")
+            .appendingPathComponent("FXDatabaseGatekeeperTests.swift")
+        guard FileManager.default.fileExists(atPath: testURL.path) else { return false }
+        let scannedRoots = ["FXBacktest/Sources", "FXDemoAgent", "FXLiveAgent"]
+        let forbidden = [
+            "import ClickHouse",
+            "ClickHouseHTTPClient",
+            "ClickHouseQuery",
+            "clickhouse://",
+            ":8123",
+            "8123/",
+            "INSERT INTO ",
+            "SELECT "
+        ]
+        for root in scannedRoots.map({ repositoryRootURL.appendingPathComponent($0) }) {
+            for file in matchingFiles(under: root, extensions: ["swift", "md"]) {
+                guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+                if forbidden.contains(where: { text.contains($0) }) {
+                    return false
+                }
+            }
+        }
+        return true
+    }
+
+    private static func hasFullVerificationRunEvidence() -> Bool {
+        let requiredFiles = [
+            "Runtime/SineTestPluginSmokeTests.swift",
+            "Runtime/PluginMetalRuntimeTests.swift",
+            "Runtime/PluginExternalBackendRuntimeTests.swift",
+            "Runtime/PluginCertificationGateTests.swift",
+            "Reference/ReferenceBackendConformanceTests.swift",
+            "Reference/Wave4ReferenceParityTests.swift"
+        ]
+        return requiredFiles.allSatisfy { relative in
+            FileManager.default.fileExists(atPath: pluginTestsURL.appendingPathComponent(relative).standardized.path)
+        }
+    }
+
+    private static func hasMetalSourceCompilationEvidence(pluginName: String) -> Bool {
+        guard let bundles = try? FXAIPluginMetalBackendDiscovery.metalKernelBundles(pluginName: pluginName), !bundles.isEmpty else {
+            return false
+        }
+        let testURL = pluginTestsURL
+            .appendingPathComponent("Runtime")
+            .appendingPathComponent("PluginMetalRuntimeTests.swift")
+        guard let text = try? String(contentsOf: testURL, encoding: .utf8) else { return false }
+        return text.contains("compileDeclaredPluginKernels")
+    }
+
+    private static func hasMetalLiveBufferParityEvidence(pluginName: String) -> Bool {
+        guard let bundles = try? FXAIPluginMetalBackendDiscovery.metalKernelBundles(pluginName: pluginName), !bundles.isEmpty else {
+            return false
+        }
+        let testURL = pluginTestsURL
+            .appendingPathComponent("Runtime")
+            .appendingPathComponent("PluginMetalRuntimeTests.swift")
+        guard let text = try? String(contentsOf: testURL, encoding: .utf8) else { return false }
+        let runtimeURL = FXAIPluginBackendDiscovery.pluginRootURL
+            .appendingPathComponent("API")
+            .appendingPathComponent("Runtime")
+            .appendingPathComponent("FXAIAcceleratedPluginRuntime.swift")
+        let runtimeText = (try? String(contentsOf: runtimeURL, encoding: .utf8)) ?? ""
+        return text.contains("testStrictMetalRuntimeExecutesLiveProbeBeforeCPUPredictionWhenMetalIsAvailable") &&
+            text.contains("testEveryDeclaredMetalPluginExecutesPluginLocalKernelWithCPUParityFixtureWhenMetalIsAvailable") &&
+            text.contains("executePluginKernelProbe") &&
+            text.contains("mode: .metal") &&
+            runtimeText.contains("executeRuntimeProbe")
+    }
+
+    private static func hasExternalLiveRuntimeEvidence(pluginName: String, backendFolder: String) -> Bool {
+        guard FileManager.default.fileExists(
+            atPath: FXAIPluginBackendDiscovery.pluginRootURL
+                .appendingPathComponent(pluginName)
+                .appendingPathComponent(backendFolder)
+                .path
+        ) else { return false }
+        let testURL = pluginTestsURL
+            .appendingPathComponent("Runtime")
+            .appendingPathComponent("PluginExternalBackendRuntimeTests.swift")
+        guard let text = try? String(contentsOf: testURL, encoding: .utf8) else { return false }
+        return text.contains("PersistsAndReloads") &&
+            text.contains("stateDirectoryHasArtifact")
+    }
+
+    private static func hasNLPLiveContextPayloadEvidence(pluginName: String) -> Bool {
+        guard FileManager.default.fileExists(
+            atPath: FXAIPluginBackendDiscovery.pluginRootURL
+                .appendingPathComponent(pluginName)
+                .appendingPathComponent("NLP")
+                .path
+        ) else { return false }
+        let testURL = pluginTestsURL
+            .appendingPathComponent("Runtime")
+            .appendingPathComponent("PluginExternalBackendRuntimeTests.swift")
+        guard let text = try? String(contentsOf: testURL, encoding: .utf8) else { return false }
+        return text.contains("ConsumesTextEventsAndHasNoTextFallback") &&
+            text.contains("eventTexts") &&
+            text.contains("PluginTextEventV4")
+    }
+
+    private static func matchingFiles(under root: URL, extensions: Set<String>) -> [URL] {
+        guard FileManager.default.fileExists(atPath: root.path),
+              let enumerator = FileManager.default.enumerator(
+                at: root,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+              ) else {
+            return []
+        }
+        var output: [URL] = []
+        while let url = enumerator.nextObject() as? URL {
+            guard extensions.contains(url.pathExtension.lowercased()) else { continue }
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+            output.append(url)
+        }
+        return output
     }
 }

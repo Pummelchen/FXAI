@@ -160,7 +160,113 @@ public struct PluginManifestV4: Codable, Hashable, Sendable {
     }
 }
 
+public struct PluginTokenizerContractV4: Codable, Hashable, Sendable {
+    public static let defaultVersion = "fxai-tokenizer-v1"
+    public static let maxTokens = 256
+
+    public var version: String
+    public var lowercases: Bool
+    public var minNGram: Int
+    public var maxNGram: Int
+    public var maxTokenCount: Int
+
+    public init(
+        version: String = Self.defaultVersion,
+        lowercases: Bool = true,
+        minNGram: Int = 1,
+        maxNGram: Int = 2,
+        maxTokenCount: Int = Self.maxTokens
+    ) {
+        let trimmedVersion = version.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.version = trimmedVersion.isEmpty ? Self.defaultVersion : trimmedVersion
+        self.lowercases = lowercases
+        self.minNGram = min(max(minNGram, 1), 4)
+        self.maxNGram = min(max(maxNGram, self.minNGram), 4)
+        self.maxTokenCount = min(max(maxTokenCount, 1), Self.maxTokens)
+    }
+
+    public func validate() throws {
+        guard !version.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw FXDataEngineError.validation("ctx.tokenizer.version")
+        }
+        guard (1...4).contains(minNGram), (minNGram...4).contains(maxNGram) else {
+            throw FXDataEngineError.validation("ctx.tokenizer.ngram")
+        }
+        guard (1...Self.maxTokens).contains(maxTokenCount) else {
+            throw FXDataEngineError.validation("ctx.tokenizer.maxTokenCount")
+        }
+    }
+}
+
+public struct PluginTextEventV4: Codable, Hashable, Sendable {
+    public static let maxTextLength = 512
+    public static let maxSymbols = 12
+
+    public var eventTimeUTC: Int64
+    public var source: String
+    public var headline: String
+    public var body: String
+    public var languageCode: String
+    public var importance: Double
+    public var symbols: [String]
+
+    public init(
+        eventTimeUTC: Int64 = 0,
+        source: String = "unknown",
+        headline: String,
+        body: String = "",
+        languageCode: String = "en",
+        importance: Double = 0.0,
+        symbols: [String] = []
+    ) {
+        self.eventTimeUTC = eventTimeUTC
+        self.source = Self.cleanToken(source, fallback: "unknown", limit: 64)
+        self.headline = Self.cleanText(headline)
+        self.body = Self.cleanText(body)
+        self.languageCode = Self.cleanToken(languageCode, fallback: "en", limit: 16).lowercased()
+        self.importance = fxClamp(importance, 0.0, 1.0)
+        self.symbols = Array(symbols.prefix(Self.maxSymbols)).map {
+            Self.cleanToken($0.uppercased(), fallback: "", limit: 24)
+        }.filter { !$0.isEmpty }
+    }
+
+    public var mergedText: String {
+        let combined = body.isEmpty ? headline : "\(headline) \(body)"
+        return combined.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public func validate() throws {
+        guard !headline.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw FXDataEngineError.validation("ctx.textEvents.headline")
+        }
+        guard headline.count <= Self.maxTextLength, body.count <= Self.maxTextLength else {
+            throw FXDataEngineError.validation("ctx.textEvents.length")
+        }
+        guard importance.isFinite, (0...1).contains(importance) else {
+            throw FXDataEngineError.validation("ctx.textEvents.importance")
+        }
+        guard symbols.count <= Self.maxSymbols else {
+            throw FXDataEngineError.validation("ctx.textEvents.symbols")
+        }
+    }
+
+    private static func cleanText(_ value: String) -> String {
+        let collapsed = value
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\t", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(collapsed.prefix(maxTextLength))
+    }
+
+    private static func cleanToken(_ value: String, fallback: String, limit: Int) -> String {
+        let filtered = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return String((filtered.isEmpty ? fallback : filtered).prefix(limit))
+    }
+}
+
 public struct PluginContextV4: Codable, Hashable, Sendable {
+    public static let maxTextEvents = 16
+
     public var apiVersion: Int
     public var regimeID: Int
     public var sessionBucket: Int
@@ -174,6 +280,8 @@ public struct PluginContextV4: Codable, Hashable, Sendable {
     public var domainHash: Double
     public var sampleTimeUTC: Int64
     public var dataHasVolume: Bool
+    public var tokenizerContract: PluginTokenizerContractV4
+    public var textEvents: [PluginTextEventV4]
 
     private enum CodingKeys: String, CodingKey {
         case apiVersion
@@ -189,6 +297,8 @@ public struct PluginContextV4: Codable, Hashable, Sendable {
         case domainHash
         case sampleTimeUTC
         case dataHasVolume
+        case tokenizerContract
+        case textEvents
     }
 
     public init(
@@ -204,7 +314,9 @@ public struct PluginContextV4: Codable, Hashable, Sendable {
         pointValue: Double = 1.0,
         domainHash: Double = 0.0,
         sampleTimeUTC: Int64 = 0,
-        dataHasVolume: Bool = false
+        dataHasVolume: Bool = false,
+        tokenizerContract: PluginTokenizerContractV4 = PluginTokenizerContractV4(),
+        textEvents: [PluginTextEventV4] = []
     ) {
         self.apiVersion = apiVersion
         self.regimeID = regimeID
@@ -219,6 +331,8 @@ public struct PluginContextV4: Codable, Hashable, Sendable {
         self.domainHash = fxClamp(domainHash, 0.0, 1.0)
         self.sampleTimeUTC = sampleTimeUTC
         self.dataHasVolume = dataHasVolume
+        self.tokenizerContract = tokenizerContract
+        self.textEvents = Array(textEvents.prefix(Self.maxTextEvents))
     }
 
     public init(from decoder: Decoder) throws {
@@ -236,7 +350,9 @@ public struct PluginContextV4: Codable, Hashable, Sendable {
             pointValue: try container.decodeIfPresent(Double.self, forKey: .pointValue) ?? 1.0,
             domainHash: try container.decodeIfPresent(Double.self, forKey: .domainHash) ?? 0.0,
             sampleTimeUTC: try container.decodeIfPresent(Int64.self, forKey: .sampleTimeUTC) ?? 0,
-            dataHasVolume: try container.decodeIfPresent(Bool.self, forKey: .dataHasVolume) ?? false
+            dataHasVolume: try container.decodeIfPresent(Bool.self, forKey: .dataHasVolume) ?? false,
+            tokenizerContract: try container.decodeIfPresent(PluginTokenizerContractV4.self, forKey: .tokenizerContract) ?? PluginTokenizerContractV4(),
+            textEvents: try container.decodeIfPresent([PluginTextEventV4].self, forKey: .textEvents) ?? []
         )
     }
 
@@ -267,6 +383,13 @@ public struct PluginContextV4: Codable, Hashable, Sendable {
         }
         guard domainHash.isFinite, domainHash >= 0, domainHash <= 1 else {
             throw FXDataEngineError.validation("ctx.domainHash")
+        }
+        try tokenizerContract.validate()
+        guard textEvents.count <= Self.maxTextEvents else {
+            throw FXDataEngineError.validation("ctx.textEvents.count")
+        }
+        for event in textEvents {
+            try event.validate()
         }
     }
 }

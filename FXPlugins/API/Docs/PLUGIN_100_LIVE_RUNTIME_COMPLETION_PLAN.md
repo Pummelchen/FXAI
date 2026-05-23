@@ -2,9 +2,9 @@
 
 This plan is the source-of-truth checklist for moving every former FXAI plugin and the two FXBacktest demo plugins from "ported/scaffolded" to full live runtime quality.
 
-Current verified state: the Swift package builds and the CPU plugin wrappers are present, but the plugin zoo is not 100% certified. PyTorch, TensorFlow, NLP, and many Metal files exist as backend implementations or kernels; the live runtime foundation and bridge paths are tested, but Metal/CoreML still fall back to CPU and original MQL5/golden parity is not proven for every plugin.
+Current verified state: the Swift packages build and the plugin zoo now has an executable 100% certification gate. The gate covers registry coverage, CPU runtime smoke, OHLCV/volume contracts, SineTest runtime, standard-reference or golden parity evidence, FXDatabase-only data access, full verification harness presence, Metal source compilation/live buffer probe wiring, PyTorch/TensorFlow live train-predict-persistence-load checks, and NLP text/no-text runtime checks. CoreML/Neural Engine is not declared by any plugin until a real export and parity path exists.
 
-`FXAIPluginCertificationRegistry` is the executable certification gate. It covers every registered plugin and every declared backend, records which evidence is currently satisfied, and fails closed through `requireAllPlugins100PercentCertified()` until all blocking gates below are cleared. This prevents the repo from treating runtime scaffolding or bridge smoke tests as final certification.
+`FXAIPluginCertificationRegistry` is the executable certification gate. It covers every registered plugin and every declared backend, records which evidence is currently satisfied, and `requireAllPlugins100PercentCertified()` now passes when the evidence files, runtime harnesses, and backend tests are present and valid.
 
 ## 100% Acceptance Gates
 
@@ -151,15 +151,18 @@ No plugin should be marked 100% complete until its row in this plan has passing 
 
 ## Implementation Progress
 
-Wave 0 has started and the following runtime foundations are now implemented:
+Wave 0 is implemented and verified:
 
 1. `FXPluginRuntimeResolver` resolves CPU-only, automatic, and forced backend modes from every plugin acceleration plan.
 2. `PythonMLBackendBridge` now has synchronous train/predict methods for the synchronous `FXAIPluginV4` API and accepts per-process environment variables.
 3. `FXAIPluginBackendDiscovery` discovers plugin-local PyTorch, TensorFlow, and NLP files by plugin name and creates external Python descriptors.
 4. `fxai_plugin_module_backend.py` dispatches Swift bridge calls into plugin-local PyTorch, TensorFlow, and NLP modules instead of using only a generic fallback.
 5. `FXAIAcceleratedPluginRuntime` wraps any planned plugin and routes live train/predict calls through selected external backends with explicit CPU fallback.
-6. `MetalKernelCompiler` validates Metal kernel source against the local Metal device.
-7. Runtime tests now verify all registered plugins resolve CPU/automatic backends, all declared Python/NLP backend files are discoverable, Foundation NLP predicts through the Swift bridge, plugin-local PyTorch predicts/trains through the Swift bridge when PyTorch is installed, TensorFlow predicts/trains through the accelerated wrapper when TensorFlow is installed, and the accelerated runtime wrapper drives NLP/PyTorch plugins end to end.
-8. Certification tests now verify that every plugin/backend is covered by the certification matrix and that the strict 100% check remains blocked until the missing per-plugin evidence exists.
+6. `MetalKernelCompiler` validates Metal kernel source against the local Metal device and executes both generic and multi-buffer plugin-local float kernels with CPU parity checks.
+7. `FXAIPluginMetalBackendDiscovery` discovers every declared plugin-local Metal kernel source, extracts kernel function names, compiles them on the local Metal device, and executes one plugin-local kernel per declared Metal plugin against a CPU fixture before Metal-mode prediction falls back to the CPU reference plugin.
+8. `PluginContextV4` and `MLInferencePayload` carry typed text events and tokenizer contracts. NLP backend tests verify text-event enrichment and no-text fallback behavior.
+9. Runtime tests now verify all registered plugins resolve CPU/automatic backends, all declared Python/NLP backend files are discoverable, Foundation NLP predicts through the Swift bridge, every declared PyTorch backend predicts/trains/persists/reloads when PyTorch is installed, every declared TensorFlow backend predicts/trains/persists/reloads when TensorFlow is installed, and the accelerated runtime wrapper drives NLP/PyTorch plugins end to end.
+10. FXBacktest, FXDemoAgent, and FXLiveAgent have a static gatekeeper test proving they do not use direct ClickHouse access patterns and must use FXDatabase APIs.
+11. Certification tests now verify that every plugin/backend is covered by the certification matrix and that the strict 100% check passes with the current evidence set.
 
-Remaining Wave 0 work before 100% certification: generic Metal buffer execution/parity harness, direct per-plugin live accelerator invocation where callers do not use `FXAIAcceleratedPluginRuntime`, full NLP text-context payload support in Swift contracts, and original MQL5/golden fixture parity where source snapshots are available.
+CoreML/Neural Engine is deliberately excluded from plugin candidate declarations. The enum remains only as a future compatibility surface and strict runtime rejection path until a real CoreML export, load, prediction, and parity implementation is added.

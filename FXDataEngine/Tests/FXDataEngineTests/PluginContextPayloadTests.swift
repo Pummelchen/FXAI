@@ -96,6 +96,32 @@ final class PluginContextPayloadTests: XCTestCase {
         XCTAssertEqual(state.resolveContextTimeUTC(fallback: 999), 123)
     }
 
+    func testTextEventContextCarriesTokenizerContractAndFallbacks() throws {
+        let event = PluginTextEventV4(
+            eventTimeUTC: 1_800_000_000,
+            source: "calendar",
+            headline: "USD growth beat supports risk-on flows",
+            body: "Fed speakers remain hawkish before CPI.",
+            importance: 0.75,
+            symbols: ["EURUSD", "USDJPY"]
+        )
+        let context = PluginContextV4(
+            horizonMinutes: 15,
+            tokenizerContract: PluginTokenizerContractV4(version: "fxai-tokenizer-v1", minNGram: 1, maxNGram: 2),
+            textEvents: [event]
+        )
+
+        try context.validate()
+        XCTAssertEqual(context.textEvents.count, 1)
+        XCTAssertTrue(context.textEvents[0].mergedText.contains("risk-on"))
+        XCTAssertEqual(context.tokenizerContract.maxNGram, 2)
+
+        let encoded = try JSONEncoder().encode(context)
+        let decoded = try JSONDecoder().decode(PluginContextV4.self, from: encoded)
+        XCTAssertEqual(decoded.textEvents, context.textEvents)
+        XCTAssertEqual(decoded.tokenizerContract, context.tokenizerContract)
+    }
+
     func testSharedAdapterInputDelegatesToTransferPayloadBuilder() {
         var features = Array(repeating: 0.0, count: FXDataEngineConstants.aiFeatures)
         setFeature(&features, 62, 0.25)

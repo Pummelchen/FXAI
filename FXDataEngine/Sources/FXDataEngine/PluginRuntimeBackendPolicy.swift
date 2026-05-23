@@ -150,7 +150,6 @@ public enum FXPluginRuntimeResolver {
         .pyTorchMPS,
         .tensorFlowMetal,
         .metal,
-        .coreMLNeuralEngine,
         .foundationNLP,
         .accelerate,
         .swiftSIMD,

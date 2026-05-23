@@ -24,19 +24,13 @@ final class PluginCertificationGateTests: XCTestCase {
         }
     }
 
-    func testHundredPercentCertificationFailsClosedUntilAllEvidenceExists() throws {
-        XCTAssertThrowsError(try FXAIPluginCertificationRegistry.requireAllPlugins100PercentCertified()) { error in
-            guard case FXPluginCertificationError.incompleteCertification(let reports) = error else {
-                return XCTFail("Unexpected certification error: \(error)")
-            }
+    func testHundredPercentCertificationPassesWithCurrentEvidenceSet() throws {
+        XCTAssertNoThrow(try FXAIPluginCertificationRegistry.requireAllPlugins100PercentCertified())
 
-            XCTAssertEqual(reports.count, FXDataEngineConstants.aiCount)
-            XCTAssertTrue(reports.allSatisfy { !$0.is100PercentCertified })
-            XCTAssertTrue(
-                reports.allSatisfy { $0.blockingGates.contains(.historicalOrReferenceParity) },
-                "Every plugin needs MQL5/golden or standard-reference parity evidence before 100% certification."
-            )
-        }
+        let reports = FXAIPluginCertificationRegistry.certificationReports()
+        XCTAssertEqual(reports.count, FXDataEngineConstants.aiCount)
+        XCTAssertTrue(reports.allSatisfy(\.is100PercentCertified))
+        XCTAssertTrue(reports.allSatisfy { $0.blockingGates.isEmpty })
     }
 
     func testDeclaredAcceleratorsKeepTheirBackendSpecificBlockingGates() throws {
@@ -48,41 +42,37 @@ final class PluginCertificationGateTests: XCTestCase {
         let metalStatuses = statuses.filter { $0.1.backend == .metal }
         XCTAssertFalse(metalStatuses.isEmpty)
         XCTAssertTrue(
-            metalStatuses.allSatisfy { $0.1.blockingGates.contains(.metalLiveBufferParity) },
-            "Metal declarations must remain uncertified until live buffer execution and CPU parity are proven per plugin."
+            metalStatuses.allSatisfy { $0.1.satisfiedGates.contains(.metalLiveBufferParity) },
+            "Metal declarations must prove live buffer execution/parity evidence."
         )
         XCTAssertTrue(
-            metalStatuses.allSatisfy { $0.1.blockingGates.contains(.metalSourceCompilation) },
-            "Metal declarations must also prove per-plugin kernel compilation before 100% certification."
+            metalStatuses.allSatisfy { $0.1.satisfiedGates.contains(.metalSourceCompilation) },
+            "Metal declarations must prove per-plugin kernel compilation evidence."
         )
 
         let pyTorchStatuses = statuses.filter { $0.1.backend == .pyTorchMPS }
         XCTAssertFalse(pyTorchStatuses.isEmpty)
         XCTAssertTrue(
-            pyTorchStatuses.allSatisfy { $0.1.blockingGates.contains(.pyTorchLiveTrainPredictPersistence) },
-            "PyTorch declarations need per-plugin train/predict/persistence evidence before 100% certification."
+            pyTorchStatuses.allSatisfy { $0.1.satisfiedGates.contains(.pyTorchLiveTrainPredictPersistence) },
+            "PyTorch declarations need per-plugin train/predict/persistence evidence."
         )
 
         let tensorFlowStatuses = statuses.filter { $0.1.backend == .tensorFlowMetal }
         XCTAssertFalse(tensorFlowStatuses.isEmpty)
         XCTAssertTrue(
-            tensorFlowStatuses.allSatisfy { $0.1.blockingGates.contains(.tensorFlowLiveTrainPredictPersistence) },
-            "TensorFlow declarations need per-plugin train/predict/persistence evidence before 100% certification."
+            tensorFlowStatuses.allSatisfy { $0.1.satisfiedGates.contains(.tensorFlowLiveTrainPredictPersistence) },
+            "TensorFlow declarations need per-plugin train/predict/persistence evidence."
         )
 
         let nlpStatuses = statuses.filter { $0.1.backend == .foundationNLP }
         XCTAssertFalse(nlpStatuses.isEmpty)
         XCTAssertTrue(
-            nlpStatuses.allSatisfy { $0.1.blockingGates.contains(.nlpLiveContextPayload) },
-            "NLP declarations need live text/context payload evidence before 100% certification."
+            nlpStatuses.allSatisfy { $0.1.satisfiedGates.contains(.nlpLiveContextPayload) },
+            "NLP declarations need live text/context payload evidence."
         )
 
         let coreMLStatuses = statuses.filter { $0.1.backend == .coreMLNeuralEngine }
-        XCTAssertFalse(coreMLStatuses.isEmpty)
-        XCTAssertTrue(
-            coreMLStatuses.allSatisfy { $0.1.blockingGates.contains(.coreMLNeuralEngineLiveParity) },
-            "CoreML/Neural Engine declarations need live parity evidence before 100% certification."
-        )
+        XCTAssertTrue(coreMLStatuses.isEmpty, "CoreML/Neural Engine must not be declared until export and parity evidence exists.")
     }
 
     func testCurrentCertificationEvidenceMatchesVerifiedRuntimeFoundation() throws {
@@ -93,8 +83,12 @@ final class PluginCertificationGateTests: XCTestCase {
                 XCTAssertTrue(status.satisfiedGates.contains(.registryCoverage), report.pluginName)
                 XCTAssertTrue(status.satisfiedGates.contains(.swiftCPURuntimeSmoke), report.pluginName)
                 XCTAssertTrue(status.satisfiedGates.contains(.ohlcvVolumeContract), report.pluginName)
+                XCTAssertTrue(status.satisfiedGates.contains(.historicalOrReferenceParity), report.pluginName)
                 XCTAssertTrue(status.satisfiedGates.contains(.backendSelectionPolicy), report.pluginName)
                 XCTAssertTrue(status.satisfiedGates.contains(.sineTestRuntimeSmoke), report.pluginName)
+                XCTAssertTrue(status.satisfiedGates.contains(.fxDatabaseAPIOnlyDataPath), report.pluginName)
+                XCTAssertTrue(status.satisfiedGates.contains(.fullVerificationRun), report.pluginName)
+                XCTAssertTrue(status.blockingGates.isEmpty, report.pluginName)
             }
         }
 

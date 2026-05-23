@@ -175,3 +175,73 @@ def predict_batch(
         "expected_move_points": expected_move,
         "expert_gates": gates,
     }
+
+
+def train_step(
+    features: Iterable[Iterable[float]] | torch.Tensor,
+    labels: Iterable[int],
+    moves: Iterable[float],
+    state: MoeConformalTorchState | None = None,
+    lr: float = 0.025,
+    session_bucket: int = 0,
+    data_has_volume: bool = True,
+) -> MoeConformalTorchState:
+    state = state or MoeConformalTorchState.seeded()
+    device = state.router.device
+    x = prepare_features(features, data_has_volume=data_has_volume).to(device)
+    regime = build_regime(x, session_bucket=session_bucket)
+    model_features = build_model_features(x)
+    head_features = torch.cat(
+        [torch.ones((x.shape[0], 1), dtype=torch.float32, device=device), model_features],
+        dim=-1,
+    )
+    prediction = predict_batch(x, session_bucket=session_bucket, data_has_volume=data_has_volume, state=state)
+    probabilities = prediction["class_probabilities"]
+    gates = prediction["expert_gates"]
+    raw_labels = list(labels)
+    if not raw_labels:
+        raw_labels = [2] * x.shape[0]
+    target = torch.tensor(raw_labels[: x.shape[0]], dtype=torch.long, device=device).clamp(0, CLASSES - 1)
+    moves_tensor = torch.tensor(list(moves) or [1.0] * x.shape[0], dtype=torch.float32, device=device).abs().clamp_min(0.10)
+    if moves_tensor.numel() < x.shape[0]:
+        moves_tensor = torch.cat([moves_tensor, moves_tensor[-1:].repeat(x.shape[0] - moves_tensor.numel())])
+    one_hot = torch.nn.functional.one_hot(target, num_classes=CLASSES).to(dtype=torch.float32)
+    error = one_hot - probabilities
+    trade_target = 1.0 - one_hot[:, 2]
+    trade_prediction = torch.clamp(1.0 - probabilities[:, 2], 0.001, 0.999)
+    direction_target = torch.where(one_hot[:, 0] > 0.5, torch.zeros_like(trade_target), torch.ones_like(trade_target))
+    direction_error = torch.where(trade_target > 0.0, direction_target - probabilities[:, 1], torch.zeros_like(trade_target))
+    trade_error = trade_target - trade_prediction
+    expert_credit = gates * (0.5 + 0.5 * torch.abs(trade_error).unsqueeze(-1))
+    state.router += lr * torch.mean(expert_credit.unsqueeze(-1) * trade_error.view(-1, 1, 1) * regime[:, None, :], dim=0)
+    state.gate_weights += lr * torch.mean(expert_credit.unsqueeze(-1) * trade_error.view(-1, 1, 1) * head_features[:, None, :], dim=0)
+    state.direction_weights += lr * torch.mean(
+        expert_credit.unsqueeze(-1)
+        * direction_error.view(-1, 1, 1)
+        * moves_tensor.clamp(max=10.0).view(-1, 1, 1)
+        * head_features[:, None, :],
+        dim=0,
+    )
+    expected_move = prediction["expected_move_points"]
+    move_error = (moves_tensor - expected_move).clamp(-10.0, 10.0)
+    state.move_weights += lr * 0.10 * torch.mean(expert_credit.unsqueeze(-1) * move_error.view(-1, 1, 1) * head_features[:, None, :], dim=0)
+    calibrator_features = torch.stack(
+        [
+            torch.ones_like(expected_move),
+            torch.clamp(probabilities[:, 1] - probabilities[:, 0], -1.0, 1.0),
+            torch.clamp(probabilities[:, 2], 0.0, 1.0),
+            torch.clamp(expected_move / torch.clamp(moves_tensor, min=0.10), 0.0, 12.0),
+            torch.ones_like(expected_move),
+        ],
+        dim=-1,
+    )
+    state.calibration_weights += lr * 0.20 * torch.mean(error.unsqueeze(-1) * calibrator_features[:, None, :], dim=0)
+    state.usage_ema = 0.98 * state.usage_ema + 0.02 * torch.mean(gates, dim=0)
+    buckets = bucket_index(x, session_bucket=session_bucket)
+    nonconformity = 1.0 - torch.sum(probabilities * one_hot, dim=-1)
+    for bucket in torch.unique(buckets):
+        mask = buckets == bucket
+        if torch.any(mask):
+            observed = torch.quantile(nonconformity[mask].detach(), 0.90)
+            state.bucket_quantiles90[bucket] = 0.98 * state.bucket_quantiles90[bucket] + 0.02 * observed
+    return state

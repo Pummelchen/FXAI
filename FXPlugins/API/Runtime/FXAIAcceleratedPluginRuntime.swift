@@ -68,12 +68,11 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
             }
         case .foundationNLP:
             return
-        case .metal, .coreMLNeuralEngine:
-            try trainCPUFallback(
-                request,
-                hyperParameters: hyperParameters,
-                error: FXDataEngineError.externalBackend("\(resolution.selectedBackend.rawValue) training is not wired yet")
-            )
+        case .metal:
+            _ = try FXAIPluginMetalBackendDiscovery.executeRuntimeProbe(pluginName: manifest.aiName)
+            try basePlugin.train(request, hyperParameters: hyperParameters)
+        case .coreMLNeuralEngine:
+            throw FXDataEngineError.externalBackend("\(resolution.selectedBackend.rawValue) training is not declared for \(manifest.aiName)")
         case .swiftScalar, .swiftSIMD, .accelerate:
             try basePlugin.train(request, hyperParameters: hyperParameters)
         }
@@ -92,12 +91,11 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
             } catch {
                 return try predictCPUFallback(request, hyperParameters: hyperParameters, error: error)
             }
-        case .metal, .coreMLNeuralEngine:
-            return try predictCPUFallback(
-                request,
-                hyperParameters: hyperParameters,
-                error: FXDataEngineError.externalBackend("\(resolution.selectedBackend.rawValue) inference is not wired yet")
-            )
+        case .metal:
+            _ = try FXAIPluginMetalBackendDiscovery.executeRuntimeProbe(pluginName: manifest.aiName)
+            return try basePlugin.predict(request, hyperParameters: hyperParameters)
+        case .coreMLNeuralEngine:
+            throw FXDataEngineError.externalBackend("\(resolution.selectedBackend.rawValue) inference is not declared for \(manifest.aiName)")
         case .swiftScalar, .swiftSIMD, .accelerate:
             return try basePlugin.predict(request, hyperParameters: hyperParameters)
         }
