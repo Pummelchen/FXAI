@@ -41,6 +41,8 @@ let package = Package(
                 "ai_cnn_lstm/TensorFlow",
                 "ai_attn_cnn_bilstm/PyTorch",
                 "ai_attn_cnn_bilstm/TensorFlow",
+                "ai_tcn/PyTorch",
+                "ai_tcn/TensorFlow",
                 "Package.swift",
                 "README.md"
             ]
