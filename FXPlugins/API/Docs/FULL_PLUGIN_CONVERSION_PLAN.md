@@ -50,9 +50,23 @@ Recovered legacy files:
 Current state:
 
 - 65 root plugin folders exist under `FXPlugins`.
-- 59 plugins still delegate to `FXAIReferencePluginRuntime`.
-- Rule plugins and the 2 FXBacktest demos contain plugin-specific Swift logic.
-- This is not a full conversion yet.
+- 59 plugins now have plugin-local `CPU/` implementations plus accelerator
+  folders where the matrix requires them.
+- 4 rule plugins and the 2 FXBacktest demos remain scalar Swift adapters with
+  plugin-specific CPU logic.
+- 0 plugins delegate to `FXAIReferencePluginRuntime`.
+- The former Swift wrapper layer has been removed from the plugin zoo.
+
+## Execution Status
+
+Completed on 2026-05-23:
+
+- All 26 remaining sequence, world-model, and RL wrappers were converted one by
+  one, with focused Swift tests passing before each commit.
+- Plugin-local accelerator folders now cover Metal, PyTorch/MPS,
+  TensorFlow/Metal, and NLP where required by the matrix.
+- `rg "FXAIReferencePluginRuntime|FXAIPluginImplementationDescriptor" FXPlugins`
+  returns no matches.
 
 ## Conversion Rules
 

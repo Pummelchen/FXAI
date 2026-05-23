@@ -19,6 +19,7 @@ final class AIMLPPluginTests: XCTestCase {
         XCTAssertTrue(plugin.selfTest())
         XCTAssertEqual(plan.pluginName, "ai_mlp")
         XCTAssertTrue(plan.primaryBackends.contains(.swiftScalar))
+        XCTAssertTrue(plan.primaryBackends.contains(.metal))
         XCTAssertTrue(plan.primaryBackends.contains(.pyTorchMPS))
         XCTAssertTrue(plan.primaryBackends.contains(.tensorFlowMetal))
         XCTAssertTrue(plan.candidateBackends.contains(.coreMLNeuralEngine))
@@ -79,9 +80,9 @@ final class AIMLPPluginTests: XCTestCase {
         let root = Self.pluginRoot()
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("CPU/AIMLPCPUModel.swift").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("CPU/AIMLPAccelerated.swift").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metal/AIMLPMetal.swift").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("PyTorch/ai_mlp_torch.py").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("TensorFlow/ai_mlp_tensorflow.py").path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metal").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("NLP").path))
     }
 

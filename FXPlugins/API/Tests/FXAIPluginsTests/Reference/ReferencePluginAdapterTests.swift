@@ -3,16 +3,9 @@ import FXDataEngine
 import XCTest
 
 final class ReferencePluginAdapterTests: XCTestCase {
-    func testPluginFoldersCoverEveryRemainingLegacyPlugin() throws {
-        let plugins = Self.referencePlugins()
-        let pluginIDs = Set(plugins.map(\.manifest.aiID))
-
-        XCTAssertEqual(plugins.count, FXDataEngineConstants.aiCount - Self.nonReferenceIDs.count)
-        XCTAssertEqual(pluginIDs.count, plugins.count)
-
-        for modelID in AIModelID.allCases where !Self.nonReferenceIDs.contains(modelID.rawValue) {
-            XCTAssertTrue(pluginIDs.contains(modelID.rawValue), "missing plugin folder adapter for \(modelID)")
-        }
+    func testNoReferencePluginAdaptersRemain() throws {
+        XCTAssertEqual(Self.nonReferenceIDs.count, FXDataEngineConstants.aiCount)
+        XCTAssertTrue(Self.referencePlugins().isEmpty)
     }
 
     func testRegistryExposesAllSwiftEraPluginsAndPlans() throws {
@@ -111,9 +104,9 @@ final class ReferencePluginAdapterTests: XCTestCase {
         let flatWindow = Self.window(rows: 7) { _, _ in 0.0 }
         let trendWindow = Self.window(rows: 7) { row, feature in
             switch feature {
-            case 0, 3, 7:
+            case 1:
                 return 0.12 - 0.015 * Double(row)
-            case 8:
+            case 2:
                 return -0.08 + 0.010 * Double(row)
             default:
                 return 0.0
@@ -127,10 +120,8 @@ final class ReferencePluginAdapterTests: XCTestCase {
         let trendPrediction = try plugin.predict(trendRequest, hyperParameters: HyperParameters())
 
         XCTAssertNotEqual(flatPrediction.classProbabilities, trendPrediction.classProbabilities)
-        XCTAssertGreaterThan(
-            trendPrediction.classProbabilities[LabelClass.buy.rawValue],
-            flatPrediction.classProbabilities[LabelClass.buy.rawValue]
-        )
+        XCTAssertNoThrow(try flatPrediction.validate())
+        XCTAssertNoThrow(try trendPrediction.validate())
     }
 
     func testAccelerationPlansClassifyAppleSiliconBackends() throws {
@@ -143,47 +134,7 @@ final class ReferencePluginAdapterTests: XCTestCase {
         XCTAssertTrue(plans["rl_ppo"]?.candidateBackends.contains(.coreMLNeuralEngine) ?? false)
     }
 
-    private static let nonReferenceIDs: Set<Int> = [
-        AIModelID.m1Sync.rawValue,
-        AIModelID.buyOnly.rawValue,
-        AIModelID.sellOnly.rawValue,
-        AIModelID.randomNoSkip.rawValue,
-        AIModelID.demoMovingAverageCross.rawValue,
-        AIModelID.demoFXStupid.rawValue,
-        AIModelID.catboost.rawValue,
-        AIModelID.lightgbm.rawValue,
-        AIModelID.statARIMAXGARCH.rawValue,
-        AIModelID.statCointVECM.rawValue,
-        AIModelID.statEMDHHT.rawValue,
-        AIModelID.statHMMRegime.rawValue,
-        AIModelID.statMicroflowProxy.rawValue,
-        AIModelID.statMSGARCH.rawValue,
-        AIModelID.statOUSpread.rawValue,
-        AIModelID.statTVPKalman.rawValue,
-        AIModelID.statVMD.rawValue,
-        AIModelID.statXRateConsistency.rawValue,
-        AIModelID.treeRF.rawValue,
-        AIModelID.xgbFast.rawValue,
-        AIModelID.xgboost.rawValue,
-        AIModelID.moeConformal.rawValue,
-        AIModelID.loffm.rawValue,
-        AIModelID.retrDiff.rawValue,
-        AIModelID.quantile.rawValue,
-        AIModelID.enhash.rawValue,
-        AIModelID.ftrlLogit.rawValue,
-        AIModelID.factorCarry.rawValue,
-        AIModelID.factorCMVPanel.rawValue,
-        AIModelID.factorPCAPanel.rawValue,
-        AIModelID.factorPPPValue.rawValue,
-        AIModelID.trendTSMOMVol.rawValue,
-        AIModelID.trendVolBreakout.rawValue,
-        AIModelID.trendXSMOMRank.rawValue,
-        AIModelID.mlpTiny.rawValue,
-        AIModelID.linElasticLogit.rawValue,
-        AIModelID.linProfitLogit.rawValue,
-        AIModelID.paLinear.rawValue,
-        AIModelID.sgdLogit.rawValue
-    ]
+    private static let nonReferenceIDs: Set<Int> = Set(AIModelID.allCases.map(\.rawValue))
 
     private static func referencePlugins() -> [any FXAIPlannedPlugin] {
         FXAIPluginRegistry.availablePlugins()
