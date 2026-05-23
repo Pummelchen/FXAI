@@ -144,15 +144,19 @@ private extension FX7 {
         _ max: Double,
         _ kind: ParameterValueKind
     ) -> ParameterDefinition {
-        try! ParameterDefinition(
-            key: key,
-            displayName: displayName,
-            defaultValue: value,
-            defaultMinimum: min,
-            defaultStep: step,
-            defaultMaximum: max,
-            valueKind: kind
-        )
+        do {
+            return try ParameterDefinition(
+                key: key,
+                displayName: displayName,
+                defaultValue: value,
+                defaultMinimum: min,
+                defaultStep: step,
+                defaultMaximum: max,
+                valueKind: kind
+            )
+        } catch {
+            preconditionFailure("Invalid FX7 parameter definition '\(key)': \(error)")
+        }
     }
 }
 

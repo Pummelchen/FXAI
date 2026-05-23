@@ -109,7 +109,7 @@ public struct YahooFinanceHistoryConnector: FXImporterConnector {
         }
 
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
-        components?.path = "/v8/finance/chart/\(encodedSymbol)"
+        components?.percentEncodedPath = "/v8/finance/chart/\(encodedSymbol)"
         components?.queryItems = [
             URLQueryItem(name: "period1", value: String(request.fromSourceTimestamp)),
             URLQueryItem(name: "period2", value: String(request.toSourceTimestampExclusive)),

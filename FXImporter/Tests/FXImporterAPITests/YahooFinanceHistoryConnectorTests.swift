@@ -34,6 +34,24 @@ final class YahooFinanceHistoryConnectorTests: XCTestCase {
         XCTAssertTrue(text.contains("includeAdjustedClose=true"))
     }
 
+    func testBuildsYahooChartURLWithoutDoubleEncodingFXSymbols() throws {
+        let request = FXImporterD1HistoryRequest(
+            sourceSymbol: "EURUSD=X",
+            fromSourceTimestamp: 1_704_067_200,
+            toSourceTimestampExclusive: 1_704_326_400,
+            maxBars: 100
+        )
+
+        let url = try YahooFinanceHistoryConnector.makeChartURL(
+            baseURL: URL(string: "https://example.test")!,
+            request: request
+        )
+        let text = url.absoluteString
+
+        XCTAssertTrue(text.hasPrefix("https://example.test/v8/finance/chart/EURUSD%3DX?"))
+        XCTAssertFalse(text.contains("EURUSD%253DX"))
+    }
+
     func testBuildsYahooChartRequestWithAuditableHeaders() throws {
         let request = FXImporterD1HistoryRequest(
             sourceSymbol: "AAPL",

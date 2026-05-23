@@ -4,11 +4,11 @@ import Foundation
 public enum SineTestSecurity {
     public static let displayName = "SineTest"
     public static let logicalSymbolRawValue = "SINETEST"
-    public static let defaultBrokerSourceId = try! BrokerSourceId("virtual-sinetest")
-    public static let logicalSymbol = try! LogicalSymbol(logicalSymbolRawValue)
-    public static let providerSymbol = try! MT5Symbol(displayName)
+    public static let defaultBrokerSourceId = validatedBrokerSourceId("virtual-sinetest")
+    public static let logicalSymbol = validatedLogicalSymbol(logicalSymbolRawValue)
+    public static let providerSymbol = validatedMT5Symbol(displayName)
     public static let sourceOrigin = DataSourceOrigin.synthetic
-    public static let digits = try! Digits(6)
+    public static let digits = validatedDigits(6)
 
     public static func matches(_ logicalSymbol: LogicalSymbol) -> Bool {
         logicalSymbol.rawValue == logicalSymbolRawValue
@@ -17,6 +17,38 @@ public enum SineTestSecurity {
     public static func acceptsProviderSymbol(_ value: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed == displayName || trimmed.uppercased() == logicalSymbolRawValue
+    }
+
+    private static func validatedBrokerSourceId(_ value: String) -> BrokerSourceId {
+        do {
+            return try BrokerSourceId(value)
+        } catch {
+            preconditionFailure("Invalid SineTest broker source id '\(value)': \(error)")
+        }
+    }
+
+    private static func validatedLogicalSymbol(_ value: String) -> LogicalSymbol {
+        do {
+            return try LogicalSymbol(value)
+        } catch {
+            preconditionFailure("Invalid SineTest logical symbol '\(value)': \(error)")
+        }
+    }
+
+    private static func validatedMT5Symbol(_ value: String) -> MT5Symbol {
+        do {
+            return try MT5Symbol(value)
+        } catch {
+            preconditionFailure("Invalid SineTest provider symbol '\(value)': \(error)")
+        }
+    }
+
+    private static func validatedDigits(_ value: Int) -> Digits {
+        do {
+            return try Digits(value)
+        } catch {
+            preconditionFailure("Invalid SineTest digits '\(value)': \(error)")
+        }
     }
 }
 

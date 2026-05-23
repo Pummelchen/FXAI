@@ -331,8 +331,8 @@ public extension FXAIPluginImplementationDescriptor {
             maxSequenceBars: 128,
             profile: .world,
             primaryBackends: [.accelerate],
-            candidateBackends: [.pyTorchMPS, .coreMLNeuralEngine],
-            notes: "World-model adapter. Native graph/context scoring remains the fallback; learned world models can move to PyTorch MPS and Core ML inference."
+            candidateBackends: [.pyTorchMPS],
+            notes: "World-model adapter. Native graph/context scoring remains the fallback; learned world models can move to PyTorch MPS. Core ML is excluded until export, load, prediction, and parity tests exist."
         )
     }
 
@@ -347,8 +347,8 @@ public extension FXAIPluginImplementationDescriptor {
             maxSequenceBars: 128,
             profile: .reinforcement,
             primaryBackends: [.pyTorchMPS],
-            candidateBackends: [.coreMLNeuralEngine],
-            notes: "RL policy adapter. PPO training belongs in PyTorch MPS; Core ML is an inference-only candidate after policy stabilization."
+            candidateBackends: [],
+            notes: "RL policy adapter. PPO training belongs in PyTorch MPS. Core ML is excluded until export, load, prediction, and parity tests exist."
         )
     }
 }

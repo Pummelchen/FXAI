@@ -260,7 +260,27 @@ public struct FXDatabaseBacktestResultService: FXBacktestResultProviding {
     }
 
     private static func sqlString(_ value: String) -> String {
-        "'\(value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "\\'"))'"
+        var escaped = ""
+        escaped.reserveCapacity(value.count)
+        for character in value {
+            switch character {
+            case "\\":
+                escaped.append("\\\\")
+            case "'":
+                escaped.append("\\'")
+            case "\n":
+                escaped.append("\\n")
+            case "\r":
+                escaped.append("\\r")
+            case "\t":
+                escaped.append("\\t")
+            case "\0":
+                escaped.append("\\0")
+            default:
+                escaped.append(character)
+            }
+        }
+        return "'\(escaped)'"
     }
 
     private static func tsvFields(_ line: String) -> [String] {

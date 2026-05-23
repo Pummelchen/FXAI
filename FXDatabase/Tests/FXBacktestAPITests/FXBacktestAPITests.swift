@@ -262,6 +262,30 @@ final class FXBacktestAPITests: XCTestCase {
         XCTAssertTrue(sql.contains { $0.contains("ALTER TABLE `fxdatabase_test`.`fxbacktest_pass_results` DELETE WHERE 1") })
     }
 
+    func testResultServiceEscapesRunMetadataSQLLiterals() async throws {
+        let clickHouse = RecordingResultClickHouse()
+        let service = FXDatabaseBacktestResultService(clickHouse: clickHouse, database: "fxdatabase_test")
+        let request = FXBacktestResultRunStartRequest(
+            runId: "run-escape",
+            pluginId: "com.fxbacktest.tests.plugin.v1",
+            engine: "cpu",
+            brokerSourceId: "demo",
+            primarySymbol: "EURUSD",
+            symbols: ["EURUSD"],
+            settingsJSON: #"{"note":"O'Reilly\\book"}"#,
+            parameterSpaceJSON: "{}",
+            totalPasses: 1,
+            note: "line1\nline2\tO'Reilly\\path\r"
+        )
+
+        _ = try await service.startRun(request)
+
+        let sql = await clickHouse.sql()
+        let insertSQL = try XCTUnwrap(sql.first { $0.contains("INSERT INTO `fxdatabase_test`.`fxbacktest_runs`") })
+        XCTAssertTrue(insertSQL.contains(#"'{"note":"O\'Reilly\\\\book"}'"#))
+        XCTAssertTrue(insertSQL.contains(#"'line1\nline2\tO\'Reilly\\path\r'"#))
+    }
+
     func testHistoryServiceServesSineTestAsVirtualSecurityWithoutClickHouseReadiness() async throws {
         let clickHouse = NeverCalledClickHouse()
         let service = FXDatabaseBacktestHistoryService(config: try Self.makeConfig(), clickHouse: clickHouse)
