@@ -111,7 +111,7 @@ Only shared API and registry code belongs under `FXPlugins/API/`. Plugin-specifi
 Run the macOS installer from the repo root:
 
 ```bash
-Scripts/install_macos26.sh
+./install_fxai.sh
 ```
 
 The installer is Bash 3 compatible for macOS. It installs Homebrew dependencies, checks Xcode/Command Line Tools for Swift and Metal, scans this repo for Python imports, and installs matching Python packages with no hard version pins.
@@ -119,7 +119,7 @@ The installer is Bash 3 compatible for macOS. It installs Homebrew dependencies,
 Use a dry run to see what it would do:
 
 ```bash
-DRY_RUN=1 Scripts/install_macos26.sh
+DRY_RUN=1 ./install_fxai.sh
 ```
 
 ## Verification

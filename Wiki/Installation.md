@@ -7,13 +7,13 @@ FXAI targets macOS 26 with the current Apple Swift toolchain, Metal, Homebrew, P
 From the repo root:
 
 ```bash
-Scripts/install_macos26.sh
+./install_fxai.sh
 ```
 
 Dry run:
 
 ```bash
-DRY_RUN=1 Scripts/install_macos26.sh
+DRY_RUN=1 ./install_fxai.sh
 ```
 
 The installer is Bash 3 compatible. It:

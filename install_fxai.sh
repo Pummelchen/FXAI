@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$SCRIPT_DIR"
 DRY_RUN="${DRY_RUN:-0}"
 SKIP_BREW="${SKIP_BREW:-0}"
 SKIP_PYTHON="${SKIP_PYTHON:-0}"
