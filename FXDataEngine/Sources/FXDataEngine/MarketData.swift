@@ -21,10 +21,11 @@ public struct FXMarketMetadata: Codable, Hashable, Sendable {
         firstUTC: Int64? = nil,
         lastUTC: Int64? = nil
     ) {
-        self.brokerSourceId = brokerSourceId
-        self.sourceOrigin = sourceOrigin
-        self.logicalSymbol = logicalSymbol.uppercased()
-        self.providerSymbol = providerSymbol
+        self.brokerSourceId = brokerSourceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.sourceOrigin = sourceOrigin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        self.logicalSymbol = logicalSymbol.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let trimmedProvider = providerSymbol?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.providerSymbol = trimmedProvider?.isEmpty == true ? nil : trimmedProvider
         self.timeframe = timeframe
         self.digits = digits
         self.firstUTC = firstUTC
@@ -87,6 +88,16 @@ public struct M1OHLCVSeries: Sendable {
               volume.count == rowCount else {
             throw FXDataEngineError.validation("M1 OHLCV columns must have equal length")
         }
+        guard !metadata.brokerSourceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw FXDataEngineError.validation("broker source id must not be empty")
+        }
+        guard !metadata.sourceOrigin.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              metadata.sourceOrigin == metadata.sourceOrigin.uppercased() else {
+            throw FXDataEngineError.validation("source origin must be non-empty uppercase text")
+        }
+        guard !metadata.logicalSymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw FXDataEngineError.validation("logical symbol must not be empty")
+        }
 
         for index in 0..<rowCount {
             let timestamp = utcTimestamps[index]
@@ -104,6 +115,18 @@ public struct M1OHLCVSeries: Sendable {
                   low[index] <= open[index],
                   low[index] <= close[index] else {
                 throw FXDataEngineError.validation("OHLC invariant failed at row \(index)")
+            }
+        }
+        if rowCount == 0 {
+            guard metadata.firstUTC == nil, metadata.lastUTC == nil else {
+                throw FXDataEngineError.validation("empty M1 OHLCV series must not declare first/last UTC metadata")
+            }
+        } else {
+            if let firstUTC = metadata.firstUTC, firstUTC != utcTimestamps[0] {
+                throw FXDataEngineError.validation("metadata first UTC does not match the first timestamp")
+            }
+            if let lastUTC = metadata.lastUTC, lastUTC != utcTimestamps[rowCount - 1] {
+                throw FXDataEngineError.validation("metadata last UTC does not match the last timestamp")
             }
         }
 

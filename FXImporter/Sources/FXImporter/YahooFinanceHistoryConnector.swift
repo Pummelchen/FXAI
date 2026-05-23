@@ -154,6 +154,7 @@ public struct YahooFinanceHistoryConnector: FXImporterConnector {
 
         var bars: [FXImporterD1Bar] = []
         bars.reserveCapacity(min(count, request.maxBars))
+        var previousTimestamp: Int64?
         for index in timestamps.indices {
             let timestamp = timestamps[index]
             guard timestamp >= request.fromSourceTimestamp,
@@ -164,6 +165,17 @@ public struct YahooFinanceHistoryConnector: FXImporterConnector {
                   let close = quote.close[index] else {
                 continue
             }
+            try validateOHLC(
+                open: open,
+                high: high,
+                low: low,
+                close: close,
+                timestamp: timestamp
+            )
+            if let previousTimestamp, timestamp <= previousTimestamp {
+                throw YahooFinanceHistoryConnectorError.malformedResponse("timestamps must be strictly increasing")
+            }
+            previousTimestamp = timestamp
 
             let adjusted = adjustedClose.indices.contains(index) ? adjustedClose[index] : nil
             bars.append(
@@ -202,10 +214,35 @@ public struct YahooFinanceHistoryConnector: FXImporterConnector {
         guard value.isFinite else {
             throw YahooFinanceHistoryConnectorError.malformedResponse("price contains non-finite value")
         }
+        guard value > 0.0 else {
+            throw YahooFinanceHistoryConnectorError.malformedResponse("price must be positive")
+        }
         let raw = String(format: "%.10f", locale: Locale(identifier: "en_US_POSIX"), value)
         let trimmedZeros = raw.replacingOccurrences(of: #"0+$"#, with: "", options: .regularExpression)
         let trimmedDecimal = trimmedZeros.replacingOccurrences(of: #"\.$"#, with: "", options: .regularExpression)
         return trimmedDecimal.isEmpty ? "0" : trimmedDecimal
+    }
+
+    private static func validateOHLC(
+        open: Double,
+        high: Double,
+        low: Double,
+        close: Double,
+        timestamp: Int64
+    ) throws {
+        guard open.isFinite, high.isFinite, low.isFinite, close.isFinite else {
+            throw YahooFinanceHistoryConnectorError.malformedResponse("OHLC contains non-finite value at \(timestamp)")
+        }
+        guard open > 0.0, high > 0.0, low > 0.0, close > 0.0 else {
+            throw YahooFinanceHistoryConnectorError.malformedResponse("OHLC contains non-positive value at \(timestamp)")
+        }
+        guard high >= open,
+              high >= close,
+              high >= low,
+              low <= open,
+              low <= close else {
+            throw YahooFinanceHistoryConnectorError.malformedResponse("OHLC invariant failed at \(timestamp)")
+        }
     }
 
     private static func defaultLoadData(_ request: URLRequest) async throws -> (Data, Int) {

@@ -10,6 +10,21 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(series.bar(at: 3).volume, 103)
     }
 
+    func testMarketMetadataCanonicalizesSourceIdentityFields() throws {
+        let metadata = FXMarketMetadata(
+            brokerSourceId: "  demo  ",
+            sourceOrigin: " mt5 ",
+            logicalSymbol: " eurusd ",
+            providerSymbol: " EURUSD.r ",
+            digits: 5
+        )
+
+        XCTAssertEqual(metadata.brokerSourceId, "demo")
+        XCTAssertEqual(metadata.sourceOrigin, "MT5")
+        XCTAssertEqual(metadata.logicalSymbol, "EURUSD")
+        XCTAssertEqual(metadata.providerSymbol, "EURUSD.r")
+    }
+
     func testFeatureCoreZerosVolumeFeaturesWhenDatasetHasNoVolume() throws {
         let series = try makeSeries(volumeEnabled: false, count: 160)
         let universe = try MarketUniverse(series: [series])
@@ -39,6 +54,42 @@ final class PipelineTests: XCTestCase {
         XCTAssertNotEqual(frame.raw[6], 0.0)
         XCTAssertEqual(frame.raw[75], 1.0)
         XCTAssertGreaterThan(frame.raw[80], 0.0)
+    }
+
+    func testMarketSeriesRejectsMetadataTimestampDrift() throws {
+        let series = try makeSeries(volumeEnabled: true, count: 20)
+        XCTAssertThrowsError(try M1OHLCVSeries(
+            metadata: FXMarketMetadata(
+                brokerSourceId: series.metadata.brokerSourceId,
+                sourceOrigin: series.metadata.sourceOrigin,
+                logicalSymbol: series.metadata.logicalSymbol,
+                providerSymbol: series.metadata.providerSymbol,
+                digits: series.metadata.digits,
+                firstUTC: series.utcTimestamps[0] - 60,
+                lastUTC: series.utcTimestamps[series.count - 1]
+            ),
+            utcTimestamps: series.utcTimestamps,
+            open: series.open,
+            high: series.high,
+            low: series.low,
+            close: series.close,
+            volume: series.volume
+        ))
+    }
+
+    func testMovingAverageFeatureWindowsDoNotCollapseLongMTFInputs() throws {
+        let series = try makeCurvedSeries(symbol: "EURUSD", count: 13_000)
+        let universe = try MarketUniverse(series: [series])
+        let bundle = try DataCore().buildBundle(
+            request: DataCoreRequest(symbol: "EURUSD", neededBars: 12_500),
+            universe: universe
+        )
+
+        let frame = try FeatureCore().buildFrame(bundle: bundle)
+
+        XCTAssertNotEqual(frame.raw[22], frame.raw[23], accuracy: 1e-12)
+        XCTAssertNotEqual(frame.raw[23], frame.raw[25], accuracy: 1e-12)
+        XCTAssertNotEqual(frame.raw[25], frame.raw[29], accuracy: 1e-12)
     }
 
     func testPipelineBuildsPluginPredictPayloadWithVolumeContext() throws {
@@ -231,6 +282,38 @@ final class PipelineTests: XCTestCase {
         }
     }
 
+    func testTrainingDatasetFitsZScoreNormalizationBeforePayloads() throws {
+        let series = try makeCurvedSeries(symbol: "EURUSD", count: 220)
+        let universe = try MarketUniverse(primarySymbol: "EURUSD", series: [series])
+        let manifest = PluginManifestV4(
+            aiID: 8,
+            aiName: "DatasetWindow",
+            family: .linear,
+            capabilityMask: [.selfTest, .windowContext],
+            minSequenceBars: 2,
+            maxSequenceBars: 16
+        )
+
+        let dataset = try FXDataEnginePipeline().prepareTrainingDataset(
+            universe: universe,
+            baseRequest: DataCoreRequest(symbol: "EURUSD", neededBars: 50),
+            manifest: manifest,
+            datasetRequest: TrainingDatasetRequest(
+                startIndex: 100,
+                endIndex: 115,
+                stride: 1,
+                maxSamples: 8,
+                horizonMinutes: 5,
+                normalizationMethod: .zScore
+            )
+        )
+
+        let first = try XCTUnwrap(dataset.payloads.first)
+        XCTAssertEqual(dataset.payloads.count, 8)
+        XCTAssertNotEqual(first.sample.x[1], first.featureFrame.raw[0], accuracy: 1e-12)
+        XCTAssertEqual(first.sample.x[1], first.normalizationFrame.normalized[0], accuracy: 1e-12)
+    }
+
     private func makeSeries(volumeEnabled: Bool, count: Int) throws -> M1OHLCVSeries {
         let start = Int64(1_704_067_200)
         var utc = ContiguousArray<Int64>()
@@ -337,6 +420,48 @@ final class PipelineTests: XCTestCase {
             low.append(min(price, next) - 2)
             close.append(next)
             volume.append(UInt64(200 + (index % 23)))
+            price = next
+        }
+
+        return try M1OHLCVSeries(
+            metadata: FXMarketMetadata(
+                brokerSourceId: "demo",
+                sourceOrigin: "DEMO",
+                logicalSymbol: symbol,
+                providerSymbol: symbol,
+                digits: 5,
+                firstUTC: utc.first,
+                lastUTC: utc.last
+            ),
+            utcTimestamps: utc,
+            open: open,
+            high: high,
+            low: low,
+            close: close,
+            volume: volume
+        )
+    }
+
+    private func makeCurvedSeries(symbol: String, count: Int) throws -> M1OHLCVSeries {
+        let start = Int64(1_704_067_200)
+        var utc = ContiguousArray<Int64>()
+        var open = ContiguousArray<Int64>()
+        var high = ContiguousArray<Int64>()
+        var low = ContiguousArray<Int64>()
+        var close = ContiguousArray<Int64>()
+        var volume = ContiguousArray<UInt64>()
+        var price = Int64(100_000)
+
+        for index in 0..<count {
+            let slowCycle = Int64(((index % 400) - 200) * 2)
+            let fastCycle = Int64((index % 73) - 36)
+            let next = max(50_000, 100_000 + slowCycle + fastCycle)
+            utc.append(start + Int64(index * 60))
+            open.append(price)
+            high.append(max(price, next) + 6)
+            low.append(min(price, next) - 6)
+            close.append(next)
+            volume.append(UInt64(100 + (index % 31)))
             price = next
         }
 

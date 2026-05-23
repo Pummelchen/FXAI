@@ -258,6 +258,66 @@ final class NormalizationStateTests: XCTestCase {
         XCTAssertEqual(existing.stats.mean, 0.0, accuracy: 1e-12)
     }
 
+    func testNormalizationCoreAppliesFittedZScoreStatsToModelInput() throws {
+        var fit = NormalizationFitState()
+        let rows = (0..<8).map { value -> [Double] in
+            var row = Array(repeating: 0.0, count: FXDataEngineConstants.aiFeatures)
+            row[0] = Double(value)
+            return row
+        }
+        XCTAssertTrue(fit.fit(method: .zScore, horizonMinutes: 5, rawRows: rows))
+
+        var raw = Array(repeating: 0.0, count: FXDataEngineConstants.aiFeatures)
+        raw[0] = 7.0
+        let frame = FeatureCoreFrame(
+            valid: true,
+            sampleIndex: 7,
+            horizonMinutes: 5,
+            normalizationMethod: .zScore,
+            sampleTimeUTC: 1_704_067_200,
+            hasVolume: false,
+            hasPrevious: true,
+            raw: raw,
+            previous: Array(repeating: 0.0, count: FXDataEngineConstants.aiFeatures)
+        )
+
+        let normalized = try NormalizationCore().buildInputFrame(from: frame, fitState: fit)
+        let expected = (7.0 - 3.5) / sqrt(5.25) / 4.0
+
+        XCTAssertEqual(normalized.normalized[0], expected, accuracy: 1e-12)
+        XCTAssertEqual(normalized.modelInput[0], 1.0, accuracy: 1e-12)
+        XCTAssertEqual(normalized.modelInput[1], expected, accuracy: 1e-12)
+    }
+
+    func testNormalizationCoreKeepsConstantFittedMinMaxFeaturesNeutral() throws {
+        var fit = NormalizationFitState()
+        let rows = (0..<8).map { _ -> [Double] in
+            var row = Array(repeating: 0.0, count: FXDataEngineConstants.aiFeatures)
+            row[0] = 0.25
+            return row
+        }
+        XCTAssertTrue(fit.fit(method: .minMaxBuffer5, horizonMinutes: 5, rawRows: rows))
+
+        var raw = Array(repeating: 0.0, count: FXDataEngineConstants.aiFeatures)
+        raw[0] = 0.25
+        let frame = FeatureCoreFrame(
+            valid: true,
+            sampleIndex: 7,
+            horizonMinutes: 5,
+            normalizationMethod: .minMaxBuffer5,
+            sampleTimeUTC: 1_704_067_200,
+            hasVolume: false,
+            hasPrevious: true,
+            raw: raw,
+            previous: Array(repeating: 0.0, count: FXDataEngineConstants.aiFeatures)
+        )
+
+        let normalized = try NormalizationCore().buildInputFrame(from: frame, fitState: fit)
+
+        XCTAssertEqual(normalized.normalized[0], 0.5, accuracy: 1e-12)
+        XCTAssertEqual(normalized.modelInput[1], 0.5, accuracy: 1e-12)
+    }
+
     func testNormalizationFitCodecRoundTripsLegacySection() throws {
         var fit = NormalizationFitState()
         let rows = (0..<8).map { value -> [Double] in

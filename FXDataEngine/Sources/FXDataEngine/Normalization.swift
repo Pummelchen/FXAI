@@ -85,7 +85,11 @@ public struct NormalizationCore: Sendable {
         self.schemaPolicy = schemaPolicy
     }
 
-    public func buildInputFrame(from featureFrame: FeatureCoreFrame) throws -> NormalizationCoreFrame {
+    public func buildInputFrame(
+        from featureFrame: FeatureCoreFrame,
+        fitState: NormalizationFitState? = nil,
+        configuredHorizons: [Int] = HorizonTools.defaultConfiguredHorizons
+    ) throws -> NormalizationCoreFrame {
         guard featureFrame.valid else {
             throw FXDataEngineError.invalidRequest("feature frame is not valid")
         }
@@ -93,7 +97,10 @@ public struct NormalizationCore: Sendable {
             method: featureFrame.normalizationMethod,
             raw: featureFrame.raw,
             previous: featureFrame.previous,
-            hasPrevious: featureFrame.hasPrevious
+            hasPrevious: featureFrame.hasPrevious,
+            horizonMinutes: featureFrame.horizonMinutes,
+            fitState: fitState,
+            configuredHorizons: configuredHorizons
         )
         let input = schemaPolicy.modelInput(from: normalized)
         return NormalizationCoreFrame(
@@ -166,7 +173,10 @@ public struct NormalizationCore: Sendable {
         method: FeatureNormalizationMethod,
         raw: [Double],
         previous: [Double],
-        hasPrevious: Bool
+        hasPrevious: Bool,
+        horizonMinutes: Int,
+        fitState: NormalizationFitState?,
+        configuredHorizons: [Int]
     ) -> [Double] {
         var out = Array(repeating: 0.0, count: FXDataEngineConstants.aiFeatures)
         for index in 0..<FXDataEngineConstants.aiFeatures {
@@ -176,12 +186,15 @@ public struct NormalizationCore: Sendable {
             switch method {
             case .existing:
                 value = current
-            case .minMaxBuffer5:
-                value = bufferedUnit(current, buffer: 0.05)
-            case .minMaxBuffer2:
-                value = bufferedUnit(current, buffer: 0.02)
-            case .minMaxBuffer3:
-                value = bufferedUnit(current, buffer: 0.03)
+            case .minMaxBuffer5, .minMaxBuffer2, .minMaxBuffer3:
+                value = fittedNormalizationValue(
+                    method: method,
+                    featureIndex: index,
+                    current: current,
+                    horizonMinutes: horizonMinutes,
+                    fitState: fitState,
+                    configuredHorizons: configuredHorizons
+                )
             case .changePercent:
                 value = hasPrevious ? (current - prior) / max(abs(prior), 1e-9) : 0.0
             case .relativeChangePercent:
@@ -193,16 +206,95 @@ public struct NormalizationCore: Sendable {
             case .candleGeometry, .volatilityStdReturns, .atrNatrUnit:
                 value = current
             case .zScore, .robustMedianIQR, .quantileToNormal, .powerYeoJohnson, .revin, .dain:
-                value = current
+                value = fittedNormalizationValue(
+                    method: method,
+                    featureIndex: index,
+                    current: current,
+                    horizonMinutes: horizonMinutes,
+                    fitState: fitState,
+                    configuredHorizons: configuredHorizons
+                )
             }
             out[index] = fxClampSignedUnit(value)
         }
         return out
     }
 
-    private func bufferedUnit(_ value: Double, buffer: Double) -> Double {
-        let buffered = (value + 1.0 + buffer) / (2.0 + buffer * 2.0)
+    private func fittedNormalizationValue(
+        method: FeatureNormalizationMethod,
+        featureIndex: Int,
+        current: Double,
+        horizonMinutes: Int,
+        fitState: NormalizationFitState?,
+        configuredHorizons: [Int]
+    ) -> Double {
+        let stats: NormalizationFitFeatureStats
+        if let lookup = fitState?.featureStats(
+            method: method,
+            horizonMinutes: horizonMinutes,
+            featureIndex: featureIndex,
+            configuredHorizons: configuredHorizons
+        ), lookup.ready {
+            stats = lookup.stats
+        } else {
+            stats = NormalizationFitTools.fallbackStats(featureIndex: featureIndex, registry: schemaPolicy.registry)
+        }
+
+        switch method {
+        case .minMaxBuffer5:
+            return fittedMinMax(current, stats: stats, buffer: 0.05)
+        case .minMaxBuffer2:
+            return fittedMinMax(current, stats: stats, buffer: 0.02)
+        case .minMaxBuffer3:
+            return fittedMinMax(current, stats: stats, buffer: 0.03)
+        case .zScore, .revin, .dain:
+            return (current - stats.mean) / max(stats.standardDeviation, 1e-6) / 4.0
+        case .robustMedianIQR:
+            return (current - stats.median) / max(stats.interquartileRange, 1e-6) / 4.0
+        case .quantileToNormal:
+            return quantileToNormal(current, stats: stats) / 6.0
+        case .powerYeoJohnson:
+            let transformed = NormalizationFitTools.yeoJohnson(current, lambda: stats.yeoJohnsonLambda)
+            return (transformed - stats.yeoJohnsonMean) / max(stats.yeoJohnsonStandardDeviation, 1e-6) / 4.0
+        default:
+            return current
+        }
+    }
+
+    private func fittedMinMax(_ value: Double, stats: NormalizationFitFeatureStats, buffer: Double) -> Double {
+        let span = stats.maximum - stats.minimum
+        guard span > 1e-12 else { return 0.5 }
+        let unit = (value - stats.minimum) / span
+        let buffered = (unit + buffer) / (1.0 + buffer * 2.0)
         return fxClamp(buffered, 0.0, 1.0)
+    }
+
+    private func quantileToNormal(_ value: Double, stats: NormalizationFitFeatureStats) -> Double {
+        let knots = stats.quantiles
+        guard let first = knots.first, let last = knots.last, knots.count > 1 else { return 0.0 }
+        let current = fxSafeFinite(value)
+        if current <= first {
+            return fxClamp(NormalizationFitTools.inverseNormalCDF(1e-6), -6.0, 6.0)
+        }
+        if current >= last {
+            return fxClamp(NormalizationFitTools.inverseNormalCDF(1.0 - 1e-6), -6.0, 6.0)
+        }
+
+        var q = 0.5
+        for index in 0..<(knots.count - 1) {
+            let q0 = knots[index]
+            let q1 = knots[index + 1]
+            if current > q1 {
+                continue
+            }
+            let p0 = Double(index) / Double(knots.count - 1)
+            let p1 = Double(index + 1) / Double(knots.count - 1)
+            q = abs(q1 - q0) < 1e-9
+                ? 0.5 * (p0 + p1)
+                : p0 + (current - q0) / (q1 - q0) * (p1 - p0)
+            break
+        }
+        return fxClamp(NormalizationFitTools.inverseNormalCDF(fxClamp(q, 1e-6, 1.0 - 1e-6)), -6.0, 6.0)
     }
 
     private func sanitizeInputVector(_ vector: [Double]) -> [Double] {

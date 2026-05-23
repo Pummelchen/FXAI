@@ -41,7 +41,9 @@ public struct FXDataEnginePipeline: Sendable {
         request dataRequest: DataCoreRequest,
         manifest: PluginManifestV4,
         horizonMinutes: Int,
-        normalizationMethod: FeatureNormalizationMethod = .existing
+        normalizationMethod: FeatureNormalizationMethod = .existing,
+        normalizationFitState: NormalizationFitState? = nil,
+        configuredHorizons: [Int] = HorizonTools.defaultConfiguredHorizons
     ) throws -> PreparedPluginPayload {
         try manifest.validate()
         let dataBundle = try dataCore.buildBundle(request: dataRequest, universe: universe)
@@ -53,13 +55,19 @@ public struct FXDataEnginePipeline: Sendable {
                 normalizationMethod: normalizationMethod
             )
         )
-        let normalizationFrame = try normalizationCore.buildInputFrame(from: featureFrame)
+        let normalizationFrame = try normalizationCore.buildInputFrame(
+            from: featureFrame,
+            fitState: normalizationFitState,
+            configuredHorizons: configuredHorizons
+        )
         let sequenceBars = manifest.resolvedSequenceBars(horizonMinutes: horizonMinutes)
         let xWindow = buildInputWindow(
             universe: universe,
             centerIndex: dataBundle.sampleIndex,
             sequenceBars: sequenceBars,
-            normalizationMethod: normalizationMethod
+            normalizationMethod: normalizationMethod,
+            normalizationFitState: normalizationFitState,
+            configuredHorizons: configuredHorizons
         )
         let payloadFrame = try normalizationCore.buildPayloadFrame(NormalizationPayloadRequest(
             valid: true,
@@ -102,7 +110,9 @@ public struct FXDataEnginePipeline: Sendable {
         roundTripCostPoints: Double = 0.0,
         evThresholdPoints: Double = 0.0,
         normalizationMethod: FeatureNormalizationMethod = .existing,
-        tradeKillerMinutes: Int? = nil
+        tradeKillerMinutes: Int? = nil,
+        normalizationFitState: NormalizationFitState? = nil,
+        configuredHorizons: [Int] = HorizonTools.defaultConfiguredHorizons
     ) throws -> PreparedTrainingPayload {
         try manifest.validate()
         let dataBundle = try dataCore.buildBundle(request: dataRequest, universe: universe)
@@ -119,7 +129,11 @@ public struct FXDataEnginePipeline: Sendable {
                 normalizationMethod: normalizationMethod
             )
         )
-        let normalizationFrame = try normalizationCore.buildInputFrame(from: featureFrame)
+        let normalizationFrame = try normalizationCore.buildInputFrame(
+            from: featureFrame,
+            fitState: normalizationFitState,
+            configuredHorizons: configuredHorizons
+        )
         let label = TrainingSampleTools.buildTripleBarrierLabel(
             series: dataBundle.primary,
             index: dataBundle.sampleIndex,
@@ -133,7 +147,9 @@ public struct FXDataEnginePipeline: Sendable {
             universe: universe,
             centerIndex: dataBundle.sampleIndex,
             sequenceBars: sequenceBars,
-            normalizationMethod: normalizationMethod
+            normalizationMethod: normalizationMethod,
+            normalizationFitState: normalizationFitState,
+            configuredHorizons: configuredHorizons
         )
         let payloadFrame = try normalizationCore.buildPayloadFrame(NormalizationPayloadRequest(
             valid: true,
@@ -242,10 +258,23 @@ public struct FXDataEnginePipeline: Sendable {
             )
         }
 
+        let sampleIndices = trainingSampleIndices(
+            start: start,
+            end: end,
+            stride: datasetRequest.stride,
+            maxSamples: datasetRequest.maxSamples
+        )
+        let fitState = try normalizationFitState(
+            universe: universe,
+            baseRequest: baseRequest,
+            sampleIndices: sampleIndices,
+            horizonMinutes: horizon,
+            normalizationMethod: datasetRequest.normalizationMethod
+        )
+
         var payloads: [PreparedTrainingPayload] = []
-        payloads.reserveCapacity(min(datasetRequest.maxSamples, max(0, ((end - start) / datasetRequest.stride) + 1)))
-        var sampleIndex = start
-        while sampleIndex <= end, payloads.count < datasetRequest.maxSamples {
+        payloads.reserveCapacity(sampleIndices.count)
+        for sampleIndex in sampleIndices {
             let request = DataCoreRequest(
                 liveMode: baseRequest.liveMode,
                 symbol: baseRequest.symbol,
@@ -261,10 +290,10 @@ public struct FXDataEnginePipeline: Sendable {
                 roundTripCostPoints: datasetRequest.roundTripCostPoints,
                 evThresholdPoints: datasetRequest.evThresholdPoints,
                 normalizationMethod: datasetRequest.normalizationMethod,
-                tradeKillerMinutes: datasetRequest.tradeKillerMinutes
+                tradeKillerMinutes: datasetRequest.tradeKillerMinutes,
+                normalizationFitState: fitState
             )
             payloads.append(payload)
-            sampleIndex += datasetRequest.stride
         }
 
         return PreparedTrainingDataset(
@@ -281,7 +310,9 @@ public struct FXDataEnginePipeline: Sendable {
         universe: MarketUniverse,
         centerIndex: Int,
         sequenceBars: Int,
-        normalizationMethod: FeatureNormalizationMethod
+        normalizationMethod: FeatureNormalizationMethod,
+        normalizationFitState: NormalizationFitState? = nil,
+        configuredHorizons: [Int] = HorizonTools.defaultConfiguredHorizons
     ) -> [[Double]] {
         let capped = min(max(1, sequenceBars), FXDataEngineConstants.maxSequenceBars)
         guard capped > 1, centerIndex > 0 else { return [] }
@@ -302,11 +333,64 @@ public struct FXDataEnginePipeline: Sendable {
                     ? featureCore.buildFeatureVector(universe: universe, sampleIndex: centerIndex - offset - 1)
                     : Array(repeating: 0.0, count: FXDataEngineConstants.aiFeatures)
             )
-            if let normalized = try? normalizationCore.buildInputFrame(from: featureFrame) {
+            if let normalized = try? normalizationCore.buildInputFrame(
+                from: featureFrame,
+                fitState: normalizationFitState,
+                configuredHorizons: configuredHorizons
+            ) {
                 window.append(normalized.modelInput)
             }
         }
         return window
+    }
+
+    private func trainingSampleIndices(start: Int, end: Int, stride: Int, maxSamples: Int) -> [Int] {
+        var indices: [Int] = []
+        indices.reserveCapacity(min(maxSamples, max(0, ((end - start) / max(stride, 1)) + 1)))
+        var sampleIndex = start
+        while sampleIndex <= end, indices.count < maxSamples {
+            indices.append(sampleIndex)
+            sampleIndex += max(stride, 1)
+        }
+        return indices
+    }
+
+    private func normalizationFitState(
+        universe: MarketUniverse,
+        baseRequest: DataCoreRequest,
+        sampleIndices: [Int],
+        horizonMinutes: Int,
+        normalizationMethod: FeatureNormalizationMethod
+    ) throws -> NormalizationFitState? {
+        guard normalizationMethod.usesFittedStats else { return nil }
+        var rawRows: [[Double]] = []
+        rawRows.reserveCapacity(sampleIndices.count)
+        for sampleIndex in sampleIndices {
+            let request = DataCoreRequest(
+                liveMode: baseRequest.liveMode,
+                symbol: baseRequest.symbol,
+                neededBars: baseRequest.neededBars,
+                alignUpToIndex: sampleIndex,
+                contextSymbols: baseRequest.contextSymbols
+            )
+            let bundle = try dataCore.buildBundle(request: request, universe: universe)
+            let frame = try featureCore.buildFrame(
+                bundle: bundle,
+                request: FeatureCoreRequest(
+                    sampleIndex: bundle.sampleIndex,
+                    horizonMinutes: horizonMinutes,
+                    normalizationMethod: normalizationMethod
+                )
+            )
+            rawRows.append(frame.raw)
+        }
+        var fit = NormalizationFitState()
+        guard fit.fit(method: normalizationMethod, horizonMinutes: horizonMinutes, rawRows: rawRows) else {
+            throw FXDataEngineError.insufficientData(
+                "normalization method \(normalizationMethod) needs at least 8 training rows to fit without leakage-prone fallbacks"
+            )
+        }
+        return fit
     }
 
     private func trainingQuality(

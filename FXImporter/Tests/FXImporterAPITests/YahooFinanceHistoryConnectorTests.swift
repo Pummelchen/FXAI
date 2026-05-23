@@ -96,6 +96,22 @@ final class YahooFinanceHistoryConnectorTests: XCTestCase {
         XCTAssertEqual(batch.bars[0].volume, 82_400_000)
     }
 
+    func testRejectsMalformedDailyOHLCInvariant() throws {
+        let request = FXImporterD1HistoryRequest(
+            sourceSymbol: "AAPL",
+            fromSourceTimestamp: 1_704_067_200,
+            toSourceTimestampExclusive: 1_704_326_400,
+            maxBars: 10
+        )
+
+        XCTAssertThrowsError(try YahooFinanceHistoryConnector.makeBatch(
+            request: request,
+            data: Self.invalidOHLCChartFixture.data(using: .utf8)!
+        )) { error in
+            XCTAssertTrue(String(describing: error).contains("OHLC invariant failed"))
+        }
+    }
+
     func testFetchD1HistoryUsesInjectedLoaderAndRejectsHTTPError() async throws {
         let connector = YahooFinanceHistoryConnector(
             baseURL: URL(string: "https://example.test")!,
@@ -156,6 +172,30 @@ final class YahooFinanceHistoryConnectorTests: XCTestCase {
               "adjclose": [
                 {
                   "adjclose": [184.9384155273, 184.8885955811]
+                }
+              ]
+            }
+          }
+        ],
+        "error": null
+      }
+    }
+    """
+
+    private static let invalidOHLCChartFixture = """
+    {
+      "chart": {
+        "result": [
+          {
+            "timestamp": [1704067200],
+            "indicators": {
+              "quote": [
+                {
+                  "open": [187.15],
+                  "high": [186.44],
+                  "low": [183.885],
+                  "close": [185.64],
+                  "volume": [82400000]
                 }
               ]
             }

@@ -268,7 +268,7 @@ public struct FeatureCore: Sendable {
             (34, 3_000), (35, 6_000), (36, 6_000), (37, 12_000)
         ]
         for (slot, window) in slots {
-            features[slot] = movingAverageEdge(series, index, window: min(window, 500))
+            features[slot] = movingAverageEdge(series, index, window: window)
         }
     }
 
