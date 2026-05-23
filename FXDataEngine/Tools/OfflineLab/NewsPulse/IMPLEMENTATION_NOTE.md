@@ -4,9 +4,8 @@ This note maps the NewsPulse design onto the actual FXAI repository structure.
 
 ## Real Integration Points
 
-- MT5 scheduled macro collector:
-  - `<FXAI_ROOT>/FXDataEngine/Services/FXAI_NewsPulseCalendar.mq5`
-  - Runs as an MT5 Service, not a chart EA.
+- FXDatabase scheduled macro collector:
+  - Runs as an FXDatabase Service, not a chart EA.
   - Exports calendar feed and state into `FILE_COMMON/FXAI/Runtime/`.
 
 - Python collectors, fusion, policy, and daemon:
@@ -23,13 +22,9 @@ This note maps the NewsPulse design onto the actual FXAI repository structure.
   - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/newspulse_service.py`
 
 - Runtime gating adapter:
-  - `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
-  - `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/Trade/runtime_trade_risk.mqh`
   - Consumes flat, file-backed pair state without changing the canonical model vector.
 
 - Audit and replay seam:
-  - `<FXAI_ROOT>/FXDataEngine/Tests/Scenarios/audit_newspulse_replay.mqh`
-  - `<FXAI_ROOT>/FXDataEngine/Tests/Scenarios/audit_context_series.mqh`
   - Pulls replay timelines into the existing macro-event audit scenario instead of inventing a parallel audit flow.
 
 - GUI operator surface:
@@ -46,7 +41,7 @@ NewsPulse is shared execution and observability infrastructure. It does not belo
 - a per-symbol collector path
 
 The actual repo already has:
-- `FXDataEngine/Services/` for MT5 background work
+- `FXDataEngine/Services/` for FXDatabase background work
 - `Tools/OfflineLab/offline_lab/` for machine-local daemons and shared research/runtime artifacts
 - `FXDataEngine/Engine/Runtime/Trade/` for execution overlays
 - `FXGUI/` for operator surfaces
@@ -55,7 +50,7 @@ So NewsPulse was added at those seams instead of inventing new top-level systems
 
 ## Phase-1 Safe Decisions
 
-- Scheduled events use MT5 Economic Calendar only.
+- Scheduled events use FXDatabase Economic Calendar only.
 - Breaking news uses GDELT plus a narrow optional official-feed rail.
 - Pair state is derived from currency state.
 - Runtime integration is gating-first, not model-retraining-first.
@@ -68,11 +63,9 @@ So NewsPulse was added at those seams instead of inventing new top-level systems
 
 2. Replay-native history and rebuild path:
    - `newspulse_replay.py`
-   - `audit_newspulse_replay.mqh`
 
 3. Symbol and session-aware calibration:
    - `newspulse_policy.py`
-   - runtime consumption in `runtime_trade_newspulse.mqh`
 
 4. Evolving story clustering:
    - `newspulse_story.py`

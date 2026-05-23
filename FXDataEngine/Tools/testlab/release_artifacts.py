@@ -9,43 +9,46 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from .compile import compile_target
-from .shared import FXAI_CONFIG_PATH, METAEDITOR, REPO_ROOT, ROOT, TOOLCHAIN_PROFILE, git_dirty, git_head_commit, sha256_path, write_json
+from .compile import compile_swift_package
+from .shared import FXAI_CONFIG_PATH, REPO_ROOT, ROOT, TOOLCHAIN_PROFILE, git_dirty, git_head_commit, sha256_path, write_json
 
 
 @dataclass(frozen=True)
-class MT5BinaryTarget:
+class SwiftPackageTarget:
     role: str
+    package: str
     source: Path
-    binary: Path
+    build_artifact: Path
     stage_name: str
     description: str
     compatible_profiles: tuple[str, ...] = ("research", "production")
 
 
-MT5_BINARY_TARGETS: tuple[MT5BinaryTarget, ...] = (
-    MT5BinaryTarget(
-        role="main_ea",
-        source=Path("FXDataEngine/FXAI.mq5"),
-        binary=Path("FXDataEngine/FXAI.ex5"),
-        stage_name="release_main_ea",
-        description="Main FXAI Expert Advisor for live trading and Strategy Tester runs.",
+SWIFT_PACKAGE_TARGETS: tuple[SwiftPackageTarget, ...] = (
+    SwiftPackageTarget(
+        role="data_engine",
+        package="data_engine",
+        source=Path("FXDataEngine/Package.swift"),
+        build_artifact=Path("FXDataEngine/.build/debug/FXDataEngineCLI"),
+        stage_name="release_data_engine",
+        description="FXDataEngine Swift package and command-line data pipeline verifier.",
     ),
-    MT5BinaryTarget(
-        role="audit_runner",
-        source=Path("FXDataEngine/Tests/FXAI_AuditRunner.mq5"),
-        binary=Path("FXDataEngine/Tests/FXAI_AuditRunner.ex5"),
-        stage_name="release_audit_runner",
-        description="Audit Lab runner for MT5-side certification and regression scenarios.",
+    SwiftPackageTarget(
+        role="plugins",
+        package="plugins",
+        source=Path("FXPlugins/Package.swift"),
+        build_artifact=Path("FXPlugins/.build/debug/Modules/FXAIPlugins.swiftmodule"),
+        stage_name="release_plugins",
+        description="FXPlugins Swift module with CPU, Metal, Python bridge, and NLP plugin surfaces.",
         compatible_profiles=("research",),
     ),
-    MT5BinaryTarget(
-        role="offline_export_runner",
-        source=Path("FXDataEngine/Tests/FXAI_OfflineExportRunner.mq5"),
-        binary=Path("FXDataEngine/Tests/FXAI_OfflineExportRunner.ex5"),
-        stage_name="release_offline_export_runner",
-        description="Offline Lab export runner for reproducible MT5 market-data extraction.",
-        compatible_profiles=("research",),
+    SwiftPackageTarget(
+        role="database",
+        package="database",
+        source=Path("FXDatabase/Package.swift"),
+        build_artifact=Path("FXDatabase/.build/debug/FXDatabase"),
+        stage_name="release_database",
+        description="FXDatabase Swift package and API gateway executable.",
     ),
 )
 
@@ -65,20 +68,21 @@ def _parse_profiles(raw: str | None) -> tuple[str, ...]:
     return tuple(profiles or ["research", "production"])
 
 
-def _copy_release_binary(root: Path, output_dir: Path, target: MT5BinaryTarget) -> Path:
-    source_path = root / target.binary
+def _copy_release_artifact(root: Path, output_dir: Path, target: SwiftPackageTarget) -> Path:
+    source_path = root / target.build_artifact
     if not source_path.exists() or not source_path.is_file():
-        raise FileNotFoundError(f"compiled MT5 binary not found: {source_path}")
-    output_path = output_dir / target.binary.name
+        raise FileNotFoundError(f"Swift build artifact not found: {source_path}")
+    output_name = f"{target.role}-{source_path.name}"
+    output_path = output_dir / output_name
     shutil.copy2(source_path, output_path)
     return output_path
 
 
-def _entry_for_binary(
+def _entry_for_artifact(
     *,
     root: Path,
     release_path: Path,
-    target: MT5BinaryTarget,
+    target: SwiftPackageTarget,
     version: str,
     release_profile: str,
     compatible_profiles: tuple[str, ...],
@@ -88,7 +92,7 @@ def _entry_for_binary(
     if not entry_profiles:
         entry_profiles = target.compatible_profiles
     return {
-        "name": target.binary.name,
+        "name": release_path.name,
         "role": target.role,
         "description": target.description,
         "source": target.source.as_posix(),
@@ -96,37 +100,36 @@ def _entry_for_binary(
         "release_file": release_path.name,
         "release_sha256": sha256_path(release_path),
         "release_size_bytes": int(release_path.stat().st_size),
-        "mt5_install_path": f"MQL5/Experts/FXAI/{target.binary.as_posix()}",
         "fxai_version": version,
         "release_profile": release_profile,
         "compatible_profiles": list(entry_profiles),
     }
 
 
-def write_mt5_release_bundle(
+def write_swift_release_bundle(
     *,
     root: Path,
     output_dir: Path,
     version: str,
     release_profile: str,
     compatible_profiles: tuple[str, ...],
-    targets: tuple[MT5BinaryTarget, ...] = MT5_BINARY_TARGETS,
+    targets: tuple[SwiftPackageTarget, ...] = SWIFT_PACKAGE_TARGETS,
     repo_root: Path = REPO_ROOT,
 ) -> dict[str, object]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     version_token = _safe_token(version)
-    manifest_path = output_dir / f"fxai-mt5-{version_token}.manifest.json"
-    sums_path = output_dir / f"fxai-mt5-{version_token}.SHA256SUMS"
-    zip_path = output_dir / f"fxai-mt5-{version_token}.zip"
+    manifest_path = output_dir / f"fxai-swift-{version_token}.manifest.json"
+    sums_path = output_dir / f"fxai-swift-{version_token}.SHA256SUMS"
+    zip_path = output_dir / f"fxai-swift-{version_token}.zip"
     zip_sums_path = output_dir / f"{zip_path.name}.sha256"
 
-    copied: list[tuple[MT5BinaryTarget, Path]] = []
+    copied: list[tuple[SwiftPackageTarget, Path]] = []
     for target in targets:
-        copied.append((target, _copy_release_binary(root, output_dir, target)))
+        copied.append((target, _copy_release_artifact(root, output_dir, target)))
 
     entries = [
-        _entry_for_binary(
+        _entry_for_artifact(
             root=root,
             release_path=release_path,
             target=target,
@@ -140,7 +143,7 @@ def write_mt5_release_bundle(
     built_at = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     manifest: dict[str, object] = {
         "schema_version": 1,
-        "artifact_type": "fxai_mt5_binaries",
+        "artifact_type": "fxai_swift_artifacts",
         "version": version,
         "built_at_utc": built_at,
         "release_profile": release_profile,
@@ -151,13 +154,8 @@ def write_mt5_release_bundle(
             "repo_dirty": git_dirty(repo_root),
             "build_platform": platform.platform(),
             "python": platform.python_version(),
-            "metaeditor": str(METAEDITOR),
             "toolchain_profile": TOOLCHAIN_PROFILE,
             "toolchain_config": (str(FXAI_CONFIG_PATH) if FXAI_CONFIG_PATH else ""),
-        },
-        "install": {
-            "mt5_root_relative": "MQL5/Experts/FXAI",
-            "notes": "Install .ex5 files under the matching FXAI source tree paths shown per artifact.",
         },
         "bundle": {
             "zip": zip_path.name,
@@ -193,22 +191,22 @@ def write_mt5_release_bundle(
     return payload
 
 
-def cmd_package_mt5_release(args) -> int:
+def cmd_package_swift_release(args) -> int:
     version = str(args.version or "").strip()
     if not version:
         raise SystemExit("--version is required")
 
-    targets = MT5_BINARY_TARGETS
-    if not bool(getattr(args, "skip_compile", False)):
+    targets = SWIFT_PACKAGE_TARGETS
+    if not bool(getattr(args, "skip_build", False)):
         for target in targets:
-            rc = compile_target(target.source, target.stage_name)
+            rc = compile_swift_package(target.package)
             if rc != 0:
                 return rc
 
     output_dir = Path(args.output_dir) if args.output_dir else ROOT / "Artifacts/Release"
     release_profile = str(getattr(args, "release_profile", "production") or "production").strip().lower()
     compatible_profiles = _parse_profiles(getattr(args, "compatible_profiles", "research,production"))
-    manifest = write_mt5_release_bundle(
+    manifest = write_swift_release_bundle(
         root=ROOT,
         output_dir=output_dir,
         version=version,

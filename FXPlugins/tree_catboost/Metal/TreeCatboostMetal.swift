@@ -66,6 +66,6 @@ public enum TreeCatboostMetal {
         primaryBackends: [.swiftScalar, .accelerate, .metal],
         candidateBackends: [.swiftSIMD],
         usesVolumeWhenAvailable: true,
-        notes: "Plugin-local Swift CPU port of legacy MQL5 tree_catboost with ordered CTR features, symmetric multiclass trees, calibration, drift-aware rebuild cadence, move estimates, and quality heads. Metal kernels provide independent symmetric-tree margin and softmax scoring; PyTorch, TensorFlow, and NLP are not suitable for this non-neural tree ensemble."
+        notes: "Plugin-local Swift CPU implementation of tree_catboost with ordered CTR features, symmetric multiclass trees, calibration, drift-aware rebuild cadence, move estimates, and quality heads. Metal kernels provide independent symmetric-tree margin and softmax scoring; PyTorch, TensorFlow, and NLP are not suitable for this non-neural tree ensemble."
     )
 }

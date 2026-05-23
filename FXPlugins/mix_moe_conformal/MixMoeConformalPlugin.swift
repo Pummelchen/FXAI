@@ -22,7 +22,7 @@ public struct MixMoeConformalPlugin: FXAIPlannedPlugin {
         primaryBackends: [.accelerate],
         candidateBackends: [.pyTorchMPS],
         usesVolumeWhenAvailable: true,
-        notes: "Plugin-local Swift CPU port of the MQL5 conformal mixture-of-experts router. PyTorch/MPS folder provides independent batched MoE inference; Metal, TensorFlow, and NLP are not suitable for this small online conformal model."
+        notes: "Plugin-local Swift CPU implementation of the conformal mixture-of-experts router. PyTorch/MPS folder provides independent batched MoE inference; Metal, TensorFlow, and NLP are not suitable for this small online conformal model."
     )
 
     private var cpu: MixMoeConformalCPUModel

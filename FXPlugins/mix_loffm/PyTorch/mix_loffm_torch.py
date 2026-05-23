@@ -2,7 +2,8 @@
 
 The Swift CPU implementation is the deterministic trading path. This module is
 plugin-local research/acceleration code for batched gating and expert inference
-on Apple Silicon MPS, with CPU fallback when MPS is unavailable.
+on Apple Silicon MPS. Live accelerator routing requires MPS; CPU execution is
+reserved for explicit contract-test fallback.
 """
 
 from __future__ import annotations

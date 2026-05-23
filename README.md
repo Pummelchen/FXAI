@@ -119,9 +119,10 @@ Only shared API and registry code belongs under `FXPlugins/API/`. Plugin-specifi
 
 - macOS deployment floor: macOS 26.
 - Swift tools: current repo standard is Swift tools 6.3 with Swift language mode 6.
-- Metal: Apple GPU acceleration is validated through runtime compilation and plugin-local buffer parity tests.
-- PyTorch: plugin backends prefer Apple Silicon MPS when available.
-- TensorFlow: plugin backends use TensorFlow and check for available local devices; TensorFlow Metal is installed when available.
+- Hardware target: Apple Silicon M2/M3-class Macs, including newer Apple Silicon generations. M1 and Intel x86 are unsupported runtime targets.
+- Metal: Apple GPU acceleration is validated through runtime compilation and plugin-local buffer parity tests, and only counts as available on unified-memory M2/M3-or-newer hosts.
+- PyTorch: plugin backends require Apple Silicon MPS for accelerator runtime paths unless a test explicitly opts into CPU fallback.
+- TensorFlow: plugin backends require a TensorFlow Metal GPU device for accelerator runtime paths unless a test explicitly opts into CPU fallback.
 - CoreML/Neural Engine: not declared by plugins until real export, load, prediction, and parity tests exist.
 
 ## Install
@@ -132,7 +133,7 @@ Run the macOS installer from the repo root:
 ./install_fxai.sh
 ```
 
-The installer is Bash 3 compatible for macOS. It installs Homebrew dependencies, checks Xcode/Command Line Tools for Swift and Metal, scans this repo for Python imports, and installs matching Python packages with no hard version pins.
+The installer is Bash 3 compatible for macOS. It rejects Intel x86 and Apple M1 hosts, installs Homebrew dependencies, checks Xcode/Command Line Tools for Swift and Metal, scans this repo for Python imports, and installs matching Python packages with no hard version pins.
 
 Use a dry run to see what it would do:
 

@@ -4,64 +4,41 @@ import Foundation
 import Darwin
 #endif
 
-#if canImport(Metal)
-import Metal
-#endif
+public struct AppleSiliconHardware: Codable, Hashable, Sendable {
+    public let architecture: String
+    public let cpuBrand: String
 
-public struct MetalAvailability: Sendable {
-    public let isAvailable: Bool
-    public let deviceName: String?
-    public let supportsUnifiedMemory: Bool
-    public let hardwareSummary: String
-    public let optimizedForAppleSiliconM2M3: Bool
-
-    public init() {
-        let hardware = FXDatabaseAppleSiliconHardware.probe()
-        #if canImport(Metal)
-        if let device = MTLCreateSystemDefaultDevice() {
-            self.isAvailable = true
-            self.deviceName = device.name
-            self.supportsUnifiedMemory = device.hasUnifiedMemory
-            self.hardwareSummary = hardware.summary
-            self.optimizedForAppleSiliconM2M3 = device.hasUnifiedMemory && hardware.isM2M3OrNewer
-        } else {
-            self.isAvailable = false
-            self.deviceName = nil
-            self.supportsUnifiedMemory = false
-            self.hardwareSummary = hardware.summary
-            self.optimizedForAppleSiliconM2M3 = false
-        }
-        #else
-        self.isAvailable = false
-        self.deviceName = nil
-        self.supportsUnifiedMemory = false
-        self.hardwareSummary = hardware.summary
-        self.optimizedForAppleSiliconM2M3 = false
-        #endif
+    public init(architecture: String, cpuBrand: String) {
+        self.architecture = architecture
+        self.cpuBrand = cpuBrand
     }
-}
 
-private struct FXDatabaseAppleSiliconHardware {
-    let architecture: String
-    let cpuBrand: String
-
-    var isAppleSilicon: Bool {
+    public var isAppleSilicon: Bool {
         architecture == "arm64" && cpuBrand.contains("Apple")
     }
 
-    var isM2M3OrNewer: Bool {
+    public var isM2M3OrNewer: Bool {
         guard isAppleSilicon else { return false }
         return ["Apple M2", "Apple M3", "Apple M4", "Apple M5", "Apple M6", "Apple M7", "Apple M8", "Apple M9"].contains {
             cpuBrand.contains($0)
         }
     }
 
-    var summary: String {
-        "\(architecture) \(cpuBrand)"
+    public var fxaiSupportSummary: String {
+        if isM2M3OrNewer {
+            return "supported Apple Silicon host (\(cpuBrand))"
+        }
+        if isAppleSilicon {
+            return "unsupported Apple Silicon host for FXAI acceleration target (\(cpuBrand))"
+        }
+        return "unsupported non-Apple-Silicon host (\(architecture), \(cpuBrand))"
     }
 
-    static func probe() -> FXDatabaseAppleSiliconHardware {
-        FXDatabaseAppleSiliconHardware(architecture: currentArchitecture(), cpuBrand: currentCPUBrand())
+    public static func probe() -> AppleSiliconHardware {
+        AppleSiliconHardware(
+            architecture: currentArchitecture(),
+            cpuBrand: currentCPUBrand()
+        )
     }
 
     private static func currentArchitecture() -> String {

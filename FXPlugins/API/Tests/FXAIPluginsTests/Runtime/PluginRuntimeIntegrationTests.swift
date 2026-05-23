@@ -3,6 +3,8 @@ import FXDataEngine
 @testable import FXAIPlugins
 
 final class PluginRuntimeIntegrationTests: XCTestCase {
+    private static let appleM2 = AppleSiliconHardware(architecture: "arm64", cpuBrand: "Apple M2 Pro")
+
     func testEveryPlannedPluginResolvesCPUOnlyAndAutomaticFallback() throws {
         let plugins = FXAIPluginRegistry.availablePlugins().compactMap { $0 as? any FXAIPlannedPlugin }
         XCTAssertEqual(plugins.count, FXAIPluginRegistry.availablePlugins().count)
@@ -34,7 +36,12 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
             XCTAssertTrue(plan.declares(.foundationNLP), pluginName)
 
             let environment = FXPluginRuntimeEnvironment(
-                metalDevice: MetalAccelerationDevice(available: false, deviceName: nil, supportsUnifiedMemory: false),
+                metalDevice: MetalAccelerationDevice(
+                    available: true,
+                    deviceName: "Test GPU",
+                    supportsUnifiedMemory: true,
+                    hardware: Self.appleM2
+                ),
                 pythonExecutable: nil,
                 foundationNLPAvailable: true
             )
@@ -200,7 +207,15 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
             configuration: FXAIPluginRuntimeConfiguration(
                 mode: .foundationNLP,
                 fallbackPolicy: .strict,
-                environment: FXPluginRuntimeEnvironment(foundationNLPAvailable: true),
+                environment: FXPluginRuntimeEnvironment(
+                    metalDevice: MetalAccelerationDevice(
+                        available: true,
+                        deviceName: "Test GPU",
+                        supportsUnifiedMemory: true,
+                        hardware: Self.appleM2
+                    ),
+                    foundationNLPAvailable: true
+                ),
                 pythonEnvironment: [
                     "FXAI_PLUGIN_STATE_DIR": temporaryDirectory.path
                 ]
@@ -226,6 +241,12 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
                 mode: .pyTorchMPS,
                 fallbackPolicy: .strict,
                 environment: FXPluginRuntimeEnvironment(
+                    metalDevice: MetalAccelerationDevice(
+                        available: true,
+                        deviceName: "Test GPU",
+                        supportsUnifiedMemory: true,
+                        hardware: Self.appleM2
+                    ),
                     pythonExecutable: "python3",
                     pyTorchMPSAvailable: true
                 ),
@@ -254,11 +275,18 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
                 mode: .tensorFlowMetal,
                 fallbackPolicy: .strict,
                 environment: FXPluginRuntimeEnvironment(
+                    metalDevice: MetalAccelerationDevice(
+                        available: true,
+                        deviceName: "Test GPU",
+                        supportsUnifiedMemory: true,
+                        hardware: Self.appleM2
+                    ),
                     pythonExecutable: "python3",
                     tensorFlowMetalAvailable: true
                 ),
                 pythonEnvironment: [
-                    "FXAI_PLUGIN_STATE_DIR": temporaryDirectory.path
+                    "FXAI_PLUGIN_STATE_DIR": temporaryDirectory.path,
+                    "FXAI_ALLOW_CPU_TENSOR_FALLBACK": "1"
                 ]
             )
         )

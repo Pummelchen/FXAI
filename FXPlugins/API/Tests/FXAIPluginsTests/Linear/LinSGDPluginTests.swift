@@ -23,7 +23,7 @@ final class LinSGDPluginTests: XCTestCase {
         XCTAssertTrue(plan.declaresHardwareAcceleration)
     }
 
-    func testFreshModelMatchesMQL5ZeroStateDistribution() throws {
+    func testFreshModelMatchesReferenceZeroStateDistribution() throws {
         let plugin = LinSGDPlugin()
         let prediction = try plugin.predict(Self.predictRequest(dataHasVolume: true), hyperParameters: HyperParameters())
 

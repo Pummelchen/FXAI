@@ -80,7 +80,7 @@ python3 Tools/fxai_offline_lab.py pair-network-report --profile continuous
 
 Phase 1 exposes the subsystem in:
 
-- MT5 runtime TSV + NDJSON artifacts per symbol
+- FXDatabase runtime TSV + NDJSON artifacts per symbol
 - Offline Lab report and append-only graph history
 - the macOS GUI Pair Network surface for:
   - symbol-level conflict decisions

@@ -11,10 +11,6 @@
   - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/cli_parser.py`
   - `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/cli_commands.py`
 - Runtime integration is in:
-  - `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/Trade/runtime_trade_pair_network.mqh`
-  - `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/Trade/runtime_trade_risk.mqh`
-  - `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/runtime_trade_helpers.mqh`
-  - `<FXAI_ROOT>/FXDataEngine/FXAI.mq5`
 - GUI ingestion and display are in:
   - `<FXAI_ROOT>/FXGUI/Sources/FXGUICore/Models/PairNetworkModels.swift`
   - `<FXAI_ROOT>/FXGUI/Sources/FXGUICore/Services/PairNetworkArtifactReader.swift`
@@ -33,7 +29,6 @@
 
 ## Repo-Specific Deviations
 
-- The runtime already had exposure and pressure controls in `runtime_trade_risk.mqh`, so the pair network is integrated there instead of creating a separate order engine.
 - Same-cycle candidate coordination reuses the existing control-plane snapshot files instead of introducing a new candidate bus.
 - Phase 1 uses fixed currency-factor profiles plus optional empirical dependency augmentation; it does not attempt full covariance optimization or graph learning.
 

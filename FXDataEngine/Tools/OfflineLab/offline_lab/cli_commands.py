@@ -734,7 +734,7 @@ def cmd_export_dataset(args) -> int:
         months_list = resolve_months_list(args.months_list)
         if not getattr(args, "skip_compile", False):
             if compile_export_runner() != 0:
-                raise OfflineLabError("failed to compile FXAI_OfflineExportRunner.mq5")
+                raise OfflineLabError("failed to build Swift export support")
             args = argparse.Namespace(**vars(args))
             args.skip_compile = True
         datasets = []
@@ -754,7 +754,7 @@ def cmd_tune_zoo(args) -> int:
         resolve_args = args
         if getattr(args, "auto_export", False) and not getattr(args, "skip_compile", False):
             if compile_export_runner() != 0:
-                raise OfflineLabError("failed to compile FXAI_OfflineExportRunner.mq5")
+                raise OfflineLabError("failed to build Swift export support")
             resolve_args = argparse.Namespace(**vars(args))
             resolve_args.skip_compile = True
         datasets = resolve_dataset_rows(conn, resolve_args, getattr(args, "auto_export", False), group_key)
@@ -764,7 +764,7 @@ def cmd_tune_zoo(args) -> int:
         if not getattr(args, "skip_compile", False):
             rc = compile_audit_runner()
             if rc != 0:
-                raise OfflineLabError("failed to compile FXAI_AuditRunner.mq5")
+                raise OfflineLabError("failed to build Swift audit support")
 
         all_results = []
         for dataset in datasets:
@@ -1101,13 +1101,13 @@ def cmd_control_loop(args) -> int:
             resolve_args = cycle_args
             if not getattr(args, "skip_compile", False):
                 if compile_export_runner() != 0:
-                    raise OfflineLabError("failed to compile FXAI_OfflineExportRunner.mq5")
+                    raise OfflineLabError("failed to build Swift export support")
                 resolve_args = argparse.Namespace(**vars(cycle_args))
                 resolve_args.skip_compile = True
             datasets = resolve_dataset_rows(conn, resolve_args, True, group_key)
             if not getattr(args, "skip_compile", False):
                 if compile_audit_runner() != 0:
-                    raise OfflineLabError("failed to compile FXAI_AuditRunner.mq5")
+                    raise OfflineLabError("failed to build Swift audit support")
             summary_items = []
             for dataset in datasets:
                 dataset_out_dir = RUNS_DIR / safe_token(args.profile) / safe_token(dataset["dataset_key"])

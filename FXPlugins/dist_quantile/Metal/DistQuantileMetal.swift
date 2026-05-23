@@ -85,6 +85,6 @@ public enum DistQuantileMetal {
         primaryBackends: [.swiftSIMD, .accelerate],
         candidateBackends: [.metal],
         usesVolumeWhenAvailable: true,
-        notes: "Plugin-local Swift CPU port of the native MQL5 quantile-head distribution model. Metal kernels cover batched quantile-head scoring and class-feature scoring; PyTorch, TensorFlow, and NLP are not suitable for this non-neural online quantile learner."
+        notes: "Plugin-local Swift CPU implementation of the native quantile-head distribution model. Metal kernels cover batched quantile-head scoring and class-feature scoring; PyTorch, TensorFlow, and NLP are not suitable for this non-neural online quantile learner."
     )
 }

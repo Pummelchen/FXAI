@@ -8,15 +8,11 @@ This plan is phase-1 production scope. It intentionally reuses the existing FXAI
 ## Repo Mapping
 
 ### Existing runtime seams
-- `FXDataEngine/Engine/Runtime/runtime_feature_pipeline_block.mqh`
   - already assembles `student_router`, `adaptive_router_profile`, `adaptive_regime_state`, `adaptive_news_state`, `adaptive_micro_state`, and the core feature/cost context.
-- `FXDataEngine/Engine/Runtime/runtime_model_stage_block.mqh`
   - already selects active models, runs plugin inference, applies adaptive router priors, and builds the current weighted ensemble statistics.
   - this is the correct place to collect plugin outputs and compute dynamic per-plugin trust.
-- `FXDataEngine/Engine/Runtime/runtime_policy_stage_block.mqh`
   - already converts aggregate ensemble state into a final `BUY / SELL / SKIP` decision and applies adaptive-router abstain posture.
   - this is the correct place to apply dynamic-ensemble quality and abstain bias to the final decision.
-- `FXDataEngine/Engine/Runtime/Trade/runtime_trade_risk.mqh`
   - remains the final hard execution-risk layer and must not be replaced.
 
 ### Existing plugin-quality memory already available
@@ -30,9 +26,6 @@ FXAI already persists rolling per-plugin diagnostics in the MQL meta layer:
 - route-factor diagnostics
 
 Relevant helpers already exist in:
-- `FXDataEngine/Engine/meta_calibration.mqh`
-- `FXDataEngine/Engine/meta_reliability.mqh`
-- `FXDataEngine/Engine/runtime_artifacts.mqh`
 
 This means phase 1 does not need a separate live online-learning daemon. It can reuse these existing per-plugin memory signals directly.
 
@@ -74,7 +67,6 @@ The Dynamic Ensemble must consume these outputs, not rebuild them.
 
 ### A. New runtime stage file
 Add:
-- `FXDataEngine/Engine/Runtime/runtime_dynamic_ensemble_stage.mqh`
 
 Responsibilities:
 - define dynamic-ensemble constants and structs
@@ -136,16 +128,12 @@ Ensemble runtime state should include at least:
 - `reasons_csv`
 
 ### C. Runtime integration points
-1. `runtime_feature_pipeline_block.mqh`
    - read current Rates Engine state alongside existing NewsPulse and Microstructure context so the model stage can use it.
-2. `runtime_model_stage_block.mqh`
    - collect plugin outputs into dynamic-ensemble candidate records.
    - call the new dynamic-ensemble evaluator.
    - use normalized dynamic weights instead of the current static routed weights when accumulating ensemble support.
-3. `runtime_policy_stage_block.mqh`
    - use dynamic-ensemble quality and abstain bias to tighten final decision logic.
    - write runtime artifacts after final posture is known.
-4. `FXDataEngine/FXAI.mq5`
    - add feature flags and thresholds for Dynamic Ensemble.
 5. fallback rule
    - if the dynamic-ensemble stage is disabled, fails, or yields no valid active plugins, the runtime must fall back to the current routed ensemble behavior deterministically.
@@ -274,15 +262,12 @@ Update:
 2. Add Python contracts/config/replay helpers and CLI hooks.
 3. Add the runtime dynamic-ensemble stage file with structs, scoring, normalization, artifact writing, and history.
 4. Add runtime feature-pipeline support for current Rates Engine context in the model stage path.
-5. Patch `runtime_model_stage_block.mqh` to collect plugin outputs, run the dynamic ensemble stage, and aggregate with normalized dynamic weights.
-6. Patch `runtime_policy_stage_block.mqh` to apply quality-based abstain bias and final artifact writing.
-7. Add `FXDataEngine/FXAI.mq5` inputs for enable/disable, thresholds, and dominant-weight caps.
 8. Add GUI models/reader/view and wire them into the app shell.
 9. Add tests and fixtures.
 10. Update owning project documentation.
 11. Review new code for logic correctness.
 12. Deep bug check API usage, data flow, fallback behavior, and integration.
-13. Run Python tests, Swift tests/build, and MT5 `verify-all`.
+13. Run Python tests, Swift tests/build, and FXDatabase `verify-all`.
 14. Sync mirror if needed, commit, and push.
 
 ## Plan Review Checklist

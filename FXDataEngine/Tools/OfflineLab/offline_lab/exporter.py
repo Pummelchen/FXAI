@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 import tempfile
 import time
+import urllib.error
+import urllib.request
 import libsql
 
 from .common import *
@@ -169,11 +171,97 @@ def attempt_expert_launch(expert_rel_path: str,
 
 
 def compile_export_runner() -> int:
-    return testlab.compile_target(Path("FXDataEngine/Tests/FXAI_OfflineExportRunner.mq5"), "offline_export")
+    return testlab.compile_target(Path("FXDataEngine"), "data_engine")
 
 
 def compile_audit_runner() -> int:
     return testlab.cmd_compile(argparse.Namespace())
+
+
+def fxdatabase_api_base_url(args) -> str:
+    raw = (
+        getattr(args, "fxdatabase_api_url", "")
+        or os.environ.get("FXDATABASE_API_URL", "")
+        or os.environ.get("FXAI_FXDATABASE_API_URL", "")
+        or "http://127.0.0.1:8765"
+    )
+    return str(raw).rstrip("/")
+
+
+def fetch_fxdatabase_m1_history(args, symbol: str, start_unix: int, end_unix: int) -> dict:
+    broker_source_id = getattr(args, "broker_source_id", "") or os.environ.get("FXDATABASE_BROKER_SOURCE_ID", "default")
+    source_origin = getattr(args, "source_origin", "") or os.environ.get("FXDATABASE_SOURCE_ORIGIN", "MT5")
+    payload = {
+        "api_version": "fxdatabase.fxbacktest.v1",
+        "broker_source_id": broker_source_id,
+        "source_origin": source_origin,
+        "logical_symbol": symbol,
+        "utc_start_inclusive": int(start_unix),
+        "utc_end_exclusive": int(end_unix),
+        "maximum_rows": int(getattr(args, "max_bars", 600000) or 600000),
+    }
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    request = urllib.request.Request(
+        f"{fxdatabase_api_base_url(args)}/v1/history/m1",
+        data=body,
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=max(1, int(getattr(args, "timeout", 300) or 300))) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise OfflineLabError(f"FXDatabase API history request failed with HTTP {exc.code}: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise OfflineLabError(f"FXDatabase API history request failed: {exc}") from exc
+
+
+def write_fxdatabase_export_files(response: dict, data_path: Path, meta_path: Path) -> None:
+    metadata = dict(response.get("metadata", {}))
+    timestamps = list(response.get("utc_timestamps", []))
+    opens = list(response.get("open", []))
+    highs = list(response.get("high", []))
+    lows = list(response.get("low", []))
+    closes = list(response.get("close", []))
+    volumes = list(response.get("volume", []))
+    count = len(timestamps)
+    if not (len(opens) == len(highs) == len(lows) == len(closes) == len(volumes) == count):
+        raise OfflineLabError("FXDatabase API returned mismatched OHLCV column lengths")
+    digits = int(metadata.get("digits", 0) or 0)
+    scale = 10.0 ** max(digits, 0)
+    ensure_dir(data_path.parent)
+    with data_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle, delimiter="\t")
+        writer.writerow(["time_unix", "open", "high", "low", "close", "price_cost_points", "tick_volume", "real_volume"])
+        for index in range(count):
+            writer.writerow([
+                int(timestamps[index]),
+                float(opens[index]) / scale,
+                float(highs[index]) / scale,
+                float(lows[index]) / scale,
+                float(closes[index]) / scale,
+                0.0,
+                int(volumes[index]),
+                int(volumes[index]),
+            ])
+    meta = {
+        "api_version": str(response.get("api_version", "")),
+        "broker_source_id": str(metadata.get("broker_source_id", "")),
+        "source_origin": str(metadata.get("source_origin", "")),
+        "logical_symbol": str(metadata.get("logical_symbol", "")),
+        "provider_symbol": str(metadata.get("mt5_symbol", "")),
+        "timeframe": str(metadata.get("timeframe", "M1")),
+        "digits": str(digits),
+        "window_start_unix": str(metadata.get("requested_utc_start", "")),
+        "window_end_unix": str(metadata.get("requested_utc_end_exclusive", "")),
+        "first_time_unix": str(metadata.get("first_utc") or ""),
+        "last_time_unix": str(metadata.get("last_utc") or ""),
+        "row_count": str(metadata.get("row_count", count)),
+        "volume_policy": "provider_volume_when_positive",
+    }
+    ensure_dir(meta_path.parent)
+    meta_path.write_text("\n".join(f"{key}\t{value}" for key, value in meta.items()) + "\n", encoding="utf-8")
 
 
 def build_dataset_key(symbol: str, start_unix: int, end_unix: int, months: int) -> str:
@@ -294,38 +382,17 @@ def export_single_dataset(conn: libsql.Connection, args, symbol: str, months: in
     if existing and not getattr(args, "replace", False):
         return existing
 
-    if not getattr(args, "skip_compile", False):
-        rc = compile_export_runner()
-        if rc != 0:
-            raise OfflineLabError("failed to compile FXAI_OfflineExportRunner.mq5")
-
     output_key = dataset_key
     data_path = dataset_data_path(output_key, symbol)
     meta_path = dataset_meta_path(output_key, symbol)
-    ensure_dir(testlab.TESTER_PRESET_DIR)
     ensure_dir(COMMON_EXPORT_DIR)
-    preset_name = f"fxai_offline_export_{safe_token(symbol)}.set"
-    preset_path = testlab.TESTER_PRESET_DIR / preset_name
-    write_export_set(preset_path, output_key, start_unix, end_unix, getattr(args, "max_bars", 600000), True)
-
-    login, server, password = testlab.resolve_credentials(args)
     if data_path.exists():
         data_path.unlink()
     if meta_path.exists():
         meta_path.unlink()
 
-    success, mode, failure = attempt_expert_launch(
-        EXPORT_EXPERT,
-        preset_name,
-        symbol,
-        login,
-        server,
-        password,
-        getattr(args, "timeout", 300),
-        [data_path, meta_path],
-    )
-    if not success:
-        raise OfflineLabError(f"{mode} launch failed for export {symbol}: {failure}")
+    response = fetch_fxdatabase_m1_history(args, symbol, start_unix, end_unix)
+    write_fxdatabase_export_files(response, data_path, meta_path)
 
     return ingest_dataset(conn, dataset_key, group_key, symbol, months, data_path, meta_path, getattr(args, "notes", ""))
 

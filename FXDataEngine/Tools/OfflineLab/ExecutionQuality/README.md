@@ -82,4 +82,4 @@ Phase 1 is intentionally deterministic and auditable:
 - no hidden live online learning
 - no duplicate execution daemon
 
-The repo already records the broker-side execution evidence inside MT5, so the best phase-1 design is a runtime scorecard forecaster with tiered OfflineLab priors and replayable history.
+The repo already records the broker-side execution evidence inside FXDatabase, so the best phase-1 design is a runtime scorecard forecaster with tiered OfflineLab priors and replayable history.

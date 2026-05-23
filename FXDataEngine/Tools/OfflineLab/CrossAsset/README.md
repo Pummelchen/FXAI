@@ -30,14 +30,14 @@ Offline Lab artifacts under `Tools/OfflineLab/CrossAsset`:
 Phase 1 is intentionally practical and auditable:
 
 - reuses the Rates Engine instead of rebuilding rates logic
-- uses an MT5 service to probe indicator-only MT5 symbols already configured in the market universe
+- uses an FXDatabase service to probe indicator-only FXDatabase symbols already configured in the market universe
 - normalizes cross-asset raw moves into z-style features and deterministic state scores
 - maps global state into pair-level `ALLOW | CAUTION | BLOCK` posture without changing canonical model inputs
 - degrades safely when rates or probe data are stale
 
 Default live-gate posture:
 - fresh Rates Engine state is the only hard live requirement by default
-- the MT5 context/probe rail is allowed to degrade into a rates-only fallback mode
+- the FXDatabase context/probe rail is allowed to degrade into a rates-only fallback mode
 - partial probe coverage is still surfaced explicitly in health, reasons, and quality flags
 
 It does not claim to be a full global-macro research platform.
@@ -73,19 +73,19 @@ The engine exposes:
 
 ## Setup
 
-1. Validate and write the default config plus MT5 probe config:
+1. Validate and write the default config plus FXDatabase probe config:
 
 ```bash
 python3 Tools/fxai_offline_lab.py cross-asset-validate
 ```
 
-2. Install the MT5 probe service:
+2. Install the FXDatabase probe service:
 
 ```bash
 python3 Tools/fxai_offline_lab.py cross-asset-install-service
 ```
 
-3. Start `FXAI_CrossAssetProbe` from MT5 `Services`.
+3. Start `FXAI_CrossAssetProbe` from FXDatabase `Services`.
 
 4. Build one shared snapshot:
 
@@ -106,7 +106,7 @@ python3 Tools/fxai_offline_lab.py cross-asset-health
 python3 Tools/fxai_offline_lab.py cross-asset-replay-report --symbol EURUSD --hours-back 72
 ```
 
-If the MT5 probe is installed but not started yet, `cross-asset-health` now reports that explicitly as a configured-but-missing probe instead of an empty service payload. The engine can still publish a degraded shared state while the probe is unavailable unless `probe_required_for_live_gates` is set to `true` in `cross_asset_config.json`.
+If the FXDatabase probe is installed but not started yet, `cross-asset-health` now reports that explicitly as a configured-but-missing probe instead of an empty service payload. The engine can still publish a degraded shared state while the probe is unavailable unless `probe_required_for_live_gates` is set to `true` in `cross_asset_config.json`.
 
 ## Runtime use
 

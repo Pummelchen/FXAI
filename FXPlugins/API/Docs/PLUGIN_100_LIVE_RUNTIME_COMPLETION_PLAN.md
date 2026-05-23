@@ -1,6 +1,6 @@
 # FXPlugins 100% Live Runtime Completion Plan
 
-This plan is the source-of-truth checklist for moving every former FXAI plugin and the two FXBacktest demo plugins from "ported/scaffolded" to full live runtime quality.
+This plan is the source-of-truth checklist for keeping every FXAI plugin and the two FXBacktest-origin demo plugins at full live runtime quality.
 
 Current verified state: the Swift packages build and the plugin zoo now has an executable 100% certification gate. The gate covers registry coverage, CPU runtime smoke, OHLCV/volume contracts, SineTest runtime, standard-reference or golden parity evidence, FXDatabase-only data access, full verification harness presence, Metal source compilation/live buffer probe wiring, PyTorch/TensorFlow live train-predict-persistence-load checks, and NLP text/no-text runtime checks. CoreML/Neural Engine is not declared by any plugin until a real export and parity path exists.
 
@@ -10,12 +10,12 @@ Current verified state: the Swift packages build and the plugin zoo now has an e
 
 Every plugin is complete only when all applicable gates pass:
 
-1. CPU implementation is the authoritative Swift port of the original MQL5 plugin concept, with no shell or placeholder behavior.
+1. CPU implementation is the authoritative Swift implementation of the plugin concept, with no shell or placeholder behavior.
 2. The CPU implementation consumes the FXDataEngine OHLCV contract: M1 OHLC is mandatory; volume is used whenever `volume > 0`.
-3. Historical parity fixtures exist for the old MQL5 behavior or, where MQL5 source is unavailable, a documented standard reference implementation is used as the parity target.
+3. Historical or standard-reference parity fixtures exist and are used as the parity target.
 4. Metal implementations compile at runtime, execute on Apple GPUs, and have deterministic CPU parity tests over representative fixtures.
-5. PyTorch implementations run through the live backend bridge, prefer MPS on Apple Silicon, persist/load model state, and expose train and predict entry points.
-6. TensorFlow implementations run through the live backend bridge, persist/load model state, and expose train and predict entry points.
+5. PyTorch implementations run through the live backend bridge, require MPS on M2/M3-class Apple Silicon, persist/load model state, and expose train and predict entry points.
+6. TensorFlow implementations run through the live backend bridge, require TensorFlow Metal GPU runtime, persist/load model state, and expose train and predict entry points.
 7. NLP implementations are live runtime backends, not passive files; they include tokenizer/text-event contracts and deterministic fallback behavior when text context is absent.
 8. Backend selection is explicit, observable, and testable: CPU-only, auto, Metal, PyTorch, TensorFlow, and NLP modes must fail closed or fall back according to the plugin policy.
 9. FXBacktest, FXDemoAgent, and FXLiveAgent use the same plugin API and cannot bypass FXDatabase for market data.

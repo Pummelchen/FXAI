@@ -21,10 +21,6 @@ MICROSTRUCTURE_STATE_PATH = MICROSTRUCTURE_STATE_DIR / "microstructure_state.jso
 MICROSTRUCTURE_REPLAY_REPORT_PATH = MICROSTRUCTURE_REPORT_DIR / "microstructure_replay_report.json"
 MICROSTRUCTURE_LOCAL_HISTORY_PATH = MICROSTRUCTURE_DIR / "microstructure_history.ndjson"
 
-MICROSTRUCTURE_SERVICE_SOURCE = REPO_ROOT / "FXDataEngine/Services/FXAI_MicrostructureProbe.mq5"
-TERMINAL_SERVICE_SOURCE = testlab.TERMINAL_ROOT / "MQL5/Services/FXAI_MicrostructureProbe.mq5"
-TERMINAL_SERVICE_BINARY = TERMINAL_SERVICE_SOURCE.with_suffix(".ex5")
-
 COMMON_MICROSTRUCTURE_JSON = testlab.RUNTIME_DIR / "microstructure_snapshot.json"
 COMMON_MICROSTRUCTURE_FLAT = testlab.RUNTIME_DIR / "microstructure_snapshot_flat.tsv"
 COMMON_MICROSTRUCTURE_HISTORY = testlab.RUNTIME_DIR / "microstructure_history.ndjson"

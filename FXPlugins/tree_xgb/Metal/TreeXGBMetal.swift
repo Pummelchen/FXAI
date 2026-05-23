@@ -68,6 +68,6 @@ public enum TreeXGBMetal {
         primaryBackends: [.swiftScalar, .accelerate, .metal],
         candidateBackends: [.swiftSIMD],
         usesVolumeWhenAvailable: true,
-        notes: "Plugin-local Swift CPU port of legacy MQL5 tree_xgb with binary XGBoost-style online trees, leaf class-mass blending, calibration, move statistics, and quality heads. Metal kernels provide independent tree-margin and sigmoid scoring; PyTorch, TensorFlow, and NLP are not suitable for this non-neural tree ensemble."
+        notes: "Plugin-local Swift CPU implementation of tree_xgb with binary XGBoost-style online trees, leaf class-mass blending, calibration, move statistics, and quality heads. Metal kernels provide independent tree-margin and sigmoid scoring; PyTorch, TensorFlow, and NLP are not suitable for this non-neural tree ensemble."
     )
 }

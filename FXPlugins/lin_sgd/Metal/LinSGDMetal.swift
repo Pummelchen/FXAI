@@ -29,6 +29,6 @@ public enum LinSGDMetal {
         primaryBackends: [.swiftSIMD, .accelerate],
         candidateBackends: [.metal],
         usesVolumeWhenAvailable: true,
-        notes: "Full plugin-local Swift CPU port of legacy MQL5 lin_sgd. Metal folder provides the batch linear-logit kernel source; hashed interaction dispatch is added after CPU parity is locked."
+        notes: "Full plugin-local Swift CPU implementation of lin_sgd. Metal folder provides the batch linear-logit kernel source; hashed interaction dispatch is added after CPU parity is locked."
     )
 }

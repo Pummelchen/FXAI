@@ -24,6 +24,10 @@ FXAI_PLUGIN_API_VERSION = 4
 FXAI_TOKENIZER_API_VERSION = "fxai-tokenizer-v1"
 
 
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _safe_float(value: Any) -> float:
     try:
         result = float(value)
@@ -179,8 +183,15 @@ def _torch_edge(values: list[Any]) -> float | None:
     try:
         import torch
     except Exception:
+        if _env_flag("FXAI_REQUIRE_PYTORCH_MPS"):
+            raise
         return None
-    device = "mps" if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available() else "cpu"
+    mps_available = bool(getattr(torch.backends, "mps", None) and torch.backends.mps.is_available())
+    if _env_flag("FXAI_REQUIRE_PYTORCH_MPS") and not mps_available:
+        raise RuntimeError("PyTorch MPS is required for this FXAI accelerator runtime")
+    device = "cpu" if _env_flag("FXAI_FORCE_PYTORCH_CPU") else ("mps" if mps_available else "cpu")
+    if device == "mps":
+        os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
     indexes = [0, 3, 7, 8, 12]
     weights = torch.tensor([0.36, 0.28, 0.22, -0.22, 0.04], dtype=torch.float32, device=device)
     tensor = torch.tensor([_feature(values, idx) for idx in indexes], dtype=torch.float32, device=device)
@@ -191,11 +202,23 @@ def _tensorflow_edge(values: list[Any]) -> float | None:
     try:
         import tensorflow as tf
     except Exception:
+        if _env_flag("FXAI_REQUIRE_TENSORFLOW_METAL"):
+            raise
         return None
+    devices = [] if _env_flag("FXAI_FORCE_TENSORFLOW_CPU") else tf.config.list_physical_devices("GPU")
+    for device in devices:
+        try:
+            tf.config.experimental.set_memory_growth(device, True)
+        except Exception:
+            pass
+    if _env_flag("FXAI_REQUIRE_TENSORFLOW_METAL") and not devices:
+        raise RuntimeError("TensorFlow Metal GPU device is required for this FXAI accelerator runtime")
     indexes = [0, 3, 7, 8, 12]
-    tensor = tf.constant([_feature(values, idx) for idx in indexes], dtype=tf.float32)
-    weights = tf.constant([0.36, 0.28, 0.22, -0.22, 0.04], dtype=tf.float32)
-    return float(tf.reduce_sum(tensor * weights).numpy())
+    device_name = "/GPU:0" if devices else "/CPU:0"
+    with tf.device(device_name):
+        tensor = tf.constant([_feature(values, idx) for idx in indexes], dtype=tf.float32)
+        weights = tf.constant([0.36, 0.28, 0.22, -0.22, 0.04], dtype=tf.float32)
+        return float(tf.reduce_sum(tensor * weights).numpy())
 
 
 def _prediction(edge: float, min_move: float, price_cost: float, move_ema: float = 1.0) -> dict[str, Any]:

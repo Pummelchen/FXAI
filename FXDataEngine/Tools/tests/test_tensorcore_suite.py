@@ -37,9 +37,9 @@ def test_tensor_work_is_declared_as_plugin_backend_bridge_not_mql_tensorcore():
     _assert_tokens(
         plugins_readme,
         [
-            "When a converted plugin needs tensor training or inference",
+            "When a Swift plugin needs tensor training or inference",
             "plugin-local PyTorch or TensorFlow backend",
-            "rather than re-creating the old MQL5 `TensorCore` inside Swift FXDataEngine",
+            "FXDataEngine remains responsible for deterministic feature and payload contracts",
         ],
     )
 

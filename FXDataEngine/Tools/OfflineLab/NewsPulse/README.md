@@ -3,7 +3,7 @@
 NewsPulse is FXAI's phase-1 news-risk subsystem for live FX trading.
 
 It is not a new prediction model. It is shared infrastructure that combines:
-- MT5 Economic Calendar state for scheduled macro events
+- FXDatabase Economic Calendar state for scheduled macro events
 - free GDELT DOC 2.0 polling for breaking-news bursts
 - deterministic currency and pair risk-state aggregation
 - runtime trade gating and operator visibility
@@ -19,14 +19,12 @@ Phase 1 is intentionally gating-first:
 
 NewsPulse has four parts:
 
-1. `FXDataEngine/Services/FXAI_NewsPulseCalendar.mq5`
-   MT5 Service that exports Economic Calendar changes into `FILE_COMMON`.
+   FXDatabase Service that exports Economic Calendar changes into `FILE_COMMON`.
 
 2. `Tools/OfflineLab/offline_lab/newspulse_*.py`
    Python collector, GDELT query layer, optional official-feed rail, fusion logic, daemon loop, replay helpers, and service install helpers.
 
-3. `FXDataEngine/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
-   MT5 runtime adapter that reads the flat snapshot and applies pair-level gates.
+   FXDatabase runtime adapter that reads the flat snapshot and applies pair-level gates.
 
 4. `FXGUI/Sources/.../NewsPulse*.swift`
    macOS GUI surface for source health, currency heatmap, pair risk, watchlists, broker-symbol mappings, gate timelines, and recent tape.
@@ -66,7 +64,7 @@ Generated local state:
 
 ## Time Semantics
 
-MT5 Economic Calendar time uses trade-server semantics.
+FXDatabase Economic Calendar time uses trade-server semantics.
 
 NewsPulse preserves that explicitly:
 - raw trade-server timestamps are retained for audit and history
@@ -75,13 +73,13 @@ NewsPulse preserves that explicitly:
 
 ## Setup
 
-Install and compile the MT5 calendar service:
+Install and compile the FXDatabase calendar service:
 
 ```bash
 python3 FXDataEngine/Tools/fxai_offline_lab.py newspulse-install-service
 ```
 
-Then start the service from MT5:
+Then start the service from FXDatabase:
 
 `Navigator -> Services -> FXAI_NewsPulseCalendar`
 
@@ -170,7 +168,7 @@ Controls:
 
 ## Runtime Behavior
 
-The phase-1 MT5 runtime integration is gating-first.
+The phase-1 FXDatabase runtime integration is gating-first.
 
 NewsPulse can:
 - block entries when high-impact events are imminent or just printed

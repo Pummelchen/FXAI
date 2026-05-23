@@ -2,7 +2,7 @@
 
 The Market Microstructure and Order-Flow Proxy Layer is a shared FXAI subsystem for **short-horizon execution and flow state**.
 
-It measures what the broker-visible market is doing **right now** using MT5 tick and quote proxies:
+It measures what the broker-visible market is doing **right now** using FXDatabase tick and quote proxies:
 
 - tick imbalance
 - directional efficiency
@@ -14,7 +14,7 @@ It measures what the broker-visible market is doing **right now** using MT5 tick
 - hostile execution conditions
 
 It is **not** true institutional order-book data.
-It is an auditable MT5-side proxy layer built from observable broker ticks and quotes.
+It is an auditable FXDatabase-side proxy layer built from observable broker ticks and quotes.
 
 ## What It Produces
 
@@ -52,13 +52,13 @@ It does **not** force immediate retraining or feature-schema changes.
 python3 Tools/fxai_offline_lab.py microstructure-validate
 ```
 
-2. Install the MT5 service:
+2. Install the FXDatabase service:
 
 ```bash
 python3 Tools/fxai_offline_lab.py microstructure-install-service
 ```
 
-3. Start `FXAI_MicrostructureProbe` from MT5 `Services`.
+3. Start `FXAI_MicrostructureProbe` from FXDatabase `Services`.
 
 4. Optional replay summary:
 
@@ -72,7 +72,7 @@ python3 Tools/fxai_offline_lab.py microstructure-replay-report --symbol EURUSD -
 python3 Tools/fxai_offline_lab.py microstructure-health
 ```
 
-If the probe has been installed but not started from MT5 `Services`, the health output now reports the configured pair count and an explicit start hint instead of an empty disabled status.
+If the probe has been installed but not started from FXDatabase `Services`, the health output now reports the configured pair count and an explicit start hint instead of an empty disabled status.
 
 ## Key Outputs
 
@@ -96,4 +96,4 @@ Per tradable FX symbol, the layer exposes:
 - no true interdealer signed flow
 - no reconstructed full order book
 
-All directional and stress measures are explicitly **proxies** built from MT5-observable quote/tick behavior.
+All directional and stress measures are explicitly **proxies** built from FXDatabase-observable quote/tick behavior.

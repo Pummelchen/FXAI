@@ -1,134 +1,91 @@
 from __future__ import annotations
 
+import configparser
 import os
-import shutil
 import subprocess
 import sys
-import tempfile
-import time
 from pathlib import Path
 
-from .shared import (
-    COMMON_INI,
-    ROOT,
-    TERMINAL_INI,
-    build_metaeditor_compile_command,
-    read_utf16_or_text,
-    terminal_running,
-    write_utf16,
-)
+from .shared import REPO_ROOT, terminal_running
 
 
-def _stage_copy_ignore(directory: str, names: list[str]) -> set[str]:
-    ignored: set[str] = set()
-    current = Path(directory)
-    if current.name == "FXGUI":
-        for candidate in (".build", ".swiftpm", "Package.resolved"):
-            if candidate in names:
-                ignored.add(candidate)
-    return ignored
-
-def read_common_account() -> tuple[str, str]:
-    text = read_utf16_or_text(COMMON_INI)
-    login = ""
-    server = ""
-    for line in text.splitlines():
-        if line.startswith("Login="):
-            login = line.split("=", 1)[1].strip()
-        elif line.startswith("Server="):
-            server = line.split("=", 1)[1].strip()
-    return login, server
+SWIFT_PACKAGES: dict[str, Path] = {
+    "data_engine": Path("FXDataEngine"),
+    "plugins": Path("FXPlugins"),
+    "database": Path("FXDatabase"),
+    "importer": Path("FXImporter"),
+    "backtest": Path("FXBacktest"),
+    "gui": Path("FXGUI"),
+}
 
 
-def resolve_credentials(args) -> tuple[str, str, str]:
-    common_login, common_server = read_common_account()
-    login = args.login or os.environ.get("FXAI_MT5_LOGIN", "") or common_login
-    server = args.server or os.environ.get("FXAI_MT5_SERVER", "") or common_server
-    password = args.password or os.environ.get("FXAI_MT5_PASSWORD", "")
-    return login, server, password
-
-def update_ini_section(path: Path, section_name: str, kv: dict[str, str], encoding: str = "utf-16le") -> None:
-    text = read_utf16_or_text(path)
-    marker = f"[{section_name}]"
-    start = text.find(marker)
-    lines = [f"{k}={v}" for k, v in kv.items()]
-    new_section = marker + "\n" + "\n".join(lines) + "\n"
-    if start < 0:
-        if text and not text.endswith("\n"):
-            text += "\n"
-        text += new_section
-    else:
-        next_sec = text.find("\n[", start + 1)
-        if next_sec < 0:
-            next_sec = len(text)
-        text = text[:start] + new_section + text[next_sec:]
-    if encoding == "utf-16le":
-        write_utf16(path, text)
-    else:
-        path.write_text(text, encoding=encoding)
-
-
-def read_metaeditor_log(log_path: Path) -> str:
-    return read_utf16_or_text(log_path)
+def compile_swift_package(package: str, configuration: str = "debug") -> int:
+    package_key = package.strip().lower()
+    if package_key not in SWIFT_PACKAGES:
+        raise ValueError(f"unknown Swift package: {package}")
+    package_path = REPO_ROOT / SWIFT_PACKAGES[package_key]
+    if not (package_path / "Package.swift").exists():
+        raise FileNotFoundError(f"Swift package manifest not found: {package_path / 'Package.swift'}")
+    cmd = ["swift", "build", "--configuration", configuration]
+    proc = subprocess.run(
+        cmd,
+        cwd=package_path,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if proc.stdout:
+        sys.stdout.write(proc.stdout)
+    return int(proc.returncode)
 
 
 def compile_target(relative_target: Path, stage_name: str) -> int:
-    stage_dir = Path(tempfile.gettempdir()) / f"fxai_testlab_{stage_name}"
-    if stage_dir.exists():
-        shutil.rmtree(stage_dir)
-    shutil.copytree(
-        ROOT,
-        stage_dir,
-        dirs_exist_ok=True,
-        ignore=_stage_copy_ignore,
-    )
+    """Compatibility wrapper for older tool callers.
 
-    stage_target = stage_dir / relative_target
-    stage_log = stage_dir / f"compile_{relative_target.stem}.log"
-    cmd = build_metaeditor_compile_command(stage_target, stage_log)
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    deadline = time.time() + 1200.0
-    built_ex5 = stage_target.with_suffix(".ex5")
-    live_ex5 = ROOT / relative_target.with_suffix(".ex5")
-    last_log_text = ""
+    `relative_target` now points at a Swift package directory under the FXAI repo.
+    The old terminal-side compiler path is intentionally not present in FXDataEngine.
+    """
+    target_text = relative_target.as_posix().strip("/")
+    package_name = Path(target_text).parts[0] if target_text else stage_name
+    if package_name == "FXDataEngine":
+        package_name = "data_engine"
+    elif package_name == "FXPlugins":
+        package_name = "plugins"
+    elif package_name == "FXDatabase":
+        package_name = "database"
+    elif package_name == "FXImporter":
+        package_name = "importer"
+    elif package_name == "FXBacktest":
+        package_name = "backtest"
+    elif package_name == "FXGUI":
+        package_name = "gui"
+    else:
+        package_name = stage_name
+    return compile_swift_package(package_name)
 
-    while time.time() < deadline:
-        rc = proc.poll()
-        log_text = read_metaeditor_log(stage_log)
-        if log_text:
-            last_log_text = log_text
 
-        if "0 errors, 0 warnings" in last_log_text and built_ex5.exists():
-            if proc.poll() is None:
-                proc.kill()
-                proc.wait(timeout=5)
-            live_ex5.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(built_ex5, live_ex5)
-            lines = [line for line in last_log_text.splitlines() if line.strip()]
-            if lines:
-                print(lines[-1])
-            return 0
+def resolve_credentials(args) -> tuple[str, str, str]:
+    """Compatibility helper for older audit commands that still accept account flags."""
+    login = getattr(args, "login", "") or os.environ.get("FXAI_MT5_LOGIN", "") or os.environ.get("MT5_LOGIN", "")
+    server = getattr(args, "server", "") or os.environ.get("FXAI_MT5_SERVER", "") or os.environ.get("MT5_SERVER", "")
+    password = getattr(args, "password", "") or os.environ.get("FXAI_MT5_PASSWORD", "") or os.environ.get("MT5_PASSWORD", "")
+    return str(login), str(server), str(password)
 
-        if rc is not None:
-            if last_log_text:
-                lines = [line for line in last_log_text.splitlines() if line.strip()]
-                if lines:
-                    print(lines[-1])
-            if "0 errors, 0 warnings" in last_log_text and built_ex5.exists():
-                live_ex5.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(built_ex5, live_ex5)
-                return 0
-            if proc.stdout is not None:
-                sys.stdout.write(proc.stdout.read())
-            return rc or 1
 
-        time.sleep(2.0)
-
-    if proc.poll() is None:
-        proc.kill()
-        proc.wait(timeout=5)
-    if last_log_text:
-        lines = [line for line in last_log_text.splitlines() if line.strip()]
-        if lines:
-            print(lines[-1])
-    return 124
+def update_ini_section(path: Path, section: str, values: dict[str, str]) -> None:
+    """Small INI patcher kept for legacy audit launch compatibility."""
+    parser = configparser.ConfigParser(strict=False)
+    parser.optionxform = str
+    if path.exists():
+        try:
+            parser.read(path, encoding="utf-8")
+        except UnicodeError:
+            parser.read(path, encoding="utf-16le")
+    if not parser.has_section(section):
+        parser.add_section(section)
+    for key, value in values.items():
+        parser.set(section, key, str(value))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        parser.write(handle)

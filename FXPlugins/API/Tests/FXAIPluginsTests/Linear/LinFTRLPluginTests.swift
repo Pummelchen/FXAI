@@ -21,7 +21,7 @@ final class LinFTRLPluginTests: XCTestCase {
         XCTAssertTrue(plan.usesVolumeWhenAvailable)
     }
 
-    func testFreshModelMatchesMQL5ZeroStateDistribution() throws {
+    func testFreshModelMatchesReferenceZeroStateDistribution() throws {
         let plugin = LinFTRLPlugin()
         let prediction = try plugin.predict(Self.predictRequest(dataHasVolume: true), hyperParameters: HyperParameters())
 

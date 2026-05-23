@@ -4,14 +4,6 @@ This note maps the subsystem design onto the actual FXAI codebase.
 
 ## Real Integration Points
 
-- Live runtime entrypoint: `<FXAI_ROOT>/FXDataEngine/Engine/engine_runtime.mqh`
-- Live feature and context stage: `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/runtime_feature_pipeline_block.mqh`
-- Live transfer/context stage: `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/runtime_transfer_stage_block.mqh`
-- Plugin aggregation and existing student-router weighting: `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/runtime_model_stage_block.mqh`
-- Final posture and decision gating: `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/runtime_policy_stage_block.mqh`
-- Existing control-plane artifact rails: `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/ControlPlane/runtime_control_plane_types.mqh` and `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/ControlPlane/runtime_control_plane_profiles.mqh`
-- Existing live NewsPulse runtime context: `<FXAI_ROOT>/FXDataEngine/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
-- Existing plugin empirical route memory: `<FXAI_ROOT>/FXDataEngine/Engine/meta_calibration.mqh`
 - Existing shadow-fleet / research telemetry: `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/shadow_fleet.py`
 - Existing student-router artifact generation: `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/student_router.py`
 - Existing operator dashboard export: `<FXAI_ROOT>/Tools/OfflineLab/offline_lab/dashboard.py`
@@ -22,7 +14,6 @@ This note maps the subsystem design onto the actual FXAI codebase.
 FXAI already has two useful routing layers:
 
 1. the `student_router` control-plane profile emitted by Offline Lab
-2. the live empirical `route_factor` inside `meta_calibration.mqh`
 
 The new subsystem extends those rails instead of replacing them.
 
@@ -79,7 +70,7 @@ The new subsystem extends those rails instead of replacing them.
 
 ## Intentional Deviations From The Generic Plan
 
-- The live regime classifier currently runs inside the legacy MQL runtime instead of Python. During the Swift migration, its broker-cost input is represented as price-cost state alongside volatility, session, and runtime NewsPulse consumption.
+- The live regime classifier currently runs inside the runtime MQL runtime instead of Python. During the Swift migration, its broker-cost input is represented as price-cost state alongside volatility, session, and runtime NewsPulse consumption.
 - The offline Python side will not classify live regime directly. It will generate the adaptive priors, thresholds, and replay reports that the runtime consumes.
 - Existing plugin interfaces will remain unchanged. Routing is applied above plugin inference at the current ensemble/meta score stage.
 - The existing 12 internal `FXAI_GetRegimeId(...)` buckets are retained as low-level calibration state. The new subsystem adds a higher-level operator-facing regime taxonomy on top of them.

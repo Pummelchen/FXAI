@@ -1,13 +1,13 @@
 # FXBacktest
 
-FXBacktest is a native Swift macOS backtesting application for running converted MQL5 Expert Advisors as high-performance Swift plugins. It lives as ordinary tracked source in the `FXBacktest/` folder inside [FXAI](https://github.com/Pummelchen/FXAI). It works with the repo-root `FXDatabase/` Swift package as the historical Forex data provider: FXDatabase ingests and verifies M1 OHLCV data from MetaTrader 5, and FXBacktest consumes that verified data for optimization runs.
+FXBacktest is a native Swift macOS backtesting application for running high-performance Swift plugins. It lives as ordinary tracked source in the `FXBacktest/` folder inside [FXAI](https://github.com/Pummelchen/FXAI). It works with the repo-root `FXDatabase/` Swift package as the historical Forex data provider: FXDatabase ingests and verifies M1 OHLCV data from approved importers, and FXBacktest consumes that verified data for optimization runs.
 
 The goal is similar to the MT5 Strategy Tester optimization view: define a matrix of input/min/step/max parameters, run many complete backtest passes on CPU or Metal, and watch the live table of pass results.
 
 ## Current Capabilities
 
 - Native SwiftPM macOS app with SwiftUI interface.
-- Plugin API v1 for converted MQL5 EAs stored as optimized single-file Swift plugins.
+- Plugin API v1 for optimized Swift plugins.
 - Pure M1 OHLC close-price broker model with position lifecycle and trade ledger types.
 - Multi-symbol market universe support for plugins that need more than one loaded Forex pair.
 - CPU optimizer that splits work by complete backtest pass across workers.
@@ -387,16 +387,16 @@ The former FXBacktest-local `MovingAverageCross` and `FXStupid` demo plugins hav
 
 ### FX7
 
-`FX7` is the OHLCV conversion of the FX7 MQL5 EA core. The CPU path keeps the EA's closed-bar feature flow where possible while intentionally omitting non-OHLCV dependencies such as carry, value, macro data, spread, swap, commission, margin, bid/ask, and tick data.
+`FX7` is an OHLCV-only Swift plugin. The CPU path keeps the closed-bar feature flow while intentionally omitting non-OHLCV dependencies such as carry, value, macro data, spread, swap, commission, margin, bid/ask, and tick data.
 
 Key conversion details:
 
 - `signal_stride_bars` is the signal timeframe in M1 bars. The default `15` matches the EA's `PERIOD_M15` signal timeframe.
 - M1 bars are aggregated into fixed UTC signal buckets before FX7 features are calculated.
 - Features use the last fully closed signal bar, and trades execute at the next M1 close.
-- Signal warmup follows the EA's `SignalBarsNeeded()` logic, including the extra 100 signal bars used by the MQL5 version.
-- MQL5 trend weights and windows are exposed as plugin inputs: `trend_weight_1`, `trend_weight_2`, `trend_weight_3`, `er_window`, `breakout_window`, and `short_reversal_window`.
-- `allow_long` and `allow_short` mirror the EA direction gates.
+- Signal warmup includes the extra 100 signal bars required by the FX7 reference path.
+- Trend weights and windows are exposed as plugin inputs: `trend_weight_1`, `trend_weight_2`, `trend_weight_3`, `er_window`, `breakout_window`, and `short_reversal_window`.
+- `allow_long` and `allow_short` mirror the reference direction gates.
 - CPU runs support aligned multi-symbol universes for panic, correlation, novelty, crowding, and portfolio target selection.
 - Metal runs are single-symbol only because the current Metal executor ABI passes one OHLC series. The FX7 Metal kernel uses the same signal-timeframe OHLC timing and core trend/regime/risk gates, but it is not a full multi-symbol correlation/novelty replacement for the CPU path.
 

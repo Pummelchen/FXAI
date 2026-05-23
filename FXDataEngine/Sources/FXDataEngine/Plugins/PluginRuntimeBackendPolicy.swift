@@ -77,20 +77,24 @@ public struct FXPluginRuntimeEnvironment: Codable, Hashable, Sendable {
         )
     }
 
+    public var isFXAIAppleSiliconTarget: Bool {
+        metalDevice.hardware.isM2M3OrNewer
+    }
+
     public func supports(_ backend: FXPluginAccelerationBackend) -> Bool {
         switch backend {
         case .swiftScalar, .swiftSIMD, .accelerate:
             return true
         case .metal:
-            return metalDevice.available
+            return metalDevice.optimizedForFXAIAppleSilicon
         case .pyTorchMPS:
-            return pythonExecutable != nil && pyTorchMPSAvailable
+            return pythonExecutable != nil && pyTorchMPSAvailable && isFXAIAppleSiliconTarget
         case .tensorFlowMetal:
-            return pythonExecutable != nil && tensorFlowMetalAvailable
+            return pythonExecutable != nil && tensorFlowMetalAvailable && isFXAIAppleSiliconTarget
         case .foundationNLP:
-            return foundationNLPAvailable
+            return foundationNLPAvailable && isFXAIAppleSiliconTarget
         case .coreMLNeuralEngine:
-            return coreMLNeuralEngineAvailable
+            return coreMLNeuralEngineAvailable && isFXAIAppleSiliconTarget
         }
     }
 }

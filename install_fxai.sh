@@ -45,6 +45,33 @@ ensure_macos() {
     fi
 }
 
+ensure_apple_silicon_m2_m3() {
+    machine="$(uname -m)"
+    if [ "$machine" != "arm64" ]; then
+        log "FXAI targets Apple Silicon M2/M3-class Macs only. Detected architecture: $machine"
+        exit 1
+    fi
+
+    apple_chip="$(sysctl -n machdep.cpu.brand_string 2>/dev/null || true)"
+    if [ -z "$apple_chip" ] || [ "$apple_chip" = "Apple processor" ]; then
+        apple_chip="$(system_profiler SPHardwareDataType 2>/dev/null | awk -F': ' '/Chip:/ {print $2; exit}')"
+    fi
+
+    case "$apple_chip" in
+        *"Apple M2"*|*"Apple M3"*|*"Apple M4"*|*"Apple M5"*|*"Apple M6"*|*"Apple M7"*|*"Apple M8"*|*"Apple M9"*)
+            log "Apple Silicon target verified: $apple_chip"
+            ;;
+        *"Apple M1"*)
+            log "FXAI does not target Apple M1. Detected: $apple_chip"
+            exit 1
+            ;;
+        *)
+            log "Unable to verify an Apple M2/M3-or-newer chip. Detected chip string: ${apple_chip:-unknown}"
+            exit 1
+            ;;
+    esac
+}
+
 ensure_homebrew() {
     if [ "$SKIP_BREW" = "1" ]; then
         log "Skipping Homebrew setup because SKIP_BREW=1."
@@ -212,7 +239,7 @@ build_python_package_list() {
                 append_unique "$package_file" torch
                 ;;
             tensorflow)
-                append_unique "$package_file" tensorflow
+                append_unique "$package_file" tensorflow-macos
                 append_unique "$optional_file" tensorflow-metal
                 ;;
             pytest)
@@ -251,12 +278,11 @@ install_python_packages() {
 
     while IFS= read -r package_name; do
         [ -z "$package_name" ] && continue
-        log "Installing optional Python accelerator package: $package_name"
+        log "Installing Python accelerator package: $package_name"
         if [ "$DRY_RUN" = "1" ]; then
             log "+ $PYTHON_BIN -m pip install --upgrade $package_name"
-        elif ! "$PYTHON_BIN" -m pip install --upgrade "$package_name"; then
-            log "Optional package failed to install: $package_name"
-            log "Continuing because TensorFlow can still run on CPU without this Apple Metal plugin."
+        else
+            run "$PYTHON_BIN" -m pip install --upgrade "$package_name"
         fi
     done < "$optional_file"
 }
@@ -278,16 +304,39 @@ verify_environment() {
     if [ "$SKIP_PYTHON" != "1" ]; then
         run "$PYTHON_BIN" - <<'PY'
 import importlib.util
+import platform
+import re
+import subprocess
 
 required = ["pytest", "libsql", "certifi", "torch", "tensorflow"]
 for name in required:
     if importlib.util.find_spec(name) is None:
         raise SystemExit(f"missing Python package: {name}")
 
+machine = platform.machine()
+try:
+    chip = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True).strip()
+except Exception:
+    chip = ""
+if not chip or chip == "Apple processor":
+    try:
+        hardware = subprocess.check_output(["system_profiler", "SPHardwareDataType"], text=True)
+        match = re.search(r"Chip:\\s*(.+)", hardware)
+        chip = match.group(1).strip() if match else chip
+    except Exception:
+        pass
+if machine != "arm64" or not re.search(r"Apple M[2-9]", chip or ""):
+    raise SystemExit(f"unsupported FXAI host; expected Apple M2/M3-or-newer arm64, got {machine} {chip or 'unknown'}")
+
 import torch
+if not getattr(torch.backends, "mps", None) or not torch.backends.mps.is_available():
+    raise SystemExit("PyTorch MPS is not available")
 print("torch", torch.__version__, "mps_available", torch.backends.mps.is_available())
 
 import tensorflow as tf
+gpu_devices = tf.config.list_physical_devices("GPU")
+if not gpu_devices:
+    raise SystemExit("TensorFlow Metal GPU device is not available")
 print("tensorflow", tf.__version__, "devices", [device.device_type for device in tf.config.list_physical_devices()])
 PY
     fi
@@ -295,6 +344,7 @@ PY
 
 main() {
     ensure_macos
+    ensure_apple_silicon_m2_m3
     ensure_homebrew
 
     brew_file="$TMP_DIR/brew-formulas.txt"
@@ -319,7 +369,7 @@ main() {
     log "Python packages to install:"
     sed 's/^/  - /' "$package_file"
     if [ -s "$optional_file" ]; then
-        log "Optional Python accelerator packages:"
+        log "Python accelerator packages:"
         sed 's/^/  - /' "$optional_file"
     fi
 

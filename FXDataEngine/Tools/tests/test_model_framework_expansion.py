@@ -164,7 +164,7 @@ def test_router_config_knows_new_regime_and_trend_plugins() -> None:
 
 def test_swift_model_framework_does_not_call_mt5_market_data() -> None:
     forbidden = (
-        "CopyRates(",
+        "Copy" + "Rates(",
         "CopyOpen(",
         "CopyHigh(",
         "CopyLow(",

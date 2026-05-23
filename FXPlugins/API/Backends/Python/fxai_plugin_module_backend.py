@@ -27,6 +27,10 @@ FXAI_TOKENIZER_API_VERSION = "fxai-tokenizer-v1"
 MAX_SEQUENCE_BARS = 512
 
 
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _safe_float(value: Any) -> float:
     try:
         result = float(value)
@@ -107,11 +111,29 @@ def _load_module(plugin_name: str, path: Path) -> Any:
 
 
 def _prepare_framework(framework: str) -> None:
-    if framework == "pyTorch" and os.environ.get("FXAI_FORCE_PYTORCH_CPU") == "1":
+    if framework == "pyTorch":
         import torch
 
-        if getattr(torch.backends, "mps", None):
+        mps_backend = getattr(torch.backends, "mps", None)
+        mps_available = bool(mps_backend and torch.backends.mps.is_available())
+        if _env_flag("FXAI_FORCE_PYTORCH_CPU") and mps_backend:
             torch.backends.mps.is_available = lambda: False
+            return
+        if _env_flag("FXAI_REQUIRE_PYTORCH_MPS") and not mps_available:
+            raise RuntimeError("PyTorch MPS is required for this FXAI accelerator runtime")
+        if mps_available:
+            os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+    elif framework == "tensorFlow":
+        import tensorflow as tf
+
+        devices = [] if _env_flag("FXAI_FORCE_TENSORFLOW_CPU") else tf.config.list_physical_devices("GPU")
+        for device in devices:
+            try:
+                tf.config.experimental.set_memory_growth(device, True)
+            except Exception:
+                pass
+        if _env_flag("FXAI_REQUIRE_TENSORFLOW_METAL") and not devices:
+            raise RuntimeError("TensorFlow Metal GPU device is required for this FXAI accelerator runtime")
 
 
 def _stable_seed(plugin_name: str, framework: str, model_identifier: Any) -> int:

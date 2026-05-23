@@ -41,7 +41,7 @@ The system has three parts:
      - `FXDatabaseBacktestCore`: verified backtest-core data contracts plus the deterministic `SineWaveAgent` used by runtime smoke tests.
      - `FXDatabaseFXBacktestAPI`: shared v1 request/response DTOs and a small HTTP client for FXBacktest.
 
-Important MT5 socket note: standard MQL5 sockets are client-oriented. The sample EA therefore connects to the Swift listener. The Swift transport also supports outbound client mode for future bridge variants.
+Important MT5 socket note: standard EA sockets are client-oriented. The sample EA therefore connects to the Swift listener. The Swift transport also supports outbound client mode for future bridge variants.
 
 ## Prerequisites
 
@@ -622,7 +622,7 @@ Implemented:
 - Canonical-only repair command with verify -> repair -> reverify flow.
 - Dedicated FXBacktest API v1 with shared DTO/client module, local HTTP server, strict request/response validation, and readiness-gated M1 history loading.
 - Internal optional Metal availability and OHLC buffer-preparation utility for diagnostics.
-- MQL5 EA bridge skeleton.
+- FXDatabase EA bridge.
 - XCTest coverage for critical domain/protocol/validation/time/checkpoint/history-data logic.
 
 Intentionally not implemented in FXDatabase:

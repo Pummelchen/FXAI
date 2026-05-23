@@ -2,7 +2,7 @@
 
 Repository-root plugin zoo shared across FXAI runtimes.
 
-AI plugins own model execution. When a converted plugin needs tensor training or inference, it should use a plugin-local PyTorch or TensorFlow backend rather than re-creating the old MQL5 `TensorCore` inside Swift FXDataEngine.
+AI plugins own model execution. When a Swift plugin needs tensor training or inference, it should use a plugin-local PyTorch or TensorFlow backend. FXDataEngine remains responsible for deterministic feature and payload contracts.
 
 Converted plugins should consume the Swift FXDataEngine OHLCV contracts and use volume-derived features whenever the loaded dataset has nonzero volume.
 
@@ -19,7 +19,7 @@ The shared FXDataEngine/FXPlugins runtime API latest version is `4`, and the tok
 Root `FXPlugins` now exposes all 66 FXAI model IDs through Swift `FXAIPluginV4`
 contracts:
 
-- 4 hand-ported legacy rule plugins.
+- 4 hand-ported rule plugins.
 - 2 former FXBacktest demo adapters: `fxbacktest_moving_average_cross` and `fxbacktest_fxstupid`.
 - 1 FXBacktest-native FX7 adapter with plugin-owned backtest source plus Swift/Metal FXDataEngine scoring.
 - 59 plugin-owned native conversions with Swift CPU code under each plugin's `CPU/`
@@ -29,14 +29,14 @@ contracts:
   `fxbacktest_moving_average_cross`, and `fx7` now include plugin-local Metal batch kernels;
   `rule_buyonly`, `rule_sellonly`, `rule_random`, and `fxbacktest_fxstupid`
   remain scalar-only by design.
-- No plugin in `FXPlugins` delegates to `FXAIReferencePluginRuntime`; the old wrapper layer
+- No plugin in `FXPlugins` delegates to `FXAIReferencePluginRuntime`; the transitional wrapper layer
   has been removed from the plugin zoo.
 - Python-backed plugins can use `PythonMLBackendBridge` from `FXDataEngine`.
   The bridge sends OHLCV feature vectors, sequence windows, volume availability,
   horizon, min-move, and price-cost context to plugin-local PyTorch/TensorFlow
   code. The included backend has a pure-Python fallback for contract tests and
-  selects PyTorch MPS or TensorFlow Metal acceleration when those frameworks are
-  installed. Training calls persist lightweight online state under
+  requires PyTorch MPS or TensorFlow Metal acceleration for live accelerator
+  runtime paths on Apple Silicon M2/M3-class hosts. Training calls persist lightweight online state under
   `FXAI_PLUGIN_STATE_DIR`, or `~/.fxai/plugins/state` when the environment
   variable is not set. The backend follows the FXDataEngine volume contract:
   volume-derived features are used only when `dataHasVolume` is true.
@@ -47,17 +47,18 @@ contracts:
   loads a plugin's own `PyTorch/`, `TensorFlow/`, or `NLP/` implementation through
   the Swift bridge. `FXAIAcceleratedPluginRuntime` can wrap any planned plugin and
   route train/predict through the selected external backend while retaining explicit
-  CPU fallback. Test runs can set `FXAI_FORCE_PYTORCH_CPU=1` for deterministic
-  Python smoke tests when Apple MPS is not stable for a specific model.
+  CPU fallback. Test runs can set `FXAI_FORCE_PYTORCH_CPU=1` or
+  `FXAI_ALLOW_CPU_TENSOR_FALLBACK=1` for deterministic smoke tests; production
+  accelerator paths require M2/M3-or-newer Apple Silicon GPU support.
 - The runtime test suite consumes FXDatabase's virtual `SINETEST` security from
   `SineWaveAgent` and checks every plugin on deterministic M1 OHLCV sine-wave data,
-  including accelerator runtime selection with CPU fallback for unavailable local
-  Metal/PyTorch/TensorFlow/NLP backends.
+  including accelerator runtime selection on M2/M3-or-newer Apple Silicon and
+  explicit CPU fallback behavior for contract tests.
 - `FXAIPluginCertificationRegistry` is the strict 100 percent certification gate.
   It covers every registered plugin and declared accelerator, records satisfied
   runtime evidence, and fails closed until missing gates such as live Metal buffer
   parity, per-plugin PyTorch/TensorFlow/NLP persistence checks, FXDatabase-only
-  data-path evidence, full verification output, and MQL5/golden or standard
+  data-path evidence, full verification output, and golden or standard
   reference parity are proven.
 - Reference-grade Swift fixtures now live inside the owning plugin folders for
   statistical models, factor/trend panel contracts, linear learners, tree
@@ -75,4 +76,4 @@ Run the local verification gate with:
 swift test
 ```
 
-The legacy MQL5 plugin reference files have been removed from the repository. The current source of truth is this plugin-owned Swift zoo, the full conversion plan in `API/Docs/FULL_PLUGIN_CONVERSION_PLAN.md`, the reference-grade implementation audit in `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_AUDIT.md`, the 99 percent reference implementation plan in `API/Docs/PLUGIN_99_REFERENCE_IMPLEMENTATION_PLAN.md`, the per-plugin scorecard in `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_SCORECARD.md`, and the 100 percent live runtime completion plan in `API/Docs/PLUGIN_100_LIVE_RUNTIME_COMPLETION_PLAN.md`.
+The current source of truth is this plugin-owned Swift zoo, the full conversion plan in `API/Docs/FULL_PLUGIN_CONVERSION_PLAN.md`, the reference-grade implementation audit in `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_AUDIT.md`, the 99 percent reference implementation plan in `API/Docs/PLUGIN_99_REFERENCE_IMPLEMENTATION_PLAN.md`, the per-plugin scorecard in `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_SCORECARD.md`, and the 100 percent live runtime completion plan in `API/Docs/PLUGIN_100_LIVE_RUNTIME_COMPLETION_PLAN.md`.

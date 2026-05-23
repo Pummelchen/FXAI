@@ -1,6 +1,6 @@
 # Installation
 
-FXAI targets macOS 26 with the current Apple Swift toolchain, Metal, Homebrew, Python 3, PyTorch, TensorFlow, and the Python packages used by repo tools and plugin accelerators.
+FXAI targets macOS 26 on Apple Silicon M2/M3-class Macs, including newer Apple Silicon generations. Apple M1 and Intel x86 hosts are not supported runtime targets. The stack uses the current Apple Swift toolchain, Metal, Homebrew, Python 3, PyTorch MPS, TensorFlow Metal, and the Python packages used by repo tools and plugin accelerators.
 
 ## Installer
 
@@ -19,11 +19,12 @@ DRY_RUN=1 ./install_fxai.sh
 The installer is Bash 3 compatible. It:
 
 - Installs or checks Homebrew.
+- Rejects Intel x86 and Apple M1 hosts before installing runtime dependencies.
 - Checks Xcode Command Line Tools for `swift`, `metal`, and `metallib`.
 - Installs Homebrew packages without version pins.
 - Scans the repo for Python imports.
 - Installs Python packages without version pins.
-- Verifies Swift, Metal, PyTorch MPS, TensorFlow devices, pytest, libSQL, and certifi.
+- Verifies Swift, Metal, PyTorch MPS, TensorFlow Metal GPU devices, pytest, libSQL, and certifi.
 
 ## What The Installer Does Not Pin
 

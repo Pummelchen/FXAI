@@ -23,9 +23,9 @@ It does not replace plugins, the Adaptive Router, or the Dynamic Ensemble. It co
 - `Reports/prob_calibration_replay_report.json`
   Replay summary built from runtime history.
 - `FILE_COMMON/FXAI/Runtime/prob_calibration_config.tsv`
-  Runtime-exported config for MT5.
+  Runtime-exported config for FXDatabase.
 - `FILE_COMMON/FXAI/Runtime/prob_calibration_memory.tsv`
-  Runtime-exported tier memory for MT5.
+  Runtime-exported tier memory for FXDatabase.
 - `FILE_COMMON/FXAI/Runtime/fxai_prob_calibration_<SYMBOL>.tsv`
   Latest live calibrated decision state per symbol.
 - `FILE_COMMON/FXAI/Runtime/fxai_prob_calibration_history_<SYMBOL>.ndjson`

@@ -1,10 +1,6 @@
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
-import tempfile
-import time
 from pathlib import Path
 from typing import Any
 
@@ -16,11 +12,8 @@ from .microstructure_contracts import (
     COMMON_MICROSTRUCTURE_STATUS,
     MICROSTRUCTURE_CONFIG_PATH,
     MICROSTRUCTURE_LOCAL_HISTORY_PATH,
-    MICROSTRUCTURE_SERVICE_SOURCE,
     MICROSTRUCTURE_STATUS_PATH,
     REPO_ROOT,
-    TERMINAL_SERVICE_BINARY,
-    TERMINAL_SERVICE_SOURCE,
     ensure_microstructure_dirs,
     isoformat_utc,
     json_dump,
@@ -28,7 +21,6 @@ from .microstructure_contracts import (
     sanitize_utc_timestamp,
     utc_now,
 )
-from testlab.shared import TERMINAL_ROOT, build_metaeditor_compile_command, read_utf16_or_text
 
 
 def _portable_artifact_path(path: Path) -> str:
@@ -61,9 +53,9 @@ def _status_payload_from_runtime(now_dt=None) -> dict[str, Any]:
                 "ok": False,
                 "stale": True,
                 "enabled": bool(config.get("enabled", True)),
-                "collector_mode": str(config.get("collector_mode", "mt5_service")),
-                "configured_pairs": len(list(dict(config.get("symbol_universe", {})).get("canonical_pairs", []))),
-                "last_error": "microstructure service has not produced a snapshot yet; start FXAI_MicrostructureProbe in MT5 Services",
+            "collector_mode": str(config.get("collector_mode", "fxdatabase_api")),
+            "configured_pairs": len(list(dict(config.get("symbol_universe", {})).get("canonical_pairs", []))),
+            "last_error": "microstructure collector has not produced a snapshot yet",
             },
             "symbols": {},
             "health": {"snapshot_stale_after_sec": int(config.get("snapshot_stale_after_sec", 45) or 45)},
@@ -85,7 +77,7 @@ def _status_payload_from_runtime(now_dt=None) -> dict[str, Any]:
         service = {}
         payload["service"] = service
     service.setdefault("enabled", bool(config.get("enabled", True)))
-    service.setdefault("collector_mode", str(config.get("collector_mode", "mt5_service")))
+    service.setdefault("collector_mode", str(config.get("collector_mode", "fxdatabase_api")))
     service.setdefault("configured_pairs", len(list(dict(config.get("symbol_universe", {})).get("canonical_pairs", []))))
     payload["artifacts"] = {
         "snapshot_json": _portable_artifact_path(COMMON_MICROSTRUCTURE_JSON),
@@ -141,68 +133,22 @@ def microstructure_health_snapshot() -> dict[str, Any]:
 
 
 def install_microstructure_service(compile_service: bool = True) -> dict[str, object]:
-    ensure_default_files()
-    if not MICROSTRUCTURE_SERVICE_SOURCE.exists():
-        raise OfflineLabError(f"Microstructure service source is missing: {MICROSTRUCTURE_SERVICE_SOURCE}")
-    TERMINAL_SERVICE_SOURCE.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(MICROSTRUCTURE_SERVICE_SOURCE, TERMINAL_SERVICE_SOURCE)
-    payload: dict[str, object] = {
-        "source_path": str(MICROSTRUCTURE_SERVICE_SOURCE),
-        "installed_path": str(TERMINAL_SERVICE_SOURCE),
-        "terminal_root": str(TERMINAL_ROOT),
+    config = ensure_default_files()
+    return {
+        "installed": True,
         "compiled": False,
-        "binary_path": str(TERMINAL_SERVICE_BINARY),
+        "compile_requested": bool(compile_service),
+        "collector": str(config.get("collector_mode", "fxdatabase_api")),
         "service_config_path": str(COMMON_MICROSTRUCTURE_CONFIG),
+        "pair_count": len(config["symbol_universe"]["canonical_pairs"]),
+        "note": "Microstructure proxy snapshots are produced by the Swift/Python offline lab pipeline and FXDatabase API inputs.",
     }
-    if compile_service:
-        payload.update(compile_microstructure_service())
-    return payload
 
 
 def compile_microstructure_service(timeout_sec: int = 600) -> dict[str, object]:
-    if not TERMINAL_SERVICE_SOURCE.exists():
-        raise OfflineLabError(
-            "Microstructure service is not installed into MQL5/Services. "
-            "Run microstructure-install-service first."
-        )
-    with tempfile.TemporaryDirectory(prefix="fxai_microstructure_service_") as tmp_dir:
-        stage_root = Path(tmp_dir)
-        stage_source = stage_root / TERMINAL_SERVICE_SOURCE.name
-        stage_log = stage_root / "compile_microstructure_service.log"
-        shutil.copy2(TERMINAL_SERVICE_SOURCE, stage_source)
-        cmd = build_metaeditor_compile_command(stage_source, stage_log)
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        deadline = time.time() + float(timeout_sec)
-        built_ex5 = stage_source.with_suffix(".ex5")
-        last_log = ""
-
-        while time.time() < deadline:
-            rc = proc.poll()
-            if stage_log.exists():
-                last_log = read_utf16_or_text(stage_log)
-            if "0 errors, 0 warnings" in last_log and built_ex5.exists():
-                if proc.poll() is None:
-                    proc.kill()
-                    proc.wait(timeout=5)
-                TERMINAL_SERVICE_BINARY.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(built_ex5, TERMINAL_SERVICE_BINARY)
-                log_path = TERMINAL_SERVICE_SOURCE.with_suffix(".compile.log")
-                shutil.copy2(stage_log, log_path)
-                return {
-                    "compiled": True,
-                    "binary_path": str(TERMINAL_SERVICE_BINARY),
-                    "log_path": str(log_path),
-                }
-            if rc is not None:
-                if proc.stdout is not None:
-                    _ = proc.stdout.read()
-                raise OfflineLabError(
-                    "Microstructure service compile failed. "
-                    f"Last log line: {(last_log.splitlines()[-1] if last_log.splitlines() else 'no log output')}"
-                )
-            time.sleep(1.5)
-
-        if proc.poll() is None:
-            proc.kill()
-            proc.wait(timeout=5)
-        raise OfflineLabError("Microstructure service compile timed out")
+    _ = timeout_sec
+    return {
+        "compiled": False,
+        "collector": "fxdatabase_api",
+        "note": "No separate terminal service is compiled for the Swift-era microstructure collector.",
+    }

@@ -42,7 +42,6 @@ Curve shape is only true-market in phase 1 when manual numeric curve inputs are 
 - `Tools/OfflineLab/offline_lab/rates_engine_daemon.py`
 - `Tools/OfflineLab/offline_lab/rates_engine_newspulse.py`
 - `Tools/OfflineLab/offline_lab/rates_engine_replay.py`
-- `FXDataEngine/Engine/Runtime/Trade/runtime_trade_rates_engine.mqh`
 - `FXGUI/Sources/FXGUICore/Services/RatesEngineArtifactReader.swift`
 - `FXGUI/Sources/FXGUIApp/Features/RatesEngine/RatesEngineView.swift`
 
@@ -104,7 +103,6 @@ The runtime adapter:
 - can block if the rates state is stale or explicitly blocked
 - can scale lot size and tighten entry floors during caution regimes
 
-This is controlled from `FXDataEngine/FXAI.mq5` with:
 - `RatesEngineEnabled`
 - `RatesEngineBlockOnUnknown`
 - `RatesEngineFreshnessMaxSec`

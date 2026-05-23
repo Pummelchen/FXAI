@@ -18,9 +18,8 @@ Every plugin must satisfy these shared gates:
 
 1. CPU path stays deterministic and valid for offline backtests.
 2. Volume-derived features are used only when `dataHasVolume == true`.
-3. Any PyTorch backend uses MPS when available and CPU otherwise.
-4. Any TensorFlow backend uses Keras layers and is compatible with
-   `tensorflow-metal` when installed.
+3. Any PyTorch backend uses MPS on Apple Silicon M2/M3-class hosts; CPU fallback is explicit test/runtime policy only.
+4. Any TensorFlow backend uses Keras layers and requires TensorFlow Metal GPU devices for accelerator runtime.
 5. Any Metal backend declares whether it is a full algorithm kernel or a batch
    scoring/parameter-sweep helper.
 6. Tests must cover reference math, volume gating, state reset, persistence
@@ -83,7 +82,7 @@ Every plugin must satisfy these shared gates:
 | `ai_tft` | Implement Temporal Fusion Transformer: variable selection, GRN, LSTM encoder/decoder, interpretable attention, quantile heads. | PyTorch MPS primary; TensorFlow optional later if parity is needed. | Variable selection, GRN, attention, quantile tests. |
 | `ai_autoformer` | Implement decomposition blocks, auto-correlation attention, seasonal/trend heads. | PyTorch MPS. | Decomposition and autocorrelation fixtures. |
 | `ai_patchtst` | Implement patch extraction, channel-independent transformer, patch positional encoding, horizon head. | PyTorch MPS. | Patch shape, transformer, horizon tests. |
-| `ai_s4` | Implement S4/S4D diagonal state-space kernel with stable parameterization. | PyTorch MPS where supported; CPU fallback for unsupported ops. | Kernel stability and sequence impulse tests. |
+| `ai_s4` | Implement S4/S4D diagonal state-space kernel with stable parameterization. | PyTorch MPS on M2/M3-class hosts; explicit CPU fallback only for tests and unsupported runtime policy. | Kernel stability and sequence impulse tests. |
 | `ai_stmn` | Implement spatio-temporal memory network with memory slots, attention read/write, update policy. | PyTorch MPS. | Memory read/write and slot update tests. |
 | `ai_chronos` | Implement Chronos-style time-series tokenization, causal token transformer, optional pretrained checkpoint hook; NLP event features stay auxiliary. | PyTorch MPS plus NLP feature merger. | Tokenization, causal mask, checkpoint hook tests. |
 | `ai_timesfm` | Implement TimesFM-style patch/horizon foundation forecaster with quantile horizon heads; NLP remains auxiliary. | PyTorch MPS plus NLP feature merger. | Patch horizon, quantile, and checkpoint tests. |

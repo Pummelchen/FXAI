@@ -22,7 +22,7 @@ public struct MixLoffmPlugin: FXAIPlannedPlugin {
         primaryBackends: [.accelerate],
         candidateBackends: [.pyTorchMPS],
         usesVolumeWhenAvailable: true,
-        notes: "Plugin-local Swift CPU port of the MQL5 LOFFM gated expert model. PyTorch/MPS folder provides batched gating/inference research acceleration; TensorFlow, Metal, and NLP are not suitable for this online mixture model."
+        notes: "Plugin-local Swift CPU implementation of the LOFFM gated expert model. PyTorch/MPS folder provides batched gating/inference research acceleration; TensorFlow, Metal, and NLP are not suitable for this online mixture model."
     )
 
     private var cpu: MixLoffmCPUModel

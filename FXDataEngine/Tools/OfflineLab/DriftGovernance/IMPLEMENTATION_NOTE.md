@@ -30,7 +30,7 @@
 
 ## Repo-Specific Deviations
 
-- The live runtime does not yet consume a separate MT5 governance block. Instead, the subsystem influences runtime participation through regenerated router artifacts, which is the cleanest existing control surface in this repo.
+- The live runtime does not yet consume a separate FXDatabase governance block. Instead, the subsystem influences runtime participation through regenerated router artifacts, which is the cleanest existing control surface in this repo.
 - Challenger evaluation reuses existing `tuning_runs`, `run_scenarios`, `best_configs`, `champion_registry`, and `shadow_fleet_observations` tables instead of introducing a new standalone experiment store.
 - GUI symbol selection reuses the existing runtime-symbol selection state to avoid a saved-workspace contract change.
 

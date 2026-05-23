@@ -76,6 +76,6 @@ public enum TreeXGBFastMetal {
         primaryBackends: [.swiftScalar, .accelerate, .metal],
         candidateBackends: [.swiftSIMD],
         usesVolumeWhenAvailable: true,
-        notes: "Plugin-local Swift CPU port of legacy MQL5 tree_xgb_fast with online OvR gradient trees, ring-buffer training, binary calibration, and move/quality heads. Metal kernels provide independent batched tree-margin and softmax scoring; PyTorch, TensorFlow, and NLP are not suitable for this non-neural tree ensemble."
+        notes: "Plugin-local Swift CPU implementation of tree_xgb_fast with online OvR gradient trees, ring-buffer training, binary calibration, and move/quality heads. Metal kernels provide independent batched tree-margin and softmax scoring; PyTorch, TensorFlow, and NLP are not suitable for this non-neural tree ensemble."
     )
 }

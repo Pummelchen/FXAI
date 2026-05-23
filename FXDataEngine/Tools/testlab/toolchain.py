@@ -327,7 +327,7 @@ def load_toolchain_config(
         env=merged_env,
         base_dir=project_root,
         env_key="FXAI_METAEDITOR",
-        default_value=mt5_root / "MetaEditor64.exe",
+        default_value=project_root / ".fxai/disabled-terminal-compiler",
         source_map=source_map,
     )
     terminal = _resolve_value(
@@ -363,7 +363,7 @@ def load_toolchain_config(
         env=merged_env,
         base_dir=project_root,
         env_key="FXAI_TESTER_PRESET_DIR",
-        default_value=mt5_root / "MQL5/Profiles/Tester",
+        default_value=project_root / "Tools/OfflineLab/Profiles/Tester",
         source_map=source_map,
     )
     common_ini = _resolve_value(

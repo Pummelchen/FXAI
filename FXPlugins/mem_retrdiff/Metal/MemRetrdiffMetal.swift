@@ -71,6 +71,6 @@ public enum MemRetrdiffMetal {
         primaryBackends: [.accelerate],
         candidateBackends: [.metal],
         usesVolumeWhenAvailable: true,
-        notes: "Plugin-local Swift CPU port of the MQL5 retrieval-difference memory. Metal kernels cover batched embedding distance scans and weighted memory voting; PyTorch, TensorFlow, and NLP are not suitable for this non-neural memory model."
+        notes: "Plugin-local Swift CPU implementation of the retrieval-difference memory. Metal kernels cover batched embedding distance scans and weighted memory voting; PyTorch, TensorFlow, and NLP are not suitable for this non-neural memory model."
     )
 }

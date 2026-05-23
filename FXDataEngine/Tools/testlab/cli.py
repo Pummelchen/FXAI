@@ -21,10 +21,10 @@ from .benchmarks import (
     DEFAULT_REFERENCE_SYMBOL,
     cmd_publish_benchmarks,
 )
-from .compile import compile_target
+from .compile import compile_swift_package
 from .optimize import build_optimization_campaign, execute_optimization_campaign, render_optimization_campaign
 from .release_gate import cmd_release_gate, DEFAULT_RELEASE_GATE_MIN_SCORE, DEFAULT_RELEASE_GATE_MIN_STABILITY
-from .release_artifacts import cmd_package_mt5_release
+from .release_artifacts import cmd_package_swift_release
 from .reporting import build_multisymbol_summary, load_current_summary, load_rows, render_multisymbol_report, render_report, render_summary_report
 from .shared import (
     AuditRunError,
@@ -54,15 +54,15 @@ from .strategy_profiles import build_strategy_profile_manifest, compile_strategy
 from .verify import run_verify_all
 
 def cmd_compile(_args):
-    return compile_target(Path("FXDataEngine/Tests/FXAI_AuditRunner.mq5"), "audit_runner")
+    return compile_swift_package("data_engine")
 
 
 def cmd_compile_tensorcore(_args):
-    return compile_target(Path("FXDataEngine/Tests/FXAI_TensorCoreRunner.mq5"), "tensorcore_runner")
+    return compile_swift_package("plugins")
 
 
 def cmd_compile_main(_args):
-    return compile_target(Path("FXDataEngine/FXAI.mq5"), "main_ea")
+    return compile_swift_package("database")
 
 
 def cmd_verify_all(args):
@@ -311,27 +311,27 @@ def main():
     ap = argparse.ArgumentParser(description="FXAI external drill-sergeant test lab")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    c = sub.add_parser("compile-audit", help="Compile the MT5 audit runner")
+    c = sub.add_parser("compile-audit", help="Build the Swift FXDataEngine package")
     c.set_defaults(func=cmd_compile)
 
-    ct = sub.add_parser("compile-tensorcore", help="Compile the dedicated MT5 TensorCore and plugin-contract runner")
+    ct = sub.add_parser("compile-plugins", aliases=["compile-tensorcore"], help="Build the Swift FXPlugins package")
     ct.set_defaults(func=cmd_compile_tensorcore)
 
-    cm = sub.add_parser("compile-main", help="Compile the main FXAI EA")
+    cm = sub.add_parser("compile-main", help="Build the Swift FXDatabase package")
     cm.set_defaults(func=cmd_compile_main)
 
     doctor = sub.add_parser("doctor", help="Run a profile-aware FXAI toolchain and environment self-check")
     doctor.set_defaults(func=cmd_doctor)
 
-    pkg = sub.add_parser("package-mt5-release", help="Compile and package MT5 .ex5 binaries for GitHub Releases")
+    pkg = sub.add_parser("package-swift-release", aliases=["package-mt5-release"], help="Build and package Swift artifacts for GitHub Releases")
     pkg.add_argument("--version", required=True, help="Release version or tag used in artifact metadata")
     pkg.add_argument("--output-dir", default="")
     pkg.add_argument("--release-profile", default="production")
     pkg.add_argument("--compatible-profiles", default="research,production")
-    pkg.add_argument("--skip-compile", action="store_true", help="Package existing local .ex5 files without recompiling")
-    pkg.set_defaults(func=cmd_package_mt5_release)
+    pkg.add_argument("--skip-build", "--skip-compile", action="store_true", help="Package existing local Swift build artifacts without rebuilding")
+    pkg.set_defaults(func=cmd_package_swift_release)
 
-    va = sub.add_parser("verify-all", help="Run Python tests, deterministic fixture checks, and clean MT5 compiles")
+    va = sub.add_parser("verify-all", help="Run Python tests, deterministic fixture checks, and clean Swift builds")
     va.add_argument("--refresh-golden", action="store_true")
     va.set_defaults(func=cmd_verify_all)
 
@@ -351,7 +351,7 @@ def main():
     pb.add_argument("--reference-strategy-profile-version", type=int, default=DEFAULT_REFERENCE_STRATEGY_PROFILE_VERSION)
     pb.set_defaults(func=cmd_publish_benchmarks)
 
-    ra = sub.add_parser("run-audit", help="Compile and attempt to run the MT5 audit runner, then analyze the report")
+    ra = sub.add_parser("run-audit", help="Build the Swift audit stack, run the configured audit, then analyze the report")
     ra.add_argument("--all-plugins", action="store_true")
     ra.add_argument("--plugin-id", type=int, default=28)
     ra.add_argument("--plugin-list", default="{all}")

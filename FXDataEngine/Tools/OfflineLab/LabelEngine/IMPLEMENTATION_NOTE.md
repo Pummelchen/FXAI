@@ -32,7 +32,7 @@
 - There was no existing clean candidate-signal log tied to offline dataset bars, so phase 1 implements:
   - a deterministic baseline candidate generator
   - an external candidate ingest path
-- The export runner currently stores M1 OHLC and a legacy `spread_points` cost column, but not symbol digit metadata. The label engine treats that legacy column as `price_cost_points` at its boundary. Point-size resolution is therefore:
+- The export runner currently stores M1 OHLC and a runtime `spread_points` cost column, but not symbol digit metadata. The label engine treats that runtime column as `price_cost_points` at its boundary. Point-size resolution is therefore:
   - overrideable in config
   - heuristically inferred per symbol otherwise
 - Path-aware labels are built from M1 bar geometry, not tick-level path, so every row records that a path approximation was used.

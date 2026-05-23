@@ -21,6 +21,9 @@ public struct FXAIPluginRuntimeConfiguration: Hashable, Sendable {
         self.pythonExecutable = pythonExecutable
         var resolvedEnvironment = pythonEnvironment
         resolvedEnvironment["FXAI_PLUGIN_ROOT"] = resolvedEnvironment["FXAI_PLUGIN_ROOT"] ?? FXAIPluginBackendDiscovery.pluginRootURL.path
+        if environment.isFXAIAppleSiliconTarget {
+            resolvedEnvironment["FXAI_APPLE_SILICON_TARGET"] = resolvedEnvironment["FXAI_APPLE_SILICON_TARGET"] ?? "m2_m3_or_newer"
+        }
         self.pythonEnvironment = resolvedEnvironment
     }
 }
@@ -129,12 +132,24 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
             throw FXDataEngineError.externalBackend("\(manifest.aiName) has no external Python descriptor for \(backend.rawValue)")
         }
         let framework = try descriptor.externalFramework()
+        var environment = configuration.pythonEnvironment
+        if backend == .pyTorchMPS,
+           environment["FXAI_FORCE_PYTORCH_CPU"] != "1",
+           environment["FXAI_ALLOW_CPU_TENSOR_FALLBACK"] != "1" {
+            environment["FXAI_REQUIRE_PYTORCH_MPS"] = "1"
+            environment["PYTORCH_ENABLE_MPS_FALLBACK"] = environment["PYTORCH_ENABLE_MPS_FALLBACK"] ?? "1"
+        }
+        if backend == .tensorFlowMetal,
+           environment["FXAI_ALLOW_CPU_TENSOR_FALLBACK"] != "1",
+           environment["FXAI_FORCE_TENSORFLOW_CPU"] != "1" {
+            environment["FXAI_REQUIRE_TENSORFLOW_METAL"] = "1"
+        }
         return PythonMLBackendBridge(
             framework: framework,
             executable: configuration.pythonExecutable,
             module: FXAIPluginBackendDiscovery.moduleBackendURL.path,
             modelIdentifier: manifest.aiName,
-            environment: configuration.pythonEnvironment
+            environment: environment
         )
     }
 

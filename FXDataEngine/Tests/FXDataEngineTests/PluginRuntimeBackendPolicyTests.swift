@@ -2,6 +2,8 @@ import XCTest
 @testable import FXDataEngine
 
 final class PluginRuntimeBackendPolicyTests: XCTestCase {
+    private let appleM2 = AppleSiliconHardware(architecture: "arm64", cpuBrand: "Apple M2 Pro")
+
     func testAutomaticResolutionPrefersAvailableNonCPUBackend() throws {
         let plan = FXPluginAccelerationPlan(
             pluginName: "test_metal",
@@ -10,7 +12,12 @@ final class PluginRuntimeBackendPolicyTests: XCTestCase {
             notes: "test"
         )
         let environment = FXPluginRuntimeEnvironment(
-            metalDevice: MetalAccelerationDevice(available: true, deviceName: "Test GPU", supportsUnifiedMemory: true),
+            metalDevice: MetalAccelerationDevice(
+                available: true,
+                deviceName: "Test GPU",
+                supportsUnifiedMemory: true,
+                hardware: appleM2
+            ),
             pythonExecutable: nil
         )
 
@@ -30,7 +37,12 @@ final class PluginRuntimeBackendPolicyTests: XCTestCase {
             notes: "test"
         )
         let environment = FXPluginRuntimeEnvironment(
-            metalDevice: MetalAccelerationDevice(available: true, deviceName: "Test GPU", supportsUnifiedMemory: true),
+            metalDevice: MetalAccelerationDevice(
+                available: true,
+                deviceName: "Test GPU",
+                supportsUnifiedMemory: true,
+                hardware: appleM2
+            ),
             pythonExecutable: "python3",
             pyTorchMPSAvailable: true
         )
@@ -61,6 +73,40 @@ final class PluginRuntimeBackendPolicyTests: XCTestCase {
         XCTAssertEqual(resolution.fallbackBackend, .swiftScalar)
         XCTAssertTrue(resolution.didFallback)
         XCTAssertEqual(resolution.requestedMode, .metal)
+    }
+
+    func testAppleSiliconTargetRejectsM1AndIntelAccelerators() {
+        let plan = FXPluginAccelerationPlan(
+            pluginName: "test_hardware_gate",
+            primaryBackends: [.swiftScalar],
+            candidateBackends: [.metal, .pyTorchMPS, .tensorFlowMetal],
+            usesVolumeWhenAvailable: true,
+            notes: "test"
+        )
+        let unsupportedHosts = [
+            AppleSiliconHardware(architecture: "arm64", cpuBrand: "Apple M1 Max"),
+            AppleSiliconHardware(architecture: "x86_64", cpuBrand: "Intel Core i9")
+        ]
+
+        for host in unsupportedHosts {
+            let environment = FXPluginRuntimeEnvironment(
+                metalDevice: MetalAccelerationDevice(
+                    available: true,
+                    deviceName: "Test GPU",
+                    supportsUnifiedMemory: true,
+                    hardware: host
+                ),
+                pythonExecutable: "python3",
+                pyTorchMPSAvailable: true,
+                tensorFlowMetalAvailable: true
+            )
+
+            XCTAssertFalse(environment.supports(.metal), host.cpuBrand)
+            XCTAssertFalse(environment.supports(.pyTorchMPS), host.cpuBrand)
+            XCTAssertFalse(environment.supports(.tensorFlowMetal), host.cpuBrand)
+            let resolution = try? FXPluginRuntimeResolver.resolve(plan: plan, environment: environment)
+            XCTAssertEqual(resolution?.selectedBackend, .swiftScalar, host.cpuBrand)
+        }
     }
 
     func testStrictForcedUnavailableBackendThrows() {
@@ -98,7 +144,16 @@ final class PluginRuntimeBackendPolicyTests: XCTestCase {
             try FXPluginRuntimeResolver.resolve(
                 plan: plan,
                 mode: .pyTorchMPS,
-                environment: FXPluginRuntimeEnvironment(pythonExecutable: "python3", pyTorchMPSAvailable: true)
+                environment: FXPluginRuntimeEnvironment(
+                    metalDevice: MetalAccelerationDevice(
+                        available: true,
+                        deviceName: "Test GPU",
+                        supportsUnifiedMemory: true,
+                        hardware: appleM2
+                    ),
+                    pythonExecutable: "python3",
+                    pyTorchMPSAvailable: true
+                )
             )
         )
     }

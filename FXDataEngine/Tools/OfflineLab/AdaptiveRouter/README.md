@@ -26,9 +26,6 @@ Phase 1 is routing-first and audit-first. It does not force retraining of the pl
 - `Tools/OfflineLab/offline_lab/adaptive_router_config.py`
 - `Tools/OfflineLab/offline_lab/adaptive_router.py`
 - `Tools/OfflineLab/offline_lab/adaptive_router_replay.py`
-- `FXDataEngine/Engine/Runtime/runtime_adaptive_router_stage.mqh`
-- `FXDataEngine/Engine/Runtime/runtime_model_stage_block.mqh`
-- `FXDataEngine/Engine/Runtime/runtime_policy_stage_block.mqh`
 
 ## Operator Commands
 
@@ -77,7 +74,6 @@ Replay report:
 
 Live fallback is explicit:
 
-- set `AdaptiveRouterEnabled = false` in `FXDataEngine/FXAI.mq5` to recover the old behavior
 - or leave promoted profiles absent and the runtime falls back cleanly
 - profile config can also enforce `fallback_to_student_router_only`
 

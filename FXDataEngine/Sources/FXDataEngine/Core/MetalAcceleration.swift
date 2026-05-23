@@ -8,25 +8,37 @@ public struct MetalAccelerationDevice: Codable, Hashable, Sendable {
     public let available: Bool
     public let deviceName: String?
     public let supportsUnifiedMemory: Bool
+    public let hardware: AppleSiliconHardware
+    public let optimizedForFXAIAppleSilicon: Bool
 
-    public init(available: Bool, deviceName: String?, supportsUnifiedMemory: Bool) {
+    public init(
+        available: Bool,
+        deviceName: String?,
+        supportsUnifiedMemory: Bool,
+        hardware: AppleSiliconHardware = .probe(),
+        optimizedForFXAIAppleSilicon: Bool? = nil
+    ) {
         self.available = available
         self.deviceName = deviceName
         self.supportsUnifiedMemory = supportsUnifiedMemory
+        self.hardware = hardware
+        self.optimizedForFXAIAppleSilicon = optimizedForFXAIAppleSilicon ?? (available && supportsUnifiedMemory && hardware.isM2M3OrNewer)
     }
 
     public static func probe() -> MetalAccelerationDevice {
+        let hardware = AppleSiliconHardware.probe()
         #if canImport(Metal)
         guard let device = MTLCreateSystemDefaultDevice() else {
-            return MetalAccelerationDevice(available: false, deviceName: nil, supportsUnifiedMemory: false)
+            return MetalAccelerationDevice(available: false, deviceName: nil, supportsUnifiedMemory: false, hardware: hardware)
         }
         return MetalAccelerationDevice(
             available: true,
             deviceName: device.name,
-            supportsUnifiedMemory: device.hasUnifiedMemory
+            supportsUnifiedMemory: device.hasUnifiedMemory,
+            hardware: hardware
         )
         #else
-        return MetalAccelerationDevice(available: false, deviceName: nil, supportsUnifiedMemory: false)
+        return MetalAccelerationDevice(available: false, deviceName: nil, supportsUnifiedMemory: false, hardware: hardware)
         #endif
     }
 }

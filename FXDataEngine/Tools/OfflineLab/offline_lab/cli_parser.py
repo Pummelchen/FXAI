@@ -18,7 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
     init_db = sub.add_parser("init-db", help="Initialize the Turso offline lab schema")
     init_db.set_defaults(func=cmd_init_db)
 
-    val = sub.add_parser("validate-env", help="Validate Python, MT5, FILE_COMMON, and Offline Lab path assumptions")
+    val = sub.add_parser("validate-env", help="Validate Python, FILE_COMMON, and Offline Lab path assumptions")
     val.set_defaults(func=cmd_validate_env)
 
     doctor = sub.add_parser("doctor", help="Run a profile-aware FXAI toolchain and environment self-check")
@@ -107,7 +107,7 @@ def build_parser() -> argparse.ArgumentParser:
     miv = sub.add_parser("microstructure-validate", help="Validate the microstructure proxy config, runtime contract, and service scaffolding")
     miv.set_defaults(func=cmd_microstructure_validate)
 
-    mis = sub.add_parser("microstructure-install-service", help="Install the MT5 microstructure probe service into MQL5/Services")
+    mis = sub.add_parser("microstructure-install-service", help="Register the Swift-era microstructure collector config")
     mis.add_argument("--skip-compile", action="store_true")
     mis.set_defaults(func=cmd_microstructure_install_service)
 
@@ -122,7 +122,7 @@ def build_parser() -> argparse.ArgumentParser:
     cav = sub.add_parser("cross-asset-validate", help="Validate the cross-asset config, runtime contracts, and probe scaffolding")
     cav.set_defaults(func=cmd_cross_asset_validate)
 
-    cas = sub.add_parser("cross-asset-install-service", help="Install the MT5 cross-asset probe service into MQL5/Services")
+    cas = sub.add_parser("cross-asset-install-service", help="Register the Swift-era cross-asset collector config")
     cas.add_argument("--skip-compile", action="store_true")
     cas.set_defaults(func=cmd_cross_asset_install_service)
 
@@ -142,7 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
     car.add_argument("--hours-back", type=int, default=72)
     car.set_defaults(func=cmd_cross_asset_replay_report)
 
-    npi = sub.add_parser("newspulse-install-service", help="Install the MT5 NewsPulse calendar service into MQL5/Services")
+    npi = sub.add_parser("newspulse-install-service", help="Register the Swift-era NewsPulse collector config")
     npi.add_argument("--skip-compile", action="store_true")
     npi.set_defaults(func=cmd_newspulse_install_service)
 
@@ -164,7 +164,7 @@ def build_parser() -> argparse.ArgumentParser:
     npo = sub.add_parser("newspulse-once", help="Run one NewsPulse fusion cycle and refresh the shared snapshot")
     npo.set_defaults(func=cmd_newspulse_once)
 
-    npd = sub.add_parser("newspulse-daemon", help="Continuously refresh NewsPulse from MT5 calendar exports and GDELT")
+    npd = sub.add_parser("newspulse-daemon", help="Continuously refresh NewsPulse from offline news sources and GDELT")
     npd.add_argument("--interval-seconds", type=int, default=0)
     npd.add_argument("--iterations", type=int, default=0, help="0 means run forever")
     npd.set_defaults(func=cmd_newspulse_daemon)
@@ -199,10 +199,10 @@ def build_parser() -> argparse.ArgumentParser:
     boot.add_argument("--seed-demo", action="store_true")
     boot.set_defaults(func=cmd_bootstrap)
 
-    comp = sub.add_parser("compile-export", help="Compile the MT5 offline export runner")
+    comp = sub.add_parser("compile-export", help="Build the Swift FXDataEngine export support")
     comp.set_defaults(func=cmd_compile_export)
 
-    exp = sub.add_parser("export-dataset", help="Export exact-window M1 OHLCV history from MT5 into Turso")
+    exp = sub.add_parser("export-dataset", help="Export exact-window M1 OHLCV history from FXDatabase API into Turso")
     exp.add_argument("--symbol", default="EURUSD")
     exp.add_argument("--symbol-list", default="")
     exp.add_argument("--symbol-pack", default="", choices=[""] + sorted(testlab.SYMBOL_PACKS.keys()))
@@ -214,13 +214,13 @@ def build_parser() -> argparse.ArgumentParser:
     exp.add_argument("--notes", default="")
     exp.add_argument("--replace", action="store_true")
     exp.add_argument("--skip-compile", action="store_true")
-    exp.add_argument("--login")
-    exp.add_argument("--server")
-    exp.add_argument("--password")
+    exp.add_argument("--fxdatabase-api-url", default="")
+    exp.add_argument("--broker-source-id", default="")
+    exp.add_argument("--source-origin", default="")
     exp.add_argument("--timeout", type=int, default=300)
     exp.set_defaults(func=cmd_export_dataset)
 
-    tune = sub.add_parser("tune-zoo", help="Run the full MT5 model-zoo tuning campaign on exact exported windows")
+    tune = sub.add_parser("tune-zoo", help="Run the full Swift plugin-zoo tuning campaign on exact exported windows")
     tune.add_argument("--profile", default="continuous")
     tune.add_argument("--dataset-keys", default="")
     tune.add_argument("--group-key", default="")
@@ -233,6 +233,9 @@ def build_parser() -> argparse.ArgumentParser:
     tune.add_argument("--end-unix", type=int, default=0)
     tune.add_argument("--replace", action="store_true")
     tune.add_argument("--skip-compile", action="store_true")
+    tune.add_argument("--fxdatabase-api-url", default="")
+    tune.add_argument("--broker-source-id", default="")
+    tune.add_argument("--source-origin", default="")
     tune.add_argument("--top-plugins", type=int, default=0)
     tune.add_argument("--limit-experiments", type=int, default=0)
     tune.add_argument("--limit-runs", type=int, default=0)

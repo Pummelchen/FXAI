@@ -2,26 +2,17 @@
 
 ## Repo Mapping
 
-This subsystem is integrated as a live MT5 runtime stage because FXAI already records broker execution telemetry inside the EA and already routes shared decision-quality overlays through `FXDataEngine/Engine/Runtime`.
+This subsystem is integrated as a live FXDatabase runtime stage because FXAI already records broker execution telemetry inside the EA and already routes shared decision-quality overlays through `FXDataEngine/Engine/Runtime`.
 
 ### Runtime boundary reused
 
 - live execution and broker telemetry:
-  - `FXDataEngine/Engine/Core/core_broker_execution.mqh`
-  - `FXDataEngine/Engine/Runtime/Trade/runtime_trade_execution.mqh`
 - shared context sources consumed, not duplicated:
-  - `FXDataEngine/Engine/Runtime/Trade/runtime_trade_newspulse.mqh`
-  - `FXDataEngine/Engine/Runtime/Trade/runtime_trade_rates_engine.mqh`
-  - `FXDataEngine/Engine/Runtime/Trade/runtime_trade_microstructure.mqh`
-  - `FXDataEngine/Engine/Runtime/runtime_adaptive_router_stage.mqh`
-  - `FXDataEngine/Engine/Runtime/runtime_dynamic_ensemble_stage.mqh`
 - downstream decision-quality and risk consumers:
-  - `FXDataEngine/Engine/Runtime/runtime_prob_calibration_stage.mqh`
-  - `FXDataEngine/Engine/Runtime/Trade/runtime_trade_risk.mqh`
 
 ### Repo-specific deviation from the brief
 
-The repo already maintains execution traces and execution EMAs directly inside the MT5 runtime. Because of that, phase 1 does **not** add a separate external execution daemon. The forecaster lives in the EA runtime so it can:
+The repo already maintains execution traces and execution EMAs directly inside the FXDatabase runtime. Because of that, phase 1 does **not** add a separate external execution daemon. The forecaster lives in the EA runtime so it can:
 
 - see the latest broker execution trace immediately
 - avoid duplicate transport or freshness lag
@@ -36,7 +27,6 @@ OfflineLab still owns:
 
 ### Chosen insertion point
 
-The execution-quality forecaster is inserted in `FXDataEngine/Engine/Runtime/runtime_policy_stage_block.mqh` after:
 
 1. adaptive router posture
 2. dynamic ensemble posture
