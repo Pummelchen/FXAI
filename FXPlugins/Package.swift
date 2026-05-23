@@ -59,6 +59,8 @@ let package = Package(
                 "ai_qcew/PyTorch",
                 "ai_tesseract/PyTorch",
                 "ai_trr/PyTorch",
+                "ai_mythos_rdt/NLP",
+                "ai_mythos_rdt/PyTorch",
                 "Package.swift",
                 "README.md"
             ]
