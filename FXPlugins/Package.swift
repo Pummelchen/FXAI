@@ -63,6 +63,7 @@ let package = Package(
                 "ai_mythos_rdt/PyTorch",
                 "wm_cfx/PyTorch",
                 "wm_graph/PyTorch",
+                "rl_ppo/PyTorch",
                 "Package.swift",
                 "README.md"
             ]
