@@ -19,7 +19,7 @@ contracts:
 
 - 4 hand-ported legacy rule plugins.
 - 2 former FXBacktest demo adapters: `fxbacktest_moving_average_cross` and `fxbacktest_fxstupid`.
-- 59 full plugin-owned native conversions with Swift CPU code under each plugin's `CPU/`
+- 59 plugin-owned native conversions with Swift CPU code under each plugin's `CPU/`
   folder and accelerator sources under plugin-owned `Metal/`, `PyTorch/`, `TensorFlow/`,
   or `NLP/` folders where suitable.
 - 6 Swift rule/demo adapters. `rule_m1sync` and
@@ -44,4 +44,4 @@ Run the local verification gate with:
 swift test
 ```
 
-The legacy MQL5 plugin reference files have been removed from the repository. The current source of truth is this plugin-owned Swift zoo plus the full conversion plan in `API/Docs/FULL_PLUGIN_CONVERSION_PLAN.md`.
+The legacy MQL5 plugin reference files have been removed from the repository. The current source of truth is this plugin-owned Swift zoo, the full conversion plan in `API/Docs/FULL_PLUGIN_CONVERSION_PLAN.md`, and the reference-grade implementation audit in `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_AUDIT.md`.
