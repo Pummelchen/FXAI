@@ -170,6 +170,7 @@ final class ReferencePluginAdapterTests: XCTestCase {
         AIModelID.enhash.rawValue,
         AIModelID.ftrlLogit.rawValue,
         AIModelID.factorCarry.rawValue,
+        AIModelID.factorCMVPanel.rawValue,
         AIModelID.factorPPPValue.rawValue,
         AIModelID.linElasticLogit.rawValue,
         AIModelID.linProfitLogit.rawValue,
