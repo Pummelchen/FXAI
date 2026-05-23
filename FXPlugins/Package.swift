@@ -49,6 +49,8 @@ let package = Package(
                 "ai_tft/PyTorch",
                 "ai_autoformer/PyTorch",
                 "ai_patchtst/PyTorch",
+                "ai_chronos/NLP",
+                "ai_chronos/PyTorch",
                 "Package.swift",
                 "README.md"
             ]
