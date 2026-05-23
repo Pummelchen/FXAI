@@ -160,6 +160,7 @@ final class ReferencePluginAdapterTests: XCTestCase {
         AIModelID.statMSGARCH.rawValue,
         AIModelID.statOUSpread.rawValue,
         AIModelID.statTVPKalman.rawValue,
+        AIModelID.statVMD.rawValue,
         AIModelID.statXRateConsistency.rawValue,
         AIModelID.treeRF.rawValue,
         AIModelID.xgbFast.rawValue,

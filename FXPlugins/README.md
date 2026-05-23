@@ -19,17 +19,17 @@ contracts:
 
 - 4 hand-ported legacy rule plugins.
 - 2 former FXBacktest demo adapters: `fxbacktest_moving_average_cross` and `fxbacktest_fxstupid`.
-- 31 full plugin-owned native conversions: `lin_sgd`, `lin_ftrl`, `lin_enhash`, `lin_pa`,
+- 32 full plugin-owned native conversions: `lin_sgd`, `lin_ftrl`, `lin_enhash`, `lin_pa`,
   `lin_elastic_logit`, `lin_profit_logit`, `dist_quantile`, `mem_retrdiff`, `mix_loffm`,
   `mix_moe_conformal`, `tree_xgb_fast`, `tree_xgb`, `tree_catboost`, `tree_lgbm`, and
   `tree_rf`, plus `stat_msgarch`, `stat_arimax_garch`, `stat_coint_vecm`, and
   `stat_ou_spread`, plus `stat_microflow_proxy`, `stat_hmm_regime`, `stat_tvp_kalman`,
   and `stat_xrate_consistency`, plus `factor_ppp_value`, `factor_carry`, and
   `factor_cmv_panel`, plus `factor_pca_panel`, plus `trend_tsmom_vol`, `trend_xsmom_rank`, and
-  `trend_vol_breakout`, plus `stat_emd_hht`,
+  `trend_vol_breakout`, plus `stat_emd_hht` and `stat_vmd`,
   with Swift CPU code under each plugin's `CPU/` folder and accelerator sources under plugin-owned
   `Metal/` or `PyTorch/` folders where suitable.
-- 28 Swift reference adapters for the remaining legacy plugins, each in its own plugin folder with
+- 27 Swift reference adapters for the remaining legacy plugins, each in its own plugin folder with
   volume-aware online centroid learning, deterministic fallback prediction, and explicit Apple Silicon
   backend metadata for Swift SIMD, Accelerate, Metal, PyTorch MPS,
   TensorFlow Metal, or Core ML / Neural Engine candidates.
