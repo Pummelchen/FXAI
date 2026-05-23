@@ -158,6 +158,7 @@ final class ReferencePluginAdapterTests: XCTestCase {
         AIModelID.statMicroflowProxy.rawValue,
         AIModelID.statMSGARCH.rawValue,
         AIModelID.statOUSpread.rawValue,
+        AIModelID.statTVPKalman.rawValue,
         AIModelID.statXRateConsistency.rawValue,
         AIModelID.treeRF.rawValue,
         AIModelID.xgbFast.rawValue,
