@@ -54,6 +54,7 @@ let package = Package(
                 "ai_timesfm/NLP",
                 "ai_timesfm/PyTorch",
                 "ai_geodesic/PyTorch",
+                "ai_fewc/PyTorch",
                 "Package.swift",
                 "README.md"
             ]
