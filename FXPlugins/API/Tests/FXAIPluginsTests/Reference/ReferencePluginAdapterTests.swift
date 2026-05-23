@@ -154,6 +154,7 @@ final class ReferencePluginAdapterTests: XCTestCase {
         AIModelID.lightgbm.rawValue,
         AIModelID.statARIMAXGARCH.rawValue,
         AIModelID.statCointVECM.rawValue,
+        AIModelID.statMicroflowProxy.rawValue,
         AIModelID.statMSGARCH.rawValue,
         AIModelID.statOUSpread.rawValue,
         AIModelID.treeRF.rawValue,
