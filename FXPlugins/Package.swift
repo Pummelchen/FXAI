@@ -46,6 +46,7 @@ let package = Package(
                 "ai_s4/PyTorch",
                 "ai_stmn/PyTorch",
                 "ai_tst/PyTorch",
+                "ai_tft/PyTorch",
                 "Package.swift",
                 "README.md"
             ]
