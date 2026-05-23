@@ -20,6 +20,9 @@ final class FXBacktestDemoAdapterTests: XCTestCase {
         XCTAssertEqual(plan.candidateBackends, [.swiftSIMD])
         XCTAssertTrue(plan.usesVolumeWhenAvailable)
         XCTAssertTrue(plan.declaresHardwareAcceleration)
+        let metalFile = Self.pluginRoot("fxbacktest_moving_average_cross")
+            .appendingPathComponent("Metal/MovingAverageCrossMetal.swift")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: metalFile.path))
     }
 
     func testMovingAverageCrossPredictsBuyAndSellFromFastSlowReturns() throws {
@@ -144,5 +147,13 @@ final class FXBacktestDemoAdapterTests: XCTestCase {
         values[7] = fastReturn
         values[8] = slowReturn
         return values
+    }
+
+    private static func pluginRoot(_ name: String) -> URL {
+        var url = URL(fileURLWithPath: #filePath)
+        for _ in 0..<5 {
+            url.deleteLastPathComponent()
+        }
+        return url.appendingPathComponent(name)
     }
 }

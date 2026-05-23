@@ -18,10 +18,10 @@ public struct RuleM1SyncPlugin: FXAIPlannedPlugin, FXAIPluginSyntheticSeriesSupp
 
     public let accelerationPlan = FXPluginAccelerationPlan(
         pluginName: "rule_m1sync",
-        primaryBackends: [.swiftScalar],
+        primaryBackends: [.swiftScalar, .metal],
         candidateBackends: [.swiftSIMD],
         usesVolumeWhenAvailable: true,
-        notes: "M1 chain rule over a tiny rolling OHLCV window. Uses volume confirmation when available; keep scalar for parity, SIMD only helps future batched audit sweeps."
+        notes: "M1 chain rule over a tiny rolling OHLCV window. Uses volume confirmation when available; Metal covers batched offline chain scans across FXDatabase M1 OHLCV samples, and SIMD remains useful for CPU audit sweeps."
     )
 
     private var hitEMA = 0.55

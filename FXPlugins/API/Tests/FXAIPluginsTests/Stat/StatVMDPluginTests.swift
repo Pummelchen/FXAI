@@ -20,7 +20,7 @@ final class StatVMDPluginTests: XCTestCase {
         XCTAssertEqual(plan.pluginName, "stat_vmd")
         XCTAssertTrue(plan.primaryBackends.contains(.accelerate))
         XCTAssertTrue(plan.primaryBackends.contains(.swiftSIMD))
-        XCTAssertFalse(plan.primaryBackends.contains(.metal))
+        XCTAssertTrue(plan.primaryBackends.contains(.metal))
         XCTAssertTrue(plan.usesVolumeWhenAvailable)
     }
 
@@ -87,12 +87,12 @@ final class StatVMDPluginTests: XCTestCase {
         XCTAssertEqual(reset.moveMeanPoints, before.moveMeanPoints, accuracy: 1.0e-12)
     }
 
-    func testConvertedPluginOwnsCPUCodeOnly() throws {
+    func testConvertedPluginOwnsCPUAndMetalCode() throws {
         let root = Self.pluginRoot()
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("CPU/StatVMDCPUModel.swift").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("CPU/StatVMDAccelerated.swift").path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metal").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metal/StatVMDMetal.swift").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("PyTorch").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("TensorFlow").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("NLP").path))

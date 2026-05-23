@@ -124,8 +124,8 @@ Finish proper plugin-local structure for:
 
 These require CPU only except:
 
-- `rule_m1sync`: optional Metal batched chain scanner.
-- `fxbacktest_moving_average_cross`: optional Metal batched parameter sweep.
+- `rule_m1sync`: implemented Metal batched chain scanner.
+- `fxbacktest_moving_average_cross`: implemented Metal batched parameter sweep.
 
 ### Wave 2: Native Linear And Distribution Plugins
 
@@ -181,7 +181,7 @@ Legend:
 | `rule_buyonly` | `Rule/rule_buyonly.mqh` | Constant buy baseline. | CPU. |
 | `rule_sellonly` | `Rule/rule_sellonly.mqh` | Constant sell baseline. | CPU. |
 | `rule_random` | `Rule/rule_random.mqh` | Deterministic seeded no-skip random. | CPU. |
-| `rule_m1sync` | `Rule/rule_m1sync.mqh` | M1 OHLC chain sync with volume confirmation. | CPU, Metal optional batch scanner. |
+| `rule_m1sync` | `Rule/rule_m1sync.mqh` | M1 OHLC chain sync with volume confirmation. | CPU, Metal batch scanner. |
 | `fxbacktest_moving_average_cross` | Swift demo | Moving-average cross signal adapter. | CPU, Metal parameter sweep. |
 | `fxbacktest_fxstupid` | Swift demo | Stateful demo direction adapter. | CPU. |
 | `lin_sgd` | `Linear/lin_sgd.mqh` | SGD multiclass model, hashed interactions, Adam moments, calibration, move head. | CPU, Metal batch interactions. |
@@ -203,9 +203,9 @@ Legend:
 | `factor_cmv_panel` | `Factor/factor_cmv_panel.mqh`, old framework kind 19 | CMV panel factor branch. | CPU, Accelerate, Metal optional panel batches. |
 | `factor_pca_panel` | `Factor/factor_pca_panel.mqh`, old framework kind 16 | PCA panel branch. | CPU, Accelerate SVD/eigens, Metal optional. |
 | `factor_ppp_value` | `Factor/factor_ppp_value.mqh`, old framework kind 17 | PPP/value factor branch. | CPU, Accelerate. |
-| `trend_tsmom_vol` | `Trend/trend_tsmom_vol.mqh`, old framework kind 20 | Time-series momentum/volatility branch. | CPU, Accelerate, Metal optional sweeps. |
+| `trend_tsmom_vol` | `Trend/trend_tsmom_vol.mqh`, old framework kind 20 | Time-series momentum/volatility branch. | CPU, Accelerate, Metal batched window scans. |
 | `trend_xsmom_rank` | `Trend/trend_xsmom_rank.mqh`, old framework kind 21 | Cross-sectional momentum/rank branch. | CPU, Accelerate. |
-| `trend_vol_breakout` | `Trend/trend_vol_breakout.mqh`, old framework kind 22 | Volatility breakout branch. | CPU, Accelerate, Metal optional sweeps. |
+| `trend_vol_breakout` | `Trend/trend_vol_breakout.mqh`, old framework kind 22 | Volatility breakout branch. | CPU, Accelerate, Metal batched breakout scans. |
 | `stat_msgarch` | `Stat/stat_msgarch.mqh`, old framework kind 1 | Markov-switching GARCH branch. | CPU, Accelerate, PyTorch optional fitting. |
 | `stat_arimax_garch` | `Stat/stat_arimax_garch.mqh`, old framework kind 2 | ARIMAX/GARCH branch. | CPU, Accelerate, PyTorch optional fitting. |
 | `stat_coint_vecm` | `Stat/stat_coint_vecm.mqh`, old framework kind 4 | Cointegration/VECM branch; spread means residual. | CPU, Accelerate. |

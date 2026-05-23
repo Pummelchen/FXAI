@@ -152,7 +152,7 @@ Each plugin step:
 | mix_moe_conformal | Mixture | Mixture/mix_moe_conformal.mqh | Mixture-of-experts conformal router | Swift scalar plus Accelerate gating | No |
 | rl_ppo | RL | RL/rl_ppo.mqh | External backend policy plugin | PyTorch MPS preferred for PPO; TensorFlow optional | Core ML inference candidate after training |
 | rule_buyonly | Rule | Rule/rule_buyonly.mqh | Constant buy rule plugin | Swift scalar only | No |
-| rule_m1sync | Rule | Rule/rule_m1sync.mqh | M1 synchronization/rule plugin using FXDataEngine OHLCV only | Swift scalar; no raw MT5 data access | No |
+| rule_m1sync | Rule | Rule/rule_m1sync.mqh | M1 synchronization/rule plugin using FXDataEngine OHLCV only | Swift scalar plus Metal batched chain scanner; no raw MT5 data access | Metal implemented |
 | rule_random | Rule | Rule/rule_random.mqh | Deterministic seeded random/no-skip rule | Swift scalar | No |
 | rule_sellonly | Rule | Rule/rule_sellonly.mqh | Constant sell rule plugin | Swift scalar only | No |
 | ai_attn_cnn_bilstm | Sequence | Sequence/ai_attn_cnn_bilstm.mqh | External sequence model | PyTorch MPS preferred; TensorFlow if Keras implementation is cleaner | Core ML inference candidate |
@@ -181,25 +181,25 @@ Each plugin step:
 | ai_tst | Sequence | Sequence/ai_tst.mqh + subfolder | Time-series transformer | PyTorch MPS preferred | Core ML inference candidate |
 | stat_arimax_garch | Stat | Stat/stat_arimax_garch.mqh | Statistical model plugin | Accelerate for AR terms; Python stats/PyTorch optional for GARCH fitting | No |
 | stat_coint_vecm | Stat | Stat/stat_coint_vecm.mqh | Cointegration/VECM plugin | Accelerate LAPACK; replace spread wording with residual | No |
-| stat_emd_hht | Stat | Stat/stat_emd_hht.mqh | EMD/HHT signal plugin | Swift/Accelerate; Metal for batched decompositions later | No |
+| stat_emd_hht | Stat | Stat/stat_emd_hht.mqh | EMD/HHT signal plugin | Swift/Accelerate plus Metal batched decomposition-proxy scans | Metal implemented |
 | stat_hmm_regime | Stat | Stat/stat_hmm_regime.mqh | HMM regime plugin | Swift/Accelerate forward-backward; Metal batch scoring optional | No |
 | stat_microflow_proxy | Stat | Stat/stat_microflow_proxy.mqh | OHLCV microflow proxy plugin | Swift scalar/Accelerate; must use volume when present | No |
 | stat_msgarch | Stat | Stat/stat_msgarch.mqh | Markov-switching GARCH plugin | Accelerate plus optional Python fitting | No |
 | stat_ou_spread | Stat | Stat/stat_ou_spread.mqh | OU residual plugin, not bid/ask spread | Accelerate; rename internals to residual | No |
 | stat_tvp_kalman | Stat | Stat/stat_tvp_kalman.mqh | Time-varying Kalman plugin | Accelerate matrix ops | No |
-| stat_vmd | Stat | Stat/stat_vmd.mqh | Variational mode decomposition plugin | Accelerate/Metal candidate for FFT-like loops | No |
+| stat_vmd | Stat | Stat/stat_vmd.mqh | Variational mode decomposition plugin | Swift/Accelerate plus Metal batched mode-proxy scans | Metal implemented |
 | stat_xrate_consistency | Stat | Stat/stat_xrate_consistency.mqh | Cross-rate consistency plugin | Swift scalar/Accelerate graph checks | No |
 | tree_catboost | Tree | Tree/tree_catboost.mqh + subfolder | Native tree ensemble | Swift reference, Metal batched scoring, CPU training first | No |
 | tree_lgbm | Tree | Tree/tree_lgbm.mqh + subfolder | Native LightGBM-like ensemble | Swift reference, Metal batched scoring, CPU training first | No |
 | tree_rf | Tree | Tree/tree_rf.mqh | Random forest framework plugin | Swift reference, Metal batched scoring if many trees | No |
 | tree_xgb | Tree | Tree/tree_xgb.mqh | Native XGBoost-like ensemble | Swift reference, Metal batched scoring, CPU training first | No |
 | tree_xgb_fast | Tree | Tree/tree_xgb_fast.mqh | Optimized XGBoost-like ensemble | Swift reference plus Metal batch inference | No |
-| trend_tsmom_vol | Trend | Trend/trend_tsmom_vol.mqh | Time-series momentum/vol trend plugin | Swift SIMD/Accelerate rolling windows | No |
-| trend_vol_breakout | Trend | Trend/trend_vol_breakout.mqh | Volatility breakout plugin | Swift SIMD/Accelerate; Metal sweep possible | No |
+| trend_tsmom_vol | Trend | Trend/trend_tsmom_vol.mqh | Time-series momentum/vol trend plugin | Swift SIMD/Accelerate rolling windows plus Metal batched window scans | Metal implemented |
+| trend_vol_breakout | Trend | Trend/trend_vol_breakout.mqh | Volatility breakout plugin | Swift SIMD/Accelerate plus Metal batched breakout scans | Metal implemented |
 | trend_xsmom_rank | Trend | Trend/trend_xsmom_rank.mqh | Cross-sectional momentum rank plugin | Accelerate sorting/reductions, Metal not first | No |
 | wm_cfx | World | World/wm_cfx.mqh | Currency factor world model | Accelerate graph/matrix ops; Metal later | Maybe after model stabilization |
 | wm_graph | World | World/wm_graph.mqh | Graph world model | Accelerate graph ops; PyTorch Geometric alternative if needed | Maybe after model stabilization |
-| MovingAverageCross | FXBacktest demo | FXPlugins/fxbacktest_moving_average_cross/MovingAverageCrossFXDataEnginePlugin.swift | FXDataEngine adapter now independent of FXBacktest-local plugin code | Metal candidate for future FXDataEngine batch/sweep work; Swift scalar adapter now active | No |
+| MovingAverageCross | FXBacktest demo | FXPlugins/fxbacktest_moving_average_cross/MovingAverageCrossFXDataEnginePlugin.swift | FXDataEngine adapter now independent of FXBacktest-local plugin code | Swift scalar adapter plus Metal batch/sweep kernel | Metal implemented |
 | FXStupid | FXBacktest demo | FXPlugins/fxbacktest_fxstupid/FXStupidFXDataEnginePlugin.swift | FXDataEngine adapter now independent of FXBacktest-local plugin code | Stateful scalar adapter; no Metal until its order-control flow is redesigned | No |
 
 ## Review Pass 1

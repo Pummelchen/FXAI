@@ -22,8 +22,10 @@ contracts:
 - 59 full plugin-owned native conversions with Swift CPU code under each plugin's `CPU/`
   folder and accelerator sources under plugin-owned `Metal/`, `PyTorch/`, `TensorFlow/`,
   or `NLP/` folders where suitable.
-- 6 scalar Swift rule/demo adapters: `rule_buyonly`, `rule_sellonly`, `rule_random`,
-  `rule_m1sync`, `fxbacktest_moving_average_cross`, and `fxbacktest_fxstupid`.
+- 6 Swift rule/demo adapters. `rule_m1sync` and
+  `fxbacktest_moving_average_cross` now include plugin-local Metal batch kernels;
+  `rule_buyonly`, `rule_sellonly`, `rule_random`, and `fxbacktest_fxstupid`
+  remain scalar-only by design.
 - No plugin in `FXPlugins` delegates to `FXAIReferencePluginRuntime`; the old wrapper layer
   has been removed from the plugin zoo.
 - Python-backed plugins can use `PythonMLBackendBridge` from `FXDataEngine`.

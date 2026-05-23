@@ -94,9 +94,16 @@ final class RuleM1SyncPluginTests: XCTestCase {
         let plan = FXAIPluginRegistry.accelerationPlans().first { $0.pluginName == "rule_m1sync" }
 
         XCTAssertTrue(pluginNames.contains("rule_m1sync"))
-        XCTAssertEqual(plan?.primaryBackends, [.swiftScalar])
+        XCTAssertEqual(plan?.primaryBackends, [.swiftScalar, .metal])
         XCTAssertEqual(plan?.candidateBackends, [.swiftSIMD])
         XCTAssertTrue(plan?.usesVolumeWhenAvailable ?? false)
+    }
+
+    func testConvertedPluginOwnsMetalKernel() throws {
+        let root = Self.pluginRoot()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("RuleM1SyncPlugin.swift").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metal/RuleM1SyncMetal.swift").path))
     }
 
     func testPredictUsesVolumeConfirmationWhenAvailable() throws {
@@ -190,5 +197,13 @@ final class RuleM1SyncPluginTests: XCTestCase {
             close: close,
             volume: volume
         )
+    }
+
+    private static func pluginRoot() -> URL {
+        var url = URL(fileURLWithPath: #filePath)
+        for _ in 0..<5 {
+            url.deleteLastPathComponent()
+        }
+        return url.appendingPathComponent("rule_m1sync")
     }
 }
