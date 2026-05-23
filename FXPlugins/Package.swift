@@ -23,6 +23,8 @@ let package = Package(
                 "API/Backends/Python",
                 "API/Docs",
                 "API/Tests",
+                "ai_mlp/TensorFlow",
+                "ai_mlp/PyTorch",
                 "mix_moe_conformal/PyTorch",
                 "mix_loffm/PyTorch",
                 "Package.swift",
