@@ -5,6 +5,16 @@ public protocol FXBacktestHistoryProviding: Sendable {
     func loadM1History(_ request: FXBacktestM1HistoryRequest) async throws -> FXBacktestM1HistoryResponse
 }
 
+public protocol FXBacktestResultProviding: Sendable {
+    func ensureResultSchema(_ request: FXBacktestResultSchemaRequest) async throws -> FXBacktestResultMutationResponse
+    func startRun(_ request: FXBacktestResultRunStartRequest) async throws -> FXBacktestResultMutationResponse
+    func appendPassResults(_ request: FXBacktestResultPassAppendRequest) async throws -> FXBacktestResultMutationResponse
+    func completeRun(_ request: FXBacktestResultRunCompleteRequest) async throws -> FXBacktestResultMutationResponse
+    func purgeResults(_ request: FXBacktestResultPurgeRequest) async throws -> FXBacktestResultPurgeResponse
+    func getRun(_ request: FXBacktestResultRunGetRequest) async throws -> FXBacktestResultRunGetResponse
+    func getPasses(_ request: FXBacktestResultPassesGetRequest) async throws -> FXBacktestResultPassesGetResponse
+}
+
 public struct FXBacktestHTTPResponse: Sendable, Equatable {
     public let statusCode: Int
     public let contentType: String
@@ -19,9 +29,11 @@ public struct FXBacktestHTTPResponse: Sendable, Equatable {
 
 public struct FXBacktestAPIHTTPHandler: Sendable {
     private let historyProvider: any FXBacktestHistoryProviding
+    private let resultProvider: (any FXBacktestResultProviding)?
 
-    public init(historyProvider: any FXBacktestHistoryProviding) {
+    public init(historyProvider: any FXBacktestHistoryProviding, resultProvider: (any FXBacktestResultProviding)? = nil) {
         self.historyProvider = historyProvider
+        self.resultProvider = resultProvider
     }
 
     public func handle(method: String, path: String, body: Data) async -> FXBacktestHTTPResponse {
@@ -36,6 +48,41 @@ public struct FXBacktestAPIHTTPHandler: Sendable {
                 let response = try await historyProvider.loadM1History(request)
                 try response.validate()
                 return try json(response)
+
+            case ("POST", FXBacktestAPIV1.resultSchemaPath):
+                let request = try JSONDecoder().decode(FXBacktestResultSchemaRequest.self, from: body)
+                try request.validate()
+                return try json(try await requireResultProvider().ensureResultSchema(request))
+
+            case ("POST", FXBacktestAPIV1.resultRunStartPath):
+                let request = try JSONDecoder().decode(FXBacktestResultRunStartRequest.self, from: body)
+                try request.validate()
+                return try json(try await requireResultProvider().startRun(request))
+
+            case ("POST", FXBacktestAPIV1.resultPassAppendPath):
+                let request = try JSONDecoder().decode(FXBacktestResultPassAppendRequest.self, from: body)
+                try request.validate()
+                return try json(try await requireResultProvider().appendPassResults(request))
+
+            case ("POST", FXBacktestAPIV1.resultRunCompletePath):
+                let request = try JSONDecoder().decode(FXBacktestResultRunCompleteRequest.self, from: body)
+                try request.validate()
+                return try json(try await requireResultProvider().completeRun(request))
+
+            case ("POST", FXBacktestAPIV1.resultPurgePath):
+                let request = try JSONDecoder().decode(FXBacktestResultPurgeRequest.self, from: body)
+                try request.validate()
+                return try json(try await requireResultProvider().purgeResults(request))
+
+            case ("POST", FXBacktestAPIV1.resultRunGetPath):
+                let request = try JSONDecoder().decode(FXBacktestResultRunGetRequest.self, from: body)
+                try request.validate()
+                return try json(try await requireResultProvider().getRun(request))
+
+            case ("POST", FXBacktestAPIV1.resultPassesGetPath):
+                let request = try JSONDecoder().decode(FXBacktestResultPassesGetRequest.self, from: body)
+                try request.validate()
+                return try json(try await requireResultProvider().getPasses(request))
 
             default:
                 return try error(status: 404, code: "not_found", message: "Unknown FXBacktest API endpoint \(method) \(path)")
@@ -53,6 +100,13 @@ public struct FXBacktestAPIHTTPHandler: Sendable {
 
     private func json<T: Encodable>(_ value: T, status: Int = 200) throws -> FXBacktestHTTPResponse {
         FXBacktestHTTPResponse(statusCode: status, body: try Self.makeEncoder().encode(value))
+    }
+
+    private func requireResultProvider() throws -> any FXBacktestResultProviding {
+        guard let resultProvider else {
+            throw FXBacktestAPIServiceError.resultStoreUnavailable("FXDatabase was started without a backtest result provider.")
+        }
+        return resultProvider
     }
 
     private func error(status: Int, code: String, message: String) throws -> FXBacktestHTTPResponse {
@@ -83,6 +137,7 @@ public enum FXBacktestAPIServiceError: Error, Equatable, CustomStringConvertible
     case digitsMismatch(expected: Int, actual: Int)
     case readinessBlocked(String)
     case historyUnavailable(String)
+    case resultStoreUnavailable(String)
 
     public var httpStatus: Int {
         switch self {
@@ -92,6 +147,8 @@ public enum FXBacktestAPIServiceError: Error, Equatable, CustomStringConvertible
             return 409
         case .historyUnavailable:
             return 502
+        case .resultStoreUnavailable:
+            return 503
         }
     }
 
@@ -111,6 +168,8 @@ public enum FXBacktestAPIServiceError: Error, Equatable, CustomStringConvertible
             return "readiness_blocked"
         case .historyUnavailable:
             return "history_unavailable"
+        case .resultStoreUnavailable:
+            return "result_store_unavailable"
         }
     }
 
@@ -130,6 +189,8 @@ public enum FXBacktestAPIServiceError: Error, Equatable, CustomStringConvertible
             return "FXDatabase backtest readiness gate blocked the request: \(reason)"
         case .historyUnavailable(let reason):
             return "FXDatabase could not load verified M1 history: \(reason)"
+        case .resultStoreUnavailable(let reason):
+            return "FXDatabase backtest result store is unavailable: \(reason)"
         }
     }
 }

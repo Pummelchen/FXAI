@@ -11,7 +11,7 @@ The implementation is intentionally defensive:
 - The current open M1 bar must never be ingested.
 - ClickHouse primary keys are not treated as uniqueness constraints.
 - FXDatabase does not run strategies or optimizations internally.
-- FXBacktest and any other external backtest client must read verified canonical data through the dedicated FXBacktest API v1, never by connecting to ClickHouse directly.
+- FXBacktest and any other external backtest client must read verified canonical data and persist backtest results through the dedicated FXBacktest API v1, never by connecting to ClickHouse directly.
 - Optional Metal support inside FXDatabase is limited to internal read-only OHLC buffer preparation checks; strategy kernels belong in FXBacktest or another external app.
 
 ## Architecture
@@ -403,7 +403,7 @@ Use `--skip-bridge` only for the early preflight before the EA is attached. A pr
 
 `data-check` is an operator diagnostic inside FXDatabase. It runs the same safety gate used by `fxbacktest-api`, then reads verified canonical M1 bars through FXDatabase's internal ClickHouse-backed pipeline. External backtest applications must not copy this internal path or connect to ClickHouse directly. If `"use_metal": true` is set in the config, the diagnostic also prepares read-only Metal buffers from the same arrays. No local cache is written.
 
-`export-cache`, `backtest`, and `optimize` intentionally fail closed. FXDatabase is the history-data provider; strategy execution, optimization sweeps, durable optimizer jobs, and result persistence belong in the external Swift backtest application.
+`export-cache`, `backtest`, and `optimize` intentionally fail closed. FXDatabase is the history-data provider and result-storage gatekeeper; strategy execution, optimization sweeps, durable optimizer jobs, and result lifecycle decisions belong in the external Swift backtest application.
 
 ## Terminal Output
 
@@ -463,7 +463,7 @@ This means a freshly loaded database is not considered safe for external backtes
 
 ## FXBacktest API v1
 
-FXBacktest reads historical M1 OHLCV data only through the dedicated FXBacktest API v1. The API server runs inside FXDatabase, so FXDatabase remains the only process that knows ClickHouse credentials, database names, canonical table layout, readiness gates, repair/verification rules, and MT5 EA bridge details.
+FXBacktest reads historical M1 OHLCV data and stores, reads, or purges backtest result data only through the dedicated FXBacktest API v1. The API server runs inside FXDatabase, so FXDatabase remains the only process that knows ClickHouse credentials, database names, canonical table layout, readiness gates, repair/verification rules, result table layout, and MT5 EA bridge details.
 
 Start the API from the resident FXDatabase prompt:
 
@@ -483,16 +483,22 @@ API identity:
 
 | Field | Value |
 | --- | --- |
-| Version | `fxdatabase.fxbacktest.history.v1` |
+| Version | `fxdatabase.fxbacktest.v1` |
 | Status | `GET /v1/status` |
 | M1 history | `POST /v1/history/m1` |
+| Result schema | `POST /v1/backtest/results/schema` |
+| Result run start | `POST /v1/backtest/results/runs/start` |
+| Result pass append | `POST /v1/backtest/results/passes/append` |
+| Result run complete | `POST /v1/backtest/results/runs/complete` |
+| Result purge | `POST /v1/backtest/results/purge` |
+| Result read | `POST /v1/backtest/results/runs/get`, `POST /v1/backtest/results/passes/get` |
 | Transport | Local HTTP, default `http://127.0.0.1:5066` |
 
 Example history request:
 
 ```json
 {
-  "api_version": "fxdatabase.fxbacktest.history.v1",
+  "api_version": "fxdatabase.fxbacktest.v1",
   "broker_source_id": "raw-trading-ltd-icmarkets-sc-mt5-4-account-12345678",
   "source_origin": "MT5",
   "logical_symbol": "EURUSD",
@@ -508,7 +514,7 @@ Example history response shape:
 
 ```json
 {
-  "api_version": "fxdatabase.fxbacktest.history.v1",
+  "api_version": "fxdatabase.fxbacktest.v1",
   "metadata": {
     "broker_source_id": "raw-trading-ltd-icmarkets-sc-mt5-4-account-12345678",
     "source_origin": "MT5",
@@ -536,6 +542,8 @@ All OHLC arrays use scaled integer prices and M1 volume uses unsigned integer va
 FXDatabase intentionally does not provide spread, swap, commission, slippage, lot constraints, margin, tick value, bid/ask, or other execution-side metadata. Backtest applications receive verified M1 OHLCV history only. Any external simulator that wants execution assumptions must own those assumptions outside FXDatabase.
 
 Server-side loading still uses FXDatabase's internal read-only ClickHouse-backed provider after the readiness gate passes. That internal provider is not a supported integration surface for FXBacktest. This prevents direct DB shortcuts and keeps API v1 as the single versioned contract between the projects.
+
+Backtest result persistence also stays behind this same API contract. FXBacktest can request result schema creation, start a run, append pass-result batches, complete a run, purge old or all result data, and read stored run/pass rows. FXDatabase executes the underlying ClickHouse operations against `fxbacktest_runs` and `fxbacktest_pass_results`; FXBacktest never receives ClickHouse credentials or a database URL.
 
 ## Operational Health API
 

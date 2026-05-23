@@ -72,11 +72,8 @@ final class OperationalAgentsTests: XCTestCase {
     }
 
     func testResultPersistenceAgentSavesAndPurgesThroughStoreAPI() async throws {
-        let executor = AgentRecordingClickHouseExecutor()
-        let store = ClickHouseBacktestResultStore(
-            configuration: FXBacktestClickHouseConfiguration(database: "fxbacktest_agent_test"),
-            executor: executor
-        )
+        let client = RecordingFXDatabaseResultClient()
+        let store = FXDatabaseBacktestResultStore(client: client)
         let plugin = FX7()
         let sweep = try ParameterSweep.singlePass(definitions: plugin.parameterDefinitions)
         let run = BacktestStoredRun(
@@ -116,12 +113,16 @@ final class OperationalAgentsTests: XCTestCase {
         )
         let purge = try await ResultPersistenceAgent.purgeAll(store: store)
 
-        let statements = await executor.statements()
+        let operations = await client.operations()
         XCTAssertEqual(saveOutcome.status, .ok)
         XCTAssertEqual(purge.outcome.status, .ok)
-        XCTAssertTrue(statements.contains { $0.contains("INSERT INTO `fxbacktest_agent_test`.`fxbacktest_runs`") })
-        XCTAssertTrue(statements.contains { $0.contains("FORMAT JSONEachRow") })
-        XCTAssertTrue(statements.contains { $0.contains("DELETE WHERE 1") })
+        XCTAssertEqual(operations, [
+            "start:agent-run:com.fxbacktest.plugins.fx7.v1:1",
+            "append:agent-run:1",
+            "complete:agent-run:1:completed",
+            "schema",
+            "purge:all"
+        ])
     }
 
     private func market(
@@ -150,20 +151,6 @@ final class OperationalAgentsTests: XCTestCase {
         )
     }
 
-}
-
-private actor AgentRecordingClickHouseExecutor: FXBacktestClickHouseExecuting {
-    private var recordedStatements: [String] = []
-
-    @discardableResult
-    func execute(_ sql: String, configuration: FXBacktestClickHouseConfiguration) async throws -> String {
-        recordedStatements.append(sql)
-        return ""
-    }
-
-    func statements() -> [String] {
-        recordedStatements
-    }
 }
 
 private struct CPUOnlyTestPlugin: FXBacktestPluginV1 {

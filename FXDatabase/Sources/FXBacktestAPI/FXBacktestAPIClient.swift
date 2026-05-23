@@ -25,14 +25,58 @@ public struct FXBacktestAPIClient: Sendable {
 
     public func loadM1History(_ historyRequest: FXBacktestM1HistoryRequest) async throws -> FXBacktestM1HistoryResponse {
         try historyRequest.validate()
-        var request = URLRequest(url: try endpoint(FXBacktestAPIV1.m1HistoryPath))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpBody = try Self.makeEncoder().encode(historyRequest)
-        let data = try await perform(request)
-        let response = try JSONDecoder().decode(FXBacktestM1HistoryResponse.self, from: data)
+        let response: FXBacktestM1HistoryResponse = try await post(historyRequest, to: FXBacktestAPIV1.m1HistoryPath)
         try response.validate()
+        return response
+    }
+
+    public func ensureBacktestResultSchema() async throws -> FXBacktestResultMutationResponse {
+        let request = FXBacktestResultSchemaRequest()
+        try request.validate()
+        let response: FXBacktestResultMutationResponse = try await post(request, to: FXBacktestAPIV1.resultSchemaPath)
+        try validateAPIVersion(response.apiVersion)
+        return response
+    }
+
+    public func startBacktestRun(_ run: FXBacktestResultRunStartRequest) async throws -> FXBacktestResultMutationResponse {
+        try run.validate()
+        let response: FXBacktestResultMutationResponse = try await post(run, to: FXBacktestAPIV1.resultRunStartPath)
+        try validateAPIVersion(response.apiVersion)
+        return response
+    }
+
+    public func appendBacktestResults(_ results: FXBacktestResultPassAppendRequest) async throws -> FXBacktestResultMutationResponse {
+        try results.validate()
+        let response: FXBacktestResultMutationResponse = try await post(results, to: FXBacktestAPIV1.resultPassAppendPath)
+        try validateAPIVersion(response.apiVersion)
+        return response
+    }
+
+    public func completeBacktestRun(_ completion: FXBacktestResultRunCompleteRequest) async throws -> FXBacktestResultMutationResponse {
+        try completion.validate()
+        let response: FXBacktestResultMutationResponse = try await post(completion, to: FXBacktestAPIV1.resultRunCompletePath)
+        try validateAPIVersion(response.apiVersion)
+        return response
+    }
+
+    public func purgeBacktestResults(_ purge: FXBacktestResultPurgeRequest) async throws -> FXBacktestResultPurgeResponse {
+        try purge.validate()
+        let response: FXBacktestResultPurgeResponse = try await post(purge, to: FXBacktestAPIV1.resultPurgePath)
+        try validateAPIVersion(response.apiVersion)
+        return response
+    }
+
+    public func getBacktestRun(_ run: FXBacktestResultRunGetRequest) async throws -> FXBacktestResultRunGetResponse {
+        try run.validate()
+        let response: FXBacktestResultRunGetResponse = try await post(run, to: FXBacktestAPIV1.resultRunGetPath)
+        try validateAPIVersion(response.apiVersion)
+        return response
+    }
+
+    public func getBacktestPasses(_ passes: FXBacktestResultPassesGetRequest) async throws -> FXBacktestResultPassesGetResponse {
+        try passes.validate()
+        let response: FXBacktestResultPassesGetResponse = try await post(passes, to: FXBacktestAPIV1.resultPassesGetPath)
+        try validateAPIVersion(response.apiVersion)
         return response
     }
 
@@ -46,6 +90,22 @@ public struct FXBacktestAPIClient: Sendable {
             throw FXBacktestAPIClientError.invalidBaseURL(baseURL.absoluteString)
         }
         return url
+    }
+
+    private func post<Request: Encodable, Response: Decodable>(_ body: Request, to path: String) async throws -> Response {
+        var request = URLRequest(url: try endpoint(path))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try Self.makeEncoder().encode(body)
+        let data = try await perform(request)
+        return try JSONDecoder().decode(Response.self, from: data)
+    }
+
+    private func validateAPIVersion(_ apiVersion: String) throws {
+        guard apiVersion == FXBacktestAPIV1.version else {
+            throw FXBacktestAPIClientError.apiVersionMismatch(apiVersion)
+        }
     }
 
     private func perform(_ request: URLRequest) async throws -> Data {

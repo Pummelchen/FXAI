@@ -1,12 +1,12 @@
+import FXBacktestAPI
 import FXBacktestCore
 import FXBacktestPlugins
 import XCTest
 
 final class BacktestResultStoreTests: XCTestCase {
-    func testClickHouseResultStoreUsesFXBacktestTablesAndPurgeAPI() async throws {
-        let executor = RecordingClickHouseExecutor()
-        let config = FXBacktestClickHouseConfiguration(database: "fxbacktest_test")
-        let store = ClickHouseBacktestResultStore(configuration: config, executor: executor)
+    func testFXDatabaseResultStoreUsesFXDatabaseBacktestAPI() async throws {
+        let client = RecordingFXDatabaseResultClient()
+        let store = FXDatabaseBacktestResultStore(client: client)
         let plugin = FX7()
         let sweep = try ParameterSweep.singlePass(definitions: plugin.parameterDefinitions)
         let run = BacktestStoredRun(
@@ -37,29 +37,67 @@ final class BacktestResultStoreTests: XCTestCase {
             barsProcessed: 100
         )
 
+        try await store.ensureSchema()
         try await store.startRun(run)
         try await store.appendResults([result], runID: run.runID)
-        try await store.completeRun(runID: run.runID, progress: BacktestProgress(completedPasses: 1, totalPasses: 1, elapsedSeconds: 0.1), status: "completed")
+        try await store.completeRun(
+            runID: run.runID,
+            progress: BacktestProgress(completedPasses: 1, totalPasses: 1, elapsedSeconds: 0.1),
+            status: "completed"
+        )
         _ = try await store.purge(olderThanDays: 30)
 
-        let statements = await executor.statements()
-        XCTAssertTrue(statements.contains { $0.contains("CREATE DATABASE IF NOT EXISTS `fxbacktest_test`") })
-        XCTAssertTrue(statements.contains { $0.contains("fxbacktest_runs") })
-        XCTAssertTrue(statements.contains { $0.contains("fxbacktest_pass_results") && $0.contains("FORMAT JSONEachRow") })
-        XCTAssertTrue(statements.contains { $0.contains("DELETE WHERE inserted_at < now() - INTERVAL 30 DAY") })
+        let operations = await client.operations()
+        XCTAssertEqual(operations, [
+            "schema",
+            "start:test-run:com.fxbacktest.plugins.fx7.v1:1",
+            "append:test-run:1",
+            "complete:test-run:1:completed",
+            "purge:older_than_days:30"
+        ])
     }
 }
 
-private actor RecordingClickHouseExecutor: FXBacktestClickHouseExecuting {
-    private var recordedStatements: [String] = []
+actor RecordingFXDatabaseResultClient: FXDatabaseBacktestResultAPIClient {
+    private var recordedOperations: [String] = []
 
-    @discardableResult
-    func execute(_ sql: String, configuration: FXBacktestClickHouseConfiguration) async throws -> String {
-        recordedStatements.append(sql)
-        return ""
+    func ensureBacktestResultSchema() async throws -> FXBacktestResultMutationResponse {
+        recordedOperations.append("schema")
+        return FXBacktestResultMutationResponse(sqlStatements: 2)
     }
 
-    func statements() -> [String] {
-        recordedStatements
+    func startBacktestRun(_ run: FXBacktestResultRunStartRequest) async throws -> FXBacktestResultMutationResponse {
+        recordedOperations.append("start:\(run.runId):\(run.pluginId):\(run.totalPasses)")
+        return FXBacktestResultMutationResponse(runId: run.runId, affectedRows: 1, sqlStatements: 3)
+    }
+
+    func appendBacktestResults(_ results: FXBacktestResultPassAppendRequest) async throws -> FXBacktestResultMutationResponse {
+        recordedOperations.append("append:\(results.runId):\(results.results.count)")
+        return FXBacktestResultMutationResponse(runId: results.runId, affectedRows: results.results.count, sqlStatements: 1)
+    }
+
+    func completeBacktestRun(_ completion: FXBacktestResultRunCompleteRequest) async throws -> FXBacktestResultMutationResponse {
+        recordedOperations.append("complete:\(completion.runId):\(completion.completedPasses):\(completion.status)")
+        return FXBacktestResultMutationResponse(runId: completion.runId, affectedRows: 1, sqlStatements: 1)
+    }
+
+    func purgeBacktestResults(_ purge: FXBacktestResultPurgeRequest) async throws -> FXBacktestResultPurgeResponse {
+        let scope = purge.all ? "all" : "older_than_days:\(purge.olderThanDays ?? 0)"
+        recordedOperations.append("purge:\(scope)")
+        return FXBacktestResultPurgeResponse(report: FXBacktestResultPurgeReport(scope: scope, sqlStatements: 2))
+    }
+
+    func getBacktestRun(_ run: FXBacktestResultRunGetRequest) async throws -> FXBacktestResultRunGetResponse {
+        recordedOperations.append("get-run:\(run.runId)")
+        return FXBacktestResultRunGetResponse(run: nil)
+    }
+
+    func getBacktestPasses(_ passes: FXBacktestResultPassesGetRequest) async throws -> FXBacktestResultPassesGetResponse {
+        recordedOperations.append("get-passes:\(passes.runId):\(passes.offset):\(passes.limit)")
+        return FXBacktestResultPassesGetResponse(runId: passes.runId, offset: passes.offset, limit: passes.limit, results: [])
+    }
+
+    func operations() -> [String] {
+        recordedOperations
     }
 }

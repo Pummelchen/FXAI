@@ -252,7 +252,7 @@ public actor ResultPersistenceAgent {
     public static let descriptor = FXBacktestAgentDescriptor(
         id: .resultPersistence,
         displayName: "Result Persistence",
-        responsibility: "Own ClickHouse result-run lifecycle, buffered pass writes, completion updates, snapshots, and purge operations."
+        responsibility: "Own FXDatabase result-run lifecycle, buffered pass writes, completion updates, snapshots, and purge operations."
     )
 
     private let store: any BacktestResultStore
@@ -270,7 +270,7 @@ public actor ResultPersistenceAgent {
         self.startedAtUtc = Date()
         self.lastOutcome = Self.descriptor.outcome(
             status: .ok,
-            message: "ClickHouse result persistence started for run \(run.runID).",
+            message: "FXDatabase result persistence started for run \(run.runID).",
             details: ["plugin=\(run.pluginIdentifier)", "engine=\(run.engine.rawValue)"],
             startedAtUtc: startedAtUtc
         )
@@ -297,7 +297,7 @@ public actor ResultPersistenceAgent {
         try await store.completeRun(runID: runID, progress: progress, status: status)
         lastOutcome = Self.descriptor.outcome(
             status: .ok,
-            message: "ClickHouse result persistence finalized run \(runID) with status \(status).",
+            message: "FXDatabase result persistence finalized run \(runID) with status \(status).",
             details: ["written_results=\(writtenResults)", "completed_passes=\(progress.completedPasses)"],
             startedAtUtc: startedAtUtc
         )
@@ -329,7 +329,7 @@ public actor ResultPersistenceAgent {
         try await store.completeRun(runID: run.runID, progress: progress, status: status)
         return descriptor.outcome(
             status: .ok,
-            message: "Saved \(results.count.formatted()) held pass results to ClickHouse run \(run.runID).",
+            message: "Saved \(results.count.formatted()) held pass results to FXDatabase run \(run.runID).",
             details: ["status=\(status)", "plugin=\(run.pluginIdentifier)"],
             startedAtUtc: started
         )
@@ -343,7 +343,7 @@ public actor ResultPersistenceAgent {
             report,
             descriptor.outcome(
                 status: .ok,
-                message: "Cleaned all ClickHouse backtest result data.",
+                message: "Cleaned all FXDatabase backtest result data.",
                 details: ["scope=\(report.scope)", "sql_statements=\(report.sqlStatements)"],
                 startedAtUtc: started
             )
@@ -361,7 +361,7 @@ public actor ResultPersistenceAgent {
             report,
             descriptor.outcome(
                 status: .ok,
-                message: "Cleaned ClickHouse backtest result data older than \(days) days.",
+                message: "Cleaned FXDatabase backtest result data older than \(days) days.",
                 details: ["scope=\(report.scope)", "sql_statements=\(report.sqlStatements)"],
                 startedAtUtc: started
             )

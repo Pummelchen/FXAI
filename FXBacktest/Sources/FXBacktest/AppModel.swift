@@ -42,11 +42,7 @@ final class AppModel: ObservableObject, @unchecked Sendable {
     @Published var utcStartInclusive: Int64 = 1_704_067_200
     @Published var utcEndExclusive: Int64 = 1_707_177_600
     @Published var maximumRows = 5_000_000
-    @Published var clickHouseURLText = "http://127.0.0.1:8123"
-    @Published var clickHouseDatabase = "fxbacktest"
-    @Published var clickHouseUsername = ""
-    @Published var clickHousePassword = ""
-    @Published var persistResultsToClickHouse = false
+    @Published var persistResultsToFXDatabase = false
 
     @Published private(set) var market: OhlcDataSeries?
     @Published private(set) var marketUniverse: OhlcMarketUniverse?
@@ -336,7 +332,7 @@ final class AppModel: ObservableObject, @unchecked Sendable {
                         do {
                             try await persistence?.append(result)
                         } catch {
-                            updateStatus("ClickHouse persistence failed: \(error)", log: .error)
+                            updateStatus("FXDatabase result persistence failed: \(error)", log: .error)
                         }
                     case .completed(let progress):
                         finalProgress = progress
@@ -360,9 +356,9 @@ final class AppModel: ObservableObject, @unchecked Sendable {
                 recordAgentOutcome(FXBacktestAgentOutcome(
                     descriptor: ResultPersistenceAgent.descriptor,
                     status: .failed,
-                    message: "ClickHouse completion update failed: \(error)"
+                    message: "FXDatabase result completion update failed: \(error)"
                 ))
-                updateStatus("ClickHouse completion update failed: \(error)", log: .error)
+                updateStatus("FXDatabase result completion update failed: \(error)", log: .error)
             }
             isRunning = false
             runTask = nil
@@ -510,8 +506,8 @@ final class AppModel: ObservableObject, @unchecked Sendable {
         guard lotSize.isFinite, lotSize > 0 else {
             throw FXBacktestError.invalidParameter("Lot size must be a finite value > 0.")
         }
-        if persistResultsToClickHouse {
-            try makeClickHouseConfiguration().validate()
+        if persistResultsToFXDatabase {
+            _ = try makeFXDatabaseConnection()
         }
     }
 
@@ -528,21 +524,9 @@ final class AppModel: ObservableObject, @unchecked Sendable {
         return result
     }
 
-    private func makeClickHouseConfiguration() throws -> FXBacktestClickHouseConfiguration {
-        guard let url = URL(string: clickHouseURLText) else {
-            throw FXBacktestError.invalidParameter("Invalid ClickHouse URL.")
-        }
-        let username = clickHouseUsername.trimmingCharacters(in: .whitespacesAndNewlines)
-        let password = clickHousePassword
-        let config = FXBacktestClickHouseConfiguration(
-            url: url,
-            database: clickHouseDatabase,
-            username: username.isEmpty ? nil : username,
-            password: password.isEmpty ? nil : password,
-            requestTimeoutSeconds: 60
-        )
-        try config.validate()
-        return config
+    private func makeFXDatabaseConnection(requestTimeoutSeconds: Double = 120) throws -> FXDatabaseConnectionSettings {
+        let url = try Self.validatedHTTPURL(apiURLText, fieldName: "FXDatabase API URL")
+        return FXDatabaseConnectionSettings(apiBaseURL: url, requestTimeoutSeconds: requestTimeoutSeconds)
     }
 
     private static func validatedHTTPURL(_ text: String, fieldName: String) throws -> URL {
@@ -560,10 +544,9 @@ final class AppModel: ObservableObject, @unchecked Sendable {
         sweep: ParameterSweep,
         settings: BacktestRunSettings
     ) async -> ResultPersistenceAgent? {
-        guard persistResultsToClickHouse else { return nil }
+        guard persistResultsToFXDatabase else { return nil }
         do {
-            let config = try makeClickHouseConfiguration()
-            let store = ClickHouseBacktestResultStore(configuration: config)
+            let store = FXDatabaseBacktestResultStore(connection: try makeFXDatabaseConnection())
             let run = BacktestStoredRun(
                 pluginIdentifier: plugin.descriptor.id,
                 engine: settings.target,
@@ -581,9 +564,9 @@ final class AppModel: ObservableObject, @unchecked Sendable {
             recordAgentOutcome(FXBacktestAgentOutcome(
                 descriptor: ResultPersistenceAgent.descriptor,
                 status: .failed,
-                message: "ClickHouse persistence disabled for this run: \(error)"
+                message: "FXDatabase result persistence disabled for this run: \(error)"
             ))
-            updateStatus("ClickHouse persistence disabled for this run: \(error)", log: .error)
+            updateStatus("FXDatabase result persistence disabled for this run: \(error)", log: .error)
             return nil
         }
     }
@@ -692,7 +675,7 @@ extension AppModel {
           params
           set <field> <value>
           set --api-url http://127.0.0.1:5066 --target both --workers 8
-          set --clickhouse-url http://127.0.0.1:8123 --clickhouse-db fxbacktest --persist-results true
+          set --api-url http://127.0.0.1:5066 --persist-results true
           set-param <key> --input 12 --min 6 --step 2 --max 40
           load-demo
           load-fxdatabase [--api-url URL] [--broker ID] [--symbol EURUSD] [--symbols EURUSD,USDJPY] [--mt5-symbol EURUSD] [--digits 5] [--from UTC] [--to UTC] [--max-rows N]
@@ -708,7 +691,7 @@ extension AppModel {
         State-changing commands gracefully stop active work before changing the app state.
         FXBacktest has no launch-time options; use this resident command shell after startup.
         FXBacktest must load Forex history only through FXDatabase API v1, never ClickHouse directly.
-        ClickHouse access is allowed only through FXBacktest's result-store API for optimization results.
+        Backtest results also go through FXDatabase API v1; FXBacktest never connects to ClickHouse.
         """
     }
 
@@ -774,8 +757,7 @@ extension AppModel {
         }
         let runID = parsed.options["run-id"] ?? parsed.options["run"] ?? UUID().uuidString
         let note = parsed.options["note"]
-        let config = try makeClickHouseConfiguration()
-        let store = ClickHouseBacktestResultStore(configuration: config)
+        let store = FXDatabaseBacktestResultStore(connection: try makeFXDatabaseConnection())
         let sweep = try makeSweep()
         let activeUniverse = marketUniverse ?? market?.universe
         guard let activeUniverse else {
@@ -804,7 +786,7 @@ extension AppModel {
             sweep: sweep,
             note: note
         )
-        updateStatus("Saving \(resultsSnapshot.count.formatted()) held pass results to ClickHouse run \(runID)...")
+        updateStatus("Saving \(resultsSnapshot.count.formatted()) held pass results to FXDatabase result run \(runID)...")
         let outcome = try await ResultPersistenceAgent.saveSnapshot(
             store: store,
             run: run,
@@ -825,8 +807,7 @@ extension AppModel {
         for key in parsed.options.keys where !allowedOptions.contains(key) {
             throw TerminalCommandError.unknownOption(key)
         }
-        let config = try makeClickHouseConfiguration()
-        let store = ClickHouseBacktestResultStore(configuration: config)
+        let store = FXDatabaseBacktestResultStore(connection: try makeFXDatabaseConnection())
         let report: BacktestResultPurgeReport
         let outcome: FXBacktestAgentOutcome
         if let all = parsed.options["all"], try parseBool(all, name: "all") {
@@ -842,7 +823,7 @@ extension AppModel {
             throw TerminalCommandError.invalidValue("Use clean-backtest-data --older-than-days N or clean-backtest-data --all true.")
         }
         recordAgentOutcome(outcome)
-        updateStatus("Cleaned ClickHouse backtest result data scope \(report.scope)", log: .success)
+        updateStatus("Cleaned FXDatabase backtest result data scope \(report.scope)", log: .success)
     }
 
     private func setFromTerminal(_ arguments: ArraySlice<String>) async throws {
@@ -954,13 +935,9 @@ extension AppModel {
             guard Self.isValidAbsoluteHTTPURL(value) else {
                 throw TerminalCommandError.invalidValue("api-url must be an absolute http or https URL.")
             }
-        case "broker", "symbol", "symbols", "mt5-symbol", "clickhouse-db", "clickhouse-user", "clickhouse-password":
+        case "broker", "symbol", "symbols", "mt5-symbol":
             guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw TerminalCommandError.invalidValue("\(key) must not be empty.")
-            }
-        case "clickhouse-url":
-            guard URL(string: value) != nil else {
-                throw TerminalCommandError.invalidValue("clickhouse-url must be a valid URL.")
             }
         case "persist-results":
             _ = try parseBool(value, name: key)
@@ -1024,16 +1001,8 @@ extension AppModel {
             contractSize = try parseDouble(value, name: key, minimum: 0)
         case "lot":
             lotSize = try parseDouble(value, name: key, minimum: 0)
-        case "clickhouse-url":
-            clickHouseURLText = value
-        case "clickhouse-db":
-            clickHouseDatabase = value
-        case "clickhouse-user":
-            clickHouseUsername = value
-        case "clickhouse-password":
-            clickHousePassword = value
         case "persist-results":
-            persistResultsToClickHouse = try parseBool(value, name: key)
+            persistResultsToFXDatabase = try parseBool(value, name: key)
         default:
             throw TerminalCommandError.unknownOption(key)
         }
@@ -1043,7 +1012,7 @@ extension AppModel {
         let canonical = canonicalKey(key)
         let dataKeys: Set<String> = ["api-url", "broker", "symbol", "symbols", "mt5-symbol", "digits", "from", "to", "max-rows"]
         let runKeys: Set<String> = ["target", "workers", "chunk", "initial-deposit", "contract-size", "lot"]
-        let storageKeys: Set<String> = ["clickhouse-url", "clickhouse-db", "clickhouse-user", "clickhouse-password", "persist-results"]
+        let storageKeys: Set<String> = ["persist-results"]
         switch allowedGroup {
         case .data where !dataKeys.contains(canonical):
             throw TerminalCommandError.unknownOption(key)
@@ -1090,15 +1059,7 @@ extension AppModel {
             return "contract-size"
         case "lot", "lot-size", "lot_size":
             return "lot"
-        case "clickhouse-url", "clickhouse_url", "ch-url", "ch_url":
-            return "clickhouse-url"
-        case "clickhouse-db", "clickhouse-database", "clickhouse_database", "ch-db", "database":
-            return "clickhouse-db"
-        case "clickhouse-user", "clickhouse-username", "clickhouse_username", "ch-user":
-            return "clickhouse-user"
-        case "clickhouse-password", "clickhouse_pass", "clickhouse-pass", "ch-password", "ch-pass":
-            return "clickhouse-password"
-        case "persist", "persist-results", "persist_results", "clickhouse-persist":
+        case "persist", "persist-results", "persist_results", "fxdatabase-persist", "fxdatabase-persist-results":
             return "persist-results"
         case "minimum":
             return "min"
@@ -1210,7 +1171,7 @@ extension AppModel {
           Plugin: \(selectedPlugin.descriptor.displayName) (\(selectedPlugin.id))
           Market: \(marketText)
           Engine: \(executionTarget.rawValue), workers \(maxWorkers), chunk \(chunkSize)
-          ClickHouse persistence: \(persistResultsToClickHouse ? "enabled" : "disabled")
+          FXDatabase result persistence: \(persistResultsToFXDatabase ? "enabled" : "disabled")
           Agents: \(agentStateSummaryLine())
           Sweep combinations: \(sweepText)
           Progress: \(progress.completedPasses.formatted()) / \(progress.totalPasses.formatted())
@@ -1234,7 +1195,7 @@ extension AppModel {
           Initial deposit: \(initialDeposit)
           Contract size: \(contractSize)
           Lot size: \(lotSize)
-          ClickHouse results: \(clickHouseURLText), database \(clickHouseDatabase), user \(clickHouseUsername.isEmpty ? "(none)" : clickHouseUsername), password \(clickHousePassword.isEmpty ? "(not set)" : "(set)"), auto-persist \(persistResultsToClickHouse)
+          FXDatabase results: \(apiURLText), auto-persist \(persistResultsToFXDatabase)
         """
     }
 

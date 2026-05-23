@@ -294,8 +294,9 @@ struct FXDatabaseCLI {
                 return .success
 
             case .fxBacktestAPI:
-                let service = FXDatabaseBacktestHistoryService(config: config, clickHouse: clickHouse)
-                let handler = FXBacktestAPIHTTPHandler(historyProvider: service)
+                let historyService = FXDatabaseBacktestHistoryService(config: config, clickHouse: clickHouse)
+                let resultService = FXDatabaseBacktestResultService(clickHouse: clickHouse, database: config.clickHouse.database)
+                let handler = FXBacktestAPIHTTPHandler(historyProvider: historyService, resultProvider: resultService)
                 try await FXBacktestAPIServer(
                     host: options.apiHost,
                     port: options.apiPort,

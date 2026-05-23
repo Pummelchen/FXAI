@@ -1,6 +1,7 @@
 import AppCore
 import Darwin
 import Foundation
+import FXBacktestAPI
 
 public final class FXBacktestAPIServer: @unchecked Sendable {
     private let host: String
@@ -28,6 +29,7 @@ public final class FXBacktestAPIServer: @unchecked Sendable {
         defer { Darwin.close(serverFD) }
         logger.ok("FXBacktest API v1 listening at http://\(host):\(port)")
         logger.info("FXBacktest history endpoint: POST /v1/history/m1")
+        logger.info("FXBacktest result endpoint prefix: /v1/backtest/results")
 
         while !Task.isCancelled {
             var pollFD = pollfd(fd: serverFD, events: Int16(POLLIN), revents: 0)
@@ -65,7 +67,7 @@ public final class FXBacktestAPIServer: @unchecked Sendable {
             let response = await handler.handle(method: request.method, path: request.path, body: request.body)
             try writeResponse(response, clientFD: clientFD)
         } catch {
-            let body = #"{"api_version":"fxdatabase.fxbacktest.history.v1","error":{"code":"bad_http_request","message":"\#(Self.jsonEscaped(String(describing: error)))"}}"#
+            let body = #"{"api_version":"\#(FXBacktestAPIV1.version)","error":{"code":"bad_http_request","message":"\#(Self.jsonEscaped(String(describing: error)))"}}"#
             let response = FXBacktestHTTPResponse(statusCode: 400, body: Data(body.utf8))
             do {
                 try writeResponse(response, clientFD: clientFD)
@@ -131,7 +133,7 @@ public final class FXBacktestAPIServer: @unchecked Sendable {
 
     private func readRequest(clientFD: Int32) throws -> ParsedHTTPRequest {
         var data = Data()
-        let maxRequestBytes = 1_048_576
+        let maxRequestBytes = 32 * 1_024 * 1_024
         var expectedLength: Int?
 
         while data.count < maxRequestBytes {
@@ -256,6 +258,7 @@ public final class FXBacktestAPIServer: @unchecked Sendable {
         case 409: return "Conflict"
         case 500: return "Internal Server Error"
         case 502: return "Bad Gateway"
+        case 503: return "Service Unavailable"
         default: return "HTTP"
         }
     }

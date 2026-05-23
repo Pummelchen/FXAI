@@ -1,10 +1,19 @@
 import Foundation
 
 public enum FXBacktestAPIV1 {
-    public static let version = "fxdatabase.fxbacktest.history.v1"
+    public static let version = "fxdatabase.fxbacktest.v1"
     public static let statusPath = "/v1/status"
     public static let m1HistoryPath = "/v1/history/m1"
+    public static let resultSchemaPath = "/v1/backtest/results/schema"
+    public static let resultRunStartPath = "/v1/backtest/results/runs/start"
+    public static let resultRunCompletePath = "/v1/backtest/results/runs/complete"
+    public static let resultPassAppendPath = "/v1/backtest/results/passes/append"
+    public static let resultPurgePath = "/v1/backtest/results/purge"
+    public static let resultRunGetPath = "/v1/backtest/results/runs/get"
+    public static let resultPassesGetPath = "/v1/backtest/results/passes/get"
     public static let maximumRowsLimit = 5_000_000
+    public static let maximumResultBatchSize = 10_000
+    public static let maximumResultReadLimit = 10_000
 }
 
 public struct FXBacktestAPIStatusResponse: Codable, Equatable, Sendable {
@@ -325,6 +334,543 @@ public enum FXBacktestAPIValidationError: Error, Equatable, CustomStringConverti
             return "Unsupported FXBacktest API version '\(version)'; expected '\(FXBacktestAPIV1.version)'."
         case .invalidField(let reason):
             return "Invalid FXBacktest API field: \(reason)."
+        }
+    }
+}
+
+public struct FXBacktestResultSchemaRequest: Codable, Equatable, Sendable {
+    public let apiVersion: String
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+    }
+
+    public init(apiVersion: String = FXBacktestAPIV1.version) {
+        self.apiVersion = apiVersion
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+    }
+}
+
+public struct FXBacktestResultRunStartRequest: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let runId: String
+    public let pluginId: String
+    public let engine: String
+    public let brokerSourceId: String
+    public let primarySymbol: String
+    public let symbols: [String]
+    public let settingsJSON: String
+    public let parameterSpaceJSON: String
+    public let totalPasses: UInt64
+    public let note: String?
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case runId = "run_id"
+        case pluginId = "plugin_id"
+        case engine
+        case brokerSourceId = "broker_source_id"
+        case primarySymbol = "primary_symbol"
+        case symbols
+        case settingsJSON = "settings_json"
+        case parameterSpaceJSON = "parameter_space_json"
+        case totalPasses = "total_passes"
+        case note
+    }
+
+    public init(
+        apiVersion: String = FXBacktestAPIV1.version,
+        runId: String,
+        pluginId: String,
+        engine: String,
+        brokerSourceId: String,
+        primarySymbol: String,
+        symbols: [String],
+        settingsJSON: String,
+        parameterSpaceJSON: String,
+        totalPasses: UInt64,
+        note: String? = nil
+    ) {
+        self.apiVersion = apiVersion
+        self.runId = runId
+        self.pluginId = pluginId
+        self.engine = engine
+        self.brokerSourceId = brokerSourceId
+        self.primarySymbol = primarySymbol
+        self.symbols = symbols
+        self.settingsJSON = settingsJSON
+        self.parameterSpaceJSON = parameterSpaceJSON
+        self.totalPasses = totalPasses
+        self.note = note
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        try FXBacktestAPIV1.requireNonEmpty(runId, "run_id")
+        try FXBacktestAPIV1.requireNonEmpty(pluginId, "plugin_id")
+        try FXBacktestAPIV1.requireNonEmpty(engine, "engine")
+        try FXBacktestAPIV1.requireNonEmpty(brokerSourceId, "broker_source_id")
+        try FXBacktestAPIV1.requireNonEmpty(primarySymbol, "primary_symbol")
+        guard !symbols.isEmpty else {
+            throw FXBacktestAPIValidationError.invalidField("symbols must not be empty")
+        }
+        for symbol in symbols {
+            try FXBacktestAPIV1.requireNonEmpty(symbol, "symbols")
+        }
+        try FXBacktestAPIV1.validateJSONObjectString(settingsJSON, field: "settings_json")
+        try FXBacktestAPIV1.validateJSONObjectString(parameterSpaceJSON, field: "parameter_space_json")
+        guard totalPasses > 0 else {
+            throw FXBacktestAPIValidationError.invalidField("total_passes must be positive")
+        }
+    }
+}
+
+public struct FXBacktestResultPassDTO: Codable, Equatable, Sendable {
+    public let passIndex: UInt64
+    public let pluginId: String
+    public let engine: String
+    public let netProfit: Double
+    public let grossProfit: Double
+    public let grossLoss: Double
+    public let maxDrawdown: Double
+    public let totalTrades: UInt32
+    public let winningTrades: UInt32
+    public let losingTrades: UInt32
+    public let winRate: Double
+    public let profitFactor: Double
+    public let barsProcessed: UInt32
+    public let flags: UInt32
+    public let errorMessage: String?
+    public let parametersJSON: String
+
+    enum CodingKeys: String, CodingKey {
+        case passIndex = "pass_index"
+        case pluginId = "plugin_id"
+        case engine
+        case netProfit = "net_profit"
+        case grossProfit = "gross_profit"
+        case grossLoss = "gross_loss"
+        case maxDrawdown = "max_drawdown"
+        case totalTrades = "total_trades"
+        case winningTrades = "winning_trades"
+        case losingTrades = "losing_trades"
+        case winRate = "win_rate"
+        case profitFactor = "profit_factor"
+        case barsProcessed = "bars_processed"
+        case flags
+        case errorMessage = "error_message"
+        case parametersJSON = "parameters_json"
+    }
+
+    public init(
+        passIndex: UInt64,
+        pluginId: String,
+        engine: String,
+        netProfit: Double,
+        grossProfit: Double,
+        grossLoss: Double,
+        maxDrawdown: Double,
+        totalTrades: UInt32,
+        winningTrades: UInt32,
+        losingTrades: UInt32,
+        winRate: Double,
+        profitFactor: Double,
+        barsProcessed: UInt32,
+        flags: UInt32 = 0,
+        errorMessage: String? = nil,
+        parametersJSON: String
+    ) {
+        self.passIndex = passIndex
+        self.pluginId = pluginId
+        self.engine = engine
+        self.netProfit = netProfit
+        self.grossProfit = grossProfit
+        self.grossLoss = grossLoss
+        self.maxDrawdown = maxDrawdown
+        self.totalTrades = totalTrades
+        self.winningTrades = winningTrades
+        self.losingTrades = losingTrades
+        self.winRate = winRate
+        self.profitFactor = profitFactor
+        self.barsProcessed = barsProcessed
+        self.flags = flags
+        self.errorMessage = errorMessage
+        self.parametersJSON = parametersJSON
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.requireNonEmpty(pluginId, "plugin_id")
+        try FXBacktestAPIV1.requireNonEmpty(engine, "engine")
+        for (field, value) in [
+            ("net_profit", netProfit),
+            ("gross_profit", grossProfit),
+            ("gross_loss", grossLoss),
+            ("max_drawdown", maxDrawdown),
+            ("win_rate", winRate),
+            ("profit_factor", profitFactor)
+        ] where !value.isFinite {
+            throw FXBacktestAPIValidationError.invalidField("\(field) must be finite")
+        }
+        try FXBacktestAPIV1.validateJSONArrayString(parametersJSON, field: "parameters_json")
+    }
+}
+
+public struct FXBacktestResultPassAppendRequest: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let runId: String
+    public let results: [FXBacktestResultPassDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case runId = "run_id"
+        case results
+    }
+
+    public init(apiVersion: String = FXBacktestAPIV1.version, runId: String, results: [FXBacktestResultPassDTO]) {
+        self.apiVersion = apiVersion
+        self.runId = runId
+        self.results = results
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        try FXBacktestAPIV1.requireNonEmpty(runId, "run_id")
+        guard !results.isEmpty else {
+            throw FXBacktestAPIValidationError.invalidField("results must not be empty")
+        }
+        guard results.count <= FXBacktestAPIV1.maximumResultBatchSize else {
+            throw FXBacktestAPIValidationError.invalidField("results must not exceed \(FXBacktestAPIV1.maximumResultBatchSize) rows")
+        }
+        try results.forEach { try $0.validate() }
+    }
+}
+
+public struct FXBacktestResultRunCompleteRequest: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let runId: String
+    public let completedPasses: UInt64
+    public let elapsedSeconds: Double
+    public let status: String
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case runId = "run_id"
+        case completedPasses = "completed_passes"
+        case elapsedSeconds = "elapsed_seconds"
+        case status
+    }
+
+    public init(
+        apiVersion: String = FXBacktestAPIV1.version,
+        runId: String,
+        completedPasses: UInt64,
+        elapsedSeconds: Double,
+        status: String
+    ) {
+        self.apiVersion = apiVersion
+        self.runId = runId
+        self.completedPasses = completedPasses
+        self.elapsedSeconds = elapsedSeconds
+        self.status = status
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        try FXBacktestAPIV1.requireNonEmpty(runId, "run_id")
+        try FXBacktestAPIV1.requireNonEmpty(status, "status")
+        guard elapsedSeconds.isFinite, elapsedSeconds >= 0 else {
+            throw FXBacktestAPIValidationError.invalidField("elapsed_seconds must be finite and >= 0")
+        }
+    }
+}
+
+public struct FXBacktestResultPurgeRequest: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let all: Bool
+    public let olderThanDays: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case all
+        case olderThanDays = "older_than_days"
+    }
+
+    public init(apiVersion: String = FXBacktestAPIV1.version, all: Bool = false, olderThanDays: Int? = nil) {
+        self.apiVersion = apiVersion
+        self.all = all
+        self.olderThanDays = olderThanDays
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        if all {
+            guard olderThanDays == nil else {
+                throw FXBacktestAPIValidationError.invalidField("older_than_days must be omitted when all is true")
+            }
+            return
+        }
+        guard let olderThanDays, olderThanDays > 0 else {
+            throw FXBacktestAPIValidationError.invalidField("older_than_days must be positive unless all is true")
+        }
+    }
+}
+
+public struct FXBacktestResultRunGetRequest: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let runId: String
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case runId = "run_id"
+    }
+
+    public init(apiVersion: String = FXBacktestAPIV1.version, runId: String) {
+        self.apiVersion = apiVersion
+        self.runId = runId
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        try FXBacktestAPIV1.requireNonEmpty(runId, "run_id")
+    }
+}
+
+public struct FXBacktestResultPassesGetRequest: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let runId: String
+    public let offset: Int
+    public let limit: Int
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case runId = "run_id"
+        case offset
+        case limit
+    }
+
+    public init(apiVersion: String = FXBacktestAPIV1.version, runId: String, offset: Int = 0, limit: Int = 1_000) {
+        self.apiVersion = apiVersion
+        self.runId = runId
+        self.offset = offset
+        self.limit = limit
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        try FXBacktestAPIV1.requireNonEmpty(runId, "run_id")
+        guard offset >= 0 else {
+            throw FXBacktestAPIValidationError.invalidField("offset must be >= 0")
+        }
+        guard limit > 0, limit <= FXBacktestAPIV1.maximumResultReadLimit else {
+            throw FXBacktestAPIValidationError.invalidField("limit must be in 1...\(FXBacktestAPIV1.maximumResultReadLimit)")
+        }
+    }
+}
+
+public struct FXBacktestResultMutationResponse: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let status: String
+    public let runId: String?
+    public let affectedRows: Int?
+    public let sqlStatements: Int
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case status
+        case runId = "run_id"
+        case affectedRows = "affected_rows"
+        case sqlStatements = "sql_statements"
+    }
+
+    public init(
+        apiVersion: String = FXBacktestAPIV1.version,
+        status: String = "ok",
+        runId: String? = nil,
+        affectedRows: Int? = nil,
+        sqlStatements: Int
+    ) {
+        self.apiVersion = apiVersion
+        self.status = status
+        self.runId = runId
+        self.affectedRows = affectedRows
+        self.sqlStatements = sqlStatements
+    }
+}
+
+public struct FXBacktestResultPurgeReport: Codable, Equatable, Sendable {
+    public let scope: String
+    public let sqlStatements: Int
+
+    enum CodingKeys: String, CodingKey {
+        case scope
+        case sqlStatements = "sql_statements"
+    }
+
+    public init(scope: String, sqlStatements: Int) {
+        self.scope = scope
+        self.sqlStatements = sqlStatements
+    }
+}
+
+public struct FXBacktestResultPurgeResponse: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let report: FXBacktestResultPurgeReport
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case report
+    }
+
+    public init(apiVersion: String = FXBacktestAPIV1.version, report: FXBacktestResultPurgeReport) {
+        self.apiVersion = apiVersion
+        self.report = report
+    }
+}
+
+public struct FXBacktestResultRunRecord: Codable, Equatable, Sendable {
+    public let runId: String
+    public let createdAtUnixMilliseconds: Int64
+    public let completedAtUnixMilliseconds: Int64?
+    public let pluginId: String
+    public let engine: String
+    public let brokerSourceId: String
+    public let primarySymbol: String
+    public let symbols: [String]
+    public let apiVersion: String
+    public let settingsJSON: String
+    public let parameterSpaceJSON: String
+    public let status: String
+    public let completedPasses: UInt64
+    public let totalPasses: UInt64
+    public let note: String
+
+    enum CodingKeys: String, CodingKey {
+        case runId = "run_id"
+        case createdAtUnixMilliseconds = "created_at_unix_ms"
+        case completedAtUnixMilliseconds = "completed_at_unix_ms"
+        case pluginId = "plugin_id"
+        case engine
+        case brokerSourceId = "broker_source_id"
+        case primarySymbol = "primary_symbol"
+        case symbols
+        case apiVersion = "api_version"
+        case settingsJSON = "settings_json"
+        case parameterSpaceJSON = "parameter_space_json"
+        case status
+        case completedPasses = "completed_passes"
+        case totalPasses = "total_passes"
+        case note
+    }
+
+    public init(
+        runId: String,
+        createdAtUnixMilliseconds: Int64,
+        completedAtUnixMilliseconds: Int64?,
+        pluginId: String,
+        engine: String,
+        brokerSourceId: String,
+        primarySymbol: String,
+        symbols: [String],
+        apiVersion: String,
+        settingsJSON: String,
+        parameterSpaceJSON: String,
+        status: String,
+        completedPasses: UInt64,
+        totalPasses: UInt64,
+        note: String
+    ) {
+        self.runId = runId
+        self.createdAtUnixMilliseconds = createdAtUnixMilliseconds
+        self.completedAtUnixMilliseconds = completedAtUnixMilliseconds
+        self.pluginId = pluginId
+        self.engine = engine
+        self.brokerSourceId = brokerSourceId
+        self.primarySymbol = primarySymbol
+        self.symbols = symbols
+        self.apiVersion = apiVersion
+        self.settingsJSON = settingsJSON
+        self.parameterSpaceJSON = parameterSpaceJSON
+        self.status = status
+        self.completedPasses = completedPasses
+        self.totalPasses = totalPasses
+        self.note = note
+    }
+}
+
+public struct FXBacktestResultRunGetResponse: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let run: FXBacktestResultRunRecord?
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case run
+    }
+
+    public init(apiVersion: String = FXBacktestAPIV1.version, run: FXBacktestResultRunRecord?) {
+        self.apiVersion = apiVersion
+        self.run = run
+    }
+}
+
+public struct FXBacktestResultPassesGetResponse: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let runId: String
+    public let offset: Int
+    public let limit: Int
+    public let results: [FXBacktestResultPassDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case runId = "run_id"
+        case offset
+        case limit
+        case results
+    }
+
+    public init(
+        apiVersion: String = FXBacktestAPIV1.version,
+        runId: String,
+        offset: Int,
+        limit: Int,
+        results: [FXBacktestResultPassDTO]
+    ) {
+        self.apiVersion = apiVersion
+        self.runId = runId
+        self.offset = offset
+        self.limit = limit
+        self.results = results
+    }
+}
+
+extension FXBacktestAPIV1 {
+    static func validateVersion(_ apiVersion: String) throws {
+        guard apiVersion == version else {
+            throw FXBacktestAPIValidationError.unsupportedVersion(apiVersion)
+        }
+    }
+
+    static func requireNonEmpty(_ value: String, _ field: String) throws {
+        guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw FXBacktestAPIValidationError.invalidField("\(field) must not be empty")
+        }
+    }
+
+    static func validateJSONObjectString(_ value: String, field: String) throws {
+        guard let data = value.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              object is [String: Any] else {
+            throw FXBacktestAPIValidationError.invalidField("\(field) must be a JSON object string")
+        }
+    }
+
+    static func validateJSONArrayString(_ value: String, field: String) throws {
+        guard let data = value.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              object is [Any] else {
+            throw FXBacktestAPIValidationError.invalidField("\(field) must be a JSON array string")
         }
     }
 }

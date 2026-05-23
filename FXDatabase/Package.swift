@@ -39,7 +39,7 @@ let package = Package(
         .testTarget(name: "VerificationTests", dependencies: ["Domain", "Verification", "TimeMapping"]),
         .testTarget(name: "OperationsTests", dependencies: ["Domain", "Config", "ClickHouse", "TimeMapping", "Operations"]),
         .testTarget(name: "BacktestTests", dependencies: ["Domain", "ClickHouse", "BacktestCore"]),
-        .testTarget(name: "FXBacktestAPITests", dependencies: ["FXBacktestAPI", "FXBacktestAPIServer"])
+        .testTarget(name: "FXBacktestAPITests", dependencies: ["FXBacktestAPI", "FXBacktestAPIServer", "ClickHouse"])
     ],
     swiftLanguageModes: [.v6]
 )

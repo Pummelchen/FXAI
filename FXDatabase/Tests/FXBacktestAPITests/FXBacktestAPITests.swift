@@ -1,3 +1,4 @@
+import ClickHouse
 import FXBacktestAPI
 import FXBacktestAPIServer
 import XCTest
@@ -127,6 +128,138 @@ final class FXBacktestAPITests: XCTestCase {
         XCTAssertEqual(error.error.code, "invalid_request")
     }
 
+    func testHTTPHandlerRoutesBacktestResultRequestsThroughResultProvider() async throws {
+        let resultProvider = MockResultProvider()
+        let handler = FXBacktestAPIHTTPHandler(historyProvider: MockHistoryProvider(), resultProvider: resultProvider)
+
+        let schemaResponse = await handler.handle(
+            method: "POST",
+            path: FXBacktestAPIV1.resultSchemaPath,
+            body: try JSONEncoder().encode(FXBacktestResultSchemaRequest())
+        )
+        XCTAssertEqual(schemaResponse.statusCode, 200)
+
+        let startRequest = FXBacktestResultRunStartRequest(
+            runId: "run-1",
+            pluginId: "com.fxbacktest.tests.plugin.v1",
+            engine: "cpu",
+            brokerSourceId: "demo",
+            primarySymbol: "EURUSD",
+            symbols: ["EURUSD"],
+            settingsJSON: "{}",
+            parameterSpaceJSON: "{}",
+            totalPasses: 1
+        )
+        let startResponse = await handler.handle(
+            method: "POST",
+            path: FXBacktestAPIV1.resultRunStartPath,
+            body: try JSONEncoder().encode(startRequest)
+        )
+        XCTAssertEqual(startResponse.statusCode, 200)
+        let start = try JSONDecoder().decode(FXBacktestResultMutationResponse.self, from: startResponse.body)
+        XCTAssertEqual(start.runId, "run-1")
+
+        let appendRequest = FXBacktestResultPassAppendRequest(
+            runId: "run-1",
+            results: [FXBacktestResultPassDTO(
+                passIndex: 0,
+                pluginId: "com.fxbacktest.tests.plugin.v1",
+                engine: "cpu",
+                netProfit: 1,
+                grossProfit: 1,
+                grossLoss: 0,
+                maxDrawdown: 0,
+                totalTrades: 1,
+                winningTrades: 1,
+                losingTrades: 0,
+                winRate: 1,
+                profitFactor: 1,
+                barsProcessed: 10,
+                parametersJSON: "[]"
+            )]
+        )
+        let appendResponse = await handler.handle(
+            method: "POST",
+            path: FXBacktestAPIV1.resultPassAppendPath,
+            body: try JSONEncoder().encode(appendRequest)
+        )
+        XCTAssertEqual(appendResponse.statusCode, 200)
+
+        let operations = await resultProvider.operations()
+        XCTAssertEqual(operations, [
+            "schema",
+            "start:run-1",
+            "append:run-1:1"
+        ])
+    }
+
+    func testHTTPHandlerRequiresConfiguredResultProviderForResultEndpoints() async throws {
+        let handler = FXBacktestAPIHTTPHandler(historyProvider: MockHistoryProvider())
+
+        let response = await handler.handle(
+            method: "POST",
+            path: FXBacktestAPIV1.resultSchemaPath,
+            body: try JSONEncoder().encode(FXBacktestResultSchemaRequest())
+        )
+
+        XCTAssertEqual(response.statusCode, 503)
+        let error = try JSONDecoder().decode(FXBacktestAPIErrorResponse.self, from: response.body)
+        XCTAssertEqual(error.apiVersion, FXBacktestAPIV1.version)
+        XCTAssertEqual(error.error.code, "result_store_unavailable")
+    }
+
+    func testResultServiceOwnsClickHouseSchemaAndMutationsBehindAPI() async throws {
+        let clickHouse = RecordingResultClickHouse()
+        let service = FXDatabaseBacktestResultService(clickHouse: clickHouse, database: "fxdatabase_test")
+        let start = FXBacktestResultRunStartRequest(
+            runId: "run-service",
+            pluginId: "com.fxbacktest.tests.plugin.v1",
+            engine: "cpu",
+            brokerSourceId: "demo",
+            primarySymbol: "EURUSD",
+            symbols: ["EURUSD"],
+            settingsJSON: "{}",
+            parameterSpaceJSON: "{}",
+            totalPasses: 1
+        )
+        let pass = FXBacktestResultPassDTO(
+            passIndex: 0,
+            pluginId: "com.fxbacktest.tests.plugin.v1",
+            engine: "cpu",
+            netProfit: 1,
+            grossProfit: 1,
+            grossLoss: 0,
+            maxDrawdown: 0,
+            totalTrades: 1,
+            winningTrades: 1,
+            losingTrades: 0,
+            winRate: 1,
+            profitFactor: 1,
+            barsProcessed: 10,
+            parametersJSON: "[]"
+        )
+
+        _ = try await service.ensureResultSchema(FXBacktestResultSchemaRequest())
+        _ = try await service.startRun(start)
+        _ = try await service.appendPassResults(FXBacktestResultPassAppendRequest(runId: "run-service", results: [pass]))
+        _ = try await service.completeRun(FXBacktestResultRunCompleteRequest(
+            runId: "run-service",
+            completedPasses: 1,
+            elapsedSeconds: 0.1,
+            status: "completed"
+        ))
+        _ = try await service.purgeResults(FXBacktestResultPurgeRequest(all: true))
+
+        let sql = await clickHouse.sql()
+        XCTAssertTrue(sql.contains { $0.contains("CREATE DATABASE IF NOT EXISTS `fxdatabase_test`") })
+        XCTAssertTrue(sql.contains { $0.contains("CREATE TABLE IF NOT EXISTS `fxdatabase_test`.`fxbacktest_runs`") })
+        XCTAssertTrue(sql.contains { $0.contains("CREATE TABLE IF NOT EXISTS `fxdatabase_test`.`fxbacktest_pass_results`") })
+        XCTAssertTrue(sql.contains { $0.contains("INSERT INTO `fxdatabase_test`.`fxbacktest_runs`") })
+        XCTAssertTrue(sql.contains { $0.contains("INSERT INTO `fxdatabase_test`.`fxbacktest_pass_results` FORMAT JSONEachRow") })
+        XCTAssertTrue(sql.contains { $0.contains("ALTER TABLE `fxdatabase_test`.`fxbacktest_runs`") && $0.contains("status = 'completed'") })
+        XCTAssertTrue(sql.contains { $0.contains("ALTER TABLE `fxdatabase_test`.`fxbacktest_pass_results` DELETE WHERE 1") })
+    }
+
     func testHTTPHandlerDoesNotExposeExecutionSpecEndpoint() async throws {
         let handler = FXBacktestAPIHTTPHandler(historyProvider: MockHistoryProvider())
 
@@ -170,5 +303,62 @@ private struct MockHistoryProvider: FXBacktestHistoryProviding {
 private struct InvalidRequestProvider: FXBacktestHistoryProviding {
     func loadM1History(_ request: FXBacktestM1HistoryRequest) async throws -> FXBacktestM1HistoryResponse {
         throw FXBacktestAPIServiceError.invalidRequest("Invalid logical symbol.")
+    }
+}
+
+private actor MockResultProvider: FXBacktestResultProviding {
+    private var recordedOperations: [String] = []
+
+    func ensureResultSchema(_ request: FXBacktestResultSchemaRequest) async throws -> FXBacktestResultMutationResponse {
+        recordedOperations.append("schema")
+        return FXBacktestResultMutationResponse(sqlStatements: 2)
+    }
+
+    func startRun(_ request: FXBacktestResultRunStartRequest) async throws -> FXBacktestResultMutationResponse {
+        recordedOperations.append("start:\(request.runId)")
+        return FXBacktestResultMutationResponse(runId: request.runId, affectedRows: 1, sqlStatements: 1)
+    }
+
+    func appendPassResults(_ request: FXBacktestResultPassAppendRequest) async throws -> FXBacktestResultMutationResponse {
+        recordedOperations.append("append:\(request.runId):\(request.results.count)")
+        return FXBacktestResultMutationResponse(runId: request.runId, affectedRows: request.results.count, sqlStatements: 1)
+    }
+
+    func completeRun(_ request: FXBacktestResultRunCompleteRequest) async throws -> FXBacktestResultMutationResponse {
+        recordedOperations.append("complete:\(request.runId):\(request.completedPasses)")
+        return FXBacktestResultMutationResponse(runId: request.runId, affectedRows: 1, sqlStatements: 1)
+    }
+
+    func purgeResults(_ request: FXBacktestResultPurgeRequest) async throws -> FXBacktestResultPurgeResponse {
+        let scope = request.all ? "all" : "older_than_days:\(request.olderThanDays ?? 0)"
+        recordedOperations.append("purge:\(scope)")
+        return FXBacktestResultPurgeResponse(report: FXBacktestResultPurgeReport(scope: scope, sqlStatements: 2))
+    }
+
+    func getRun(_ request: FXBacktestResultRunGetRequest) async throws -> FXBacktestResultRunGetResponse {
+        recordedOperations.append("get-run:\(request.runId)")
+        return FXBacktestResultRunGetResponse(run: nil)
+    }
+
+    func getPasses(_ request: FXBacktestResultPassesGetRequest) async throws -> FXBacktestResultPassesGetResponse {
+        recordedOperations.append("get-passes:\(request.runId):\(request.offset):\(request.limit)")
+        return FXBacktestResultPassesGetResponse(runId: request.runId, offset: request.offset, limit: request.limit, results: [])
+    }
+
+    func operations() -> [String] {
+        recordedOperations
+    }
+}
+
+private actor RecordingResultClickHouse: ClickHouseClientProtocol {
+    private var recordedSQL: [String] = []
+
+    func execute(_ query: ClickHouseQuery) async throws -> String {
+        recordedSQL.append(query.sql)
+        return ""
+    }
+
+    func sql() -> [String] {
+        recordedSQL
     }
 }
