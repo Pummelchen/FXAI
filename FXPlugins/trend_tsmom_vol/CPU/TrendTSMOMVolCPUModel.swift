@@ -153,7 +153,7 @@ public struct TrendTSMOMVolCPUModel: Sendable {
     }
 
     private func tsmomVolMargin(z: [Double], window: [[Double]], forecastVolatility: Double) -> Double {
-        let recentDelta = window.isEmpty ? z[11] : Self.windowRecentDelta(window, feature: 0, count: 16)
+        let recentDelta = window.isEmpty ? z[11] : Self.windowRecentDelta(window, feature: 1, count: 16)
         return PluginSupportTools.clipSymmetric(
             (0.45 * recentDelta + 0.35 * z[8] + 0.20 * linearMargin(z: z)) / max(forecastVolatility, 0.05),
             limit: 8.0
@@ -161,7 +161,7 @@ public struct TrendTSMOMVolCPUModel: Sendable {
     }
 
     private func tsmomConfidence(z: [Double], window: [[Double]], forecastVolatility: Double, dataHasVolume: Bool) -> Double {
-        let recentDelta = abs(window.isEmpty ? z[11] : Self.windowRecentDelta(window, feature: 0, count: 16))
+        let recentDelta = abs(window.isEmpty ? z[11] : Self.windowRecentDelta(window, feature: 1, count: 16))
         let momentumStrength = fxClamp((recentDelta + abs(z[8])) / max(forecastVolatility, 0.05), 0.0, 2.0) / 2.0
         let volatilityQuality = fxClamp(1.0 / (1.0 + max(forecastVolatility, 0.0)), 0.0, 1.0)
         let volumeBoost = dataHasVolume ? 0.06 * abs(z[7]) : 0.0
@@ -230,11 +230,11 @@ public struct TrendTSMOMVolCPUModel: Sendable {
         z[5] = Self.safeFeature(x, 7)
         z[6] = Self.safeFeature(x, 12)
         z[7] = fxClamp(0.65 * Self.safeFeature(x, 40) + 0.35 * Self.safeFeature(x, 6), -8.0, 8.0)
-        z[8] = window.isEmpty ? Self.safeFeature(x, 1) : Self.windowSlope(window, feature: 0)
-        z[9] = Self.windowStd(window, feature: 0)
-        z[10] = Self.windowRange(window, feature: 0, count: 16)
-        z[11] = window.isEmpty ? Self.safeFeature(x, 7) : Self.windowRecentDelta(window, feature: 0, count: 8)
-        z[12] = window.isEmpty ? Self.safeFeature(x, 12) : Self.windowEMAMean(window, feature: 1, alpha: 0.70)
+        z[8] = window.isEmpty ? Self.safeFeature(x, 1) : Self.windowSlope(window, feature: 1)
+        z[9] = Self.windowStd(window, feature: 1)
+        z[10] = Self.windowRange(window, feature: 1, count: 16)
+        z[11] = window.isEmpty ? Self.safeFeature(x, 7) : Self.windowRecentDelta(window, feature: 1, count: 8)
+        z[12] = window.isEmpty ? Self.safeFeature(x, 12) : Self.windowEMAMean(window, feature: 2, alpha: 0.70)
         z[13] = Self.safeFeature(x, FXDataEngineConstants.macroEventFeatureOffset + 14)
         z[14] = Self.safeFeature(x, FXDataEngineConstants.macroEventFeatureOffset + 19)
         z[15] = fxClamp(Double(horizonMinutes) / 60.0, 0.0, 2.0)

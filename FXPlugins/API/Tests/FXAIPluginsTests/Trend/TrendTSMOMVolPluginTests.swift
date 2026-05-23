@@ -169,8 +169,8 @@ final class TrendTSMOMVolPluginTests: XCTestCase {
         (0..<32).map { index in
             var row = features(direction: direction, volume: volume)
             let age = Double(index)
-            row[0] = direction == 0.0 ? 0.0 : direction * (0.90 - 0.025 * age)
-            row[1] = direction == 0.0 ? 0.0 : direction * (0.45 - 0.010 * age)
+            row[1] = direction == 0.0 ? 0.0 : direction * (0.90 - 0.025 * age)
+            row[2] = direction == 0.0 ? 0.0 : direction * (0.45 - 0.010 * age)
             row[6] = volume
             row[40] = 0.12 * direction
             return row
