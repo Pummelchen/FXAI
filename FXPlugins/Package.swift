@@ -23,6 +23,7 @@ let package = Package(
                 "API/Backends/Python",
                 "API/Docs",
                 "API/Tests",
+                "mix_loffm/PyTorch",
                 "Package.swift",
                 "README.md"
             ]
