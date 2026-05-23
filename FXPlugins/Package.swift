@@ -27,6 +27,8 @@ let package = Package(
                 "ai_mlp/PyTorch",
                 "mix_moe_conformal/PyTorch",
                 "mix_loffm/PyTorch",
+                "ai_lstm/PyTorch",
+                "ai_lstm/TensorFlow",
                 "Package.swift",
                 "README.md"
             ]
