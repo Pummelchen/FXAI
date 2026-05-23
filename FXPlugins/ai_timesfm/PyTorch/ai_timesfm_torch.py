@@ -189,6 +189,29 @@ class GraphMessagePassingLayer(nn.Module):
         return self.update(message.reshape(-1, message.shape[-1]), nodes.reshape(-1, nodes.shape[-1])).view_as(nodes)
 
 
+class TimesFMPatchExtractor:
+    """TimesFM-style patch and horizon helper for local foundation forecasts."""
+
+    def __init__(self, patch_size: int, stride: int, feature_count: int = FEATURE_COUNT) -> None:
+        self.patch_size = patch_size
+        self.stride = stride
+        self.feature_count = feature_count
+
+    def extract(self, x: torch.Tensor) -> torch.Tensor:
+        if x.shape[1] < self.patch_size:
+            pad = torch.zeros((x.shape[0], self.patch_size - x.shape[1], x.shape[2]), dtype=x.dtype, device=x.device)
+            x = torch.cat([pad, x], dim=1)
+        return x.unfold(1, self.patch_size, self.stride).contiguous().view(x.shape[0], -1, self.feature_count * self.patch_size)
+
+    @staticmethod
+    def horizon_index(batch_size: int, horizon: int, device: torch.device) -> torch.Tensor:
+        return torch.arange(horizon, dtype=torch.float32, device=device).view(1, horizon, 1).expand(batch_size, -1, -1)
+
+    @staticmethod
+    def checkpoint_metadata() -> dict[str, str | int]:
+        return {"family": "timesfm", "format": "fxai-local-reference", "version": 1}
+
+
 class AITimesFMReferenceModel(nn.Module):
     """Reference-grade TimesFM-style patch foundation forecaster."""
     def __init__(self) -> None:
@@ -244,11 +267,13 @@ class AITimesFMReferenceModel(nn.Module):
         elif self.architecture in {"PATCHTST", "TIMESFM"}:
             self.patch_size = 16 if self.architecture == "TIMESFM" else 8
             self.stride = 8 if self.architecture == "TIMESFM" else 4
+            self.patch_extractor = TimesFMPatchExtractor(self.patch_size, self.stride)
             self.patch_embedding = nn.Linear(FEATURE_COUNT * self.patch_size, HIDDEN_COUNT)
             self.position = nn.Parameter(torch.zeros(1, 128, HIDDEN_COUNT))
             layer = nn.TransformerEncoderLayer(d_model=HIDDEN_COUNT, nhead=HEAD_COUNT, dim_feedforward=HIDDEN_COUNT * 4, batch_first=True, activation="gelu")
             self.foundation_encoder = nn.TransformerEncoder(layer, num_layers=5 if self.architecture == "TIMESFM" else 3)
             self.horizon_quantiles = nn.Linear(HIDDEN_COUNT, 8 * len(QUANTILES))
+            self.checkpoint_metadata = TimesFMPatchExtractor.checkpoint_metadata()
         elif self.architecture == "S4":
             self.input_projection = nn.Linear(FEATURE_COUNT, HIDDEN_COUNT)
             self.s4_layers = nn.ModuleList([S4DLayer(HIDDEN_COUNT), S4DLayer(HIDDEN_COUNT)])
@@ -313,10 +338,7 @@ class AITimesFMReferenceModel(nn.Module):
             raise ValueError(f"unsupported architecture {self.architecture}")
 
     def _patches(self, x: torch.Tensor) -> torch.Tensor:
-        if x.shape[1] < self.patch_size:
-            pad = torch.zeros((x.shape[0], self.patch_size - x.shape[1], x.shape[2]), dtype=x.dtype, device=x.device)
-            x = torch.cat([pad, x], dim=1)
-        return x.unfold(1, self.patch_size, self.stride).contiguous().view(x.shape[0], -1, FEATURE_COUNT * self.patch_size)
+        return self.patch_extractor.extract(x)
 
     def _moving_average(self, x: torch.Tensor, kernel: int = 5) -> torch.Tensor:
         return F.avg_pool1d(x.transpose(1, 2), kernel_size=kernel, stride=1, padding=kernel // 2).transpose(1, 2)
@@ -391,6 +413,7 @@ class AITimesFMReferenceModel(nn.Module):
             patches = self._patches(x)
             encoded = self.foundation_encoder(self.patch_embedding(patches) + self.position[:, : patches.shape[1], :])
             self.last_horizon_quantiles = self.horizon_quantiles(encoded[:, -1, :]).view(x.shape[0], 8, len(QUANTILES)).detach()
+            self.last_horizon_index = TimesFMPatchExtractor.horizon_index(x.shape[0], 8, x.device).detach()
             return encoded[:, -1, :]
         if arch == "S4":
             state = self.input_projection(x)

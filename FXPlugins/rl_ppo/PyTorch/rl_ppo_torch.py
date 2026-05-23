@@ -108,6 +108,67 @@ class RolloutBuffer:
             torch.cat(self.values),
         )
 
+    def clear(self) -> None:
+        self.observations.clear()
+        self.actions.clear()
+        self.old_log_probs.clear()
+        self.rewards.clear()
+        self.dones.clear()
+        self.values.clear()
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.observations
+
+
+class OfflineFXRolloutEnvironment:
+    """Minimal offline FX reward model for PPO rollouts.
+
+    The action convention follows FXDataEngine labels: sell=0, buy=1, skip=2.
+    Signed move points are positive for upward price moves and negative for
+    downward price moves. The reward is net of a symmetric transaction cost.
+    """
+
+    def __init__(self, transaction_cost_points: float = 0.0, reward_scale: float = 1.0) -> None:
+        self.transaction_cost_points = max(0.0, float(transaction_cost_points))
+        self.reward_scale = max(1.0e-9, float(reward_scale))
+
+    def reward(self, signed_move_points: float, action: int) -> float:
+        if action == 1:
+            return (float(signed_move_points) - self.transaction_cost_points) / self.reward_scale
+        if action == 0:
+            return (-float(signed_move_points) - self.transaction_cost_points) / self.reward_scale
+        return 0.0
+
+
+def append_offline_rollout(
+    state: "RlPPOReferenceState",
+    batch: Iterable[Iterable[float]] | torch.Tensor,
+    signed_moves: Iterable[float],
+    data_has_volume: bool = True,
+    transaction_cost_points: float = 0.0,
+) -> RlPPOReferenceState:
+    device = next(state.model.parameters()).device
+    observations = _features(batch, device, data_has_volume=data_has_volume)
+    environment = OfflineFXRolloutEnvironment(transaction_cost_points=transaction_cost_points)
+    moves = list(signed_moves)
+    if len(moves) < observations.shape[0]:
+        moves.extend([0.0] * (observations.shape[0] - len(moves)))
+    with torch.no_grad():
+        distribution, values = state.model(observations)
+        actions = distribution.sample()
+        log_probs = distribution.log_prob(actions)
+    rewards = torch.tensor(
+        [environment.reward(move, int(action.item())) for move, action in zip(moves[: observations.shape[0]], actions)],
+        dtype=torch.float32,
+        device=device,
+    )
+    dones = torch.zeros_like(rewards)
+    if dones.numel() > 0:
+        dones[-1] = 1.0
+    state.rollout.append(observations, actions, log_probs, rewards, dones, values)
+    return state
+
 
 def compute_gae(
     rewards: torch.Tensor,
@@ -202,10 +263,16 @@ def train_step(
     rewards = torch.tensor([abs(float(value)) for value in move_values[: observations.shape[0]]], dtype=torch.float32, device=device)
     old_distribution, old_values = state.model(observations)
     old_log_probs = old_distribution.log_prob(actions).detach()
-    advantages, returns = compute_gae(rewards, old_values.detach(), torch.zeros_like(rewards))
+    dones = torch.zeros_like(rewards)
+    if dones.numel() > 0:
+        dones[-1] = 1.0
+    state.rollout.append(observations, actions, old_log_probs, rewards, dones, old_values.detach())
+    rollout_observations, rollout_actions, rollout_log_probs, rollout_rewards, rollout_dones, rollout_values = state.rollout.tensors()
+    advantages, returns = compute_gae(rollout_rewards, rollout_values, rollout_dones)
     state.optimizer.zero_grad(set_to_none=True)
-    loss = ppo_clipped_loss(state.model, observations, actions, old_log_probs, advantages, returns)
+    loss = ppo_clipped_loss(state.model, rollout_observations, rollout_actions, rollout_log_probs, advantages, returns)
     loss.backward()
     torch.nn.utils.clip_grad_norm_(state.model.parameters(), 1.0)
     state.optimizer.step()
+    state.rollout.clear()
     return state

@@ -18,18 +18,18 @@ final class ReferenceBackendConformanceTests: XCTestCase {
             ("ai_patchtst", ["ARCHITECTURE_MODE = \"PATCHTST\"", "patch_embedding", "unfold"]),
             ("ai_s4", ["ARCHITECTURE_MODE = \"S4\"", "S4DLayer", "F.conv1d"]),
             ("ai_stmn", ["ARCHITECTURE_MODE = \"STMN\"", "memory_slots", "write_cell"]),
-            ("ai_chronos", ["ARCHITECTURE_MODE = \"CHRONOS\"", "token_embedding", "causal_transformer", "torch.bucketize"]),
-            ("ai_timesfm", ["ARCHITECTURE_MODE = \"TIMESFM\"", "foundation_encoder", "horizon_quantiles"]),
+            ("ai_chronos", ["ARCHITECTURE_MODE = \"CHRONOS\"", "ChronosTokenizer", "causal_transformer", "last_token_reconstruction"]),
+            ("ai_timesfm", ["ARCHITECTURE_MODE = \"TIMESFM\"", "TimesFMPatchExtractor", "horizon_quantiles", "checkpoint_metadata"]),
             ("ai_fewc", ["ARCHITECTURE_MODE = \"FEWC\"", "fisher_diagonal", "ewc_penalty"]),
             ("ai_geodesic", ["ARCHITECTURE_MODE = \"GEODESIC\"", "last_geodesic_attention", "self.landmarks"]),
             ("ai_gha", ["ARCHITECTURE_MODE = \"GHA\"", "_orthonormal_components", "last_reconstruction_error"]),
             ("ai_qcew", ["ARCHITECTURE_MODE = \"QCEW\"", "_pinball_loss", "quantile_head"]),
             ("ai_tesseract", ["ARCHITECTURE_MODE = \"TESSERACT\"", "torch.einsum", "feature_factor"]),
             ("ai_trr", ["ARCHITECTURE_MODE = \"TRR\"", "transition_logits", "last_regime_probabilities"]),
-            ("ai_mythos_rdt", ["ARCHITECTURE_MODE = \"MYTHOS_RDT\"", "decision_transformer", "recursive_memory", "returns_to_go"]),
+            ("ai_mythos_rdt", ["ARCHITECTURE_MODE = \"MYTHOS_RDT\"", "DecisionTrajectoryTools", "action_embedding", "last_pseudo_actions"]),
             ("wm_cfx", ["ARCHITECTURE_MODE = \"WM_CFX\"", "currency_exposure", "cross_rate_decoder"]),
-            ("wm_graph", ["ARCHITECTURE_MODE = \"WM_GRAPH\"", "GraphMessagePassingLayer", "last_adjacency"]),
-            ("rl_ppo", ["ARCHITECTURE_MODE = \"proximalPolicyOptimization\"", "ActorCriticPPO", "RolloutBuffer", "compute_gae", "ppo_clipped_loss", "old_log_probs"])
+            ("wm_graph", ["ARCHITECTURE_MODE = \"WM_GRAPH\"", "FXGraphTopology", "base_adjacency", "cycle_consistency_loss"]),
+            ("rl_ppo", ["ARCHITECTURE_MODE = \"proximalPolicyOptimization\"", "ActorCriticPPO", "OfflineFXRolloutEnvironment", "append_offline_rollout", "ppo_clipped_loss", "state.rollout.clear()"])
         ]
 
         for expectation in expectations {

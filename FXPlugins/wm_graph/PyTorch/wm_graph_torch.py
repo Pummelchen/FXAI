@@ -180,13 +180,40 @@ class GraphMessagePassingLayer(nn.Module):
     def __init__(self, node_count: int, width: int) -> None:
         super().__init__()
         self.edge_logits = nn.Parameter(torch.zeros(node_count, node_count))
+        self.register_buffer("base_adjacency", FXGraphTopology.default_adjacency(node_count))
         self.message = nn.Linear(width, width)
         self.update = nn.GRUCell(width, width)
 
     def forward(self, nodes: torch.Tensor) -> torch.Tensor:
-        adjacency = torch.softmax(self.edge_logits, dim=-1)
+        structural_bias = torch.log(self.base_adjacency.to(nodes.device).clamp_min(1.0e-4))
+        adjacency = torch.softmax(self.edge_logits + structural_bias, dim=-1)
         message = adjacency @ self.message(nodes)
         return self.update(message.reshape(-1, message.shape[-1]), nodes.reshape(-1, nodes.shape[-1])).view_as(nodes)
+
+
+class FXGraphTopology:
+    """Reference FX graph topology for currency-node message passing."""
+
+    @staticmethod
+    def default_adjacency(node_count: int) -> torch.Tensor:
+        adjacency = torch.eye(node_count, dtype=torch.float32)
+        for index in range(node_count):
+            adjacency[index, (index + 1) % node_count] = 1.0
+            adjacency[(index + 1) % node_count, index] = 1.0
+        if node_count >= 4:
+            adjacency[0, 2] = adjacency[2, 0] = 1.0
+            adjacency[1, 3] = adjacency[3, 1] = 1.0
+        return FXGraphTopology.row_normalize(adjacency)
+
+    @staticmethod
+    def row_normalize(adjacency: torch.Tensor) -> torch.Tensor:
+        return adjacency / adjacency.sum(dim=-1, keepdim=True).clamp_min(1.0e-9)
+
+    @staticmethod
+    def cycle_consistency_loss(pair_matrix: torch.Tensor) -> torch.Tensor:
+        skew = pair_matrix + pair_matrix.transpose(-1, -2)
+        diagonal = torch.diagonal(pair_matrix, dim1=-2, dim2=-1)
+        return skew.abs().mean() + diagonal.abs().mean()
 
 
 class WMGraphReferenceModel(nn.Module):
@@ -469,7 +496,9 @@ class WMGraphReferenceModel(nn.Module):
             nodes = self.node_projection(current).view(current.shape[0], self.nodes, HIDDEN_COUNT)
             for layer in self.message_passing:
                 nodes = layer(nodes)
-            self.last_adjacency = torch.softmax(self.message_passing[-1].edge_logits, dim=-1).detach()
+            last_layer = self.message_passing[-1]
+            structural_bias = torch.log(last_layer.base_adjacency.to(x.device).clamp_min(1.0e-4))
+            self.last_adjacency = torch.softmax(last_layer.edge_logits + structural_bias, dim=-1).detach()
             return torch.tanh(self.readout(nodes.reshape(current.shape[0], -1)))
         raise ValueError(f"unsupported architecture {arch}")
 

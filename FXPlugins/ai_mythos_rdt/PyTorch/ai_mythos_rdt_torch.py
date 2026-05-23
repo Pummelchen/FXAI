@@ -189,6 +189,25 @@ class GraphMessagePassingLayer(nn.Module):
         return self.update(message.reshape(-1, message.shape[-1]), nodes.reshape(-1, nodes.shape[-1])).view_as(nodes)
 
 
+class DecisionTrajectoryTools:
+    """Trajectory helpers for recursive decision-transformer conditioning."""
+
+    @staticmethod
+    def returns_to_go(rewards_or_signal: torch.Tensor) -> torch.Tensor:
+        return torch.flip(torch.cumsum(torch.flip(rewards_or_signal, dims=[1]), dim=1), dims=[1])
+
+    @staticmethod
+    def pseudo_actions(signal: torch.Tensor, deadband: float = 0.02) -> torch.Tensor:
+        buy = torch.ones_like(signal, dtype=torch.long)
+        sell = torch.zeros_like(signal, dtype=torch.long)
+        skip = torch.full_like(signal, 2, dtype=torch.long)
+        return torch.where(signal > deadband, buy, torch.where(signal < -deadband, sell, skip))
+
+    @staticmethod
+    def causal_mask(length: int, device: torch.device) -> torch.Tensor:
+        return torch.triu(torch.ones(length, length, dtype=torch.bool, device=device), diagonal=1)
+
+
 class AIMythosRDTReferenceModel(nn.Module):
     """Reference-grade recursive decision transformer."""
     def __init__(self) -> None:
@@ -293,6 +312,7 @@ class AIMythosRDTReferenceModel(nn.Module):
         elif self.architecture == "MYTHOS_RDT":
             self.state_embedding = nn.Linear(FEATURE_COUNT, HIDDEN_COUNT)
             self.return_embedding = nn.Linear(1, HIDDEN_COUNT)
+            self.action_embedding = nn.Embedding(CLASS_COUNT, HIDDEN_COUNT)
             self.position = nn.Parameter(torch.zeros(1, 128, HIDDEN_COUNT))
             layer = nn.TransformerEncoderLayer(d_model=HIDDEN_COUNT, nhead=HEAD_COUNT, dim_feedforward=HIDDEN_COUNT * 4, batch_first=True, activation="gelu")
             self.decision_transformer = nn.TransformerEncoder(layer, num_layers=4)
@@ -448,13 +468,21 @@ class AIMythosRDTReferenceModel(nn.Module):
             self.last_regime_probabilities = next_regime.detach()
             return next_regime[:, :1] * torch.tanh(self.trend_head(h)) + (1.0 - next_regime[:, :1]) * torch.tanh(self.reversal_head(h))
         if arch == "MYTHOS_RDT":
-            returns_to_go = torch.flip(torch.cumsum(torch.flip(x[..., 0:1], dims=[1]), dim=1), dims=[1])
-            tokens = self.state_embedding(x) + self.return_embedding(returns_to_go) + self.position[:, : x.shape[1], :]
-            mask = torch.triu(torch.ones(x.shape[1], x.shape[1], dtype=torch.bool, device=x.device), diagonal=1)
+            returns_to_go = DecisionTrajectoryTools.returns_to_go(x[..., 0:1])
+            pseudo_actions = DecisionTrajectoryTools.pseudo_actions(x[..., 0])
+            tokens = (
+                self.state_embedding(x) +
+                self.return_embedding(returns_to_go) +
+                self.action_embedding(pseudo_actions) +
+                self.position[:, : x.shape[1], :]
+            )
+            mask = DecisionTrajectoryTools.causal_mask(x.shape[1], x.device)
             encoded = self.decision_transformer(tokens, mask=mask)
             memory = torch.zeros((x.shape[0], HIDDEN_COUNT), dtype=x.dtype, device=x.device)
             for step in range(encoded.shape[1]):
                 memory = self.recursive_memory(encoded[:, step, :], memory)
+            self.last_returns_to_go = returns_to_go.detach()
+            self.last_pseudo_actions = pseudo_actions.detach()
             self.last_recursive_memory = memory.detach()
             return memory
         if arch == "WM_CFX":

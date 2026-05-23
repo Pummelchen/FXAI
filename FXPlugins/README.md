@@ -65,6 +65,9 @@ contracts:
   `Wave2StatisticalReferenceTests`, `Wave3FactorTrendReferenceTests`, and
   `Wave4ReferenceParityTests` pin the reference equations and volume-gating
   behavior described in `API/Docs/PLUGIN_99_REFERENCE_IMPLEMENTATION_PLAN.md`.
+- Current per-plugin reference implementation percentages are tracked in
+  `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_SCORECARD.md`; the scorecard covers
+  every registered plugin and is checked by `ReferenceScorecardTests`.
 
 Run the local verification gate with:
 
@@ -72,4 +75,4 @@ Run the local verification gate with:
 swift test
 ```
 
-The legacy MQL5 plugin reference files have been removed from the repository. The current source of truth is this plugin-owned Swift zoo, the full conversion plan in `API/Docs/FULL_PLUGIN_CONVERSION_PLAN.md`, the reference-grade implementation audit in `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_AUDIT.md`, the 99 percent reference implementation plan in `API/Docs/PLUGIN_99_REFERENCE_IMPLEMENTATION_PLAN.md`, and the 100 percent live runtime completion plan in `API/Docs/PLUGIN_100_LIVE_RUNTIME_COMPLETION_PLAN.md`.
+The legacy MQL5 plugin reference files have been removed from the repository. The current source of truth is this plugin-owned Swift zoo, the full conversion plan in `API/Docs/FULL_PLUGIN_CONVERSION_PLAN.md`, the reference-grade implementation audit in `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_AUDIT.md`, the 99 percent reference implementation plan in `API/Docs/PLUGIN_99_REFERENCE_IMPLEMENTATION_PLAN.md`, the per-plugin scorecard in `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_SCORECARD.md`, and the 100 percent live runtime completion plan in `API/Docs/PLUGIN_100_LIVE_RUNTIME_COMPLETION_PLAN.md`.

@@ -189,6 +189,42 @@ class GraphMessagePassingLayer(nn.Module):
         return self.update(message.reshape(-1, message.shape[-1]), nodes.reshape(-1, nodes.shape[-1])).view_as(nodes)
 
 
+class ChronosTokenizer:
+    """Chronos-style local tokenizer for continuous M1 feature trajectories."""
+
+    token_count = 256
+
+    @staticmethod
+    def bin_edges(device: Optional[torch.device] = None) -> torch.Tensor:
+        return torch.linspace(-4.0, 4.0, ChronosTokenizer.token_count - 1, device=device)
+
+    @staticmethod
+    def normalize(signal: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        center = signal.median(dim=1, keepdim=True).values
+        scale = torch.mean(torch.abs(signal - center), dim=1, keepdim=True).clamp_min(1.0e-4)
+        return ((signal - center) / scale).clamp(-4.0, 4.0), center, scale
+
+    @staticmethod
+    def encode(signal: torch.Tensor, edges: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        normalized, center, scale = ChronosTokenizer.normalize(signal)
+        tokens = torch.bucketize(normalized.contiguous(), edges.to(signal.device)).clamp(0, ChronosTokenizer.token_count - 1)
+        return tokens, center, scale
+
+    @staticmethod
+    def decode(tokens: torch.Tensor, edges: torch.Tensor, center: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
+        padded_edges = torch.cat([
+            edges[:1].to(tokens.device) - 0.5,
+            edges.to(tokens.device),
+            edges[-1:].to(tokens.device) + 0.5,
+        ])
+        centers = 0.5 * (padded_edges[:-1] + padded_edges[1:])
+        return centers[tokens.clamp(0, centers.numel() - 1)] * scale + center
+
+    @staticmethod
+    def causal_mask(length: int, device: torch.device) -> torch.Tensor:
+        return torch.triu(torch.ones(length, length, dtype=torch.bool, device=device), diagonal=1)
+
+
 class AIChronosReferenceModel(nn.Module):
     """Reference-grade Chronos-style causal token forecaster."""
     def __init__(self) -> None:
@@ -259,7 +295,7 @@ class AIChronosReferenceModel(nn.Module):
             self.read_projection = nn.Linear(HIDDEN_COUNT * 2, HIDDEN_COUNT)
             self.write_cell = nn.GRUCell(HIDDEN_COUNT, HIDDEN_COUNT)
         elif self.architecture == "CHRONOS":
-            self.register_buffer("bin_edges", torch.linspace(-4.0, 4.0, 255))
+            self.register_buffer("bin_edges", ChronosTokenizer.bin_edges())
             self.token_embedding = nn.Embedding(256, HIDDEN_COUNT)
             self.position = nn.Parameter(torch.zeros(1, 128, HIDDEN_COUNT))
             layer = nn.TransformerEncoderLayer(d_model=HIDDEN_COUNT, nhead=HEAD_COUNT, dim_feedforward=HIDDEN_COUNT * 4, batch_first=True, activation="gelu")
@@ -410,9 +446,11 @@ class AIChronosReferenceModel(nn.Module):
             return state
         if arch == "CHRONOS":
             signal = x.mean(dim=-1)
-            tokens = torch.bucketize(signal.contiguous(), self.bin_edges.to(x.device)).clamp(0, self.token_embedding.num_embeddings - 1)
+            tokens, center, scale = ChronosTokenizer.encode(signal, self.bin_edges)
             embedded = self.token_embedding(tokens) + self.position[:, : tokens.shape[1], :]
-            mask = torch.triu(torch.ones(tokens.shape[1], tokens.shape[1], dtype=torch.bool, device=x.device), diagonal=1)
+            mask = ChronosTokenizer.causal_mask(tokens.shape[1], x.device)
+            self.last_token_ids = tokens.detach()
+            self.last_token_reconstruction = ChronosTokenizer.decode(tokens, self.bin_edges, center, scale).detach()
             return self.causal_transformer(embedded, mask=mask)[:, -1, :]
         if arch == "FEWC":
             current = x[:, -1, :]
