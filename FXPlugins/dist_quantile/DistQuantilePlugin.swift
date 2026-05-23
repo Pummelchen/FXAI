@@ -2,33 +2,49 @@ import FXDataEngine
 import Foundation
 
 public struct DistQuantilePlugin: FXAIPlannedPlugin {
-    private static let descriptor = FXAIPluginImplementationDescriptor.distribution(.quantile, "dist_quantile")
-    private var runtime: FXAIReferencePluginRuntime
+    private static let pluginManifest = PluginManifestV4(
+        aiID: AIModelID.quantile.rawValue,
+        aiName: "dist_quantile",
+        family: .distributional,
+        referenceTier: PluginPersistenceTools.defaultReferenceTier(aiID: AIModelID.quantile.rawValue),
+        capabilityMask: [.selfTest, .onlineLearning, .replay, .multiHorizon, .nativeDistribution],
+        featureSchema: .sparseStat,
+        featureGroups: [.price, .multiTimeframe, .volatility, .volume],
+        minHorizonMinutes: 1,
+        maxHorizonMinutes: 240,
+        minSequenceBars: 1,
+        maxSequenceBars: 1,
+        requiresVolumeWhenAvailable: true
+    )
 
-    public var manifest: PluginManifestV4 { Self.descriptor.manifest }
-    public var accelerationPlan: FXPluginAccelerationPlan { Self.descriptor.accelerationPlan }
+    private var cpu: DistQuantileCPUModel
+
+    public var manifest: PluginManifestV4 { Self.pluginManifest }
+    public var accelerationPlan: FXPluginAccelerationPlan { DistQuantileMetal.descriptor }
 
     public init() {
-        self.runtime = FXAIReferencePluginRuntime(descriptor: Self.descriptor)
+        self.cpu = DistQuantileCPUModel()
     }
 
     public mutating func reset() {
-        runtime = FXAIReferencePluginRuntime(descriptor: Self.descriptor)
+        cpu.reset()
     }
 
     public func selfTest() -> Bool {
-        (try? manifest.validate()) != nil && !Self.descriptor.primaryBackends.isEmpty
+        (try? manifest.validate()) != nil &&
+            accelerationPlan.primaryBackends.contains(.accelerate) &&
+            accelerationPlan.candidateBackends.contains(.metal)
     }
 
     public mutating func train(_ request: TrainRequestV4, hyperParameters: HyperParameters) throws {
         try request.validate()
         try PluginContractTools.validateCompatibility(manifest: manifest, context: request.context)
-        runtime.train(request, descriptor: Self.descriptor, hyperParameters: hyperParameters)
+        cpu.train(request, hyperParameters: hyperParameters)
     }
 
     public func predict(_ request: PredictRequestV4, hyperParameters: HyperParameters) throws -> PredictionV4 {
         try request.validate()
         try PluginContractTools.validateCompatibility(manifest: manifest, context: request.context)
-        return runtime.predict(request, descriptor: Self.descriptor, hyperParameters: hyperParameters)
+        return cpu.predict(request, hyperParameters: hyperParameters)
     }
 }
