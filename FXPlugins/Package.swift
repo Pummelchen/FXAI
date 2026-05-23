@@ -58,6 +58,7 @@ let package = Package(
                 "ai_gha/PyTorch",
                 "ai_qcew/PyTorch",
                 "ai_tesseract/PyTorch",
+                "ai_trr/PyTorch",
                 "Package.swift",
                 "README.md"
             ]
