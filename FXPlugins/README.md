@@ -50,6 +50,12 @@ contracts:
   `SineWaveAgent` and checks every plugin on deterministic M1 OHLCV sine-wave data,
   including accelerator runtime selection with CPU fallback for unavailable local
   Metal/PyTorch/TensorFlow/NLP backends.
+- `FXAIPluginCertificationRegistry` is the strict 100 percent certification gate.
+  It covers every registered plugin and declared accelerator, records satisfied
+  runtime evidence, and fails closed until missing gates such as live Metal buffer
+  parity, per-plugin PyTorch/TensorFlow/NLP persistence checks, FXDatabase-only
+  data-path evidence, full verification output, and MQL5/golden or standard
+  reference parity are proven.
 - Reference-grade Swift fixtures now live inside the owning plugin folders for
   statistical models, factor/trend panel contracts, linear learners, tree
   learners, distribution models, and memory retrieval. The focused suites
