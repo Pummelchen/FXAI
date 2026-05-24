@@ -14,6 +14,7 @@ final class SineWavePredictionCertificationTests: XCTestCase {
     private static let minimumEvaluationSamples = 240
     private static let requiredDirectionalAccuracy = 0.99
     private static let requiredMeanSignedEdge = 0.01
+    private static let requiredPredictionConfidence = 0.85
     private static let acceleratorEvaluationSamples = 2
     private static let acceleratorTrainingMinuteSamples = 4
 
@@ -192,6 +193,8 @@ final class SineWavePredictionCertificationTests: XCTestCase {
         var validPredictions = 0
         var signedEdgeSum = 0.0
         var absoluteEdgeSum = 0.0
+        var confidenceSum = 0.0
+        var minimumConfidence = Double.greatestFiniteMagnitude
         var validationFailure: String?
 
         if holdoutStartIndex < holdoutEndIndex {
@@ -222,8 +225,11 @@ final class SineWavePredictionCertificationTests: XCTestCase {
 
                 let edge = directionalEdge(prediction)
                 let signedEdge = expected == .buy ? edge : -edge
+                let confidence = normalizedConfidence(prediction)
                 signedEdgeSum += signedEdge
                 absoluteEdgeSum += abs(edge)
+                confidenceSum += confidence
+                minimumConfidence = min(minimumConfidence, confidence)
                 if signedEdge > 0.0 {
                     correctSamples += 1
                 }
@@ -234,11 +240,15 @@ final class SineWavePredictionCertificationTests: XCTestCase {
         let accuracy = evaluatedSamples > 0 ? Double(correctSamples) / Double(evaluatedSamples) : 0.0
         let meanSignedEdge = evaluatedSamples > 0 ? signedEdgeSum / Double(evaluatedSamples) : 0.0
         let meanAbsoluteEdge = evaluatedSamples > 0 ? absoluteEdgeSum / Double(evaluatedSamples) : 0.0
+        let meanConfidence = evaluatedSamples > 0 ? confidenceSum / Double(evaluatedSamples) : 0.0
+        let minConfidence = evaluatedSamples > 0 ? minimumConfidence : 0.0
         let failureReason = failureReason(
             evaluatedSamples: evaluatedSamples,
             validPredictions: validPredictions,
             accuracy: accuracy,
             meanSignedEdge: meanSignedEdge,
+            meanConfidence: meanConfidence,
+            minimumConfidence: minConfidence,
             validationFailure: validationFailure
         )
 
@@ -251,6 +261,8 @@ final class SineWavePredictionCertificationTests: XCTestCase {
             directionalAccuracy: accuracy,
             meanSignedEdge: meanSignedEdge,
             meanAbsoluteEdge: meanAbsoluteEdge,
+            meanConfidence: meanConfidence,
+            minimumConfidence: minConfidence,
             failureReason: failureReason
         )
     }
@@ -321,6 +333,8 @@ final class SineWavePredictionCertificationTests: XCTestCase {
         var validPredictions = 0
         var signedEdgeSum = 0.0
         var absoluteEdgeSum = 0.0
+        var confidenceSum = 0.0
+        var minimumConfidence = Double.greatestFiniteMagnitude
         var validationFailure: String?
 
         for sampleIndex in evaluationIndices {
@@ -345,8 +359,11 @@ final class SineWavePredictionCertificationTests: XCTestCase {
 
             let edge = directionalEdge(prediction)
             let signedEdge = expected == .buy ? edge : -edge
+            let confidence = normalizedConfidence(prediction)
             signedEdgeSum += signedEdge
             absoluteEdgeSum += abs(edge)
+            confidenceSum += confidence
+            minimumConfidence = min(minimumConfidence, confidence)
             if signedEdge > 0.0 {
                 correctSamples += 1
             }
@@ -356,11 +373,15 @@ final class SineWavePredictionCertificationTests: XCTestCase {
         let accuracy = evaluatedSamples > 0 ? Double(correctSamples) / Double(evaluatedSamples) : 0.0
         let meanSignedEdge = evaluatedSamples > 0 ? signedEdgeSum / Double(evaluatedSamples) : 0.0
         let meanAbsoluteEdge = evaluatedSamples > 0 ? absoluteEdgeSum / Double(evaluatedSamples) : 0.0
+        let meanConfidence = evaluatedSamples > 0 ? confidenceSum / Double(evaluatedSamples) : 0.0
+        let minConfidence = evaluatedSamples > 0 ? minimumConfidence : 0.0
         let failureReason = failureReason(
             evaluatedSamples: evaluatedSamples,
             validPredictions: validPredictions,
             accuracy: accuracy,
             meanSignedEdge: meanSignedEdge,
+            meanConfidence: meanConfidence,
+            minimumConfidence: minConfidence,
             validationFailure: validationFailure,
             minimumEvaluationSamples: Self.acceleratorEvaluationSamples
         )
@@ -374,6 +395,8 @@ final class SineWavePredictionCertificationTests: XCTestCase {
             directionalAccuracy: accuracy,
             meanSignedEdge: meanSignedEdge,
             meanAbsoluteEdge: meanAbsoluteEdge,
+            meanConfidence: meanConfidence,
+            minimumConfidence: minConfidence,
             failureReason: failureReason
         )
     }
@@ -604,6 +627,13 @@ final class SineWavePredictionCertificationTests: XCTestCase {
             prediction.classProbabilities[LabelClass.sell.rawValue]
     }
 
+    private static func normalizedConfidence(_ prediction: PredictionV4) -> Double {
+        guard prediction.confidence.isFinite else {
+            return 0.0
+        }
+        return min(max(prediction.confidence, 0.0), 1.0)
+    }
+
     private static func certificationHorizon(for plugin: any FXAIPlannedPlugin) -> Int {
         plugin.manifest.minHorizonMinutes
     }
@@ -633,10 +663,13 @@ final class SineWavePredictionCertificationTests: XCTestCase {
         validPredictions: Int,
         accuracy: Double,
         meanSignedEdge: Double,
+        meanConfidence: Double,
+        minimumConfidence: Double,
         validationFailure: String?,
         minimumEvaluationSamples: Int = SineWavePredictionCertificationTests.minimumEvaluationSamples,
         requiredDirectionalAccuracy: Double = SineWavePredictionCertificationTests.requiredDirectionalAccuracy,
-        requiredMeanSignedEdge: Double = SineWavePredictionCertificationTests.requiredMeanSignedEdge
+        requiredMeanSignedEdge: Double = SineWavePredictionCertificationTests.requiredMeanSignedEdge,
+        requiredPredictionConfidence: Double = SineWavePredictionCertificationTests.requiredPredictionConfidence
     ) -> String? {
         if let validationFailure {
             return "invalid prediction: \(validationFailure)"
@@ -652,6 +685,9 @@ final class SineWavePredictionCertificationTests: XCTestCase {
         }
         if meanSignedEdge <= requiredMeanSignedEdge {
             return "mean signed edge \(formatDouble(meanSignedEdge)) <= \(formatDouble(requiredMeanSignedEdge))"
+        }
+        if minimumConfidence < requiredPredictionConfidence {
+            return "minimum confidence \(formatPercent(minimumConfidence)) below \(formatPercent(requiredPredictionConfidence)); mean confidence \(formatPercent(meanConfidence))"
         }
         return nil
     }
@@ -669,24 +705,26 @@ final class SineWavePredictionCertificationTests: XCTestCase {
         results: [PluginSineWavePredictionResult],
         minimumEvaluationSamples: Int,
         requiredDirectionalAccuracy: Double = SineWavePredictionCertificationTests.requiredDirectionalAccuracy,
-        requiredMeanSignedEdge: Double = SineWavePredictionCertificationTests.requiredMeanSignedEdge
+        requiredMeanSignedEdge: Double = SineWavePredictionCertificationTests.requiredMeanSignedEdge,
+        requiredPredictionConfidence: Double = SineWavePredictionCertificationTests.requiredPredictionConfidence
     ) -> String {
         var lines: [String] = [
             "# \(title)",
             "",
-            "| Plugin | Backend | Status | Train | Eval | Valid | Accuracy | Mean Signed Edge | Mean Absolute Edge | Notes |",
-            "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |"
+            "| Plugin | Backend | Status | Train | Eval | Valid | Accuracy | Mean Signed Edge | Mean Absolute Edge | Mean Confidence | Min Confidence | Notes |",
+            "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"
         ]
         for result in results {
             lines.append(
                 "| \(result.pluginName) | \(result.backendName) | \(result.passed ? "PASS" : "FAIL") | " +
                     "\(result.trainedSamples) | \(result.evaluatedSamples) | \(result.validPredictions) | " +
                     "\(formatPercent(result.directionalAccuracy)) | \(formatDouble(result.meanSignedEdge)) | " +
-                    "\(formatDouble(result.meanAbsoluteEdge)) | \(result.failureReason ?? "") |"
+                    "\(formatDouble(result.meanAbsoluteEdge)) | \(formatPercent(result.meanConfidence)) | " +
+                    "\(formatPercent(result.minimumConfidence)) | \(result.failureReason ?? "") |"
             )
         }
         lines.append("")
-        lines.append("Pass criteria: valid predictions for all evaluated samples, at least \(minimumEvaluationSamples) holdout samples, directional accuracy >= \(formatPercent(requiredDirectionalAccuracy)), mean signed edge > \(formatDouble(requiredMeanSignedEdge)).")
+        lines.append("Pass criteria: valid predictions for all evaluated samples, at least \(minimumEvaluationSamples) holdout samples, directional accuracy >= \(formatPercent(requiredDirectionalAccuracy)), mean signed edge > \(formatDouble(requiredMeanSignedEdge)), and every prediction confidence >= \(formatPercent(requiredPredictionConfidence)).")
         return lines.joined(separator: "\n")
     }
 
@@ -795,6 +833,8 @@ private struct PluginSineWavePredictionResult {
     var directionalAccuracy: Double
     var meanSignedEdge: Double
     var meanAbsoluteEdge: Double
+    var meanConfidence: Double
+    var minimumConfidence: Double
     var failureReason: String?
 
     var passed: Bool {
@@ -804,6 +844,7 @@ private struct PluginSineWavePredictionResult {
     var failureSummary: String {
         "\(pluginName)[\(backendName)]: \(failureReason ?? "passed") " +
             "(accuracy=\(SineWavePredictionCertificationTests.formatPercent(directionalAccuracy)), " +
-            "meanSignedEdge=\(SineWavePredictionCertificationTests.formatDouble(meanSignedEdge)))"
+            "meanSignedEdge=\(SineWavePredictionCertificationTests.formatDouble(meanSignedEdge)), " +
+            "minConfidence=\(SineWavePredictionCertificationTests.formatPercent(minimumConfidence)))"
     }
 }
