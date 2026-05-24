@@ -13,10 +13,16 @@ public enum SineTestSecurity {
     public static let minimumNormalizedValue = 0.001
     public static let syncIntervalSeconds = 10
 
+    /// Returns true when a logical symbol refers to the virtual SineTest market.
+    ///
+    /// FXDatabase uses this to route SineTest requests away from real providers.
     public static func matches(_ logicalSymbol: LogicalSymbol) -> Bool {
         logicalSymbol.rawValue == logicalSymbolRawValue
     }
 
+    /// Returns true when a provider symbol is an accepted SineTest alias.
+    ///
+    /// The virtual security accepts both the display name and canonical symbol.
     public static func acceptsProviderSymbol(_ value: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed == displayName || trimmed.uppercased() == logicalSymbolRawValue
@@ -58,10 +64,16 @@ public enum SineTestSecurity {
 public struct SineWaveAgent: HistoricalOhlcDataProviding {
     public let digits: Digits
 
+    /// Creates a deterministic SineTest data provider with the selected price scale.
+    ///
+    /// The default six-digit scale gives enough precision for plugin certification.
     public init(digits: Digits = SineTestSecurity.digits) {
         self.digits = digits
     }
 
+    /// Loads synthetic SineTest M1 OHLCV data for a validated history request.
+    ///
+    /// Non-SineTest symbols, provider-symbol mismatches, and digit mismatches fail closed.
     public func loadM1Ohlc(_ request: HistoricalOhlcRequest) async throws -> ColumnarOhlcSeries {
         guard SineTestSecurity.matches(request.logicalSymbol) else {
             throw HistoryDataError.invalidRequest(
@@ -90,6 +102,9 @@ public struct SineWaveAgent: HistoricalOhlcDataProviding {
         )
     }
 
+    /// Builds a canonical FXDatabase history request for the virtual SineTest security.
+    ///
+    /// Callers use this helper when they need a versioned, source-tagged SineTest request.
     public static func request(
         brokerSourceId: BrokerSourceId = SineTestSecurity.defaultBrokerSourceId,
         utcStartInclusive: UtcSecond,
@@ -110,6 +125,9 @@ public struct SineWaveAgent: HistoricalOhlcDataProviding {
         )
     }
 
+    /// Generates SineTest OHLCV data from raw UTC seconds and broker-source text.
+    ///
+    /// This overload validates raw inputs before delegating to the typed generator.
     public static func generateM1Ohlc(
         brokerSourceIdRawValue: String = SineTestSecurity.defaultBrokerSourceId.rawValue,
         utcStartInclusive: Int64,
@@ -127,6 +145,9 @@ public struct SineWaveAgent: HistoricalOhlcDataProviding {
         )
     }
 
+    /// Generates deterministic minute bars over a typed UTC interval.
+    ///
+    /// The sine wave peaks at each full hour, bottoms at half-hour, and carries volume.
     public static func generateM1Ohlc(
         brokerSourceId: BrokerSourceId = SineTestSecurity.defaultBrokerSourceId,
         utcStartInclusive: UtcSecond,
@@ -204,6 +225,9 @@ public struct SineWaveAgent: HistoricalOhlcDataProviding {
         )
     }
 
+    /// Returns the normalized SineTest value for one UTC timestamp.
+    ///
+    /// Values are clamped into the 0.001...1.0 range used by certification tests.
     public static func normalizedValue(atUTC utc: Int64) -> Double {
         let minuteIndex = floorDiv(utc, Timeframe.m1.seconds)
         let minuteOfHour = positiveModulo(minuteIndex, 60)
@@ -212,6 +236,9 @@ public struct SineWaveAgent: HistoricalOhlcDataProviding {
         return SineTestSecurity.minimumNormalizedValue + ((1.0 - SineTestSecurity.minimumNormalizedValue) * zeroToOne)
     }
 
+    /// Returns the scaled integer price for one UTC timestamp.
+    ///
+    /// FXDatabase stores prices as fixed-scale integers, so plugins receive stable data.
     public static func scaledPrice(atUTC utc: Int64, digits: Digits = SineTestSecurity.digits) -> Int64 {
         scaledPrice(atUTC: utc, scale: pow10(digits.rawValue))
     }

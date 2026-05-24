@@ -14,6 +14,10 @@ FXDATABASE_M1_HISTORY_PATH = "/v1/history/m1"
 
 
 def _required_int(payload: dict, key: str) -> int:
+    """Read a required integer from a decoded FXDatabase JSON object.
+
+    Raises OfflineLabError so API contract violations stay operator-readable.
+    """
     try:
         return _coerce_int(payload[key], key)
     except KeyError as exc:
@@ -21,6 +25,10 @@ def _required_int(payload: dict, key: str) -> int:
 
 
 def _coerce_int(value: object, field: str) -> int:
+    """Convert one FXDatabase response field to int with field-aware errors.
+
+    This keeps malformed API payloads from escaping as raw Python ValueError.
+    """
     try:
         return int(value)
     except (TypeError, ValueError) as exc:
@@ -28,6 +36,10 @@ def _coerce_int(value: object, field: str) -> int:
 
 
 def _normalize_fxdatabase_source_origin(value: str) -> str:
+    """Normalize and validate the FXDatabase source-origin boundary value.
+
+    The Swift API accepts uppercase letters, numbers, underscore, and hyphen.
+    """
     normalized = str(value or "").strip().upper()
     if not normalized:
         raise OfflineLabError("FXDatabase source_origin must not be empty")
@@ -37,6 +49,11 @@ def _normalize_fxdatabase_source_origin(value: str) -> str:
 
 
 def validate_fxdatabase_m1_history_response(response: dict) -> None:
+    """Validate the FXDatabase M1 history response before OfflineLab consumes it.
+
+    The check mirrors the Swift v1 contract for API version, metadata, OHLCV
+    columns, timestamp order, and positive price invariants.
+    """
     if not isinstance(response, dict):
         raise OfflineLabError("FXDatabase API history response must be a JSON object")
     api_version = str(response.get("api_version", ""))
@@ -279,6 +296,10 @@ def compile_audit_runner() -> int:
 
 
 def fxdatabase_api_base_url(args) -> str:
+    """Resolve the FXDatabase HTTP API base URL for OfflineLab exports.
+
+    CLI arguments take precedence, then environment overrides, then localhost.
+    """
     raw = (
         getattr(args, "fxdatabase_api_url", "")
         or os.environ.get("FXDATABASE_API_URL", "")
@@ -289,6 +310,11 @@ def fxdatabase_api_base_url(args) -> str:
 
 
 def fetch_fxdatabase_m1_history(args, symbol: str, start_unix: int, end_unix: int) -> dict:
+    """Fetch validated M1 OHLCV history from FXDatabase over the v1 API.
+
+    OfflineLab never talks to ClickHouse directly; this function is the data
+    boundary for importing canonical M1 data into lab-local artifacts.
+    """
     broker_source_id = str(
         getattr(args, "broker_source_id", "") or os.environ.get("FXDATABASE_BROKER_SOURCE_ID", "default")
     ).strip()
@@ -329,6 +355,11 @@ def fetch_fxdatabase_m1_history(args, symbol: str, start_unix: int, end_unix: in
 
 
 def write_fxdatabase_export_files(response: dict, data_path: Path, meta_path: Path) -> None:
+    """Write a validated FXDatabase M1 history response as TSV and metadata.
+
+    The output preserves source identity and provider volume so lab datasets
+    keep the same contract as FXDataEngine and FXPlugins.
+    """
     validate_fxdatabase_m1_history_response(response)
     metadata = dict(response.get("metadata", {}))
     timestamps = list(response.get("utc_timestamps", []))

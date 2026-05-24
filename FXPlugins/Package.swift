@@ -23,6 +23,7 @@ func fxaiPluginSwiftSources() -> [String] {
         guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
 
         let path = url.path
+        guard FileManager.default.fileExists(atPath: path) else { continue }
         guard path.hasPrefix(packagePathPrefix) else { continue }
         let relativePath = String(path.dropFirst(packagePathPrefix.count))
         guard relativePath != "Package.swift" else { continue }

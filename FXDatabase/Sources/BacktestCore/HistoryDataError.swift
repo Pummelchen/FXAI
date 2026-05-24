@@ -9,8 +9,10 @@ public enum HistoryDataError: Error, Equatable, CustomStringConvertible, Sendabl
     case missingVerifiedCoverage(LogicalSymbol, UtcSecond, UtcSecond)
     case missingDataCertificate(LogicalSymbol, UtcSecond, UtcSecond)
     case rowLimitExceeded(limit: Int)
-    case unsupportedInternalCompute(String)
 
+    /// Returns an operator-facing description for history data failures.
+    ///
+    /// Messages explain whether the caller should change the request or repair data coverage.
     public var description: String {
         switch self {
         case .invalidRequest(let reason):
@@ -27,8 +29,6 @@ public enum HistoryDataError: Error, Equatable, CustomStringConvertible, Sendabl
             return "\(symbol.rawValue) UTC range \(from.rawValue)..<\(to.rawValue) is not fully covered by valid cryptographic data certificates. Let the data certification agent complete before using this range."
         case .rowLimitExceeded(let limit):
             return "History data request returned more than \(limit) rows. Split the UTC range into smaller chunks."
-        case .unsupportedInternalCompute(let command):
-            return "\(command) is not implemented in FXDatabase. FXDatabase only provides verified historical data to external Swift CPU/Metal backtest applications."
         }
     }
 }
