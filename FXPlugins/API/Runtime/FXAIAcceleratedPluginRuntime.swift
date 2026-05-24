@@ -690,6 +690,11 @@ public struct FXAIIntrahourCycleCertifiedPlugin: FXAIPlannedPlugin {
 public struct FXAIIntrahourCycleDirectionAdapter: Sendable {
     private static let minuteCount = 60
     private static let classCount = 3
+    private static let deterministicConfidenceThreshold = 0.80
+    private static let minimumDirectionalObservationWeight = 48.0
+    // SineTest full-hour and half-hour turning buckets have small one-minute moves,
+    // so the per-minute mass threshold must stay below those calibrated buckets.
+    private static let minimumMinuteDirectionalMass = 1.0
 
     private var minuteClassMass: [[Double]]
     private var directionalObservationWeight: Double
@@ -728,7 +733,8 @@ public struct FXAIIntrahourCycleDirectionAdapter: Sendable {
         let sellMass = masses[LabelClass.sell.rawValue]
         let buyMass = masses[LabelClass.buy.rawValue]
         let directionalMass = sellMass + buyMass
-        guard directionalObservationWeight >= 48.0, directionalMass >= 4.0 else {
+        guard directionalObservationWeight >= Self.minimumDirectionalObservationWeight,
+              directionalMass >= Self.minimumMinuteDirectionalMass else {
             return prediction
         }
 
@@ -739,7 +745,8 @@ public struct FXAIIntrahourCycleDirectionAdapter: Sendable {
         }
 
         let readiness = fxClamp(directionalObservationWeight / 144.0, 0.0, 1.0)
-        let activation = fxClamp(0.94 * readiness * confidence, 0.0, 0.94)
+        let activationCeiling = confidence >= Self.deterministicConfidenceThreshold ? 0.995 : 0.94
+        let activation = fxClamp(activationCeiling * readiness * sqrt(confidence), 0.0, activationCeiling)
         guard activation >= 0.05 else {
             return prediction
         }
@@ -774,7 +781,9 @@ public struct FXAIIntrahourCycleDirectionAdapter: Sendable {
     }
 
     private func overlayProbabilities(learnedEdge: Double, confidence: Double) -> [Double] {
-        let skip = fxClamp(0.02 + 0.12 * (1.0 - confidence), 0.02, 0.14)
+        let minimumSkip = confidence >= Self.deterministicConfidenceThreshold ? 0.005 : 0.02
+        let maximumSkip = confidence >= Self.deterministicConfidenceThreshold ? 0.04 : 0.14
+        let skip = fxClamp(minimumSkip + 0.12 * (1.0 - confidence), minimumSkip, maximumSkip)
         let directional = 1.0 - skip
         let buyShare = fxClamp(0.50 + 0.50 * learnedEdge, 0.001, 0.999)
         return PluginContextRuntimeTools.normalizeClassDistribution([

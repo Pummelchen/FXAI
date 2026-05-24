@@ -25,7 +25,9 @@ The same protocol is applied to each plugin, without family-specific exceptions:
 9. Score directional sync from the sign of `pBuy - pSell`:
    - expected buy when the future close is higher than the current close;
    - expected sell when the future close is lower than the current close.
-10. Pass only when the plugin has enough evaluated samples, every prediction is valid, directional accuracy is at least 68%, and the mean signed directional edge is positive.
+10. Pass only when the plugin has enough evaluated samples, every prediction is valid, directional accuracy is at least 99%, and the mean signed directional edge is positive.
+
+The registry adapter must not skip deterministic SineTest turning buckets. Full-hour and half-hour samples can have smaller one-minute movement than mid-cycle samples, so the runtime keeps a high global observation gate while allowing a lower per-minute directional mass gate for already confident intrahour patterns.
 
 ## Accelerator Certification Protocol
 
