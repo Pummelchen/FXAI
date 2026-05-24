@@ -14,7 +14,7 @@ final class SineWavePredictionCertificationTests: XCTestCase {
     private static let minimumEvaluationSamples = 240
     private static let requiredDirectionalAccuracy = 0.99
     private static let requiredMeanSignedEdge = 0.01
-    private static let requiredPredictionConfidence = 0.85
+    private static let requiredPredictionConfidence = 0.95
     private static let acceleratorEvaluationSamples = 2
     private static let acceleratorTrainingMinuteSamples = 4
 

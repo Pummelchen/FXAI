@@ -177,10 +177,70 @@ def _seed_framework(plugin_name: str, framework: str, model_identifier: Any) -> 
 
 
 def _state_path(plugin_name: str, framework: str, model_identifier: Any) -> Path:
-    return _state_dir() / f"{plugin_name}.{framework}.{_safe_token(model_identifier)}.pkl"
+    suffix = "tfstate.pkl" if framework == "tensorFlow" else "pkl"
+    return _state_dir() / f"{plugin_name}.{framework}.{_safe_token(model_identifier)}.{suffix}"
 
 
-def _load_state(plugin_name: str, framework: str, model_identifier: Any) -> Any | None:
+def _tensorflow_state_class(module: Any, class_name: Any) -> Any | None:
+    if module is None:
+        return None
+    if isinstance(class_name, str):
+        candidate = getattr(module, class_name, None)
+        if candidate is not None and hasattr(candidate, "create"):
+            return candidate
+    for name in dir(module):
+        if name.endswith("TensorFlowState"):
+            candidate = getattr(module, name, None)
+            if candidate is not None and hasattr(candidate, "create"):
+                return candidate
+    return None
+
+
+def _optimizer_learning_rate(state: Any) -> float:
+    optimizer = getattr(state, "optimizer", None)
+    learning_rate = getattr(optimizer, "learning_rate", None)
+    try:
+        if hasattr(learning_rate, "numpy"):
+            return _safe_float(learning_rate.numpy())
+        return _safe_float(learning_rate)
+    except Exception:
+        return 3.0e-4
+
+
+def _load_tensorflow_state(
+    path: Path,
+    module: Any,
+    sequence: list[list[float]] | None,
+    data_has_volume: bool
+) -> Any | None:
+    if module is None:
+        return None
+    with path.open("rb") as handle:
+        payload = pickle.load(handle)
+    if not isinstance(payload, dict) or payload.get("kind") != "fxai_tensorflow_state_v1":
+        return None
+    state_class = _tensorflow_state_class(module, payload.get("stateClass"))
+    if state_class is None:
+        return None
+    learning_rate = _safe_float(payload.get("learningRate", 3.0e-4)) or 3.0e-4
+    state = state_class.create(lr=learning_rate)
+    weights = payload.get("modelWeights")
+    if isinstance(weights, list) and hasattr(getattr(state, "model", None), "set_weights"):
+        feature_count = int(getattr(module, "FEATURE_COUNT", 32))
+        build_sequence = sequence if sequence else [[0.0] * feature_count]
+        _call_predict_batch(module, build_sequence, state, data_has_volume)
+        state.model.set_weights(weights)
+    return state
+
+
+def _load_state(
+    plugin_name: str,
+    framework: str,
+    model_identifier: Any,
+    module: Any | None = None,
+    sequence: list[list[float]] | None = None,
+    data_has_volume: bool = True
+) -> Any | None:
     path = _state_path(plugin_name, framework, model_identifier)
     if not path.exists():
         return None
@@ -189,10 +249,30 @@ def _load_state(plugin_name: str, framework: str, model_identifier: Any) -> Any 
             import torch
 
             return torch.load(path, map_location="cpu", weights_only=False)
+        if framework == "tensorFlow":
+            return _load_tensorflow_state(path, module, sequence, data_has_volume)
         with path.open("rb") as handle:
             return pickle.load(handle)
     except Exception:
         return None
+
+
+def _save_tensorflow_state(path: Path, plugin_name: str, model_identifier: Any, state: Any) -> None:
+    model = getattr(state, "model", None)
+    weights = model.get_weights() if model is not None and hasattr(model, "get_weights") else []
+    payload = {
+        "kind": "fxai_tensorflow_state_v1",
+        "plugin": plugin_name,
+        "modelIdentifier": _safe_token(model_identifier),
+        "stateClass": state.__class__.__name__,
+        "architecture": getattr(model, "architecture", None),
+        "learningRate": _optimizer_learning_rate(state),
+        "modelWeights": weights,
+    }
+    temporary_path = path.with_name(f"{path.name}.tmp")
+    with temporary_path.open("wb") as handle:
+        pickle.dump(payload, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    temporary_path.replace(path)
 
 
 def _save_state(plugin_name: str, framework: str, model_identifier: Any, state: Any) -> None:
@@ -205,6 +285,9 @@ def _save_state(plugin_name: str, framework: str, model_identifier: Any, state: 
             import torch
 
             torch.save(state, path)
+            return
+        if framework == "tensorFlow":
+            _save_tensorflow_state(path, plugin_name, model_identifier, state)
             return
         with path.open("wb") as handle:
             pickle.dump(state, handle)
@@ -403,8 +486,17 @@ def _handle_predict(command: dict[str, Any]) -> dict[str, Any]:
     if framework == "foundationNLP":
         prediction = _nlp_prediction(module, features, payload)
     else:
-        state = _load_state(plugin_name, framework, model_identifier)
-        result = _call_predict_batch(module, _sequence(payload), state, bool(payload.get("dataHasVolume", False)))
+        sequence = _sequence(payload)
+        data_has_volume = bool(payload.get("dataHasVolume", False))
+        state = _load_state(
+            plugin_name,
+            framework,
+            model_identifier,
+            module=module,
+            sequence=sequence,
+            data_has_volume=data_has_volume
+        )
+        result = _call_predict_batch(module, sequence, state, data_has_volume)
         prediction = _prediction_from_module_result(result)
     return {"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": True, "prediction": prediction, "error": None}
 
@@ -422,8 +514,17 @@ def _handle_train(command: dict[str, Any]) -> dict[str, Any]:
     module = _load_module(plugin_name, backend_path)
     label = _label_index(training.get("labelClass"))
     move = abs(_safe_float(training.get("movePoints", 0.0)))
-    state = _load_state(plugin_name, framework, model_identifier)
-    state = _call_train_step(module, _sequence(inference), label, move, state, bool(inference.get("dataHasVolume", False)))
+    sequence = _sequence(inference)
+    data_has_volume = bool(inference.get("dataHasVolume", False))
+    state = _load_state(
+        plugin_name,
+        framework,
+        model_identifier,
+        module=module,
+        sequence=sequence,
+        data_has_volume=data_has_volume
+    )
+    state = _call_train_step(module, sequence, label, move, state, data_has_volume)
     _save_state(plugin_name, framework, model_identifier, state)
     return {"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": True, "prediction": None, "error": None}
 

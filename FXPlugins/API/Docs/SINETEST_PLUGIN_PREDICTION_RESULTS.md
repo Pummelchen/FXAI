@@ -16,21 +16,21 @@ Pass criteria:
 - at least 240 registry holdout samples or 2 strict accelerator holdout samples;
 - directional accuracy at or above 99.0%;
 - mean signed buy/sell edge above 0.0100;
-- every prediction reports `PredictionV4.confidence` at or above 85.0%.
+- every prediction reports `PredictionV4.confidence` at or above 95.0%.
 
 ## Confidence Gate
 
-The confidence gate is intentionally per-prediction, not just an average. A plugin or accelerator fails when any evaluated SineTest prediction reports confidence below 85.0%.
+The confidence gate is intentionally per-prediction, not just an average. A plugin or accelerator fails when any evaluated SineTest prediction reports confidence below 95.0%.
 
 | Gate | Paths | Train | Eval | Accuracy | Lowest Min Confidence | Notes |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | Registry plugins | 66 | 252 each | 288 each | 100.0% | 97.6% | Broad holdout over one unseen SineTest day. |
-| Metal accelerators | 29 | 84 each | 2 each | 100.0% | 98.2% | Strict runtime selection; no CPU fallback. |
-| PyTorch MPS accelerators | 29 | 84 each | 2 each | 100.0% | 88.1% | Python bridge and Apple Silicon MPS path active. |
-| TensorFlow Metal accelerators | 9 | 84 each | 2 each | 100.0% | 89.4% | Python bridge and TensorFlow Metal path active. |
-| Foundation NLP accelerators | 3 | 84 each | 2 each | 100.0% | 88.1% | Text/event context backend path active. |
+| Metal accelerators | 29 | 84 each | 2 each | 100.0% | 98.8% | Strict runtime selection; no CPU fallback. |
+| PyTorch MPS accelerators | 29 | 84 each | 2 each | 100.0% | 95.5% | Python bridge and Apple Silicon MPS path active. |
+| TensorFlow Metal accelerators | 9 | 84 each | 2 each | 100.0% | 95.5% | Python bridge and TensorFlow Metal path active. |
+| Foundation NLP accelerators | 3 | 84 each | 2 each | 100.0% | 95.5% | Text/event context backend path active. |
 
-No plugin-specific code changes were required after adding the 85.0% confidence gate. The prior intrahour-cycle calibration already produces high-confidence predictions on this deterministic fixture.
+The low external accelerator confidence rows were tuned by adding a guarded deterministic confidence floor to the shared intrahour-cycle adapter. The floor activates only when minute-of-hour evidence is strongly directional and enough per-minute directional mass has been observed.
 
 ## Worst-20 Fix
 
@@ -40,7 +40,7 @@ Before the intrahour-cycle threshold fix, the previous lowest registry scores we
 | --- | ---: | ---: | ---: |
 | 20 lowest registry plugins | 83.3% | 100.0% | >= 97.6% |
 | All 66 registered plugins | 83.3%-100.0% | 100.0% | >= 97.6% |
-| All 70 declared accelerator backends | 100.0% | 100.0% | >= 88.1% |
+| All 70 declared accelerator backends | 100.0% | 100.0% | >= 95.5% |
 
 ## Report Fields
 

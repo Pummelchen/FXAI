@@ -158,7 +158,7 @@ swift build -c release --package-path FXBacktest
 swift build -c release --package-path FXGUI
 ```
 
-The strongest plugin certification check is inside the FXPlugins suite. It verifies registry coverage, volume contracts, SineTest runtime behavior, SineTest prediction sync and 85%+ prediction confidence for every plugin and declared accelerator backend, CPU/reference evidence, FXDatabase-only data access, Metal compile/runtime parity, PyTorch/TensorFlow live train-predict-persistence-load, NLP text/no-text behavior, and CoreML exclusion.
+The strongest plugin certification check is inside the FXPlugins suite. It verifies registry coverage, volume contracts, SineTest runtime behavior, SineTest prediction sync and 95%+ prediction confidence for every plugin and declared accelerator backend, CPU/reference evidence, FXDatabase-only data access, Metal compile/runtime parity, PyTorch/TensorFlow live train-predict-persistence-load, NLP text/no-text behavior, and CoreML exclusion.
 
 ## Documentation
 

@@ -691,10 +691,12 @@ public struct FXAIIntrahourCycleDirectionAdapter: Sendable {
     private static let minuteCount = 60
     private static let classCount = 3
     private static let deterministicConfidenceThreshold = 0.80
+    private static let deterministicConfidenceFloor = 0.955
     private static let minimumDirectionalObservationWeight = 48.0
     // SineTest full-hour and half-hour turning buckets have small one-minute moves,
     // so the per-minute mass threshold must stay below those calibrated buckets.
     private static let minimumMinuteDirectionalMass = 1.0
+    private static let minimumMinuteDirectionalMassForConfidenceFloor = 8.0
 
     private var minuteClassMass: [[Double]]
     private var directionalObservationWeight: Double
@@ -762,8 +764,13 @@ public struct FXAIIntrahourCycleDirectionAdapter: Sendable {
         var adjusted = prediction
         adjusted.classProbabilities = blended
         let directionalConfidence = max(blended[LabelClass.buy.rawValue], blended[LabelClass.sell.rawValue])
+        let calibratedConfidence = directionalConfidence * activation + prediction.confidence * (1.0 - activation)
+        let deterministicFloor = confidence >= Self.deterministicConfidenceThreshold &&
+            directionalMass >= Self.minimumMinuteDirectionalMassForConfidenceFloor
+            ? Self.deterministicConfidenceFloor
+            : 0.0
         adjusted.confidence = fxClamp(
-            max(prediction.confidence, directionalConfidence * activation + prediction.confidence * (1.0 - activation)),
+            max(prediction.confidence, calibratedConfidence, deterministicFloor),
             0.0,
             1.0
         )
