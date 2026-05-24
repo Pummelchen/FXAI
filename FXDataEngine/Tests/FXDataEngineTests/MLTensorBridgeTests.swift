@@ -183,6 +183,34 @@ else:
         }
     }
 
+    func testMLPayloadEnforcesSequenceWindowContract() throws {
+        var x = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
+        x[0] = 1.0
+        let missingWindow = MLInferencePayload(
+            modelIdentifier: "missing_window",
+            framework: .pyTorch,
+            dataHasVolume: false,
+            sequenceBars: 2,
+            x: x,
+            xWindow: []
+        )
+        XCTAssertThrowsError(try missingWindow.validateLatestAPI()) { error in
+            XCTAssertEqual(String(describing: error), "validation failed: mlPayload.xWindowPayload")
+        }
+
+        let oversizedWindow = MLInferencePayload(
+            modelIdentifier: "oversized_window",
+            framework: .pyTorch,
+            dataHasVolume: false,
+            sequenceBars: 2,
+            x: x,
+            xWindow: [x, x]
+        )
+        XCTAssertThrowsError(try oversizedWindow.validateLatestAPI()) { error in
+            XCTAssertEqual(String(describing: error), "validation failed: mlPayload.xWindowSequence")
+        }
+    }
+
     func testMLPayloadDecodingRequiresExplicitAPIVersion() {
         let json = """
         {

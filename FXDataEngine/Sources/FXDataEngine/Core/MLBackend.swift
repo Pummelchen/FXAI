@@ -138,8 +138,11 @@ public struct MLInferencePayload: Codable, Hashable, Sendable {
             throw FXDataEngineError.validation("mlPayload.minMovePoints")
         }
         try PredictRequestV4.validateInput(x)
-        guard xWindow.count <= FXDataEngineConstants.maxSequenceBars else {
-            throw FXDataEngineError.validation("mlPayload.xWindow")
+        guard xWindow.count <= max(sequenceBars - 1, 0) else {
+            throw FXDataEngineError.validation("mlPayload.xWindowSequence")
+        }
+        if sequenceBars > 1 {
+            guard !xWindow.isEmpty else { throw FXDataEngineError.validation("mlPayload.xWindowPayload") }
         }
         for row in xWindow {
             try PredictRequestV4.validateInput(row)

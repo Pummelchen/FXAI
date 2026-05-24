@@ -65,6 +65,7 @@ public struct FXDataEnginePipeline: Sendable {
             universe: universe,
             centerIndex: dataBundle.sampleIndex,
             sequenceBars: sequenceBars,
+            horizonMinutes: horizonMinutes,
             normalizationMethod: normalizationMethod,
             normalizationFitState: normalizationFitState,
             configuredHorizons: configuredHorizons
@@ -147,6 +148,7 @@ public struct FXDataEnginePipeline: Sendable {
             universe: universe,
             centerIndex: dataBundle.sampleIndex,
             sequenceBars: sequenceBars,
+            horizonMinutes: horizon,
             normalizationMethod: normalizationMethod,
             normalizationFitState: normalizationFitState,
             configuredHorizons: configuredHorizons
@@ -205,7 +207,7 @@ public struct FXDataEnginePipeline: Sendable {
             pathRisk: pathRisk,
             fillRisk: TrainingSampleTools.fillRisk(liquidityStressPoints: 0.0, minMovePoints: minMovePoints, costPoints: minMovePoints),
             maskedStepTarget: maskedStepTarget(series: primary, index: dataBundle.sampleIndex),
-            nextVolumeTarget: nextVolatilityTarget(series: primary, index: dataBundle.sampleIndex, horizonMinutes: horizon, fallback: abs(label.realizedMovePoints)),
+            nextVolumeTarget: nextVolumeTarget(series: primary, index: dataBundle.sampleIndex, horizonMinutes: horizon),
             regimeShiftTarget: regimeShiftTarget(series: primary, index: dataBundle.sampleIndex, horizonMinutes: horizon),
             contextLeadTarget: contextLeadTarget(bundle: dataBundle, movePoints: label.realizedMovePoints),
             pointValue: pointValue,
@@ -310,6 +312,7 @@ public struct FXDataEnginePipeline: Sendable {
         universe: MarketUniverse,
         centerIndex: Int,
         sequenceBars: Int,
+        horizonMinutes: Int = 1,
         normalizationMethod: FeatureNormalizationMethod,
         normalizationFitState: NormalizationFitState? = nil,
         configuredHorizons: [Int] = HorizonTools.defaultConfiguredHorizons
@@ -323,7 +326,7 @@ public struct FXDataEnginePipeline: Sendable {
             let featureFrame = FeatureCoreFrame(
                 valid: true,
                 sampleIndex: centerIndex - offset,
-                horizonMinutes: 1,
+                horizonMinutes: TrainingSampleTools.clampHorizon(horizonMinutes),
                 normalizationMethod: normalizationMethod,
                 sampleTimeUTC: universe.primary.utcTimestamps[centerIndex - offset],
                 hasVolume: FeatureCore.hasUsableVolume(universe),
@@ -422,23 +425,15 @@ public struct FXDataEnginePipeline: Sendable {
         return TrainingSampleTools.movePoints(from: series.close[index], to: series.close[index + 1])
     }
 
-    private func nextVolatilityTarget(
+    private func nextVolumeTarget(
         series: M1OHLCVSeries,
         index: Int,
-        horizonMinutes: Int,
-        fallback: Double
+        horizonMinutes: Int
     ) -> Double {
-        let auxHorizon = min(max(1, horizonMinutes), 8)
-        guard index >= 0, index + 1 < series.count else { return abs(fallback) }
-        var sum = 0.0
-        var count = 0
-        for step in 1...auxHorizon {
-            let futureIndex = index + step
-            guard futureIndex < series.count else { break }
-            sum += abs(TrainingSampleTools.movePoints(from: series.close[index], to: series.close[futureIndex]))
-            count += 1
-        }
-        return count > 0 ? sum / Double(count) : abs(fallback)
+        guard series.hasVolume, index >= 0, index + 1 < series.count else { return 0.0 }
+        let targetIndex = min(index + TrainingSampleTools.clampHorizon(horizonMinutes), series.count - 1)
+        guard targetIndex > index else { return 0.0 }
+        return Double(series.volume[targetIndex])
     }
 
     private func regimeShiftTarget(series: M1OHLCVSeries, index: Int, horizonMinutes: Int) -> Double {

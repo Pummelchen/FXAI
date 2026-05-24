@@ -122,6 +122,28 @@ final class PluginContextPayloadTests: XCTestCase {
         XCTAssertEqual(decoded.tokenizerContract, context.tokenizerContract)
     }
 
+    func testSanitizedContextPreservesNLPEventPayload() throws {
+        let event = PluginTextEventV4(
+            eventTimeUTC: 1_800_000_000,
+            source: "calendar",
+            headline: "EUR inflation surprise reprices ECB path",
+            body: "Core CPI beat consensus before London open.",
+            importance: 0.9,
+            symbols: ["EURUSD"]
+        )
+        let context = PluginContextV4(
+            horizonMinutes: 30,
+            tokenizerContract: PluginTokenizerContractV4(minNGram: 1, maxNGram: 2),
+            textEvents: [event]
+        )
+
+        let state = PluginContextPayloadState(context: context)
+
+        XCTAssertEqual(state.context.tokenizerContract, context.tokenizerContract)
+        XCTAssertEqual(state.context.textEvents, context.textEvents)
+        try state.context.validate()
+    }
+
     func testSharedAdapterInputDelegatesToTransferPayloadBuilder() {
         var features = Array(repeating: 0.0, count: FXDataEngineConstants.aiFeatures)
         setFeature(&features, 62, 0.25)

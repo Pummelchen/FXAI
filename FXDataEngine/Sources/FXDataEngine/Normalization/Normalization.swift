@@ -118,10 +118,16 @@ public struct NormalizationCore: Sendable {
         guard request.valid else {
             throw FXDataEngineError.invalidRequest("payload request is not valid")
         }
+        guard request.windowSize <= max(request.sequenceBars - 1, 0) else {
+            throw FXDataEngineError.validation("payload.windowSizeContext")
+        }
+        guard request.xWindow.count == request.windowSize else {
+            throw FXDataEngineError.validation("payload.windowSizePayload")
+        }
 
         let sanitizedX = sanitizeInputVector(request.x)
         let maskedX = schemaPolicy.apply(schema: request.featureSchema, groups: request.featureGroups, to: sanitizedX)
-        let trimmedWindow = Array(request.xWindow.prefix(request.windowSize))
+        let payloadWindow = request.xWindow
             .map { schemaPolicy.apply(schema: request.featureSchema, groups: request.featureGroups, to: sanitizeInputVector($0)) }
         return NormalizationPayloadFrame(
             valid: true,
@@ -131,9 +137,9 @@ public struct NormalizationCore: Sendable {
             horizonMinutes: request.horizonMinutes,
             sequenceBars: request.sequenceBars,
             sampleTimeUTC: request.sampleTimeUTC,
-            windowSize: trimmedWindow.count,
+            windowSize: payloadWindow.count,
             x: maskedX,
-            xWindow: trimmedWindow
+            xWindow: payloadWindow
         )
     }
 

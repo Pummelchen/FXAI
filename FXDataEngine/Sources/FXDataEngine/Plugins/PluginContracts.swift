@@ -436,10 +436,13 @@ public struct PredictRequestV4: Sendable {
         guard windowSize <= max(context.sequenceBars - 1, 0) else {
             throw FXDataEngineError.validation("req.windowSizeContext")
         }
+        guard window.count == windowSize else {
+            throw FXDataEngineError.validation("req.windowSizePayload")
+        }
         if context.sequenceBars > 1 {
             guard windowSize > 0 else { throw FXDataEngineError.validation("req.windowPayload") }
         }
-        for row in window.prefix(windowSize) {
+        for row in window {
             try validateInput(row)
         }
     }

@@ -80,6 +80,46 @@ final class PluginContractTests: XCTestCase {
         XCTAssertThrowsError(try invalid.validate())
     }
 
+    func testPluginWindowValidationRequiresExactPayloadRowCount() throws {
+        let x = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
+        let context = PluginContextV4(sequenceBars: 3, dataHasVolume: true)
+
+        let missingRow = PredictRequestV4(valid: true, context: context, windowSize: 2, x: x, xWindow: [x])
+        XCTAssertThrowsError(try missingRow.validate()) { error in
+            XCTAssertEqual(String(describing: error), "validation failed: req.windowSizePayload")
+        }
+
+        let extraRow = PredictRequestV4(valid: true, context: context, windowSize: 1, x: x, xWindow: [x, x])
+        XCTAssertThrowsError(try extraRow.validate()) { error in
+            XCTAssertEqual(String(describing: error), "validation failed: req.windowSizePayload")
+        }
+    }
+
+    func testPayloadBuilderRejectsWindowOutsideSequenceContract() throws {
+        let x = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
+        let normalization = NormalizationCore()
+
+        XCTAssertThrowsError(try normalization.buildPayloadFrame(NormalizationPayloadRequest(
+            valid: true,
+            sequenceBars: 2,
+            windowSize: 2,
+            x: x,
+            xWindow: [x, x]
+        ))) { error in
+            XCTAssertEqual(String(describing: error), "validation failed: payload.windowSizeContext")
+        }
+
+        XCTAssertThrowsError(try normalization.buildPayloadFrame(NormalizationPayloadRequest(
+            valid: true,
+            sequenceBars: 3,
+            windowSize: 2,
+            x: x,
+            xWindow: [x]
+        ))) { error in
+            XCTAssertEqual(String(describing: error), "validation failed: payload.windowSizePayload")
+        }
+    }
+
     func testManifestContextCompatibilityMatchesLegacyWindowRules() throws {
         let x = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
         let stateless = PluginManifestV4(

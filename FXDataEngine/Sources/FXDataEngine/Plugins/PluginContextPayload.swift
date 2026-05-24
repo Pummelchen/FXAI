@@ -144,7 +144,9 @@ public enum PluginContextPayloadTools {
             pointValue: resolvedPointValue(context.pointValue, fallback: pointValueFallback),
             domainHash: domainHash,
             sampleTimeUTC: sampleTimeUTC,
-            dataHasVolume: context.dataHasVolume
+            dataHasVolume: context.dataHasVolume,
+            tokenizerContract: context.tokenizerContract,
+            textEvents: context.textEvents
         )
     }
 

@@ -245,6 +245,88 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(request.fillRisk, 0.0)
     }
 
+    func testTrainPayloadUsesFutureVolumeAsVolumeTarget() throws {
+        let series = try makeBreakoutSeries(symbol: "EURUSD", count: 110, breakoutIndex: 62)
+        let universe = try MarketUniverse(primarySymbol: "EURUSD", series: [series])
+        let manifest = PluginManifestV4(
+            aiID: 7,
+            aiName: "VolumeTarget",
+            family: .linear,
+            capabilityMask: [.selfTest]
+        )
+        let payload = try FXDataEnginePipeline().prepareTrainPayload(
+            universe: universe,
+            request: DataCoreRequest(symbol: "EURUSD", neededBars: 50, alignUpToIndex: 60),
+            manifest: manifest,
+            horizonMinutes: 5
+        )
+
+        XCTAssertEqual(payload.sample.nextVolumeTarget, Double(series.volume[65]), accuracy: 0.0)
+        XCTAssertEqual(payload.trainRequest.nextVolumeTarget, Double(series.volume[65]), accuracy: 0.0)
+    }
+
+    func testTrainPayloadZerosVolumeTargetWhenSeriesHasNoVolume() throws {
+        let series = try makeSeries(volumeEnabled: false, count: 110)
+        let universe = try MarketUniverse(primarySymbol: "EURUSD", series: [series])
+        let manifest = PluginManifestV4(
+            aiID: 7,
+            aiName: "NoVolumeTarget",
+            family: .linear,
+            capabilityMask: [.selfTest]
+        )
+        let payload = try FXDataEnginePipeline().prepareTrainPayload(
+            universe: universe,
+            request: DataCoreRequest(symbol: "EURUSD", neededBars: 50, alignUpToIndex: 60),
+            manifest: manifest,
+            horizonMinutes: 5
+        )
+
+        XCTAssertFalse(payload.context.dataHasVolume)
+        XCTAssertEqual(payload.sample.nextVolumeTarget, 0.0, accuracy: 0.0)
+    }
+
+    func testInputWindowUsesRequestedHorizonForFittedNormalization() throws {
+        let series = try makeCurvedSeries(symbol: "EURUSD", count: 180)
+        let universe = try MarketUniverse(primarySymbol: "EURUSD", series: [series])
+        let featureCore = FeatureCore()
+        let normalizationCore = NormalizationCore()
+        var fitState = NormalizationFitState()
+        let rawRows = (80..<100).map { featureCore.buildFeatureVector(universe: universe, sampleIndex: $0) }
+        XCTAssertTrue(fitState.fit(method: .zScore, horizonMinutes: 5, rawRows: rawRows))
+
+        let window = FXDataEnginePipeline(
+            featureCore: featureCore,
+            normalizationCore: normalizationCore
+        ).buildInputWindow(
+            universe: universe,
+            centerIndex: 120,
+            sequenceBars: 4,
+            horizonMinutes: 5,
+            normalizationMethod: .zScore,
+            normalizationFitState: fitState
+        )
+
+        let expectedIndex = 117
+        let expectedFrame = FeatureCoreFrame(
+            valid: true,
+            sampleIndex: expectedIndex,
+            horizonMinutes: 5,
+            normalizationMethod: .zScore,
+            sampleTimeUTC: series.utcTimestamps[expectedIndex],
+            hasVolume: FeatureCore.hasUsableVolume(universe),
+            hasPrevious: true,
+            raw: featureCore.buildFeatureVector(universe: universe, sampleIndex: expectedIndex),
+            previous: featureCore.buildFeatureVector(universe: universe, sampleIndex: expectedIndex - 1)
+        )
+        let expected = try normalizationCore.buildInputFrame(from: expectedFrame, fitState: fitState).modelInput
+
+        XCTAssertEqual(window.count, 3)
+        XCTAssertEqual(window[0].count, expected.count)
+        for featureIndex in 0..<expected.count {
+            XCTAssertEqual(window[0][featureIndex], expected[featureIndex], accuracy: 1e-12)
+        }
+    }
+
     func testPipelineBuildsTrainingDatasetAcrossIndexRange() throws {
         let series = try makeBreakoutSeries(symbol: "EURUSD", count: 130, breakoutIndex: 80)
         let universe = try MarketUniverse(primarySymbol: "EURUSD", series: [series])
