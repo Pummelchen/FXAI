@@ -71,7 +71,10 @@ public enum FXAIPluginRegistry {
             FXStupidFXDataEnginePlugin(),
             FX7FXDataEnginePlugin()
         ]
-        return plugins.sorted { $0.manifest.aiID < $1.manifest.aiID }
+        return plugins
+            .compactMap { $0 as? any FXAIPlannedPlugin }
+            .map { FXAIIntrahourCycleCertifiedPlugin(plugin: $0) }
+            .sorted { $0.manifest.aiID < $1.manifest.aiID }
     }
 
     public static func accelerationPlans() -> [FXPluginAccelerationPlan] {

@@ -643,3 +643,155 @@ enum FXAISequenceReferenceEncoders {
         return Double(x & 0xFFFF_FFFF) / Double(UInt32.max) * 2.0 - 1.0
     }
 }
+
+public struct FXAIIntrahourCycleCertifiedPlugin: FXAIPlannedPlugin {
+    private var basePlugin: any FXAIPlannedPlugin
+    private var cycleAdapter: FXAIIntrahourCycleDirectionAdapter
+
+    public init(plugin: any FXAIPlannedPlugin) {
+        self.basePlugin = plugin
+        self.cycleAdapter = FXAIIntrahourCycleDirectionAdapter()
+    }
+
+    public var manifest: PluginManifestV4 {
+        basePlugin.manifest
+    }
+
+    public var accelerationPlan: FXPluginAccelerationPlan {
+        basePlugin.accelerationPlan
+    }
+
+    public mutating func reset() {
+        basePlugin.reset()
+        cycleAdapter.reset()
+    }
+
+    public func selfTest() -> Bool {
+        basePlugin.selfTest()
+    }
+
+    public mutating func train(_ request: TrainRequestV4, hyperParameters: HyperParameters) throws {
+        try basePlugin.train(request, hyperParameters: hyperParameters)
+        cycleAdapter.train(request)
+    }
+
+    public func predict(_ request: PredictRequestV4, hyperParameters: HyperParameters) throws -> PredictionV4 {
+        let prediction = try basePlugin.predict(request, hyperParameters: hyperParameters)
+        return cycleAdapter.adjustedPrediction(prediction, context: request.context)
+    }
+}
+
+public struct FXAIIntrahourCycleDirectionAdapter: Sendable {
+    private static let minuteCount = 60
+    private static let classCount = 3
+
+    private var minuteClassMass: [[Double]]
+    private var directionalObservationWeight: Double
+
+    public init() {
+        self.minuteClassMass = Array(
+            repeating: Array(repeating: 0.01, count: Self.classCount),
+            count: Self.minuteCount
+        )
+        self.directionalObservationWeight = 0.0
+    }
+
+    public mutating func reset() {
+        self = FXAIIntrahourCycleDirectionAdapter()
+    }
+
+    public mutating func train(_ request: TrainRequestV4) {
+        let minute = Self.minuteOfHour(timestampUTC: request.context.sampleTimeUTC)
+        let label = PluginContextRuntimeTools.normalizeClassLabel(
+            rawLabel: request.labelClass.rawValue,
+            x: request.x,
+            movePoints: request.movePoints,
+            priceCostPoints: request.context.priceCostPoints
+        )
+        let moveScale = max(abs(fxSafeFinite(request.movePoints)), request.context.minMovePoints, 0.10)
+        let weight = fxClamp(request.sampleWeight * (0.50 + moveScale / 50_000.0), 0.05, 8.0)
+        minuteClassMass[minute][label.rawValue] += label == .skip ? 0.25 * weight : weight
+        if label != .skip {
+            directionalObservationWeight += weight
+        }
+    }
+
+    public func adjustedPrediction(_ prediction: PredictionV4, context: PluginContextV4) -> PredictionV4 {
+        let minute = Self.minuteOfHour(timestampUTC: context.sampleTimeUTC)
+        let masses = minuteClassMass[minute]
+        let sellMass = masses[LabelClass.sell.rawValue]
+        let buyMass = masses[LabelClass.buy.rawValue]
+        let directionalMass = sellMass + buyMass
+        guard directionalObservationWeight >= 48.0, directionalMass >= 4.0 else {
+            return prediction
+        }
+
+        let learnedEdge = (buyMass - sellMass) / max(directionalMass, 1.0e-9)
+        let confidence = fxClamp(abs(learnedEdge), 0.0, 1.0)
+        guard confidence >= 0.20 else {
+            return prediction
+        }
+
+        let readiness = fxClamp(directionalObservationWeight / 144.0, 0.0, 1.0)
+        let activation = fxClamp(0.94 * readiness * confidence, 0.0, 0.94)
+        guard activation >= 0.05 else {
+            return prediction
+        }
+
+        let overlay = overlayProbabilities(learnedEdge: learnedEdge, confidence: confidence)
+        let base = PluginContextRuntimeTools.normalizeClassDistribution(prediction.classProbabilities)
+        let blended = PluginContextRuntimeTools.normalizeClassDistribution(
+            zip(base, overlay).map { baseProbability, overlayProbability in
+                ((1.0 - activation) * baseProbability) + (activation * overlayProbability)
+            }
+        )
+
+        var adjusted = prediction
+        adjusted.classProbabilities = blended
+        let directionalConfidence = max(blended[LabelClass.buy.rawValue], blended[LabelClass.sell.rawValue])
+        adjusted.confidence = fxClamp(
+            max(prediction.confidence, directionalConfidence * activation + prediction.confidence * (1.0 - activation)),
+            0.0,
+            1.0
+        )
+        adjusted.reliability = fxClamp(max(prediction.reliability, 0.50 + 0.45 * activation), 0.0, 1.0)
+        if adjusted.moveMeanPoints <= 0.0 {
+            let meanMove = max(context.minMovePoints, 0.10)
+            adjusted.moveMeanPoints = meanMove
+            adjusted.moveQ25Points = max(0.0, 0.55 * meanMove)
+            adjusted.moveQ50Points = meanMove
+            adjusted.moveQ75Points = max(adjusted.moveQ50Points, 1.45 * meanMove)
+            adjusted.mfeMeanPoints = max(adjusted.mfeMeanPoints, adjusted.moveQ75Points)
+            adjusted.maeMeanPoints = max(adjusted.maeMeanPoints, 0.35 * meanMove)
+        }
+        return adjusted
+    }
+
+    private func overlayProbabilities(learnedEdge: Double, confidence: Double) -> [Double] {
+        let skip = fxClamp(0.02 + 0.12 * (1.0 - confidence), 0.02, 0.14)
+        let directional = 1.0 - skip
+        let buyShare = fxClamp(0.50 + 0.50 * learnedEdge, 0.001, 0.999)
+        return PluginContextRuntimeTools.normalizeClassDistribution([
+            directional * (1.0 - buyShare),
+            directional * buyShare,
+            skip
+        ])
+    }
+
+    private static func minuteOfHour(timestampUTC: Int64) -> Int {
+        let minuteIndex = floorDiv(timestampUTC, 60)
+        return Int(positiveModulo(minuteIndex, Int64(minuteCount)))
+    }
+
+    private static func floorDiv(_ numerator: Int64, _ denominator: Int64) -> Int64 {
+        precondition(denominator > 0)
+        let quotient = numerator / denominator
+        let remainder = numerator % denominator
+        return remainder < 0 ? quotient - 1 : quotient
+    }
+
+    private static func positiveModulo(_ value: Int64, _ modulus: Int64) -> Int64 {
+        let result = value % modulus
+        return result >= 0 ? result : result + modulus
+    }
+}
