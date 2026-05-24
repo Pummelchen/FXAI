@@ -166,6 +166,66 @@ else:
         try bridge.trainSynchronously(MLTrainingPayload(inference: payload, request: trainRequest))
     }
 
+    func testPythonMLBackendBridgeReportsConfigurationErrorsWithoutLaunchingProcess() {
+        var x = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
+        x[0] = 1.0
+        let unsupportedFrameworkPayload = MLInferencePayload(
+            modelIdentifier: "bad_bridge",
+            framework: .metal,
+            dataHasVolume: false,
+            x: x,
+            xWindow: []
+        )
+        let unsupportedFrameworkBridge = PythonMLBackendBridge(
+            framework: .metal,
+            executable: "python3",
+            module: "/tmp/fxai-backend-that-must-not-run.py",
+            modelIdentifier: "bad_bridge"
+        )
+
+        XCTAssertThrowsError(try unsupportedFrameworkBridge.predictSynchronously(unsupportedFrameworkPayload)) { error in
+            XCTAssertEqual(
+                String(describing: error),
+                "external backend failed: Python bridge does not support metal; use pyTorch, tensorFlow, or foundationNLP"
+            )
+        }
+
+        let emptyExecutableBridge = PythonMLBackendBridge(
+            framework: .pyTorch,
+            executable: "  ",
+            module: "/tmp/fxai-backend-that-must-not-run.py",
+            modelIdentifier: "bad_bridge"
+        )
+        let payload = MLInferencePayload(
+            modelIdentifier: "bad_bridge",
+            framework: .pyTorch,
+            dataHasVolume: false,
+            x: x,
+            xWindow: []
+        )
+
+        XCTAssertThrowsError(try emptyExecutableBridge.predictSynchronously(payload)) { error in
+            XCTAssertEqual(
+                String(describing: error),
+                "external backend failed: Python bridge executable must not be empty"
+            )
+        }
+
+        let emptyModuleBridge = PythonMLBackendBridge(
+            framework: .pyTorch,
+            executable: "python3",
+            module: "\n\t",
+            modelIdentifier: "bad_bridge"
+        )
+
+        XCTAssertThrowsError(try emptyModuleBridge.predictSynchronously(payload)) { error in
+            XCTAssertEqual(
+                String(describing: error),
+                "external backend failed: Python bridge module must not be empty"
+            )
+        }
+    }
+
     func testMLPayloadRequiresLatestAPIVersion() throws {
         var x = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
         x[0] = 1.0

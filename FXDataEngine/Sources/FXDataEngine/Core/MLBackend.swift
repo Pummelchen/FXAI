@@ -335,6 +335,7 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
     private let executable: String
     private let module: String
     private let environment: [String: String]
+    private let configurationError: FXDataEngineError?
 
     public init(
         framework: MLFramework,
@@ -343,13 +344,14 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
         modelIdentifier: String,
         environment: [String: String] = [:]
     ) {
-        precondition(
-            framework == .pyTorch || framework == .tensorFlow || framework == .foundationNLP,
-            "Python bridge supports PyTorch, TensorFlow, or Foundation NLP"
-        )
         self.executable = executable
         self.module = module
         self.environment = environment
+        self.configurationError = Self.configurationError(
+            framework: framework,
+            executable: executable,
+            module: module
+        )
         self.descriptor = MLBackendDescriptor(
             mode: .externalPython(framework: framework, executable: executable, module: module),
             modelIdentifier: modelIdentifier
@@ -357,6 +359,7 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
     }
 
     public func predict(_ payload: MLInferencePayload) async throws -> PredictionV4 {
+        try validateConfiguration()
         try payload.validateLatestAPI()
         let command = PythonMLBackendCommand(operation: "predict", inference: payload, training: nil)
         let response = try await run(command)
@@ -375,6 +378,7 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
     }
 
     public func train(_ payload: MLTrainingPayload) async throws {
+        try validateConfiguration()
         try payload.validateLatestAPI()
         let command = PythonMLBackendCommand(operation: "train", inference: nil, training: payload)
         let response = try await run(command)
@@ -388,6 +392,7 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
     }
 
     public func predictSynchronously(_ payload: MLInferencePayload) throws -> PredictionV4 {
+        try validateConfiguration()
         try payload.validateLatestAPI()
         let command = PythonMLBackendCommand(operation: "predict", inference: payload, training: nil)
         let response = try runSynchronously(command)
@@ -406,6 +411,7 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
     }
 
     public func trainSynchronously(_ payload: MLTrainingPayload) throws {
+        try validateConfiguration()
         try payload.validateLatestAPI()
         let command = PythonMLBackendCommand(operation: "train", inference: nil, training: payload)
         let response = try runSynchronously(command)
@@ -416,6 +422,31 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
         if let error = response.error {
             throw FXDataEngineError.externalBackend(error)
         }
+    }
+
+    private func validateConfiguration() throws {
+        if let configurationError {
+            throw configurationError
+        }
+    }
+
+    private static func configurationError(
+        framework: MLFramework,
+        executable: String,
+        module: String
+    ) -> FXDataEngineError? {
+        guard framework == .pyTorch || framework == .tensorFlow || framework == .foundationNLP else {
+            return .externalBackend(
+                "Python bridge does not support \(framework.rawValue); use pyTorch, tensorFlow, or foundationNLP"
+            )
+        }
+        guard !executable.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .externalBackend("Python bridge executable must not be empty")
+        }
+        guard !module.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .externalBackend("Python bridge module must not be empty")
+        }
+        return nil
     }
 
     private func run(_ command: PythonMLBackendCommand) async throws -> PythonMLBackendResponse {
