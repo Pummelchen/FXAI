@@ -78,6 +78,7 @@ public struct YahooFinanceHistoryConnector: FXImporterConnector {
 
     public func fetchM1History(_ request: FXImporterM1HistoryRequest) async throws -> FXImporterM1Batch {
         try validateLatestAPI()
+        try request.validateLatestAPI()
         throw YahooFinanceHistoryConnectorError.m1HistoryUnsupported
     }
 
@@ -203,6 +204,7 @@ public struct YahooFinanceHistoryConnector: FXImporterConnector {
     }
 
     private static func validate(_ request: FXImporterD1HistoryRequest) throws {
+        try request.validateLatestAPI()
         guard !request.sourceSymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw YahooFinanceHistoryConnectorError.invalidRequest("sourceSymbol is empty")
         }

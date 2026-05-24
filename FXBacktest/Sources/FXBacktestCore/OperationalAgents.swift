@@ -32,6 +32,16 @@ public struct FXDatabaseConnectivityAgent: Sendable {
                     startedAtUtc: started
                 )
             }
+            do {
+                try response.validate()
+            } catch {
+                return Self.descriptor.outcome(
+                    status: .failed,
+                    message: "FXDatabase API status response failed contract validation: \(error).",
+                    details: ["service=\(response.service)", "api_version=\(response.apiVersion)"],
+                    startedAtUtc: started
+                )
+            }
             guard response.status.lowercased() == "ok" else {
                 return Self.descriptor.outcome(
                     status: .failed,

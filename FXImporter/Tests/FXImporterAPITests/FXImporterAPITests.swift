@@ -62,6 +62,52 @@ final class FXImporterAPITests: XCTestCase {
         }
     }
 
+    func testHistoryRequestsAndBatchesCarryLatestAPIVersion() throws {
+        let m1Request = FXImporterM1HistoryRequest(
+            sourceSymbol: "EURUSD",
+            fromSourceTimestamp: 1_704_067_200,
+            toSourceTimestampExclusive: 1_704_067_260,
+            maxBars: 1
+        )
+        let d1Request = FXImporterD1HistoryRequest(
+            sourceSymbol: "AAPL",
+            fromSourceTimestamp: 1_704_067_200,
+            toSourceTimestampExclusive: 1_704_153_600,
+            maxBars: 1
+        )
+
+        XCTAssertEqual(m1Request.apiVersion, FXImporterAPIV1.latestVersion)
+        XCTAssertEqual(d1Request.apiVersion, FXImporterAPIV1.latestVersion)
+        XCTAssertNoThrow(try m1Request.validateLatestAPI())
+        XCTAssertNoThrow(try d1Request.validateLatestAPI())
+        XCTAssertNoThrow(try FXImporterM1Batch(request: m1Request, bars: [], sourceComplete: true).validateLatestAPI())
+        XCTAssertNoThrow(try FXImporterD1Batch(request: d1Request, bars: [], sourceComplete: true).validateLatestAPI())
+    }
+
+    func testHistoryRequestsRejectStaleAPIVersion() {
+        let staleM1 = FXImporterM1HistoryRequest(
+            apiVersion: "fximporter.connector.v0",
+            sourceSymbol: "EURUSD",
+            fromSourceTimestamp: 1_704_067_200,
+            toSourceTimestampExclusive: 1_704_067_260,
+            maxBars: 1
+        )
+        let staleD1 = FXImporterD1HistoryRequest(
+            apiVersion: "fximporter.connector.v0",
+            sourceSymbol: "AAPL",
+            fromSourceTimestamp: 1_704_067_200,
+            toSourceTimestampExclusive: 1_704_153_600,
+            maxBars: 1
+        )
+
+        XCTAssertThrowsError(try staleM1.validateLatestAPI()) { error in
+            XCTAssertTrue(String(describing: error).contains(FXImporterAPIV1.latestVersion))
+        }
+        XCTAssertThrowsError(try staleD1.validateLatestAPI()) { error in
+            XCTAssertTrue(String(describing: error).contains(FXImporterAPIV1.latestVersion))
+        }
+    }
+
     func testD1BarKeepsAdjustedCloseAndVolumeForDailyHistoryProviders() {
         let bar = FXImporterD1Bar(
             sourceSymbol: "AAPL",

@@ -17,9 +17,7 @@ public struct FXBacktestAPIClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let data = try await perform(request)
         let response = try JSONDecoder().decode(FXBacktestAPIStatusResponse.self, from: data)
-        guard response.apiVersion == FXBacktestAPIV1.latestVersion else {
-            throw FXBacktestAPIClientError.apiVersionMismatch(response.apiVersion)
-        }
+        try validateResponse(response)
         return response
     }
 
@@ -34,49 +32,49 @@ public struct FXBacktestAPIClient: Sendable {
         let request = FXBacktestResultSchemaRequest()
         try request.validate()
         let response: FXBacktestResultMutationResponse = try await post(request, to: FXBacktestAPIV1.resultSchemaPath)
-        try validateAPIVersion(response.apiVersion)
+        try validateResponse(response)
         return response
     }
 
     public func startBacktestRun(_ run: FXBacktestResultRunStartRequest) async throws -> FXBacktestResultMutationResponse {
         try run.validate()
         let response: FXBacktestResultMutationResponse = try await post(run, to: FXBacktestAPIV1.resultRunStartPath)
-        try validateAPIVersion(response.apiVersion)
+        try validateResponse(response)
         return response
     }
 
     public func appendBacktestResults(_ results: FXBacktestResultPassAppendRequest) async throws -> FXBacktestResultMutationResponse {
         try results.validate()
         let response: FXBacktestResultMutationResponse = try await post(results, to: FXBacktestAPIV1.resultPassAppendPath)
-        try validateAPIVersion(response.apiVersion)
+        try validateResponse(response)
         return response
     }
 
     public func completeBacktestRun(_ completion: FXBacktestResultRunCompleteRequest) async throws -> FXBacktestResultMutationResponse {
         try completion.validate()
         let response: FXBacktestResultMutationResponse = try await post(completion, to: FXBacktestAPIV1.resultRunCompletePath)
-        try validateAPIVersion(response.apiVersion)
+        try validateResponse(response)
         return response
     }
 
     public func purgeBacktestResults(_ purge: FXBacktestResultPurgeRequest) async throws -> FXBacktestResultPurgeResponse {
         try purge.validate()
         let response: FXBacktestResultPurgeResponse = try await post(purge, to: FXBacktestAPIV1.resultPurgePath)
-        try validateAPIVersion(response.apiVersion)
+        try validateResponse(response)
         return response
     }
 
     public func getBacktestRun(_ run: FXBacktestResultRunGetRequest) async throws -> FXBacktestResultRunGetResponse {
         try run.validate()
         let response: FXBacktestResultRunGetResponse = try await post(run, to: FXBacktestAPIV1.resultRunGetPath)
-        try validateAPIVersion(response.apiVersion)
+        try validateResponse(response)
         return response
     }
 
     public func getBacktestPasses(_ passes: FXBacktestResultPassesGetRequest) async throws -> FXBacktestResultPassesGetResponse {
         try passes.validate()
         let response: FXBacktestResultPassesGetResponse = try await post(passes, to: FXBacktestAPIV1.resultPassesGetPath)
-        try validateAPIVersion(response.apiVersion)
+        try validateResponse(response)
         return response
     }
 
@@ -102,9 +100,40 @@ public struct FXBacktestAPIClient: Sendable {
         return try JSONDecoder().decode(Response.self, from: data)
     }
 
-    private func validateAPIVersion(_ apiVersion: String) throws {
-        guard apiVersion == FXBacktestAPIV1.latestVersion else {
-            throw FXBacktestAPIClientError.apiVersionMismatch(apiVersion)
+    private func validateResponse(_ response: FXBacktestAPIStatusResponse) throws {
+        try mapValidationError { try response.validate() }
+    }
+
+    private func validateResponse(_ response: FXBacktestResultMutationResponse) throws {
+        try mapValidationError { try response.validate() }
+    }
+
+    private func validateResponse(_ response: FXBacktestResultPurgeResponse) throws {
+        try mapValidationError { try response.validate() }
+    }
+
+    private func validateResponse(_ response: FXBacktestResultRunGetResponse) throws {
+        try mapValidationError { try response.validate() }
+    }
+
+    private func validateResponse(_ response: FXBacktestResultPassesGetResponse) throws {
+        try mapValidationError { try response.validate() }
+    }
+
+    private func validateErrorResponse(_ response: FXBacktestAPIErrorResponse) throws {
+        try mapValidationError { try response.validate() }
+    }
+
+    private func mapValidationError(_ body: () throws -> Void) throws {
+        do {
+            try body()
+        } catch let error as FXBacktestAPIValidationError {
+            switch error {
+            case .unsupportedVersion(let version):
+                throw FXBacktestAPIClientError.apiVersionMismatch(version)
+            case .invalidField(let reason):
+                throw FXBacktestAPIClientError.invalidResponse(reason)
+            }
         }
     }
 
@@ -132,6 +161,7 @@ public struct FXBacktestAPIClient: Sendable {
                     : "\(body) (could not decode FXDatabase API error response: \(error))"
                 throw FXBacktestAPIClientError.httpStatus(httpResponse.statusCode, detail)
             }
+            try validateErrorResponse(errorResponse)
             throw FXBacktestAPIClientError.server(code: errorResponse.error.code, message: errorResponse.error.message)
         }
         return data

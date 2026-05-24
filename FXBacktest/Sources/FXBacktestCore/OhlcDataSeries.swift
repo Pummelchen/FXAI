@@ -3,6 +3,7 @@ import FXBacktestAPI
 
 public struct FXBacktestMarketMetadata: Hashable, Sendable {
     public let brokerSourceId: String
+    public let sourceOrigin: String
     public let logicalSymbol: String
     public let mt5Symbol: String?
     public let timeframe: String
@@ -12,6 +13,7 @@ public struct FXBacktestMarketMetadata: Hashable, Sendable {
 
     public init(
         brokerSourceId: String,
+        sourceOrigin: String = "MT5",
         logicalSymbol: String,
         mt5Symbol: String? = nil,
         timeframe: String = "M1",
@@ -19,9 +21,11 @@ public struct FXBacktestMarketMetadata: Hashable, Sendable {
         firstUtc: Int64? = nil,
         lastUtc: Int64? = nil
     ) {
-        self.brokerSourceId = brokerSourceId
-        self.logicalSymbol = logicalSymbol
-        self.mt5Symbol = mt5Symbol
+        self.brokerSourceId = brokerSourceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.sourceOrigin = sourceOrigin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        self.logicalSymbol = logicalSymbol.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let trimmedMT5Symbol = mt5Symbol?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.mt5Symbol = trimmedMT5Symbol?.isEmpty == true ? nil : trimmedMT5Symbol
         self.timeframe = timeframe
         self.digits = digits
         self.firstUtc = firstUtc
@@ -72,6 +76,15 @@ public struct OhlcDataSeries: Sendable {
         guard (0...10).contains(metadata.digits) else {
             throw FXBacktestError.invalidMarketData("Price digits must be in 0...10.")
         }
+        guard !metadata.brokerSourceId.isEmpty else {
+            throw FXBacktestError.invalidMarketData("Broker source id must not be empty.")
+        }
+        guard !metadata.sourceOrigin.isEmpty, metadata.sourceOrigin == metadata.sourceOrigin.uppercased() else {
+            throw FXBacktestError.invalidMarketData("Source origin must be non-empty uppercase text.")
+        }
+        guard !metadata.logicalSymbol.isEmpty else {
+            throw FXBacktestError.invalidMarketData("Logical symbol must not be empty.")
+        }
         let rowCount = utcTimestamps.count
         guard open.count == rowCount, high.count == rowCount, low.count == rowCount, close.count == rowCount else {
             throw FXBacktestError.invalidMarketData("OHLC columns must have equal length.")
@@ -113,6 +126,7 @@ public struct OhlcDataSeries: Sendable {
         try self.init(
             metadata: FXBacktestMarketMetadata(
                 brokerSourceId: response.metadata.brokerSourceId,
+                sourceOrigin: response.metadata.sourceOrigin,
                 logicalSymbol: response.metadata.logicalSymbol,
                 mt5Symbol: response.metadata.mt5Symbol,
                 timeframe: response.metadata.timeframe,
@@ -179,6 +193,7 @@ public extension OhlcDataSeries {
         return try OhlcDataSeries(
             metadata: FXBacktestMarketMetadata(
                 brokerSourceId: "demo",
+                sourceOrigin: "DEMO",
                 logicalSymbol: "EURUSD",
                 mt5Symbol: "EURUSD",
                 digits: 5,

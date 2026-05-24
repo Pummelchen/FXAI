@@ -9,6 +9,106 @@ import libsql
 
 from .common import *
 
+FXDATABASE_FXBACKTEST_API_VERSION = "fxdatabase.fxbacktest.v1"
+FXDATABASE_M1_HISTORY_PATH = "/v1/history/m1"
+
+
+def _required_int(payload: dict, key: str) -> int:
+    try:
+        return _coerce_int(payload[key], key)
+    except KeyError as exc:
+        raise OfflineLabError(f"FXDatabase API response field {key} must be an integer") from exc
+
+
+def _coerce_int(value: object, field: str) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise OfflineLabError(f"FXDatabase API response field {field} must be an integer") from exc
+
+
+def _normalize_fxdatabase_source_origin(value: str) -> str:
+    normalized = str(value or "").strip().upper()
+    if not normalized:
+        raise OfflineLabError("FXDatabase source_origin must not be empty")
+    if not all(("A" <= char <= "Z") or char.isdigit() or char in "_-" for char in normalized):
+        raise OfflineLabError("FXDatabase source_origin must use uppercase letters, numbers, underscore, or hyphen")
+    return normalized
+
+
+def validate_fxdatabase_m1_history_response(response: dict) -> None:
+    if not isinstance(response, dict):
+        raise OfflineLabError("FXDatabase API history response must be a JSON object")
+    api_version = str(response.get("api_version", ""))
+    if api_version != FXDATABASE_FXBACKTEST_API_VERSION:
+        raise OfflineLabError(
+            f"FXDatabase API version mismatch: got {api_version or '<missing>'}, "
+            f"expected {FXDATABASE_FXBACKTEST_API_VERSION}"
+        )
+
+    metadata = response.get("metadata")
+    if not isinstance(metadata, dict):
+        raise OfflineLabError("FXDatabase API history response metadata must be a JSON object")
+    for key in ("broker_source_id", "logical_symbol", "mt5_symbol"):
+        if not str(metadata.get(key, "")).strip():
+            raise OfflineLabError(f"FXDatabase API metadata.{key} must not be empty")
+    _normalize_fxdatabase_source_origin(str(metadata.get("source_origin", "")))
+    if str(metadata.get("timeframe", "")) != "M1":
+        raise OfflineLabError("FXDatabase API metadata.timeframe must be M1")
+    digits = _required_int(metadata, "digits")
+    if digits < 0 or digits > 10:
+        raise OfflineLabError("FXDatabase API metadata.digits must be in 0...10")
+    requested_start = _required_int(metadata, "requested_utc_start")
+    requested_end = _required_int(metadata, "requested_utc_end_exclusive")
+    if requested_start >= requested_end or requested_start % 60 != 0 or requested_end % 60 != 0:
+        raise OfflineLabError("FXDatabase API metadata requested UTC range must be minute-aligned and increasing")
+
+    columns: dict[str, list] = {}
+    for key in ("utc_timestamps", "open", "high", "low", "close", "volume"):
+        value = response.get(key)
+        if not isinstance(value, list):
+            raise OfflineLabError(f"FXDatabase API response field {key} must be an array")
+        columns[key] = value
+    count = len(columns["utc_timestamps"])
+    if _required_int(metadata, "row_count") != count:
+        raise OfflineLabError("FXDatabase API metadata.row_count does not match utc_timestamps count")
+    if any(len(values) != count for values in columns.values()):
+        raise OfflineLabError("FXDatabase API returned mismatched OHLCV column lengths")
+
+    if count == 0:
+        if metadata.get("first_utc") is not None or metadata.get("last_utc") is not None:
+            raise OfflineLabError("FXDatabase API first_utc/last_utc must be null for an empty history response")
+        return
+
+    first_utc = _required_int(metadata, "first_utc")
+    last_utc = _required_int(metadata, "last_utc")
+    first_timestamp = _coerce_int(columns["utc_timestamps"][0], "utc_timestamps[0]")
+    last_timestamp = _coerce_int(columns["utc_timestamps"][-1], "utc_timestamps[-1]")
+    if first_utc != first_timestamp or last_utc != last_timestamp:
+        raise OfflineLabError("FXDatabase API first_utc/last_utc do not match timestamp columns")
+
+    previous_timestamp: int | None = None
+    for index, timestamp_value in enumerate(columns["utc_timestamps"]):
+        timestamp = _coerce_int(timestamp_value, f"utc_timestamps[{index}]")
+        if timestamp % 60 != 0 or timestamp < requested_start or timestamp >= requested_end:
+            raise OfflineLabError("FXDatabase API timestamp columns must be minute-aligned inside the requested range")
+        if previous_timestamp is not None and timestamp <= previous_timestamp:
+            raise OfflineLabError("FXDatabase API utc_timestamps must be strictly increasing")
+        previous_timestamp = timestamp
+
+        open_price = _coerce_int(columns["open"][index], f"open[{index}]")
+        high_price = _coerce_int(columns["high"][index], f"high[{index}]")
+        low_price = _coerce_int(columns["low"][index], f"low[{index}]")
+        close_price = _coerce_int(columns["close"][index], f"close[{index}]")
+        volume = _coerce_int(columns["volume"][index], f"volume[{index}]")
+        if min(open_price, high_price, low_price, close_price) <= 0:
+            raise OfflineLabError("FXDatabase API OHLC values must be positive")
+        if volume < 0:
+            raise OfflineLabError("FXDatabase API volume values must be non-negative")
+        if high_price < max(open_price, low_price, close_price) or low_price > min(open_price, high_price, close_price):
+            raise OfflineLabError(f"FXDatabase API OHLC invariant failed at row {index}")
+
+
 def write_export_set(path: Path, output_key: str, start_unix: int, end_unix: int, max_bars: int, reset_output: bool) -> None:
     content = "\n".join([
         f"Export_OutputKey={output_key}||0||0||0||N",
@@ -189,27 +289,38 @@ def fxdatabase_api_base_url(args) -> str:
 
 
 def fetch_fxdatabase_m1_history(args, symbol: str, start_unix: int, end_unix: int) -> dict:
-    broker_source_id = getattr(args, "broker_source_id", "") or os.environ.get("FXDATABASE_BROKER_SOURCE_ID", "default")
-    source_origin = getattr(args, "source_origin", "") or os.environ.get("FXDATABASE_SOURCE_ORIGIN", "MT5")
+    broker_source_id = str(
+        getattr(args, "broker_source_id", "") or os.environ.get("FXDATABASE_BROKER_SOURCE_ID", "default")
+    ).strip()
+    source_origin = _normalize_fxdatabase_source_origin(
+        getattr(args, "source_origin", "") or os.environ.get("FXDATABASE_SOURCE_ORIGIN", "MT5")
+    )
+    logical_symbol = str(symbol or "").strip().upper()
+    if not broker_source_id:
+        raise OfflineLabError("FXDatabase broker_source_id must not be empty")
+    if not logical_symbol:
+        raise OfflineLabError("FXDatabase logical_symbol must not be empty")
     payload = {
-        "api_version": "fxdatabase.fxbacktest.v1",
+        "api_version": FXDATABASE_FXBACKTEST_API_VERSION,
         "broker_source_id": broker_source_id,
         "source_origin": source_origin,
-        "logical_symbol": symbol,
+        "logical_symbol": logical_symbol,
         "utc_start_inclusive": int(start_unix),
         "utc_end_exclusive": int(end_unix),
         "maximum_rows": int(getattr(args, "max_bars", 600000) or 600000),
     }
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(
-        f"{fxdatabase_api_base_url(args)}/v1/history/m1",
+        f"{fxdatabase_api_base_url(args)}{FXDATABASE_M1_HISTORY_PATH}",
         data=body,
         headers={"Content-Type": "application/json", "Accept": "application/json"},
         method="POST",
     )
     try:
         with urllib.request.urlopen(request, timeout=max(1, int(getattr(args, "timeout", 300) or 300))) as response:
-            return json.loads(response.read().decode("utf-8"))
+            payload = json.loads(response.read().decode("utf-8"))
+            validate_fxdatabase_m1_history_response(payload)
+            return payload
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise OfflineLabError(f"FXDatabase API history request failed with HTTP {exc.code}: {detail}") from exc
@@ -218,6 +329,7 @@ def fetch_fxdatabase_m1_history(args, symbol: str, start_unix: int, end_unix: in
 
 
 def write_fxdatabase_export_files(response: dict, data_path: Path, meta_path: Path) -> None:
+    validate_fxdatabase_m1_history_response(response)
     metadata = dict(response.get("metadata", {}))
     timestamps = list(response.get("utc_timestamps", []))
     opens = list(response.get("open", []))

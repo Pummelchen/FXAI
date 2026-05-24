@@ -9,6 +9,7 @@ final class FXBacktestAPITests: XCTestCase {
     func testLatestBacktestAPIVersionTracksOnlySupportedVersion() {
         XCTAssertEqual(FXBacktestAPIV1.latestVersion, FXBacktestAPIV1.version)
         XCTAssertEqual(FXBacktestAPIStatusResponse().apiVersion, FXBacktestAPIV1.latestVersion)
+        XCTAssertNoThrow(try FXBacktestAPIStatusResponse().validate())
     }
 
     func testHistoryRequestRequiresV1VersionAndMinuteAlignedRange() throws {
@@ -115,6 +116,40 @@ final class FXBacktestAPITests: XCTestCase {
         XCTAssertThrowsError(try response.validate())
     }
 
+    func testResultResponsesRejectStaleAPIVersions() throws {
+        XCTAssertThrowsError(try FXBacktestResultMutationResponse(
+            apiVersion: "fxdatabase.fxbacktest.v0",
+            sqlStatements: 1
+        ).validate()) { error in
+            XCTAssertEqual(error as? FXBacktestAPIValidationError, .unsupportedVersion("fxdatabase.fxbacktest.v0"))
+        }
+
+        XCTAssertThrowsError(try FXBacktestResultPurgeResponse(
+            apiVersion: "fxdatabase.fxbacktest.v0",
+            report: FXBacktestResultPurgeReport(scope: "all", sqlStatements: 1)
+        ).validate())
+
+        XCTAssertThrowsError(try FXBacktestResultRunGetResponse(
+            run: FXBacktestResultRunRecord(
+                runId: "run-old",
+                createdAtUnixMilliseconds: 1,
+                completedAtUnixMilliseconds: nil,
+                pluginId: "com.fxbacktest.tests.plugin.v1",
+                engine: "cpu",
+                brokerSourceId: "demo",
+                primarySymbol: "EURUSD",
+                symbols: ["EURUSD"],
+                apiVersion: "fxdatabase.fxbacktest.v0",
+                settingsJSON: "{}",
+                parameterSpaceJSON: "{}",
+                status: "running",
+                completedPasses: 0,
+                totalPasses: 1,
+                note: ""
+            )
+        ).validate())
+    }
+
     func testHTTPHandlerMapsProviderInvalidRequestToV1Error() async throws {
         let handler = FXBacktestAPIHTTPHandler(historyProvider: InvalidRequestProvider())
         let request = FXBacktestM1HistoryRequest(
@@ -198,6 +233,24 @@ final class FXBacktestAPITests: XCTestCase {
             "start:run-1",
             "append:run-1:1"
         ])
+    }
+
+    func testHTTPHandlerRejectsStaleResultProviderResponseEnvelope() async throws {
+        let handler = FXBacktestAPIHTTPHandler(
+            historyProvider: MockHistoryProvider(),
+            resultProvider: StaleResultProvider()
+        )
+        let response = await handler.handle(
+            method: "POST",
+            path: FXBacktestAPIV1.resultSchemaPath,
+            body: try JSONEncoder().encode(FXBacktestResultSchemaRequest())
+        )
+
+        XCTAssertEqual(response.statusCode, 400)
+        let error = try JSONDecoder().decode(FXBacktestAPIErrorResponse.self, from: response.body)
+        XCTAssertEqual(error.apiVersion, FXBacktestAPIV1.latestVersion)
+        XCTAssertEqual(error.error.code, "invalid_request")
+        XCTAssertTrue(error.error.message.contains("Unsupported FXBacktest API version"))
     }
 
     func testHTTPHandlerRequiresConfiguredResultProviderForResultEndpoints() async throws {
@@ -439,6 +492,45 @@ private actor MockResultProvider: FXBacktestResultProviding {
 
     func operations() -> [String] {
         recordedOperations
+    }
+}
+
+private struct StaleResultProvider: FXBacktestResultProviding {
+    func ensureResultSchema(_ request: FXBacktestResultSchemaRequest) async throws -> FXBacktestResultMutationResponse {
+        FXBacktestResultMutationResponse(apiVersion: "fxdatabase.fxbacktest.v0", sqlStatements: 1)
+    }
+
+    func startRun(_ request: FXBacktestResultRunStartRequest) async throws -> FXBacktestResultMutationResponse {
+        FXBacktestResultMutationResponse(apiVersion: "fxdatabase.fxbacktest.v0", runId: request.runId, sqlStatements: 1)
+    }
+
+    func appendPassResults(_ request: FXBacktestResultPassAppendRequest) async throws -> FXBacktestResultMutationResponse {
+        FXBacktestResultMutationResponse(apiVersion: "fxdatabase.fxbacktest.v0", runId: request.runId, sqlStatements: 1)
+    }
+
+    func completeRun(_ request: FXBacktestResultRunCompleteRequest) async throws -> FXBacktestResultMutationResponse {
+        FXBacktestResultMutationResponse(apiVersion: "fxdatabase.fxbacktest.v0", runId: request.runId, sqlStatements: 1)
+    }
+
+    func purgeResults(_ request: FXBacktestResultPurgeRequest) async throws -> FXBacktestResultPurgeResponse {
+        FXBacktestResultPurgeResponse(
+            apiVersion: "fxdatabase.fxbacktest.v0",
+            report: FXBacktestResultPurgeReport(scope: "all", sqlStatements: 1)
+        )
+    }
+
+    func getRun(_ request: FXBacktestResultRunGetRequest) async throws -> FXBacktestResultRunGetResponse {
+        FXBacktestResultRunGetResponse(apiVersion: "fxdatabase.fxbacktest.v0", run: nil)
+    }
+
+    func getPasses(_ request: FXBacktestResultPassesGetRequest) async throws -> FXBacktestResultPassesGetResponse {
+        FXBacktestResultPassesGetResponse(
+            apiVersion: "fxdatabase.fxbacktest.v0",
+            runId: request.runId,
+            offset: request.offset,
+            limit: request.limit,
+            results: []
+        )
     }
 }
 

@@ -25,13 +25,16 @@ def test_tensor_work_is_declared_as_plugin_backend_bridge_not_mql_tensorcore():
             "public enum MLFramework: String, Codable, Hashable, Sendable",
             "case pyTorch",
             "case tensorFlow",
+            "case foundationNLP",
             "public enum MLBackendMode",
             "case externalPython(framework: MLFramework, executable: String, module: String)",
             "public protocol ExternalMLBackend",
             "public struct PythonMLBackendBridge",
-            "precondition(",
+            "configurationError(",
             "framework == .pyTorch",
             "framework == .tensorFlow",
+            "framework == .foundationNLP",
+            "Python bridge does not support",
         ],
     )
     _assert_tokens(

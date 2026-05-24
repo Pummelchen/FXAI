@@ -101,21 +101,33 @@ public struct FXImporterSymbol: Codable, Hashable, Sendable {
 }
 
 public struct FXImporterM1HistoryRequest: Codable, Hashable, Sendable {
+    public let apiVersion: String
     public let sourceSymbol: String
     public let fromSourceTimestamp: Int64
     public let toSourceTimestampExclusive: Int64
     public let maxBars: Int
 
     public init(
+        apiVersion: String = FXImporterAPIV1.latestVersion,
         sourceSymbol: String,
         fromSourceTimestamp: Int64,
         toSourceTimestampExclusive: Int64,
         maxBars: Int
     ) {
+        self.apiVersion = apiVersion
         self.sourceSymbol = sourceSymbol
         self.fromSourceTimestamp = fromSourceTimestamp
         self.toSourceTimestampExclusive = toSourceTimestampExclusive
         self.maxBars = maxBars
+    }
+
+    public func validateLatestAPI() throws {
+        guard apiVersion == FXImporterAPIV1.latestVersion else {
+            throw FXImporterConnectorError.unsupportedRequestAPIVersion(
+                got: apiVersion,
+                expected: FXImporterAPIV1.latestVersion
+            )
+        }
     }
 }
 
@@ -151,18 +163,36 @@ public struct FXImporterM1Bar: Codable, Hashable, Sendable {
 }
 
 public struct FXImporterM1Batch: Codable, Hashable, Sendable {
+    public let apiVersion: String
     public let request: FXImporterM1HistoryRequest
     public let bars: [FXImporterM1Bar]
     public let sourceComplete: Bool
 
-    public init(request: FXImporterM1HistoryRequest, bars: [FXImporterM1Bar], sourceComplete: Bool) {
+    public init(
+        apiVersion: String = FXImporterAPIV1.latestVersion,
+        request: FXImporterM1HistoryRequest,
+        bars: [FXImporterM1Bar],
+        sourceComplete: Bool
+    ) {
+        self.apiVersion = apiVersion
         self.request = request
         self.bars = bars
         self.sourceComplete = sourceComplete
     }
+
+    public func validateLatestAPI() throws {
+        guard apiVersion == FXImporterAPIV1.latestVersion else {
+            throw FXImporterConnectorError.unsupportedRequestAPIVersion(
+                got: apiVersion,
+                expected: FXImporterAPIV1.latestVersion
+            )
+        }
+        try request.validateLatestAPI()
+    }
 }
 
 public struct FXImporterD1HistoryRequest: Codable, Hashable, Sendable {
+    public let apiVersion: String
     public let sourceSymbol: String
     public let fromSourceTimestamp: Int64
     public let toSourceTimestampExclusive: Int64
@@ -170,17 +200,28 @@ public struct FXImporterD1HistoryRequest: Codable, Hashable, Sendable {
     public let includeAdjustedClose: Bool
 
     public init(
+        apiVersion: String = FXImporterAPIV1.latestVersion,
         sourceSymbol: String,
         fromSourceTimestamp: Int64,
         toSourceTimestampExclusive: Int64,
         maxBars: Int,
         includeAdjustedClose: Bool = true
     ) {
+        self.apiVersion = apiVersion
         self.sourceSymbol = sourceSymbol
         self.fromSourceTimestamp = fromSourceTimestamp
         self.toSourceTimestampExclusive = toSourceTimestampExclusive
         self.maxBars = maxBars
         self.includeAdjustedClose = includeAdjustedClose
+    }
+
+    public func validateLatestAPI() throws {
+        guard apiVersion == FXImporterAPIV1.latestVersion else {
+            throw FXImporterConnectorError.unsupportedRequestAPIVersion(
+                got: apiVersion,
+                expected: FXImporterAPIV1.latestVersion
+            )
+        }
     }
 }
 
@@ -219,20 +260,38 @@ public struct FXImporterD1Bar: Codable, Hashable, Sendable {
 }
 
 public struct FXImporterD1Batch: Codable, Hashable, Sendable {
+    public let apiVersion: String
     public let request: FXImporterD1HistoryRequest
     public let bars: [FXImporterD1Bar]
     public let sourceComplete: Bool
 
-    public init(request: FXImporterD1HistoryRequest, bars: [FXImporterD1Bar], sourceComplete: Bool) {
+    public init(
+        apiVersion: String = FXImporterAPIV1.latestVersion,
+        request: FXImporterD1HistoryRequest,
+        bars: [FXImporterD1Bar],
+        sourceComplete: Bool
+    ) {
+        self.apiVersion = apiVersion
         self.request = request
         self.bars = bars
         self.sourceComplete = sourceComplete
+    }
+
+    public func validateLatestAPI() throws {
+        guard apiVersion == FXImporterAPIV1.latestVersion else {
+            throw FXImporterConnectorError.unsupportedRequestAPIVersion(
+                got: apiVersion,
+                expected: FXImporterAPIV1.latestVersion
+            )
+        }
+        try request.validateLatestAPI()
     }
 }
 
 public enum FXImporterConnectorError: Error, CustomStringConvertible, Sendable {
     case unsupportedCapability(connectorID: String, capability: String)
     case unsupportedAPIVersion(connectorID: String, got: String, expected: String)
+    case unsupportedRequestAPIVersion(got: String, expected: String)
     case invalidDescriptor(String)
 
     public var description: String {
@@ -241,6 +300,8 @@ public enum FXImporterConnectorError: Error, CustomStringConvertible, Sendable {
             return "Connector \(connectorID) does not support \(capability)."
         case .unsupportedAPIVersion(let connectorID, let got, let expected):
             return "Connector \(connectorID) uses unsupported FXImporter API version \(got); expected latest \(expected)."
+        case .unsupportedRequestAPIVersion(let got, let expected):
+            return "FXImporter request uses unsupported API version \(got); expected latest \(expected)."
         case .invalidDescriptor(let reason):
             return "Invalid FXImporter connector descriptor: \(reason)."
         }
@@ -263,6 +324,7 @@ public extension FXImporterConnector {
 
     func fetchD1History(_ request: FXImporterD1HistoryRequest) async throws -> FXImporterD1Batch {
         try validateLatestAPI()
+        try request.validateLatestAPI()
         throw FXImporterConnectorError.unsupportedCapability(
             connectorID: descriptor.id,
             capability: "D1 historical OHLC"

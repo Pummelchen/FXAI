@@ -69,6 +69,7 @@ public struct MT5ImporterConnector: FXImporterConnector {
 
     public func fetchM1History(_ request: FXImporterM1HistoryRequest) async throws -> FXImporterM1Batch {
         try validateLatestAPI()
+        try request.validateLatestAPI()
         let response = try bridge.ratesRange(
             mt5Symbol: request.sourceSymbol,
             fromMT5ServerTs: request.fromSourceTimestamp,
@@ -119,6 +120,7 @@ public struct MT5ImporterConnector: FXImporterConnector {
     }
 
     private static func validate(_ request: FXImporterM1HistoryRequest) throws {
+        try request.validateLatestAPI()
         guard !request.sourceSymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw MT5ImporterConnectorError.invalidRequest("sourceSymbol is empty")
         }

@@ -16,6 +16,7 @@ public struct FXDatabaseConnectionSettings: Codable, Hashable, Sendable {
 
 public struct FXDatabaseHistoryRequest: Codable, Hashable, Sendable {
     public var brokerSourceId: String
+    public var sourceOrigin: String
     public var logicalSymbol: String
     public var expectedMT5Symbol: String?
     public var expectedDigits: Int?
@@ -25,6 +26,7 @@ public struct FXDatabaseHistoryRequest: Codable, Hashable, Sendable {
 
     public init(
         brokerSourceId: String = "icmarkets-sc-mt5-4",
+        sourceOrigin: String = "MT5",
         logicalSymbol: String = "EURUSD",
         expectedMT5Symbol: String? = "EURUSD",
         expectedDigits: Int? = 5,
@@ -32,9 +34,11 @@ public struct FXDatabaseHistoryRequest: Codable, Hashable, Sendable {
         utcEndExclusive: Int64 = 1_707_177_600,
         maximumRows: Int = 5_000_000
     ) {
-        self.brokerSourceId = brokerSourceId
-        self.logicalSymbol = logicalSymbol
-        self.expectedMT5Symbol = expectedMT5Symbol
+        self.brokerSourceId = brokerSourceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.sourceOrigin = sourceOrigin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        self.logicalSymbol = logicalSymbol.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let providerSymbol = expectedMT5Symbol?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.expectedMT5Symbol = providerSymbol?.isEmpty == true ? nil : providerSymbol
         self.expectedDigits = expectedDigits
         self.utcStartInclusive = utcStartInclusive
         self.utcEndExclusive = utcEndExclusive
@@ -52,10 +56,11 @@ public struct FXDatabaseHistoryLoader: Sendable {
         do {
             let apiRequest = FXBacktestM1HistoryRequest(
                 brokerSourceId: request.brokerSourceId,
+                sourceOrigin: request.sourceOrigin,
                 logicalSymbol: request.logicalSymbol,
                 utcStartInclusive: request.utcStartInclusive,
                 utcEndExclusive: request.utcEndExclusive,
-                expectedMT5Symbol: request.expectedMT5Symbol?.isEmpty == true ? nil : request.expectedMT5Symbol,
+                expectedMT5Symbol: request.expectedMT5Symbol,
                 expectedDigits: request.expectedDigits,
                 maximumRows: request.maximumRows
             )

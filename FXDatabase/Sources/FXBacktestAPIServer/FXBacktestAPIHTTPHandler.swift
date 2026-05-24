@@ -40,7 +40,9 @@ public struct FXBacktestAPIHTTPHandler: Sendable {
         do {
             switch (method.uppercased(), path) {
             case ("GET", FXBacktestAPIV1.statusPath):
-                return try json(FXBacktestAPIStatusResponse())
+                let response = FXBacktestAPIStatusResponse()
+                try response.validate()
+                return try json(response)
 
             case ("POST", FXBacktestAPIV1.m1HistoryPath):
                 let request = try JSONDecoder().decode(FXBacktestM1HistoryRequest.self, from: body)
@@ -52,37 +54,51 @@ public struct FXBacktestAPIHTTPHandler: Sendable {
             case ("POST", FXBacktestAPIV1.resultSchemaPath):
                 let request = try JSONDecoder().decode(FXBacktestResultSchemaRequest.self, from: body)
                 try request.validate()
-                return try json(try await requireResultProvider().ensureResultSchema(request))
+                let response = try await requireResultProvider().ensureResultSchema(request)
+                try response.validate()
+                return try json(response)
 
             case ("POST", FXBacktestAPIV1.resultRunStartPath):
                 let request = try JSONDecoder().decode(FXBacktestResultRunStartRequest.self, from: body)
                 try request.validate()
-                return try json(try await requireResultProvider().startRun(request))
+                let response = try await requireResultProvider().startRun(request)
+                try response.validate()
+                return try json(response)
 
             case ("POST", FXBacktestAPIV1.resultPassAppendPath):
                 let request = try JSONDecoder().decode(FXBacktestResultPassAppendRequest.self, from: body)
                 try request.validate()
-                return try json(try await requireResultProvider().appendPassResults(request))
+                let response = try await requireResultProvider().appendPassResults(request)
+                try response.validate()
+                return try json(response)
 
             case ("POST", FXBacktestAPIV1.resultRunCompletePath):
                 let request = try JSONDecoder().decode(FXBacktestResultRunCompleteRequest.self, from: body)
                 try request.validate()
-                return try json(try await requireResultProvider().completeRun(request))
+                let response = try await requireResultProvider().completeRun(request)
+                try response.validate()
+                return try json(response)
 
             case ("POST", FXBacktestAPIV1.resultPurgePath):
                 let request = try JSONDecoder().decode(FXBacktestResultPurgeRequest.self, from: body)
                 try request.validate()
-                return try json(try await requireResultProvider().purgeResults(request))
+                let response = try await requireResultProvider().purgeResults(request)
+                try response.validate()
+                return try json(response)
 
             case ("POST", FXBacktestAPIV1.resultRunGetPath):
                 let request = try JSONDecoder().decode(FXBacktestResultRunGetRequest.self, from: body)
                 try request.validate()
-                return try json(try await requireResultProvider().getRun(request))
+                let response = try await requireResultProvider().getRun(request)
+                try response.validate()
+                return try json(response)
 
             case ("POST", FXBacktestAPIV1.resultPassesGetPath):
                 let request = try JSONDecoder().decode(FXBacktestResultPassesGetRequest.self, from: body)
                 try request.validate()
-                return try json(try await requireResultProvider().getPasses(request))
+                let response = try await requireResultProvider().getPasses(request)
+                try response.validate()
+                return try json(response)
 
             default:
                 return try error(status: 404, code: "not_found", message: "Unknown FXBacktest API endpoint \(method) \(path)")

@@ -33,6 +33,12 @@ public struct FXBacktestAPIStatusResponse: Codable, Equatable, Sendable {
         self.service = service
         self.status = status
     }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        try FXBacktestAPIV1.requireNonEmpty(service, "service")
+        try FXBacktestAPIV1.requireNonEmpty(status, "status")
+    }
 }
 
 public struct FXBacktestM1HistoryRequest: Codable, Equatable, Sendable {
@@ -317,6 +323,12 @@ public struct FXBacktestAPIErrorResponse: Codable, Equatable, Sendable {
     public init(apiVersion: String = FXBacktestAPIV1.latestVersion, code: String, message: String) {
         self.apiVersion = apiVersion
         self.error = FXBacktestAPIErrorBody(code: code, message: message)
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        try FXBacktestAPIV1.requireNonEmpty(error.code, "error.code")
+        try FXBacktestAPIV1.requireNonEmpty(error.message, "error.message")
     }
 }
 
@@ -699,6 +711,20 @@ public struct FXBacktestResultMutationResponse: Codable, Equatable, Sendable {
         self.affectedRows = affectedRows
         self.sqlStatements = sqlStatements
     }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        try FXBacktestAPIV1.requireNonEmpty(status, "status")
+        if let runId {
+            try FXBacktestAPIV1.requireNonEmpty(runId, "run_id")
+        }
+        if let affectedRows, affectedRows < 0 {
+            throw FXBacktestAPIValidationError.invalidField("affected_rows must be >= 0 when supplied")
+        }
+        guard sqlStatements >= 0 else {
+            throw FXBacktestAPIValidationError.invalidField("sql_statements must be >= 0")
+        }
+    }
 }
 
 public struct FXBacktestResultPurgeReport: Codable, Equatable, Sendable {
@@ -714,6 +740,13 @@ public struct FXBacktestResultPurgeReport: Codable, Equatable, Sendable {
         self.scope = scope
         self.sqlStatements = sqlStatements
     }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.requireNonEmpty(scope, "report.scope")
+        guard sqlStatements >= 0 else {
+            throw FXBacktestAPIValidationError.invalidField("report.sql_statements must be >= 0")
+        }
+    }
 }
 
 public struct FXBacktestResultPurgeResponse: Codable, Equatable, Sendable {
@@ -728,6 +761,11 @@ public struct FXBacktestResultPurgeResponse: Codable, Equatable, Sendable {
     public init(apiVersion: String = FXBacktestAPIV1.latestVersion, report: FXBacktestResultPurgeReport) {
         self.apiVersion = apiVersion
         self.report = report
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        try report.validate()
     }
 }
 
@@ -799,6 +837,36 @@ public struct FXBacktestResultRunRecord: Codable, Equatable, Sendable {
         self.totalPasses = totalPasses
         self.note = note
     }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.requireNonEmpty(runId, "run_id")
+        guard createdAtUnixMilliseconds > 0 else {
+            throw FXBacktestAPIValidationError.invalidField("created_at_unix_ms must be positive")
+        }
+        if let completedAtUnixMilliseconds, completedAtUnixMilliseconds < createdAtUnixMilliseconds {
+            throw FXBacktestAPIValidationError.invalidField("completed_at_unix_ms must be >= created_at_unix_ms")
+        }
+        try FXBacktestAPIV1.requireNonEmpty(pluginId, "plugin_id")
+        try FXBacktestAPIV1.requireNonEmpty(engine, "engine")
+        try FXBacktestAPIV1.requireNonEmpty(brokerSourceId, "broker_source_id")
+        try FXBacktestAPIV1.requireNonEmpty(primarySymbol, "primary_symbol")
+        guard !symbols.isEmpty else {
+            throw FXBacktestAPIValidationError.invalidField("symbols must not be empty")
+        }
+        for symbol in symbols {
+            try FXBacktestAPIV1.requireNonEmpty(symbol, "symbols")
+        }
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        try FXBacktestAPIV1.validateJSONObjectString(settingsJSON, field: "settings_json")
+        try FXBacktestAPIV1.validateJSONObjectString(parameterSpaceJSON, field: "parameter_space_json")
+        try FXBacktestAPIV1.requireNonEmpty(status, "status")
+        guard totalPasses > 0 else {
+            throw FXBacktestAPIValidationError.invalidField("total_passes must be positive")
+        }
+        guard completedPasses <= totalPasses else {
+            throw FXBacktestAPIValidationError.invalidField("completed_passes must not exceed total_passes")
+        }
+    }
 }
 
 public struct FXBacktestResultRunGetResponse: Codable, Equatable, Sendable {
@@ -813,6 +881,11 @@ public struct FXBacktestResultRunGetResponse: Codable, Equatable, Sendable {
     public init(apiVersion: String = FXBacktestAPIV1.latestVersion, run: FXBacktestResultRunRecord?) {
         self.apiVersion = apiVersion
         self.run = run
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        try run?.validate()
     }
 }
 
@@ -843,6 +916,21 @@ public struct FXBacktestResultPassesGetResponse: Codable, Equatable, Sendable {
         self.offset = offset
         self.limit = limit
         self.results = results
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        try FXBacktestAPIV1.requireNonEmpty(runId, "run_id")
+        guard offset >= 0 else {
+            throw FXBacktestAPIValidationError.invalidField("offset must be >= 0")
+        }
+        guard limit > 0, limit <= FXBacktestAPIV1.maximumResultReadLimit else {
+            throw FXBacktestAPIValidationError.invalidField("limit must be in 1...\(FXBacktestAPIV1.maximumResultReadLimit)")
+        }
+        guard results.count <= limit else {
+            throw FXBacktestAPIValidationError.invalidField("results count must not exceed limit")
+        }
+        try results.forEach { try $0.validate() }
     }
 }
 
