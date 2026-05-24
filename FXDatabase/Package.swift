@@ -25,7 +25,7 @@ let package = Package(
         .target(name: "Verification", dependencies: ["Domain", "AppCore", "Config", .product(name: "MT5Bridge", package: "FXImporter"), "ClickHouse", "TimeMapping", "Validation", "Ingestion"]),
         .target(name: "BacktestCore", dependencies: ["Domain", "ClickHouse"]),
         .target(name: "MetalAccel", dependencies: ["Domain", "BacktestCore"]),
-        .target(name: "Operations", dependencies: ["Domain", "AppCore", "Config", .product(name: "MT5Bridge", package: "FXImporter"), "ClickHouse", "TimeMapping", "Validation", "Ingestion", "Verification"]),
+        .target(name: "Operations", dependencies: ["Domain", "AppCore", "Config", .product(name: "MT5Bridge", package: "FXImporter"), "ClickHouse", "TimeMapping", "Validation", "Ingestion", "Verification", "BacktestCore"]),
         .target(name: "FXBacktestAPI"),
         .target(name: "FXBacktestAPIServer", dependencies: ["FXBacktestAPI", "AppCore", "BacktestCore", "ClickHouse", "Config", "Domain", "Operations"]),
         .executableTarget(

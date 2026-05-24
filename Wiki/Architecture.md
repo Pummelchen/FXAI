@@ -48,7 +48,7 @@ FXDatabase is the only project allowed to import or implement ClickHouse access.
 
 - Historical market data.
 - Backtest result storage and deletion.
-- SineTest data.
+- SineTest data, including the persistent synthetic M1 OHLCV series from `2000-01-01` through runtime-now that is refreshed every 10 seconds by FXDatabase.
 - Dataset validation and metadata.
 - Future data access needed by agents.
 

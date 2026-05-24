@@ -293,6 +293,15 @@ struct FXDatabaseCLI {
                 }
                 return .success
 
+            case .sineTestSync:
+                try await runSineTestSync(
+                    config: config,
+                    clickHouse: clickHouse,
+                    logger: logger,
+                    watch: options.watchSineTestSync
+                )
+                return .success
+
             case .fxBacktestAPI:
                 let historyService = FXDatabaseBacktestHistoryService(config: config, clickHouse: clickHouse)
                 let resultService = FXDatabaseBacktestResultService(clickHouse: clickHouse, database: config.clickHouse.database)

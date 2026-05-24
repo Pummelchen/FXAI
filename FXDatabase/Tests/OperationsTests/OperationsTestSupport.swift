@@ -1,4 +1,5 @@
 import AppCore
+import BacktestCore
 import ClickHouse
 import Config
 import Domain
@@ -331,6 +332,207 @@ actor StartupClickHouse: ClickHouseClientProtocol {
             throw ClickHouseError.transport("connection refused")
         }
         return "1\n"
+    }
+}
+
+struct StoredSineCanonicalRow: Sendable, Equatable {
+    let sourceOrigin: String
+    let mt5Symbol: String
+    let timeframe: String
+    let mt5: Int64
+    let utc: Int64
+    let offset: Int64
+    let offsetSource: String
+    let offsetConfidence: String
+    let open: Int64
+    let high: Int64
+    let low: Int64
+    let close: Int64
+    let volume: UInt64
+    let digits: Int
+    let hash: String
+}
+
+actor SineSyncClickHouse: ClickHouseClientProtocol {
+    private var rows: [StoredSineCanonicalRow] = []
+    private var coverageRows: [[String]] = []
+    private var canonicalInserts = 0
+    private var stateInserts = 0
+
+    func execute(_ query: ClickHouseQuery) async throws -> String {
+        let sql = query.sql
+        if sql.contains("SELECT utc_range_start, utc_range_end_exclusive"),
+           sql.contains("FROM db.ohlc_m1_verified_coverage") {
+            return coverageRows
+                .map { "\($0[7])\t\($0[8])" }
+                .joined(separator: "\n")
+        }
+        if sql.contains("ALTER TABLE db.ohlc_m1_canonical DELETE") {
+            let start = Self.integer(after: "mt5_server_ts_raw >= ", in: sql) ?? Int64.min
+            let end = Self.integer(after: "mt5_server_ts_raw < ", in: sql) ?? Int64.max
+            rows.removeAll { $0.mt5 >= start && $0.mt5 < end }
+            return ""
+        }
+        if sql.contains("INSERT INTO db.ohlc_m1_canonical") {
+            rows.append(contentsOf: try Self.parseCanonicalRows(sql))
+            rows.sort { $0.mt5 < $1.mt5 }
+            canonicalInserts += 1
+            return ""
+        }
+        if sql.contains("uniqExact(ts_utc)"),
+           sql.contains("countIf("),
+           sql.contains("source_status"),
+           sql.contains("FROM db.ohlc_m1_canonical") {
+            let selected = rowsByUTC(in: sql)
+            let values: [Int64] = [
+                Int64(selected.count),
+                Int64(Set(selected.map(\.utc)).count),
+                selected.map(\.utc).min() ?? 0,
+                selected.map(\.utc).max() ?? 0,
+                Int64(selected.filter { row in
+                    row.mt5Symbol != SineTestSecurity.providerSymbol.rawValue ||
+                        row.timeframe != Timeframe.m1.rawValue ||
+                        row.mt5 != row.utc ||
+                        row.offset != 0 ||
+                        row.offsetSource != OffsetSource.configured.rawValue ||
+                        row.offsetConfidence != OffsetConfidence.verified.rawValue ||
+                        row.digits != SineTestSecurity.digits.rawValue ||
+                        row.open <= 0 ||
+                        row.high <= 0 ||
+                        row.low <= 0 ||
+                        row.close <= 0 ||
+                        row.volume == 0
+                }.count)
+            ]
+            return values.map { String($0) }.joined(separator: "\t") + "\n"
+        }
+        if sql.contains("uniqExact(mt5_server_ts_raw)"),
+           sql.contains("countIf(offset_confidence"),
+           sql.contains("FROM db.ohlc_m1_canonical") {
+            let selected = rows(in: sql)
+            let values: [Int] = [
+                selected.count,
+                Set(selected.map(\.mt5)).count,
+                Set(selected.map(\.utc)).count,
+                Set(selected.map(\.sourceOrigin)).count,
+                Set(selected.map(\.mt5Symbol)).count,
+                Set(selected.map(\.timeframe)).count,
+                Set(selected.map(\.digits)).count,
+                selected.filter { $0.offsetConfidence != OffsetConfidence.verified.rawValue }.count
+            ]
+            return values.map { String($0) }.joined(separator: "\t") + "\n"
+        }
+        if sql.contains("SELECT source_origin, mt5_symbol, timeframe, mt5_server_ts_raw, ts_utc"),
+           sql.contains("server_utc_offset_seconds"),
+           sql.contains("FROM db.ohlc_m1_canonical") {
+            return rows(in: sql).map { row in
+                [
+                    row.sourceOrigin,
+                    row.mt5Symbol,
+                    row.timeframe,
+                    String(row.mt5),
+                    String(row.utc),
+                    String(row.offset),
+                    row.offsetSource,
+                    row.offsetConfidence,
+                    String(row.open),
+                    String(row.high),
+                    String(row.low),
+                    String(row.close),
+                    String(row.volume),
+                    String(row.digits),
+                    row.hash
+                ].joined(separator: "\t")
+            }.joined(separator: "\n")
+        }
+        if sql.contains("INSERT INTO db.ohlc_m1_verified_coverage") {
+            coverageRows.append(contentsOf: Self.payloadRows(sql).map {
+                $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            })
+            return ""
+        }
+        if sql.contains("INSERT INTO db.ingest_state") {
+            stateInserts += Self.payloadRows(sql).count
+            return ""
+        }
+        return ""
+    }
+
+    func canonicalRows() -> [StoredSineCanonicalRow] {
+        rows
+    }
+
+    func canonicalInsertCount() -> Int {
+        canonicalInserts
+    }
+
+    func coverageIntervalCount() -> Int {
+        coverageRows.count
+    }
+
+    func ingestStateInsertCount() -> Int {
+        stateInserts
+    }
+
+    private func rows(in sql: String) -> [StoredSineCanonicalRow] {
+        let start = Self.integer(after: "mt5_server_ts_raw >= ", in: sql) ?? Int64.min
+        let end = Self.integer(after: "mt5_server_ts_raw < ", in: sql) ?? Int64.max
+        return rows.filter { $0.mt5 >= start && $0.mt5 < end }.sorted { $0.mt5 < $1.mt5 }
+    }
+
+    private func rowsByUTC(in sql: String) -> [StoredSineCanonicalRow] {
+        let start = Self.integer(after: "ts_utc >= ", in: sql) ?? Int64.min
+        let end = Self.integer(after: "ts_utc < ", in: sql) ?? Int64.max
+        return rows.filter { $0.utc >= start && $0.utc < end }.sorted { $0.utc < $1.utc }
+    }
+
+    private static func parseCanonicalRows(_ sql: String) throws -> [StoredSineCanonicalRow] {
+        try payloadRows(sql).map { row in
+            let fields = row.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            guard fields.count == 20,
+                  let mt5 = Int64(fields[5]),
+                  let utc = Int64(fields[6]),
+                  let offset = Int64(fields[7]),
+                  let open = Int64(fields[10]),
+                  let high = Int64(fields[11]),
+                  let low = Int64(fields[12]),
+                  let close = Int64(fields[13]),
+                  let volume = UInt64(fields[14]),
+                  let digits = Int(fields[15]) else {
+                throw ProductionAgentError.invariant("invalid test canonical row: \(row)")
+            }
+            return StoredSineCanonicalRow(
+                sourceOrigin: fields[1],
+                mt5Symbol: fields[3],
+                timeframe: fields[4],
+                mt5: mt5,
+                utc: utc,
+                offset: offset,
+                offsetSource: fields[8],
+                offsetConfidence: fields[9],
+                open: open,
+                high: high,
+                low: low,
+                close: close,
+                volume: volume,
+                digits: digits,
+                hash: fields[17]
+            )
+        }
+    }
+
+    private static func payloadRows(_ sql: String) -> [String] {
+        guard let range = sql.range(of: "FORMAT TabSeparated") else { return [] }
+        let payload = sql[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !payload.isEmpty else { return [] }
+        return payload.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+    }
+
+    private static func integer(after marker: String, in sql: String) -> Int64? {
+        guard let range = sql.range(of: marker) else { return nil }
+        let suffix = sql[range.upperBound...].drop { $0 == " " || $0 == "\n" || $0 == "\t" }
+        let digits = suffix.prefix { $0 == "-" || $0.isNumber }
+        return Int64(String(digits))
     }
 }
 

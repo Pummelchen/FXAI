@@ -58,13 +58,13 @@ public struct AgentExecutionPolicy: Sendable {
         case .healthMonitor:
             if outcome.status == .failed {
                 block(
-                    [.schemaDriftGuard, .bridgeVersionGuard, .utcTimeAuthority, .symbolMetadataDrift, .sourceHistoryDrift, .historyImporter, .liveM1Updater, .databaseVerifierRepairer, .verificationCoveragePlanner, .checkpointGapAuditor, .dataCertification, .backupReadiness, .backupRestoreVerifier],
+                    [.schemaDriftGuard, .bridgeVersionGuard, .utcTimeAuthority, .symbolMetadataDrift, .sourceHistoryDrift, .sineTestSynchronizer, .historyImporter, .liveM1Updater, .databaseVerifierRepairer, .verificationCoveragePlanner, .checkpointGapAuditor, .dataCertification, .backupReadiness, .backupRestoreVerifier],
                     reason: reason,
                     into: &blocked
                 )
             }
         case .schemaDriftGuard:
-            block([.bridgeVersionGuard, .utcTimeAuthority, .symbolMetadataDrift, .sourceHistoryDrift, .historyImporter, .liveM1Updater, .databaseVerifierRepairer, .verificationCoveragePlanner, .checkpointGapAuditor, .dataCertification, .backupReadiness, .backupRestoreVerifier], reason: reason, into: &blocked)
+            block([.bridgeVersionGuard, .utcTimeAuthority, .symbolMetadataDrift, .sourceHistoryDrift, .sineTestSynchronizer, .historyImporter, .liveM1Updater, .databaseVerifierRepairer, .verificationCoveragePlanner, .checkpointGapAuditor, .dataCertification, .backupReadiness, .backupRestoreVerifier], reason: reason, into: &blocked)
         case .bridgeVersionGuard:
             block([.utcTimeAuthority, .symbolMetadataDrift, .sourceHistoryDrift, .historyImporter, .liveM1Updater, .databaseVerifierRepairer], reason: reason, into: &blocked)
         case .utcTimeAuthority:
@@ -91,7 +91,7 @@ public struct AgentExecutionPolicy: Sendable {
             }
         case .backupReadiness:
             block([.backupRestoreVerifier], reason: reason, into: &blocked)
-        case .supervisorCoordinator, .backupRestoreVerifier, .alerting:
+        case .sineTestSynchronizer, .supervisorCoordinator, .backupRestoreVerifier, .alerting:
             break
         }
         return blocked

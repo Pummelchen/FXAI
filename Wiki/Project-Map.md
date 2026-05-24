@@ -5,7 +5,7 @@
 | Folder | Description |
 | --- | --- |
 | `FXImporter/` | Provider connectors and import adapters for MT5, Yahoo Finance, and future sources such as IBKR/TWS and TradingView. |
-| `FXDatabase/` | The only ClickHouse authority. Owns database config, validation, ingestion, storage, deletion, SineTest, and public data APIs. |
+| `FXDatabase/` | The only ClickHouse authority. Owns database config, validation, ingestion, storage, deletion, persistent SineTest data, and public data APIs. |
 | `FXDataEngine/` | Post-processing and feature layer. Converts M1 OHLCV into labels, context, audit artifacts, and plugin request payloads. |
 | `FXPlugins/` | Flat plugin zoo. Each plugin owns its own CPU and optional accelerator implementations. |
 | `FXBacktest/` | Offline Swift/Metal backtest framework. Uses FXDatabase APIs and calls plugins through FXDataEngine/plugin contracts. |

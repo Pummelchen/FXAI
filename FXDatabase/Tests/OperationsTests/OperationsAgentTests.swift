@@ -1,4 +1,5 @@
 import AppCore
+import BacktestCore
 import ClickHouse
 import Config
 import Domain
@@ -124,6 +125,7 @@ final class OperationsAgentTests: XCTestCase {
                 .utcTimeAuthority,
                 .symbolMetadataDrift,
                 .sourceHistoryDrift,
+                .sineTestSynchronizer,
                 .historyImporter,
                 .liveM1Updater,
                 .databaseVerifierRepairer,
@@ -143,6 +145,42 @@ final class OperationsAgentTests: XCTestCase {
         let importer = try XCTUnwrap(agents.first { $0.descriptor.kind == .historyImporter })
 
         XCTAssertEqual(importer.descriptor.intervalSeconds, config.app.supervisor.checkpointAuditIntervalSeconds)
+    }
+
+    func testSineWaveDatabaseSyncFillsMissingChunksAndSkipsCoveredRows() async throws {
+        let clickHouse = SineSyncClickHouse()
+        let sync = try SineWaveDatabaseSyncAgent(
+            clickHouse: clickHouse,
+            database: "db",
+            chunkRows: 2,
+            certifyInsertedRanges: false
+        )
+        let end = UtcSecond(rawValue: SineTestSecurity.genesisUtc.rawValue + 5 * 60)
+
+        let first = try await sync.sync(utcEndExclusive: end)
+        let second = try await sync.sync(utcEndExclusive: end)
+
+        XCTAssertEqual(first.chunksInserted, 3)
+        XCTAssertEqual(first.rowsInserted, 5)
+        XCTAssertFalse(first.alreadyCurrent)
+        XCTAssertTrue(second.alreadyCurrent)
+        XCTAssertEqual(second.chunksInserted, 0)
+        let rows = await clickHouse.canonicalRows()
+        XCTAssertEqual(rows.count, 5)
+        XCTAssertEqual(rows.first?.open, 1_000_000)
+        XCTAssertEqual(rows.map(\.utc), [
+            SineTestSecurity.genesisUtc.rawValue,
+            SineTestSecurity.genesisUtc.rawValue + 60,
+            SineTestSecurity.genesisUtc.rawValue + 120,
+            SineTestSecurity.genesisUtc.rawValue + 180,
+            SineTestSecurity.genesisUtc.rawValue + 240
+        ])
+        let canonicalInsertCount = await clickHouse.canonicalInsertCount()
+        let coverageIntervalCount = await clickHouse.coverageIntervalCount()
+        let ingestStateInsertCount = await clickHouse.ingestStateInsertCount()
+        XCTAssertEqual(canonicalInsertCount, 3)
+        XCTAssertEqual(coverageIntervalCount, 3)
+        XCTAssertEqual(ingestStateInsertCount, 3)
     }
 
     func testClickHouseStartupManagerRunsStartCommandForLocalTransportFailure() async throws {

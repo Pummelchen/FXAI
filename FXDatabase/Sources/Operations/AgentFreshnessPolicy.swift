@@ -1,3 +1,4 @@
+import BacktestCore
 import Config
 import Foundation
 
@@ -22,6 +23,8 @@ public struct AgentFreshnessPolicy: Sendable {
             seconds = max(900, supervisor.symbolMetadataCheckIntervalSeconds * 3)
         case .sourceHistoryDrift:
             seconds = max(900, supervisor.checkpointAuditIntervalSeconds * 3)
+        case .sineTestSynchronizer:
+            seconds = max(120, SineTestSecurity.syncIntervalSeconds * 6)
         case .liveM1Updater:
             seconds = max(120, config.app.liveScanIntervalSeconds * 6)
         case .databaseVerifierRepairer:

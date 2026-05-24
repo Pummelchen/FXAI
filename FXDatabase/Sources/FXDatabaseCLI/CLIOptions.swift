@@ -31,6 +31,7 @@ struct CLIOptions {
     let commandConfigPath: URL?
     let apiHost: String
     let apiPort: UInt16
+    let watchSineTestSync: Bool
 
     init(arguments: [String]) throws {
         guard let first = arguments.first else {
@@ -52,6 +53,7 @@ struct CLIOptions {
             self.commandConfigPath = nil
             self.apiHost = "127.0.0.1"
             self.apiPort = 5066
+            self.watchSineTestSync = false
             return
         }
 
@@ -73,6 +75,7 @@ struct CLIOptions {
         var commandConfigPath: URL?
         var apiHost = "127.0.0.1"
         var apiPort: UInt16 = 5066
+        var watchSineTestSync = false
 
         var index = 1
         while index < arguments.count {
@@ -148,6 +151,8 @@ struct CLIOptions {
                     throw CLIError.invalidValue(arg)
                 }
                 apiPort = value
+            case "--watch":
+                watchSineTestSync = true
             default:
                 throw CLIError.unknownOption(arg)
             }
@@ -162,6 +167,9 @@ struct CLIOptions {
         }
         if (apiHost != "127.0.0.1" || apiPort != 5066) && command != .fxBacktestAPI && command != .healthAPI {
             throw CLIError.invalidValue("--api-host/--api-port")
+        }
+        if watchSineTestSync && command != .sineTestSync {
+            throw CLIError.invalidValue("--watch")
         }
 
         self.configDirectory = configDirectory
@@ -181,6 +189,7 @@ struct CLIOptions {
         self.commandConfigPath = commandConfigPath
         self.apiHost = apiHost
         self.apiPort = apiPort
+        self.watchSineTestSync = watchSineTestSync
     }
 
     private static func parseCommand(_ value: String) throws -> Command {
@@ -198,6 +207,7 @@ struct CLIOptions {
         case "repair": return .repair
         case "export-cache": return .exportCache
         case "data-check": return .dataCheck
+        case "sinetest-sync", "sine-sync": return .sineTestSync
         case "fxbacktest-api": return .fxBacktestAPI
         case "health-api": return .healthAPI
         case "backtest": return .backtest

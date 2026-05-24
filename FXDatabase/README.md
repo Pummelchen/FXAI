@@ -205,7 +205,14 @@ Paths are resolved relative to the package working directory unless absolute. Lo
 
 The program does not guess suffixes or prefixes. If your broker uses `EURUSDm`, configure it explicitly. `source_origin` is stored in ClickHouse and is part of checkpoints, batch IDs, canonical keys, verified coverage, data certificates, verification results, repair logs, and FXBacktest API requests. `startcheck` also syncs the broker-specific `symbol_data_sources` table from this config, keyed by `broker_source_id`, `logical_symbol`, `source_origin`, and priority. MT5 is the first supported origin; future sources can use their own uppercase source origin values.
 
-`SINETEST` is the reserved virtual test security served by FXDatabase without ClickHouse or MT5 readiness gates. It uses `source_origin = "SYNTHETIC"`, provider symbol `SineTest`, and 6 scaled digits. The generated M1 OHLCV stream is a deterministic one-hour sine/cosine cycle in the 0..1 range, with the open/high at exactly `1.000000` on every full UTC hour and the mathematical zero trough clamped to one scaled tick so the positive-price OHLC contract remains valid. Volume is always nonzero, so FXDataEngine and FXPlugins smoke tests exercise the volume-aware code path.
+`SINETEST` is the reserved virtual test security served by FXDatabase without MT5 readiness gates. It uses `source_origin = "SYNTHETIC"`, broker source `virtual-sinetest`, provider symbol `SineTest`, and 6 scaled digits. The generated M1 OHLCV stream is a deterministic one-hour sine/cosine cycle, with open/high at exactly `1.000000` on every full UTC hour and the trough clamped to `0.001000` at the half-hour. Volume is always nonzero, so FXDataEngine and FXPlugins smoke tests exercise the volume-aware code path.
+
+The production `sinetest_synchronizer` agent keeps the ClickHouse canonical store, verified coverage, data certificates, and ingest checkpoint filled from `2000-01-01 00:00:00 UTC` through runtime-now. It checks every 10 seconds and replaces only uncovered SineTest chunks, so existing canonical rows do not create duplicate keys or confuse the backtest data API. To fill or repair SineTest manually, run:
+
+```bash
+swift run --package-path FXDatabase FXDatabase sinetest-sync
+swift run --package-path FXDatabase FXDatabase sinetest-sync --watch
+```
 
 ### Broker Time
 
@@ -562,7 +569,7 @@ It serves `GET /v1/health` with ClickHouse reachability, broker source count, ca
 
 ## Production Supervisor Agents
 
-`supervise` runs sixteen operational agents through one sequential supervisor. The supervisor owns the single MT5 bridge connection, uses the same broker runtime lock as standalone writer commands, records agent events in ClickHouse, and keeps retryable failures from advancing ingestion checkpoints.
+`supervise` runs seventeen operational agents through one sequential supervisor. The supervisor owns the single MT5 bridge connection, uses the same broker runtime lock as standalone writer commands, records agent events in ClickHouse, and keeps retryable failures from advancing ingestion checkpoints.
 
 The supervisor sorts due agents by explicit priority before every cycle:
 
@@ -575,6 +582,7 @@ The supervisor sorts due agents by explicit priority before every cycle:
 | 40 | `utc_time_authority` | 60s | Verifies live broker server offset against DB-backed verified offset segments. |
 | 50 | `symbol_metadata_drift` | 300s | Checks configured MT5 symbols and digit metadata. |
 | 55 | `source_history_drift` | 300s | Compares MT5 oldest/latest closed M1 source boundaries with stored checkpoints. |
+| 58 | `sinetest_synchronizer` | 10s | Keeps the synthetic SineTest canonical dataset, coverage, certificates, and checkpoint current from 2000-01-01 through runtime-now. |
 | 60 | `history_importer` | run once only when enabled | Owns first-run/resume backfill. |
 | 70 | `live_m1_updater` | 10s | Ingests newly closed M1 bars. |
 | 80 | `database_verifier_repairer` | 3600s | Runs DB checks, MT5 random cross-checks, and safe canonical repair. |
@@ -610,7 +618,7 @@ Implemented:
 - TCP socket transport in Swift with separate connect/accept timeout and request read/write timeout.
 - ClickHouse HTTP client and migrations.
 - Backfill/live update agents with MT5 history synchronization checks, double-read source completeness proofs, conflict recording, verified coverage certificates, checkpoint-after-canonical-readback flow, and canonical range replacement.
-- Production supervisor with sixteen operational agents, priority/supersedence rules, broker runtime lock, and runtime event/state tables.
+- Production supervisor with seventeen operational agents, priority/supersedence rules, broker runtime lock, and runtime event/state tables.
 - SHA-256 data certification agent and `data_certificates` table for verified coverage audit evidence.
 - Read-only operational health API at `/v1/health`.
 - Operational failure guide command with action-oriented recovery advice for unattended operation.

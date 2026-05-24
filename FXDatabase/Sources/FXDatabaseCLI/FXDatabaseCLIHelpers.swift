@@ -195,6 +195,31 @@ extension FXDatabaseCLI {
         }
     }
 
+    static func runSineTestSync(
+        config: ConfigBundle,
+        clickHouse: ClickHouseClientProtocol,
+        logger: Logger,
+        watch: Bool
+    ) async throws {
+        let sync = try SineWaveDatabaseSyncAgent(
+            clickHouse: clickHouse,
+            database: config.clickHouse.database,
+            chunkRows: config.app.chunkSize
+        )
+        let sleepNanoseconds = UInt64(SineTestSecurity.syncIntervalSeconds) * 1_000_000_000
+        repeat {
+            let result = try await sync.syncThroughRuntimeNow()
+            if result.alreadyCurrent {
+                logger.ok("SineTest data is current through UTC \(result.targetEndExclusiveUtc.rawValue)")
+            } else {
+                logger.ok("SineTest sync inserted \(result.rowsInserted) row(s) across \(result.chunksInserted) chunk(s) through UTC \(result.targetEndExclusiveUtc.rawValue)")
+            }
+            if watch {
+                try await Task.sleep(nanoseconds: sleepNanoseconds)
+            }
+        } while watch && !Task.isCancelled
+    }
+
     static func recoverClickHouse(
         config: ConfigBundle,
         clickHouse: ClickHouseClientProtocol,
@@ -417,6 +442,7 @@ extension FXDatabaseCLI {
           verify --random-ranges 20
           repair --symbol EURUSD --from 2020-01-01 --to 2020-02-01
           data-check --config Config/history_data.json
+          sinetest-sync [--watch]
           fxbacktest-api [--api-host 127.0.0.1] [--api-port 5066]
           health-api [--api-host 127.0.0.1] [--api-port 5067]
 
@@ -426,6 +452,7 @@ extension FXDatabaseCLI {
           --config Config/history_data.json   # data-check only
           --api-host 127.0.0.1                # fxbacktest-api / health-api
           --api-port 5066                     # fxbacktest-api / health-api
+          --watch                             # sinetest-sync only; repeats every 10s
           --verbose
           --debug
 

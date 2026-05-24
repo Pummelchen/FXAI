@@ -71,7 +71,7 @@ The core historical data contract is `M1 OHLCV`.
 - M1 open, high, low, close are mandatory.
 - Volume is optional by provider, but when `volume > 0` exists, FXDataEngine and plugins must use it.
 - Spread is no longer part of the offline backtest contract.
-- SineTest is a virtual FXDatabase security used by the test suite to prove plugins and accelerators can handle a simple predictable series without crashing.
+- SineTest is a virtual FXDatabase security used by the test suite to prove plugins and accelerators can handle a simple predictable series without crashing. FXDatabase also persists it as canonical synthetic data from `2000-01-01` through runtime-now, with a full-hour peak of `1.000000`, half-hour trough of `0.001000`, and a 10-second sync agent.
 
 ## User Benefits
 

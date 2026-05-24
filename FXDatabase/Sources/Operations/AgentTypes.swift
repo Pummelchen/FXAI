@@ -13,6 +13,7 @@ public enum ProductionAgentKind: String, CaseIterable, Sendable {
     case supervisorCoordinator = "supervisor_coordinator"
     case symbolMetadataDrift = "symbol_metadata_drift"
     case sourceHistoryDrift = "source_history_drift"
+    case sineTestSynchronizer = "sinetest_synchronizer"
     case verificationCoveragePlanner = "verification_coverage_planner"
     case checkpointGapAuditor = "checkpoint_gap_auditor"
     case dataCertification = "data_certification"
@@ -29,6 +30,7 @@ public enum ProductionAgentKind: String, CaseIterable, Sendable {
         case .utcTimeAuthority: return 40
         case .symbolMetadataDrift: return 50
         case .sourceHistoryDrift: return 55
+        case .sineTestSynchronizer: return 58
         case .historyImporter: return 60
         case .liveM1Updater: return 70
         case .databaseVerifierRepairer: return 80
@@ -63,6 +65,8 @@ public enum ProductionAgentKind: String, CaseIterable, Sendable {
             return "Symbol Guard"
         case .sourceHistoryDrift:
             return "Source History Guard"
+        case .sineTestSynchronizer:
+            return "SineTest Sync"
         case .verificationCoveragePlanner:
             return "Verification Planner"
         case .checkpointGapAuditor:
@@ -100,6 +104,8 @@ public enum ProductionAgentKind: String, CaseIterable, Sendable {
             return "Checking MT5 symbols and digits"
         case .sourceHistoryDrift:
             return "Checking MT5 source history boundaries"
+        case .sineTestSynchronizer:
+            return "Synchronizing deterministic SineTest M1 OHLCV data"
         case .verificationCoveragePlanner:
             return "Checking historical verification coverage plan"
         case .checkpointGapAuditor:
@@ -131,6 +137,8 @@ public enum ProductionAgentKind: String, CaseIterable, Sendable {
             return .brightBlue
         case .sourceHistoryDrift:
             return .cyan
+        case .sineTestSynchronizer:
+            return .brightCyan
         case .historyImporter:
             return .green
         case .liveM1Updater:

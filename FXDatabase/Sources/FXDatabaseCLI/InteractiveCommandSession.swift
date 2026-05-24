@@ -180,6 +180,7 @@ private actor InteractiveCommandCoordinator {
           verify --random-ranges 20
           repair --symbol EURUSD --from 2020-01-01 --to 2020-02-01
           data-check --config Config/history_data.json
+          sinetest-sync --watch
           fxbacktest-api --api-host 127.0.0.1 --api-port 5066
           health-api --api-host 127.0.0.1 --api-port 5067
 

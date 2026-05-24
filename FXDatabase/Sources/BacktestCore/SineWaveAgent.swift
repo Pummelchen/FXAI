@@ -9,6 +9,9 @@ public enum SineTestSecurity {
     public static let providerSymbol = validatedMT5Symbol(displayName)
     public static let sourceOrigin = DataSourceOrigin.synthetic
     public static let digits = validatedDigits(6)
+    public static let genesisUtc = UtcSecond(rawValue: 946_684_800)
+    public static let minimumNormalizedValue = 0.001
+    public static let syncIntervalSeconds = 10
 
     public static func matches(_ logicalSymbol: LogicalSymbol) -> Bool {
         logicalSymbol.rawValue == logicalSymbolRawValue
@@ -205,7 +208,8 @@ public struct SineWaveAgent: HistoricalOhlcDataProviding {
         let minuteIndex = floorDiv(utc, Timeframe.m1.seconds)
         let minuteOfHour = positiveModulo(minuteIndex, 60)
         let radians = 2.0 * Double.pi * Double(minuteOfHour) / 60.0
-        return 0.5 + 0.5 * cos(radians)
+        let zeroToOne = 0.5 + 0.5 * cos(radians)
+        return SineTestSecurity.minimumNormalizedValue + ((1.0 - SineTestSecurity.minimumNormalizedValue) * zeroToOne)
     }
 
     public static func scaledPrice(atUTC utc: Int64, digits: Digits = SineTestSecurity.digits) -> Int64 {
@@ -214,7 +218,8 @@ public struct SineWaveAgent: HistoricalOhlcDataProviding {
 
     private static func scaledPrice(atUTC utc: Int64, scale: Int64) -> Int64 {
         let scaled = Int64((normalizedValue(atUTC: utc) * Double(scale)).rounded())
-        return min(scale, max(1, scaled))
+        let minimumScaled = max(1, Int64((SineTestSecurity.minimumNormalizedValue * Double(scale)).rounded()))
+        return min(scale, max(minimumScaled, scaled))
     }
 
     private static func volumeFor(open: Int64, close: Int64, scale: Int64) -> UInt64 {

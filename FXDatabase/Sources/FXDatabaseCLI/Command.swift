@@ -26,6 +26,7 @@ enum Command: Equatable {
     case repair
     case exportCache
     case dataCheck
+    case sineTestSync
     case fxBacktestAPI
     case healthAPI
     case backtest
@@ -38,7 +39,7 @@ extension Command {
         switch self {
         case .help, .interactive, .failureGuide, .symbolCheck, .exportCache, .backtest, .optimize:
             return false
-        case .migrate, .bridgeCheck, .backfill, .live, .supervise, .startcheck, .verify, .repair, .dataCheck, .fxBacktestAPI, .healthAPI:
+        case .migrate, .bridgeCheck, .backfill, .live, .supervise, .startcheck, .verify, .repair, .dataCheck, .sineTestSync, .fxBacktestAPI, .healthAPI:
             return true
         }
     }
@@ -51,7 +52,7 @@ extension Command {
             return "backtest has been removed from FXDatabase. Use fxbacktest-api to serve verified history, then run strategies in FXBacktest or another external Swift app through FXBacktest API v1."
         case .optimize:
             return "optimize has been removed from FXDatabase. Long-running optimization belongs in an external Swift app with its own durable job model; FXDatabase only serves verified OHLC data."
-        case .interactive, .migrate, .bridgeCheck, .symbolCheck, .backfill, .live, .supervise, .startcheck, .failureGuide, .verify, .repair, .dataCheck, .fxBacktestAPI, .healthAPI, .help:
+        case .interactive, .migrate, .bridgeCheck, .symbolCheck, .backfill, .live, .supervise, .startcheck, .failureGuide, .verify, .repair, .dataCheck, .sineTestSync, .fxBacktestAPI, .healthAPI, .help:
             return nil
         }
     }

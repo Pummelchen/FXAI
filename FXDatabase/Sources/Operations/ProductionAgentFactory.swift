@@ -1,3 +1,4 @@
+import BacktestCore
 import Config
 import Foundation
 
@@ -14,6 +15,7 @@ public struct ProductionAgentFactory: Sendable {
             UTCTimeAuthorityProductionAgent(intervalSeconds: supervisor.utcCheckIntervalSeconds),
             SymbolMetadataDriftAgent(intervalSeconds: supervisor.symbolMetadataCheckIntervalSeconds),
             SourceHistoryDriftAgent(intervalSeconds: supervisor.checkpointAuditIntervalSeconds),
+            SineTestDataProductionAgent(intervalSeconds: SineTestSecurity.syncIntervalSeconds),
             HistoryImportProductionAgent(
                 intervalSeconds: max(60, supervisor.checkpointAuditIntervalSeconds),
                 enabled: runBackfillOnStart

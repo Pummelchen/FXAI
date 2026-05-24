@@ -310,7 +310,7 @@ final class FXBacktestAPITests: XCTestCase {
         XCTAssertEqual(response.metadata.mt5Symbol, "SineTest")
         XCTAssertEqual(response.metadata.rowCount, 61)
         XCTAssertEqual(response.open[0], 1_000_000)
-        XCTAssertEqual(response.open[30], 1)
+        XCTAssertEqual(response.open[30], 1_000)
         XCTAssertEqual(response.open[60], 1_000_000)
         XCTAssertTrue(response.volume.allSatisfy { $0 > 0 })
         let executeCount = await clickHouse.executeCount()

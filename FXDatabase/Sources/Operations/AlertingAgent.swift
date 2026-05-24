@@ -203,7 +203,7 @@ public struct AlertingAgent: ProductionAgent {
         switch agent {
         case .healthMonitor, .bridgeVersionGuard, .utcTimeAuthority, .symbolMetadataDrift, .sourceHistoryDrift, .historyImporter, .liveM1Updater, .databaseVerifierRepairer:
             return true
-        case .supervisorCoordinator, .schemaDriftGuard, .verificationCoveragePlanner, .checkpointGapAuditor, .dataCertification, .backupReadiness, .backupRestoreVerifier, .alerting:
+        case .supervisorCoordinator, .schemaDriftGuard, .sineTestSynchronizer, .verificationCoveragePlanner, .checkpointGapAuditor, .dataCertification, .backupReadiness, .backupRestoreVerifier, .alerting:
             return false
         }
     }
