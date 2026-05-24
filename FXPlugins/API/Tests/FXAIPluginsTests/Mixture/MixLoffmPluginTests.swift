@@ -90,10 +90,45 @@ final class MixLoffmPluginTests: XCTestCase {
         let root = Self.pluginRoot()
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("CPU/MixLoffmCPUModel.swift").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("CPU/MixLoffmReference.swift").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("PyTorch/mix_loffm_torch.py").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metal").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("TensorFlow").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("NLP").path))
+    }
+
+    func testReferenceFactorizationRoutesExpertsAndPenalizesOveruse() throws {
+        let features = [1.0, 0.8, -0.4]
+        let trendExpert = MixLoffmReference.Expert(
+            bias: 0.0,
+            linearWeights: [0.2, 0.5, -0.1],
+            factors: [[0.3, 0.1], [0.2, -0.2], [-0.1, 0.4]],
+            reliability: 0.80,
+            usageEMA: 0.80
+        )
+        let meanReversionExpert = MixLoffmReference.Expert(
+            bias: 0.0,
+            linearWeights: [-0.2, -0.3, 0.4],
+            factors: [[-0.2, 0.3], [0.1, 0.2], [0.3, -0.1]],
+            reliability: 0.70,
+            usageEMA: 0.20
+        )
+
+        let gates = MixLoffmReference.gateProbabilities(features: features, experts: [trendExpert, meanReversionExpert])
+        let balancedGates = MixLoffmReference.gateProbabilities(features: features, experts: [
+            MixLoffmReference.Expert(
+                bias: trendExpert.bias,
+                linearWeights: trendExpert.linearWeights,
+                factors: trendExpert.factors,
+                reliability: trendExpert.reliability,
+                usageEMA: 0.20
+            ),
+            meanReversionExpert
+        ])
+
+        XCTAssertEqual(gates.reduce(0.0, +), 1.0, accuracy: 1.0e-12)
+        XCTAssertGreaterThan(MixLoffmReference.interactionEnergy(features: features, expert: trendExpert), 0.0)
+        XCTAssertLessThan(gates[0], balancedGates[0])
     }
 
     private static func predictRequest(dataHasVolume: Bool) -> PredictRequestV4 {

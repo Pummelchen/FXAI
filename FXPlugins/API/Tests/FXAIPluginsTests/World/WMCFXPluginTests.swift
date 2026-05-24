@@ -89,10 +89,33 @@ final class WMCFXPluginTests: XCTestCase {
         let root = Self.pluginRoot()
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("CPU/WMCFXCPUModel.swift").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("CPU/WMCFXAccelerated.swift").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("CPU/WMCFXReference.swift").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metal").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("PyTorch").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("TensorFlow").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("NLP").path))
+    }
+
+    func testCurrencyFactorReferenceRecoversStrengthsAndCycleImbalance() throws {
+        let consistent = [
+            WMCFXReference.PairReturn(base: "EUR", quote: "USD", logReturn: 0.030, volume: 16),
+            WMCFXReference.PairReturn(base: "USD", quote: "JPY", logReturn: 0.020, volume: 9),
+            WMCFXReference.PairReturn(base: "EUR", quote: "JPY", logReturn: 0.050, volume: 25)
+        ]
+        let snapshot = WMCFXReference.inferCurrencyFactors(consistent, dataHasVolume: true)
+        let cycles = WMCFXReference.cycleImbalances(consistent)
+
+        XCTAssertEqual(snapshot.factors.first?.currency, "EUR")
+        XCTAssertEqual(snapshot.factors.last?.currency, "JPY")
+        XCTAssertLessThan(snapshot.residualRMSE, 1.0e-5)
+        XCTAssertEqual(cycles.first?.basisPoints ?? 1.0, 0.0, accuracy: 1.0e-9)
+
+        var inconsistent = consistent
+        inconsistent[2] = WMCFXReference.PairReturn(base: "EUR", quote: "JPY", logReturn: 0.040, volume: 25)
+        XCTAssertGreaterThan(abs(WMCFXReference.cycleImbalances(inconsistent).first?.basisPoints ?? 0.0), 90.0)
+
+        let unweighted = WMCFXReference.inferCurrencyFactors(consistent, dataHasVolume: false)
+        XCTAssertTrue(unweighted.factors.allSatisfy { $0.liquidityWeight == 1.0 })
     }
 
     private static func request(direction: Double, shapedWindow: Bool, dataHasVolume: Bool) -> PredictRequestV4 {

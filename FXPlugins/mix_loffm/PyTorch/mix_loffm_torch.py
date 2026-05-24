@@ -12,17 +12,57 @@ from dataclasses import dataclass
 from typing import Iterable
 
 import torch
+from torch import nn
+import torch.nn.functional as F
 
 
 EXPERTS = 4
 DERIVED = 10
 LATENT = 12
+RANK = 8
 
 
 def preferred_device() -> torch.device:
     if torch.backends.mps.is_available():
         return torch.device("mps")
     return torch.device("cpu")
+
+
+class LoffmMixtureModule(nn.Module):
+    """Low-rank online factorization-machine mixture for MPS training."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.router = nn.Sequential(
+            nn.LayerNorm(DERIVED),
+            nn.Linear(DERIVED, 32),
+            nn.GELU(),
+            nn.Linear(32, EXPERTS),
+        )
+        self.expert_linear = nn.Parameter(torch.zeros(EXPERTS, 3, DERIVED))
+        self.feature_factors = nn.Parameter(torch.randn(EXPERTS, DERIVED, RANK) * 0.03)
+        self.class_factors = nn.Parameter(torch.randn(EXPERTS, 3, RANK) * 0.03)
+        self.move_head = nn.Sequential(nn.LayerNorm(DERIVED), nn.Linear(DERIVED, EXPERTS), nn.Softplus())
+
+    def forward(self, derived: torch.Tensor) -> dict[str, torch.Tensor]:
+        gates = torch.softmax(self.router(derived), dim=-1)
+        latent = torch.einsum("bd,edr->ber", derived, self.feature_factors)
+        factor_logits = torch.einsum("ber,ecr->bec", latent, self.class_factors)
+        linear_logits = torch.einsum("bd,ecd->bec", derived, self.expert_linear)
+        expert_logits = linear_logits + factor_logits
+        logits = torch.sum(gates.unsqueeze(-1) * expert_logits, dim=1)
+        move = torch.sum(gates * self.move_head(derived), dim=-1)
+        return {
+            "class_probabilities": torch.softmax(logits, dim=-1),
+            "expert_gates": gates,
+            "expected_move_points": move,
+        }
+
+
+def load_balance_loss(gates: torch.Tensor) -> torch.Tensor:
+    """Penalize collapsed routing so all LOFFM experts remain trainable."""
+    target = torch.full((EXPERTS,), 1.0 / EXPERTS, dtype=gates.dtype, device=gates.device)
+    return torch.mean((gates.mean(dim=0) - target).pow(2))
 
 
 def _seed_gate_weights(device: torch.device) -> torch.Tensor:
@@ -60,10 +100,13 @@ class LoffmTorchState:
     usage_ema: torch.Tensor
     hit_ema: torch.Tensor
     confidence_ema: torch.Tensor
+    model: LoffmMixtureModule | None = None
+    optimizer: torch.optim.Optimizer | None = None
 
     @classmethod
     def seeded(cls, device: torch.device | None = None) -> "LoffmTorchState":
         device = device or preferred_device()
+        model = LoffmMixtureModule().to(device)
         skip = torch.zeros((EXPERTS, DERIVED), dtype=torch.float32, device=device)
         skip[:, 0] = torch.tensor([-0.10, -0.10, -0.10, 0.25], device=device)
         skip[:, 5] = torch.tensor([0.05, 0.05, 0.05, 0.18], device=device)
@@ -75,6 +118,8 @@ class LoffmTorchState:
             usage_ema=torch.full((EXPERTS,), 1.0 / EXPERTS, dtype=torch.float32, device=device),
             hit_ema=torch.full((EXPERTS,), 0.50, dtype=torch.float32, device=device),
             confidence_ema=torch.full((EXPERTS,), 0.50, dtype=torch.float32, device=device),
+            model=model,
+            optimizer=torch.optim.AdamW(model.parameters(), lr=3.0e-4, weight_decay=1.0e-4),
         )
 
 
@@ -150,6 +195,14 @@ def predict_batch(
     probs = torch.stack([sell, buy, skip], dim=-1)
     probs = torch.clamp(probs, 0.0005, 0.9995)
     probs = probs / torch.sum(probs, dim=-1, keepdim=True)
+    if state.model is not None:
+        state.model.eval()
+        with torch.no_grad():
+            neural = state.model(derived)
+        probs = torch.clamp(0.70 * probs + 0.30 * neural["class_probabilities"], 0.0005, 0.9995)
+        probs = probs / torch.sum(probs, dim=-1, keepdim=True)
+        gates = torch.clamp(0.70 * gates + 0.30 * neural["expert_gates"], 0.0005, 0.9995)
+        gates = gates / torch.sum(gates, dim=-1, keepdim=True)
     return {"class_probabilities": probs, "expert_gates": gates}
 
 
@@ -208,4 +261,15 @@ def train_step(
     hit = torch.sum(probabilities * one_hot, dim=-1)
     state.hit_ema = 0.98 * state.hit_ema + 0.02 * torch.mean(gates * hit.unsqueeze(-1), dim=0).clamp(0.0, 1.0)
     state.confidence_ema = 0.98 * state.confidence_ema + 0.02 * torch.mean(gates * torch.max(probabilities, dim=-1).values.unsqueeze(-1), dim=0)
+    if state.model is not None and state.optimizer is not None:
+        state.model.train()
+        neural = state.model(derived.detach())
+        neural_probs = neural["class_probabilities"].clamp_min(1.0e-6)
+        loss = F.nll_loss(torch.log(neural_probs), target)
+        loss = loss + 0.05 * F.smooth_l1_loss(neural["expected_move_points"], moves_tensor)
+        loss = loss + 0.02 * load_balance_loss(neural["expert_gates"])
+        state.optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(state.model.parameters(), 1.0)
+        state.optimizer.step()
     return state

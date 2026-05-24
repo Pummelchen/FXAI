@@ -3,6 +3,7 @@ import Foundation
 import PackageDescription
 
 let packageDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+let fxaiPluginImplementationSourceFolders = Set(["CPU", "Metal"])
 
 func fxaiPluginSwiftSources() -> [String] {
     guard let enumerator = FileManager.default.enumerator(
@@ -15,7 +16,6 @@ func fxaiPluginSwiftSources() -> [String] {
 
     var sources: [String] = []
     let allowedAPIFolders = Set(["Registry", "Runtime"])
-    let allowedPluginImplementationFolders = Set(["CPU", "Metal"])
     let packagePathPrefix = packageDirectory.path + "/"
 
     while let url = enumerator.nextObject() as? URL {
@@ -42,7 +42,7 @@ func fxaiPluginSwiftSources() -> [String] {
             continue
         }
 
-        if parts.count >= 3, allowedPluginImplementationFolders.contains(parts[1]) {
+        if parts.count >= 3, fxaiPluginImplementationSourceFolders.contains(parts[1]) {
             sources.append(relativePath)
         }
     }
@@ -58,7 +58,6 @@ func fxaiPluginExcludedPaths() -> [String] {
         "API/Docs",
         "API/Tests"
     ])
-    let allowedPluginImplementationFolders = Set(["CPU", "Metal"])
 
     guard let rootEntries = try? FileManager.default.contentsOfDirectory(
         at: packageDirectory,
@@ -79,7 +78,7 @@ func fxaiPluginExcludedPaths() -> [String] {
         }
         for child in children {
             guard (try? child.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
-            guard !allowedPluginImplementationFolders.contains(child.lastPathComponent) else { continue }
+            guard !fxaiPluginImplementationSourceFolders.contains(child.lastPathComponent) else { continue }
             excluded.insert("\(pluginURL.lastPathComponent)/\(child.lastPathComponent)")
         }
     }

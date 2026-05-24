@@ -159,6 +159,52 @@ class AutoCorrelation(nn.Module):
         return torch.sum(values * weights.view(x.shape[0], lag_count, 1, 1), dim=1)
 
 
+class SeriesDecomposition(nn.Module):
+    """Autoformer moving-average decomposition with edge replication padding."""
+
+    def __init__(self, kernel_size: int = 5) -> None:
+        super().__init__()
+        self.kernel_size = max(3, int(kernel_size) | 1)
+        self.pad = (self.kernel_size - 1) // 2
+        self.pool = nn.AvgPool1d(kernel_size=self.kernel_size, stride=1)
+
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        if x.shape[1] == 0:
+            return x, x
+        left = x[:, :1, :].expand(-1, self.pad, -1)
+        right = x[:, -1:, :].expand(-1, self.pad, -1)
+        padded = torch.cat([left, x, right], dim=1)
+        trend = self.pool(padded.transpose(1, 2)).transpose(1, 2)
+        seasonal = x - trend
+        return seasonal, trend
+
+
+class AutoformerEncoderBlock(nn.Module):
+    """Decomposition-first Autoformer block with auto-correlation attention."""
+
+    def __init__(self, width: int = HIDDEN_COUNT) -> None:
+        super().__init__()
+        self.autocorrelation = AutoCorrelation(width)
+        self.attention_norm = nn.LayerNorm(width)
+        self.feed_forward = nn.Sequential(
+            nn.Linear(width, width * 4),
+            nn.GELU(),
+            nn.Dropout(0.05),
+            nn.Linear(width * 4, width),
+        )
+        self.output_norm = nn.LayerNorm(width)
+
+    def forward(self, seasonal: torch.Tensor) -> torch.Tensor:
+        attended = self.autocorrelation(seasonal)
+        seasonal = self.attention_norm(seasonal + attended)
+        return self.output_norm(seasonal + self.feed_forward(seasonal))
+
+
+def decomposition_consistency_loss(seasonal: torch.Tensor, trend: torch.Tensor, source: torch.Tensor) -> torch.Tensor:
+    """Penalize decomposition drift so seasonal + trend reconstructs input."""
+    return F.smooth_l1_loss(seasonal + trend, source)
+
+
 class S4DLayer(nn.Module):
     def __init__(self, width: int = HIDDEN_COUNT, max_kernel: int = 128) -> None:
         super().__init__()
@@ -238,7 +284,9 @@ class AIAutoformerReferenceModel(nn.Module):
             self.post_attention_grn = GatedResidualNetwork(HIDDEN_COUNT)
         elif self.architecture == "AUTOFORMER":
             self.input_projection = nn.Linear(FEATURE_COUNT, HIDDEN_COUNT)
+            self.series_decomposition = SeriesDecomposition(kernel_size=5)
             self.autocorrelation = AutoCorrelation(HIDDEN_COUNT)
+            self.encoder_blocks = nn.ModuleList([AutoformerEncoderBlock(HIDDEN_COUNT) for _ in range(2)])
             self.trend_projection = nn.Linear(FEATURE_COUNT, HIDDEN_COUNT)
             self.grn = GatedResidualNetwork(HIDDEN_COUNT)
         elif self.architecture in {"PATCHTST", "TIMESFM"}:
@@ -383,9 +431,13 @@ class AIAutoformerReferenceModel(nn.Module):
             self.last_attention_weights = attn_weights.detach()
             return self.post_attention_grn(attended[:, -1, :])
         if arch == "AUTOFORMER":
-            trend = self._moving_average(x)
-            seasonal = x - trend
-            seasonal_encoded = self.autocorrelation(self.input_projection(seasonal))
+            seasonal, trend = self.series_decomposition(x)
+            seasonal_encoded = self.input_projection(seasonal)
+            for block in self.encoder_blocks:
+                seasonal_encoded = block(seasonal_encoded)
+            self.last_decomposition_loss = decomposition_consistency_loss(seasonal, trend, x).detach()
+            self.last_trend_component = trend.detach()
+            self.last_seasonal_component = seasonal.detach()
             return self.grn(seasonal_encoded[:, -1, :] + self.trend_projection(trend[:, -1, :]))
         if arch in {"PATCHTST", "TIMESFM"}:
             patches = self._patches(x)

@@ -50,6 +50,32 @@ final class Wave3FactorTrendReferenceTests: XCTestCase {
         XCTAssertEqual(result.scores.count, panel.count)
     }
 
+    func testPCAReferenceProducesDeflatedOrthonormalComponents() {
+        let panel = (0..<48).map { index in
+            let first = sin(Double(index) * 0.17)
+            let second = cos(Double(index) * 0.29)
+            return [
+                first + 0.05 * second,
+                0.7 * first - 0.2 * second,
+                second,
+                -0.3 * first + 0.8 * second
+            ]
+        }
+
+        let components = FactorPCAPanelReference.components(panel: panel, componentCount: 2)
+        let firstNorm = sqrt(components.loadings[0].map { $0 * $0 }.reduce(0.0, +))
+        let secondNorm = sqrt(components.loadings[1].map { $0 * $0 }.reduce(0.0, +))
+        let dot = zip(components.loadings[0], components.loadings[1]).map(*).reduce(0.0, +)
+
+        XCTAssertEqual(components.loadings.count, 2)
+        XCTAssertEqual(firstNorm, 1.0, accuracy: 1.0e-8)
+        XCTAssertEqual(secondNorm, 1.0, accuracy: 1.0e-8)
+        XCTAssertEqual(dot, 0.0, accuracy: 1.0e-6)
+        XCTAssertGreaterThan(components.eigenvalues[0], components.eigenvalues[1])
+        XCTAssertEqual(components.scores[0].count, panel.count)
+        XCTAssertGreaterThan(components.explainedVarianceRatios.reduce(0.0, +), 0.95)
+    }
+
     func testPPPReferenceScoresMeanReversionAndStaleness() {
         let scores = FactorPPPValueReference.scores([
             .init(symbol: "EURUSD", spot: 1.20, pppFairValue: 1.10, observationAgeDays: 10, halfLifeDays: 100),

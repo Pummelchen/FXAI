@@ -15,7 +15,7 @@ final class ReferenceBackendConformanceTests: XCTestCase {
             ("ai_tcn", ["ARCHITECTURE_MODE = \"TCN\"", "CausalTCNBlock", "dilation"]),
             ("ai_tst", ["ARCHITECTURE_MODE = \"TST\"", "nn.TransformerEncoderLayer", "nn.TransformerEncoder"]),
             ("ai_tft", ["ARCHITECTURE_MODE = \"TFT\"", "VariableSelectionNetwork", "GatedResidualNetwork", "interpretable_attention"]),
-            ("ai_autoformer", ["ARCHITECTURE_MODE = \"AUTOFORMER\"", "AutoCorrelation", "_moving_average"]),
+            ("ai_autoformer", ["ARCHITECTURE_MODE = \"AUTOFORMER\"", "SeriesDecomposition", "AutoformerEncoderBlock", "decomposition_consistency_loss"]),
             ("ai_patchtst", ["ARCHITECTURE_MODE = \"PATCHTST\"", "patch_embedding", "unfold"]),
             ("ai_s4", ["ARCHITECTURE_MODE = \"S4\"", "S4DLayer", "F.conv1d"]),
             ("ai_stmn", ["ARCHITECTURE_MODE = \"STMN\"", "memory_slots", "write_cell"]),
@@ -28,9 +28,23 @@ final class ReferenceBackendConformanceTests: XCTestCase {
             ("ai_tesseract", ["ARCHITECTURE_MODE = \"TESSERACT\"", "torch.einsum", "feature_factor"]),
             ("ai_trr", ["ARCHITECTURE_MODE = \"TRR\"", "transition_logits", "last_regime_probabilities"]),
             ("ai_mythos_rdt", ["ARCHITECTURE_MODE = \"MYTHOS_RDT\"", "DecisionTrajectoryTools", "action_embedding", "last_pseudo_actions"]),
-            ("wm_cfx", ["ARCHITECTURE_MODE = \"WM_CFX\"", "currency_exposure", "cross_rate_decoder"]),
+            ("wm_cfx", ["ARCHITECTURE_MODE = \"WM_CFX\"", "currency_exposure", "factor_gru", "cross_rate_decoder", "last_cross_rate_consistency"]),
             ("wm_graph", ["ARCHITECTURE_MODE = \"WM_GRAPH\"", "FXGraphTopology", "base_adjacency", "cycle_consistency_loss"]),
             ("rl_ppo", ["ARCHITECTURE_MODE = \"proximalPolicyOptimization\"", "ActorCriticPPO", "OfflineFXRolloutEnvironment", "append_offline_rollout", "ppo_clipped_loss", "state.rollout.clear()"])
+        ]
+
+        for expectation in expectations {
+            let text = try readPluginFile(plugin: expectation.plugin, backend: "PyTorch", filename: "\(expectation.plugin)_torch.py")
+            for required in expectation.required {
+                XCTAssertTrue(text.contains(required), "\(expectation.plugin) PyTorch backend missing \(required)")
+            }
+        }
+    }
+
+    func testMixturePyTorchBackendsUseModernTrainableModules() throws {
+        let expectations: [(plugin: String, required: [String])] = [
+            ("mix_loffm", ["LoffmMixtureModule(nn.Module)", "torch.optim.AdamW", "load_balance_loss", "feature_factors"]),
+            ("mix_moe_conformal", ["MoeConformalModule(nn.Module)", "torch.optim.AdamW", "split_conformal_cutoff", "load_balance_loss"])
         ]
 
         for expectation in expectations {

@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from typing import Iterable
 
 import torch
+from torch import nn
+import torch.nn.functional as F
 
 
 EXPERTS = 4
@@ -26,6 +28,65 @@ def preferred_device() -> torch.device:
     if torch.backends.mps.is_available():
         return torch.device("mps")
     return torch.device("cpu")
+
+
+class MoeConformalModule(nn.Module):
+    """Modern MoE router with differentiable conformal calibration heads."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.router = nn.Sequential(
+            nn.LayerNorm(REGIME),
+            nn.Linear(REGIME, 32),
+            nn.GELU(),
+            nn.Linear(32, EXPERTS),
+        )
+        self.expert_heads = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.LayerNorm(FEATURES),
+                    nn.Linear(FEATURES, 32),
+                    nn.GELU(),
+                    nn.Linear(32, CLASSES),
+                )
+                for _ in range(EXPERTS)
+            ]
+        )
+        self.move_heads = nn.ModuleList(
+            [
+                nn.Sequential(nn.LayerNorm(FEATURES), nn.Linear(FEATURES, 1), nn.Softplus())
+                for _ in range(EXPERTS)
+            ]
+        )
+        self.temperature = nn.Parameter(torch.ones(()))
+
+    def forward(self, regime: torch.Tensor, features: torch.Tensor) -> dict[str, torch.Tensor]:
+        gates = torch.softmax(self.router(regime) / self.temperature.clamp_min(0.20), dim=-1)
+        expert_logits = torch.stack([head(features) for head in self.expert_heads], dim=1)
+        logits = torch.sum(gates.unsqueeze(-1) * expert_logits, dim=1)
+        moves = torch.cat([head(features) for head in self.move_heads], dim=-1)
+        return {
+            "class_probabilities": torch.softmax(logits, dim=-1),
+            "expected_move_points": torch.sum(gates * moves, dim=-1),
+            "expert_gates": gates,
+        }
+
+
+def split_conformal_cutoff(scores: torch.Tensor, alpha: float = 0.10) -> torch.Tensor:
+    """Return the conservative split-conformal quantile for nonconformity scores."""
+    if scores.numel() == 0:
+        return torch.ones((), dtype=torch.float32, device=scores.device)
+    sorted_scores = torch.sort(scores.flatten()).values
+    rank = int(torch.ceil(torch.tensor((sorted_scores.numel() + 1) * (1.0 - alpha))).item()) - 1
+    if rank >= sorted_scores.numel():
+        return torch.ones((), dtype=sorted_scores.dtype, device=sorted_scores.device)
+    return sorted_scores[max(rank, 0)]
+
+
+def load_balance_loss(gates: torch.Tensor) -> torch.Tensor:
+    """Keep MoE routing from collapsing into a single expert."""
+    target = torch.full((EXPERTS,), 1.0 / EXPERTS, dtype=gates.dtype, device=gates.device)
+    return torch.mean((gates.mean(dim=0) - target).pow(2))
 
 
 def prepare_features(features: Iterable[Iterable[float]] | torch.Tensor, data_has_volume: bool = True) -> torch.Tensor:
@@ -60,10 +121,13 @@ class MoeConformalTorchState:
     usage_ema: torch.Tensor
     calibration_weights: torch.Tensor
     bucket_quantiles90: torch.Tensor
+    model: MoeConformalModule | None = None
+    optimizer: torch.optim.Optimizer | None = None
 
     @classmethod
     def seeded(cls, device: torch.device | None = None) -> "MoeConformalTorchState":
         device = device or preferred_device()
+        model = MoeConformalModule().to(device)
         return cls(
             router=_seed_router(device),
             gate_weights=torch.zeros((EXPERTS, WEIGHTS), dtype=torch.float32, device=device),
@@ -72,6 +136,8 @@ class MoeConformalTorchState:
             usage_ema=torch.full((EXPERTS,), 1.0 / EXPERTS, dtype=torch.float32, device=device),
             calibration_weights=torch.zeros((CLASSES, 5), dtype=torch.float32, device=device),
             bucket_quantiles90=torch.full((BUCKETS,), 0.40, dtype=torch.float32, device=device),
+            model=model,
+            optimizer=torch.optim.AdamW(model.parameters(), lr=3.0e-4, weight_decay=1.0e-4),
         )
 
 
@@ -170,6 +236,15 @@ def predict_batch(
     )
     calibrated_logits = torch.log(torch.clamp(raw, min=1.0e-6)) + calibrator_features @ state.calibration_weights.T
     probabilities = torch.softmax(calibrated_logits, dim=-1)
+    if state.model is not None:
+        state.model.eval()
+        with torch.no_grad():
+            neural = state.model(regime, model_features)
+        probabilities = torch.clamp(0.72 * probabilities + 0.28 * neural["class_probabilities"], 0.0005, 0.9990)
+        probabilities = probabilities / torch.sum(probabilities, dim=-1, keepdim=True)
+        expected_move = 0.72 * expected_move + 0.28 * neural["expected_move_points"]
+        gates = torch.clamp(0.72 * gates + 0.28 * neural["expert_gates"], 0.0005, 0.9995)
+        gates = gates / torch.sum(gates, dim=-1, keepdim=True)
     return {
         "class_probabilities": probabilities,
         "raw_probabilities": raw,
@@ -245,4 +320,18 @@ def train_step(
         if torch.any(mask):
             observed = torch.quantile(nonconformity[mask].detach(), 0.90)
             state.bucket_quantiles90[bucket] = 0.98 * state.bucket_quantiles90[bucket] + 0.02 * observed
+    if state.model is not None and state.optimizer is not None:
+        state.model.train()
+        neural = state.model(regime.detach(), model_features.detach())
+        neural_probs = neural["class_probabilities"].clamp_min(1.0e-6)
+        neural_nonconformity = 1.0 - torch.sum(neural_probs * one_hot, dim=-1)
+        cutoff = split_conformal_cutoff(neural_nonconformity.detach(), alpha=0.10)
+        loss = F.nll_loss(torch.log(neural_probs), target)
+        loss = loss + 0.05 * F.smooth_l1_loss(neural["expected_move_points"], moves_tensor)
+        loss = loss + 0.03 * torch.relu(neural_nonconformity.mean() - cutoff)
+        loss = loss + 0.02 * load_balance_loss(neural["expert_gates"])
+        state.optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(state.model.parameters(), 1.0)
+        state.optimizer.step()
     return state

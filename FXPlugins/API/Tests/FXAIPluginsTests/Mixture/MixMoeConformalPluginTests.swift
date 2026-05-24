@@ -92,10 +92,34 @@ final class MixMoeConformalPluginTests: XCTestCase {
         let root = Self.pluginRoot()
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("CPU/MixMoeConformalCPUModel.swift").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("CPU/MixMoeConformalReference.swift").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("PyTorch/mix_moe_conformal_torch.py").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metal").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("TensorFlow").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("NLP").path))
+    }
+
+    func testReferenceConformalCutoffCoverageAndBalancedRouter() throws {
+        let probabilities = [
+            [0.08, 0.86, 0.06],
+            [0.82, 0.10, 0.08],
+            [0.15, 0.20, 0.65],
+            [0.12, 0.76, 0.12]
+        ]
+        let labels = [1, 0, 2, 1]
+        let scores = zip(probabilities, labels).map { pair in 1.0 - pair.0[pair.1] }
+        let cutoff = MixMoeConformalReference.splitConformalCutoff(scores: scores, alpha: 0.10)
+        let coverage = MixMoeConformalReference.empiricalCoverage(probabilities: probabilities, labels: labels, cutoff: cutoff)
+        let gates = MixMoeConformalReference.routerGates(
+            regime: [1.0, 0.5, -0.1],
+            expertWeights: [[0.2, 0.1, 0.0], [0.2, 0.1, 0.0], [-0.1, 0.3, 0.2], [0.0, -0.2, 0.3]],
+            usageEMA: [0.80, 0.10, 0.05, 0.05]
+        )
+
+        XCTAssertGreaterThanOrEqual(coverage, 0.90)
+        XCTAssertTrue(MixMoeConformalReference.predictionSet(probabilities: probabilities[0], cutoff: cutoff).classes.contains(1))
+        XCTAssertEqual(gates.reduce(0.0, +), 1.0, accuracy: 1.0e-12)
+        XCTAssertLessThan(gates[0], gates[1])
     }
 
     private static func predictRequest(dataHasVolume: Bool) -> PredictRequestV4 {
