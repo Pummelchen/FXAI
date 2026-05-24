@@ -94,7 +94,6 @@ public struct VerificationCoveragePlannerAgent: ProductionAgent {
           AND length(mt5_source_sha256) = 64
           AND length(canonical_readback_sha256) = 64
           AND length(offset_authority_sha256) = 64
-        ORDER BY utc_range_start ASC, utc_range_end_exclusive DESC
         FORMAT TabSeparated
         """))
         return try body
@@ -108,6 +107,10 @@ public struct VerificationCoveragePlannerAgent: ProductionAgent {
                     throw ProductionAgentError.invariant("verification coverage planner received invalid coverage interval: \(line)")
                 }
                 return CoverageInterval(start: start, end: end)
+            }
+            .sorted {
+                if $0.start != $1.start { return $0.start < $1.start }
+                return $0.end > $1.end
             }
     }
 

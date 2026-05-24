@@ -210,7 +210,6 @@ public struct BacktestReadinessGate: Sendable {
           AND length(offset_authority_sha256) = 64
           AND utc_range_end_exclusive > \(request.utcStart.rawValue)
           AND utc_range_start < \(request.utcEndExclusive.rawValue)
-        ORDER BY utc_range_start ASC, utc_range_end_exclusive ASC
         FORMAT TabSeparated
         """))
         let intervals = try parseCoverageIntervals(body)
@@ -287,7 +286,6 @@ public struct BacktestReadinessGate: Sendable {
           AND length(offset_authority_sha256_aggregate) = 64
           AND utc_range_end_exclusive > \(request.utcStart.rawValue)
           AND utc_range_start < \(request.utcEndExclusive.rawValue)
-        ORDER BY utc_range_start ASC, utc_range_end_exclusive ASC
         FORMAT TabSeparated
         """))
         let intervals = try parseCoverageIntervals(body)
@@ -440,6 +438,10 @@ public struct BacktestReadinessGate: Sendable {
                     throw BacktestReadinessError.invalidScalar(String(line))
                 }
                 return UtcCoverageInterval(start: start, end: end)
+            }
+            .sorted {
+                if $0.start != $1.start { return $0.start < $1.start }
+                return $0.end < $1.end
             }
     }
 

@@ -183,6 +183,28 @@ final class OperationsAgentTests: XCTestCase {
         XCTAssertEqual(ingestStateInsertCount, 3)
     }
 
+    func testSineWaveDatabaseSyncDeletesUncoveredExistingRowsBeforeReinsert() async throws {
+        let clickHouse = SineSyncClickHouse()
+        let sync = try SineWaveDatabaseSyncAgent(
+            clickHouse: clickHouse,
+            database: "db",
+            chunkRows: 2,
+            certifyInsertedRanges: false
+        )
+        let end = UtcSecond(rawValue: SineTestSecurity.genesisUtc.rawValue + 2 * 60)
+
+        _ = try await sync.sync(utcEndExclusive: end)
+        await clickHouse.clearCoverageIntervals()
+        _ = try await sync.sync(utcEndExclusive: end)
+
+        let rows = await clickHouse.canonicalRows()
+        let canonicalDeleteCount = await clickHouse.canonicalDeleteCount()
+        let canonicalInsertCount = await clickHouse.canonicalInsertCount()
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertEqual(canonicalDeleteCount, 1)
+        XCTAssertEqual(canonicalInsertCount, 2)
+    }
+
     func testClickHouseStartupManagerRunsStartCommandForLocalTransportFailure() async throws {
         let config = try makeConfig()
         let client = StartupClickHouse(failuresBeforeSuccess: 1)

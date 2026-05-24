@@ -357,6 +357,7 @@ actor SineSyncClickHouse: ClickHouseClientProtocol {
     private var rows: [StoredSineCanonicalRow] = []
     private var coverageRows: [[String]] = []
     private var canonicalInserts = 0
+    private var canonicalDeletes = 0
     private var stateInserts = 0
 
     func execute(_ query: ClickHouseQuery) async throws -> String {
@@ -367,10 +368,15 @@ actor SineSyncClickHouse: ClickHouseClientProtocol {
                 .map { "\($0[7])\t\($0[8])" }
                 .joined(separator: "\n")
         }
+        if sql.contains("SELECT 1"),
+           sql.contains("FROM db.ohlc_m1_canonical") {
+            return rowsByUTC(in: sql).isEmpty ? "" : "1\n"
+        }
         if sql.contains("ALTER TABLE db.ohlc_m1_canonical DELETE") {
             let start = Self.integer(after: "mt5_server_ts_raw >= ", in: sql) ?? Int64.min
             let end = Self.integer(after: "mt5_server_ts_raw < ", in: sql) ?? Int64.max
             rows.removeAll { $0.mt5 >= start && $0.mt5 < end }
+            canonicalDeletes += 1
             return ""
         }
         if sql.contains("INSERT INTO db.ohlc_m1_canonical") {
@@ -378,6 +384,32 @@ actor SineSyncClickHouse: ClickHouseClientProtocol {
             rows.sort { $0.mt5 < $1.mt5 }
             canonicalInserts += 1
             return ""
+        }
+        if sql.contains("uniqExact(ts_utc)"),
+           sql.contains("ts_utc IN"),
+           sql.contains("countIf("),
+           sql.contains("source_status"),
+           sql.contains("FROM db.ohlc_m1_canonical") {
+            let selected = rowsByBoundary(in: sql)
+            let values: [Int64] = [
+                Int64(selected.count),
+                Int64(Set(selected.map(\.utc)).count),
+                Int64(selected.filter { row in
+                    row.mt5Symbol != SineTestSecurity.providerSymbol.rawValue ||
+                        row.timeframe != Timeframe.m1.rawValue ||
+                        row.mt5 != row.utc ||
+                        row.offset != 0 ||
+                        row.offsetSource != OffsetSource.configured.rawValue ||
+                        row.offsetConfidence != OffsetConfidence.verified.rawValue ||
+                        row.digits != SineTestSecurity.digits.rawValue ||
+                        row.open <= 0 ||
+                        row.high <= 0 ||
+                        row.low <= 0 ||
+                        row.close <= 0 ||
+                        row.volume == 0
+                }.count)
+            ]
+            return values.map { String($0) }.joined(separator: "\t") + "\n"
         }
         if sql.contains("uniqExact(ts_utc)"),
            sql.contains("countIf("),
@@ -466,8 +498,16 @@ actor SineSyncClickHouse: ClickHouseClientProtocol {
         canonicalInserts
     }
 
+    func canonicalDeleteCount() -> Int {
+        canonicalDeletes
+    }
+
     func coverageIntervalCount() -> Int {
         coverageRows.count
+    }
+
+    func clearCoverageIntervals() {
+        coverageRows.removeAll()
     }
 
     func ingestStateInsertCount() -> Int {
@@ -484,6 +524,16 @@ actor SineSyncClickHouse: ClickHouseClientProtocol {
         let start = Self.integer(after: "ts_utc >= ", in: sql) ?? Int64.min
         let end = Self.integer(after: "ts_utc < ", in: sql) ?? Int64.max
         return rows.filter { $0.utc >= start && $0.utc < end }.sorted { $0.utc < $1.utc }
+    }
+
+    private func rowsByBoundary(in sql: String) -> [StoredSineCanonicalRow] {
+        guard let range = sql.range(of: "ts_utc IN (") else { return [] }
+        let suffix = sql[range.upperBound...]
+        let rawValues = suffix.prefix { $0 != ")" }
+        let boundaries = Set(rawValues
+            .split(separator: ",", omittingEmptySubsequences: true)
+            .compactMap { Int64($0.trimmingCharacters(in: .whitespacesAndNewlines)) })
+        return rows.filter { boundaries.contains($0.utc) }.sorted { $0.utc < $1.utc }
     }
 
     private static func parseCanonicalRows(_ sql: String) throws -> [StoredSineCanonicalRow] {

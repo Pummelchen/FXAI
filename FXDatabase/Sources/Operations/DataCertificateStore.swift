@@ -115,7 +115,6 @@ public struct DataCertificateStore: Sendable {
           AND length(offset_authority_sha256) = 64
           AND utc_range_end_exclusive > \(utcStart.rawValue)
           AND utc_range_start < \(utcEndExclusive.rawValue)
-        ORDER BY utc_range_start ASC, utc_range_end_exclusive ASC, verified_at_utc ASC
         FORMAT TabSeparated
         """))
         return try body

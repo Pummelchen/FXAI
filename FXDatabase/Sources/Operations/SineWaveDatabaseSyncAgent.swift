@@ -81,8 +81,8 @@ public struct SineWaveDatabaseSyncAgent: Sendable {
         let targetEnd = utcEndExclusive
         var intervals = mergeIntervals(try await loadCoverageIntervals(start: targetStart, end: targetEnd))
         if firstGap(from: targetStart.rawValue, to: targetEnd.rawValue, coveredBy: intervals) == nil {
-            let summary = try await canonicalSummary(start: targetStart, end: targetEnd)
-            if !summary.isComplete(start: targetStart, end: targetEnd) {
+            let hasBoundaryRows = try await canonicalBoundaryRowsArePresent(start: targetStart, end: targetEnd)
+            if !hasBoundaryRows {
                 intervals.removeAll()
             }
         }
@@ -128,11 +128,13 @@ public struct SineWaveDatabaseSyncAgent: Sendable {
         let sourceSHA256 = syntheticSourceSHA256(bars: bars, start: mt5Start, end: mt5End)
         let offsetSHA256 = syntheticOffsetAuthoritySHA256(start: mt5Start, end: mt5End, rowCount: bars.count)
 
-        _ = try await clickHouse.execute(try insertBuilder.canonicalRangeDelete(
-            bars,
-            mt5Start: mt5Start,
-            mt5EndExclusive: mt5End
-        ))
+        if try await canonicalRowsExist(start: start, end: end) {
+            _ = try await clickHouse.execute(try insertBuilder.canonicalRangeDelete(
+                bars,
+                mt5Start: mt5Start,
+                mt5EndExclusive: mt5End
+            ))
+        }
         _ = try await clickHouse.execute(try insertBuilder.canonicalBarsInsert(bars))
         let verification = try await CanonicalInsertVerifier(
             clickHouse: clickHouse,
@@ -189,6 +191,22 @@ public struct SineWaveDatabaseSyncAgent: Sendable {
         ))
 
         return bars.count
+    }
+
+    private func canonicalRowsExist(start: UtcSecond, end: UtcSecond) async throws -> Bool {
+        let body = try await clickHouse.execute(.select("""
+        SELECT 1
+        FROM \(database).ohlc_m1_canonical
+        WHERE broker_source_id = '\(SQLText.literal(brokerSourceId.rawValue))'
+          AND source_origin = '\(SQLText.literal(SineTestSecurity.sourceOrigin.rawValue))'
+          AND logical_symbol = '\(SQLText.literal(SineTestSecurity.logicalSymbol.rawValue))'
+          AND timeframe = '\(SQLText.literal(Timeframe.m1.rawValue))'
+          AND ts_utc >= \(start.rawValue)
+          AND ts_utc < \(end.rawValue)
+        LIMIT 1
+        FORMAT TabSeparated
+        """))
+        return !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func makeValidatedBars(start: UtcSecond, end: UtcSecond) throws -> [ValidatedBar] {
@@ -251,7 +269,6 @@ public struct SineWaveDatabaseSyncAgent: Sendable {
           AND length(offset_authority_sha256) = 64
           AND utc_range_end_exclusive > \(start.rawValue)
           AND utc_range_start < \(end.rawValue)
-        ORDER BY utc_range_start ASC, utc_range_end_exclusive ASC
         FORMAT TabSeparated
         """))
         return try body
@@ -271,13 +288,13 @@ public struct SineWaveDatabaseSyncAgent: Sendable {
             }
     }
 
-    private func canonicalSummary(start: UtcSecond, end: UtcSecond) async throws -> CanonicalSineSummary {
+    private func canonicalBoundaryRowsArePresent(start: UtcSecond, end: UtcSecond) async throws -> Bool {
+        let lastUtc = end.rawValue - Timeframe.m1.seconds
+        let expectedRows = start.rawValue == lastUtc ? 1 : 2
         let body = try await clickHouse.execute(.select("""
         SELECT
             count(),
             uniqExact(ts_utc),
-            if(count() = 0, 0, min(ts_utc)),
-            if(count() = 0, 0, max(ts_utc)),
             countIf(
                 mt5_symbol != '\(SQLText.literal(SineTestSecurity.providerSymbol.rawValue))'
                 OR timeframe != 'M1'
@@ -297,27 +314,20 @@ public struct SineWaveDatabaseSyncAgent: Sendable {
         WHERE broker_source_id = '\(SQLText.literal(brokerSourceId.rawValue))'
           AND source_origin = '\(SQLText.literal(SineTestSecurity.sourceOrigin.rawValue))'
           AND logical_symbol = '\(SQLText.literal(SineTestSecurity.logicalSymbol.rawValue))'
-          AND ts_utc >= \(start.rawValue)
-          AND ts_utc < \(end.rawValue)
+          AND ts_utc IN (\(start.rawValue), \(lastUtc))
         FORMAT TabSeparated
         """))
         let fields = body.trimmingCharacters(in: .whitespacesAndNewlines)
             .split(separator: "\t", omittingEmptySubsequences: false)
-        guard fields.count == 5,
+        guard fields.count == 3,
               let count = Int64(fields[0]),
               let uniqueUtc = Int64(fields[1]),
-              let minUtc = Int64(fields[2]),
-              let maxUtc = Int64(fields[3]),
-              let badRows = Int64(fields[4]) else {
+              let badRows = Int64(fields[2]) else {
             throw SineWaveDatabaseSyncError.invalidCoverageRow(body)
         }
-        return CanonicalSineSummary(
-            count: count,
-            uniqueUtc: uniqueUtc,
-            minUtc: minUtc,
-            maxUtc: maxUtc,
-            badRows: badRows
-        )
+        return count == Int64(expectedRows)
+            && uniqueUtc == Int64(expectedRows)
+            && badRows == 0
     }
 
     private func syntheticSourceSHA256(bars: [ValidatedBar], start: MT5ServerSecond, end: MT5ServerSecond) -> SHA256DigestHex {
@@ -414,23 +424,6 @@ public struct SineWaveDatabaseSyncAgent: Sendable {
 private struct CoverageInterval: Sendable {
     var start: Int64
     var end: Int64
-}
-
-private struct CanonicalSineSummary: Sendable {
-    let count: Int64
-    let uniqueUtc: Int64
-    let minUtc: Int64
-    let maxUtc: Int64
-    let badRows: Int64
-
-    func isComplete(start: UtcSecond, end: UtcSecond) -> Bool {
-        let expectedRows = (end.rawValue - start.rawValue) / Timeframe.m1.seconds
-        return count == expectedRows
-            && uniqueUtc == expectedRows
-            && minUtc == start.rawValue
-            && maxUtc == end.rawValue - Timeframe.m1.seconds
-            && badRows == 0
-    }
 }
 
 public struct SineTestDataProductionAgent: ProductionAgent {
