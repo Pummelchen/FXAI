@@ -8,6 +8,7 @@ This plan adds a stricter layer above the existing `SineTestPluginSmokeTests`:
 
 - Smoke test: every plugin can train and predict on SineTest without invalid API contracts.
 - Directional certification: every plugin's buy/sell probability edge must agree with the future sine-wave direction on holdout data.
+- Accelerator certification: every declared non-CPU backend for every plugin must run through `FXAIAcceleratedPluginRuntime` and pass the same directional API-valid prediction check on balanced SineTest holdout samples.
 
 ## Shared Certification Protocol
 
@@ -25,6 +26,19 @@ The same protocol is applied to each plugin, without family-specific exceptions:
    - expected buy when the future close is higher than the current close;
    - expected sell when the future close is lower than the current close.
 10. Pass only when the plugin has enough evaluated samples, every prediction is valid, directional accuracy is at least 68%, and the mean signed directional edge is positive.
+
+## Accelerator Certification Protocol
+
+The accelerator gate is intentionally stricter about runtime selection and intentionally smaller about sample count:
+
+1. Enumerate every registered plugin and every declared non-CPU backend: Metal, PyTorch MPS, TensorFlow Metal, Foundation NLP, and any future CoreML Neural Engine backend.
+2. Require the local runtime to actually support the declared backend. Metal must come from the local Apple Silicon Metal probe; PyTorch MPS and TensorFlow Metal must be importable from `python3` with live MPS/GPU support.
+3. Train `FXAIAcceleratedPluginRuntime` on four high-signal minute-of-hour buckets from the SineTest training day. This keeps the core gate fast while still calibrating both buy and sell directions.
+4. Switch the same runtime into the declared accelerator backend with strict fallback disabled.
+5. Predict two balanced high-signal holdout samples, one buy-side and one sell-side when available.
+6. Validate `PredictionV4` and require directional sync. New plugins or new accelerator declarations are automatically included because the test walks the registry and `declaredBackends`.
+
+The broad 288-sample holdout remains the registry-level plugin gate. The accelerator gate exists to prove that the concrete runtime backend path does not bypass SineTest safety or crash under live backend execution.
 
 ## Per-Plugin Test Matrix
 
@@ -101,4 +115,4 @@ All 66 registered plugins are tested by the same XCTest harness, using their own
 
 ## Output Evidence
 
-The executable evidence is `SineWavePredictionCertificationTests`. It prints and writes a temporary Markdown report containing one row per plugin with sample count, directional accuracy, mean signed edge, and pass/fail status.
+The executable evidence is `SineWavePredictionCertificationTests`. It prints and writes temporary Markdown reports containing one row per plugin for the registry gate and one row per plugin/backend pair for the accelerator gate.

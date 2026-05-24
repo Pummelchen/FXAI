@@ -12,6 +12,14 @@ Result: all 66 registered plugins passed the SineTest directional sync gate afte
 
 Pass criteria: at least 240 holdout samples, valid predictions for all evaluated samples, directional accuracy at or above 68%, and mean signed buy/sell edge above 0.0100.
 
+Accelerator gate:
+
+```bash
+swift test --package-path FXPlugins --filter SineWavePredictionCertificationTests/testEveryDeclaredAcceleratorPredictionStaysInSyncWithSineWaveHoldout
+```
+
+Result: all 70 declared non-CPU accelerator backend paths passed with strict runtime selection and no CPU fallback. The gate covered 29 Metal backends, 29 PyTorch MPS backends, 9 TensorFlow Metal backends, and 3 Foundation NLP backends. Each backend used SineTest training on four high-signal minute-of-hour buckets and made two balanced holdout predictions through the declared accelerator runtime path.
+
 | Plugin | Status | Train | Eval | Valid | Accuracy | Mean Signed Edge | Mean Absolute Edge |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | ai_autoformer | PASS | 252 | 288 | 288 | 91.7% | 0.8203 | 0.8567 |

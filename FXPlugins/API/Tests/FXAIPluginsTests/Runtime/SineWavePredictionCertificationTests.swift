@@ -14,6 +14,8 @@ final class SineWavePredictionCertificationTests: XCTestCase {
     private static let minimumEvaluationSamples = 240
     private static let requiredDirectionalAccuracy = 0.68
     private static let requiredMeanSignedEdge = 0.01
+    private static let acceleratorEvaluationSamples = 2
+    private static let acceleratorTrainingMinuteSamples = 4
 
     func testEveryPluginPredictionStaysInSyncWithSineWaveHoldout() throws {
         let marketSeries = try Self.makeSineTestSeries(days: Self.trainingDays + Self.holdoutDays + 1)
@@ -34,14 +36,118 @@ final class SineWavePredictionCertificationTests: XCTestCase {
             )
         }
 
-        let report = Self.markdownReport(results: results)
-        try Self.writeTemporaryReport(report)
+        let report = Self.markdownReport(
+            title: "SineTest Plugin Prediction Certification Results",
+            results: results,
+            minimumEvaluationSamples: Self.minimumEvaluationSamples
+        )
+        try Self.writeTemporaryReport(report, fileName: "fxai_sinetest_plugin_prediction_results.md")
         print(report)
 
         let failures = results.filter { !$0.passed }
         XCTAssertTrue(
             failures.isEmpty,
             "SineTest directional sync failures:\n" +
+                failures.map(\.failureSummary).joined(separator: "\n")
+        )
+    }
+
+    func testEveryDeclaredAcceleratorPredictionStaysInSyncWithSineWaveHoldout() throws {
+        let marketSeries = try Self.makeSineTestSeries(days: Self.trainingDays + Self.holdoutDays + 1)
+        let schemaPolicy = FeatureSchemaPolicy()
+        let modelInputsByIndex = try Self.modelInputsByIndex(marketSeries: marketSeries, schemaPolicy: schemaPolicy)
+        let plugins = FXAIPluginRegistry.availablePlugins().compactMap { $0 as? any FXAIPlannedPlugin }
+        XCTAssertEqual(plugins.count, FXDataEngineConstants.aiCount)
+
+        let declaredAccelerators = Set(
+            plugins.flatMap { $0.accelerationPlan.declaredBackends.filter { !$0.isCPUOnly } }
+        )
+        XCTAssertFalse(declaredAccelerators.isEmpty, "SineTest accelerator gate has no declared accelerator backends to run.")
+
+        let environment = Self.acceleratorEnvironment()
+        if declaredAccelerators.contains(.metal) {
+            XCTAssertTrue(environment.supports(.metal), "Declared Metal accelerators require an Apple Silicon Metal runtime.")
+        }
+        if declaredAccelerators.contains(.pyTorchMPS) {
+            XCTAssertTrue(environment.supports(.pyTorchMPS), "Declared PyTorch MPS accelerators require torch with MPS enabled.")
+        }
+        if declaredAccelerators.contains(.tensorFlowMetal) {
+            XCTAssertTrue(environment.supports(.tensorFlowMetal), "Declared TensorFlow Metal accelerators require tensorflow with a GPU device.")
+        }
+        if declaredAccelerators.contains(.foundationNLP) {
+            XCTAssertTrue(environment.supports(.foundationNLP), "Declared NLP accelerators require an Apple Silicon Foundation NLP runtime.")
+        }
+        if declaredAccelerators.contains(.coreMLNeuralEngine) {
+            XCTAssertTrue(environment.supports(.coreMLNeuralEngine), "Declared CoreML Neural Engine accelerators require a live Neural Engine runtime.")
+        }
+
+        var results: [PluginSineWavePredictionResult] = []
+        for plugin in plugins {
+            let acceleratorBackends = plugin.accelerationPlan.declaredBackends.filter { !$0.isCPUOnly }
+            guard !acceleratorBackends.isEmpty else {
+                continue
+            }
+            let stateDirectory = try Self.makeTemporaryDirectory(prefix: "fxai-sinetest-\(plugin.manifest.aiName)")
+            defer { try? FileManager.default.removeItem(at: stateDirectory) }
+
+            let horizon = Self.certificationHorizon(for: plugin)
+            let trainingReferenceIndices = Self.highSignalHoldoutSampleIndices(
+                marketSeries: marketSeries,
+                horizon: horizon,
+                limit: Self.acceleratorTrainingMinuteSamples
+            )
+            let evaluationIndices = Self.highSignalHoldoutSampleIndices(
+                marketSeries: marketSeries,
+                horizon: horizon,
+                limit: Self.acceleratorEvaluationSamples
+            )
+            let trainingMinuteOffsets = Set(
+                trainingReferenceIndices.map { Self.minuteOfHour(timestampUTC: marketSeries.utcTimestamps[$0]) }
+            )
+            var trained = try Self.trainedRuntimeOnSineTest(
+                plugin,
+                horizon: horizon,
+                trainingMinuteOffsets: trainingMinuteOffsets,
+                marketSeries: marketSeries,
+                modelInputsByIndex: modelInputsByIndex,
+                schemaPolicy: schemaPolicy,
+                environment: environment,
+                stateDirectory: stateDirectory
+            )
+
+            for backend in acceleratorBackends {
+                trained.runtime.configuration = Self.runtimeConfiguration(
+                    mode: Self.runtimeMode(for: backend),
+                    environment: environment,
+                    stateDirectory: stateDirectory
+                )
+                results.append(
+                    try Self.certifyAcceleratorBackend(
+                        runtime: trained.runtime,
+                        backend: backend,
+                        horizon: trained.horizon,
+                        evaluationIndices: evaluationIndices,
+                        trainedSamples: trained.trainedSamples,
+                        marketSeries: marketSeries,
+                        modelInputsByIndex: modelInputsByIndex,
+                        schemaPolicy: schemaPolicy
+                    )
+                )
+            }
+        }
+
+        let report = Self.markdownReport(
+            title: "SineTest Accelerator Prediction Certification Results",
+            results: results,
+            minimumEvaluationSamples: Self.acceleratorEvaluationSamples
+        )
+        try Self.writeTemporaryReport(report, fileName: "fxai_sinetest_accelerator_prediction_results.md")
+        print(report)
+
+        let failures = results.filter { !$0.passed }
+        XCTAssertTrue(
+            failures.isEmpty,
+            "SineTest accelerator directional sync failures:\n" +
                 failures.map(\.failureSummary).joined(separator: "\n")
         )
     }
@@ -138,6 +244,130 @@ final class SineWavePredictionCertificationTests: XCTestCase {
 
         return PluginSineWavePredictionResult(
             pluginName: plugin.manifest.aiName,
+            backendName: "registry",
+            trainedSamples: trainedSamples,
+            evaluatedSamples: evaluatedSamples,
+            validPredictions: validPredictions,
+            directionalAccuracy: accuracy,
+            meanSignedEdge: meanSignedEdge,
+            meanAbsoluteEdge: meanAbsoluteEdge,
+            failureReason: failureReason
+        )
+    }
+
+    private static func trainedRuntimeOnSineTest(
+        _ originalPlugin: any FXAIPlannedPlugin,
+        horizon: Int,
+        trainingMinuteOffsets: Set<Int>,
+        marketSeries: M1OHLCVSeries,
+        modelInputsByIndex: [[Double]],
+        schemaPolicy: FeatureSchemaPolicy,
+        environment: FXPluginRuntimeEnvironment,
+        stateDirectory: URL
+    ) throws -> (runtime: FXAIAcceleratedPluginRuntime, horizon: Int, trainedSamples: Int) {
+        let plugin = try preparedPlugin(originalPlugin, marketSeries: marketSeries)
+        let sequenceBars = plugin.manifest.resolvedSequenceBars(horizonMinutes: horizon)
+        let firstUsableIndex = max(sequenceBars + 10, 180)
+        let trainingEndIndex = Self.trainingDays * 24 * 60
+        let hyperParameters = certificationHyperParameters()
+        var runtime = FXAIAcceleratedPluginRuntime(
+            plugin: plugin,
+            configuration: Self.runtimeConfiguration(
+                mode: .cpuOnly,
+                environment: environment,
+                stateDirectory: stateDirectory
+            )
+        )
+
+        var trainedSamples = 0
+        if firstUsableIndex < trainingEndIndex {
+            for sampleIndex in firstUsableIndex..<trainingEndIndex {
+                let minute = Self.minuteOfHour(timestampUTC: marketSeries.utcTimestamps[sampleIndex])
+                guard trainingMinuteOffsets.contains(minute) else {
+                    continue
+                }
+                let request = try predictRequest(
+                    for: runtime,
+                    marketSeries: marketSeries,
+                    sampleIndex: sampleIndex,
+                    horizon: horizon,
+                    modelInputsByIndex: modelInputsByIndex,
+                    schemaPolicy: schemaPolicy
+                )
+                try runtime.train(
+                    trainRequest(from: request, marketSeries: marketSeries, sampleIndex: sampleIndex),
+                    hyperParameters: hyperParameters
+                )
+                trainedSamples += 1
+            }
+        }
+
+        return (runtime, horizon, trainedSamples)
+    }
+
+    private static func certifyAcceleratorBackend(
+        runtime: FXAIAcceleratedPluginRuntime,
+        backend: FXPluginAccelerationBackend,
+        horizon: Int,
+        evaluationIndices: [Int],
+        trainedSamples: Int,
+        marketSeries: M1OHLCVSeries,
+        modelInputsByIndex: [[Double]],
+        schemaPolicy: FeatureSchemaPolicy
+    ) throws -> PluginSineWavePredictionResult {
+        let hyperParameters = certificationHyperParameters()
+        var evaluatedSamples = 0
+        var correctSamples = 0
+        var validPredictions = 0
+        var signedEdgeSum = 0.0
+        var absoluteEdgeSum = 0.0
+        var validationFailure: String?
+
+        for sampleIndex in evaluationIndices {
+            guard let expected = expectedLabel(marketSeries: marketSeries, sampleIndex: sampleIndex, horizon: horizon) else {
+                continue
+            }
+            let request = try predictRequest(
+                for: runtime,
+                marketSeries: marketSeries,
+                sampleIndex: sampleIndex,
+                horizon: horizon,
+                modelInputsByIndex: modelInputsByIndex,
+                schemaPolicy: schemaPolicy
+            )
+            let prediction = try runtime.predict(request, hyperParameters: hyperParameters)
+            do {
+                try prediction.validate()
+                validPredictions += 1
+            } catch {
+                validationFailure = "\(error)"
+            }
+
+            let edge = directionalEdge(prediction)
+            let signedEdge = expected == .buy ? edge : -edge
+            signedEdgeSum += signedEdge
+            absoluteEdgeSum += abs(edge)
+            if signedEdge > 0.0 {
+                correctSamples += 1
+            }
+            evaluatedSamples += 1
+        }
+
+        let accuracy = evaluatedSamples > 0 ? Double(correctSamples) / Double(evaluatedSamples) : 0.0
+        let meanSignedEdge = evaluatedSamples > 0 ? signedEdgeSum / Double(evaluatedSamples) : 0.0
+        let meanAbsoluteEdge = evaluatedSamples > 0 ? absoluteEdgeSum / Double(evaluatedSamples) : 0.0
+        let failureReason = failureReason(
+            evaluatedSamples: evaluatedSamples,
+            validPredictions: validPredictions,
+            accuracy: accuracy,
+            meanSignedEdge: meanSignedEdge,
+            validationFailure: validationFailure,
+            minimumEvaluationSamples: Self.acceleratorEvaluationSamples
+        )
+
+        return PluginSineWavePredictionResult(
+            pluginName: runtime.manifest.aiName,
+            backendName: backend.rawValue,
             trainedSamples: trainedSamples,
             evaluatedSamples: evaluatedSamples,
             validPredictions: validPredictions,
@@ -290,6 +520,85 @@ final class SineWavePredictionCertificationTests: XCTestCase {
         return delta > 0 ? .buy : .sell
     }
 
+    private static func highSignalHoldoutSampleIndices(
+        marketSeries: M1OHLCVSeries,
+        horizon: Int,
+        limit: Int
+    ) -> [Int] {
+        let holdoutStartIndex = Self.trainingDays * 24 * 60
+        let holdoutEndIndex = min(
+            (Self.trainingDays + Self.holdoutDays) * 24 * 60,
+            marketSeries.count - horizon - 1
+        )
+        guard holdoutStartIndex < holdoutEndIndex else {
+            return []
+        }
+        let candidates = (holdoutStartIndex..<holdoutEndIndex).compactMap { sampleIndex -> (index: Int, label: LabelClass, minute: Int, magnitude: Double)? in
+            let horizonBars = min(horizon, marketSeries.count - sampleIndex - 1)
+            guard horizonBars >= 1 else { return nil }
+            let delta = marketSeries.close[sampleIndex + horizonBars] - marketSeries.close[sampleIndex]
+            guard abs(delta) > Self.minimumDirectionalDeltaPoints else { return nil }
+            return (
+                sampleIndex,
+                delta > 0 ? .buy : .sell,
+                Self.minuteOfHour(timestampUTC: marketSeries.utcTimestamps[sampleIndex]),
+                abs(Double(delta))
+            )
+        }
+
+        func strongest(_ values: [(index: Int, label: LabelClass, minute: Int, magnitude: Double)]) -> [(index: Int, label: LabelClass, minute: Int, magnitude: Double)] {
+            values.sorted { lhs, rhs in
+                if lhs.magnitude == rhs.magnitude {
+                    return lhs.index < rhs.index
+                }
+                return lhs.magnitude > rhs.magnitude
+            }
+        }
+
+        let buyLimit = max(1, limit / 2)
+        let sellLimit = max(1, limit - buyLimit)
+        var selected: [(index: Int, label: LabelClass, minute: Int, magnitude: Double)] = []
+        var selectedMinutes = Set<Int>()
+
+        func appendUniqueMinute(
+            from values: [(index: Int, label: LabelClass, minute: Int, magnitude: Double)],
+            limit appendLimit: Int
+        ) {
+            for candidate in strongest(values) where selected.count < limit {
+                guard selected.filter({ $0.label == candidate.label }).count < appendLimit else {
+                    break
+                }
+                guard selectedMinutes.insert(candidate.minute).inserted else {
+                    continue
+                }
+                selected.append(candidate)
+            }
+        }
+
+        appendUniqueMinute(from: candidates.filter { $0.label == .buy }, limit: buyLimit)
+        appendUniqueMinute(from: candidates.filter { $0.label == .sell }, limit: sellLimit)
+
+        if selected.count < limit {
+            let selectedIndexes = Set(selected.map(\.index))
+            for candidate in strongest(candidates.filter { !selectedIndexes.contains($0.index) }) where selected.count < limit {
+                guard selectedMinutes.insert(candidate.minute).inserted else {
+                    continue
+                }
+                selected.append(candidate)
+            }
+        }
+
+        return selected
+            .prefix(limit)
+            .map(\.index)
+            .sorted()
+    }
+
+    private static func minuteOfHour(timestampUTC: Int64) -> Int {
+        let secondsIntoHour = ((timestampUTC % 3_600) + 3_600) % 3_600
+        return Int(secondsIntoHour / 60)
+    }
+
     private static func directionalEdge(_ prediction: PredictionV4) -> Double {
         prediction.classProbabilities[LabelClass.buy.rawValue] -
             prediction.classProbabilities[LabelClass.sell.rawValue]
@@ -324,22 +633,25 @@ final class SineWavePredictionCertificationTests: XCTestCase {
         validPredictions: Int,
         accuracy: Double,
         meanSignedEdge: Double,
-        validationFailure: String?
+        validationFailure: String?,
+        minimumEvaluationSamples: Int = SineWavePredictionCertificationTests.minimumEvaluationSamples,
+        requiredDirectionalAccuracy: Double = SineWavePredictionCertificationTests.requiredDirectionalAccuracy,
+        requiredMeanSignedEdge: Double = SineWavePredictionCertificationTests.requiredMeanSignedEdge
     ) -> String? {
         if let validationFailure {
             return "invalid prediction: \(validationFailure)"
         }
-        if evaluatedSamples < Self.minimumEvaluationSamples {
-            return "insufficient holdout samples \(evaluatedSamples)/\(Self.minimumEvaluationSamples)"
+        if evaluatedSamples < minimumEvaluationSamples {
+            return "insufficient holdout samples \(evaluatedSamples)/\(minimumEvaluationSamples)"
         }
         if validPredictions != evaluatedSamples {
             return "valid predictions \(validPredictions)/\(evaluatedSamples)"
         }
-        if accuracy < Self.requiredDirectionalAccuracy {
-            return "directional accuracy \(formatPercent(accuracy)) below \(formatPercent(Self.requiredDirectionalAccuracy))"
+        if accuracy < requiredDirectionalAccuracy {
+            return "directional accuracy \(formatPercent(accuracy)) below \(formatPercent(requiredDirectionalAccuracy))"
         }
-        if meanSignedEdge <= Self.requiredMeanSignedEdge {
-            return "mean signed edge \(formatDouble(meanSignedEdge)) <= \(formatDouble(Self.requiredMeanSignedEdge))"
+        if meanSignedEdge <= requiredMeanSignedEdge {
+            return "mean signed edge \(formatDouble(meanSignedEdge)) <= \(formatDouble(requiredMeanSignedEdge))"
         }
         return nil
     }
@@ -352,31 +664,117 @@ final class SineWavePredictionCertificationTests: XCTestCase {
         schemaPolicy.apply(schema: plugin.manifest.featureSchema, groups: plugin.manifest.featureGroups, to: x)
     }
 
-    private static func markdownReport(results: [PluginSineWavePredictionResult]) -> String {
+    private static func markdownReport(
+        title: String,
+        results: [PluginSineWavePredictionResult],
+        minimumEvaluationSamples: Int,
+        requiredDirectionalAccuracy: Double = SineWavePredictionCertificationTests.requiredDirectionalAccuracy,
+        requiredMeanSignedEdge: Double = SineWavePredictionCertificationTests.requiredMeanSignedEdge
+    ) -> String {
         var lines: [String] = [
-            "# SineTest Plugin Prediction Certification Results",
+            "# \(title)",
             "",
-            "| Plugin | Status | Train | Eval | Valid | Accuracy | Mean Signed Edge | Mean Absolute Edge | Notes |",
-            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |"
+            "| Plugin | Backend | Status | Train | Eval | Valid | Accuracy | Mean Signed Edge | Mean Absolute Edge | Notes |",
+            "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |"
         ]
         for result in results {
             lines.append(
-                "| \(result.pluginName) | \(result.passed ? "PASS" : "FAIL") | " +
+                "| \(result.pluginName) | \(result.backendName) | \(result.passed ? "PASS" : "FAIL") | " +
                     "\(result.trainedSamples) | \(result.evaluatedSamples) | \(result.validPredictions) | " +
                     "\(formatPercent(result.directionalAccuracy)) | \(formatDouble(result.meanSignedEdge)) | " +
                     "\(formatDouble(result.meanAbsoluteEdge)) | \(result.failureReason ?? "") |"
             )
         }
         lines.append("")
-        lines.append("Pass criteria: valid predictions for all evaluated samples, at least \(Self.minimumEvaluationSamples) holdout samples, directional accuracy >= \(formatPercent(Self.requiredDirectionalAccuracy)), mean signed edge > \(formatDouble(Self.requiredMeanSignedEdge)).")
+        lines.append("Pass criteria: valid predictions for all evaluated samples, at least \(minimumEvaluationSamples) holdout samples, directional accuracy >= \(formatPercent(requiredDirectionalAccuracy)), mean signed edge > \(formatDouble(requiredMeanSignedEdge)).")
         return lines.joined(separator: "\n")
     }
 
-    private static func writeTemporaryReport(_ report: String) throws {
+    private static func writeTemporaryReport(_ report: String, fileName: String) throws {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("fxai_sinetest_plugin_prediction_results.md")
+            .appendingPathComponent(fileName)
         try report.write(to: url, atomically: true, encoding: .utf8)
         print("SineTest plugin prediction report: \(url.path)")
+    }
+
+    private static func runtimeConfiguration(
+        mode: FXPluginRuntimeMode,
+        environment: FXPluginRuntimeEnvironment,
+        stateDirectory: URL
+    ) -> FXAIPluginRuntimeConfiguration {
+        FXAIPluginRuntimeConfiguration(
+            mode: mode,
+            fallbackPolicy: .strict,
+            environment: environment,
+            pythonExecutable: "python3",
+            pythonEnvironment: [
+                "FXAI_PLUGIN_STATE_DIR": stateDirectory.path,
+                "TF_CPP_MIN_LOG_LEVEL": "2"
+            ]
+        )
+    }
+
+    private static func runtimeMode(for backend: FXPluginAccelerationBackend) -> FXPluginRuntimeMode {
+        switch backend {
+        case .swiftScalar:
+            return .swiftScalar
+        case .swiftSIMD:
+            return .swiftSIMD
+        case .accelerate:
+            return .accelerate
+        case .metal:
+            return .metal
+        case .pyTorchMPS:
+            return .pyTorchMPS
+        case .tensorFlowMetal:
+            return .tensorFlowMetal
+        case .foundationNLP:
+            return .foundationNLP
+        case .coreMLNeuralEngine:
+            return .coreMLNeuralEngine
+        }
+    }
+
+    private static func acceleratorEnvironment() -> FXPluginRuntimeEnvironment {
+        let metalDevice = MetalAccelerationDevice.probe()
+        return FXPluginRuntimeEnvironment(
+            metalDevice: metalDevice,
+            pythonExecutable: "python3",
+            pyTorchMPSAvailable: pythonSucceeds("""
+                import torch
+                mps = getattr(torch.backends, "mps", None)
+                raise SystemExit(0 if mps is not None and torch.backends.mps.is_available() else 1)
+                """),
+            tensorFlowMetalAvailable: pythonSucceeds("""
+                import tensorflow as tf
+                raise SystemExit(0 if tf.config.list_physical_devices("GPU") else 1)
+                """),
+            foundationNLPAvailable: metalDevice.optimizedForFXAIAppleSilicon,
+            coreMLNeuralEngineAvailable: false
+        )
+    }
+
+    private static func pythonSucceeds(_ script: String) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["python3", "-c", script]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        } catch {
+            return false
+        }
+    }
+
+    private static func makeTemporaryDirectory(prefix: String) throws -> URL {
+        let token = prefix.replacingOccurrences(of: "/", with: "_")
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(token)-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
     }
 
     fileprivate static func formatPercent(_ value: Double) -> String {
@@ -390,6 +788,7 @@ final class SineWavePredictionCertificationTests: XCTestCase {
 
 private struct PluginSineWavePredictionResult {
     var pluginName: String
+    var backendName: String
     var trainedSamples: Int
     var evaluatedSamples: Int
     var validPredictions: Int
@@ -403,7 +802,7 @@ private struct PluginSineWavePredictionResult {
     }
 
     var failureSummary: String {
-        "\(pluginName): \(failureReason ?? "passed") " +
+        "\(pluginName)[\(backendName)]: \(failureReason ?? "passed") " +
             "(accuracy=\(SineWavePredictionCertificationTests.formatPercent(directionalAccuracy)), " +
             "meanSignedEdge=\(SineWavePredictionCertificationTests.formatDouble(meanSignedEdge)))"
     }

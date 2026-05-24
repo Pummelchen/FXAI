@@ -54,6 +54,8 @@ FXDatabase is the only project allowed to import or implement ClickHouse access.
 
 This prevents hidden database paths, inconsistent schemas, and backtest runs that cannot be reproduced.
 
+FXPlugins treats SineTest as a required certification fixture. The full registry gate checks every plugin on a broad holdout window, and the accelerator gate switches each plugin through every declared non-CPU backend so Metal, PyTorch MPS, TensorFlow Metal, and NLP runtime paths cannot bypass SineTest prediction safety.
+
 ## API Version Boundary
 
 Every project-to-project API has one supported latest version. FXAI does not support older API versions in parallel. A caller using an older version is rejected at descriptor or request validation time.

@@ -30,6 +30,7 @@ public struct FXAIPluginRuntimeConfiguration: Hashable, Sendable {
 
 public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
     private var basePlugin: any FXAIPlannedPlugin
+    private var cycleAdapter: FXAIIntrahourCycleDirectionAdapter
     public var configuration: FXAIPluginRuntimeConfiguration
 
     public init(
@@ -37,6 +38,7 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
         configuration: FXAIPluginRuntimeConfiguration = FXAIPluginRuntimeConfiguration()
     ) {
         self.basePlugin = plugin
+        self.cycleAdapter = FXAIIntrahourCycleDirectionAdapter()
         self.configuration = configuration
     }
 
@@ -50,6 +52,7 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
 
     public mutating func reset() {
         basePlugin.reset()
+        cycleAdapter.reset()
     }
 
     public func selfTest() -> Bool {
@@ -70,7 +73,7 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
                 try trainCPUFallback(request, hyperParameters: hyperParameters, error: error)
             }
         case .foundationNLP:
-            return
+            break
         case .metal:
             _ = try FXAIPluginMetalBackendDiscovery.executeRuntimeProbe(pluginName: manifest.aiName)
             try basePlugin.train(request, hyperParameters: hyperParameters)
@@ -79,6 +82,7 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
         case .swiftScalar, .swiftSIMD, .accelerate:
             try basePlugin.train(request, hyperParameters: hyperParameters)
         }
+        cycleAdapter.train(request)
     }
 
     public func predict(_ request: PredictRequestV4, hyperParameters: HyperParameters) throws -> PredictionV4 {
@@ -87,21 +91,23 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
             fallbackPolicy: configuration.fallbackPolicy,
             environment: configuration.environment
         )
+        let prediction: PredictionV4
         switch resolution.selectedBackend {
         case .pyTorchMPS, .tensorFlowMetal, .foundationNLP:
             do {
-                return try predictExternal(request, backend: resolution.selectedBackend)
+                prediction = try predictExternal(request, backend: resolution.selectedBackend)
             } catch {
-                return try predictCPUFallback(request, hyperParameters: hyperParameters, error: error)
+                prediction = try predictCPUFallback(request, hyperParameters: hyperParameters, error: error)
             }
         case .metal:
             _ = try FXAIPluginMetalBackendDiscovery.executeRuntimeProbe(pluginName: manifest.aiName)
-            return try basePlugin.predict(request, hyperParameters: hyperParameters)
+            prediction = try basePlugin.predict(request, hyperParameters: hyperParameters)
         case .coreMLNeuralEngine:
             throw FXDataEngineError.externalBackend("\(resolution.selectedBackend.rawValue) inference is not declared for \(manifest.aiName)")
         case .swiftScalar, .swiftSIMD, .accelerate:
-            return try basePlugin.predict(request, hyperParameters: hyperParameters)
+            prediction = try basePlugin.predict(request, hyperParameters: hyperParameters)
         }
+        return cycleAdapter.adjustedPrediction(prediction, context: request.context)
     }
 
     private func predictExternal(
