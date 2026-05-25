@@ -78,6 +78,28 @@ public struct FXBacktestAPIClient: Sendable {
         return response
     }
 
+    public func ensureBacktestConfigurationSchema() async throws -> FXBacktestResultMutationResponse {
+        let request = FXBacktestConfigurationSchemaRequest()
+        try request.validate()
+        let response: FXBacktestResultMutationResponse = try await post(request, to: FXBacktestAPIV1.configurationSchemaPath)
+        try validateResponse(response)
+        return response
+    }
+
+    public func registerBacktestConfiguration(_ registration: FXBacktestConfigurationRegistrationRequest) async throws -> FXBacktestResultMutationResponse {
+        try registration.validate()
+        let response: FXBacktestResultMutationResponse = try await post(registration, to: FXBacktestAPIV1.configurationRegisterPath)
+        try validateResponse(response)
+        return response
+    }
+
+    public func getBacktestConfiguration(_ request: FXBacktestConfigurationGetRequest = FXBacktestConfigurationGetRequest()) async throws -> FXBacktestConfigurationSnapshotResponse {
+        try request.validate()
+        let response: FXBacktestConfigurationSnapshotResponse = try await post(request, to: FXBacktestAPIV1.configurationGetPath)
+        try validateResponse(response)
+        return response
+    }
+
     private func endpoint(_ path: String) throws -> URL {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw FXBacktestAPIClientError.invalidBaseURL(baseURL.absoluteString)
@@ -117,6 +139,10 @@ public struct FXBacktestAPIClient: Sendable {
     }
 
     private func validateResponse(_ response: FXBacktestResultPassesGetResponse) throws {
+        try mapValidationError { try response.validate() }
+    }
+
+    private func validateResponse(_ response: FXBacktestConfigurationSnapshotResponse) throws {
         try mapValidationError { try response.validate() }
     }
 

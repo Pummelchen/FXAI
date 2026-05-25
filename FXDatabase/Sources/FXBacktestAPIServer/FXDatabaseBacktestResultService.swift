@@ -17,6 +17,109 @@ public struct FXDatabaseBacktestResultService: FXBacktestResultProviding {
         return FXBacktestResultMutationResponse(sqlStatements: 3)
     }
 
+    public func ensureConfigurationSchema(_ request: FXBacktestConfigurationSchemaRequest) async throws -> FXBacktestResultMutationResponse {
+        try request.validate()
+        try await ensureConfigurationSchema()
+        return FXBacktestResultMutationResponse(affectedRows: 0, sqlStatements: 3)
+    }
+
+    public func registerConfiguration(_ request: FXBacktestConfigurationRegistrationRequest) async throws -> FXBacktestResultMutationResponse {
+        try request.validate()
+        try await ensureConfigurationSchema()
+        var sqlStatements = 3
+        if !request.sharedParameters.isEmpty {
+            _ = try await clickHouse.execute(.mutation("""
+            ALTER TABLE \(table("fxbacktest_shared_config_parameters")) DELETE WHERE 1
+            SETTINGS mutations_sync = 1
+            """, idempotent: false))
+            _ = try await clickHouse.execute(.mutation("""
+            INSERT INTO \(table("fxbacktest_shared_config_parameters")) FORMAT JSONEachRow
+            \(try Self.sharedConfigurationPayload(request.sharedParameters))
+            """, idempotent: false))
+            sqlStatements += 2
+        }
+        if !request.pluginConfigurations.isEmpty {
+            let pluginIds = Set(request.pluginConfigurations.map(\.pluginId))
+            let pluginFilter = pluginIds.map(Self.sqlString).sorted().joined(separator: ",")
+            _ = try await clickHouse.execute(.mutation("""
+            ALTER TABLE \(table("fxbacktest_plugin_config_parameters"))
+            DELETE WHERE plugin_id IN (\(pluginFilter))
+            SETTINGS mutations_sync = 1
+            """, idempotent: false))
+            _ = try await clickHouse.execute(.mutation("""
+            INSERT INTO \(table("fxbacktest_plugin_config_parameters")) FORMAT JSONEachRow
+            \(try Self.pluginConfigurationPayload(request.pluginConfigurations))
+            """, idempotent: false))
+            sqlStatements += 2
+        }
+        let rows = request.sharedParameters.count + request.pluginConfigurations.reduce(0) { $0 + $1.parameters.count }
+        return FXBacktestResultMutationResponse(affectedRows: rows, sqlStatements: sqlStatements)
+    }
+
+    public func getConfiguration(_ request: FXBacktestConfigurationGetRequest) async throws -> FXBacktestConfigurationSnapshotResponse {
+        try request.validate()
+        try await ensureConfigurationSchema()
+        let sharedBody = try await clickHouse.execute(.select("""
+        SELECT
+          key,
+          display_name,
+          value_kind,
+          toString(default_value),
+          toString(min_value),
+          toString(step_value),
+          toString(max_value),
+          unit,
+          description
+        FROM \(table("fxbacktest_shared_config_parameters")) FINAL
+        ORDER BY key
+        FORMAT TabSeparated
+        """))
+        let pluginWhere: String
+        if let pluginIds = request.pluginIds, !pluginIds.isEmpty {
+            pluginWhere = "WHERE plugin_id IN (\(pluginIds.map(Self.sqlString).joined(separator: ",")))"
+        } else {
+            pluginWhere = ""
+        }
+        let pluginBody = try await clickHouse.execute(.select("""
+        SELECT
+          plugin_id,
+          accelerator_id,
+          key,
+          display_name,
+          value_kind,
+          toString(default_value),
+          toString(min_value),
+          toString(step_value),
+          toString(max_value),
+          unit,
+          description
+        FROM \(table("fxbacktest_plugin_config_parameters")) FINAL
+        \(pluginWhere)
+        ORDER BY plugin_id, accelerator_id, key
+        FORMAT TabSeparated
+        """))
+        let shared = try sharedBody
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map { try Self.parseConfigurationParameter(String($0)) }
+        let pluginRows = try pluginBody
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map { try Self.parsePluginConfigurationRow(String($0)) }
+        let grouped = Dictionary(grouping: pluginRows) { PluginConfigurationScope(pluginId: $0.pluginId, acceleratorId: $0.acceleratorId) }
+        let pluginConfigurations = grouped.keys.sorted().map { scope in
+            FXBacktestPluginConfigurationDTO(
+                pluginId: scope.pluginId,
+                acceleratorId: scope.acceleratorId,
+                parameters: grouped[scope]?.map(\.parameter).sorted { $0.key < $1.key } ?? []
+            )
+        }
+        let response = FXBacktestConfigurationSnapshotResponse(
+            sharedParameters: shared,
+            pluginConfigurations: pluginConfigurations
+        )
+        try response.validate()
+        return response
+    }
+
     public func startRun(_ request: FXBacktestResultRunStartRequest) async throws -> FXBacktestResultMutationResponse {
         try request.validate()
         try await ensureSchema()
@@ -198,6 +301,12 @@ public struct FXDatabaseBacktestResultService: FXBacktestResultProviding {
         _ = try await clickHouse.execute(.mutation(Self.passResultsTableSQL(database: database), idempotent: true))
     }
 
+    private func ensureConfigurationSchema() async throws {
+        _ = try await clickHouse.execute(.mutation("CREATE DATABASE IF NOT EXISTS \(Self.identifier(database))", idempotent: true))
+        _ = try await clickHouse.execute(.mutation(Self.sharedConfigurationTableSQL(database: database), idempotent: true))
+        _ = try await clickHouse.execute(.mutation(Self.pluginConfigurationTableSQL(database: database), idempotent: true))
+    }
+
     private func table(_ name: String) -> String {
         "\(Self.identifier(database)).\(Self.identifier(name))"
     }
@@ -255,6 +364,101 @@ public struct FXDatabaseBacktestResultService: FXBacktestResultProviding {
         """
     }
 
+    private static func sharedConfigurationTableSQL(database: String) -> String {
+        """
+        CREATE TABLE IF NOT EXISTS \(identifier(database)).\(identifier("fxbacktest_shared_config_parameters"))
+        (
+          key String,
+          display_name String,
+          value_kind LowCardinality(String),
+          default_value Float64,
+          min_value Float64,
+          step_value Float64,
+          max_value Float64,
+          unit String,
+          description String,
+          api_version String,
+          updated_at DateTime64(3, 'UTC') DEFAULT now64(3)
+        )
+        ENGINE = ReplacingMergeTree(updated_at)
+        ORDER BY key
+        """
+    }
+
+    private static func pluginConfigurationTableSQL(database: String) -> String {
+        """
+        CREATE TABLE IF NOT EXISTS \(identifier(database)).\(identifier("fxbacktest_plugin_config_parameters"))
+        (
+          plugin_id String,
+          accelerator_id LowCardinality(String),
+          key String,
+          display_name String,
+          value_kind LowCardinality(String),
+          default_value Float64,
+          min_value Float64,
+          step_value Float64,
+          max_value Float64,
+          unit String,
+          description String,
+          api_version String,
+          updated_at DateTime64(3, 'UTC') DEFAULT now64(3)
+        )
+        ENGINE = ReplacingMergeTree(updated_at)
+        ORDER BY (plugin_id, accelerator_id, key)
+        """
+    }
+
+    private static func sharedConfigurationPayload(_ parameters: [FXBacktestConfigurationParameterDTO]) throws -> String {
+        let rows = parameters.map { parameter in
+            SharedConfigurationInsertRow(
+                key: parameter.key,
+                display_name: parameter.displayName,
+                value_kind: parameter.valueKind.rawValue,
+                default_value: parameter.defaultValue,
+                min_value: parameter.minimum,
+                step_value: parameter.step,
+                max_value: parameter.maximum,
+                unit: parameter.unit,
+                description: parameter.description,
+                api_version: FXBacktestAPIV1.latestVersion
+            )
+        }
+        return try jsonEachRow(rows)
+    }
+
+    private static func pluginConfigurationPayload(_ configurations: [FXBacktestPluginConfigurationDTO]) throws -> String {
+        let rows = configurations.flatMap { configuration in
+            configuration.parameters.map { parameter in
+                PluginConfigurationInsertRow(
+                    plugin_id: configuration.pluginId,
+                    accelerator_id: configuration.acceleratorId,
+                    key: parameter.key,
+                    display_name: parameter.displayName,
+                    value_kind: parameter.valueKind.rawValue,
+                    default_value: parameter.defaultValue,
+                    min_value: parameter.minimum,
+                    step_value: parameter.step,
+                    max_value: parameter.maximum,
+                    unit: parameter.unit,
+                    description: parameter.description,
+                    api_version: FXBacktestAPIV1.latestVersion
+                )
+            }
+        }
+        return try jsonEachRow(rows)
+    }
+
+    private static func jsonEachRow<T: Encodable>(_ rows: [T]) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try rows.map { row in
+            guard let encoded = String(data: try encoder.encode(row), encoding: .utf8) else {
+                throw FXBacktestAPIServiceError.invalidRequest("Could not encode configuration row as JSONEachRow.")
+            }
+            return encoded
+        }.joined(separator: "\n")
+    }
+
     private static func identifier(_ value: String) -> String {
         "`\(value.replacingOccurrences(of: "`", with: "``"))`"
     }
@@ -310,6 +514,44 @@ public struct FXDatabaseBacktestResultService: FXBacktestResultProviding {
             output.append("\\")
         }
         return output
+    }
+
+    private static func parseConfigurationParameter(_ line: String) throws -> FXBacktestConfigurationParameterDTO {
+        try parseConfigurationParameter(fields: tsvFields(line))
+    }
+
+    private static func parseConfigurationParameter(fields: [String]) throws -> FXBacktestConfigurationParameterDTO {
+        guard fields.count == 9 else {
+            throw FXBacktestAPIServiceError.resultStoreUnavailable("Invalid shared configuration row with \(fields.count) fields.")
+        }
+        guard let valueKind = FXBacktestConfigurationValueKind(rawValue: fields[2]) else {
+            throw FXBacktestAPIServiceError.resultStoreUnavailable("Invalid configuration value_kind \(fields[2]).")
+        }
+        let parameter = try FXBacktestConfigurationParameterDTO(
+            key: fields[0],
+            displayName: fields[1],
+            valueKind: valueKind,
+            defaultValue: double(fields[3], field: "default_value"),
+            minimum: double(fields[4], field: "min_value"),
+            step: double(fields[5], field: "step_value"),
+            maximum: double(fields[6], field: "max_value"),
+            unit: fields[7],
+            description: fields[8]
+        )
+        try parameter.validate()
+        return parameter
+    }
+
+    private static func parsePluginConfigurationRow(_ line: String) throws -> PluginConfigurationSelectRow {
+        let fields = tsvFields(line)
+        guard fields.count == 11 else {
+            throw FXBacktestAPIServiceError.resultStoreUnavailable("Invalid plugin configuration row with \(fields.count) fields.")
+        }
+        return PluginConfigurationSelectRow(
+            pluginId: fields[0],
+            acceleratorId: fields[1],
+            parameter: try parseConfigurationParameter(fields: Array(fields.dropFirst(2)))
+        )
     }
 
     private static func parseRunRecord(_ line: String) throws -> FXBacktestResultRunRecord {
@@ -408,4 +650,50 @@ private struct PassResultInsertRow: Encodable {
     let flags: UInt32
     let error_message: String
     let parameters_json: String
+}
+
+private struct SharedConfigurationInsertRow: Encodable {
+    let key: String
+    let display_name: String
+    let value_kind: String
+    let default_value: Double
+    let min_value: Double
+    let step_value: Double
+    let max_value: Double
+    let unit: String
+    let description: String
+    let api_version: String
+}
+
+private struct PluginConfigurationInsertRow: Encodable {
+    let plugin_id: String
+    let accelerator_id: String
+    let key: String
+    let display_name: String
+    let value_kind: String
+    let default_value: Double
+    let min_value: Double
+    let step_value: Double
+    let max_value: Double
+    let unit: String
+    let description: String
+    let api_version: String
+}
+
+private struct PluginConfigurationScope: Hashable, Comparable {
+    let pluginId: String
+    let acceleratorId: String
+
+    static func < (lhs: PluginConfigurationScope, rhs: PluginConfigurationScope) -> Bool {
+        if lhs.pluginId != rhs.pluginId {
+            return lhs.pluginId < rhs.pluginId
+        }
+        return lhs.acceleratorId < rhs.acceleratorId
+    }
+}
+
+private struct PluginConfigurationSelectRow {
+    let pluginId: String
+    let acceleratorId: String
+    let parameter: FXBacktestConfigurationParameterDTO
 }

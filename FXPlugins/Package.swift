@@ -56,7 +56,8 @@ func fxaiPluginExcludedPaths() -> [String] {
         "README.md",
         "API/Backends",
         "API/Docs",
-        "API/Tests"
+        "API/Tests",
+        "demo_plugin_template/README.md"
     ])
 
     guard let rootEntries = try? FileManager.default.contentsOfDirectory(
@@ -105,7 +106,8 @@ let package = Package(
         .target(
             name: "FXAIPlugins",
             dependencies: [
-                .product(name: "FXDataEngine", package: "FXDataEngine")
+                .product(name: "FXDataEngine", package: "FXDataEngine"),
+                .product(name: "FXDatabaseFXBacktestAPI", package: "FXDatabase")
             ],
             path: ".",
             exclude: fxaiPluginExcludedPaths(),

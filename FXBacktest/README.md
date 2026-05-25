@@ -16,8 +16,8 @@ The goal is similar to the MT5 Strategy Tester optimization view: define a matri
 - Plugin acceleration descriptor/IR scaffold for future generated Swift SIMD and Metal kernels.
 - Six operational agents for FXDatabase connectivity, market readiness, run coordination, result persistence, plugin validation, and resource health.
 - Read-only FXDatabase data loading through the dedicated FXBacktest API v1.
-- FXDatabase-gated result persistence through the dedicated FXBacktest API v1, including explicit purge commands.
-- Live pass table with MT5-style result, profit, trade count, drawdown, recovery, Sharpe placeholder, and tested input columns.
+- FXDatabase-gated configuration and result persistence through the dedicated FXBacktest API v1, including explicit purge commands.
+- Live pass table with MT5-style result, profit, trade count, drawdown, recovery, Sharpe estimate, and tested input columns.
 - Resident terminal command shell with `>` prompt for loading data, changing settings, starting runs, stopping active work, and checking status without relaunching.
 - Demo data mode for UI and engine testing when the FXDatabase API is not running.
 
@@ -45,6 +45,7 @@ Important files:
 - `Sources/FXBacktestCore/ExecutionModel.swift`: pure M1 OHLC broker model and deterministic ledger simulator.
 - `Sources/FXBacktestCore/OhlcMarketUniverse.swift`: aligned multi-symbol OHLC universe.
 - `Sources/FXBacktestCore/FXDatabaseHistoryLoader.swift`: FXDatabase FXBacktest API v1 client bridge.
+- `Sources/FXBacktestCore/BacktestConfigurationStore.swift`: FXDatabase configuration API bridge for shared run parameters and plugin/accelerator parameter sets.
 - `Sources/FXBacktestCore/BacktestResultStore.swift`: FXDatabase result API bridge and purge support.
 - `Sources/FXBacktestCore/PluginAcceleration.swift`: plugin acceleration descriptor and IR v1.
 - `Sources/FXBacktestPlugins/FX7.swift`: source link to `../FXPlugins/fx7/Backtest/FX7.swift`, the plugin-owned FX7 OHLC-only backtest implementation with closed signal-bar feature timing, CPU universe support, and a Metal kernel for single-symbol sweeps.
@@ -224,7 +225,7 @@ help
 exit
 ```
 
-`set --persist-results true` streams future optimization rows into FXDatabase through `BacktestResultStore`. FXDatabase owns the actual ClickHouse writes behind its API. `save-results` persists a point-in-time snapshot of the currently retained in-memory result rows. `clean-backtest-data` is the purge command for old or unwanted optimization result data.
+Result persistence is enabled by default. FXBacktest registers shared run configuration and the selected plugin's per-accelerator parameter schema in FXDatabase before persisted runs, then streams optimization rows into FXDatabase through `BacktestResultStore`. FXDatabase owns the actual ClickHouse writes behind its API. `save-results` first registers the same configuration schema, then persists a point-in-time snapshot of the currently retained in-memory result rows. `clean-backtest-data` is the purge command for old or unwanted optimization result data.
 
 ## Operational Agents
 
@@ -256,6 +257,9 @@ FXBacktest consumes FXDatabase only through the dedicated FXBacktest API v1:
 - Result run completion endpoint: `POST /v1/backtest/results/runs/complete`
 - Result purge endpoint: `POST /v1/backtest/results/purge`
 - Result read endpoints: `POST /v1/backtest/results/runs/get`, `POST /v1/backtest/results/passes/get`
+- Configuration schema endpoint: `POST /v1/backtest/configuration/schema`
+- Configuration register endpoint: `POST /v1/backtest/configuration/register`
+- Configuration read endpoint: `POST /v1/backtest/configuration/get`
 
 FXBacktest imports the small `FXDatabaseFXBacktestAPI` SwiftPM product for v1 DTOs and the HTTP client. That module does not expose ClickHouse, FXDatabase internals, or the old direct history provider.
 
@@ -284,10 +288,14 @@ FXBacktest expects:
 
 FXBacktest does not call FXDatabase for execution side data. Spread, swap, commission, margin, bid/ask quotes, and tick data are intentionally outside the current backtest model. Volume is market data and is passed through to plugins when available.
 
-Direct ClickHouse access is forbidden in FXBacktest for both historical OHLCV data and optimization results. FXBacktest can start runs, append pass rows, complete runs, read stored rows, and purge old data only through FXDatabase API v1. FXDatabase remains the gatekeeper for the underlying result tables:
+Direct ClickHouse access is forbidden in FXBacktest for historical OHLCV data, optimization configuration, and optimization results. FXBacktest can register shared configuration, register plugin/accelerator parameters, start runs, append pass rows, complete runs, read stored rows, and purge old data only through FXDatabase API v1. FXDatabase remains the gatekeeper for the underlying backtest tables:
 
+- `fxbacktest_shared_config_parameters`
+- `fxbacktest_plugin_config_parameters`
 - `fxbacktest_runs`
 - `fxbacktest_pass_results`
+
+The default shared configuration uses a `1000` USD virtual trade account, `100000` unit FX contract size, and `0.01` lot size. Spread is not a backtest configuration parameter because the current model uses M1 OHLCV only.
 
 ## Pure OHLC Execution Model
 

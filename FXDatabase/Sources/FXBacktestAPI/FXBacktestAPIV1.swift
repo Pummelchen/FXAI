@@ -12,9 +12,13 @@ public enum FXBacktestAPIV1 {
     public static let resultPurgePath = "/v1/backtest/results/purge"
     public static let resultRunGetPath = "/v1/backtest/results/runs/get"
     public static let resultPassesGetPath = "/v1/backtest/results/passes/get"
+    public static let configurationSchemaPath = "/v1/backtest/configuration/schema"
+    public static let configurationRegisterPath = "/v1/backtest/configuration/register"
+    public static let configurationGetPath = "/v1/backtest/configuration/get"
     public static let maximumRowsLimit = 5_000_000
     public static let maximumResultBatchSize = 10_000
     public static let maximumResultReadLimit = 10_000
+    public static let maximumConfigurationParameterCount = 20_000
 }
 
 public struct FXBacktestAPIStatusResponse: Codable, Equatable, Sendable {
@@ -683,6 +687,252 @@ public struct FXBacktestResultPassesGetRequest: Codable, Equatable, Sendable {
     }
 }
 
+public enum FXBacktestConfigurationValueKind: String, Codable, CaseIterable, Sendable {
+    case integer
+    case decimal
+    case boolean
+}
+
+public struct FXBacktestConfigurationParameterDTO: Codable, Equatable, Sendable {
+    public let key: String
+    public let displayName: String
+    public let valueKind: FXBacktestConfigurationValueKind
+    public let defaultValue: Double
+    public let minimum: Double
+    public let step: Double
+    public let maximum: Double
+    public let unit: String
+    public let description: String
+
+    enum CodingKeys: String, CodingKey {
+        case key
+        case displayName = "display_name"
+        case valueKind = "value_kind"
+        case defaultValue = "default_value"
+        case minimum
+        case step
+        case maximum
+        case unit
+        case description
+    }
+
+    public init(
+        key: String,
+        displayName: String,
+        valueKind: FXBacktestConfigurationValueKind,
+        defaultValue: Double,
+        minimum: Double,
+        step: Double,
+        maximum: Double,
+        unit: String = "",
+        description: String = ""
+    ) {
+        self.key = key
+        self.displayName = displayName
+        self.valueKind = valueKind
+        self.defaultValue = defaultValue
+        self.minimum = minimum
+        self.step = step
+        self.maximum = maximum
+        self.unit = unit
+        self.description = description
+    }
+
+    public func validate() throws {
+        guard FXBacktestAPIV1.isValidParameterKey(key) else {
+            throw FXBacktestAPIValidationError.invalidField("configuration parameter key must be non-empty and contain only letters, numbers, or underscore")
+        }
+        try FXBacktestAPIV1.requireNonEmpty(displayName, "configuration display_name")
+        for (field, value) in [
+            ("default_value", defaultValue),
+            ("minimum", minimum),
+            ("step", step),
+            ("maximum", maximum)
+        ] where !value.isFinite {
+            throw FXBacktestAPIValidationError.invalidField("\(key).\(field) must be finite")
+        }
+        guard minimum <= defaultValue, defaultValue <= maximum else {
+            throw FXBacktestAPIValidationError.invalidField("\(key).default_value must be inside minimum...maximum")
+        }
+        guard minimum <= maximum else {
+            throw FXBacktestAPIValidationError.invalidField("\(key).minimum must be <= maximum")
+        }
+        guard step > 0 else {
+            throw FXBacktestAPIValidationError.invalidField("\(key).step must be > 0")
+        }
+        switch valueKind {
+        case .integer:
+            for (field, value) in [
+                ("default_value", defaultValue),
+                ("minimum", minimum),
+                ("step", step),
+                ("maximum", maximum)
+            ] where value.rounded() != value {
+                throw FXBacktestAPIValidationError.invalidField("\(key).\(field) must be an integer")
+            }
+        case .boolean:
+            guard [0, 1].contains(defaultValue), [0, 1].contains(minimum), [0, 1].contains(maximum), step == 1 else {
+                throw FXBacktestAPIValidationError.invalidField("\(key) boolean parameters must use 0/1 values and step 1")
+            }
+        case .decimal:
+            break
+        }
+    }
+}
+
+public struct FXBacktestPluginConfigurationDTO: Codable, Equatable, Sendable {
+    public let pluginId: String
+    public let acceleratorId: String
+    public let parameters: [FXBacktestConfigurationParameterDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case pluginId = "plugin_id"
+        case acceleratorId = "accelerator_id"
+        case parameters
+    }
+
+    public init(pluginId: String, acceleratorId: String, parameters: [FXBacktestConfigurationParameterDTO]) {
+        self.pluginId = pluginId
+        self.acceleratorId = acceleratorId
+        self.parameters = parameters
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.requireNonEmpty(pluginId, "plugin_id")
+        try FXBacktestAPIV1.requireNonEmpty(acceleratorId, "accelerator_id")
+        guard !parameters.isEmpty else {
+            throw FXBacktestAPIValidationError.invalidField("\(pluginId)/\(acceleratorId) parameters must not be empty")
+        }
+        let keys = parameters.map(\.key)
+        guard Set(keys).count == keys.count else {
+            throw FXBacktestAPIValidationError.invalidField("\(pluginId)/\(acceleratorId) contains duplicate parameter keys")
+        }
+        try parameters.forEach { try $0.validate() }
+    }
+}
+
+public struct FXBacktestConfigurationSchemaRequest: Codable, Equatable, Sendable {
+    public let apiVersion: String
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+    }
+
+    public init(apiVersion: String = FXBacktestAPIV1.latestVersion) {
+        self.apiVersion = apiVersion
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+    }
+}
+
+public struct FXBacktestConfigurationRegistrationRequest: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let sharedParameters: [FXBacktestConfigurationParameterDTO]
+    public let pluginConfigurations: [FXBacktestPluginConfigurationDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case sharedParameters = "shared_parameters"
+        case pluginConfigurations = "plugin_configurations"
+    }
+
+    public init(
+        apiVersion: String = FXBacktestAPIV1.latestVersion,
+        sharedParameters: [FXBacktestConfigurationParameterDTO],
+        pluginConfigurations: [FXBacktestPluginConfigurationDTO]
+    ) {
+        self.apiVersion = apiVersion
+        self.sharedParameters = sharedParameters
+        self.pluginConfigurations = pluginConfigurations
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        guard !sharedParameters.isEmpty || !pluginConfigurations.isEmpty else {
+            throw FXBacktestAPIValidationError.invalidField("configuration registration must include shared or plugin parameters")
+        }
+        let sharedKeys = sharedParameters.map(\.key)
+        guard Set(sharedKeys).count == sharedKeys.count else {
+            throw FXBacktestAPIValidationError.invalidField("shared configuration contains duplicate parameter keys")
+        }
+        try sharedParameters.forEach { try $0.validate() }
+        try pluginConfigurations.forEach { try $0.validate() }
+        let pluginScopes = pluginConfigurations.map { "\($0.pluginId)\u{1F}\($0.acceleratorId)" }
+        guard Set(pluginScopes).count == pluginScopes.count else {
+            throw FXBacktestAPIValidationError.invalidField("plugin configuration contains duplicate plugin/accelerator scopes")
+        }
+        let parameterCount = sharedParameters.count + pluginConfigurations.reduce(0) { $0 + $1.parameters.count }
+        guard parameterCount <= FXBacktestAPIV1.maximumConfigurationParameterCount else {
+            throw FXBacktestAPIValidationError.invalidField("configuration parameters must not exceed \(FXBacktestAPIV1.maximumConfigurationParameterCount)")
+        }
+    }
+}
+
+public struct FXBacktestConfigurationGetRequest: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let pluginIds: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case pluginIds = "plugin_ids"
+    }
+
+    public init(apiVersion: String = FXBacktestAPIV1.latestVersion, pluginIds: [String]? = nil) {
+        self.apiVersion = apiVersion
+        self.pluginIds = pluginIds
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        if let pluginIds {
+            guard !pluginIds.isEmpty else {
+                throw FXBacktestAPIValidationError.invalidField("plugin_ids must be omitted or non-empty")
+            }
+            for pluginId in pluginIds {
+                try FXBacktestAPIV1.requireNonEmpty(pluginId, "plugin_ids")
+            }
+        }
+    }
+}
+
+public struct FXBacktestConfigurationSnapshotResponse: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let sharedParameters: [FXBacktestConfigurationParameterDTO]
+    public let pluginConfigurations: [FXBacktestPluginConfigurationDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case sharedParameters = "shared_parameters"
+        case pluginConfigurations = "plugin_configurations"
+    }
+
+    public init(
+        apiVersion: String = FXBacktestAPIV1.latestVersion,
+        sharedParameters: [FXBacktestConfigurationParameterDTO],
+        pluginConfigurations: [FXBacktestPluginConfigurationDTO]
+    ) {
+        self.apiVersion = apiVersion
+        self.sharedParameters = sharedParameters
+        self.pluginConfigurations = pluginConfigurations
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        let sharedKeys = sharedParameters.map(\.key)
+        guard Set(sharedKeys).count == sharedKeys.count else {
+            throw FXBacktestAPIValidationError.invalidField("shared configuration contains duplicate parameter keys")
+        }
+        try sharedParameters.forEach { try $0.validate() }
+        try pluginConfigurations.forEach { try $0.validate() }
+        let pluginScopes = pluginConfigurations.map { "\($0.pluginId)\u{1F}\($0.acceleratorId)" }
+        guard Set(pluginScopes).count == pluginScopes.count else {
+            throw FXBacktestAPIValidationError.invalidField("plugin configuration contains duplicate plugin/accelerator scopes")
+        }
+    }
+}
+
 public struct FXBacktestResultMutationResponse: Codable, Equatable, Sendable {
     public let apiVersion: String
     public let status: String
@@ -945,6 +1195,10 @@ extension FXBacktestAPIV1 {
         guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw FXBacktestAPIValidationError.invalidField("\(field) must not be empty")
         }
+    }
+
+    static func isValidParameterKey(_ value: String) -> Bool {
+        !value.isEmpty && value.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" }
     }
 
     static func validateJSONObjectString(_ value: String, field: String) throws {

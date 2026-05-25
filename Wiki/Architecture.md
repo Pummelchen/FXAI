@@ -21,7 +21,7 @@ FXDatabase
       |      Builds features, contexts, labels, audits, and plugin payloads.
       |
       +--> FXBacktest
-      |      Requests data and stores results through FXDatabase APIs.
+      |      Requests data and stores configuration/results through FXDatabase APIs.
       |      Calls plugins through the FXAI plugin contracts.
       |
       +--> FXGUI
@@ -47,12 +47,15 @@ FXDatabase
 FXDatabase is the only project allowed to import or implement ClickHouse access. Other projects must use FXDatabase APIs for:
 
 - Historical market data.
+- Backtest shared configuration and plugin/accelerator parameter definitions.
 - Backtest result storage and deletion.
 - SineTest data, including the persistent synthetic M1 OHLCV series from `2000-01-01` through runtime-now that is refreshed every 10 seconds by FXDatabase.
 - Dataset validation and metadata.
 - Future data access needed by agents.
 
 This prevents hidden database paths, inconsistent schemas, and backtest runs that cannot be reproduced.
+
+FXBacktest registers configuration through `fxdatabase.fxbacktest.v1` before persisted runs. The shared defaults include a `1000` USD virtual trade account, `100000` unit FX contract size, and `0.01` lot size. Each plugin/accelerator scope registers its own tunable parameters with default, minimum, step, and maximum values. FXBacktest does not write configuration or result files to disk.
 
 FXPlugins treats SineTest as a required certification fixture. The full registry gate checks every plugin on a broad holdout window, and the accelerator gate switches each plugin through every declared non-CPU backend so Metal, PyTorch MPS, TensorFlow Metal, and NLP runtime paths cannot bypass SineTest prediction safety. Every evaluated plugin and accelerator prediction must also report at least 95% confidence on this deterministic fixture.
 

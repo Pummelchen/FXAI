@@ -29,9 +29,9 @@ final class AppModel: ObservableObject, @unchecked Sendable {
     @Published var executionTarget: BacktestExecutionTarget = .cpu
     @Published var maxWorkers: Int = max(1, ProcessInfo.processInfo.activeProcessorCount)
     @Published var chunkSize: Int = 128
-    @Published var initialDeposit: Double = 10_000
+    @Published var initialDeposit: Double = 1_000
     @Published var contractSize: Double = 100_000
-    @Published var lotSize: Double = 0.10
+    @Published var lotSize: Double = 0.01
 
     @Published var apiURLText = "http://127.0.0.1:5066"
     @Published var brokerSourceId = "icmarkets-sc-mt5-4"
@@ -42,12 +42,12 @@ final class AppModel: ObservableObject, @unchecked Sendable {
     @Published var utcStartInclusive: Int64 = 1_704_067_200
     @Published var utcEndExclusive: Int64 = 1_707_177_600
     @Published var maximumRows = 5_000_000
-    @Published var persistResultsToFXDatabase = false
+    @Published var persistResultsToFXDatabase = true
 
     @Published private(set) var market: OhlcDataSeries?
     @Published private(set) var marketUniverse: OhlcMarketUniverse?
     @Published private(set) var results: [BacktestPassResult] = []
-    @Published private(set) var resultInitialDeposit: Double = 10_000
+    @Published private(set) var resultInitialDeposit: Double = 1_000
     @Published private(set) var progress = BacktestProgress(completedPasses: 0, totalPasses: 0, elapsedSeconds: 0)
     @Published private(set) var statusText = "Ready"
     @Published private(set) var isRunning = false
@@ -546,7 +546,10 @@ final class AppModel: ObservableObject, @unchecked Sendable {
     ) async -> ResultPersistenceAgent? {
         guard persistResultsToFXDatabase else { return nil }
         do {
-            let store = FXDatabaseBacktestResultStore(connection: try makeFXDatabaseConnection())
+            let connection = try makeFXDatabaseConnection()
+            let configurationStore = FXDatabaseBacktestConfigurationStore(connection: connection)
+            _ = try await configurationStore.register(plugins: [plugin])
+            let store = FXDatabaseBacktestResultStore(connection: connection)
             let run = BacktestStoredRun(
                 pluginIdentifier: plugin.descriptor.id,
                 engine: settings.target,
@@ -691,7 +694,7 @@ extension AppModel {
         State-changing commands gracefully stop active work before changing the app state.
         FXBacktest has no launch-time options; use this resident command shell after startup.
         FXBacktest must load Forex history only through FXDatabase API v1, never ClickHouse directly.
-        Backtest results also go through FXDatabase API v1; FXBacktest never connects to ClickHouse.
+        Backtest configuration and results also go through FXDatabase API v1; FXBacktest never connects to ClickHouse.
         """
     }
 
@@ -757,7 +760,10 @@ extension AppModel {
         }
         let runID = parsed.options["run-id"] ?? parsed.options["run"] ?? UUID().uuidString
         let note = parsed.options["note"]
-        let store = FXDatabaseBacktestResultStore(connection: try makeFXDatabaseConnection())
+        let connection = try makeFXDatabaseConnection()
+        let configurationStore = FXDatabaseBacktestConfigurationStore(connection: connection)
+        _ = try await configurationStore.register(plugins: [selectedPlugin])
+        let store = FXDatabaseBacktestResultStore(connection: connection)
         let sweep = try makeSweep()
         let activeUniverse = marketUniverse ?? market?.universe
         guard let activeUniverse else {

@@ -6,6 +6,7 @@ final class PluginZooLayoutTests: XCTestCase {
     func testFXPluginsRootIsFlatPluginZoo() throws {
         let root = Self.packageRoot()
         let expectedPluginDirectories = Set(FXAIPluginRegistry.availablePlugins().map(\.manifest.aiName))
+        let allowedNonRuntimeTemplateDirectories: Set<String> = ["demo_plugin_template"]
         let rootDirectories = try FileManager.default.contentsOfDirectory(
             at: root,
             includingPropertiesForKeys: [.isDirectoryKey],
@@ -14,7 +15,9 @@ final class PluginZooLayoutTests: XCTestCase {
             let values = try? url.resourceValues(forKeys: [.isDirectoryKey])
             return values?.isDirectory == true
         }
-        let actualPluginDirectories = Set(rootDirectories.map(\.lastPathComponent)).subtracting(["API"])
+        let actualPluginDirectories = Set(rootDirectories.map(\.lastPathComponent))
+            .subtracting(["API"])
+            .subtracting(allowedNonRuntimeTemplateDirectories)
 
         XCTAssertTrue(
             FileManager.default.fileExists(atPath: root.appendingPathComponent("API").path),
@@ -29,6 +32,15 @@ final class PluginZooLayoutTests: XCTestCase {
                 "missing FXPlugins/\(directory)"
             )
         }
+
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: root.appendingPathComponent("demo_plugin_template").path),
+            "missing compile-checked demo plugin template"
+        )
+        XCTAssertFalse(
+            expectedPluginDirectories.contains("demo_plugin_template"),
+            "demo_plugin_template must stay out of the runnable production plugin registry"
+        )
 
         for retiredStagingDirectory in [
             "Backends",

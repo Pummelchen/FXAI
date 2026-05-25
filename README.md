@@ -41,7 +41,7 @@ Future agents
 
 - `FXImporter` pulls or receives external market data and hands normalized data to FXDatabase.
 - `FXDatabase` is the only database authority. It owns ClickHouse, validation, migrations, ingestion, storage, deletion, and access APIs.
-- `FXBacktest` never reads ClickHouse directly. It asks FXDatabase for history, stores backtest results through FXDatabase, and calls plugins through the FXAI contracts.
+- `FXBacktest` never reads ClickHouse directly. It asks FXDatabase for history, registers shared/plugin/accelerator configuration through FXDatabase, stores backtest results through FXDatabase, and calls plugins through the FXAI contracts.
 - `FXDataEngine` turns raw M1 OHLCV into features, labels, context payloads, audit data, and plugin-ready requests.
 - `FXPlugins` is a flat plugin zoo. Each plugin folder owns its own implementation and accelerator folders.
 - `FXBacktestAgent`, `FXDemoAgent`, and `FXLiveAgent` are future distributed runtime projects, not data owners.
@@ -63,6 +63,8 @@ Current latest versions:
 | FXDataEngine tokenizer contract | `fxai-tokenizer-v1` |
 
 Swift descriptors, request DTOs, plugin manifests, contexts, predictions, and Python accelerator bridge payloads reject non-latest versions during validation.
+
+Backtest configuration is also part of `fxdatabase.fxbacktest.v1`. Shared run settings such as `initial_deposit_usd` defaulting to `1000` and `lot_size_lots` defaulting to `0.01`, plus each plugin/accelerator parameter set, are registered in ClickHouse only through FXDatabase API endpoints. FXBacktest does not write configuration or result files to disk.
 
 ## Data Contract
 
@@ -114,6 +116,8 @@ FXPlugins/plugin_name/
 ```
 
 Only shared API and registry code belongs under `FXPlugins/API/`. Plugin-specific Metal kernels, Python models, tokenizers, or NLP logic stay inside the plugin's own folder.
+
+`FXPlugins/demo_plugin_template/` is a compile-checked template for future plugins. It contains no trading strategy and is intentionally not in the runtime plugin registry.
 
 ## Current Runtime Standard
 

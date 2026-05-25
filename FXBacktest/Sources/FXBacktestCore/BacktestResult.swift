@@ -35,9 +35,9 @@ public struct BacktestRunSettings: Codable, Hashable, Sendable {
         target: BacktestExecutionTarget = .cpu,
         maxWorkers: Int = max(1, ProcessInfo.processInfo.activeProcessorCount),
         chunkSize: Int = 128,
-        initialDeposit: Double = 10_000,
+        initialDeposit: Double = 1_000,
         contractSize: Double = 100_000,
-        lotSize: Double = 0.10
+        lotSize: Double = 0.01
     ) {
         self.target = target
         self.maxWorkers = max(1, maxWorkers)

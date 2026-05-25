@@ -56,6 +56,27 @@ final class BacktestResultStoreTests: XCTestCase {
             "purge:older_than_days:30"
         ])
     }
+
+    func testFXDatabaseConfigurationStoreRegistersSharedAndPluginAcceleratorParametersThroughAPI() async throws {
+        let client = RecordingFXDatabaseConfigurationClient()
+        let store = FXDatabaseBacktestConfigurationStore(client: client)
+        let plugin = AnyFXBacktestPlugin(FX7())
+        let response = try await store.register(plugins: [plugin])
+
+        XCTAssertEqual(response.affectedRows, BacktestCommonConfigurationDefaults.parameters().count + plugin.parameterDefinitions.count * 3)
+        let snapshot = try await store.fetch(pluginIds: [plugin.descriptor.id])
+        XCTAssertEqual(snapshot.sharedParameters.first { $0.key == "initial_deposit_usd" }?.defaultValue, 1_000)
+        XCTAssertEqual(snapshot.sharedParameters.first { $0.key == "lot_size_lots" }?.defaultValue, 0.01)
+        XCTAssertEqual(Set(snapshot.pluginConfigurations.map(\.acceleratorId)), ["swiftScalar", "swiftSIMD", "metal"])
+        XCTAssertTrue(snapshot.pluginConfigurations.allSatisfy { $0.parameters.contains { $0.key == "signal_stride_bars" } })
+
+        let operations = await client.operations()
+        XCTAssertEqual(operations, [
+            "config-schema",
+            "config-register:5:3",
+            "config-get:com.fxbacktest.plugins.fx7.v1"
+        ])
+    }
 }
 
 actor RecordingFXDatabaseResultClient: FXDatabaseBacktestResultAPIClient {
@@ -95,6 +116,39 @@ actor RecordingFXDatabaseResultClient: FXDatabaseBacktestResultAPIClient {
     func getBacktestPasses(_ passes: FXBacktestResultPassesGetRequest) async throws -> FXBacktestResultPassesGetResponse {
         recordedOperations.append("get-passes:\(passes.runId):\(passes.offset):\(passes.limit)")
         return FXBacktestResultPassesGetResponse(runId: passes.runId, offset: passes.offset, limit: passes.limit, results: [])
+    }
+
+    func operations() -> [String] {
+        recordedOperations
+    }
+}
+
+actor RecordingFXDatabaseConfigurationClient: FXDatabaseBacktestConfigurationAPIClient {
+    private var recordedOperations: [String] = []
+    private var snapshot = FXBacktestConfigurationSnapshotResponse(sharedParameters: [], pluginConfigurations: [])
+
+    func ensureBacktestConfigurationSchema() async throws -> FXBacktestResultMutationResponse {
+        recordedOperations.append("config-schema")
+        return FXBacktestResultMutationResponse(affectedRows: 0, sqlStatements: 3)
+    }
+
+    func registerBacktestConfiguration(_ registration: FXBacktestConfigurationRegistrationRequest) async throws -> FXBacktestResultMutationResponse {
+        recordedOperations.append("config-register:\(registration.sharedParameters.count):\(registration.pluginConfigurations.count)")
+        snapshot = FXBacktestConfigurationSnapshotResponse(
+            sharedParameters: registration.sharedParameters,
+            pluginConfigurations: registration.pluginConfigurations
+        )
+        let rows = registration.sharedParameters.count + registration.pluginConfigurations.reduce(0) { $0 + $1.parameters.count }
+        return FXBacktestResultMutationResponse(affectedRows: rows, sqlStatements: 5)
+    }
+
+    func getBacktestConfiguration(_ request: FXBacktestConfigurationGetRequest) async throws -> FXBacktestConfigurationSnapshotResponse {
+        recordedOperations.append("config-get:\(request.pluginIds?.joined(separator: ",") ?? "all")")
+        guard let pluginIds = request.pluginIds else { return snapshot }
+        return FXBacktestConfigurationSnapshotResponse(
+            sharedParameters: snapshot.sharedParameters,
+            pluginConfigurations: snapshot.pluginConfigurations.filter { pluginIds.contains($0.pluginId) }
+        )
     }
 
     func operations() -> [String] {

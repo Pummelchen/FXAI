@@ -13,6 +13,9 @@ public protocol FXBacktestResultProviding: Sendable {
     func purgeResults(_ request: FXBacktestResultPurgeRequest) async throws -> FXBacktestResultPurgeResponse
     func getRun(_ request: FXBacktestResultRunGetRequest) async throws -> FXBacktestResultRunGetResponse
     func getPasses(_ request: FXBacktestResultPassesGetRequest) async throws -> FXBacktestResultPassesGetResponse
+    func ensureConfigurationSchema(_ request: FXBacktestConfigurationSchemaRequest) async throws -> FXBacktestResultMutationResponse
+    func registerConfiguration(_ request: FXBacktestConfigurationRegistrationRequest) async throws -> FXBacktestResultMutationResponse
+    func getConfiguration(_ request: FXBacktestConfigurationGetRequest) async throws -> FXBacktestConfigurationSnapshotResponse
 }
 
 public struct FXBacktestHTTPResponse: Sendable, Equatable {
@@ -97,6 +100,27 @@ public struct FXBacktestAPIHTTPHandler: Sendable {
                 let request = try JSONDecoder().decode(FXBacktestResultPassesGetRequest.self, from: body)
                 try request.validate()
                 let response = try await requireResultProvider().getPasses(request)
+                try response.validate()
+                return try json(response)
+
+            case ("POST", FXBacktestAPIV1.configurationSchemaPath):
+                let request = try JSONDecoder().decode(FXBacktestConfigurationSchemaRequest.self, from: body)
+                try request.validate()
+                let response = try await requireResultProvider().ensureConfigurationSchema(request)
+                try response.validate()
+                return try json(response)
+
+            case ("POST", FXBacktestAPIV1.configurationRegisterPath):
+                let request = try JSONDecoder().decode(FXBacktestConfigurationRegistrationRequest.self, from: body)
+                try request.validate()
+                let response = try await requireResultProvider().registerConfiguration(request)
+                try response.validate()
+                return try json(response)
+
+            case ("POST", FXBacktestAPIV1.configurationGetPath):
+                let request = try JSONDecoder().decode(FXBacktestConfigurationGetRequest.self, from: body)
+                try request.validate()
+                let response = try await requireResultProvider().getConfiguration(request)
                 try response.validate()
                 return try json(response)
 

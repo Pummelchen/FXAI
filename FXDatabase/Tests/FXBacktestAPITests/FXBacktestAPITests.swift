@@ -235,6 +235,71 @@ final class FXBacktestAPITests: XCTestCase {
         ])
     }
 
+    func testHTTPHandlerRoutesBacktestConfigurationRequestsThroughFXDatabaseProvider() async throws {
+        let resultProvider = MockResultProvider()
+        let handler = FXBacktestAPIHTTPHandler(historyProvider: MockHistoryProvider(), resultProvider: resultProvider)
+        let shared = FXBacktestConfigurationParameterDTO(
+            key: "initial_deposit_usd",
+            displayName: "Virtual Trade Account USD",
+            valueKind: .decimal,
+            defaultValue: 1_000,
+            minimum: 100,
+            step: 100,
+            maximum: 1_000_000,
+            unit: "USD"
+        )
+        let plugin = FXBacktestPluginConfigurationDTO(
+            pluginId: "com.fxbacktest.tests.plugin.v1",
+            acceleratorId: "swiftScalar",
+            parameters: [
+                FXBacktestConfigurationParameterDTO(
+                    key: "lookback",
+                    displayName: "Lookback",
+                    valueKind: .integer,
+                    defaultValue: 20,
+                    minimum: 2,
+                    step: 1,
+                    maximum: 200,
+                    unit: "bars"
+                )
+            ]
+        )
+
+        let schemaResponse = await handler.handle(
+            method: "POST",
+            path: FXBacktestAPIV1.configurationSchemaPath,
+            body: try JSONEncoder().encode(FXBacktestConfigurationSchemaRequest())
+        )
+        XCTAssertEqual(schemaResponse.statusCode, 200)
+
+        let registerResponse = await handler.handle(
+            method: "POST",
+            path: FXBacktestAPIV1.configurationRegisterPath,
+            body: try JSONEncoder().encode(FXBacktestConfigurationRegistrationRequest(
+                sharedParameters: [shared],
+                pluginConfigurations: [plugin]
+            ))
+        )
+        XCTAssertEqual(registerResponse.statusCode, 200)
+
+        let getResponse = await handler.handle(
+            method: "POST",
+            path: FXBacktestAPIV1.configurationGetPath,
+            body: try JSONEncoder().encode(FXBacktestConfigurationGetRequest(pluginIds: ["com.fxbacktest.tests.plugin.v1"]))
+        )
+        XCTAssertEqual(getResponse.statusCode, 200)
+        let snapshot = try JSONDecoder().decode(FXBacktestConfigurationSnapshotResponse.self, from: getResponse.body)
+        XCTAssertEqual(snapshot.sharedParameters.first?.defaultValue, 1_000)
+        XCTAssertEqual(snapshot.pluginConfigurations.first?.acceleratorId, "swiftScalar")
+
+        let operations = await resultProvider.operations()
+        XCTAssertEqual(operations, [
+            "config-schema",
+            "config-register:1:1",
+            "config-get:com.fxbacktest.tests.plugin.v1"
+        ])
+    }
+
     func testHTTPHandlerRejectsStaleResultProviderResponseEnvelope() async throws {
         let handler = FXBacktestAPIHTTPHandler(
             historyProvider: MockHistoryProvider(),
@@ -318,6 +383,67 @@ final class FXBacktestAPITests: XCTestCase {
         XCTAssertTrue(sql.contains { $0.contains("INSERT INTO `fxdatabase_test`.`fxbacktest_pass_results` FORMAT JSONEachRow") })
         XCTAssertTrue(sql.contains { $0.contains("ALTER TABLE `fxdatabase_test`.`fxbacktest_runs`") && $0.contains("status = 'completed'") })
         XCTAssertTrue(sql.contains { $0.contains("ALTER TABLE `fxdatabase_test`.`fxbacktest_pass_results` DELETE WHERE 1") })
+    }
+
+    func testResultServiceOwnsBacktestConfigurationSchemaAndMutationsBehindAPI() async throws {
+        let clickHouse = RecordingResultClickHouse(configurationSelectBodies: [
+            "initial_deposit_usd\tVirtual Trade Account USD\tdecimal\t1000\t100\t100\t1000000\tUSD\tStarting\\tvirtual account\n",
+            "com.fxbacktest.tests.plugin.v1\tswiftScalar\tlookback\tLookback\tinteger\t20\t2\t1\t200\tbars\tPlugin\\tlookback\n"
+        ])
+        let service = FXDatabaseBacktestResultService(clickHouse: clickHouse, database: "fxdatabase_test")
+        let request = FXBacktestConfigurationRegistrationRequest(
+            sharedParameters: [
+                FXBacktestConfigurationParameterDTO(
+                    key: "initial_deposit_usd",
+                    displayName: "Virtual Trade Account USD",
+                    valueKind: .decimal,
+                    defaultValue: 1_000,
+                    minimum: 100,
+                    step: 100,
+                    maximum: 1_000_000,
+                    unit: "USD",
+                    description: "Starting virtual account"
+                )
+            ],
+            pluginConfigurations: [
+                FXBacktestPluginConfigurationDTO(
+                    pluginId: "com.fxbacktest.tests.plugin.v1",
+                    acceleratorId: "swiftScalar",
+                    parameters: [
+                        FXBacktestConfigurationParameterDTO(
+                            key: "lookback",
+                            displayName: "Lookback",
+                            valueKind: .integer,
+                            defaultValue: 20,
+                            minimum: 2,
+                            step: 1,
+                            maximum: 200,
+                            unit: "bars",
+                            description: "Plugin lookback"
+                        )
+                    ]
+                )
+            ]
+        )
+
+        let schema = try await service.ensureConfigurationSchema(FXBacktestConfigurationSchemaRequest())
+        XCTAssertEqual(schema.sqlStatements, 3)
+        let registration = try await service.registerConfiguration(request)
+        XCTAssertEqual(registration.affectedRows, 2)
+        let snapshot = try await service.getConfiguration(FXBacktestConfigurationGetRequest(pluginIds: ["com.fxbacktest.tests.plugin.v1"]))
+        XCTAssertEqual(snapshot.sharedParameters.map(\.key), ["initial_deposit_usd"])
+        XCTAssertEqual(snapshot.pluginConfigurations.first?.parameters.map(\.key), ["lookback"])
+        XCTAssertEqual(snapshot.sharedParameters.first?.description, "Starting\tvirtual account")
+        XCTAssertEqual(snapshot.pluginConfigurations.first?.parameters.first?.description, "Plugin\tlookback")
+
+        let sql = await clickHouse.sql()
+        XCTAssertTrue(sql.contains { $0.contains("CREATE TABLE IF NOT EXISTS `fxdatabase_test`.`fxbacktest_shared_config_parameters`") })
+        XCTAssertTrue(sql.contains { $0.contains("CREATE TABLE IF NOT EXISTS `fxdatabase_test`.`fxbacktest_plugin_config_parameters`") })
+        XCTAssertTrue(sql.contains { $0.contains("ALTER TABLE `fxdatabase_test`.`fxbacktest_shared_config_parameters` DELETE WHERE 1") && $0.contains("SETTINGS mutations_sync = 1") })
+        XCTAssertTrue(sql.contains { $0.contains("INSERT INTO `fxdatabase_test`.`fxbacktest_shared_config_parameters` FORMAT JSONEachRow") })
+        XCTAssertTrue(sql.contains { $0.contains("ALTER TABLE `fxdatabase_test`.`fxbacktest_plugin_config_parameters`") && $0.contains("DELETE WHERE plugin_id IN") && $0.contains("SETTINGS mutations_sync = 1") })
+        XCTAssertTrue(sql.contains { $0.contains("INSERT INTO `fxdatabase_test`.`fxbacktest_plugin_config_parameters` FORMAT JSONEachRow") })
+        XCTAssertTrue(sql.contains { $0.contains("FROM `fxdatabase_test`.`fxbacktest_plugin_config_parameters` FINAL") && $0.contains("com.fxbacktest.tests.plugin.v1") })
     }
 
     func testResultServiceEscapesRunMetadataSQLLiterals() async throws {
@@ -490,6 +616,53 @@ private actor MockResultProvider: FXBacktestResultProviding {
         return FXBacktestResultPassesGetResponse(runId: request.runId, offset: request.offset, limit: request.limit, results: [])
     }
 
+    func ensureConfigurationSchema(_ request: FXBacktestConfigurationSchemaRequest) async throws -> FXBacktestResultMutationResponse {
+        recordedOperations.append("config-schema")
+        return FXBacktestResultMutationResponse(affectedRows: 0, sqlStatements: 3)
+    }
+
+    func registerConfiguration(_ request: FXBacktestConfigurationRegistrationRequest) async throws -> FXBacktestResultMutationResponse {
+        recordedOperations.append("config-register:\(request.sharedParameters.count):\(request.pluginConfigurations.count)")
+        let rows = request.sharedParameters.count + request.pluginConfigurations.reduce(0) { $0 + $1.parameters.count }
+        return FXBacktestResultMutationResponse(affectedRows: rows, sqlStatements: 5)
+    }
+
+    func getConfiguration(_ request: FXBacktestConfigurationGetRequest) async throws -> FXBacktestConfigurationSnapshotResponse {
+        recordedOperations.append("config-get:\(request.pluginIds?.joined(separator: ",") ?? "all")")
+        return FXBacktestConfigurationSnapshotResponse(
+            sharedParameters: [
+                FXBacktestConfigurationParameterDTO(
+                    key: "initial_deposit_usd",
+                    displayName: "Virtual Trade Account USD",
+                    valueKind: .decimal,
+                    defaultValue: 1_000,
+                    minimum: 100,
+                    step: 100,
+                    maximum: 1_000_000,
+                    unit: "USD"
+                )
+            ],
+            pluginConfigurations: [
+                FXBacktestPluginConfigurationDTO(
+                    pluginId: "com.fxbacktest.tests.plugin.v1",
+                    acceleratorId: "swiftScalar",
+                    parameters: [
+                        FXBacktestConfigurationParameterDTO(
+                            key: "lookback",
+                            displayName: "Lookback",
+                            valueKind: .integer,
+                            defaultValue: 20,
+                            minimum: 2,
+                            step: 1,
+                            maximum: 200,
+                            unit: "bars"
+                        )
+                    ]
+                )
+            ]
+        )
+    }
+
     func operations() -> [String] {
         recordedOperations
     }
@@ -532,13 +705,36 @@ private struct StaleResultProvider: FXBacktestResultProviding {
             results: []
         )
     }
+
+    func ensureConfigurationSchema(_ request: FXBacktestConfigurationSchemaRequest) async throws -> FXBacktestResultMutationResponse {
+        FXBacktestResultMutationResponse(apiVersion: "fxdatabase.fxbacktest.v0", sqlStatements: 1)
+    }
+
+    func registerConfiguration(_ request: FXBacktestConfigurationRegistrationRequest) async throws -> FXBacktestResultMutationResponse {
+        FXBacktestResultMutationResponse(apiVersion: "fxdatabase.fxbacktest.v0", sqlStatements: 1)
+    }
+
+    func getConfiguration(_ request: FXBacktestConfigurationGetRequest) async throws -> FXBacktestConfigurationSnapshotResponse {
+        FXBacktestConfigurationSnapshotResponse(apiVersion: "fxdatabase.fxbacktest.v0", sharedParameters: [], pluginConfigurations: [])
+    }
 }
 
 private actor RecordingResultClickHouse: ClickHouseClientProtocol {
     private var recordedSQL: [String] = []
+    private var configurationSelectBodies: [String]
+
+    init(configurationSelectBodies: [String] = []) {
+        self.configurationSelectBodies = configurationSelectBodies
+    }
 
     func execute(_ query: ClickHouseQuery) async throws -> String {
         recordedSQL.append(query.sql)
+        if query.sql.contains("fxbacktest_shared_config_parameters") && query.sql.contains("FORMAT TabSeparated") {
+            return configurationSelectBodies.isEmpty ? "" : configurationSelectBodies[0]
+        }
+        if query.sql.contains("fxbacktest_plugin_config_parameters") && query.sql.contains("FORMAT TabSeparated") {
+            return configurationSelectBodies.count > 1 ? configurationSelectBodies[1] : ""
+        }
         return ""
     }
 
