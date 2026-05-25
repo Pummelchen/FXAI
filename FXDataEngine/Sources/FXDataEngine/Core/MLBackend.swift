@@ -469,14 +469,30 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
             process.standardInput = stdin
             process.standardOutput = stdout
             process.standardError = stderr
+            let stdoutBuffer = PythonProcessOutputBuffer()
+            let stderrBuffer = PythonProcessOutputBuffer()
+            stdout.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                guard !data.isEmpty else { return }
+                stdoutBuffer.append(data)
+            }
+            stderr.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                guard !data.isEmpty else { return }
+                stderrBuffer.append(data)
+            }
+            defer {
+                stdout.fileHandleForReading.readabilityHandler = nil
+                stderr.fileHandleForReading.readabilityHandler = nil
+            }
 
             try process.run()
             stdin.fileHandleForWriting.write(input)
             try stdin.fileHandleForWriting.close()
             process.waitUntilExit()
 
-            let output = stdout.fileHandleForReading.readDataToEndOfFile()
-            let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
+            let output = stdoutBuffer.snapshot(appending: stdout.fileHandleForReading.readDataToEndOfFile())
+            let errorData = stderrBuffer.snapshot(appending: stderr.fileHandleForReading.readDataToEndOfFile())
             guard process.terminationStatus == 0 else {
                 let message = String(data: errorData, encoding: .utf8) ?? "Python backend failed"
                 throw FXDataEngineError.externalBackend(message.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -504,14 +520,30 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
         process.standardInput = stdin
         process.standardOutput = stdout
         process.standardError = stderr
+        let stdoutBuffer = PythonProcessOutputBuffer()
+        let stderrBuffer = PythonProcessOutputBuffer()
+        stdout.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            stdoutBuffer.append(data)
+        }
+        stderr.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            stderrBuffer.append(data)
+        }
+        defer {
+            stdout.fileHandleForReading.readabilityHandler = nil
+            stderr.fileHandleForReading.readabilityHandler = nil
+        }
 
         try process.run()
         stdin.fileHandleForWriting.write(input)
         try stdin.fileHandleForWriting.close()
         process.waitUntilExit()
 
-        let output = stdout.fileHandleForReading.readDataToEndOfFile()
-        let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
+        let output = stdoutBuffer.snapshot(appending: stdout.fileHandleForReading.readDataToEndOfFile())
+        let errorData = stderrBuffer.snapshot(appending: stderr.fileHandleForReading.readDataToEndOfFile())
         guard process.terminationStatus == 0 else {
             let message = String(data: errorData, encoding: .utf8) ?? "Python backend failed"
             throw FXDataEngineError.externalBackend(message.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -525,6 +557,25 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
                 "Python backend API version \(response.apiVersion) is not supported; expected \(FXDataEngineConstants.latestPluginAPIVersion)"
             )
         }
+    }
+}
+
+private final class PythonProcessOutputBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var data = Data()
+
+    func append(_ chunk: Data) {
+        lock.lock()
+        data.append(chunk)
+        lock.unlock()
+    }
+
+    func snapshot(appending chunk: Data) -> Data {
+        lock.lock()
+        data.append(chunk)
+        let snapshot = data
+        lock.unlock()
+        return snapshot
     }
 }
 

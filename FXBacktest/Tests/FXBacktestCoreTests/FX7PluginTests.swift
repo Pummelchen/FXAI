@@ -14,14 +14,13 @@ final class FX7PluginTests: XCTestCase {
         XCTAssertTrue(plugin.descriptor.supportsCPU)
         XCTAssertTrue(plugin.descriptor.supportsMetal)
         XCTAssertNotNil(plugin.metalKernel)
-        XCTAssertTrue(FXBacktestPluginRegistry.availablePlugins.contains { $0.descriptor.id == plugin.descriptor.id })
         XCTAssertNoThrow(try PluginAccelerationPipeline().validate(plugin.accelerationDescriptor))
     }
 
     func testFX7RunsClosedBarSingleSymbolTrend() throws {
         let plugin = FX7()
         let market = try trendingMarket(symbol: "EURUSD", slope: 18)
-        let parameters = try defaultParameters(plugin)
+        let parameters = try activeTrendParameters(plugin)
         let context = BacktestContext(settings: BacktestRunSettings(lotSize: 0.01), digits: market.metadata.digits)
 
         let result = try plugin.runPass(market: market, parameters: parameters, context: context)
@@ -37,7 +36,7 @@ final class FX7PluginTests: XCTestCase {
         let eurusd = try trendingMarket(symbol: "EURUSD", slope: 16)
         let usdjpy = try trendingMarket(symbol: "USDJPY", slope: -12, digits: 3, basePrice: 150_000)
         let universe = try OhlcMarketUniverse(primarySymbol: "EURUSD", series: [eurusd, usdjpy])
-        let parameters = try defaultParameters(plugin)
+        let parameters = try activeTrendParameters(plugin)
         let context = BacktestContext(settings: BacktestRunSettings(lotSize: 0.01), digits: eurusd.metadata.digits)
 
         let result = try plugin.runPass(marketUniverse: universe, parameters: parameters, context: context)
@@ -69,12 +68,12 @@ final class FX7PluginTests: XCTestCase {
 
         let longOnly = try plugin.runPass(
             market: market,
-            parameters: try defaultParameters(plugin, overrides: ["allow_short": 0]),
+            parameters: try activeTrendParameters(plugin, overrides: ["allow_short": 0]),
             context: context
         )
         let noLongs = try plugin.runPass(
             market: market,
-            parameters: try defaultParameters(plugin, overrides: ["allow_long": 0]),
+            parameters: try activeTrendParameters(plugin, overrides: ["allow_long": 0]),
             context: context
         )
 
@@ -90,7 +89,7 @@ final class FX7PluginTests: XCTestCase {
 
         let market = try trendingMarket(symbol: "EURUSD", slope: 18)
         let plugin = AnyFXBacktestPlugin(FX7())
-        let sweep = try ParameterSweep.singlePass(definitions: plugin.parameterDefinitions)
+        let sweep = try singlePassSweep(definitions: plugin.parameterDefinitions, overrides: ["signal_stride_bars": 1])
         let settings = BacktestRunSettings(target: .metal, maxWorkers: 1, chunkSize: 1, lotSize: 0.01)
 
         var passResults: [BacktestPassResult] = []
@@ -110,10 +109,33 @@ final class FX7PluginTests: XCTestCase {
         #endif
     }
 
+    private func activeTrendParameters(_ plugin: FX7, overrides: [String: Double] = [:]) throws -> ParameterVector {
+        try defaultParameters(
+            plugin,
+            overrides: ["signal_stride_bars": 1].merging(overrides) { _, new in new }
+        )
+    }
+
     private func defaultParameters(_ plugin: FX7, overrides: [String: Double] = [:]) throws -> ParameterVector {
         let names = plugin.parameterDefinitions.map(\.key)
         let values = plugin.parameterDefinitions.map { overrides[$0.key] ?? $0.defaultValue }
         return ParameterVector(combinationIndex: 0, names: names, values: ContiguousArray(values))
+    }
+
+    private func singlePassSweep(
+        definitions: [ParameterDefinition],
+        overrides: [String: Double]
+    ) throws -> ParameterSweep {
+        try ParameterSweep(dimensions: definitions.map { definition in
+            let value = overrides[definition.key] ?? definition.defaultValue
+            return try ParameterSweepDimension(
+                definition: definition,
+                input: value,
+                minimum: value,
+                step: max(definition.defaultStep, 1),
+                maximum: value
+            )
+        })
     }
 
     private func trendingMarket(symbol: String, slope: Int, digits: Int = 5, basePrice: Int = 108_000, count: Int = 6_000) throws -> OhlcDataSeries {

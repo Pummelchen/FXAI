@@ -300,6 +300,37 @@ final class FXBacktestAPITests: XCTestCase {
         ])
     }
 
+    func testHTTPHandlerRoutesLineageAndCertificationEvidenceThroughFXDatabaseProvider() async throws {
+        let resultProvider = MockResultProvider()
+        let handler = FXBacktestAPIHTTPHandler(historyProvider: MockHistoryProvider(), resultProvider: resultProvider)
+
+        let lineageResponse = await handler.handle(
+            method: "POST",
+            path: FXBacktestAPIV1.lineageCreatePath,
+            body: try JSONEncoder().encode(FXAILineageCreateRequest(manifest: Self.sampleLineageManifest()))
+        )
+        XCTAssertEqual(lineageResponse.statusCode, 200)
+        let lineage = try JSONDecoder().decode(FXAILineageCreateResponse.self, from: lineageResponse.body)
+        XCTAssertEqual(lineage.lineageId, "lineage-1")
+        XCTAssertTrue(lineage.accepted)
+
+        let certificationResponse = await handler.handle(
+            method: "POST",
+            path: FXBacktestAPIV1.certificationEvidencePath,
+            body: try JSONEncoder().encode(Self.sampleCertificationEvidence())
+        )
+        XCTAssertEqual(certificationResponse.statusCode, 200)
+        let certification = try JSONDecoder().decode(FXAICertificationEvidenceResponse.self, from: certificationResponse.body)
+        XCTAssertEqual(certification.certificationRunId, "cert-1")
+        XCTAssertTrue(certification.accepted)
+
+        let operations = await resultProvider.operations()
+        XCTAssertEqual(operations, [
+            "lineage:lineage-1",
+            "certification:cert-1"
+        ])
+    }
+
     func testHTTPHandlerRejectsStaleResultProviderResponseEnvelope() async throws {
         let handler = FXBacktestAPIHTTPHandler(
             historyProvider: MockHistoryProvider(),
@@ -544,6 +575,72 @@ final class FXBacktestAPITests: XCTestCase {
             symbols: SymbolConfig(symbols: [])
         )
     }
+
+    private static func sampleLineageManifest() -> FXAILineageManifestDTO {
+        FXAILineageManifestDTO(
+            lineageId: "lineage-1",
+            lineageHash: "hash-lineage",
+            datasetId: "dataset-1",
+            sourceProviderId: "provider-1",
+            sourceConnectorAPIVersion: "fximporter.connector.v1",
+            brokerSourceId: "demo",
+            sourceOrigin: "DEMO",
+            symbol: "EURUSD",
+            timeframe: "M1",
+            utcStartInclusive: 1_704_067_200,
+            utcEndExclusive: 1_704_067_260,
+            sourceDataSnapshotHash: "hash-data",
+            fxDatabaseValidationStatus: "passed",
+            sineTestSyncStatus: "passed",
+            fxDataEngineAPIVersion: "4",
+            featureGraphHash: "hash-feature",
+            normalizationStateHash: "hash-normalization",
+            labelPolicyHash: "hash-label",
+            leakageAuditHash: "hash-leakage",
+            pluginId: "rule_buyonly",
+            pluginAPIVersion: "4",
+            pluginCodeHash: "hash-plugin",
+            acceleratorBackend: "swiftScalar",
+            acceleratorCodeHash: "hash-accelerator",
+            pluginParameterSetHash: "hash-plugin-params",
+            sharedConfigurationHash: "hash-shared-config",
+            fxBacktestRuntimeKernelVersion: "fxbacktest.plugin-api.v1",
+            swiftVersion: "Swift",
+            xcodeVersion: "Xcode",
+            macOSVersion: "macOS",
+            hardwareClass: "arm64",
+            commandOrGUIActionId: "test"
+        )
+    }
+
+    private static func sampleCertificationEvidence() -> FXAICertificationEvidenceRequest {
+        FXAICertificationEvidenceRequest(
+            certificationRunId: "cert-1",
+            gitCommit: "commit",
+            workingTreeClean: true,
+            hostHardwareClass: "arm64",
+            macOSVersion: "macOS",
+            xcodeVersion: "Xcode",
+            swiftVersion: "Swift",
+            metalDeviceName: "Metal",
+            pythonVersion: "Python",
+            pyTorchStatus: "mps=True",
+            tensorflowStatus: "gpu=True",
+            startedAtUTC: 1,
+            completedAtUTC: 2,
+            overallStatus: "passed",
+            evidenceHash: "hash-cert",
+            componentResults: [
+                FXAICertificationComponentResultDTO(
+                    componentId: "FXDatabase.build",
+                    componentType: "swift_build",
+                    status: "passed",
+                    durationSeconds: 0.1,
+                    evidenceHash: "hash-component"
+                )
+            ]
+        )
+    }
 }
 
 private struct MockHistoryProvider: FXBacktestHistoryProviding {
@@ -663,6 +760,24 @@ private actor MockResultProvider: FXBacktestResultProviding {
         )
     }
 
+    func createLineageManifest(_ request: FXAILineageCreateRequest) async throws -> FXAILineageCreateResponse {
+        recordedOperations.append("lineage:\(request.manifest.lineageId)")
+        return FXAILineageCreateResponse(
+            lineageId: request.manifest.lineageId,
+            lineageHash: request.manifest.lineageHash,
+            accepted: true
+        )
+    }
+
+    func recordCertificationEvidence(_ request: FXAICertificationEvidenceRequest) async throws -> FXAICertificationEvidenceResponse {
+        recordedOperations.append("certification:\(request.certificationRunId)")
+        return FXAICertificationEvidenceResponse(
+            certificationRunId: request.certificationRunId,
+            evidenceHash: request.evidenceHash,
+            accepted: true
+        )
+    }
+
     func operations() -> [String] {
         recordedOperations
     }
@@ -716,6 +831,14 @@ private struct StaleResultProvider: FXBacktestResultProviding {
 
     func getConfiguration(_ request: FXBacktestConfigurationGetRequest) async throws -> FXBacktestConfigurationSnapshotResponse {
         FXBacktestConfigurationSnapshotResponse(apiVersion: "fxdatabase.fxbacktest.v0", sharedParameters: [], pluginConfigurations: [])
+    }
+
+    func createLineageManifest(_ request: FXAILineageCreateRequest) async throws -> FXAILineageCreateResponse {
+        FXAILineageCreateResponse(apiVersion: "fxdatabase.fxbacktest.v0", lineageId: request.manifest.lineageId, lineageHash: request.manifest.lineageHash, accepted: false)
+    }
+
+    func recordCertificationEvidence(_ request: FXAICertificationEvidenceRequest) async throws -> FXAICertificationEvidenceResponse {
+        FXAICertificationEvidenceResponse(apiVersion: "fxdatabase.fxbacktest.v0", certificationRunId: request.certificationRunId, evidenceHash: request.evidenceHash, accepted: false)
     }
 }
 

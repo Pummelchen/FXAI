@@ -4,13 +4,13 @@ FXAI is a Swift, Metal, PyTorch, and TensorFlow stack organized as focused subpr
 
 ## The Short Version
 
-FXImporter gets data from external sources. FXDatabase validates and stores it in ClickHouse. FXDataEngine prepares plugin-ready feature and context payloads. FXPlugins owns the model zoo. FXBacktest runs offline backtests through those APIs. Future agents will distribute backtests and apply approved settings to demo and live accounts.
+FXImporter gets data from external sources. FXDatabase validates and stores it in ClickHouse. FXDataEngine prepares plugin-ready feature and context payloads. FXPlugins owns the model zoo. FXBacktest runs offline backtests through those APIs and now sees the root plugin zoo through a FXDataEngine-backed bridge. FXBacktestAgent has a versioned fail-closed worker protocol, and demo/live execution safety contracts are shared in FXExecutionContracts.
 
 ```text
 FXImporter -> FXDatabase -> FXDataEngine -> FXPlugins -> FXBacktest
                   |
                   +-> FXGUI
-                  +-> future FXBacktestAgent / FXDemoAgent / FXLiveAgent
+                  +-> FXBacktestAgent / future FXDemoAgent / FXLiveAgent
 ```
 
 Only FXDatabase may touch ClickHouse directly.
@@ -30,6 +30,7 @@ Only FXDatabase may touch ClickHouse directly.
 - Data operators who need one controlled path into ClickHouse.
 - Fleet operators who want remote Macs to act as future TCP backtest agents.
 - Demo and live traders who need a clean separation between research, demo deployment, and live execution.
+- Operators who want FXGUI to mirror terminal workflows through a command catalog and versioned API paths.
 
 ## Current Rule
 

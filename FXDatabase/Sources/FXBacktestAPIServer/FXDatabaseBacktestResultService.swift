@@ -120,6 +120,54 @@ public struct FXDatabaseBacktestResultService: FXBacktestResultProviding {
         return response
     }
 
+    public func createLineageManifest(_ request: FXAILineageCreateRequest) async throws -> FXAILineageCreateResponse {
+        try request.validate()
+        try await ensureEvidenceSchema()
+        let manifestJSON = try Self.jsonString(request.manifest)
+        let row = LineageManifestInsertRow(
+            lineage_id: request.manifest.lineageId,
+            lineage_hash: request.manifest.lineageHash,
+            dataset_id: request.manifest.datasetId,
+            plugin_id: request.manifest.pluginId,
+            accelerator_backend: request.manifest.acceleratorBackend,
+            manifest_json: manifestJSON,
+            api_version: FXBacktestAPIV1.latestVersion
+        )
+        _ = try await clickHouse.execute(.mutation("""
+        INSERT INTO \(table("fxai_lineage_manifest")) FORMAT JSONEachRow
+        \(try Self.jsonEachRow([row]))
+        """, idempotent: false))
+        return FXAILineageCreateResponse(
+            lineageId: request.manifest.lineageId,
+            lineageHash: request.manifest.lineageHash,
+            accepted: true
+        )
+    }
+
+    public func recordCertificationEvidence(_ request: FXAICertificationEvidenceRequest) async throws -> FXAICertificationEvidenceResponse {
+        try request.validate()
+        try await ensureEvidenceSchema()
+        let evidenceJSON = try Self.jsonString(request)
+        let row = CertificationEvidenceInsertRow(
+            certification_run_id: request.certificationRunId,
+            evidence_hash: request.evidenceHash,
+            overall_status: request.overallStatus,
+            git_commit: request.gitCommit,
+            working_tree_clean: request.workingTreeClean ? 1 : 0,
+            evidence_json: evidenceJSON,
+            api_version: FXBacktestAPIV1.latestVersion
+        )
+        _ = try await clickHouse.execute(.mutation("""
+        INSERT INTO \(table("fxai_certification_evidence")) FORMAT JSONEachRow
+        \(try Self.jsonEachRow([row]))
+        """, idempotent: false))
+        return FXAICertificationEvidenceResponse(
+            certificationRunId: request.certificationRunId,
+            evidenceHash: request.evidenceHash,
+            accepted: true
+        )
+    }
+
     public func startRun(_ request: FXBacktestResultRunStartRequest) async throws -> FXBacktestResultMutationResponse {
         try request.validate()
         try await ensureSchema()
@@ -307,6 +355,12 @@ public struct FXDatabaseBacktestResultService: FXBacktestResultProviding {
         _ = try await clickHouse.execute(.mutation(Self.pluginConfigurationTableSQL(database: database), idempotent: true))
     }
 
+    private func ensureEvidenceSchema() async throws {
+        _ = try await clickHouse.execute(.mutation("CREATE DATABASE IF NOT EXISTS \(Self.identifier(database))", idempotent: true))
+        _ = try await clickHouse.execute(.mutation(Self.lineageManifestTableSQL(database: database), idempotent: true))
+        _ = try await clickHouse.execute(.mutation(Self.certificationEvidenceTableSQL(database: database), idempotent: true))
+    }
+
     private func table(_ name: String) -> String {
         "\(Self.identifier(database)).\(Self.identifier(name))"
     }
@@ -408,6 +462,42 @@ public struct FXDatabaseBacktestResultService: FXBacktestResultProviding {
         """
     }
 
+    private static func lineageManifestTableSQL(database: String) -> String {
+        """
+        CREATE TABLE IF NOT EXISTS \(identifier(database)).\(identifier("fxai_lineage_manifest"))
+        (
+          lineage_id String,
+          lineage_hash String,
+          dataset_id String,
+          plugin_id String,
+          accelerator_backend LowCardinality(String),
+          manifest_json String,
+          api_version String,
+          created_at DateTime64(3, 'UTC') DEFAULT now64(3)
+        )
+        ENGINE = ReplacingMergeTree(created_at)
+        ORDER BY (lineage_id, lineage_hash)
+        """
+    }
+
+    private static func certificationEvidenceTableSQL(database: String) -> String {
+        """
+        CREATE TABLE IF NOT EXISTS \(identifier(database)).\(identifier("fxai_certification_evidence"))
+        (
+          certification_run_id String,
+          evidence_hash String,
+          overall_status LowCardinality(String),
+          git_commit String,
+          working_tree_clean UInt8,
+          evidence_json String,
+          api_version String,
+          created_at DateTime64(3, 'UTC') DEFAULT now64(3)
+        )
+        ENGINE = ReplacingMergeTree(created_at)
+        ORDER BY (certification_run_id, evidence_hash)
+        """
+    }
+
     private static func sharedConfigurationPayload(_ parameters: [FXBacktestConfigurationParameterDTO]) throws -> String {
         let rows = parameters.map { parameter in
             SharedConfigurationInsertRow(
@@ -457,6 +547,15 @@ public struct FXDatabaseBacktestResultService: FXBacktestResultProviding {
             }
             return encoded
         }.joined(separator: "\n")
+    }
+
+    private static func jsonString<T: Encodable>(_ value: T) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let encoded = String(data: try encoder.encode(value), encoding: .utf8) else {
+            throw FXBacktestAPIServiceError.invalidRequest("Could not encode value as JSON.")
+        }
+        return encoded
     }
 
     private static func identifier(_ value: String) -> String {
@@ -677,6 +776,26 @@ private struct PluginConfigurationInsertRow: Encodable {
     let max_value: Double
     let unit: String
     let description: String
+    let api_version: String
+}
+
+private struct LineageManifestInsertRow: Encodable {
+    let lineage_id: String
+    let lineage_hash: String
+    let dataset_id: String
+    let plugin_id: String
+    let accelerator_backend: String
+    let manifest_json: String
+    let api_version: String
+}
+
+private struct CertificationEvidenceInsertRow: Encodable {
+    let certification_run_id: String
+    let evidence_hash: String
+    let overall_status: String
+    let git_commit: String
+    let working_tree_clean: UInt8
+    let evidence_json: String
     let api_version: String
 }
 

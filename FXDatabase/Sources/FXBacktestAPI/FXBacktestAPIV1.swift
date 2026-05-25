@@ -15,10 +15,14 @@ public enum FXBacktestAPIV1 {
     public static let configurationSchemaPath = "/v1/backtest/configuration/schema"
     public static let configurationRegisterPath = "/v1/backtest/configuration/register"
     public static let configurationGetPath = "/v1/backtest/configuration/get"
+    public static let lineageCreatePath = "/v1/backtest/lineage/create"
+    public static let lineageGetPath = "/v1/backtest/lineage/get"
+    public static let certificationEvidencePath = "/v1/certification/evidence"
     public static let maximumRowsLimit = 5_000_000
     public static let maximumResultBatchSize = 10_000
     public static let maximumResultReadLimit = 10_000
     public static let maximumConfigurationParameterCount = 20_000
+    public static let maximumCertificationComponentCount = 100_000
 }
 
 public struct FXBacktestAPIStatusResponse: Codable, Equatable, Sendable {
@@ -1181,6 +1185,435 @@ public struct FXBacktestResultPassesGetResponse: Codable, Equatable, Sendable {
             throw FXBacktestAPIValidationError.invalidField("results count must not exceed limit")
         }
         try results.forEach { try $0.validate() }
+    }
+}
+
+public struct FXAILineageManifestDTO: Codable, Equatable, Sendable {
+    public let lineageId: String
+    public let lineageHash: String
+    public let datasetId: String
+    public let sourceProviderId: String
+    public let sourceConnectorAPIVersion: String
+    public let brokerSourceId: String
+    public let sourceOrigin: String
+    public let symbol: String
+    public let timeframe: String
+    public let utcStartInclusive: Int64
+    public let utcEndExclusive: Int64
+    public let sourceDataSnapshotHash: String
+    public let fxDatabaseValidationStatus: String
+    public let sineTestSyncStatus: String
+    public let fxDataEngineAPIVersion: String
+    public let featureGraphHash: String
+    public let normalizationStateHash: String
+    public let labelPolicyHash: String
+    public let leakageAuditHash: String
+    public let pluginId: String
+    public let pluginAPIVersion: String
+    public let pluginCodeHash: String
+    public let acceleratorBackend: String
+    public let acceleratorCodeHash: String
+    public let pluginParameterSetHash: String
+    public let sharedConfigurationHash: String
+    public let fxBacktestRuntimeKernelVersion: String
+    public let swiftVersion: String
+    public let xcodeVersion: String
+    public let macOSVersion: String
+    public let hardwareClass: String
+    public let metalDeviceId: String?
+    public let pythonPackageManifestJSON: String?
+    public let commandOrGUIActionId: String
+    public let operatorId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case lineageId = "lineage_id"
+        case lineageHash = "lineage_hash"
+        case datasetId = "dataset_id"
+        case sourceProviderId = "source_provider_id"
+        case sourceConnectorAPIVersion = "source_connector_api_version"
+        case brokerSourceId = "broker_source_id"
+        case sourceOrigin = "source_origin"
+        case symbol
+        case timeframe
+        case utcStartInclusive = "utc_start_inclusive"
+        case utcEndExclusive = "utc_end_exclusive"
+        case sourceDataSnapshotHash = "source_data_snapshot_hash"
+        case fxDatabaseValidationStatus = "fxdatabase_validation_status"
+        case sineTestSyncStatus = "sinetest_sync_status"
+        case fxDataEngineAPIVersion = "fxdataengine_api_version"
+        case featureGraphHash = "feature_graph_hash"
+        case normalizationStateHash = "normalization_state_hash"
+        case labelPolicyHash = "label_policy_hash"
+        case leakageAuditHash = "leakage_audit_hash"
+        case pluginId = "plugin_id"
+        case pluginAPIVersion = "plugin_api_version"
+        case pluginCodeHash = "plugin_code_hash"
+        case acceleratorBackend = "accelerator_backend"
+        case acceleratorCodeHash = "accelerator_code_hash"
+        case pluginParameterSetHash = "plugin_parameter_set_hash"
+        case sharedConfigurationHash = "shared_configuration_hash"
+        case fxBacktestRuntimeKernelVersion = "fxbacktest_runtime_kernel_version"
+        case swiftVersion = "swift_version"
+        case xcodeVersion = "xcode_version"
+        case macOSVersion = "macos_version"
+        case hardwareClass = "hardware_class"
+        case metalDeviceId = "metal_device_id"
+        case pythonPackageManifestJSON = "python_package_manifest_json"
+        case commandOrGUIActionId = "command_or_gui_action_id"
+        case operatorId = "operator_id"
+    }
+
+    public init(
+        lineageId: String,
+        lineageHash: String,
+        datasetId: String,
+        sourceProviderId: String,
+        sourceConnectorAPIVersion: String,
+        brokerSourceId: String,
+        sourceOrigin: String,
+        symbol: String,
+        timeframe: String,
+        utcStartInclusive: Int64,
+        utcEndExclusive: Int64,
+        sourceDataSnapshotHash: String,
+        fxDatabaseValidationStatus: String,
+        sineTestSyncStatus: String,
+        fxDataEngineAPIVersion: String,
+        featureGraphHash: String,
+        normalizationStateHash: String,
+        labelPolicyHash: String,
+        leakageAuditHash: String,
+        pluginId: String,
+        pluginAPIVersion: String,
+        pluginCodeHash: String,
+        acceleratorBackend: String,
+        acceleratorCodeHash: String,
+        pluginParameterSetHash: String,
+        sharedConfigurationHash: String,
+        fxBacktestRuntimeKernelVersion: String,
+        swiftVersion: String,
+        xcodeVersion: String,
+        macOSVersion: String,
+        hardwareClass: String,
+        metalDeviceId: String? = nil,
+        pythonPackageManifestJSON: String? = nil,
+        commandOrGUIActionId: String,
+        operatorId: String? = nil
+    ) {
+        self.lineageId = lineageId
+        self.lineageHash = lineageHash
+        self.datasetId = datasetId
+        self.sourceProviderId = sourceProviderId
+        self.sourceConnectorAPIVersion = sourceConnectorAPIVersion
+        self.brokerSourceId = brokerSourceId
+        self.sourceOrigin = sourceOrigin
+        self.symbol = symbol
+        self.timeframe = timeframe
+        self.utcStartInclusive = utcStartInclusive
+        self.utcEndExclusive = utcEndExclusive
+        self.sourceDataSnapshotHash = sourceDataSnapshotHash
+        self.fxDatabaseValidationStatus = fxDatabaseValidationStatus
+        self.sineTestSyncStatus = sineTestSyncStatus
+        self.fxDataEngineAPIVersion = fxDataEngineAPIVersion
+        self.featureGraphHash = featureGraphHash
+        self.normalizationStateHash = normalizationStateHash
+        self.labelPolicyHash = labelPolicyHash
+        self.leakageAuditHash = leakageAuditHash
+        self.pluginId = pluginId
+        self.pluginAPIVersion = pluginAPIVersion
+        self.pluginCodeHash = pluginCodeHash
+        self.acceleratorBackend = acceleratorBackend
+        self.acceleratorCodeHash = acceleratorCodeHash
+        self.pluginParameterSetHash = pluginParameterSetHash
+        self.sharedConfigurationHash = sharedConfigurationHash
+        self.fxBacktestRuntimeKernelVersion = fxBacktestRuntimeKernelVersion
+        self.swiftVersion = swiftVersion
+        self.xcodeVersion = xcodeVersion
+        self.macOSVersion = macOSVersion
+        self.hardwareClass = hardwareClass
+        self.metalDeviceId = metalDeviceId
+        self.pythonPackageManifestJSON = pythonPackageManifestJSON
+        self.commandOrGUIActionId = commandOrGUIActionId
+        self.operatorId = operatorId
+    }
+
+    public func validate() throws {
+        for (field, value) in [
+            ("lineage_id", lineageId),
+            ("lineage_hash", lineageHash),
+            ("dataset_id", datasetId),
+            ("source_provider_id", sourceProviderId),
+            ("source_connector_api_version", sourceConnectorAPIVersion),
+            ("broker_source_id", brokerSourceId),
+            ("source_origin", sourceOrigin),
+            ("symbol", symbol),
+            ("timeframe", timeframe),
+            ("source_data_snapshot_hash", sourceDataSnapshotHash),
+            ("fxdatabase_validation_status", fxDatabaseValidationStatus),
+            ("sinetest_sync_status", sineTestSyncStatus),
+            ("fxdataengine_api_version", fxDataEngineAPIVersion),
+            ("feature_graph_hash", featureGraphHash),
+            ("normalization_state_hash", normalizationStateHash),
+            ("label_policy_hash", labelPolicyHash),
+            ("leakage_audit_hash", leakageAuditHash),
+            ("plugin_id", pluginId),
+            ("plugin_api_version", pluginAPIVersion),
+            ("plugin_code_hash", pluginCodeHash),
+            ("accelerator_backend", acceleratorBackend),
+            ("accelerator_code_hash", acceleratorCodeHash),
+            ("plugin_parameter_set_hash", pluginParameterSetHash),
+            ("shared_configuration_hash", sharedConfigurationHash),
+            ("fxbacktest_runtime_kernel_version", fxBacktestRuntimeKernelVersion),
+            ("swift_version", swiftVersion),
+            ("xcode_version", xcodeVersion),
+            ("macos_version", macOSVersion),
+            ("hardware_class", hardwareClass),
+            ("command_or_gui_action_id", commandOrGUIActionId)
+        ] {
+            try FXBacktestAPIV1.requireNonEmpty(value, field)
+        }
+        guard utcStartInclusive < utcEndExclusive else {
+            throw FXBacktestAPIValidationError.invalidField("lineage utc_start_inclusive must be before utc_end_exclusive")
+        }
+        if let pythonPackageManifestJSON {
+            try FXBacktestAPIV1.validateJSONObjectString(pythonPackageManifestJSON, field: "python_package_manifest_json")
+        }
+    }
+}
+
+public struct FXAILineageCreateRequest: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let manifest: FXAILineageManifestDTO
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case manifest
+    }
+
+    public init(apiVersion: String = FXBacktestAPIV1.latestVersion, manifest: FXAILineageManifestDTO) {
+        self.apiVersion = apiVersion
+        self.manifest = manifest
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        try manifest.validate()
+    }
+}
+
+public struct FXAILineageCreateResponse: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let lineageId: String
+    public let lineageHash: String
+    public let accepted: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case lineageId = "lineage_id"
+        case lineageHash = "lineage_hash"
+        case accepted
+    }
+
+    public init(
+        apiVersion: String = FXBacktestAPIV1.latestVersion,
+        lineageId: String,
+        lineageHash: String,
+        accepted: Bool
+    ) {
+        self.apiVersion = apiVersion
+        self.lineageId = lineageId
+        self.lineageHash = lineageHash
+        self.accepted = accepted
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        try FXBacktestAPIV1.requireNonEmpty(lineageId, "lineage_id")
+        try FXBacktestAPIV1.requireNonEmpty(lineageHash, "lineage_hash")
+    }
+}
+
+public struct FXAICertificationComponentResultDTO: Codable, Equatable, Sendable {
+    public let componentId: String
+    public let componentType: String
+    public let status: String
+    public let durationSeconds: Double
+    public let evidenceHash: String
+    public let detail: String
+
+    enum CodingKeys: String, CodingKey {
+        case componentId = "component_id"
+        case componentType = "component_type"
+        case status
+        case durationSeconds = "duration_seconds"
+        case evidenceHash = "evidence_hash"
+        case detail
+    }
+
+    public init(
+        componentId: String,
+        componentType: String,
+        status: String,
+        durationSeconds: Double,
+        evidenceHash: String,
+        detail: String = ""
+    ) {
+        self.componentId = componentId
+        self.componentType = componentType
+        self.status = status
+        self.durationSeconds = durationSeconds
+        self.evidenceHash = evidenceHash
+        self.detail = detail
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.requireNonEmpty(componentId, "component_id")
+        try FXBacktestAPIV1.requireNonEmpty(componentType, "component_type")
+        try FXBacktestAPIV1.requireNonEmpty(status, "status")
+        try FXBacktestAPIV1.requireNonEmpty(evidenceHash, "evidence_hash")
+        guard durationSeconds.isFinite, durationSeconds >= 0 else {
+            throw FXBacktestAPIValidationError.invalidField("duration_seconds must be finite and >= 0")
+        }
+    }
+}
+
+public struct FXAICertificationEvidenceRequest: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let certificationRunId: String
+    public let gitCommit: String
+    public let workingTreeClean: Bool
+    public let hostHardwareClass: String
+    public let macOSVersion: String
+    public let xcodeVersion: String
+    public let swiftVersion: String
+    public let metalDeviceName: String
+    public let pythonVersion: String
+    public let pyTorchStatus: String
+    public let tensorflowStatus: String
+    public let startedAtUTC: Int64
+    public let completedAtUTC: Int64
+    public let overallStatus: String
+    public let evidenceHash: String
+    public let componentResults: [FXAICertificationComponentResultDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case certificationRunId = "certification_run_id"
+        case gitCommit = "git_commit"
+        case workingTreeClean = "working_tree_clean"
+        case hostHardwareClass = "host_hardware_class"
+        case macOSVersion = "macos_version"
+        case xcodeVersion = "xcode_version"
+        case swiftVersion = "swift_version"
+        case metalDeviceName = "metal_device_name"
+        case pythonVersion = "python_version"
+        case pyTorchStatus = "pytorch_status"
+        case tensorflowStatus = "tensorflow_status"
+        case startedAtUTC = "started_at_utc"
+        case completedAtUTC = "completed_at_utc"
+        case overallStatus = "overall_status"
+        case evidenceHash = "evidence_hash"
+        case componentResults = "component_results"
+    }
+
+    public init(
+        apiVersion: String = FXBacktestAPIV1.latestVersion,
+        certificationRunId: String,
+        gitCommit: String,
+        workingTreeClean: Bool,
+        hostHardwareClass: String,
+        macOSVersion: String,
+        xcodeVersion: String,
+        swiftVersion: String,
+        metalDeviceName: String,
+        pythonVersion: String,
+        pyTorchStatus: String,
+        tensorflowStatus: String,
+        startedAtUTC: Int64,
+        completedAtUTC: Int64,
+        overallStatus: String,
+        evidenceHash: String,
+        componentResults: [FXAICertificationComponentResultDTO]
+    ) {
+        self.apiVersion = apiVersion
+        self.certificationRunId = certificationRunId
+        self.gitCommit = gitCommit
+        self.workingTreeClean = workingTreeClean
+        self.hostHardwareClass = hostHardwareClass
+        self.macOSVersion = macOSVersion
+        self.xcodeVersion = xcodeVersion
+        self.swiftVersion = swiftVersion
+        self.metalDeviceName = metalDeviceName
+        self.pythonVersion = pythonVersion
+        self.pyTorchStatus = pyTorchStatus
+        self.tensorflowStatus = tensorflowStatus
+        self.startedAtUTC = startedAtUTC
+        self.completedAtUTC = completedAtUTC
+        self.overallStatus = overallStatus
+        self.evidenceHash = evidenceHash
+        self.componentResults = componentResults
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        for (field, value) in [
+            ("certification_run_id", certificationRunId),
+            ("git_commit", gitCommit),
+            ("host_hardware_class", hostHardwareClass),
+            ("macos_version", macOSVersion),
+            ("xcode_version", xcodeVersion),
+            ("swift_version", swiftVersion),
+            ("metal_device_name", metalDeviceName),
+            ("python_version", pythonVersion),
+            ("pytorch_status", pyTorchStatus),
+            ("tensorflow_status", tensorflowStatus),
+            ("overall_status", overallStatus),
+            ("evidence_hash", evidenceHash)
+        ] {
+            try FXBacktestAPIV1.requireNonEmpty(value, field)
+        }
+        guard startedAtUTC > 0, completedAtUTC >= startedAtUTC else {
+            throw FXBacktestAPIValidationError.invalidField("certification timestamps are invalid")
+        }
+        guard !componentResults.isEmpty else {
+            throw FXBacktestAPIValidationError.invalidField("component_results must not be empty")
+        }
+        guard componentResults.count <= FXBacktestAPIV1.maximumCertificationComponentCount else {
+            throw FXBacktestAPIValidationError.invalidField("component_results exceeds \(FXBacktestAPIV1.maximumCertificationComponentCount)")
+        }
+        try componentResults.forEach { try $0.validate() }
+    }
+}
+
+public struct FXAICertificationEvidenceResponse: Codable, Equatable, Sendable {
+    public let apiVersion: String
+    public let certificationRunId: String
+    public let evidenceHash: String
+    public let accepted: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersion = "api_version"
+        case certificationRunId = "certification_run_id"
+        case evidenceHash = "evidence_hash"
+        case accepted
+    }
+
+    public init(
+        apiVersion: String = FXBacktestAPIV1.latestVersion,
+        certificationRunId: String,
+        evidenceHash: String,
+        accepted: Bool
+    ) {
+        self.apiVersion = apiVersion
+        self.certificationRunId = certificationRunId
+        self.evidenceHash = evidenceHash
+        self.accepted = accepted
+    }
+
+    public func validate() throws {
+        try FXBacktestAPIV1.validateVersion(apiVersion)
+        try FXBacktestAPIV1.requireNonEmpty(certificationRunId, "certification_run_id")
+        try FXBacktestAPIV1.requireNonEmpty(evidenceHash, "evidence_hash")
     }
 }
 

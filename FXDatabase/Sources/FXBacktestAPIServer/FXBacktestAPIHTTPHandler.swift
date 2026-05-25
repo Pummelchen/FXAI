@@ -16,6 +16,8 @@ public protocol FXBacktestResultProviding: Sendable {
     func ensureConfigurationSchema(_ request: FXBacktestConfigurationSchemaRequest) async throws -> FXBacktestResultMutationResponse
     func registerConfiguration(_ request: FXBacktestConfigurationRegistrationRequest) async throws -> FXBacktestResultMutationResponse
     func getConfiguration(_ request: FXBacktestConfigurationGetRequest) async throws -> FXBacktestConfigurationSnapshotResponse
+    func createLineageManifest(_ request: FXAILineageCreateRequest) async throws -> FXAILineageCreateResponse
+    func recordCertificationEvidence(_ request: FXAICertificationEvidenceRequest) async throws -> FXAICertificationEvidenceResponse
 }
 
 public struct FXBacktestHTTPResponse: Sendable, Equatable {
@@ -121,6 +123,20 @@ public struct FXBacktestAPIHTTPHandler: Sendable {
                 let request = try JSONDecoder().decode(FXBacktestConfigurationGetRequest.self, from: body)
                 try request.validate()
                 let response = try await requireResultProvider().getConfiguration(request)
+                try response.validate()
+                return try json(response)
+
+            case ("POST", FXBacktestAPIV1.lineageCreatePath):
+                let request = try JSONDecoder().decode(FXAILineageCreateRequest.self, from: body)
+                try request.validate()
+                let response = try await requireResultProvider().createLineageManifest(request)
+                try response.validate()
+                return try json(response)
+
+            case ("POST", FXBacktestAPIV1.certificationEvidencePath):
+                let request = try JSONDecoder().decode(FXAICertificationEvidenceRequest.self, from: body)
+                try request.validate()
+                let response = try await requireResultProvider().recordCertificationEvidence(request)
                 try response.validate()
                 return try json(response)
 

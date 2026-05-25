@@ -53,6 +53,15 @@ FXImporter/Package.resolved
 FXPlugins/.build/
 FXPlugins/.swiftpm/
 FXPlugins/Package.resolved
+FXTools/.build/
+FXTools/.swiftpm/
+FXTools/Package.resolved
+FXBacktestAgent/.build/
+FXBacktestAgent/.swiftpm/
+FXBacktestAgent/Package.resolved
+FXExecutionContracts/.build/
+FXExecutionContracts/.swiftpm/
+FXExecutionContracts/Package.resolved
 FXDatabase/Config/
 FXDatabase/Logs/
 FXDataEngine/Tools/tests/.pytest_cache/

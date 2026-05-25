@@ -8,6 +8,7 @@ The goal is similar to the MT5 Strategy Tester optimization view: define a matri
 
 - Native SwiftPM macOS app with SwiftUI interface.
 - Plugin API v1 for optimized Swift plugins.
+- Root FXPlugins zoo bridge that exposes the converted FXAI plugins through FXDataEngine feature/context payloads.
 - Pure M1 OHLC close-price broker model with position lifecycle and trade ledger types.
 - Multi-symbol market universe support for plugins that need more than one loaded Forex pair.
 - CPU optimizer that splits work by complete backtest pass across workers.
@@ -16,6 +17,7 @@ The goal is similar to the MT5 Strategy Tester optimization view: define a matri
 - Plugin acceleration descriptor/IR scaffold for future generated Swift SIMD and Metal kernels.
 - Six operational agents for FXDatabase connectivity, market readiness, run coordination, result persistence, plugin validation, and resource health.
 - Read-only FXDatabase data loading through the dedicated FXBacktest API v1.
+- Versioned lineage and certification DTOs are available through the FXDatabase API contract for persisted-run evidence.
 - FXDatabase-gated configuration and result persistence through the dedicated FXBacktest API v1, including explicit purge commands.
 - Live pass table with MT5-style result, profit, trade count, drawdown, recovery, Sharpe estimate, and tested input columns.
 - Resident terminal command shell with `>` prompt for loading data, changing settings, starting runs, stopping active work, and checking status without relaunching.

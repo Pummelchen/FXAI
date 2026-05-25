@@ -12,7 +12,9 @@ let package = Package(
         .library(name: "FXBacktestPlugins", targets: ["FXBacktestPlugins"])
     ],
     dependencies: [
-        .package(path: "../FXDatabase")
+        .package(path: "../FXDatabase"),
+        .package(path: "../FXDataEngine"),
+        .package(path: "../FXPlugins")
     ],
     targets: [
         .target(
@@ -23,7 +25,12 @@ let package = Package(
         ),
         .target(
             name: "FXBacktestPlugins",
-            dependencies: ["FXBacktestCore"]
+            dependencies: [
+                "FXBacktestCore",
+                .product(name: "FXDatabaseFXBacktestAPI", package: "FXDatabase"),
+                .product(name: "FXDataEngine", package: "FXDataEngine"),
+                .product(name: "FXAIPlugins", package: "FXPlugins")
+            ]
         ),
         .executableTarget(
             name: "FXBacktest",

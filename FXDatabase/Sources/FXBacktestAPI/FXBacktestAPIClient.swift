@@ -100,6 +100,20 @@ public struct FXBacktestAPIClient: Sendable {
         return response
     }
 
+    public func createLineageManifest(_ request: FXAILineageCreateRequest) async throws -> FXAILineageCreateResponse {
+        try request.validate()
+        let response: FXAILineageCreateResponse = try await post(request, to: FXBacktestAPIV1.lineageCreatePath)
+        try validateResponse(response)
+        return response
+    }
+
+    public func recordCertificationEvidence(_ request: FXAICertificationEvidenceRequest) async throws -> FXAICertificationEvidenceResponse {
+        try request.validate()
+        let response: FXAICertificationEvidenceResponse = try await post(request, to: FXBacktestAPIV1.certificationEvidencePath)
+        try validateResponse(response)
+        return response
+    }
+
     private func endpoint(_ path: String) throws -> URL {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw FXBacktestAPIClientError.invalidBaseURL(baseURL.absoluteString)
@@ -143,6 +157,14 @@ public struct FXBacktestAPIClient: Sendable {
     }
 
     private func validateResponse(_ response: FXBacktestConfigurationSnapshotResponse) throws {
+        try mapValidationError { try response.validate() }
+    }
+
+    private func validateResponse(_ response: FXAILineageCreateResponse) throws {
+        try mapValidationError { try response.validate() }
+    }
+
+    private func validateResponse(_ response: FXAICertificationEvidenceResponse) throws {
         try mapValidationError { try response.validate() }
     }
 

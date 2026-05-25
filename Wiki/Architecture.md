@@ -22,10 +22,10 @@ FXDatabase
       |
       +--> FXBacktest
       |      Requests data and stores configuration/results through FXDatabase APIs.
-      |      Calls plugins through the FXAI plugin contracts.
+      |      Calls the root FXPlugins zoo through FXDataEngine plugin payloads.
       |
       +--> FXGUI
-             Reads artifacts and gives operators a workflow surface.
+             Mirrors terminal/API workflows and gives operators a workflow surface.
 ```
 
 ## Project Responsibilities
@@ -36,9 +36,11 @@ FXDatabase
 | `FXDatabase` | ClickHouse gatekeeper, ingestion, validation, history access, deletion, SineTest, and FXBacktest data APIs. |
 | `FXDataEngine` | Post-processing, feature engineering, label preparation, audit tools, and plugin payload contracts. |
 | `FXPlugins` | Flat plugin zoo with plugin-local CPU, Metal, PyTorch, TensorFlow, and NLP implementations. |
-| `FXBacktest` | Offline Swift/Metal backtesting and optimization. It does not own raw database access. |
-| `FXGUI` | macOS operator interface for reports, dashboards, promotion review, and workflow actions. |
-| `FXBacktestAgent` | Future remote Mac worker that pulls backtest batches over TCP and reports results. |
+| `FXBacktest` | Offline Swift/Metal backtesting and optimization. It now bridges the root FXPlugins zoo through FXDataEngine payloads and does not own raw database access. |
+| `FXGUI` | macOS operator interface, terminal replacement layer, command catalog, reports, dashboards, promotion review, and workflow actions. |
+| `FXTools` | Root operational tools such as `./fxai certify`. |
+| `FXExecutionContracts` | Shared account, risk, kill-switch, broker-adapter, and order-intent safety contracts for demo/live agents. |
+| `FXBacktestAgent` | Remote Mac worker protocol and fail-closed package foundation for pulling backtest batches over TCP and reporting results. |
 | `FXDemoAgent` | Future demo-account execution agent for approved backtest parameters. |
 | `FXLiveAgent` | Future live-account execution agent with stricter approval, safety, and broker controls. |
 
@@ -51,6 +53,7 @@ FXDatabase is the only project allowed to import or implement ClickHouse access.
 - Backtest result storage and deletion.
 - SineTest data, including the persistent synthetic M1 OHLCV series from `2000-01-01` through runtime-now that is refreshed every 10 seconds by FXDatabase.
 - Dataset validation and metadata.
+- Immutable lineage manifests and certification evidence.
 - Future data access needed by agents.
 
 This prevents hidden database paths, inconsistent schemas, and backtest runs that cannot be reproduced.
@@ -70,6 +73,8 @@ Every project-to-project API has one supported latest version. FXAI does not sup
 | FXBacktest plugin API | `fxbacktest.plugin-api.v1` |
 | FXBacktest plugin acceleration API | `fxbacktest.plugin-acceleration.v1` |
 | FXBacktest plugin IR | `fxbacktest.plugin-ir.v1` |
+| FXBacktestAgent TCP protocol | `fxbacktest.agent.tcp.v1` |
+| FXExecution contracts | `fxexecution.contracts.v1` |
 | FXDataEngine / FXPlugins API | `4` |
 | FXDataEngine tokenizer contract | `fxai-tokenizer-v1` |
 
@@ -90,8 +95,10 @@ The only shared code is the API and registry layer under `FXPlugins/API/`.
 
 ## Agent Boundary
 
-Agents are future runtime projects. They are not data owners.
+Agents are runtime projects. They are not data owners.
 
-- `FXBacktestAgent` receives batch work from FXBacktest over TCP and returns results.
+- `FXBacktestAgent` receives batch work from FXBacktest over TCP and returns certified results. The worker protocol fails closed until local certification and SineTest pass.
 - `FXDemoAgent` applies selected parameters to demo accounts across MT5, IBKR, TradingView, and other terminals or broker APIs.
 - `FXLiveAgent` applies approved parameters to live accounts with stronger operational gates.
+
+Demo/live execution must use `FXExecutionContracts` for account scope, risk limits, kill-switch state, lineage, promotion gates, and audit records before any order-capable workflow.

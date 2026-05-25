@@ -20,7 +20,7 @@ FXDatabase
       |
       +--> FXBacktest
       |      Requests historical and backtest data through FXDatabase APIs only.
-      |      Calls FXDataEngine and FXPlugins to run CPU/Metal/PyTorch/TensorFlow/NLP backtests.
+      |      Calls the root FXPlugins zoo through FXDataEngine plugin payloads.
       |
       +--> FXDataEngine
       |      Post-processes M1 OHLCV data, builds features, contexts, labels, audits, and plugin payloads.
@@ -31,8 +31,12 @@ FXDatabase
 FXPlugins
   Flat plugin zoo. Each plugin owns its CPU code and optional Metal, PyTorch, TensorFlow, or NLP code.
 
-Future agents
-  FXBacktestAgent: remote Mac worker that pulls backtest batches over TCP and reports results.
+Support contracts and tools
+  FXExecutionContracts: shared demo/live account, risk, kill-switch, and audit contracts.
+  FXTools: root certification command support, including ./fxai certify.
+
+Agents
+  FXBacktestAgent: versioned remote Mac worker protocol and fail-closed worker executable.
   FXDemoAgent: applies selected backtest parameters to demo accounts across supported terminals/brokers.
   FXLiveAgent: applies approved parameters to live accounts across supported terminals/brokers.
 ```
@@ -41,10 +45,10 @@ Future agents
 
 - `FXImporter` pulls or receives external market data and hands normalized data to FXDatabase.
 - `FXDatabase` is the only database authority. It owns ClickHouse, validation, migrations, ingestion, storage, deletion, and access APIs.
-- `FXBacktest` never reads ClickHouse directly. It asks FXDatabase for history, registers shared/plugin/accelerator configuration through FXDatabase, stores backtest results through FXDatabase, and calls plugins through the FXAI contracts.
+- `FXBacktest` never reads ClickHouse directly. It asks FXDatabase for history, registers shared/plugin/accelerator configuration through FXDatabase, stores backtest results through FXDatabase, and now exposes the root FXPlugins zoo through a FXDataEngine-backed adapter.
 - `FXDataEngine` turns raw M1 OHLCV into features, labels, context payloads, audit data, and plugin-ready requests.
 - `FXPlugins` is a flat plugin zoo. Each plugin folder owns its own implementation and accelerator folders.
-- `FXBacktestAgent`, `FXDemoAgent`, and `FXLiveAgent` are future distributed runtime projects, not data owners.
+- `FXBacktestAgent`, `FXDemoAgent`, and `FXLiveAgent` are distributed or execution runtime projects, not data owners. Agent and execution safety contracts fail closed until certification, SineTest, lineage, account scope, risk limits, and kill-switch checks pass.
 
 ## API Version Policy
 
@@ -59,12 +63,14 @@ Current latest versions:
 | FXBacktest plugin API | `fxbacktest.plugin-api.v1` |
 | FXBacktest plugin acceleration API | `fxbacktest.plugin-acceleration.v1` |
 | FXBacktest plugin IR | `fxbacktest.plugin-ir.v1` |
+| FXBacktestAgent TCP protocol | `fxbacktest.agent.tcp.v1` |
+| FXExecution contracts | `fxexecution.contracts.v1` |
 | FXDataEngine / FXPlugins API | `4` |
 | FXDataEngine tokenizer contract | `fxai-tokenizer-v1` |
 
 Swift descriptors, request DTOs, plugin manifests, contexts, predictions, and Python accelerator bridge payloads reject non-latest versions during validation.
 
-Backtest configuration is also part of `fxdatabase.fxbacktest.v1`. Shared run settings such as `initial_deposit_usd` defaulting to `1000` and `lot_size_lots` defaulting to `0.01`, plus each plugin/accelerator parameter set, are registered in ClickHouse only through FXDatabase API endpoints. FXBacktest does not write configuration or result files to disk.
+Backtest configuration, lineage, and certification evidence are also part of `fxdatabase.fxbacktest.v1`. Shared run settings such as `initial_deposit_usd` defaulting to `1000` and `lot_size_lots` defaulting to `0.01`, plus each plugin/accelerator parameter set, are registered in ClickHouse only through FXDatabase API endpoints. FXBacktest does not write configuration or result files to disk.
 
 ## Data Contract
 
@@ -84,7 +90,7 @@ The core historical data contract is `M1 OHLCV`.
 | Data operator | One ingestion path into FXDatabase, one ClickHouse authority, and no hidden direct database access from backtests or agents. |
 | Demo trader | A future FXDemoAgent path for applying proven backtest parameters to demo accounts before capital is at risk. |
 | Live trader | A future FXLiveAgent path where live execution is separated from research and gated by FXAI data, plugin, and risk contracts. |
-| Fleet operator | A future FXBacktestAgent model where other Macs can pull TCP batch work like MT5 backtest agents and return results to FXBacktest. |
+| Fleet operator | A versioned FXBacktestAgent protocol where other Macs can pull TCP batch work like MT5 backtest agents and return certified results to FXBacktest. |
 | System architect | A repo layout where data import, database authority, feature engineering, plugins, backtesting, UI, and agents have separate ownership. |
 
 ## Main Projects
@@ -97,7 +103,9 @@ The core historical data contract is `M1 OHLCV`.
 | `FXPlugins/` | Converted plugin zoo. Plugins stay flat at the root of this folder, with accelerator code under each plugin folder. |
 | `FXBacktest/` | Swift/Metal offline backtest framework that uses FXDatabase APIs and calls plugins through FXDataEngine contracts. |
 | `FXGUI/` | macOS SwiftUI operator interface for dashboards, reports, promotion review, and workflow access. |
-| `FXBacktestAgent/` | Future distributed backtest worker for remote Macs over TCP. |
+| `FXTools/` | Root operational tools. Current executable: `FXAICertify`, launched through `./fxai certify`. |
+| `FXExecutionContracts/` | Shared versioned account, risk, kill-switch, and order-intent safety contracts for demo/live agents. |
+| `FXBacktestAgent/` | Distributed backtest worker package and TCP protocol foundation for remote Macs over TCP. |
 | `FXDemoAgent/` | Future demo-account execution agent for MT5, IBKR, TradingView, and other account types. |
 | `FXLiveAgent/` | Future live-account execution agent with the same broker/terminal abstraction as demo, but stricter approval and safety gates. |
 
@@ -150,19 +158,26 @@ DRY_RUN=1 ./install_fxai.sh
 Useful checks after setup:
 
 ```bash
+./fxai certify --build-only
+./fxai certify --all
 swift test --package-path FXDatabase
 swift test --package-path FXDataEngine
 swift test --package-path FXPlugins
 swift test --package-path FXBacktest
 swift test --package-path FXGUI
+swift test --package-path FXBacktestAgent
+swift test --package-path FXExecutionContracts
 swift build -c release --package-path FXDatabase
 swift build -c release --package-path FXDataEngine
 swift build -c release --package-path FXPlugins
 swift build -c release --package-path FXBacktest
 swift build -c release --package-path FXGUI
+swift build -c release --package-path FXTools
+swift build -c release --package-path FXBacktestAgent
+swift build -c release --package-path FXExecutionContracts
 ```
 
-The strongest plugin certification check is inside the FXPlugins suite. It verifies registry coverage, volume contracts, SineTest runtime behavior, SineTest prediction sync and 95%+ prediction confidence for every plugin and declared accelerator backend, CPU/reference evidence, FXDatabase-only data access, Metal compile/runtime parity, PyTorch/TensorFlow live train-predict-persistence-load, NLP text/no-text behavior, and CoreML exclusion.
+The root certification entrypoint is `./fxai certify --all`. Build-only mode checks Swift/package health without requiring optional Python accelerator imports. Full mode runs package tests and treats accelerator environment probes as required. The strongest plugin-specific certification check remains inside the FXPlugins suite. It verifies registry coverage, volume contracts, SineTest runtime behavior, SineTest prediction sync and 95%+ prediction confidence for every plugin and declared accelerator backend, CPU/reference evidence, FXDatabase-only data access, Metal compile/runtime parity, PyTorch/TensorFlow live train-predict-persistence-load, NLP text/no-text behavior, and CoreML exclusion.
 
 ## Documentation
 
