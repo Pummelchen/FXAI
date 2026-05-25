@@ -496,7 +496,7 @@ def write_world_simulator_plans(conn: libsql.Connection,
         )
 
     commit_db(conn)
-    summary_path = out_dir / "world_simulator_plans.json"
+    summary_path = out_dir / "world_simulator_artifacts.json"
     summary_path.write_text(
         json.dumps(portableize_payload_paths(plans), indent=2, sort_keys=True),
         encoding="utf-8",

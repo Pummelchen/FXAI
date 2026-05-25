@@ -99,21 +99,22 @@ final class PluginCertificationGateTests: XCTestCase {
         XCTAssertTrue(externalStatuses.allSatisfy { $0.satisfiedGates.contains(.externalBackendDiscovery) })
     }
 
-    func testLiveRuntimePlanHasNoStaleOpenPluginRows() throws {
-        let plan = try String(
-            contentsOf: Self.repositoryRoot
-                .appendingPathComponent("FXPlugins")
-                .appendingPathComponent("API")
-                .appendingPathComponent("Docs")
-                .appendingPathComponent("PLUGIN_100_LIVE_RUNTIME_COMPLETION_PLAN.md"),
-            encoding: .utf8
+    func testStandaloneMarkdownPlanArtifactsStayRemoved() throws {
+        let repositoryRoot = Self.repositoryRoot
+        let enumerator = FileManager.default.enumerator(
+            at: repositoryRoot,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
         )
+        let planDocs = (enumerator?.compactMap { entry -> String? in
+            guard let url = entry as? URL else { return nil }
+            guard url.pathExtension.lowercased() == "md" else { return nil }
+            guard url.lastPathComponent.localizedCaseInsensitiveContains("plan") else { return nil }
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { return nil }
+            return url.path.replacingOccurrences(of: repositoryRoot.path + "/", with: "")
+        } ?? []).sorted()
 
-        XCTAssertFalse(plan.contains("Remaining CPU/reference work"))
-        XCTAssertFalse(plan.contains("Accelerator work required for 100%"))
-        XCTAssertTrue(plan.contains("Remaining plugin implementation tasks: none"))
-        XCTAssertTrue(plan.contains("PyTorch MPS required"))
-        XCTAssertTrue(plan.contains("TensorFlow Metal required"))
+        XCTAssertTrue(planDocs.isEmpty, "Standalone plan docs should be removed: \(planDocs.joined(separator: ", "))")
     }
 
     func testExternalBackendEvidenceRequiresAppleSiliconAccelerators() throws {

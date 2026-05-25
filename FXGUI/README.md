@@ -62,8 +62,7 @@ The theme system includes:
 - debug calibration mode with reference overlay, compare mode, layout guides, frame outlines, live scale display, and effect toggles
 - a detached-safe startup path so the GUI can launch even before FXAI or MT5 is fully ready
 
-The phased implementation reference is stored in:
-- [Docs/FXGUI_IMPLEMENTATION_PLAN.md](Docs/FXGUI_IMPLEMENTATION_PLAN.md)
+Operational GUI references are stored in:
 - [Docs/FXGUI_RELEASE_CHECKLIST.md](Docs/FXGUI_RELEASE_CHECKLIST.md)
 - [Docs/FINANCE_APP_THEME_MIGRATION.md](Docs/FINANCE_APP_THEME_MIGRATION.md)
 - [Docs/ADDING_THEME_V2.md](Docs/ADDING_THEME_V2.md)

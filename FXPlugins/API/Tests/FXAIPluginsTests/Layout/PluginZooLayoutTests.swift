@@ -68,9 +68,18 @@ final class PluginZooLayoutTests: XCTestCase {
             )
         }
 
-        XCTAssertFalse(
-            FileManager.default.fileExists(atPath: root.appendingPathComponent("PLUGIN_CONVERSION_PLAN.md").path),
-            "conversion plan belongs under API/Docs, not the plugin-zoo root"
+        let apiDocs = root.appendingPathComponent("API").appendingPathComponent("Docs")
+        let planDocs = ((try? FileManager.default.contentsOfDirectory(
+            at: apiDocs,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []).filter { url in
+            url.pathExtension.lowercased() == "md" &&
+                url.lastPathComponent.localizedCaseInsensitiveContains("plan")
+        }
+        XCTAssertTrue(
+            planDocs.isEmpty,
+            "FXPlugins/API/Docs should not contain standalone plan docs: \(planDocs.map(\.lastPathComponent).joined(separator: ", "))"
         )
     }
 

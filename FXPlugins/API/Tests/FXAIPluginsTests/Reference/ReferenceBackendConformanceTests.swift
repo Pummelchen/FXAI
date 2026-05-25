@@ -106,20 +106,6 @@ final class ReferenceBackendConformanceTests: XCTestCase {
         }
     }
 
-    func testReferencePlanCoversEveryPluginAndRevisionPass() throws {
-        let planURL = packageRoot()
-            .appendingPathComponent("API")
-            .appendingPathComponent("Docs")
-            .appendingPathComponent("PLUGIN_99_REFERENCE_IMPLEMENTATION_PLAN.md")
-        let text = try String(contentsOf: planURL, encoding: .utf8)
-        let rows = text.components(separatedBy: .newlines).filter { $0.hasPrefix("| `") }
-
-        XCTAssertEqual(rows.count, 66)
-        XCTAssertTrue(text.contains("Revision Pass 1"))
-        XCTAssertTrue(text.contains("Revision Pass 2"))
-        XCTAssertTrue(text.contains("AI/RL/world plugins"))
-    }
-
     private func readPluginFile(plugin: String, backend: String, filename: String) throws -> String {
         let url = packageRoot()
             .appendingPathComponent(plugin)

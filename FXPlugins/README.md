@@ -42,8 +42,7 @@ contracts:
   `FXAI_PLUGIN_STATE_DIR`, or `~/.fxai/plugins/state` when the environment
   variable is not set. The backend follows the FXDataEngine volume contract:
   volume-derived features are used only when `dataHasVolume` is true.
-- Live accelerator routing is tracked in `API/Docs/PLUGIN_100_LIVE_RUNTIME_COMPLETION_PLAN.md`.
-  `FXPluginRuntimeResolver` selects CPU, Metal, PyTorch, TensorFlow, Foundation NLP,
+- `FXPluginRuntimeResolver` selects CPU, Metal, PyTorch, TensorFlow, Foundation NLP,
   or CoreML/Neural Engine candidates from each plugin acceleration plan. The
   plugin-local dispatcher `API/Backends/Python/fxai_plugin_module_backend.py`
   loads a plugin's own `PyTorch/`, `TensorFlow/`, or `NLP/` implementation through
@@ -68,7 +67,7 @@ contracts:
   learners, distribution models, and memory retrieval. The focused suites
   `Wave2StatisticalReferenceTests`, `Wave3FactorTrendReferenceTests`, and
   `Wave4ReferenceParityTests` pin the reference equations and volume-gating
-  behavior described in `API/Docs/PLUGIN_99_REFERENCE_IMPLEMENTATION_PLAN.md`.
+  behavior.
 - Current per-plugin reference implementation percentages are tracked in
   `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_SCORECARD.md`; the scorecard covers
   every registered plugin and is checked by `ReferenceScorecardTests`.
@@ -79,4 +78,4 @@ Run the local verification gate with:
 swift test
 ```
 
-The current source of truth is this plugin-owned Swift zoo, the full conversion plan in `API/Docs/FULL_PLUGIN_CONVERSION_PLAN.md`, the reference-grade implementation audit in `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_AUDIT.md`, the 99 percent reference implementation plan in `API/Docs/PLUGIN_99_REFERENCE_IMPLEMENTATION_PLAN.md`, the per-plugin scorecard in `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_SCORECARD.md`, and the 100 percent live runtime completion plan in `API/Docs/PLUGIN_100_LIVE_RUNTIME_COMPLETION_PLAN.md`.
+The current source of truth is this plugin-owned Swift zoo, the reference-grade implementation audit in `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_AUDIT.md`, the per-plugin scorecard in `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_SCORECARD.md`, and the executable certification gates in the Swift test suite.
