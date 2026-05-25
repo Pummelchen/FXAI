@@ -4,6 +4,8 @@ FXAI is a pure Swift, Metal, PyTorch, and TensorFlow research and execution stac
 
 FXAI is organized around one strict rule: only FXDatabase may touch ClickHouse directly. Every other project talks to FXDatabase through an API.
 
+Roadmap: [FXAI Roadmap](https://github.com/Pummelchen/FXAI/wiki/Roadmap)
+
 ## Project Map
 
 ```text
@@ -181,14 +183,14 @@ The root certification entrypoint is `./fxai certify --all`. Build-only mode che
 
 ## Documentation
 
-User-focused docs are mirrored in `Wiki/` for the GitHub wiki:
+User-focused docs live in the GitHub wiki:
 
-- [Wiki Home](Wiki/Home.md)
-- [Architecture](Wiki/Architecture.md)
-- [User Roles](Wiki/User-Roles.md)
-- [Installation](Wiki/Installation.md)
-- [Project Map](Wiki/Project-Map.md)
-- [Top 5 Implementation Roadmap](Wiki/Top-5-Implementation-Roadmap.md)
+- [Wiki Home](https://github.com/Pummelchen/FXAI/wiki)
+- [Roadmap](https://github.com/Pummelchen/FXAI/wiki/Roadmap)
+- [Architecture](https://github.com/Pummelchen/FXAI/wiki/Architecture)
+- [User Roles](https://github.com/Pummelchen/FXAI/wiki/User-Roles)
+- [Installation](https://github.com/Pummelchen/FXAI/wiki/Installation)
+- [Project Map](https://github.com/Pummelchen/FXAI/wiki/Project-Map)
 
 Project-local docs remain next to the code they describe:
 
