@@ -1,6 +1,94 @@
-import FXBacktestAPI
 import FXDataEngine
 import Foundation
+
+public enum DemoPluginParameterValueKind: String, Codable, Hashable, Sendable {
+    case integer
+    case decimal
+    case boolean
+}
+
+public struct DemoPluginParameterTemplate: Codable, Hashable, Sendable {
+    public let key: String
+    public let displayName: String
+    public let valueKind: DemoPluginParameterValueKind
+    public let defaultValue: Double
+    public let minimum: Double
+    public let step: Double
+    public let maximum: Double
+    public let unit: String
+    public let description: String
+
+    public init(
+        key: String,
+        displayName: String,
+        valueKind: DemoPluginParameterValueKind,
+        defaultValue: Double,
+        minimum: Double,
+        step: Double,
+        maximum: Double,
+        unit: String,
+        description: String
+    ) {
+        self.key = key
+        self.displayName = displayName
+        self.valueKind = valueKind
+        self.defaultValue = defaultValue
+        self.minimum = minimum
+        self.step = step
+        self.maximum = maximum
+        self.unit = unit
+        self.description = description
+    }
+
+    public func validate() throws {
+        guard !key.isEmpty, key.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }) else {
+            throw FXDataEngineError.validation("demo parameter key")
+        }
+        guard !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw FXDataEngineError.validation("demo parameter displayName")
+        }
+        guard defaultValue.isFinite, minimum.isFinite, step.isFinite, maximum.isFinite else {
+            throw FXDataEngineError.validation("demo parameter finite bounds")
+        }
+        guard minimum <= defaultValue, defaultValue <= maximum, step > 0 else {
+            throw FXDataEngineError.validation("demo parameter bounds")
+        }
+        if valueKind == .boolean {
+            guard [0, 1].contains(defaultValue),
+                  [0, 1].contains(minimum),
+                  [0, 1].contains(maximum) else {
+                throw FXDataEngineError.validation("demo boolean parameter bounds")
+            }
+        }
+    }
+}
+
+public struct DemoPluginAcceleratorConfigurationTemplate: Codable, Hashable, Sendable {
+    public let pluginId: String
+    public let acceleratorId: String
+    public let parameters: [DemoPluginParameterTemplate]
+
+    public init(pluginId: String, acceleratorId: String, parameters: [DemoPluginParameterTemplate]) {
+        self.pluginId = pluginId
+        self.acceleratorId = acceleratorId
+        self.parameters = parameters
+    }
+
+    public func validate() throws {
+        guard !pluginId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw FXDataEngineError.validation("demo configuration pluginId")
+        }
+        guard !acceleratorId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw FXDataEngineError.validation("demo configuration acceleratorId")
+        }
+        guard !parameters.isEmpty else {
+            throw FXDataEngineError.validation("demo configuration parameters")
+        }
+        for parameter in parameters {
+            try parameter.validate()
+        }
+    }
+}
 
 public struct DemoPluginTemplate: FXAIPlannedPlugin {
     public let aiID: Int
@@ -37,8 +125,8 @@ public struct DemoPluginTemplate: FXAIPlannedPlugin {
         )
     }
 
-    public static let configurationParameters: [FXBacktestConfigurationParameterDTO] = [
-        FXBacktestConfigurationParameterDTO(
+    public static let configurationParameters: [DemoPluginParameterTemplate] = [
+        DemoPluginParameterTemplate(
             key: "lookback_bars",
             displayName: "Lookback Bars",
             valueKind: .integer,
@@ -49,7 +137,7 @@ public struct DemoPluginTemplate: FXAIPlannedPlugin {
             unit: "bars",
             description: "Example plugin-owned window length. Replace with the plugin's real parameter set."
         ),
-        FXBacktestConfigurationParameterDTO(
+        DemoPluginParameterTemplate(
             key: "confidence_floor",
             displayName: "Confidence Floor",
             valueKind: .decimal,
@@ -60,7 +148,7 @@ public struct DemoPluginTemplate: FXAIPlannedPlugin {
             unit: "ratio",
             description: "Example decision threshold for plugin-level signal filtering."
         ),
-        FXBacktestConfigurationParameterDTO(
+        DemoPluginParameterTemplate(
             key: "use_volume_when_available",
             displayName: "Use Volume When Available",
             valueKind: .boolean,
@@ -73,9 +161,9 @@ public struct DemoPluginTemplate: FXAIPlannedPlugin {
         )
     ]
 
-    public func configurationRows() -> [FXBacktestPluginConfigurationDTO] {
+    public func configurationRows() -> [DemoPluginAcceleratorConfigurationTemplate] {
         accelerationPlan.declaredBackends.map { backend in
-            FXBacktestPluginConfigurationDTO(
+            DemoPluginAcceleratorConfigurationTemplate(
                 pluginId: aiName,
                 acceleratorId: backend.rawValue,
                 parameters: Self.configurationParameters

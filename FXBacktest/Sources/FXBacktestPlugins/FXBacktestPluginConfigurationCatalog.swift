@@ -1,8 +1,9 @@
+import FXAIPlugins
 import FXBacktestAPI
 import FXDataEngine
 import Foundation
 
-public enum FXAIPluginBacktestConfigurationCatalog {
+public enum FXBacktestPluginConfigurationCatalog {
     public static func pluginConfigurations(
         plugins: [any FXAIPluginV4] = FXAIPluginRegistry.availablePlugins()
     ) -> [FXBacktestPluginConfigurationDTO] {

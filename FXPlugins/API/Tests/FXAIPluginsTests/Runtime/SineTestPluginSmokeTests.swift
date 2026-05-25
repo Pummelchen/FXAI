@@ -1,10 +1,9 @@
-import BacktestCore
 import FXDataEngine
 import XCTest
 @testable import FXAIPlugins
 
 final class SineTestPluginSmokeTests: XCTestCase {
-    func testEveryPluginPredictsAndTrainsOnFXDatabaseSineTestSeries() async throws {
+    func testEveryPluginPredictsAndTrainsOnLocalSineTestSeries() async throws {
         let marketSeries = try Self.makeSineTestSeries()
         let universe = try MarketUniverse(primarySymbol: "SINETEST", series: [marketSeries])
         let featureCore = FeatureCore()
@@ -79,27 +78,10 @@ final class SineTestPluginSmokeTests: XCTestCase {
 
     private static func makeSineTestSeries() throws -> M1OHLCVSeries {
         let startUTC: Int64 = 1_704_067_200
-        let series = try SineWaveAgent.generateM1Ohlc(
-            brokerSourceIdRawValue: "plugin-smoke",
-            utcStartInclusive: startUTC,
-            utcEndExclusive: startUTC + 24 * 60 * 60
-        )
-        return try M1OHLCVSeries(
-            metadata: FXMarketMetadata(
-                brokerSourceId: series.metadata.brokerSourceId.rawValue,
-                sourceOrigin: series.metadata.sourceOrigin.rawValue,
-                logicalSymbol: series.metadata.logicalSymbol.rawValue,
-                providerSymbol: SineTestSecurity.displayName,
-                digits: series.metadata.digits.rawValue,
-                firstUTC: series.metadata.firstUtc?.rawValue,
-                lastUTC: series.metadata.lastUtc?.rawValue
-            ),
-            utcTimestamps: ContiguousArray(series.utcTimestamps),
-            open: ContiguousArray(series.open),
-            high: ContiguousArray(series.high),
-            low: ContiguousArray(series.low),
-            close: ContiguousArray(series.close),
-            volume: ContiguousArray(series.volume)
+        return try PluginSineTestSeriesFactory.makeSeries(
+            brokerSourceId: "plugin-smoke",
+            startUTC: startUTC,
+            dayCount: 1
         )
     }
 

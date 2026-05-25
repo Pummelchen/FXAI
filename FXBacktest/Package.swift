@@ -44,6 +44,7 @@ let package = Package(
             dependencies: [
                 "FXBacktestCore",
                 "FXBacktestPlugins",
+                .product(name: "FXAIPlugins", package: "FXPlugins"),
                 .product(name: "FXDatabaseFXBacktestAPI", package: "FXDatabase")
             ]
         )

@@ -1,4 +1,3 @@
-import BacktestCore
 import FXDataEngine
 import Foundation
 import XCTest
@@ -420,28 +419,10 @@ final class SineWavePredictionCertificationTests: XCTestCase {
     }
 
     private static func makeSineTestSeries(days: Int) throws -> M1OHLCVSeries {
-        let endUTC = Self.startUTC + Int64(max(1, days) * 24 * 60 * 60)
-        let series = try SineWaveAgent.generateM1Ohlc(
-            brokerSourceIdRawValue: "plugin-sinetest-cert",
-            utcStartInclusive: Self.startUTC,
-            utcEndExclusive: endUTC
-        )
-        return try M1OHLCVSeries(
-            metadata: FXMarketMetadata(
-                brokerSourceId: series.metadata.brokerSourceId.rawValue,
-                sourceOrigin: series.metadata.sourceOrigin.rawValue,
-                logicalSymbol: series.metadata.logicalSymbol.rawValue,
-                providerSymbol: SineTestSecurity.displayName,
-                digits: series.metadata.digits.rawValue,
-                firstUTC: series.metadata.firstUtc?.rawValue,
-                lastUTC: series.metadata.lastUtc?.rawValue
-            ),
-            utcTimestamps: ContiguousArray(series.utcTimestamps),
-            open: ContiguousArray(series.open),
-            high: ContiguousArray(series.high),
-            low: ContiguousArray(series.low),
-            close: ContiguousArray(series.close),
-            volume: ContiguousArray(series.volume)
+        try PluginSineTestSeriesFactory.makeSeries(
+            brokerSourceId: "plugin-sinetest-cert",
+            startUTC: Self.startUTC,
+            dayCount: days
         )
     }
 

@@ -99,15 +99,13 @@ let package = Package(
         .library(name: "FXAIPlugins", targets: ["FXAIPlugins"])
     ],
     dependencies: [
-        .package(path: "../FXDatabase"),
         .package(path: "../FXDataEngine")
     ],
     targets: [
         .target(
             name: "FXAIPlugins",
             dependencies: [
-                .product(name: "FXDataEngine", package: "FXDataEngine"),
-                .product(name: "FXDatabaseFXBacktestAPI", package: "FXDatabase")
+                .product(name: "FXDataEngine", package: "FXDataEngine")
             ],
             path: ".",
             exclude: fxaiPluginExcludedPaths(),
@@ -116,8 +114,7 @@ let package = Package(
         .testTarget(
             name: "FXAIPluginsTests",
             dependencies: [
-                "FXAIPlugins",
-                .product(name: "FXDatabaseBacktestCore", package: "FXDatabase")
+                "FXAIPlugins"
             ],
             path: "API/Tests/FXAIPluginsTests"
         )

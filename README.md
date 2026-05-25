@@ -49,7 +49,7 @@ Agents
 - `FXDatabase` is the only database authority. It owns ClickHouse, validation, migrations, ingestion, storage, deletion, and access APIs.
 - `FXBacktest` never reads ClickHouse directly. It asks FXDatabase for history, registers shared/plugin/accelerator configuration through FXDatabase, stores backtest results through FXDatabase, and now exposes the root FXPlugins zoo through a FXDataEngine-backed adapter.
 - `FXDataEngine` turns raw M1 OHLCV into features, labels, context payloads, audit data, and plugin-ready requests.
-- `FXPlugins` is a flat plugin zoo. Each plugin folder owns its own implementation and accelerator folders.
+- `FXPlugins` is a flat plugin zoo. Plugins do not import FXDatabase, ClickHouse, or FXBacktest database APIs. They consume FXDataEngine plugin contracts for data payloads, while FXBacktest owns workload scheduling plus shared type 1 and plugin/accelerator type 2 parameter delivery.
 - `FXBacktestAgent`, `FXDemoAgent`, and `FXLiveAgent` are distributed or execution runtime projects, not data owners. Agent and execution safety contracts fail closed until certification, SineTest, lineage, account scope, risk limits, and kill-switch checks pass.
 
 ## API Version Policy
@@ -126,6 +126,8 @@ FXPlugins/plugin_name/
 ```
 
 Only shared API and registry code belongs under `FXPlugins/API/`. Plugin-specific Metal kernels, Python models, tokenizers, or NLP logic stay inside the plugin's own folder.
+
+FXBacktest is the only project that adapts the root plugin zoo into backtest workloads. It pulls market history through FXDatabase APIs, asks FXDataEngine to build plugin-ready requests, converts ClickHouse-stored type 1 and type 2 configuration into plugin hyperparameters, then calls the plugin runtime. Plugins stay unaware of ClickHouse storage and backtest result persistence.
 
 `FXPlugins/demo_plugin_template/` is a compile-checked template for future plugins. It contains no trading strategy and is intentionally not in the runtime plugin registry.
 

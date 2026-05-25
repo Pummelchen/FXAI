@@ -6,6 +6,8 @@ AI plugins own model execution. When a Swift plugin needs tensor training or inf
 
 Converted plugins should consume the Swift FXDataEngine OHLCV contracts and use volume-derived features whenever the loaded dataset has nonzero volume.
 
+`FXPlugins` does not import FXDatabase, ClickHouse, or FXBacktest database APIs. FXBacktest owns workload scheduling and shared/plugin parameter delivery; plugins receive those values only through the runtime call path after FXDataEngine has built plugin-ready requests.
+
 The shared FXDataEngine/FXPlugins runtime API latest version is `4`, and the tokenizer contract latest version is `fxai-tokenizer-v1`. Plugin manifests, contexts, predictions, and Python accelerator bridge payloads must carry those latest versions. Older versions are rejected instead of being compatibility-shimmed.
 
 ## Layout
@@ -50,10 +52,11 @@ contracts:
   CPU fallback. Test runs can set `FXAI_FORCE_PYTORCH_CPU=1` or
   `FXAI_ALLOW_CPU_TENSOR_FALLBACK=1` for deterministic smoke tests; production
   accelerator paths require M2/M3-or-newer Apple Silicon GPU support.
-- The runtime test suite consumes FXDatabase's virtual `SINETEST` security from
-  `SineWaveAgent` and checks every plugin on deterministic M1 OHLCV sine-wave data,
-  including accelerator runtime selection on M2/M3-or-newer Apple Silicon and
-  explicit CPU fallback behavior for contract tests.
+- The runtime test suite uses a local FXDataEngine `SINETEST` fixture that mirrors
+  FXDatabase's canonical virtual sine-wave security without importing FXDatabase
+  into the plugin package. It checks every plugin on deterministic M1 OHLCV
+  sine-wave data, including accelerator runtime selection on M2/M3-or-newer
+  Apple Silicon and explicit CPU fallback behavior for contract tests.
 - `FXAIPluginCertificationRegistry` is the strict 100 percent certification gate.
   It covers every registered plugin and declared accelerator, records satisfied
   runtime evidence, and fails closed until missing gates such as live Metal buffer

@@ -201,7 +201,7 @@ public struct FXAIPluginBacktestAdapter: FXBacktestPluginV1 {
     }
 
     private static func parameterDefinitions(for runtime: FXAIAcceleratedPluginRuntime) throws -> [ParameterDefinition] {
-        let catalog = FXAIPluginBacktestConfigurationCatalog.pluginConfigurations(plugins: [runtime])
+        let catalog = FXBacktestPluginConfigurationCatalog.pluginConfigurations(plugins: [runtime])
         let firstScope = catalog.first { $0.pluginId == runtime.manifest.aiName } ?? catalog.first
         var definitions = try (firstScope?.parameters ?? []).map(Self.parameterDefinition(from:))
         definitions.append(try ParameterDefinition(
