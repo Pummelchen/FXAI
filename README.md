@@ -39,8 +39,8 @@ Support contracts and tools
 
 Agents
   FXBacktestAgent: versioned remote Mac worker protocol and fail-closed worker executable.
-  FXDemoAgent: applies selected backtest parameters to demo accounts across supported terminals/brokers.
-  FXLiveAgent: applies approved parameters to live accounts across supported terminals/brokers.
+  FXDemoAgent: versioned demo execution boundary for approved backtest-derived workloads.
+  FXLiveAgent: versioned live execution boundary with promotion, risk, kill-switch, and human-release gates.
 ```
 
 ## Core Boundaries
@@ -90,8 +90,8 @@ The core historical data contract is `M1 OHLCV`.
 | Backtest researcher | A Swift/Metal offline backtest stack that can run many plugin families without depending on MT5 Strategy Tester. |
 | Plugin developer | A clear plugin API, flat plugin folders, CPU references, and optional Metal/PyTorch/TensorFlow/NLP acceleration paths inside each plugin. |
 | Data operator | One ingestion path into FXDatabase, one ClickHouse authority, and no hidden direct database access from backtests or agents. |
-| Demo trader | A future FXDemoAgent path for applying proven backtest parameters to demo accounts before capital is at risk. |
-| Live trader | A future FXLiveAgent path where live execution is separated from research and gated by FXAI data, plugin, and risk contracts. |
+| Demo trader | A versioned FXDemoAgent contract for applying proven backtest parameters to demo accounts before capital is at risk. |
+| Live trader | A versioned FXLiveAgent contract where live execution is separated from research and gated by FXAI data, plugin, promotion, and risk contracts. |
 | Fleet operator | A versioned FXBacktestAgent protocol where other Macs can pull TCP batch work like MT5 backtest agents and return certified results to FXBacktest. |
 | System architect | A repo layout where data import, database authority, feature engineering, plugins, backtesting, UI, and agents have separate ownership. |
 
@@ -108,8 +108,8 @@ The core historical data contract is `M1 OHLCV`.
 | `FXTools/` | Root operational tools. Current executable: `FXAICertify`, launched through `./fxai certify`. |
 | `FXExecutionContracts/` | Shared versioned account, risk, kill-switch, and order-intent safety contracts for demo/live agents. |
 | `FXBacktestAgent/` | Distributed backtest worker package and TCP protocol foundation for remote Macs over TCP. |
-| `FXDemoAgent/` | Future demo-account execution agent for MT5, IBKR, TradingView, and other account types. |
-| `FXLiveAgent/` | Future live-account execution agent with the same broker/terminal abstraction as demo, but stricter approval and safety gates. |
+| `FXDemoAgent/` | Demo-account execution agent contract with dry-run-first planning, account scoping, risk limits, and kill-switch validation. |
+| `FXLiveAgent/` | Live-account execution agent contract with promotion evidence, human-release planning, account scoping, risk limits, and kill-switch validation. |
 
 ## Plugin Zoo
 
@@ -170,6 +170,8 @@ swift test --package-path FXPlugins
 swift test --package-path FXBacktest
 swift test --package-path FXGUI
 swift test --package-path FXBacktestAgent
+swift test --package-path FXDemoAgent
+swift test --package-path FXLiveAgent
 swift test --package-path FXExecutionContracts
 swift build -c release --package-path FXDatabase
 swift build -c release --package-path FXDataEngine
@@ -178,6 +180,8 @@ swift build -c release --package-path FXBacktest
 swift build -c release --package-path FXGUI
 swift build -c release --package-path FXTools
 swift build -c release --package-path FXBacktestAgent
+swift build -c release --package-path FXDemoAgent
+swift build -c release --package-path FXLiveAgent
 swift build -c release --package-path FXExecutionContracts
 ```
 

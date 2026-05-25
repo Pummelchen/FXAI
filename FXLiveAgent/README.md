@@ -1,10 +1,11 @@
 # FXLiveAgent
 
-Future source root for live-account execution.
+FXLiveAgent is the live-account execution boundary for FXAI.
 
-FXLiveAgent will apply approved FXAI parameters to live trading accounts across the
-same broker and terminal families as FXDemoAgent, but with stronger approval,
-monitoring, risk, and rollback gates.
+The current package provides the versioned promoted-workload contract,
+fail-closed safety validation, human-release planning runtime, and tests. Real
+broker/terminal adapters must stay behind this boundary and must not bypass
+promotion evidence, risk limits, or kill-switch controls.
 
 ## Boundary
 
@@ -24,3 +25,9 @@ monitoring, risk, and rollback gates.
   connector can route real orders.
 - Persist immutable audit events for every decision, order request, broker response,
   and safety intervention.
+
+## Verify
+
+```bash
+swift test --package-path FXLiveAgent
+```

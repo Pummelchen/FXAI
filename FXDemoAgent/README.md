@@ -1,10 +1,10 @@
 # FXDemoAgent
 
-Future source root for demo-account execution.
+FXDemoAgent is the demo-account execution boundary for FXAI.
 
-FXDemoAgent will take approved backtest parameters from FXBacktest and apply them to
-demo trading accounts across supported terminals and brokers, including MT5, IBKR,
-TradingView, and future execution endpoints.
+The current package provides the versioned workload contract, fail-closed safety
+validation, dry-run planning runtime, and tests. Broker/terminal adapters must
+plug into this boundary instead of bypassing the shared execution contracts.
 
 ## Boundary
 
@@ -20,3 +20,9 @@ TradingView, and future execution endpoints.
 - Require explicit strategy, symbol, risk, and account-scoping inputs from FXBacktest.
 - Prefer dry-run and paper-trade modes in new connectors before allowing order routing.
 - Store audit events through FXDatabase or a future approved agent telemetry API.
+
+## Verify
+
+```bash
+swift test --package-path FXDemoAgent
+```

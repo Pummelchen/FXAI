@@ -166,4 +166,10 @@ Wave 0 is implemented and verified:
 10. FXBacktest, FXDemoAgent, and FXLiveAgent have a static gatekeeper test proving they do not use direct ClickHouse access patterns and must use FXDatabase APIs.
 11. Certification tests now verify that every plugin/backend is covered by the certification matrix and that the strict 100% check passes with the current evidence set.
 
+Wave 4 agent contract foundations are implemented and verified:
+
+1. `FXDemoAgent` is now a Swift package with a versioned `fxdemo.agent.v1` workload contract, dry-run-first planning runtime, account-scope validation, risk-limit validation, kill-switch enforcement, and no direct database access tests.
+2. `FXLiveAgent` is now a Swift package with a versioned `fxlive.agent.v1` promoted-workload contract, promotion evidence validation, human-release planning runtime, account-scope validation, risk-limit validation, kill-switch enforcement, and no direct database access tests.
+3. Root certification now builds and, in full mode, tests `FXDemoAgent` and `FXLiveAgent` alongside the other FXAI packages.
+
 CoreML/Neural Engine is deliberately excluded from plugin candidate declarations. The enum remains only as a future compatibility surface and strict runtime rejection path until a real CoreML export, load, prediction, and parity implementation is added.

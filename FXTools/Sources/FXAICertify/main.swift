@@ -38,6 +38,8 @@ struct CertificationRunner {
         "FXBacktest",
         "FXGUI",
         "FXBacktestAgent",
+        "FXDemoAgent",
+        "FXLiveAgent",
         "FXExecutionContracts"
     ]
 
