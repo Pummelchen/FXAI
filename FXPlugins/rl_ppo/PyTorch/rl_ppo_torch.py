@@ -64,8 +64,10 @@ class ActorCriticPPO(nn.Module):
         self.value_head = nn.Linear(HIDDEN_COUNT, 1)
 
     def forward(self, observations: torch.Tensor) -> tuple[torch.distributions.Categorical, torch.Tensor]:
-        encoded = self.encoder(observations)
-        return torch.distributions.Categorical(logits=self.policy_head(encoded)), self.value_head(encoded).squeeze(-1)
+        encoded = torch.nan_to_num(self.encoder(observations), nan=0.0, posinf=8.0, neginf=-8.0).clamp(-8.0, 8.0)
+        logits = torch.nan_to_num(self.policy_head(encoded), nan=0.0, posinf=20.0, neginf=-20.0).clamp(-20.0, 20.0)
+        value = torch.nan_to_num(self.value_head(encoded).squeeze(-1), nan=0.0, posinf=1.0e6, neginf=-1.0e6)
+        return torch.distributions.Categorical(logits=logits), value
 
     def act(self, observations: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         distribution, value = self.forward(observations)
@@ -213,6 +215,15 @@ def ppo_clipped_loss(
     return policy_loss + value_weight * value_loss + entropy_weight * entropy_loss
 
 
+def _sanitize_gradients_and_parameters(model: nn.Module) -> None:
+    for parameter in model.parameters():
+        if parameter.grad is not None:
+            parameter.grad = torch.nan_to_num(parameter.grad, nan=0.0, posinf=1.0, neginf=-1.0).clamp(-1.0, 1.0)
+    with torch.no_grad():
+        for parameter in model.parameters():
+            parameter.copy_(torch.nan_to_num(parameter, nan=0.0, posinf=8.0, neginf=-8.0).clamp(-8.0, 8.0))
+
+
 @dataclass
 class RlPPOReferenceState:
     model: ActorCriticPPO
@@ -272,7 +283,9 @@ def train_step(
     state.optimizer.zero_grad(set_to_none=True)
     loss = ppo_clipped_loss(state.model, rollout_observations, rollout_actions, rollout_log_probs, advantages, returns)
     loss.backward()
+    _sanitize_gradients_and_parameters(state.model)
     torch.nn.utils.clip_grad_norm_(state.model.parameters(), 1.0)
     state.optimizer.step()
+    _sanitize_gradients_and_parameters(state.model)
     state.rollout.clear()
     return state

@@ -545,8 +545,15 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
         let output = stdoutBuffer.snapshot(appending: stdout.fileHandleForReading.readDataToEndOfFile())
         let errorData = stderrBuffer.snapshot(appending: stderr.fileHandleForReading.readDataToEndOfFile())
         guard process.terminationStatus == 0 else {
-            let message = String(data: errorData, encoding: .utf8) ?? "Python backend failed"
-            throw FXDataEngineError.externalBackend(message.trimmingCharacters(in: .whitespacesAndNewlines))
+            let stderrMessage = String(data: errorData, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let stdoutMessage = String(data: output, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let message = [stderrMessage, stdoutMessage]
+                .compactMap { $0 }
+                .first { !$0.isEmpty }
+                ?? "Python backend failed with exit=\(process.terminationStatus)"
+            throw FXDataEngineError.externalBackend(message)
         }
         return try JSONDecoder().decode(PythonMLBackendResponse.self, from: output)
     }

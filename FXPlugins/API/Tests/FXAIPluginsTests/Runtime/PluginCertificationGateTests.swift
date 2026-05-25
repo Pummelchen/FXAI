@@ -98,4 +98,60 @@ final class PluginCertificationGateTests: XCTestCase {
         XCTAssertFalse(externalStatuses.isEmpty)
         XCTAssertTrue(externalStatuses.allSatisfy { $0.satisfiedGates.contains(.externalBackendDiscovery) })
     }
+
+    func testLiveRuntimePlanHasNoStaleOpenPluginRows() throws {
+        let plan = try String(
+            contentsOf: Self.repositoryRoot
+                .appendingPathComponent("FXPlugins")
+                .appendingPathComponent("API")
+                .appendingPathComponent("Docs")
+                .appendingPathComponent("PLUGIN_100_LIVE_RUNTIME_COMPLETION_PLAN.md"),
+            encoding: .utf8
+        )
+
+        XCTAssertFalse(plan.contains("Remaining CPU/reference work"))
+        XCTAssertFalse(plan.contains("Accelerator work required for 100%"))
+        XCTAssertTrue(plan.contains("Remaining plugin implementation tasks: none"))
+        XCTAssertTrue(plan.contains("PyTorch MPS required"))
+        XCTAssertTrue(plan.contains("TensorFlow Metal required"))
+    }
+
+    func testExternalBackendEvidenceRequiresAppleSiliconAccelerators() throws {
+        let externalBackendTests = try String(
+            contentsOf: Self.repositoryRoot
+                .appendingPathComponent("FXPlugins")
+                .appendingPathComponent("API")
+                .appendingPathComponent("Tests")
+                .appendingPathComponent("FXAIPluginsTests")
+                .appendingPathComponent("Runtime")
+                .appendingPathComponent("PluginExternalBackendRuntimeTests.swift"),
+            encoding: .utf8
+        )
+        let dispatcher = try String(
+            contentsOf: Self.repositoryRoot
+                .appendingPathComponent("FXPlugins")
+                .appendingPathComponent("API")
+                .appendingPathComponent("Backends")
+                .appendingPathComponent("Python")
+                .appendingPathComponent("fxai_plugin_module_backend.py"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(externalBackendTests.contains("FXAI_REQUIRE_PYTORCH_MPS"))
+        XCTAssertTrue(externalBackendTests.contains("PYTORCH_ENABLE_MPS_FALLBACK"))
+        XCTAssertTrue(externalBackendTests.contains("FXAI_REQUIRE_TENSORFLOW_METAL"))
+        XCTAssertFalse(externalBackendTests.contains("FXAI_FORCE_PYTORCH_CPU"))
+        XCTAssertFalse(externalBackendTests.contains("FXAI_FORCE_TENSORFLOW_CPU"))
+        XCTAssertTrue(dispatcher.contains("map_location = torch.device(\"mps\")"))
+    }
+
+    private static var repositoryRoot: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
 }

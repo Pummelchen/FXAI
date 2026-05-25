@@ -11,23 +11,27 @@ final class PluginExternalBackendRuntimeTests: XCTestCase {
         XCTAssertFalse(plans.isEmpty)
 
         for plan in plans {
-            let temporaryDirectory = try Self.makeTemporaryDirectory(plan.pluginName, suffix: "torch")
-            defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
-            let bridge = Self.bridge(pluginName: plan.pluginName, framework: .pyTorch, stateDirectory: temporaryDirectory)
-            let payload = Self.inferencePayload(pluginName: plan.pluginName, framework: .pyTorch, includeText: false)
+            do {
+                let temporaryDirectory = try Self.makeTemporaryDirectory(plan.pluginName, suffix: "torch")
+                defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+                let bridge = Self.bridge(pluginName: plan.pluginName, framework: .pyTorch, stateDirectory: temporaryDirectory)
+                let payload = Self.inferencePayload(pluginName: plan.pluginName, framework: .pyTorch, includeText: false)
 
-            let prediction = try bridge.predictSynchronously(payload)
-            try prediction.validate()
+                let prediction = try bridge.predictSynchronously(payload)
+                try prediction.validate()
 
-            try bridge.trainSynchronously(Self.trainingPayload(payload: payload, label: .buy))
-            XCTAssertTrue(
-                Self.stateDirectoryHasArtifact(temporaryDirectory),
-                "\(plan.pluginName) PyTorch train did not create a persistence artifact"
-            )
+                try bridge.trainSynchronously(Self.trainingPayload(payload: payload, label: .buy))
+                XCTAssertTrue(
+                    Self.stateDirectoryHasArtifact(temporaryDirectory),
+                    "\(plan.pluginName) PyTorch train did not create a persistence artifact"
+                )
 
-            let reloadedBridge = Self.bridge(pluginName: plan.pluginName, framework: .pyTorch, stateDirectory: temporaryDirectory)
-            let reloadedPrediction = try reloadedBridge.predictSynchronously(payload)
-            try reloadedPrediction.validate()
+                let reloadedBridge = Self.bridge(pluginName: plan.pluginName, framework: .pyTorch, stateDirectory: temporaryDirectory)
+                let reloadedPrediction = try reloadedBridge.predictSynchronously(payload)
+                try reloadedPrediction.validate()
+            } catch {
+                XCTFail("\(plan.pluginName) PyTorch backend failed: \(error)")
+            }
         }
     }
 
@@ -39,23 +43,27 @@ final class PluginExternalBackendRuntimeTests: XCTestCase {
         XCTAssertFalse(plans.isEmpty)
 
         for plan in plans {
-            let temporaryDirectory = try Self.makeTemporaryDirectory(plan.pluginName, suffix: "tensorflow")
-            defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
-            let bridge = Self.bridge(pluginName: plan.pluginName, framework: .tensorFlow, stateDirectory: temporaryDirectory)
-            let payload = Self.inferencePayload(pluginName: plan.pluginName, framework: .tensorFlow, includeText: false)
+            do {
+                let temporaryDirectory = try Self.makeTemporaryDirectory(plan.pluginName, suffix: "tensorflow")
+                defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+                let bridge = Self.bridge(pluginName: plan.pluginName, framework: .tensorFlow, stateDirectory: temporaryDirectory)
+                let payload = Self.inferencePayload(pluginName: plan.pluginName, framework: .tensorFlow, includeText: false)
 
-            let prediction = try bridge.predictSynchronously(payload)
-            try prediction.validate()
+                let prediction = try bridge.predictSynchronously(payload)
+                try prediction.validate()
 
-            try bridge.trainSynchronously(Self.trainingPayload(payload: payload, label: .buy))
-            XCTAssertTrue(
-                Self.stateDirectoryHasArtifact(temporaryDirectory),
-                "\(plan.pluginName) TensorFlow train did not create a persistence artifact"
-            )
+                try bridge.trainSynchronously(Self.trainingPayload(payload: payload, label: .buy))
+                XCTAssertTrue(
+                    Self.stateDirectoryHasArtifact(temporaryDirectory),
+                    "\(plan.pluginName) TensorFlow train did not create a persistence artifact"
+                )
 
-            let reloadedBridge = Self.bridge(pluginName: plan.pluginName, framework: .tensorFlow, stateDirectory: temporaryDirectory)
-            let reloadedPrediction = try reloadedBridge.predictSynchronously(payload)
-            try reloadedPrediction.validate()
+                let reloadedBridge = Self.bridge(pluginName: plan.pluginName, framework: .tensorFlow, stateDirectory: temporaryDirectory)
+                let reloadedPrediction = try reloadedBridge.predictSynchronously(payload)
+                try reloadedPrediction.validate()
+            } catch {
+                XCTFail("\(plan.pluginName) TensorFlow backend failed: \(error)")
+            }
         }
     }
 
@@ -64,25 +72,29 @@ final class PluginExternalBackendRuntimeTests: XCTestCase {
         XCTAssertFalse(plans.isEmpty)
 
         for plan in plans {
-            let temporaryDirectory = try Self.makeTemporaryDirectory(plan.pluginName, suffix: "nlp")
-            defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
-            let bridge = Self.bridge(pluginName: plan.pluginName, framework: .foundationNLP, stateDirectory: temporaryDirectory)
-            let noTextPayload = Self.inferencePayload(pluginName: plan.pluginName, framework: .foundationNLP, includeText: false)
-            let textPayload = Self.inferencePayload(pluginName: plan.pluginName, framework: .foundationNLP, includeText: true)
+            do {
+                let temporaryDirectory = try Self.makeTemporaryDirectory(plan.pluginName, suffix: "nlp")
+                defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+                let bridge = Self.bridge(pluginName: plan.pluginName, framework: .foundationNLP, stateDirectory: temporaryDirectory)
+                let noTextPayload = Self.inferencePayload(pluginName: plan.pluginName, framework: .foundationNLP, includeText: false)
+                let textPayload = Self.inferencePayload(pluginName: plan.pluginName, framework: .foundationNLP, includeText: true)
 
-            XCTAssertTrue(noTextPayload.eventTexts.isEmpty)
-            XCTAssertFalse(textPayload.eventTexts.isEmpty)
-            XCTAssertEqual(textPayload.tokenizerContract.version, PluginTokenizerContractV4.defaultVersion)
+                XCTAssertTrue(noTextPayload.eventTexts.isEmpty)
+                XCTAssertFalse(textPayload.eventTexts.isEmpty)
+                XCTAssertEqual(textPayload.tokenizerContract.version, PluginTokenizerContractV4.defaultVersion)
 
-            let noTextPrediction = try bridge.predictSynchronously(noTextPayload)
-            let textPrediction = try bridge.predictSynchronously(textPayload)
-            try noTextPrediction.validate()
-            try textPrediction.validate()
-            XCTAssertNotEqual(
-                noTextPrediction.classProbabilities,
-                textPrediction.classProbabilities,
-                "\(plan.pluginName) NLP backend ignored text event context"
-            )
+                let noTextPrediction = try bridge.predictSynchronously(noTextPayload)
+                let textPrediction = try bridge.predictSynchronously(textPayload)
+                try noTextPrediction.validate()
+                try textPrediction.validate()
+                XCTAssertNotEqual(
+                    noTextPrediction.classProbabilities,
+                    textPrediction.classProbabilities,
+                    "\(plan.pluginName) NLP backend ignored text event context"
+                )
+            } catch {
+                XCTFail("\(plan.pluginName) NLP backend failed: \(error)")
+            }
         }
     }
 
@@ -96,12 +108,31 @@ final class PluginExternalBackendRuntimeTests: XCTestCase {
             executable: "python3",
             module: FXAIPluginBackendDiscovery.moduleBackendURL.path,
             modelIdentifier: pluginName,
-            environment: [
-                "FXAI_PLUGIN_ROOT": FXAIPluginBackendDiscovery.pluginRootURL.path,
-                "FXAI_PLUGIN_STATE_DIR": stateDirectory.path,
-                "FXAI_FORCE_PYTORCH_CPU": "1"
-            ]
+            environment: Self.acceleratorEnvironment(
+                framework: framework,
+                stateDirectory: stateDirectory
+            )
         )
+    }
+
+    private static func acceleratorEnvironment(
+        framework: MLFramework,
+        stateDirectory: URL
+    ) -> [String: String] {
+        var environment = [
+            "FXAI_PLUGIN_ROOT": FXAIPluginBackendDiscovery.pluginRootURL.path,
+            "FXAI_PLUGIN_STATE_DIR": stateDirectory.path
+        ]
+        switch framework {
+        case .pyTorch:
+            environment["FXAI_REQUIRE_PYTORCH_MPS"] = "1"
+            environment["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+        case .tensorFlow:
+            environment["FXAI_REQUIRE_TENSORFLOW_METAL"] = "1"
+        case .nativeSwift, .metal, .foundationNLP:
+            break
+        }
+        return environment
     }
 
     private static func inferencePayload(

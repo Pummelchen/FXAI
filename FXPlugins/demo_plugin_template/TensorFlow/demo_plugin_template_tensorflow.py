@@ -1,14 +1,18 @@
 from __future__ import annotations
 
-from typing import Iterable
+from dataclasses import dataclass
+from typing import Iterable, Optional
 
 import tensorflow as tf
+
+FEATURE_COUNT = 16
+VOLUME_FEATURE_INDEXES = (6, 68, 69, 70, 71, 74, 75, 76, 77, 78, 80, 81, 82, 83)
 
 
 class DemoPluginTemplateTensorFlow(tf.keras.Model):
     """TensorFlow Metal template model with no trade logic."""
 
-    def __init__(self, feature_count: int = 16) -> None:
+    def __init__(self, feature_count: int = FEATURE_COUNT) -> None:
         super().__init__()
         self.feature_count = feature_count
         self.encoder = tf.keras.Sequential(
@@ -27,37 +31,73 @@ class DemoPluginTemplateTensorFlow(tf.keras.Model):
         return {"class_probabilities": tf.nn.softmax(logits * 0.0 + skip_bias, axis=-1)}
 
 
-def prepare_features(features: Iterable[Iterable[float]] | tf.Tensor, feature_count: int = 16) -> tf.Tensor:
+@dataclass
+class DemoPluginTemplateTensorFlowState:
+    model: DemoPluginTemplateTensorFlow
+    optimizer: tf.keras.optimizers.Optimizer
+
+    @classmethod
+    def create(cls, lr: float = 3.0e-4) -> "DemoPluginTemplateTensorFlowState":
+        return cls(
+            model=DemoPluginTemplateTensorFlow(feature_count=FEATURE_COUNT),
+            optimizer=tf.keras.optimizers.AdamW(learning_rate=lr, weight_decay=1.0e-4),
+        )
+
+
+def prepare_features(
+    features: Iterable[Iterable[float]] | tf.Tensor,
+    feature_count: int = FEATURE_COUNT,
+    data_has_volume: bool = True,
+) -> tf.Tensor:
     x = tf.convert_to_tensor(features, dtype=tf.float32)
     if len(x.shape) == 1:
         x = tf.expand_dims(x, axis=0)
+    elif len(x.shape) == 3:
+        x = x[:, -1, :]
     current_width = int(x.shape[-1])
     if current_width < feature_count:
         x = tf.pad(x, [[0, 0], [0, feature_count - current_width]])
-    return x[:, :feature_count]
+    x = tf.clip_by_value(x[:, :feature_count], -8.0, 8.0)
+    if not data_has_volume:
+        valid = [index for index in VOLUME_FEATURE_INDEXES if index < feature_count]
+        if valid:
+            mask = tf.ones((feature_count,), dtype=tf.float32)
+            mask = tf.tensor_scatter_nd_update(
+                mask,
+                [[index] for index in valid],
+                tf.zeros((len(valid),), dtype=tf.float32),
+            )
+            x = x * mask
+    return x
 
 
-def predict_batch(model: DemoPluginTemplateTensorFlow, features: Iterable[Iterable[float]] | tf.Tensor) -> dict[str, tf.Tensor]:
-    return model(prepare_features(features, model.feature_count), training=False)
+def predict_batch(
+    features: Iterable[Iterable[float]] | tf.Tensor,
+    state: Optional[DemoPluginTemplateTensorFlowState] = None,
+    data_has_volume: bool = True,
+) -> dict[str, list[list[float]] | list[float]]:
+    state = state or DemoPluginTemplateTensorFlowState.create()
+    probabilities = state.model(
+        prepare_features(features, state.model.feature_count, data_has_volume=data_has_volume),
+        training=False,
+    )["class_probabilities"]
+    batch_size = int(probabilities.shape[0])
+    return {
+        "class_probabilities": probabilities.numpy().tolist(),
+        "move_mean_points": [0.0] * batch_size,
+        "move_quantiles": [[0.0, 0.0, 0.0] for _ in range(batch_size)],
+    }
 
 
 def train_step(
-    model: DemoPluginTemplateTensorFlow,
-    optimizer: tf.keras.optimizers.Optimizer,
     features: Iterable[Iterable[float]] | tf.Tensor,
     labels: Iterable[int] | tf.Tensor,
-) -> DemoPluginTemplateTensorFlow:
-    x = prepare_features(features, model.feature_count)
-    y = tf.clip_by_value(tf.convert_to_tensor(labels, dtype=tf.int32), 0, 2)
-    with tf.GradientTape() as tape:
-        probabilities = tf.clip_by_value(model(x, training=True)["class_probabilities"], 1.0e-6, 1.0)
-        loss = tf.reduce_mean(tf.keras.losses.sparse_categorical_crossentropy(y, probabilities))
-    gradients = tape.gradient(loss, model.trainable_variables)
-    gradient_pairs = [
-        (gradient, variable)
-        for gradient, variable in zip(gradients, model.trainable_variables)
-        if gradient is not None
-    ]
-    if gradient_pairs:
-        optimizer.apply_gradients(gradient_pairs)
-    return model
+    moves: Iterable[float] | tf.Tensor,
+    state: Optional[DemoPluginTemplateTensorFlowState] = None,
+    lr: float = 3.0e-4,
+    data_has_volume: bool = True,
+) -> DemoPluginTemplateTensorFlowState:
+    del labels, moves, lr
+    state = state or DemoPluginTemplateTensorFlowState.create()
+    _ = predict_batch(features, state=state, data_has_volume=data_has_volume)
+    return state

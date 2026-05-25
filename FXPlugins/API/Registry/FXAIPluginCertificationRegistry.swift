@@ -372,8 +372,20 @@ public enum FXAIPluginCertificationRegistry {
             .appendingPathComponent("Runtime")
             .appendingPathComponent("PluginExternalBackendRuntimeTests.swift")
         guard let text = try? String(contentsOf: testURL, encoding: .utf8) else { return false }
-        return text.contains("PersistsAndReloads") &&
+        let hasPersistenceEvidence = text.contains("PersistsAndReloads") &&
             text.contains("stateDirectoryHasArtifact")
+        if backendFolder == "PyTorch" {
+            return hasPersistenceEvidence &&
+                text.contains("FXAI_REQUIRE_PYTORCH_MPS") &&
+                text.contains("PYTORCH_ENABLE_MPS_FALLBACK") &&
+                !text.contains("FXAI_FORCE_PYTORCH_CPU")
+        }
+        if backendFolder == "TensorFlow" {
+            return hasPersistenceEvidence &&
+                text.contains("FXAI_REQUIRE_TENSORFLOW_METAL") &&
+                !text.contains("FXAI_FORCE_TENSORFLOW_CPU")
+        }
+        return hasPersistenceEvidence
     }
 
     private static func hasNLPLiveContextPayloadEvidence(pluginName: String) -> Bool {

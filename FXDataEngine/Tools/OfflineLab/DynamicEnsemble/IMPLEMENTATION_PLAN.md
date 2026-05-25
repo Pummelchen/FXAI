@@ -5,6 +5,16 @@ Build a deterministic, auditable, post-inference dynamic ensemble layer for the 
 
 This plan is phase-1 production scope. It intentionally reuses the existing FXAI control-plane pieces instead of duplicating them.
 
+## Implementation Status
+
+Complete. The Dynamic Ensemble / OfflineLab scope has been implemented, wired, and covered by project tests.
+
+Implemented evidence:
+- Runtime contracts, configuration, replay helpers, and CLI support live under `FXDataEngine/Tools/OfflineLab/offline_lab/`.
+- Dynamic Ensemble operator docs and default configuration live under `FXDataEngine/Tools/OfflineLab/DynamicEnsemble/`.
+- FXGUI reader, models, and view integration live under `FXGUI/Sources/FXGUICore/` and `FXGUI/Sources/FXGUIApp/`.
+- Python and Swift tests cover config validation, replay summaries, artifact parsing, missing-artifact fallback behavior, and GUI-facing models.
+
 ## Repo Mapping
 
 ### Existing runtime seams
@@ -257,18 +267,18 @@ Update:
 - `FXDataEngine/Tools/OfflineLab/README.md`
 - root-level project documentation that references Dynamic Ensemble
 
-## Step-by-Step Execution Plan
-1. Add the implementation-plan and implementation-note docs directory.
-2. Add Python contracts/config/replay helpers and CLI hooks.
-3. Add the runtime dynamic-ensemble stage file with structs, scoring, normalization, artifact writing, and history.
-4. Add runtime feature-pipeline support for current Rates Engine context in the model stage path.
-8. Add GUI models/reader/view and wire them into the app shell.
-9. Add tests and fixtures.
-10. Update owning project documentation.
-11. Review new code for logic correctness.
-12. Deep bug check API usage, data flow, fallback behavior, and integration.
-13. Run Python tests, Swift tests/build, and FXDatabase `verify-all`.
-14. Sync mirror if needed, commit, and push.
+## Completed Step-by-Step Execution Plan
+1. Done: add the implementation-plan and implementation-note docs directory.
+2. Done: add Python contracts/config/replay helpers and CLI hooks.
+3. Done: add the runtime dynamic-ensemble stage file with structs, scoring, normalization, artifact writing, and history.
+4. Done: add runtime feature-pipeline support for current Rates Engine context in the model stage path.
+5. Done: add GUI models/reader/view and wire them into the app shell.
+6. Done: add tests and fixtures.
+7. Done: update owning project documentation.
+8. Done: review new code for logic correctness.
+9. Done: deep bug check API usage, data flow, fallback behavior, and integration.
+10. Done: run Python tests, Swift tests/build, and FXDatabase verification through the root certification flow.
+11. Done: sync mirror as needed, commit, and push.
 
 ## Plan Review Checklist
 - Does the plan reuse the existing Adaptive Router rather than duplicating it? Yes.

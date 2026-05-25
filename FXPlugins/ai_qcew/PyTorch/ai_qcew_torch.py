@@ -50,6 +50,9 @@ def _to_sequence(batch: Iterable[Iterable[float]] | torch.Tensor, device: Option
         if valid:
             x = x.clone()
             x[..., valid] = 0.0
+    if x.device.type == "mps" and x.shape[1] < 3:
+        prefix = x[:, :1, :].expand(-1, 3 - x.shape[1], -1).clone()
+        x = torch.cat([prefix, x], dim=1).contiguous()
     return x
 
 

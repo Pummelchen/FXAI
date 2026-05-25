@@ -248,7 +248,10 @@ def _load_state(
         if framework == "pyTorch":
             import torch
 
-            return torch.load(path, map_location="cpu", weights_only=False)
+            mps_backend = getattr(torch.backends, "mps", None)
+            use_mps = bool(mps_backend and torch.backends.mps.is_available() and not _env_flag("FXAI_FORCE_PYTORCH_CPU"))
+            map_location = torch.device("mps") if use_mps else torch.device("cpu")
+            return torch.load(path, map_location=map_location, weights_only=False)
         if framework == "tensorFlow":
             return _load_tensorflow_state(path, module, sequence, data_has_volume)
         with path.open("rb") as handle:
