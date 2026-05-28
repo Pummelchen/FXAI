@@ -54,8 +54,34 @@ struct CertificationRunner {
         components.append(capture("macos.version", type: "environment", command: ["sw_vers"]))
         components.append(capture("hardware", type: "environment", command: ["uname", "-m"]))
         components.append(capture("python.version", type: "environment", command: ["python3", "--version"]))
-        components.append(capture("pytorch.status", type: "environment", command: ["python3", "-c", "import torch; print(torch.__version__); print('mps=' + str(torch.backends.mps.is_available()))"]))
-        components.append(capture("tensorflow.status", type: "environment", command: ["python3", "-c", "import tensorflow as tf; print(tf.__version__); print(tf.config.list_physical_devices())"]))
+        components.append(capture(
+            "pytorch.status",
+            type: "environment",
+            command: [
+                "python3", "-c",
+                """
+                import torch
+                mps = bool(getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available())
+                print(torch.__version__)
+                print('mps=' + str(mps))
+                raise SystemExit(0 if mps else 1)
+                """
+            ]
+        ))
+        components.append(capture(
+            "tensorflow.status",
+            type: "environment",
+            command: [
+                "python3", "-c",
+                """
+                import tensorflow as tf
+                gpu = tf.config.list_physical_devices('GPU')
+                print(tf.__version__)
+                print('gpu=' + str(gpu))
+                raise SystemExit(0 if gpu else 1)
+                """
+            ]
+        ))
 
         for packagePath in packagePaths {
             components.append(capture("\(packagePath).build", type: "swift_build", command: ["swift", "build", "--package-path", packagePath]))

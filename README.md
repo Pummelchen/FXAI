@@ -139,6 +139,7 @@ FXBacktest is the only project that adapts the root plugin zoo into backtest wor
 - Metal: Apple GPU acceleration is validated through runtime compilation and plugin-local buffer parity tests, and only counts as available on unified-memory M2/M3-or-newer hosts.
 - PyTorch: plugin backends require Apple Silicon MPS for accelerator runtime paths unless a test explicitly opts into CPU fallback.
 - TensorFlow: plugin backends require a TensorFlow Metal GPU device for accelerator runtime paths unless a test explicitly opts into CPU fallback.
+- Python bridge command: FXAI uses `python3` for PyTorch and TensorFlow plugin bridges. Ensure `python3` resolves to the environment where `tensorflow` reports at least one GPU device.
 - CoreML/Neural Engine: not declared by plugins until real export, load, prediction, and parity tests exist.
 
 ## Install
@@ -150,6 +151,12 @@ Run the macOS installer from the repo root:
 ```
 
 The installer is Bash 3 compatible for macOS. It rejects Intel x86 and Apple M1 hosts, installs Homebrew dependencies, checks Xcode/Command Line Tools for Swift and Metal, scans this repo for Python imports, and installs matching Python packages with no hard version pins.
+
+Verify TensorFlow Metal on the same `python3` command used by FXAI:
+
+```bash
+python3 -c "import tensorflow as tf; print('TF:', tf.__version__); print('GPU:', tf.config.list_physical_devices('GPU'))"
+```
 
 Use a dry run to see what it would do:
 

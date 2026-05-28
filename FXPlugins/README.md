@@ -42,6 +42,8 @@ contracts:
   `FXAI_PLUGIN_STATE_DIR`, or `~/.fxai/plugins/state` when the environment
   variable is not set. The backend follows the FXDataEngine volume contract:
   volume-derived features are used only when `dataHasVolume` is true.
+  FXAI invokes these plugin-local Python backends with `python3`; that command
+  must resolve to the Python environment where TensorFlow reports a Metal GPU.
 - `FXPluginRuntimeResolver` selects CPU, Metal, PyTorch, TensorFlow, Foundation NLP,
   or CoreML/Neural Engine candidates from each plugin acceleration plan. The
   plugin-local dispatcher `API/Backends/Python/fxai_plugin_module_backend.py`
