@@ -54,7 +54,10 @@ contracts:
   loads a plugin's own `PyTorch/`, `TensorFlow/`, or `NLP/` implementation through
   the Swift bridge. `FXAIAcceleratedPluginRuntime` can wrap any planned plugin and
   route train/predict through the selected external backend while retaining explicit
-  CPU fallback. Test runs can set `FXAI_FORCE_PYTORCH_CPU=1` or
+  CPU fallback. Its shared intrahour direction adapter uses
+  `FXAIIntrahourCycleCalibrationPolicy` for confidence and reliability floors so
+  minute-of-hour calibration gates are explicit and test-covered. Test runs can
+  set `FXAI_FORCE_PYTORCH_CPU=1` or
   `FXAI_ALLOW_CPU_TENSOR_FALLBACK=1` for deterministic smoke tests; production
   accelerator paths require M2/M3-or-newer Apple Silicon GPU support.
 - The runtime test suite uses a local FXDataEngine `SINETEST` fixture that mirrors

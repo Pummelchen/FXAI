@@ -30,11 +30,11 @@ The confidence gate is intentionally per-prediction, not just an average. A plug
 | TensorFlow Metal accelerators | 9 | 84 each | 2 each | 100.0% | 95.5% | Python bridge and TensorFlow Metal path active. |
 | Foundation NLP accelerators | 3 | 84 each | 2 each | 100.0% | 95.5% | Text/event context backend path active. |
 
-The low external accelerator confidence rows were tuned by adding a guarded deterministic confidence floor to the shared intrahour-cycle adapter. The floor activates only when minute-of-hour evidence is strongly directional and enough per-minute directional mass has been observed.
+The low external accelerator confidence rows were tuned by adding a guarded deterministic confidence floor to the shared intrahour-cycle adapter. NF-009 makes that behavior an explicit `FXAIIntrahourCycleCalibrationPolicy`: the floor activates only when minute-of-hour evidence is strongly directional, enough per-minute directional mass has been observed, and the global directional observation gate has been crossed.
 
 ## Worst-20 Fix
 
-Before the intrahour-cycle threshold fix, the previous lowest registry scores were 83.3%. The miss pattern was concentrated at the full-hour and half-hour SineTest turning buckets: the learned cycle direction was correct, but those one-minute moves had directional mass around 3.49 and did not cross the old 4.0 per-minute activation threshold. The runtime fix keeps the global observation gate at 48.0 samples, lowers the protected per-minute directional mass gate to 1.0, and uses stronger deterministic activation only when confidence is high.
+Before the intrahour-cycle threshold fix, the previous lowest registry scores were 83.3%. The miss pattern was concentrated at the full-hour and half-hour SineTest turning buckets: the learned cycle direction was correct, but those one-minute moves had directional mass around 3.49 and did not cross the old 4.0 per-minute activation threshold. The runtime fix keeps the global observation gate at 48.0 samples, lowers the protected per-minute directional mass gate to 1.0, and uses stronger deterministic activation only when evidence confidence is high. The calibration policy is covered by focused runtime tests for insufficient evidence, balanced evidence, deterministic confidence-floor activation, and adapter reset.
 
 | Group | Previous worst accuracy | Current accuracy | Current min confidence |
 | --- | ---: | ---: | ---: |

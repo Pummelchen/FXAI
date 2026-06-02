@@ -687,30 +687,196 @@ public struct FXAIIntrahourCycleCertifiedPlugin: FXAIPlannedPlugin {
     }
 }
 
+public struct FXAIIntrahourCycleConfidenceCalibration: Hashable, Sendable {
+    public let learnedEdge: Double
+    public let evidenceConfidence: Double
+    public let directionalMass: Double
+    public let directionalObservationWeight: Double
+    public let readiness: Double
+    public let activation: Double
+    public let activationCeiling: Double
+    public let confidenceFloor: Double
+    public let reliabilityFloor: Double
+    public let deterministic: Bool
+
+    public func calibratedConfidence(predictionConfidence: Double, directionalConfidence: Double) -> Double {
+        let base = fxClamp(fxSafeFinite(predictionConfidence), 0.0, 1.0)
+        let directional = fxClamp(fxSafeFinite(directionalConfidence), 0.0, 1.0)
+        let blended = directional * activation + base * (1.0 - activation)
+        return fxClamp(max(base, blended, confidenceFloor), 0.0, 1.0)
+    }
+
+    public func calibratedReliability(predictionReliability: Double) -> Double {
+        fxClamp(max(fxSafeFinite(predictionReliability), reliabilityFloor), 0.0, 1.0)
+    }
+}
+
+public struct FXAIIntrahourCycleCalibrationPolicy: Hashable, Sendable {
+    public static let standard = FXAIIntrahourCycleCalibrationPolicy()
+
+    public var minimumDirectionalObservationWeight: Double
+    // SineTest full-hour and half-hour turning buckets have small one-minute moves,
+    // so the per-minute mass threshold must stay below those calibrated buckets.
+    public var minimumMinuteDirectionalMass: Double
+    public var minimumEvidenceConfidence: Double
+    public var minimumActivation: Double
+    public var readinessObservationWeight: Double
+    public var weakActivationCeiling: Double
+    public var strongActivationCeiling: Double
+    public var deterministicConfidenceThreshold: Double
+    public var deterministicConfidenceFloor: Double
+    public var minimumMinuteDirectionalMassForConfidenceFloor: Double
+    public var weakMinimumSkipProbability: Double
+    public var strongMinimumSkipProbability: Double
+    public var weakMaximumSkipProbability: Double
+    public var strongMaximumSkipProbability: Double
+    public var skipConfidencePenalty: Double
+    public var reliabilityBase: Double
+    public var reliabilityGain: Double
+
+    public init(
+        minimumDirectionalObservationWeight: Double = 48.0,
+        minimumMinuteDirectionalMass: Double = 1.0,
+        minimumEvidenceConfidence: Double = 0.20,
+        minimumActivation: Double = 0.05,
+        readinessObservationWeight: Double = 144.0,
+        weakActivationCeiling: Double = 0.94,
+        strongActivationCeiling: Double = 0.995,
+        deterministicConfidenceThreshold: Double = 0.80,
+        deterministicConfidenceFloor: Double = 0.955,
+        minimumMinuteDirectionalMassForConfidenceFloor: Double = 8.0,
+        weakMinimumSkipProbability: Double = 0.02,
+        strongMinimumSkipProbability: Double = 0.005,
+        weakMaximumSkipProbability: Double = 0.14,
+        strongMaximumSkipProbability: Double = 0.04,
+        skipConfidencePenalty: Double = 0.12,
+        reliabilityBase: Double = 0.50,
+        reliabilityGain: Double = 0.45
+    ) {
+        let weakCeiling = fxClamp(fxSafeFinite(weakActivationCeiling), 0.0, 1.0)
+        let strongCeiling = fxClamp(max(fxSafeFinite(strongActivationCeiling), weakCeiling), 0.0, 1.0)
+        let weakMinimumSkip = fxClamp(fxSafeFinite(weakMinimumSkipProbability), 0.0, 1.0)
+        let strongMinimumSkip = fxClamp(fxSafeFinite(strongMinimumSkipProbability), 0.0, 1.0)
+        let weakMaximumSkip = fxClamp(max(fxSafeFinite(weakMaximumSkipProbability), weakMinimumSkip), 0.0, 1.0)
+        let strongMaximumSkip = fxClamp(max(fxSafeFinite(strongMaximumSkipProbability), strongMinimumSkip), 0.0, 1.0)
+
+        self.minimumDirectionalObservationWeight = max(0.0, fxSafeFinite(minimumDirectionalObservationWeight))
+        self.minimumMinuteDirectionalMass = max(0.0, fxSafeFinite(minimumMinuteDirectionalMass))
+        self.minimumEvidenceConfidence = fxClamp(fxSafeFinite(minimumEvidenceConfidence), 0.0, 1.0)
+        self.minimumActivation = fxClamp(fxSafeFinite(minimumActivation), 0.0, 1.0)
+        self.readinessObservationWeight = max(1.0e-9, fxSafeFinite(readinessObservationWeight))
+        self.weakActivationCeiling = weakCeiling
+        self.strongActivationCeiling = strongCeiling
+        self.deterministicConfidenceThreshold = fxClamp(
+            fxSafeFinite(deterministicConfidenceThreshold),
+            0.0,
+            1.0
+        )
+        self.deterministicConfidenceFloor = fxClamp(fxSafeFinite(deterministicConfidenceFloor), 0.0, 1.0)
+        self.minimumMinuteDirectionalMassForConfidenceFloor = max(
+            0.0,
+            fxSafeFinite(minimumMinuteDirectionalMassForConfidenceFloor)
+        )
+        self.weakMinimumSkipProbability = weakMinimumSkip
+        self.strongMinimumSkipProbability = strongMinimumSkip
+        self.weakMaximumSkipProbability = weakMaximumSkip
+        self.strongMaximumSkipProbability = strongMaximumSkip
+        self.skipConfidencePenalty = max(0.0, fxSafeFinite(skipConfidencePenalty))
+        self.reliabilityBase = fxClamp(fxSafeFinite(reliabilityBase), 0.0, 1.0)
+        self.reliabilityGain = fxClamp(fxSafeFinite(reliabilityGain), 0.0, 1.0)
+    }
+
+    public func calibration(
+        learnedEdge: Double,
+        directionalMass: Double,
+        directionalObservationWeight: Double
+    ) -> FXAIIntrahourCycleConfidenceCalibration? {
+        let finiteEdge = fxClamp(fxSafeFinite(learnedEdge), -1.0, 1.0)
+        let finiteDirectionalMass = max(0.0, fxSafeFinite(directionalMass))
+        let finiteObservationWeight = max(0.0, fxSafeFinite(directionalObservationWeight))
+        guard finiteObservationWeight >= minimumDirectionalObservationWeight,
+              finiteDirectionalMass >= minimumMinuteDirectionalMass else {
+            return nil
+        }
+
+        let evidenceConfidence = fxClamp(abs(finiteEdge), 0.0, 1.0)
+        guard evidenceConfidence >= minimumEvidenceConfidence else {
+            return nil
+        }
+
+        let readiness = fxClamp(finiteObservationWeight / readinessObservationWeight, 0.0, 1.0)
+        let deterministic = evidenceConfidence >= deterministicConfidenceThreshold
+        let activationCeiling = deterministic ? strongActivationCeiling : weakActivationCeiling
+        let activation = fxClamp(
+            activationCeiling * readiness * sqrt(evidenceConfidence),
+            0.0,
+            activationCeiling
+        )
+        guard activation >= minimumActivation else {
+            return nil
+        }
+
+        let confidenceFloor = deterministic &&
+            finiteDirectionalMass >= minimumMinuteDirectionalMassForConfidenceFloor
+            ? deterministicConfidenceFloor
+            : 0.0
+        let reliabilityFloor = fxClamp(reliabilityBase + reliabilityGain * activation, 0.0, 1.0)
+        return FXAIIntrahourCycleConfidenceCalibration(
+            learnedEdge: finiteEdge,
+            evidenceConfidence: evidenceConfidence,
+            directionalMass: finiteDirectionalMass,
+            directionalObservationWeight: finiteObservationWeight,
+            readiness: readiness,
+            activation: activation,
+            activationCeiling: activationCeiling,
+            confidenceFloor: confidenceFloor,
+            reliabilityFloor: reliabilityFloor,
+            deterministic: deterministic
+        )
+    }
+
+    public func overlayProbabilities(
+        for calibration: FXAIIntrahourCycleConfidenceCalibration
+    ) -> [Double] {
+        let minimumSkip = calibration.deterministic
+            ? strongMinimumSkipProbability
+            : weakMinimumSkipProbability
+        let maximumSkip = calibration.deterministic
+            ? strongMaximumSkipProbability
+            : weakMaximumSkipProbability
+        let skip = fxClamp(
+            minimumSkip + skipConfidencePenalty * (1.0 - calibration.evidenceConfidence),
+            minimumSkip,
+            maximumSkip
+        )
+        let directional = 1.0 - skip
+        let buyShare = fxClamp(0.50 + 0.50 * calibration.learnedEdge, 0.001, 0.999)
+        return PluginContextRuntimeTools.normalizeClassDistribution([
+            directional * (1.0 - buyShare),
+            directional * buyShare,
+            skip
+        ])
+    }
+}
+
 public struct FXAIIntrahourCycleDirectionAdapter: Sendable {
     private static let minuteCount = 60
     private static let classCount = 3
-    private static let deterministicConfidenceThreshold = 0.80
-    private static let deterministicConfidenceFloor = 0.955
-    private static let minimumDirectionalObservationWeight = 48.0
-    // SineTest full-hour and half-hour turning buckets have small one-minute moves,
-    // so the per-minute mass threshold must stay below those calibrated buckets.
-    private static let minimumMinuteDirectionalMass = 1.0
-    private static let minimumMinuteDirectionalMassForConfidenceFloor = 8.0
+    private static let initialClassMass = 0.01
 
+    public let calibrationPolicy: FXAIIntrahourCycleCalibrationPolicy
     private var minuteClassMass: [[Double]]
     private var directionalObservationWeight: Double
 
-    public init() {
-        self.minuteClassMass = Array(
-            repeating: Array(repeating: 0.01, count: Self.classCount),
-            count: Self.minuteCount
-        )
+    public init(calibrationPolicy: FXAIIntrahourCycleCalibrationPolicy = .standard) {
+        self.calibrationPolicy = calibrationPolicy
+        self.minuteClassMass = Self.initialMinuteClassMass()
         self.directionalObservationWeight = 0.0
     }
 
     public mutating func reset() {
-        self = FXAIIntrahourCycleDirectionAdapter()
+        minuteClassMass = Self.initialMinuteClassMass()
+        directionalObservationWeight = 0.0
     }
 
     public mutating func train(_ request: TrainRequestV4) {
@@ -735,46 +901,31 @@ public struct FXAIIntrahourCycleDirectionAdapter: Sendable {
         let sellMass = masses[LabelClass.sell.rawValue]
         let buyMass = masses[LabelClass.buy.rawValue]
         let directionalMass = sellMass + buyMass
-        guard directionalObservationWeight >= Self.minimumDirectionalObservationWeight,
-              directionalMass >= Self.minimumMinuteDirectionalMass else {
-            return prediction
-        }
-
         let learnedEdge = (buyMass - sellMass) / max(directionalMass, 1.0e-9)
-        let confidence = fxClamp(abs(learnedEdge), 0.0, 1.0)
-        guard confidence >= 0.20 else {
+        guard let calibration = calibrationPolicy.calibration(
+            learnedEdge: learnedEdge,
+            directionalMass: directionalMass,
+            directionalObservationWeight: directionalObservationWeight
+        ) else {
             return prediction
         }
 
-        let readiness = fxClamp(directionalObservationWeight / 144.0, 0.0, 1.0)
-        let activationCeiling = confidence >= Self.deterministicConfidenceThreshold ? 0.995 : 0.94
-        let activation = fxClamp(activationCeiling * readiness * sqrt(confidence), 0.0, activationCeiling)
-        guard activation >= 0.05 else {
-            return prediction
-        }
-
-        let overlay = overlayProbabilities(learnedEdge: learnedEdge, confidence: confidence)
+        let overlay = calibrationPolicy.overlayProbabilities(for: calibration)
         let base = PluginContextRuntimeTools.normalizeClassDistribution(prediction.classProbabilities)
         let blended = PluginContextRuntimeTools.normalizeClassDistribution(
             zip(base, overlay).map { baseProbability, overlayProbability in
-                ((1.0 - activation) * baseProbability) + (activation * overlayProbability)
+                ((1.0 - calibration.activation) * baseProbability) + (calibration.activation * overlayProbability)
             }
         )
 
         var adjusted = prediction
         adjusted.classProbabilities = blended
         let directionalConfidence = max(blended[LabelClass.buy.rawValue], blended[LabelClass.sell.rawValue])
-        let calibratedConfidence = directionalConfidence * activation + prediction.confidence * (1.0 - activation)
-        let deterministicFloor = confidence >= Self.deterministicConfidenceThreshold &&
-            directionalMass >= Self.minimumMinuteDirectionalMassForConfidenceFloor
-            ? Self.deterministicConfidenceFloor
-            : 0.0
-        adjusted.confidence = fxClamp(
-            max(prediction.confidence, calibratedConfidence, deterministicFloor),
-            0.0,
-            1.0
+        adjusted.confidence = calibration.calibratedConfidence(
+            predictionConfidence: prediction.confidence,
+            directionalConfidence: directionalConfidence
         )
-        adjusted.reliability = fxClamp(max(prediction.reliability, 0.50 + 0.45 * activation), 0.0, 1.0)
+        adjusted.reliability = calibration.calibratedReliability(predictionReliability: prediction.reliability)
         if adjusted.moveMeanPoints <= 0.0 {
             let meanMove = max(context.minMovePoints, 0.10)
             adjusted.moveMeanPoints = meanMove
@@ -787,17 +938,11 @@ public struct FXAIIntrahourCycleDirectionAdapter: Sendable {
         return adjusted
     }
 
-    private func overlayProbabilities(learnedEdge: Double, confidence: Double) -> [Double] {
-        let minimumSkip = confidence >= Self.deterministicConfidenceThreshold ? 0.005 : 0.02
-        let maximumSkip = confidence >= Self.deterministicConfidenceThreshold ? 0.04 : 0.14
-        let skip = fxClamp(minimumSkip + 0.12 * (1.0 - confidence), minimumSkip, maximumSkip)
-        let directional = 1.0 - skip
-        let buyShare = fxClamp(0.50 + 0.50 * learnedEdge, 0.001, 0.999)
-        return PluginContextRuntimeTools.normalizeClassDistribution([
-            directional * (1.0 - buyShare),
-            directional * buyShare,
-            skip
-        ])
+    private static func initialMinuteClassMass() -> [[Double]] {
+        Array(
+            repeating: Array(repeating: Self.initialClassMass, count: Self.classCount),
+            count: Self.minuteCount
+        )
     }
 
     private static func minuteOfHour(timestampUTC: Int64) -> Int {
