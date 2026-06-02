@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 from collections.abc import Mapping
+
+def sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
 
 def plugin_family_name(family_id: int) -> str:
     mapping = {
@@ -241,5 +244,3 @@ def family_distillation_profile(family_id: int) -> dict:
         "analog_weight": 0.08,
         "foundation_weight": 0.14,
     }
-
-

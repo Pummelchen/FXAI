@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .common import COMMON_PROMOTION_DIR, RESEARCH_DIR, ensure_dir, safe_token
+from .common import COMMON_PROMOTION_DIR, RESEARCH_DIR, OfflineLabError, ensure_dir, safe_token
 from testlab.shared import RUNTIME_DIR, runtime_artifact_safe_symbol
 
 
@@ -113,10 +113,12 @@ def build_symbol_performance_report(symbol: str,
                                     budgets: dict[str, float] | None = None) -> dict[str, object]:
     budgets = dict(DEFAULT_BUDGETS if budgets is None else budgets)
     deploy = _load_kv(COMMON_PROMOTION_DIR / f"fxai_live_deploy_{safe_token(symbol)}.tsv")
-    try:
-        budgets["runtime_total_ms_max"] = float(deploy.get("performance_budget_ms", budgets["runtime_total_ms_max"]))
-    except Exception:
-        pass
+    raw_budget = deploy.get("performance_budget_ms")
+    if raw_budget not in (None, ""):
+        try:
+            budgets["runtime_total_ms_max"] = float(raw_budget)
+        except (TypeError, ValueError) as exc:
+            raise OfflineLabError(f"invalid performance_budget_ms for {symbol}: {raw_budget!r}") from exc
     path = runtime_performance_manifest_path(symbol)
     rows = _load_tsv(path)
     report: dict[str, object] = {

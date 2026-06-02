@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -27,10 +28,8 @@ def _portable_artifact_path(path: Path) -> str:
     resolved = path.resolve()
     repo_root = REPO_ROOT.resolve()
     runtime_dir = COMMON_MICROSTRUCTURE_JSON.parent.resolve()
-    try:
+    with suppress(ValueError):
         return str(resolved.relative_to(repo_root))
-    except ValueError:
-        pass
     try:
         return "FILE_COMMON/FXAI/Runtime/" + str(resolved.relative_to(runtime_dir))
     except ValueError:
@@ -98,8 +97,8 @@ def sync_local_status_from_runtime() -> dict[str, Any]:
     if COMMON_MICROSTRUCTURE_STATUS.exists():
         try:
             health["runtime_status_mtime"] = COMMON_MICROSTRUCTURE_STATUS.stat().st_mtime
-        except Exception:
-            pass
+        except OSError as exc:
+            health["runtime_status_error"] = str(exc)
     json_dump(MICROSTRUCTURE_STATUS_PATH, payload)
     return payload
 

@@ -161,8 +161,8 @@ def read_utf16_or_text(path: Path) -> str:
     for enc in ("utf-16le", "utf-8"):
         try:
             return path.read_text(encoding=enc)
-        except Exception:
-            pass
+        except UnicodeError:
+            continue
     return path.read_text(errors="replace")
 
 

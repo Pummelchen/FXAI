@@ -5,6 +5,7 @@ from collections import defaultdict
 from pathlib import Path
 import libsql
 
+from .common import OfflineLabError
 from .common import *
 from .shadow_fleet import latest_shadow_rows, symbol_shadow_summary
 
@@ -23,6 +24,19 @@ def _weighted_mean(items: list[tuple[float, float]], default: float) -> float:
     if total_w <= 1e-9:
         return float(default)
     return total_v / total_w
+
+
+def _student_target_overrides(raw: object, *, plugin_name: str, symbol: str) -> dict:
+    text = str(raw or "{}").strip()
+    if not text:
+        return {}
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise OfflineLabError(f"invalid student_target_json for {symbol}/{plugin_name}") from exc
+    if not isinstance(payload, dict):
+        raise OfflineLabError(f"student_target_json for {symbol}/{plugin_name} must be a JSON object")
+    return payload
 
 
 FOUNDATION_MODEL_FEATURES = [
@@ -358,10 +372,13 @@ def write_student_deployment_bundles(conn: libsql.Connection,
         )
         target = family_distillation_profile(family_id)
         if distill:
-            try:
-                target.update(json.loads(distill.get("student_target_json", "{}") or "{}"))
-            except Exception:
-                pass
+            target.update(
+                _student_target_overrides(
+                    distill.get("student_target_json", "{}"),
+                    plugin_name=plugin_name,
+                    symbol=symbol,
+                )
+            )
 
         mean_shadow = _clamp(shadow.get("shadow_score", 0.0), 0.0, 1.0)
         route_regret = _clamp(shadow.get("route_regret", 0.0), 0.0, 1.0)

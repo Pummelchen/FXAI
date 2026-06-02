@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .shared import BASELINES_DIR
+from .reporting import build_summary, load_rows
+from .shared import BASELINES_DIR, load_json
 
 def resolve_baseline_path(name_or_path: str) -> Path:
     candidate = Path(name_or_path)
@@ -168,5 +169,4 @@ def compare_summary_data(current: dict, baseline: dict) -> dict:
         "regressions": regressions,
         "improvements": improvements,
     }
-
 

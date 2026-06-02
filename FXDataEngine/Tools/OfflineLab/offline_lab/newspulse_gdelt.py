@@ -7,6 +7,7 @@ import ssl
 import time
 import urllib.parse
 import urllib.request
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -104,12 +105,19 @@ def build_gdelt_url(query_spec: dict[str, Any], sources: dict[str, Any]) -> str:
 def _ssl_context(allow_insecure_tls_fallback: bool):
     try:
         import certifi  # type: ignore
-
-        return ssl.create_default_context(cafile=certifi.where())
-    except Exception:
-        if allow_insecure_tls_fallback:
-            return ssl._create_unverified_context()
+    except ImportError:
         return ssl.create_default_context()
+    try:
+        return ssl.create_default_context(cafile=certifi.where())
+    except (OSError, ssl.SSLError) as exc:
+        if allow_insecure_tls_fallback:
+            warnings.warn(
+                "Falling back to an unverified TLS context for GDELT because the verified certifi context failed.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return ssl._create_unverified_context()
+        raise OfflineLabError("failed to create verified TLS context for GDELT") from exc
 
 
 def fetch_query_results(query_spec: dict[str, Any],

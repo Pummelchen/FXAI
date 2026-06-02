@@ -5,6 +5,7 @@ import datetime as dt
 import json
 import os
 import shutil
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -137,10 +138,8 @@ def _resolve_portable_path(raw: str | Path, *, root: Path = ROOT) -> Path:
 
 
 def _relative_link(from_path: Path, target_path: Path) -> str:
-    try:
+    with suppress(OSError, ValueError):
         return Path(os.path.relpath(target_path.resolve(), start=from_path.resolve().parent)).as_posix()
-    except Exception:
-        pass
     try:
         return target_path.resolve().relative_to(ROOT.resolve()).as_posix()
     except ValueError:

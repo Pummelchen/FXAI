@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import libsql
 
+from .common import OfflineLabError
 from .common import *
 from .drift_governance import run_drift_governance_cycle
 from .shadow_fleet import symbol_shadow_summary
@@ -26,8 +27,8 @@ def _unlink_if_exists(raw_path: str) -> None:
         path = Path(path_text)
         if path.exists() and path.is_file():
             path.unlink()
-    except Exception:
-        pass
+    except OSError as exc:
+        raise OfflineLabError(f"failed to remove stale artifact: {path_text}") from exc
 
 
 def write_portfolio_supervisor_profile(conn: libsql.Connection,

@@ -18,6 +18,10 @@ let package = Package(
             dependencies: [
                 .product(name: "FXDatabaseFXBacktestAPI", package: "FXDatabase")
             ]
+        ),
+        .testTarget(
+            name: "FXToolsTests",
+            dependencies: []
         )
     ],
     swiftLanguageModes: [.v6]

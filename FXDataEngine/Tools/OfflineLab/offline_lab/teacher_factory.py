@@ -5,6 +5,7 @@ from collections import defaultdict
 from pathlib import Path
 import libsql
 
+from .common import OfflineLabError
 from .common import *
 from .mode import resolve_runtime_mode
 from .shadow_fleet import latest_shadow_rows, symbol_shadow_summary
@@ -23,8 +24,8 @@ def _unlink_if_exists(raw_path: str) -> None:
         path = Path(path_text)
         if path.exists() and path.is_file():
             path.unlink()
-    except Exception:
-        pass
+    except OSError as exc:
+        raise OfflineLabError(f"failed to remove stale artifact: {path_text}") from exc
 
 
 def _weighted_mean(items: list[tuple[float, float]], default: float) -> float:
@@ -37,6 +38,19 @@ def _weighted_mean(items: list[tuple[float, float]], default: float) -> float:
     if total_w <= 1e-9:
         return float(default)
     return total_v / total_w
+
+
+def _student_target_overrides(raw: object, *, plugin_name: str, symbol: str) -> dict:
+    text = str(raw or "{}").strip()
+    if not text:
+        return {}
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise OfflineLabError(f"invalid student_target_json for {symbol}/{plugin_name}") from exc
+    if not isinstance(payload, dict):
+        raise OfflineLabError(f"student_target_json for {symbol}/{plugin_name} must be a JSON object")
+    return payload
 
 
 def _promotion_tier(mean_stability: float,
@@ -273,10 +287,13 @@ def write_foundation_teacher_artifacts(conn: libsql.Connection,
             distill = distill_map.get((symbol, plugin_name), {})
             student_target = family_distillation_profile(family_id)
             if distill:
-                try:
-                    student_target.update(json.loads(distill.get("student_target_json", "{}") or "{}"))
-                except Exception:
-                    pass
+                student_target.update(
+                    _student_target_overrides(
+                        distill.get("student_target_json", "{}"),
+                        plugin_name=plugin_name,
+                        symbol=symbol,
+                    )
+                )
             shadow = shadow_map.get((symbol, plugin_name), {})
             teacher_weight += float(student_target.get("teacher_weight", 0.58)) * weight
             student_weight += float(student_target.get("student_weight", 0.42)) * weight
@@ -402,10 +419,13 @@ def write_teacher_factory_artifacts(conn: libsql.Connection,
         base_profile = family_distillation_profile(family_id)
         student_target = dict(base_profile)
         if distill:
-            try:
-                student_target.update(json.loads(distill.get("student_target_json", "{}") or "{}"))
-            except Exception:
-                pass
+            student_target.update(
+                _student_target_overrides(
+                    distill.get("student_target_json", "{}"),
+                    plugin_name=plugin_name,
+                    symbol=symbol,
+                )
+            )
 
         teacher_payload = {
             "profile_name": args.profile,
@@ -600,10 +620,13 @@ def write_live_deployment_profiles(conn: libsql.Connection,
             distill = distill_map.get((symbol, str(item["plugin_name"])))
             distill_target = family_distillation_profile(family_id)
             if distill:
-                try:
-                    distill_target.update(json.loads(distill.get("student_target_json", "{}") or "{}"))
-                except Exception:
-                    pass
+                distill_target.update(
+                    _student_target_overrides(
+                        distill.get("student_target_json", "{}"),
+                        plugin_name=str(item["plugin_name"]),
+                        symbol=symbol,
+                    )
+                )
             family_card = family_cards.get((symbol, family_id), {})
             student_bundle = student_bundles.get((symbol, str(item["plugin_name"])), {})
             macro_score = float(family_card.get("mean_macro_score", 0.0))

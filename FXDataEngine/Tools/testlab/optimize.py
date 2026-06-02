@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
-from .reporting import grade
-from .shared import DEFAULT_TEXT_REPORT, EXPERIMENTS_DIR, build_effective_audit_args, deep_merge, load_oracles, write_json
+from .reporting import load_current_summary
+from .shared import (
+    EXPERIMENTS_DIR,
+    build_effective_audit_args,
+    get_oracle,
+    load_oracles,
+    parse_brace_list,
+)
 
 def build_optimization_campaign(summary: dict, oracles: dict) -> dict:
     campaign = {"plugins": {}}
@@ -261,6 +268,8 @@ def build_run_audit_namespace(base_args, run: dict, output_path: Path):
 
 
 def execute_optimization_campaign(campaign: dict, args) -> int:
+    from .cli import cmd_run_audit
+
     args = build_effective_audit_args(args)
     ts = time.strftime("%Y%m%d_%H%M%S")
     out_dir = Path(args.output_dir) if args.output_dir else (EXPERIMENTS_DIR / ts)
@@ -294,10 +303,9 @@ def execute_optimization_campaign(campaign: dict, args) -> int:
             # Keep running, but make failures explicit in the ledger.
             continue
 
-    print(f"\n# FXAI Optimization Execution Ledger\n")
+    print("\n# FXAI Optimization Execution Ledger\n")
     print(f"output_dir: {out_dir}")
     print(f"runs: {len(results)}")
     failed = sum(1 for item in results if item["status"] != "ok")
     print(f"failed: {failed}")
     return 0 if failed == 0 else 1
-
