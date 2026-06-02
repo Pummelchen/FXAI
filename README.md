@@ -139,7 +139,8 @@ FXBacktest is the only project that adapts the root plugin zoo into backtest wor
 - Metal: Apple GPU acceleration is validated through runtime compilation and plugin-local buffer parity tests, and only counts as available on unified-memory M2/M3-or-newer hosts.
 - PyTorch: plugin backends require Apple Silicon MPS for accelerator runtime paths unless a test explicitly opts into CPU fallback.
 - TensorFlow: plugin backends require a TensorFlow Metal GPU device for accelerator runtime paths unless a test explicitly opts into CPU fallback.
-- Python bridge command: FXAI uses `python3` for PyTorch and TensorFlow plugin bridges. Ensure `python3` resolves to the environment where `tensorflow` reports at least one GPU device.
+- Python bridge command: FXAI uses `FXAI_PYTHON` when set, otherwise `python3`, for plugin Python bridges. On systems where `python3` is newer than TensorFlow Metal supports, set `FXAI_PYTHON` to a compatible system interpreter such as Homebrew `python3.12`.
+- TensorFlow Metal stack: use `tensorflow==2.18.1` with `tensorflow-metal==1.2.0` on Python 3.12/3.11/3.10. Newer default Python versions, such as Python 3.14, are not a compatible target for this stack.
 - CoreML/Neural Engine: not declared by plugins until real export, load, prediction, and parity tests exist.
 
 ## Install
@@ -150,12 +151,12 @@ Run the macOS installer from the repo root:
 ./install_fxai.sh
 ```
 
-The installer is Bash 3 compatible for macOS. It rejects Intel x86 and Apple M1 hosts, installs Homebrew dependencies, checks Xcode/Command Line Tools for Swift and Metal, scans this repo for Python imports, and installs matching Python packages with no hard version pins.
+The installer is Bash 3 compatible for macOS. It rejects Intel x86 and Apple M1 hosts, installs Homebrew dependencies, checks Xcode/Command Line Tools for Swift and Metal, scans this repo for Python imports, and installs matching Python packages. For TensorFlow Metal it prefers a compatible Python 3.12/3.11/3.10 interpreter and pins the verified `tensorflow==2.18.1` plus `tensorflow-metal==1.2.0` pair.
 
-Verify TensorFlow Metal on the same `python3` command used by FXAI:
+Verify TensorFlow Metal on the same command used by FXAI:
 
 ```bash
-python3 -c "import tensorflow as tf; print('TF:', tf.__version__); print('GPU:', tf.config.list_physical_devices('GPU'))"
+${FXAI_PYTHON:-python3.12} -c "import tensorflow as tf; print('TF:', tf.__version__); print('GPU:', tf.config.list_physical_devices('GPU'))"
 ```
 
 Use a dry run to see what it would do:

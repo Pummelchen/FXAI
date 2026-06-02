@@ -46,6 +46,8 @@ struct CertificationRunner {
     func run() throws -> FXAICertificationEvidenceRequest {
         let started = Int64(Date().timeIntervalSince1970)
         var components: [CommandResult] = []
+        let pythonExecutable = Self.defaultPythonExecutable()
+        let tensorflowPythonExecutable = Self.resolveTensorFlowPythonExecutable(fallback: pythonExecutable)
 
         components.append(capture("git.commit", type: "environment", command: ["git", "rev-parse", "HEAD"]))
         components.append(capture("git.status", type: "environment", command: ["git", "status", "--porcelain"]))
@@ -53,12 +55,12 @@ struct CertificationRunner {
         components.append(capture("xcode.version", type: "environment", command: ["xcodebuild", "-version"]))
         components.append(capture("macos.version", type: "environment", command: ["sw_vers"]))
         components.append(capture("hardware", type: "environment", command: ["uname", "-m"]))
-        components.append(capture("python.version", type: "environment", command: ["python3", "--version"]))
+        components.append(capture("python.version", type: "environment", command: [pythonExecutable, "--version"]))
         components.append(capture(
             "pytorch.status",
             type: "environment",
             command: [
-                "python3", "-c",
+                pythonExecutable, "-c",
                 """
                 import torch
                 mps = bool(getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available())
@@ -72,10 +74,12 @@ struct CertificationRunner {
             "tensorflow.status",
             type: "environment",
             command: [
-                "python3", "-c",
+                tensorflowPythonExecutable, "-c",
                 """
+                import sys
                 import tensorflow as tf
                 gpu = tf.config.list_physical_devices('GPU')
+                print(sys.executable)
                 print(tf.__version__)
                 print('gpu=' + str(gpu))
                 raise SystemExit(0 if gpu else 1)
@@ -132,6 +136,35 @@ struct CertificationRunner {
             evidenceHash: evidenceHash,
             componentResults: components.map(\.evidenceDTO)
         )
+    }
+
+    private static func defaultPythonExecutable() -> String {
+        if let configured = ProcessInfo.processInfo.environment["FXAI_PYTHON"], !configured.isEmpty {
+            return configured
+        }
+        return "python3"
+    }
+
+    private static func resolveTensorFlowPythonExecutable(fallback: String) -> String {
+        if hasTensorFlowMetal(fallback) {
+            return fallback
+        }
+        for candidate in ["python3.12", "python3.11", "python3.10"] where hasTensorFlowMetal(candidate) {
+            return candidate
+        }
+        return fallback
+    }
+
+    private static func hasTensorFlowMetal(_ executable: String) -> Bool {
+        let probe = ProcessRunner.run([
+            executable,
+            "-c",
+            """
+            import tensorflow as tf
+            raise SystemExit(0 if tf.config.list_physical_devices('GPU') else 1)
+            """
+        ], in: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+        return probe.exitCode == 0
     }
 
     private func capture(_ id: String, type: String, command: [String]) -> CommandResult {

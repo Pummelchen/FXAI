@@ -171,6 +171,12 @@ install_brew_formulas() {
 resolve_python() {
     if [ -n "${FXAI_PYTHON:-}" ]; then
         PYTHON_BIN="$FXAI_PYTHON"
+    elif have python3.12; then
+        PYTHON_BIN="$(command -v python3.12)"
+    elif have python3.11; then
+        PYTHON_BIN="$(command -v python3.11)"
+    elif have python3.10; then
+        PYTHON_BIN="$(command -v python3.10)"
     elif have python3; then
         PYTHON_BIN="$(command -v python3)"
     elif have brew; then
@@ -245,8 +251,8 @@ build_python_package_list() {
                 append_unique "$package_file" torch
                 ;;
             tensorflow)
-                append_unique "$package_file" tensorflow-macos
-                append_unique "$optional_file" tensorflow-metal
+                append_unique "$package_file" "tensorflow==2.18.1"
+                append_unique "$optional_file" "tensorflow-metal==1.2.0"
                 ;;
             pytest)
                 append_unique "$package_file" pytest
