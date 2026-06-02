@@ -60,6 +60,49 @@ final class RlPPOPluginTests: XCTestCase {
         XCTAssertNoThrow(try after.validate())
     }
 
+    func testSellTruthDecisionUsesLabelWhenMoveMagnitudeIsPositive() throws {
+        let request = Self.request(direction: -1.0, shapedWindow: true, dataHasVolume: true)
+        var plugin = RlPPOPlugin()
+        let before = try plugin.predict(request, hyperParameters: Self.hyperParameters())
+
+        for _ in 0..<90 {
+            try plugin.train(
+                Self.trainRequest(from: request, label: .sell, movePoints: 3.0),
+                hyperParameters: Self.hyperParameters()
+            )
+        }
+
+        let after = try plugin.predict(request, hyperParameters: Self.hyperParameters())
+        XCTAssertGreaterThan(after.classProbabilities[LabelClass.sell.rawValue], before.classProbabilities[LabelClass.sell.rawValue])
+        XCTAssertGreaterThan(after.classProbabilities[LabelClass.sell.rawValue], after.classProbabilities[LabelClass.buy.rawValue])
+        XCTAssertNoThrow(try after.validate())
+    }
+
+    func testDirectionalMoveBelowCostResolvesToSkipTruthDecision() throws {
+        let request = Self.request(
+            direction: 1.0,
+            shapedWindow: true,
+            dataHasVolume: true,
+            priceCostPoints: 1.25,
+            minMovePoints: 0.50
+        )
+        var plugin = RlPPOPlugin()
+        let before = try plugin.predict(request, hyperParameters: Self.hyperParameters())
+
+        for _ in 0..<100 {
+            try plugin.train(
+                Self.trainRequest(from: request, label: .buy, movePoints: 0.40),
+                hyperParameters: Self.hyperParameters()
+            )
+        }
+
+        let after = try plugin.predict(request, hyperParameters: Self.hyperParameters())
+        XCTAssertGreaterThan(after.classProbabilities[LabelClass.skip.rawValue], before.classProbabilities[LabelClass.skip.rawValue])
+        XCTAssertGreaterThan(after.classProbabilities[LabelClass.skip.rawValue], after.classProbabilities[LabelClass.buy.rawValue])
+        XCTAssertGreaterThan(after.classProbabilities[LabelClass.skip.rawValue], after.classProbabilities[LabelClass.sell.rawValue])
+        XCTAssertNoThrow(try after.validate())
+    }
+
     func testVolumeAffectsPredictionOnlyWhenDatasetHasVolume() throws {
         let plugin = RlPPOPlugin()
         let withVolume = try plugin.predict(Self.request(direction: 1.0, shapedWindow: true, dataHasVolume: true), hyperParameters: Self.hyperParameters())
@@ -95,11 +138,21 @@ final class RlPPOPluginTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("NLP").path))
     }
 
-    private static func request(direction: Double, shapedWindow: Bool, dataHasVolume: Bool) -> PredictRequestV4 {
+    private static func request(
+        direction: Double,
+        shapedWindow: Bool,
+        dataHasVolume: Bool,
+        priceCostPoints: Double = 0.20,
+        minMovePoints: Double = 0.50
+    ) -> PredictRequestV4 {
         let window = sequenceWindow(direction: direction, volume: 1.15, shaped: shapedWindow)
         return PredictRequestV4(
             valid: true,
-            context: context(dataHasVolume: dataHasVolume),
+            context: context(
+                dataHasVolume: dataHasVolume,
+                priceCostPoints: priceCostPoints,
+                minMovePoints: minMovePoints
+            ),
             windowSize: window.count,
             x: features(direction: direction, volume: 1.15),
             xWindow: window
@@ -125,13 +178,17 @@ final class RlPPOPluginTests: XCTestCase {
         )
     }
 
-    private static func context(dataHasVolume: Bool) -> PluginContextV4 {
+    private static func context(
+        dataHasVolume: Bool,
+        priceCostPoints: Double = 0.20,
+        minMovePoints: Double = 0.50
+    ) -> PluginContextV4 {
         PluginContextV4(
             sessionBucket: 2,
             horizonMinutes: 30,
             sequenceBars: 33,
-            priceCostPoints: 0.20,
-            minMovePoints: 0.50,
+            priceCostPoints: priceCostPoints,
+            minMovePoints: minMovePoints,
             pointValue: 1.0,
             sampleTimeUTC: 1_800_230_000,
             dataHasVolume: dataHasVolume

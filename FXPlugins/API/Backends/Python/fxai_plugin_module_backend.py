@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import hashlib
+import inspect
 import json
 import math
 import os
@@ -457,12 +458,24 @@ def _call_train_step(
     label: int,
     move: float,
     state: Any,
-    data_has_volume: bool
+    data_has_volume: bool,
+    transaction_cost_points: float | None = None,
 ) -> Any:
+    train_step = module.train_step
+    parameters = inspect.signature(train_step).parameters
+    if transaction_cost_points is not None and "transaction_cost_points" in parameters:
+        return train_step(
+            [sequence],
+            [label],
+            [move],
+            state=state,
+            data_has_volume=data_has_volume,
+            transaction_cost_points=transaction_cost_points,
+        )
     try:
-        return module.train_step([sequence], [label], [move], state=state, data_has_volume=data_has_volume)
+        return train_step([sequence], [label], [move], state=state, data_has_volume=data_has_volume)
     except TypeError:
-        return module.train_step([sequence], [label], [move], state=state)
+        return train_step([sequence], [label], [move], state=state)
 
 
 def _call_predict_batch(
@@ -516,9 +529,11 @@ def _handle_train(command: dict[str, Any]) -> dict[str, Any]:
     _seed_framework(plugin_name, framework, model_identifier)
     module = _load_module(plugin_name, backend_path)
     label = _label_index(training.get("labelClass"))
-    move = abs(_safe_float(training.get("movePoints", 0.0)))
+    raw_move = _safe_float(training.get("movePoints", 0.0))
+    move = raw_move if plugin_name == "rl_ppo" else abs(raw_move)
     sequence = _sequence(inference)
     data_has_volume = bool(inference.get("dataHasVolume", False))
+    transaction_cost_points = _safe_float(inference.get("priceCostPoints", 0.0)) if plugin_name == "rl_ppo" else None
     state = _load_state(
         plugin_name,
         framework,
@@ -527,7 +542,15 @@ def _handle_train(command: dict[str, Any]) -> dict[str, Any]:
         sequence=sequence,
         data_has_volume=data_has_volume
     )
-    state = _call_train_step(module, sequence, label, move, state, data_has_volume)
+    state = _call_train_step(
+        module,
+        sequence,
+        label,
+        move,
+        state,
+        data_has_volume,
+        transaction_cost_points=transaction_cost_points,
+    )
     _save_state(plugin_name, framework, model_identifier, state)
     return {"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": True, "prediction": None, "error": None}
 

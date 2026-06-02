@@ -143,6 +143,60 @@ class OfflineFXRolloutEnvironment:
         return 0.0
 
 
+@dataclass(frozen=True)
+class PPOTruthDecision:
+    action: int
+    signed_move_points: float
+    gross_move_points: float
+    reward: float
+    buy_reward: float
+    sell_reward: float
+    skip_reward: float
+
+
+def ppo_truth_decision(
+    label: int,
+    move_points: float,
+    transaction_cost_points: float = 0.0,
+    reward_scale: float = 1.0,
+) -> PPOTruthDecision:
+    """Resolve the training label and move magnitude to the net-reward PPO action."""
+    normalized_label = max(0, min(int(label), ACTION_COUNT - 1))
+    gross_move = abs(float(move_points))
+    if normalized_label == 1:
+        signed_move = gross_move
+    elif normalized_label == 0:
+        signed_move = -gross_move
+    else:
+        signed_move = 0.0
+
+    scale = max(1.0e-9, float(reward_scale))
+    environment = OfflineFXRolloutEnvironment(
+        transaction_cost_points=transaction_cost_points,
+        reward_scale=scale,
+    )
+    buy_reward = environment.reward(signed_move, 1)
+    sell_reward = environment.reward(signed_move, 0)
+    skip_reward = environment.reward(signed_move, 2)
+    if buy_reward >= sell_reward:
+        directional_action = 1
+        directional_reward = buy_reward
+    else:
+        directional_action = 0
+        directional_reward = sell_reward
+    action = directional_action if directional_reward > skip_reward + 1.0e-9 else 2
+    reward = buy_reward if action == 1 else sell_reward if action == 0 else skip_reward
+    return PPOTruthDecision(
+        action=action,
+        signed_move_points=signed_move,
+        gross_move_points=gross_move,
+        reward=reward,
+        buy_reward=buy_reward,
+        sell_reward=sell_reward,
+        skip_reward=skip_reward,
+    )
+
+
 def append_offline_rollout(
     state: "RlPPOReferenceState",
     batch: Iterable[Iterable[float]] | torch.Tensor,
@@ -264,14 +318,23 @@ def train_step(
     state: Optional[RlPPOReferenceState] = None,
     lr: float = 3.0e-4,
     data_has_volume: bool = True,
+    transaction_cost_points: float = 0.0,
 ) -> RlPPOReferenceState:
     state = state or RlPPOReferenceState.create(lr=lr)
     device = next(state.model.parameters()).device
     observations = _features(batch, device, data_has_volume=data_has_volume)
     label_values = list(labels) or [2] * observations.shape[0]
     move_values = list(moves) or [0.0] * observations.shape[0]
-    actions = torch.tensor(label_values[: observations.shape[0]], dtype=torch.long, device=device).clamp(0, ACTION_COUNT - 1)
-    rewards = torch.tensor([abs(float(value)) for value in move_values[: observations.shape[0]]], dtype=torch.float32, device=device)
+    if len(label_values) < observations.shape[0]:
+        label_values.extend([2] * (observations.shape[0] - len(label_values)))
+    if len(move_values) < observations.shape[0]:
+        move_values.extend([0.0] * (observations.shape[0] - len(move_values)))
+    decisions = [
+        ppo_truth_decision(label, move, transaction_cost_points=transaction_cost_points)
+        for label, move in zip(label_values[: observations.shape[0]], move_values[: observations.shape[0]])
+    ]
+    actions = torch.tensor([decision.action for decision in decisions], dtype=torch.long, device=device)
+    rewards = torch.tensor([decision.reward for decision in decisions], dtype=torch.float32, device=device)
     old_distribution, old_values = state.model(observations)
     old_log_probs = old_distribution.log_prob(actions).detach()
     dones = torch.zeros_like(rewards)

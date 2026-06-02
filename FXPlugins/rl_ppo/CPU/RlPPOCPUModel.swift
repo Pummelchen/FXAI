@@ -1,6 +1,70 @@
 import FXDataEngine
 import Foundation
 
+struct RlPPOTruthDecision: Equatable, Sendable {
+    static let tieTolerance = 1.0e-9
+
+    let action: LabelClass
+    let signedMovePoints: Double
+    let grossMovePoints: Double
+    let netRewardPoints: Double
+    let valueTarget: Double
+    let moveTargetPoints: Double
+    let buyRewardPoints: Double
+    let sellRewardPoints: Double
+    let skipRewardPoints: Double
+
+    static func resolve(label: LabelClass, movePoints: Double, context: PluginContextV4) -> RlPPOTruthDecision {
+        let grossMove = abs(fxSafeFinite(movePoints))
+        let signedMove: Double
+        switch label {
+        case .buy:
+            signedMove = grossMove
+        case .sell:
+            signedMove = -grossMove
+        case .skip:
+            signedMove = 0.0
+        }
+
+        let cost = max(0.0, fxSafeFinite(context.priceCostPoints))
+        let buyReward = signedMove - cost
+        let sellReward = -signedMove - cost
+        let skipReward = 0.0
+        let directionalAction: LabelClass
+        let directionalReward: Double
+        if buyReward >= sellReward {
+            directionalAction = .buy
+            directionalReward = buyReward
+        } else {
+            directionalAction = .sell
+            directionalReward = sellReward
+        }
+        let action = directionalReward > skipReward + tieTolerance ? directionalAction : LabelClass.skip
+        let netReward: Double
+        switch action {
+        case .buy:
+            netReward = buyReward
+        case .sell:
+            netReward = sellReward
+        case .skip:
+            netReward = skipReward
+        }
+
+        let valueScale = max(context.minMovePoints, 0.10)
+        return RlPPOTruthDecision(
+            action: action,
+            signedMovePoints: signedMove,
+            grossMovePoints: grossMove,
+            netRewardPoints: netReward,
+            valueTarget: fxClamp(netReward / valueScale, 0.0, 3.0),
+            moveTargetPoints: max(0.0, grossMove - cost),
+            buyRewardPoints: buyReward,
+            sellRewardPoints: sellReward,
+            skipRewardPoints: skipReward
+        )
+    }
+}
+
 public struct RlPPOCPUModel: Sendable {
     private static let featureCount = 32
     private static let hiddenCount = 18
@@ -50,13 +114,18 @@ public struct RlPPOCPUModel: Sendable {
             movePoints: request.movePoints,
             priceCostPoints: request.context.priceCostPoints
         )
+        let truth = RlPPOTruthDecision.resolve(
+            label: label,
+            movePoints: request.movePoints,
+            context: request.context
+        )
         let features = buildFeatures(x: x, window: window, context: request.context)
         let hidden = hiddenActivations(features: features, window: window)
         updateRecurrentState(hidden: hidden)
         let raw = rawProbabilities(hidden: hidden)
         let valuePrediction = Self.dot(valueWeights, hiddenWithBias(hidden))
-        let reward = rewardTarget(label: label, movePoints: request.movePoints, context: request.context)
-        let moveTarget = max(0.0, abs(request.movePoints) - max(0.0, request.context.priceCostPoints))
+        let reward = truth.valueTarget
+        let moveTarget = truth.moveTargetPoints
         let volumeMultiplier = request.context.dataHasVolume ? 1.0 + 0.04 * abs(Self.safeFeature(x, 6)) : 1.0
         let sampleWeight = fxClamp(
             request.sampleWeight * volumeMultiplier *
@@ -67,12 +136,12 @@ public struct RlPPOCPUModel: Sendable {
             0.15,
             6.0
         )
-        updateClassHead(label: label, raw: raw, hidden: hidden, sampleWeight: sampleWeight, hyperParameters: hyperParameters)
+        updateClassHead(label: truth.action, raw: raw, hidden: hidden, sampleWeight: sampleWeight, hyperParameters: hyperParameters)
         updateMoveHead(targetMove: moveTarget, hidden: hidden, sampleWeight: sampleWeight, hyperParameters: hyperParameters)
         updateValueHead(targetReward: reward, predictedReward: valuePrediction, hidden: hidden, sampleWeight: sampleWeight, hyperParameters: hyperParameters)
-        calibrator.update(rawProbabilities: raw, labelClass: label, sampleWeight: sampleWeight, learningRate: hyperParameters.learningRate)
-        classMass[label.rawValue] += sampleWeight
-        updateMoveEMA(abs(request.movePoints))
+        calibrator.update(rawProbabilities: raw, labelClass: truth.action, sampleWeight: sampleWeight, learningRate: hyperParameters.learningRate)
+        classMass[truth.action.rawValue] += sampleWeight
+        updateMoveEMA(truth.grossMovePoints)
         qualityBank.update(request: request, sampleWeight: sampleWeight)
         steps += 1
     }
@@ -375,12 +444,6 @@ public struct RlPPOCPUModel: Sendable {
         for h in 0..<hb.count {
             valueWeights[h] = fxClamp(valueWeights[h] + learningRate * error * hb[h], -8.0, 8.0)
         }
-    }
-
-    private func rewardTarget(label: LabelClass, movePoints: Double, context: PluginContextV4) -> Double {
-        let signed = label == .buy ? movePoints : (label == .sell ? -movePoints : 0.0)
-        let net = abs(signed) - max(context.priceCostPoints, 0.0)
-        return fxClamp(label == .skip ? -0.10 : net / max(context.minMovePoints, 0.10), -3.0, 3.0)
     }
 
     private mutating func updateMoveEMA(_ movePoints: Double) {

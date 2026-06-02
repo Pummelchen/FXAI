@@ -30,7 +30,7 @@ final class ReferenceBackendConformanceTests: XCTestCase {
             ("ai_mythos_rdt", ["ARCHITECTURE_MODE = \"MYTHOS_RDT\"", "DecisionTrajectoryTools", "action_embedding", "last_pseudo_actions"]),
             ("wm_cfx", ["ARCHITECTURE_MODE = \"WM_CFX\"", "currency_exposure", "factor_gru", "cross_rate_decoder", "last_cross_rate_consistency"]),
             ("wm_graph", ["ARCHITECTURE_MODE = \"WM_GRAPH\"", "FXGraphTopology", "base_adjacency", "cycle_consistency_loss"]),
-            ("rl_ppo", ["ARCHITECTURE_MODE = \"proximalPolicyOptimization\"", "ActorCriticPPO", "OfflineFXRolloutEnvironment", "append_offline_rollout", "ppo_clipped_loss", "state.rollout.clear()"])
+            ("rl_ppo", ["ARCHITECTURE_MODE = \"proximalPolicyOptimization\"", "ActorCriticPPO", "OfflineFXRolloutEnvironment", "append_offline_rollout", "ppo_truth_decision", "transaction_cost_points", "ppo_clipped_loss", "state.rollout.clear()"])
         ]
 
         for expectation in expectations {

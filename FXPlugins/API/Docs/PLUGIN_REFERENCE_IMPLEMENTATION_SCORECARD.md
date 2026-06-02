@@ -48,7 +48,7 @@ PyTorch paths:
 | `mem_retrdiff` | 99.3 | 99.3 | Exact top-k retrieval, deterministic eviction, distance voting, Metal distance kernel. |
 | `mix_loffm` | 99.1 | 99.5 | Latent online factor/expert gating, Swift LOFFM reference math, modern PyTorch `nn.Module`/AdamW backend, persistence smoke. |
 | `mix_moe_conformal` | 99.1 | 99.5 | MoE routing, split-conformal reference cutoff/coverage, modern PyTorch `nn.Module`/AdamW backend, calibration fixtures. |
-| `rl_ppo` | 98.0 | 99.2 | Actor-critic PPO, GAE, clipped loss, offline FX rollout reward/accounting, PyTorch/MPS runtime. |
+| `rl_ppo` | 98.0 | 99.2 | Actor-critic PPO, GAE, clipped loss, net-of-cost truth decision, offline FX rollout reward/accounting, PyTorch/MPS runtime. |
 | `ai_autoformer` | 99.1 | 99.4 | Series decomposition, Autoformer encoder blocks, auto-correlation backend, sequence CPU fallback, non-runtime Metal projection source, runtime evidence. |
 | `ai_chronos` | 98.1 | 99.2 | Chronos-style tokenization, causal transformer, NLP event merger, PyTorch/MPS runtime. |
 | `ai_geodesic` | 99.1 | 99.1 | Geodesic/RBF attention over feature landmarks, volume-gated CPU and PyTorch paths. |
