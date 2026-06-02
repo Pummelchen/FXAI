@@ -4,9 +4,7 @@ import XCTest
 
 final class PluginExternalBackendRuntimeTests: XCTestCase {
     func testEveryDeclaredPyTorchBackendPredictsTrainsPersistsAndReloadsWhenTorchIsInstalled() throws {
-        guard Self.pythonCanImport("torch") else {
-            throw XCTSkip("PyTorch is not installed for this runner")
-        }
+        let pythonExecutable = try BackendPythonTestSupport.requirePythonImporting("torch")
         let plans = FXAIPluginRegistry.accelerationPlans().filter { $0.declares(.pyTorchMPS) }
         XCTAssertFalse(plans.isEmpty)
 
@@ -14,7 +12,12 @@ final class PluginExternalBackendRuntimeTests: XCTestCase {
             do {
                 let temporaryDirectory = try Self.makeTemporaryDirectory(plan.pluginName, suffix: "torch")
                 defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
-                let bridge = Self.bridge(pluginName: plan.pluginName, framework: .pyTorch, stateDirectory: temporaryDirectory)
+                let bridge = Self.bridge(
+                    pluginName: plan.pluginName,
+                    framework: .pyTorch,
+                    executable: pythonExecutable,
+                    stateDirectory: temporaryDirectory
+                )
                 let payload = Self.inferencePayload(pluginName: plan.pluginName, framework: .pyTorch, includeText: false)
 
                 let prediction = try bridge.predictSynchronously(payload)
@@ -26,7 +29,12 @@ final class PluginExternalBackendRuntimeTests: XCTestCase {
                     "\(plan.pluginName) PyTorch train did not create a persistence artifact"
                 )
 
-                let reloadedBridge = Self.bridge(pluginName: plan.pluginName, framework: .pyTorch, stateDirectory: temporaryDirectory)
+                let reloadedBridge = Self.bridge(
+                    pluginName: plan.pluginName,
+                    framework: .pyTorch,
+                    executable: pythonExecutable,
+                    stateDirectory: temporaryDirectory
+                )
                 let reloadedPrediction = try reloadedBridge.predictSynchronously(payload)
                 try reloadedPrediction.validate()
             } catch {
@@ -36,9 +44,7 @@ final class PluginExternalBackendRuntimeTests: XCTestCase {
     }
 
     func testEveryDeclaredTensorFlowBackendPredictsTrainsPersistsAndReloadsWhenTensorFlowIsInstalled() throws {
-        guard Self.pythonCanImport("tensorflow") else {
-            throw XCTSkip("TensorFlow is not installed for this runner")
-        }
+        let pythonExecutable = try BackendPythonTestSupport.requireTensorFlowMetalPython()
         let plans = FXAIPluginRegistry.accelerationPlans().filter { $0.declares(.tensorFlowMetal) }
         XCTAssertFalse(plans.isEmpty)
 
@@ -46,7 +52,12 @@ final class PluginExternalBackendRuntimeTests: XCTestCase {
             do {
                 let temporaryDirectory = try Self.makeTemporaryDirectory(plan.pluginName, suffix: "tensorflow")
                 defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
-                let bridge = Self.bridge(pluginName: plan.pluginName, framework: .tensorFlow, stateDirectory: temporaryDirectory)
+                let bridge = Self.bridge(
+                    pluginName: plan.pluginName,
+                    framework: .tensorFlow,
+                    executable: pythonExecutable,
+                    stateDirectory: temporaryDirectory
+                )
                 let payload = Self.inferencePayload(pluginName: plan.pluginName, framework: .tensorFlow, includeText: false)
 
                 let prediction = try bridge.predictSynchronously(payload)
@@ -58,7 +69,12 @@ final class PluginExternalBackendRuntimeTests: XCTestCase {
                     "\(plan.pluginName) TensorFlow train did not create a persistence artifact"
                 )
 
-                let reloadedBridge = Self.bridge(pluginName: plan.pluginName, framework: .tensorFlow, stateDirectory: temporaryDirectory)
+                let reloadedBridge = Self.bridge(
+                    pluginName: plan.pluginName,
+                    framework: .tensorFlow,
+                    executable: pythonExecutable,
+                    stateDirectory: temporaryDirectory
+                )
                 let reloadedPrediction = try reloadedBridge.predictSynchronously(payload)
                 try reloadedPrediction.validate()
             } catch {
@@ -68,6 +84,7 @@ final class PluginExternalBackendRuntimeTests: XCTestCase {
     }
 
     func testEveryDeclaredNLPBackendConsumesTextEventsAndHasNoTextFallback() throws {
+        let pythonExecutable = try BackendPythonTestSupport.requireAnyPython()
         let plans = FXAIPluginRegistry.accelerationPlans().filter { $0.declares(.foundationNLP) }
         XCTAssertFalse(plans.isEmpty)
 
@@ -75,7 +92,12 @@ final class PluginExternalBackendRuntimeTests: XCTestCase {
             do {
                 let temporaryDirectory = try Self.makeTemporaryDirectory(plan.pluginName, suffix: "nlp")
                 defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
-                let bridge = Self.bridge(pluginName: plan.pluginName, framework: .foundationNLP, stateDirectory: temporaryDirectory)
+                let bridge = Self.bridge(
+                    pluginName: plan.pluginName,
+                    framework: .foundationNLP,
+                    executable: pythonExecutable,
+                    stateDirectory: temporaryDirectory
+                )
                 let noTextPayload = Self.inferencePayload(pluginName: plan.pluginName, framework: .foundationNLP, includeText: false)
                 let textPayload = Self.inferencePayload(pluginName: plan.pluginName, framework: .foundationNLP, includeText: true)
 
@@ -101,11 +123,12 @@ final class PluginExternalBackendRuntimeTests: XCTestCase {
     private static func bridge(
         pluginName: String,
         framework: MLFramework,
+        executable: String,
         stateDirectory: URL
     ) -> PythonMLBackendBridge {
         PythonMLBackendBridge(
             framework: framework,
-            executable: "python3",
+            executable: executable,
             module: FXAIPluginBackendDiscovery.moduleBackendURL.path,
             modelIdentifier: pluginName,
             environment: Self.acceleratorEnvironment(
@@ -208,20 +231,5 @@ final class PluginExternalBackendRuntimeTests: XCTestCase {
             return false
         }
         return contents.contains { !$0.hasDirectoryPath }
-    }
-
-    private static func pythonCanImport(_ module: String) -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", "-c", "import \(module)"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do {
-            try process.run()
-            process.waitUntilExit()
-            return process.terminationStatus == 0
-        } catch {
-            return false
-        }
     }
 }

@@ -76,12 +76,13 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
     }
 
     func testFoundationNLPModuleBackendPredictsThroughSwiftBridge() throws {
+        let pythonExecutable = try BackendPythonTestSupport.requireAnyPython()
         let temporaryDirectory = try Self.makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
 
         let bridge = PythonMLBackendBridge(
             framework: .foundationNLP,
-            executable: "python3",
+            executable: pythonExecutable,
             module: FXAIPluginBackendDiscovery.moduleBackendURL.path,
             modelIdentifier: "ai_chronos",
             environment: [
@@ -109,15 +110,13 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
     }
 
     func testPyTorchModuleBackendPredictsAndTrainsWhenTorchIsInstalled() throws {
-        guard Self.pythonCanImport("torch") else {
-            throw XCTSkip("PyTorch is not installed for this runner")
-        }
+        let pythonExecutable = try BackendPythonTestSupport.requirePythonImporting("torch")
         let temporaryDirectory = try Self.makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
 
         let bridge = PythonMLBackendBridge(
             framework: .pyTorch,
-            executable: "python3",
+            executable: pythonExecutable,
             module: FXAIPluginBackendDiscovery.moduleBackendURL.path,
             modelIdentifier: "ai_lstm",
             environment: [
@@ -158,13 +157,16 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
     }
 
     func testPyTorchModuleBackendUsesSequenceWindowWhenTorchIsInstalled() throws {
-        guard Self.pythonCanImport("torch") else {
-            throw XCTSkip("PyTorch is not installed for this runner")
-        }
+        let pythonExecutable = try BackendPythonTestSupport.requirePythonImporting("torch")
         let temporaryDirectory = try Self.makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
 
-        let bridge = Self.pythonBridge(framework: .pyTorch, modelIdentifier: "ai_lstm", stateDirectory: temporaryDirectory)
+        let bridge = Self.pythonBridge(
+            framework: .pyTorch,
+            executable: pythonExecutable,
+            modelIdentifier: "ai_lstm",
+            stateDirectory: temporaryDirectory
+        )
         let upWindowPrediction = try bridge.predictSynchronously(Self.sequencePayload(windowDirection: 1.0))
         let downWindowPrediction = try bridge.predictSynchronously(Self.sequencePayload(windowDirection: -1.0))
 
@@ -178,13 +180,16 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
     }
 
     func testPyTorchColdPredictionsAreDeterministicWhenTorchIsInstalled() throws {
-        guard Self.pythonCanImport("torch") else {
-            throw XCTSkip("PyTorch is not installed for this runner")
-        }
+        let pythonExecutable = try BackendPythonTestSupport.requirePythonImporting("torch")
         let temporaryDirectory = try Self.makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
 
-        let bridge = Self.pythonBridge(framework: .pyTorch, modelIdentifier: "ai_lstm", stateDirectory: temporaryDirectory)
+        let bridge = Self.pythonBridge(
+            framework: .pyTorch,
+            executable: pythonExecutable,
+            modelIdentifier: "ai_lstm",
+            stateDirectory: temporaryDirectory
+        )
         let payload = Self.sequencePayload(windowDirection: 1.0)
         let first = try bridge.predictSynchronously(payload)
         let second = try bridge.predictSynchronously(payload)
@@ -199,6 +204,7 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
     }
 
     func testAcceleratedRuntimeWrapsNLPPluginThroughExternalBackend() throws {
+        let pythonExecutable = try BackendPythonTestSupport.requireAnyPython()
         let temporaryDirectory = try Self.makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
         let plugin = try Self.plannedPlugin(named: "ai_chronos")
@@ -216,6 +222,7 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
                     ),
                     foundationNLPAvailable: true
                 ),
+                pythonExecutable: pythonExecutable,
                 pythonEnvironment: [
                     "FXAI_PLUGIN_STATE_DIR": temporaryDirectory.path
                 ]
@@ -253,9 +260,7 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
     }
 
     func testAcceleratedRuntimeWrapsPyTorchPluginWhenTorchIsInstalled() throws {
-        guard Self.pythonCanImport("torch") else {
-            throw XCTSkip("PyTorch is not installed for this runner")
-        }
+        let pythonExecutable = try BackendPythonTestSupport.requirePythonImporting("torch")
         let temporaryDirectory = try Self.makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
         let plugin = try Self.plannedPlugin(named: "ai_lstm")
@@ -271,9 +276,10 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
                         supportsUnifiedMemory: true,
                         hardware: Self.appleM2
                     ),
-                    pythonExecutable: "python3",
+                    pythonExecutable: pythonExecutable,
                     pyTorchMPSAvailable: true
                 ),
+                pythonExecutable: pythonExecutable,
                 pythonEnvironment: [
                     "FXAI_PLUGIN_STATE_DIR": temporaryDirectory.path,
                     "FXAI_FORCE_PYTORCH_CPU": "1"
@@ -287,9 +293,7 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
     }
 
     func testAcceleratedRuntimeWrapsTensorFlowPluginWhenTensorFlowIsInstalled() throws {
-        guard Self.pythonCanImport("tensorflow") else {
-            throw XCTSkip("TensorFlow is not installed for this runner")
-        }
+        let pythonExecutable = try BackendPythonTestSupport.requireTensorFlowMetalPython()
         let temporaryDirectory = try Self.makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
         let plugin = try Self.plannedPlugin(named: "ai_lstm")
@@ -305,9 +309,10 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
                         supportsUnifiedMemory: true,
                         hardware: Self.appleM2
                     ),
-                    pythonExecutable: "python3",
+                    pythonExecutable: pythonExecutable,
                     tensorFlowMetalAvailable: true
                 ),
+                pythonExecutable: pythonExecutable,
                 pythonEnvironment: [
                     "FXAI_PLUGIN_STATE_DIR": temporaryDirectory.path,
                     "FXAI_ALLOW_CPU_TENSOR_FALLBACK": "1"
@@ -359,12 +364,13 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
 
     private static func pythonBridge(
         framework: MLFramework,
+        executable: String,
         modelIdentifier: String,
         stateDirectory: URL
     ) -> PythonMLBackendBridge {
         PythonMLBackendBridge(
             framework: framework,
-            executable: "python3",
+            executable: executable,
             module: FXAIPluginBackendDiscovery.moduleBackendURL.path,
             modelIdentifier: modelIdentifier,
             environment: [
@@ -415,21 +421,6 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
             .appendingPathComponent("fxai-plugin-runtime-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
-    }
-
-    private static func pythonCanImport(_ module: String) -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", "-c", "import \(module)"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do {
-            try process.run()
-            process.waitUntilExit()
-            return process.terminationStatus == 0
-        } catch {
-            return false
-        }
     }
 }
 

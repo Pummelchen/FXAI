@@ -42,8 +42,12 @@ contracts:
   `FXAI_PLUGIN_STATE_DIR`, or `~/.fxai/plugins/state` when the environment
   variable is not set. The backend follows the FXDataEngine volume contract:
   volume-derived features are used only when `dataHasVolume` is true.
-  FXAI invokes these plugin-local Python backends with `python3`; that command
-  must resolve to the Python environment where TensorFlow reports a Metal GPU.
+  FXAI invokes these plugin-local Python backends with `FXAI_PYTHON` when set,
+  otherwise `python3`. The Phase 0 backend-test baseline for TensorFlow Metal is
+  Python 3.12 with `tensorflow==2.18.1`, `tensorflow-metal==1.2.0`, and at least
+  one TensorFlow GPU device reported by `tf.config.list_physical_devices("GPU")`.
+  Tests that exercise TensorFlow backends resolve that Python 3.12 stack
+  directly and fail with diagnostics when it is unavailable.
 - `FXPluginRuntimeResolver` selects CPU, Metal, PyTorch, TensorFlow, Foundation NLP,
   or CoreML/Neural Engine candidates from each plugin acceleration plan. The
   plugin-local dispatcher `API/Backends/Python/fxai_plugin_module_backend.py`
@@ -78,6 +82,13 @@ Run the local verification gate with:
 
 ```bash
 swift test
+```
+
+For focused backend environment verification on Apple Silicon, run:
+
+```bash
+FXAI_PYTHON=/opt/homebrew/opt/python@3.12/libexec/bin/python3 swift test --filter PluginRuntimeIntegrationTests
+FXAI_PYTHON=/opt/homebrew/opt/python@3.12/libexec/bin/python3 swift test --filter PluginExternalBackendRuntimeTests
 ```
 
 The current source of truth is this plugin-owned Swift zoo, the reference-grade implementation audit in `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_AUDIT.md`, the per-plugin scorecard in `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_SCORECARD.md`, and the executable certification gates in the Swift test suite.

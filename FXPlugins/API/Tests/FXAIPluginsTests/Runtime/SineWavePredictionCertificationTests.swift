@@ -64,7 +64,7 @@ final class SineWavePredictionCertificationTests: XCTestCase {
         )
         XCTAssertFalse(declaredAccelerators.isEmpty, "SineTest accelerator gate has no declared accelerator backends to run.")
 
-        let environment = Self.acceleratorEnvironment()
+        let environment = try Self.acceleratorEnvironment()
         let availableAccelerators = declaredAccelerators.filter { environment.supports($0) }
         let unavailableAccelerators = declaredAccelerators.subtracting(availableAccelerators)
         if !unavailableAccelerators.isEmpty {
@@ -114,7 +114,7 @@ final class SineWavePredictionCertificationTests: XCTestCase {
             )
 
             for backend in acceleratorBackends {
-                trained.runtime.configuration = Self.runtimeConfiguration(
+                trained.runtime.configuration = try Self.runtimeConfiguration(
                     mode: Self.runtimeMode(for: backend),
                     environment: environment,
                     stateDirectory: stateDirectory
@@ -284,7 +284,7 @@ final class SineWavePredictionCertificationTests: XCTestCase {
         let hyperParameters = certificationHyperParameters()
         var runtime = FXAIAcceleratedPluginRuntime(
             plugin: plugin,
-            configuration: Self.runtimeConfiguration(
+            configuration: try Self.runtimeConfiguration(
                 mode: .cpuOnly,
                 environment: environment,
                 stateDirectory: stateDirectory
@@ -721,12 +721,12 @@ final class SineWavePredictionCertificationTests: XCTestCase {
         mode: FXPluginRuntimeMode,
         environment: FXPluginRuntimeEnvironment,
         stateDirectory: URL
-    ) -> FXAIPluginRuntimeConfiguration {
+    ) throws -> FXAIPluginRuntimeConfiguration {
         FXAIPluginRuntimeConfiguration(
             mode: mode,
             fallbackPolicy: .strict,
             environment: environment,
-            pythonExecutable: "python3",
+            pythonExecutable: try pythonExecutable(for: mode),
             pythonEnvironment: [
                 "FXAI_PLUGIN_STATE_DIR": stateDirectory.path,
                 "TF_CPP_MIN_LOG_LEVEL": "2"
@@ -755,29 +755,41 @@ final class SineWavePredictionCertificationTests: XCTestCase {
         }
     }
 
-    private static func acceleratorEnvironment() -> FXPluginRuntimeEnvironment {
+    private static func pythonExecutable(for mode: FXPluginRuntimeMode) throws -> String {
+        switch mode {
+        case .pyTorchMPS:
+            return try BackendPythonTestSupport.requirePythonImporting("torch")
+        case .tensorFlowMetal:
+            return try BackendPythonTestSupport.requireTensorFlowMetalPython()
+        case .automatic, .cpuOnly, .swiftScalar, .swiftSIMD, .accelerate, .metal, .foundationNLP, .coreMLNeuralEngine:
+            return try BackendPythonTestSupport.requireAnyPython()
+        }
+    }
+
+    private static func acceleratorEnvironment() throws -> FXPluginRuntimeEnvironment {
         let metalDevice = MetalAccelerationDevice.probe()
+        let pyTorchPython = try? BackendPythonTestSupport.requirePythonImporting("torch")
+        let tensorFlowPython = try? BackendPythonTestSupport.requireTensorFlowMetalPython()
         return FXPluginRuntimeEnvironment(
             metalDevice: metalDevice,
-            pythonExecutable: "python3",
-            pyTorchMPSAvailable: pythonSucceeds("""
+            pythonExecutable: tensorFlowPython ?? pyTorchPython ?? (try? BackendPythonTestSupport.requireAnyPython()),
+            pyTorchMPSAvailable: pyTorchPython.map { executable in
+                pythonSucceeds(executable: executable, script: """
                 import torch
                 mps = getattr(torch.backends, "mps", None)
                 raise SystemExit(0 if mps is not None and torch.backends.mps.is_available() else 1)
-                """),
-            tensorFlowMetalAvailable: pythonSucceeds("""
-                import tensorflow as tf
-                raise SystemExit(0 if tf.config.list_physical_devices("GPU") else 1)
-                """),
+                """)
+            } ?? false,
+            tensorFlowMetalAvailable: tensorFlowPython != nil,
             foundationNLPAvailable: metalDevice.optimizedForFXAIAppleSilicon,
             coreMLNeuralEngineAvailable: false
         )
     }
 
-    private static func pythonSucceeds(_ script: String) -> Bool {
+    private static func pythonSucceeds(executable: String, script: String) -> Bool {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", "-c", script]
+        process.arguments = [executable, "-c", script]
         process.standardOutput = Pipe()
         process.standardError = Pipe()
         do {
