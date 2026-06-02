@@ -73,6 +73,42 @@ struct LiveAgentContractsTests {
         }
     }
 
+    @Test func liveWorkloadRejectsStalePromotionEvidence() throws {
+        let issuedAtUTC = Int64(Date().timeIntervalSince1970)
+        let staleEvidence = FXLivePromotionEvidence(
+            promotionId: "promotion-1",
+            sourceBacktestRunId: "backtest-run-1",
+            demoRunId: "demo-run-1",
+            lineageId: "lineage-1",
+            certificationRunId: "certification-1",
+            approver: "operator",
+            approvedAtUTC: issuedAtUTC - FXLiveAgentProtocolV1.defaultPromotionMaxAgeSeconds - 1
+        )
+        let request = Self.request(promotionEvidence: staleEvidence, issuedAtUTC: issuedAtUTC)
+
+        #expect(throws: FXLiveAgentError.self) {
+            _ = try FXLiveAgentRuntime.plan(request)
+        }
+    }
+
+    @Test func liveWorkloadRejectsFuturePromotionEvidence() throws {
+        let issuedAtUTC = Int64(Date().timeIntervalSince1970)
+        let futureEvidence = FXLivePromotionEvidence(
+            promotionId: "promotion-1",
+            sourceBacktestRunId: "backtest-run-1",
+            demoRunId: "demo-run-1",
+            lineageId: "lineage-1",
+            certificationRunId: "certification-1",
+            approver: "operator",
+            approvedAtUTC: issuedAtUTC + 1
+        )
+        let request = Self.request(promotionEvidence: futureEvidence, issuedAtUTC: issuedAtUTC)
+
+        #expect(throws: FXLiveAgentError.self) {
+            _ = try FXLiveAgentRuntime.plan(request)
+        }
+    }
+
     @Test func livePackageDoesNotUseDirectDatabaseAccess() throws {
         let forbidden = [
             ["Click", "House"].joined(),
@@ -117,7 +153,9 @@ struct LiveAgentContractsTests {
             accountEnabled: true,
             symbolEnabled: true,
             reason: ""
-        )
+        ),
+        promotionEvidence: FXLivePromotionEvidence? = nil,
+        issuedAtUTC: Int64 = Int64(Date().timeIntervalSince1970)
     ) -> FXLiveAgentWorkloadRequest {
         FXLiveAgentWorkloadRequest(
             apiVersion: apiVersion,
@@ -134,15 +172,17 @@ struct LiveAgentContractsTests {
                 maxSymbolExposureLots: 0.01
             ),
             killSwitch: killSwitch,
-            promotionEvidence: FXLivePromotionEvidence(
+            promotionEvidence: promotionEvidence ?? FXLivePromotionEvidence(
                 promotionId: "promotion-1",
                 sourceBacktestRunId: "backtest-run-1",
                 demoRunId: "demo-run-1",
                 lineageId: "lineage-1",
                 certificationRunId: "certification-1",
-                approver: "operator"
+                approver: "operator",
+                approvedAtUTC: issuedAtUTC
             ),
-            orderIntents: orderIntents
+            orderIntents: orderIntents,
+            issuedAtUTC: issuedAtUTC
         )
     }
 

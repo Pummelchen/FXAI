@@ -114,7 +114,7 @@ public struct MT5ImporterConnector: FXImporterConnector {
                 volume: 0
             ))
         }
-        let sourceComplete = (response.seriesSynchronized ?? true) && bars.count <= request.maxBars
+        let sourceComplete = (response.seriesSynchronized ?? false) && bars.count <= request.maxBars
         let cappedBars = sourceComplete ? bars : Array(bars.prefix(request.maxBars))
         return FXImporterM1Batch(request: request, bars: cappedBars, sourceComplete: sourceComplete)
     }

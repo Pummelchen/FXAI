@@ -173,8 +173,14 @@ resolve_python() {
         PYTHON_BIN="$FXAI_PYTHON"
     elif have python3; then
         PYTHON_BIN="$(command -v python3)"
-    elif have brew && [ -x "$(brew --prefix python 2>/dev/null)/bin/python3" ]; then
-        PYTHON_BIN="$(brew --prefix python)/bin/python3"
+    elif have brew; then
+        brew_python_prefix="$(brew --prefix python 2>/dev/null || true)"
+        if [ -n "$brew_python_prefix" ] && [ -x "$brew_python_prefix/bin/python3" ]; then
+            PYTHON_BIN="$brew_python_prefix/bin/python3"
+        else
+            log "python3 is missing. Install Homebrew python and rerun."
+            exit 1
+        fi
     else
         log "python3 is missing. Install Homebrew python and rerun."
         exit 1

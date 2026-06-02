@@ -63,9 +63,9 @@ public struct BacktestBroker: Sendable {
         grossProfit += max(0, pnl)
         grossLoss += min(0, pnl)
         totalTrades += 1
-        if pnl >= 0 {
+        if pnl > 0 {
             winningTrades += 1
-        } else {
+        } else if pnl < 0 {
             losingTrades += 1
         }
         self.position = nil
@@ -89,6 +89,10 @@ public struct BacktestBroker: Sendable {
 
     public var netProfit: Double {
         balance - context.settings.initialDeposit
+    }
+
+    public var equityNetProfit: Double {
+        equity - context.settings.initialDeposit
     }
 
     public var winRate: Double {

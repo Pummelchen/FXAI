@@ -92,13 +92,13 @@ def population_stability_index(reference_values: Sequence[float],
     edges: list[float] = [ref_sorted[0]]
     for step in range(1, bucket_count):
         quantile = int(round((len(ref_sorted) - 1) * step / float(bucket_count)))
-        edges.append(ref_sorted[quantile])
-    edges.append(ref_sorted[-1])
-
-    # Enforce monotonic bucket edges so repeated values do not create zero-width bins.
-    for index in range(1, len(edges)):
-        if edges[index] <= edges[index - 1]:
-            edges[index] = edges[index - 1] + epsilon
+        edge = ref_sorted[quantile]
+        if edges[-1] < edge < ref_sorted[-1]:
+            edges.append(edge)
+    if edges[-1] < ref_sorted[-1]:
+        edges.append(ref_sorted[-1])
+    if len(edges) < 2:
+        return normalized_gap(mean(reference_values), mean(recent_values), 0.05, 0.20)
 
     ref_counts = _histogram(reference_values, edges)
     recent_counts = _histogram(recent_values, edges)

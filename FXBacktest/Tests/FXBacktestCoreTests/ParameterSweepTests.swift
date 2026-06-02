@@ -76,4 +76,50 @@ final class ParameterSweepTests: XCTestCase {
             maximum: 1
         ))
     }
+
+    func testDecimalSweepCountsWholeStepRangesWithRelativeTolerance() throws {
+        let decimal = try ParameterDefinition(
+            key: "threshold",
+            displayName: "Threshold",
+            defaultValue: 0,
+            defaultMinimum: 0,
+            defaultStep: 0.1,
+            defaultMaximum: 0.3,
+            valueKind: .decimal
+        )
+
+        let dimension = try ParameterSweepDimension(
+            definition: decimal,
+            input: 0,
+            minimum: 0,
+            step: 0.1,
+            maximum: 0.3
+        )
+
+        XCTAssertEqual(dimension.valueCount, 4)
+        XCTAssertEqual(dimension.value(at: 3), 0.3, accuracy: 0.0000000001)
+    }
+
+    func testDecimalSweepDoesNotEmitClampedDuplicateEndpointWhenStepOvershoots() throws {
+        let decimal = try ParameterDefinition(
+            key: "fraction",
+            displayName: "Fraction",
+            defaultValue: 0,
+            defaultMinimum: 0,
+            defaultStep: 0.34,
+            defaultMaximum: 1,
+            valueKind: .decimal
+        )
+
+        let dimension = try ParameterSweepDimension(
+            definition: decimal,
+            input: 0,
+            minimum: 0,
+            step: 0.34,
+            maximum: 1
+        )
+
+        XCTAssertEqual(dimension.valueCount, 3)
+        XCTAssertEqual(dimension.value(at: 2), 0.68, accuracy: 0.0000000001)
+    }
 }

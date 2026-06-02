@@ -55,6 +55,13 @@ final class ProtocolTests: XCTestCase {
         }
     }
 
+    func testSocketConfigurationFailureDescriptionIncludesOptionAndErrno() throws {
+        let description = String(describing: MT5BridgeError.socketConfigurationFailed(option: "SO_RCVTIMEO", errno: 22))
+
+        XCTAssertTrue(description.contains("SO_RCVTIMEO"))
+        XCTAssertTrue(description.contains("22"))
+    }
+
     func testRatesFromPositionPayloadIsFramedWithStartPosition() throws {
         let codec = FramedProtocolCodec()
         let payload = RatesFromPositionPayload(mt5Symbol: "EURUSD", startPosition: 1, count: 2)

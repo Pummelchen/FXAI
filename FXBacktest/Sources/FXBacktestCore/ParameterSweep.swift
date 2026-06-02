@@ -77,7 +77,13 @@ public struct ParameterSweepDimension: Identifiable, Codable, Hashable, Sendable
         if span == 0 {
             return 1
         }
-        let count = floor((span / step) + 1.0e-9) + 1
+        let rawStepCount = span / step
+        let nearestWholeStepCount = rawStepCount.rounded()
+        let tolerance = max(1.0e-9, abs(rawStepCount) * 1.0e-12)
+        let wholeStepCount = abs(rawStepCount - nearestWholeStepCount) <= tolerance
+            ? nearestWholeStepCount
+            : floor(rawStepCount + tolerance)
+        let count = wholeStepCount + 1
         guard count.isFinite, count > 0, count <= Double(UInt64.max) else {
             throw FXBacktestError.invalidParameter("\(definition.key): parameter value count is too large.")
         }

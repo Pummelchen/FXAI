@@ -162,8 +162,10 @@ def compute_execution_quality_forecast(
     news_risk = clamp(float(news_risk_score or 0.0), 0.0, 1.0)
     rates_risk = clamp(float(rates_risk_score or 0.0), 0.0, 1.0)
     reject_norm = clamp(float(broker_reject_prob or 0.0), 0.0, 1.0)
+    explicit_partial_prob = clamp(float(broker_partial_fill_prob or 0.0), 0.0, 1.0)
+    fill_ratio_shortfall = 1.0 - clamp(float(broker_fill_ratio_mean or 1.0), 0.0, 1.0)
     partial_norm = clamp(
-        max(float(broker_partial_fill_prob or 0.0), 1.0 - clamp(float(broker_fill_ratio_mean or 1.0), 0.0, 1.0)),
+        (0.70 * explicit_partial_prob) + (0.30 * fill_ratio_shortfall),
         0.0,
         1.0,
     )

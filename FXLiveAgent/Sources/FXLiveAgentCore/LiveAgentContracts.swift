@@ -3,6 +3,7 @@ import Foundation
 
 public enum FXLiveAgentProtocolV1 {
     public static let latestVersion = "fxlive.agent.v1"
+    public static let defaultPromotionMaxAgeSeconds: Int64 = 30 * 24 * 60 * 60
 }
 
 /// Errors raised when a live execution workload fails the promoted safety contract.
@@ -53,6 +54,13 @@ public struct FXLivePromotionEvidence: Codable, Hashable, Sendable {
 
     /// Verifies that all promotion identifiers are present and the approval timestamp is usable.
     public func validate() throws {
+        try validate(currentUTC: Int64(Date().timeIntervalSince1970))
+    }
+
+    public func validate(
+        currentUTC: Int64,
+        maxAgeSeconds: Int64 = FXLiveAgentProtocolV1.defaultPromotionMaxAgeSeconds
+    ) throws {
         try require(promotionId, "promotion_id")
         try require(sourceBacktestRunId, "source_backtest_run_id")
         try require(demoRunId, "demo_run_id")
@@ -61,6 +69,15 @@ public struct FXLivePromotionEvidence: Codable, Hashable, Sendable {
         try require(approver, "approver")
         guard approvedAtUTC > 0 else {
             throw FXLiveAgentError.invalidRequest("approved_at_utc must be positive")
+        }
+        guard currentUTC >= approvedAtUTC else {
+            throw FXLiveAgentError.invalidRequest("approved_at_utc must not be in the future")
+        }
+        guard maxAgeSeconds > 0 else {
+            throw FXLiveAgentError.invalidRequest("promotion max age must be positive")
+        }
+        guard currentUTC - approvedAtUTC <= maxAgeSeconds else {
+            throw FXLiveAgentError.invalidRequest("promotion evidence is stale")
         }
     }
 }
@@ -120,7 +137,7 @@ public struct FXLiveAgentWorkloadRequest: Codable, Hashable, Sendable {
         guard account.environment == .live else {
             throw FXLiveAgentError.invalidRequest("live workloads require a live account scope")
         }
-        try promotionEvidence.validate()
+        try promotionEvidence.validate(currentUTC: issuedAtUTC)
         guard !orderIntents.isEmpty else {
             throw FXLiveAgentError.invalidRequest("order_intents must not be empty")
         }

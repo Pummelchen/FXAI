@@ -45,6 +45,37 @@ final class MT5ImporterConnectorTests: XCTestCase {
         XCTAssertNil(batch.bars[0].utcTimestamp)
     }
 
+    func testMT5RatesResponseWithoutSynchronizationFlagFailsClosed() throws {
+        let response = try JSONDecoder().decode(RatesResponseDTO.self, from: Data("""
+        {
+          "mt5_symbol": "EURUSD",
+          "timeframe": "M1",
+          "requested_from_mt5_server_ts": 60,
+          "requested_to_mt5_server_ts_exclusive": 180,
+          "rates": [
+            {
+              "mt5_server_time": 60,
+              "open": "1.10000",
+              "high": "1.10010",
+              "low": "1.09990",
+              "close": "1.10005"
+            }
+          ]
+        }
+        """.utf8))
+        let request = FXImporterM1HistoryRequest(
+            sourceSymbol: "EURUSD",
+            fromSourceTimestamp: 60,
+            toSourceTimestampExclusive: 180,
+            maxBars: 2
+        )
+
+        let batch = try MT5ImporterConnector.makeBatch(request: request, response: response)
+
+        XCTAssertFalse(batch.sourceComplete)
+        XCTAssertEqual(batch.bars.count, 1)
+    }
+
     func testMT5ImporterRejectsMismatchedSymbol() throws {
         let response = try JSONDecoder().decode(RatesResponseDTO.self, from: Data("""
         {

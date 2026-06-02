@@ -33,7 +33,7 @@ def mean_std(values: list[float]) -> tuple[float, float]:
     mean_v = sum(values) / float(len(values))
     if len(values) <= 1:
         return mean_v, 0.0
-    var = sum((v - mean_v) * (v - mean_v) for v in values) / float(len(values))
+    var = sum((v - mean_v) * (v - mean_v) for v in values) / float(len(values) - 1)
     return mean_v, math.sqrt(max(var, 0.0))
 
 
@@ -42,11 +42,11 @@ def row_float(row: Mapping[str, object] | None, key: str, default: float = 0.0) 
         return float(default)
     try:
         raw = row.get(key, default) if hasattr(row, "get") else row[key]
-    except Exception:
+    except (AttributeError, KeyError, TypeError):
         raw = default
     try:
         return float(raw)
-    except Exception:
+    except (TypeError, ValueError):
         return float(default)
 
 

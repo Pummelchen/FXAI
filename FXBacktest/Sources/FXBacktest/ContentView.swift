@@ -291,9 +291,9 @@ struct ContentView: View {
             metricHeader("Result  ✓", width: 118)
             metricHeader("Profit", width: 110)
             metricHeader("Total trades", width: 118)
-            metricHeader("Drawdown %", width: 118)
+            metricHeader("DD / deposit %", width: 118)
             metricHeader("Recovery factor", width: 132)
-            metricHeader("Sharpe ratio", width: 132)
+            metricHeader("Profit factor", width: 132)
             ForEach(model.selectedPlugin.parameterDefinitions) { parameter in
                 metricHeader(parameter.displayName, width: parameterColumnWidth)
             }
@@ -315,9 +315,9 @@ struct ContentView: View {
             metricCell(formatDecimal(resultValue(result)), width: 118, isSelected: isSelected)
             metricCell(formatDecimal(result.netProfit), width: 110, isSelected: isSelected)
             metricCell("\(result.totalTrades)", width: 118, isSelected: isSelected)
-            metricCell(formatDecimal(drawdownPercent(result)), width: 118, isSelected: isSelected)
+            metricCell(formatDecimal(drawdownInitialDepositPercent(result)), width: 118, isSelected: isSelected)
             metricCell(formatDecimal(recoveryFactor(result)), width: 132, isSelected: isSelected)
-            metricCell(formatDecimal(sharpeRatio(result)), width: 132, isSelected: isSelected)
+            metricCell(formatDecimal(result.profitFactor), width: 132, isSelected: isSelected)
             ForEach(model.selectedPlugin.parameterDefinitions) { parameter in
                 metricCell(
                     parameterValue(result, definition: parameter),
@@ -390,7 +390,7 @@ struct ContentView: View {
         model.resultInitialDeposit + result.netProfit
     }
 
-    private func drawdownPercent(_ result: BacktestPassResult) -> Double {
+    private func drawdownInitialDepositPercent(_ result: BacktestPassResult) -> Double {
         guard model.resultInitialDeposit > 0 else { return 0 }
         return (result.maxDrawdown / model.resultInitialDeposit) * 100
     }
@@ -398,10 +398,6 @@ struct ContentView: View {
     private func recoveryFactor(_ result: BacktestPassResult) -> Double {
         guard result.maxDrawdown > 0 else { return 0 }
         return result.netProfit / result.maxDrawdown
-    }
-
-    private func sharpeRatio(_: BacktestPassResult) -> Double {
-        0
     }
 
     private func parameterValue(_ result: BacktestPassResult, definition: ParameterDefinition) -> String {

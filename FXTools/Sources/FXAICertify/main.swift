@@ -246,7 +246,9 @@ func postEvidenceIfConfigured(_ evidence: FXAICertificationEvidenceRequest) {
     URLSession.shared.dataTask(with: request) { _, _, _ in
         semaphore.signal()
     }.resume()
-    _ = semaphore.wait(timeout: .now() + 30)
+    if semaphore.wait(timeout: .now() + 30) == .timedOut {
+        FileHandle.standardError.write(Data("warning: timed out posting certification evidence to \(url.absoluteString)\n".utf8))
+    }
 }
 
 let args = Array(CommandLine.arguments.dropFirst())

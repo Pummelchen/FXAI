@@ -9,6 +9,7 @@ public enum MT5BridgeError: Error, CustomStringConvertible, Sendable {
     case listenFailed(errno: Int32)
     case acceptTimedOut(port: UInt16)
     case acceptFailed(errno: Int32)
+    case socketConfigurationFailed(option: String, errno: Int32)
     case readFailed(errno: Int32)
     case writeFailed(errno: Int32)
     case connectionClosed
@@ -31,6 +32,8 @@ public enum MT5BridgeError: Error, CustomStringConvertible, Sendable {
             return "Timed out waiting for MT5 EA to connect on port \(port)."
         case .acceptFailed(let errno):
             return "Could not accept MT5 bridge connection: errno \(errno)."
+        case .socketConfigurationFailed(let option, let errno):
+            return "Could not configure MT5 bridge socket option \(option): errno \(errno)."
         case .readFailed(let errno):
             return "Could not read from MT5 bridge socket: errno \(errno)."
         case .writeFailed(let errno):
@@ -207,10 +210,10 @@ public final class MT5Connection: @unchecked Sendable {
         let microseconds = Int((timeoutSeconds - Double(seconds)) * 1_000_000)
         var timeout = timeval(tv_sec: seconds, tv_usec: Int32(microseconds))
         guard setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size)) == 0 else {
-            throw MT5BridgeError.readFailed(errno: errno)
+            throw MT5BridgeError.socketConfigurationFailed(option: "SO_RCVTIMEO", errno: errno)
         }
         guard setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size)) == 0 else {
-            throw MT5BridgeError.writeFailed(errno: errno)
+            throw MT5BridgeError.socketConfigurationFailed(option: "SO_SNDTIMEO", errno: errno)
         }
     }
 

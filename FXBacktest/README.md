@@ -308,7 +308,7 @@ The default shared configuration uses a `1000` USD virtual trade account, `10000
 - Positive lot sizes from the run settings or plugin logic.
 - Position lifecycle and closed-trade ledger.
 
-There is no execution profile in `BacktestRunSettings`. PnL uses close-price delta, symbol digits, configured contract size, and lots. The older `BacktestBroker` remains available for simple single-position plugins.
+There is no execution profile in `BacktestRunSettings`. PnL uses close-price delta, symbol digits, configured contract size, and lots. `netProfit` is realized PnL relative to initial deposit; floating PnL is exposed separately as equity. The older `BacktestBroker` remains available for simple single-position plugins.
 
 ## Multi-Symbol Backtests
 
@@ -389,7 +389,7 @@ Plugin rules:
 
 Single-pass reports are intentionally not implemented yet. The current product focus is maximum optimizer throughput and a live pass table.
 
-The live optimization table follows the MT5 tester shape: fixed metric columns first (`Pass`, `Result`, `Profit`, `Total trades`, `Drawdown %`, `Recovery factor`, `Sharpe ratio`), followed by one column per tested plugin input parameter.
+The live optimization table follows the MT5 tester shape: fixed metric columns first (`Pass`, `Result`, `Profit`, `Total trades`, `DD / deposit %`, `Recovery factor`, `Profit factor`), followed by one column per tested plugin input parameter. `DD / deposit %` is intentionally relative to the run's initial deposit, not equity peak.
 
 ### Retired Demo Plugins
 
