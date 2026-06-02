@@ -45,7 +45,7 @@ public struct HistoryMonthRangeBuilder: Sendable {
         guard latestClosed.rawValue >= Self.firstSupportedMonthStart.rawValue else {
             throw HistoryMonthRangeBuilderError.latestClosedBeforeUnixEpoch(latestClosed.rawValue)
         }
-        let endExclusive = try addOneMinute(to: latestClosed)
+        let endExclusive = try oneMinuteAfter(latestClosed)
         var ranges: [HistoryMonthRange] = []
         var cursor = Self.firstSupportedMonthStart
         while cursor.rawValue < endExclusive.rawValue {
@@ -60,7 +60,7 @@ public struct HistoryMonthRangeBuilder: Sendable {
         guard start.rawValue >= Self.firstSupportedMonthStart.rawValue else {
             throw HistoryMonthRangeBuilderError.latestClosedBeforeUnixEpoch(start.rawValue)
         }
-        let requestedEndExclusive = try addOneMinute(to: endInclusive)
+        let requestedEndExclusive = try oneMinuteAfter(endInclusive)
         let nextBoundary = try nextMonthBoundary(afterOrAt: start)
         let end = min(nextBoundary.rawValue, requestedEndExclusive.rawValue)
         guard end > start.rawValue else {
@@ -96,11 +96,11 @@ public struct HistoryMonthRangeBuilder: Sendable {
         return MT5ServerSecond(rawValue: nextEpoch)
     }
 
-    private func addOneMinute(to value: MT5ServerSecond) throws -> MT5ServerSecond {
-        let result = value.rawValue.addingReportingOverflow(Timeframe.m1.seconds)
-        guard !result.overflow else {
+    private func oneMinuteAfter(_ value: MT5ServerSecond) throws -> MT5ServerSecond {
+        do {
+            return try value.addingOneMinute()
+        } catch {
             throw HistoryMonthRangeBuilderError.overflow(value.rawValue)
         }
-        return MT5ServerSecond(rawValue: result.partialValue)
     }
 }

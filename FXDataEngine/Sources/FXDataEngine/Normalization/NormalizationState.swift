@@ -261,20 +261,56 @@ public struct NormalizationWindowConfigState: Codable, Hashable, Sendable {
 }
 
 public struct NormalizationWindowRuntimeState: Codable, Hashable, Sendable {
-    public var legacy: NormalizationLegacyWindowState
     public var config: NormalizationWindowConfigState
+
+    public var legacy: NormalizationLegacyWindowState {
+        get {
+            NormalizationLegacyWindowState(
+                ready: config.initialized,
+                defaultWindow: config.defaultWindow,
+                featureWindows: config.featureWindows
+            )
+        }
+        set {
+            config = Self.config(from: newValue, fallbackConfigVersion: config.configVersion)
+        }
+    }
 
     public init(
         legacy: NormalizationLegacyWindowState = NormalizationLegacyWindowState(),
         config: NormalizationWindowConfigState = NormalizationWindowConfigState()
     ) {
-        self.legacy = legacy
-        self.config = config
+        self.config = config.initialized
+            ? config
+            : Self.config(from: legacy, fallbackConfigVersion: config.configVersion)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case legacy
+        case config
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let config = try container.decodeIfPresent(NormalizationWindowConfigState.self, forKey: .config),
+           config.initialized {
+            self.config = config
+            return
+        }
+        if let legacy = try container.decodeIfPresent(NormalizationLegacyWindowState.self, forKey: .legacy) {
+            self.config = Self.config(from: legacy, fallbackConfigVersion: 0)
+        } else {
+            self.config = NormalizationWindowConfigState()
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(config, forKey: .config)
     }
 
     public mutating func apply(featureWindows: [Int], defaultWindow: Int) {
         config.set(featureWindows: featureWindows, defaultWindow: defaultWindow)
-        legacy.apply(featureWindows: featureWindows, defaultWindow: defaultWindow)
     }
 
     public mutating func applyGroupWindows(
@@ -292,6 +328,18 @@ public struct NormalizationWindowRuntimeState: Codable, Hashable, Sendable {
                 regime: regime
             ),
             defaultWindow: defaultWindow
+        )
+    }
+
+    private static func config(
+        from legacy: NormalizationLegacyWindowState,
+        fallbackConfigVersion: Int
+    ) -> NormalizationWindowConfigState {
+        NormalizationWindowConfigState(
+            initialized: legacy.ready,
+            defaultWindow: legacy.defaultWindow,
+            configVersion: max(0, fallbackConfigVersion),
+            featureWindows: legacy.featureWindows
         )
     }
 }
@@ -723,6 +771,33 @@ public enum NormalizationFitTools {
         return (((((a1 * r + a2) * r + a3) * r + a4) * r + a5) * r + a6) * q /
             (((((b1 * r + b2) * r + b3) * r + b4) * r + b5) * r + 1.0)
     }
+
+    public static func quantileToNormal(_ value: Double, quantiles knots: [Double]) -> Double {
+        guard let first = knots.first, let last = knots.last, knots.count > 1 else { return 0.0 }
+        let current = fxSafeFinite(value)
+        if current <= first {
+            return fxClamp(inverseNormalCDF(1e-6), -6.0, 6.0)
+        }
+        if current >= last {
+            return fxClamp(inverseNormalCDF(1.0 - 1e-6), -6.0, 6.0)
+        }
+
+        var q = 0.5
+        for index in 0..<(knots.count - 1) {
+            let q0 = knots[index]
+            let q1 = knots[index + 1]
+            if current > q1 {
+                continue
+            }
+            let p0 = Double(index) / Double(knots.count - 1)
+            let p1 = Double(index + 1) / Double(knots.count - 1)
+            q = abs(q1 - q0) < 1e-9
+                ? 0.5 * (p0 + p1)
+                : p0 + (current - q0) / (q1 - q0) * (p1 - p0)
+            break
+        }
+        return fxClamp(inverseNormalCDF(fxClamp(q, 1e-6, 1.0 - 1e-6)), -6.0, 6.0)
+    }
 }
 
 public struct NormalizationFitSlotState: Codable, Hashable, Sendable {
@@ -1022,33 +1097,7 @@ public struct NormalizationFitState: Codable, Hashable, Sendable {
             featureIndex: featureIndex,
             configuredHorizons: configuredHorizons
         )
-        let knots = lookup.stats.quantiles
-        guard let first = knots.first, let last = knots.last else { return 0.0 }
-        let current = fxSafeFinite(value)
-        if current <= first {
-            return fxClamp(NormalizationFitTools.inverseNormalCDF(1e-6), -6.0, 6.0)
-        }
-        if current >= last {
-            return fxClamp(NormalizationFitTools.inverseNormalCDF(1.0 - 1e-6), -6.0, 6.0)
-        }
-
-        var q = 0.5
-        for index in 0..<(knots.count - 1) {
-            let q0 = knots[index]
-            let q1 = knots[index + 1]
-            if current > q1 {
-                continue
-            }
-            let p0 = Double(index) / Double(knots.count - 1)
-            let p1 = Double(index + 1) / Double(knots.count - 1)
-            if abs(q1 - q0) < 1e-9 {
-                q = 0.5 * (p0 + p1)
-            } else {
-                q = p0 + (current - q0) / (q1 - q0) * (p1 - p0)
-            }
-            break
-        }
-        return fxClamp(NormalizationFitTools.inverseNormalCDF(fxClamp(q, 1e-6, 1.0 - 1e-6)), -6.0, 6.0)
+        return NormalizationFitTools.quantileToNormal(value, quantiles: lookup.stats.quantiles)
     }
 
     private mutating func ensureInitialized() {

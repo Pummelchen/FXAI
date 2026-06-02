@@ -36,6 +36,18 @@ final class DomainTests: XCTestCase {
         XCTAssertEqual(mt5.rawValue, utc.rawValue)
     }
 
+    func testEpochSecondsAdvanceOneMinuteAndReportOverflow() throws {
+        XCTAssertEqual(try MT5ServerSecond(rawValue: 60).addingOneMinute().rawValue, 120)
+        XCTAssertEqual(try UtcSecond(rawValue: 120).addingOneMinute().rawValue, 180)
+
+        XCTAssertThrowsError(try MT5ServerSecond(rawValue: Int64.max - 30).addingOneMinute()) { error in
+            XCTAssertEqual(error as? DomainError, .timestampOverflow("MT5 server", Int64.max - 30))
+        }
+        XCTAssertThrowsError(try UtcSecond(rawValue: Int64.max - 30).addingOneMinute()) { error in
+            XCTAssertEqual(error as? DomainError, .timestampOverflow("UTC", Int64.max - 30))
+        }
+    }
+
     func testSHA256ChunkHasherIsDeterministicAndLengthChecked() {
         var first = SHA256ChunkHasher(namespace: "test")
         first.appendField("symbol", "EURUSD")

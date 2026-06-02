@@ -104,7 +104,7 @@ public struct CanonicalInsertVerifier: Sendable {
         if let mt5EndExclusive {
             hashEndExclusive = mt5EndExclusive
         } else {
-            hashEndExclusive = try addOneMinute(to: last.mt5ServerTime)
+            hashEndExclusive = try last.mt5ServerTime.addingOneMinute()
         }
         guard hashStart.rawValue <= first.mt5ServerTime.rawValue,
               hashEndExclusive.rawValue > last.mt5ServerTime.rawValue else {
@@ -207,25 +207,37 @@ public struct CanonicalInsertVerifier: Sendable {
     private func parseRows(_ body: String) throws -> [CanonicalRangeRow] {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-        return try trimmed.split(separator: "\n", omittingEmptySubsequences: true).map { row in
+        return try trimmed.split(separator: "\n", omittingEmptySubsequences: true).enumerated().map { rowIndex, row in
             let fields = row.split(separator: "\t", omittingEmptySubsequences: false).map { Self.unescapeTabSeparated(String($0)) }
-            guard fields.count == 15,
-                  let sourceOrigin = DataSourceOrigin(rawValue: fields[0]),
-                  let mt5Symbol = MT5Symbol(rawValue: fields[1]),
-                  let timeframe = Timeframe(rawValue: fields[2]),
-                  let mt5 = Int64(fields[3]),
-                  let utc = Int64(fields[4]),
-                  let offset = Int64(fields[5]),
-                  let offsetSource = OffsetSource(rawValue: fields[6]),
-                  let offsetConfidence = OffsetConfidence(rawValue: fields[7]),
-                  let open = Int64(fields[8]),
-                  let high = Int64(fields[9]),
-                  let low = Int64(fields[10]),
-                  let close = Int64(fields[11]),
-                  let volume = UInt64(fields[12]),
-                  let digitsValue = Int(fields[13]),
-                  let hashValue = UInt64(fields[14], radix: 16) else {
-                throw IngestError.canonicalInsertVerificationFailed("invalid ClickHouse canonical readback row '\(row)'")
+            guard fields.count == 15 else {
+                throw IngestError.canonicalInsertVerificationFailed("invalid ClickHouse canonical readback row \(rowIndex): expected 15 fields, got \(fields.count); row='\(row)'")
+            }
+            let sourceOrigin = try Self.parseField(fields, rowIndex: rowIndex, index: 0, name: "source_origin") {
+                DataSourceOrigin(rawValue: $0)
+            }
+            let mt5Symbol = try Self.parseField(fields, rowIndex: rowIndex, index: 1, name: "mt5_symbol") {
+                MT5Symbol(rawValue: $0)
+            }
+            let timeframe = try Self.parseField(fields, rowIndex: rowIndex, index: 2, name: "timeframe") {
+                Timeframe(rawValue: $0)
+            }
+            let mt5 = try Self.parseField(fields, rowIndex: rowIndex, index: 3, name: "mt5_server_ts_raw", parse: Int64.init)
+            let utc = try Self.parseField(fields, rowIndex: rowIndex, index: 4, name: "ts_utc", parse: Int64.init)
+            let offset = try Self.parseField(fields, rowIndex: rowIndex, index: 5, name: "server_utc_offset_seconds", parse: Int64.init)
+            let offsetSource = try Self.parseField(fields, rowIndex: rowIndex, index: 6, name: "offset_source") {
+                OffsetSource(rawValue: $0)
+            }
+            let offsetConfidence = try Self.parseField(fields, rowIndex: rowIndex, index: 7, name: "offset_confidence") {
+                OffsetConfidence(rawValue: $0)
+            }
+            let open = try Self.parseField(fields, rowIndex: rowIndex, index: 8, name: "open_scaled", parse: Int64.init)
+            let high = try Self.parseField(fields, rowIndex: rowIndex, index: 9, name: "high_scaled", parse: Int64.init)
+            let low = try Self.parseField(fields, rowIndex: rowIndex, index: 10, name: "low_scaled", parse: Int64.init)
+            let close = try Self.parseField(fields, rowIndex: rowIndex, index: 11, name: "close_scaled", parse: Int64.init)
+            let volume = try Self.parseField(fields, rowIndex: rowIndex, index: 12, name: "volume", parse: UInt64.init)
+            let digitsValue = try Self.parseField(fields, rowIndex: rowIndex, index: 13, name: "digits", parse: Int.init)
+            let hashValue = try Self.parseField(fields, rowIndex: rowIndex, index: 14, name: "bar_hash") {
+                UInt64($0, radix: 16)
             }
             let digits = try Digits(digitsValue)
             return CanonicalRangeRow(
@@ -246,6 +258,20 @@ public struct CanonicalInsertVerifier: Sendable {
                 barHash: BarHash(rawValue: hashValue)
             )
         }
+    }
+
+    private static func parseField<T>(
+        _ fields: [String],
+        rowIndex: Int,
+        index: Int,
+        name: String,
+        parse: (String) -> T?
+    ) throws -> T {
+        let raw = fields[index]
+        guard let value = parse(raw) else {
+            throw IngestError.canonicalInsertVerificationFailed("invalid ClickHouse canonical readback row \(rowIndex) field \(index) (\(name)): '\(raw)'")
+        }
+        return value
     }
 
     private static func unescapeTabSeparated(_ value: String) -> String {
@@ -273,13 +299,6 @@ public struct CanonicalInsertVerifier: Sendable {
         return result
     }
 
-    private func addOneMinute(to value: MT5ServerSecond) throws -> MT5ServerSecond {
-        let result = value.rawValue.addingReportingOverflow(Timeframe.m1.seconds)
-        guard !result.overflow else {
-            throw IngestError.canonicalInsertVerificationFailed("MT5 server timestamp overflow while hashing canonical readback")
-        }
-        return MT5ServerSecond(rawValue: result.partialValue)
-    }
 }
 
 private struct CanonicalRangeReadback: Sendable {

@@ -146,6 +146,31 @@ final class NormalizationStateTests: XCTestCase {
         XCTAssertEqual(state.config.configVersion, 2)
     }
 
+    func testRuntimeWindowStateMigratesLegacyOnlyPayloadToConfig() throws {
+        let data = """
+        {
+          "legacy": {
+            "ready": true,
+            "defaultWindow": 96,
+            "featureWindows": [8, 64, 999]
+          }
+        }
+        """.data(using: .utf8)!
+
+        let state = try JSONDecoder().decode(NormalizationWindowRuntimeState.self, from: data)
+        let encoded = String(data: try JSONEncoder().encode(state), encoding: .utf8)!
+
+        XCTAssertTrue(state.config.initialized)
+        XCTAssertTrue(state.legacy.ready)
+        XCTAssertEqual(state.config.defaultWindow, 96)
+        XCTAssertEqual(state.config.configVersion, 0)
+        XCTAssertEqual(state.config.featureWindows[0], 16)
+        XCTAssertEqual(state.config.featureWindows[1], 64)
+        XCTAssertEqual(state.config.featureWindows[2], 512)
+        XCTAssertFalse(encoded.contains("\"legacy\""))
+        XCTAssertTrue(encoded.contains("\"config\""))
+    }
+
     func testNormalizationWindowCodecsRoundTripLegacySections() throws {
         var runtime = NormalizationWindowRuntimeState()
         runtime.apply(featureWindows: [8, 64, 256], defaultWindow: 96)
@@ -232,6 +257,11 @@ final class NormalizationStateTests: XCTestCase {
         XCTAssertEqual(stats.interquartileRange, 3.5, accuracy: 1e-12)
         XCTAssertEqual(stats.quantiles[4], 1.75, accuracy: 1e-12)
         XCTAssertEqual(stats.quantiles[12], 5.25, accuracy: 1e-12)
+        XCTAssertEqual(
+            NormalizationFitTools.quantileToNormal(0.5, quantiles: [0.0, 0.5, 1.0]),
+            0.0,
+            accuracy: 1e-12
+        )
     }
 
     func testNormalizationFitStateFitsRowsAndSkipsNonFittedMethods() {

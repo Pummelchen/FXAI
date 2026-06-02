@@ -75,6 +75,21 @@ actor HealthRecordingClickHouse: ClickHouseClientProtocol {
     }
 }
 
+actor HealthInvalidScalarClickHouse: ClickHouseClientProtocol {
+    func execute(_ query: ClickHouseQuery) async throws -> String {
+        if query.sql.trimmingCharacters(in: .whitespacesAndNewlines) == "SELECT 1" {
+            return "1\n"
+        }
+        return "not-a-number\n"
+    }
+}
+
+actor HealthTransportFailureClickHouse: ClickHouseClientProtocol {
+    func execute(_ query: ClickHouseQuery) async throws -> String {
+        throw ClickHouseError.transport("connection refused")
+    }
+}
+
 actor VerificationPlannerClickHouse: ClickHouseClientProtocol {
     func execute(_ query: ClickHouseQuery) async throws -> String {
         let sql = query.sql
@@ -612,6 +627,7 @@ actor RecordingCommandRunner: SystemCommandRunning {
 func makeConfig(
     minimumFreeDiskBytes: Int64 = SupervisorConfig.default.minimumFreeDiskBytes,
     clickHouseDiskFreeAlertBytes: Int64 = SupervisorConfig.default.clickHouseDiskFreeAlertBytes,
+    database: String = "db",
     symbols: [String: UInt8] = ["EURUSD": 5, "USDJPY": 3]
 ) throws -> ConfigBundle {
     let appData = """
@@ -631,7 +647,7 @@ func makeConfig(
         app: try JSONDecoder().decode(AppConfigFile.self, from: appData),
         clickHouse: ClickHouseConfig(
             url: URL(string: "http://localhost:8123")!,
-            database: "db",
+            database: database,
             username: nil,
             password: nil,
             requestTimeoutSeconds: 10,

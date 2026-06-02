@@ -61,12 +61,12 @@ public struct FXLivePromotionEvidence: Codable, Hashable, Sendable {
         currentUTC: Int64,
         maxAgeSeconds: Int64 = FXLiveAgentProtocolV1.defaultPromotionMaxAgeSeconds
     ) throws {
-        try require(promotionId, "promotion_id")
-        try require(sourceBacktestRunId, "source_backtest_run_id")
-        try require(demoRunId, "demo_run_id")
-        try require(lineageId, "lineage_id")
-        try require(certificationRunId, "certification_run_id")
-        try require(approver, "approver")
+        try FXExecutionValidation.requireNonEmpty(promotionId, "promotion_id", error: FXLiveAgentError.invalidRequest)
+        try FXExecutionValidation.requireNonEmpty(sourceBacktestRunId, "source_backtest_run_id", error: FXLiveAgentError.invalidRequest)
+        try FXExecutionValidation.requireNonEmpty(demoRunId, "demo_run_id", error: FXLiveAgentError.invalidRequest)
+        try FXExecutionValidation.requireNonEmpty(lineageId, "lineage_id", error: FXLiveAgentError.invalidRequest)
+        try FXExecutionValidation.requireNonEmpty(certificationRunId, "certification_run_id", error: FXLiveAgentError.invalidRequest)
+        try FXExecutionValidation.requireNonEmpty(approver, "approver", error: FXLiveAgentError.invalidRequest)
         guard approvedAtUTC > 0 else {
             throw FXLiveAgentError.invalidRequest("approved_at_utc must be positive")
         }
@@ -127,10 +127,10 @@ public struct FXLiveAgentWorkloadRequest: Codable, Hashable, Sendable {
         guard apiVersion == FXLiveAgentProtocolV1.latestVersion else {
             throw FXLiveAgentError.unsupportedVersion(apiVersion)
         }
-        try require(requestId, "request_id")
-        try require(pluginId, "plugin_id")
-        try require(acceleratorId, "accelerator_id")
-        try require(parameterSetId, "parameter_set_id")
+        try FXExecutionValidation.requireNonEmpty(requestId, "request_id", error: FXLiveAgentError.invalidRequest)
+        try FXExecutionValidation.requireNonEmpty(pluginId, "plugin_id", error: FXLiveAgentError.invalidRequest)
+        try FXExecutionValidation.requireNonEmpty(acceleratorId, "accelerator_id", error: FXLiveAgentError.invalidRequest)
+        try FXExecutionValidation.requireNonEmpty(parameterSetId, "parameter_set_id", error: FXLiveAgentError.invalidRequest)
         guard issuedAtUTC > 0 else {
             throw FXLiveAgentError.invalidRequest("issued_at_utc must be positive")
         }
@@ -212,11 +212,5 @@ public enum FXLiveAgentRuntime {
             lineageId: request.promotionEvidence.lineageId,
             requiresHumanRelease: requiresHumanRelease
         )
-    }
-}
-
-private func require(_ value: String, _ field: String) throws {
-    guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-        throw FXLiveAgentError.invalidRequest("\(field) must not be empty")
     }
 }

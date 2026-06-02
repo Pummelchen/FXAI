@@ -100,7 +100,7 @@ public struct BacktestBroker: Sendable {
     }
 
     public var profitFactor: Double {
-        grossLoss == 0 ? (grossProfit > 0 ? Double.infinity : 0) : grossProfit / abs(grossLoss)
+        grossLoss == 0 ? (grossProfit > 0 ? BacktestMetricLimits.maxProfitFactor : 0) : grossProfit / abs(grossLoss)
     }
 
     private func profit(position: BacktestPosition, price: Int64) -> Double {

@@ -163,7 +163,7 @@ public struct BackfillAgent: Sendable {
                 let oldest = MT5ServerSecond(rawValue: oldestResponse.mt5ServerTime)
                 let refreshedLatestClosedResponse = try bridge.latestClosedM1Bar(mapping.mt5Symbol)
                 try validateSingleTimeResponse(refreshedLatestClosedResponse, expectedMT5Symbol: mapping.mt5Symbol)
-                let latestExclusive = try addOneMinute(to: MT5ServerSecond(rawValue: refreshedLatestClosedResponse.mt5ServerTime))
+                let latestExclusive = try MT5ServerSecond(rawValue: refreshedLatestClosedResponse.mt5ServerTime).addingOneMinute()
                 requiredFrom = MT5ServerSecond(rawValue: min(requiredFrom?.rawValue ?? oldest.rawValue, oldest.rawValue))
                 requiredTo = MT5ServerSecond(rawValue: max(requiredTo?.rawValue ?? latestExclusive.rawValue, latestExclusive.rawValue))
             } catch {
@@ -313,7 +313,7 @@ public struct BackfillAgent: Sendable {
                 let closedBars = try sourceRange.response.rates.map {
                     try $0.toClosedM1Bar(logicalSymbol: mapping.logicalSymbol, mt5Symbol: mapping.mt5Symbol, digits: mapping.digits)
                 }
-                try validateClosedBarsInRange(closedBars, from: range.from, toExclusive: range.toExclusive)
+                try IngestionWritePipeline.validateClosedBarsInRange(closedBars, from: range.from, toExclusive: range.toExclusive)
 
                 let now = UtcSecond(rawValue: Int64(Date().timeIntervalSince1970))
                 guard !closedBars.isEmpty else {
@@ -418,7 +418,7 @@ public struct BackfillAgent: Sendable {
                 }
                 let verifiedRangeLabel = OperatorStatusText.monthRangeLabel(
                     start: first.utcTime,
-                    endExclusive: try addOneMinute(to: last.utcTime)
+                    endExclusive: try last.utcTime.addingOneMinute()
                 )
                 let state = IngestState(
                     brokerSourceId: config.brokerTime.brokerSourceId,
@@ -449,7 +449,7 @@ public struct BackfillAgent: Sendable {
                     offsetAuthoritySHA256: offsetAuthoritySHA256
                 )
                 logger.ok("\(mapping.logicalSymbol.rawValue) - \(verifiedRangeLabel) pulled, verified, UTC correct and canonical data clean (\(validated.count) closed M1 bars)")
-                cursor = try addOneMinute(to: last.mt5ServerTime)
+                cursor = try last.mt5ServerTime.addingOneMinute()
             } catch {
                 do {
                     try await recordChunkOperation(
@@ -487,84 +487,23 @@ public struct BackfillAgent: Sendable {
         mt5SourceSHA256: SHA256DigestHex,
         offsetAuthoritySHA256: SHA256DigestHex
     ) async throws -> CanonicalInsertVerificationResult {
-        guard let first = bars.first else {
-            throw IngestError.invalidChunk("cannot write an empty validated canonical chunk")
-        }
-        let rawInsert = insertBuilder.rawBarsInsert(bars)
-        let canonicalDelete = try insertBuilder.canonicalRangeDelete(
+        try await IngestionWritePipeline(
+            clickHouse: clickHouse,
+            brokerSourceId: config.brokerTime.brokerSourceId
+        ).writeValidatedBars(
             bars,
-            mt5Start: range.from,
-            mt5EndExclusive: range.toExclusive
-        )
-        let canonicalInsert = try insertBuilder.canonicalBarsInsert(bars)
-        try await CanonicalConflictRecorder(clickHouse: clickHouse, insertBuilder: insertBuilder)
-            .recordConflictsBeforeCanonicalReplace(bars, detectedAtUtc: first.ingestedAtUtc)
-        _ = try await clickHouse.execute(rawInsert)
-        try await recordChunkOperation(
+            insertBuilder: insertBuilder,
             auditStore: auditStore,
             mapping: mapping,
             operationType: operationType,
             batchId: batchId,
             range: range,
-            status: .rawWritten,
-            stage: "raw_audit_written",
             sourceBarCount: sourceBarCount,
-            canonicalRowCount: nil,
             sourceHash: sourceHash,
             mt5SourceSHA256: mt5SourceSHA256,
-            offsetAuthoritySHA256: offsetAuthoritySHA256
+            offsetAuthoritySHA256: offsetAuthoritySHA256,
+            emptyChunkMessage: "cannot write an empty validated canonical chunk"
         )
-        _ = try await clickHouse.execute(canonicalDelete)
-        try await recordChunkOperation(
-            auditStore: auditStore,
-            mapping: mapping,
-            operationType: operationType,
-            batchId: batchId,
-            range: range,
-            status: .canonicalDeleted,
-            stage: "canonical_range_deleted",
-            sourceBarCount: sourceBarCount,
-            canonicalRowCount: nil,
-            sourceHash: sourceHash,
-            mt5SourceSHA256: mt5SourceSHA256,
-            offsetAuthoritySHA256: offsetAuthoritySHA256
-        )
-        _ = try await clickHouse.execute(canonicalInsert)
-        try await recordChunkOperation(
-            auditStore: auditStore,
-            mapping: mapping,
-            operationType: operationType,
-            batchId: batchId,
-            range: range,
-            status: .canonicalWritten,
-            stage: "canonical_written",
-            sourceBarCount: sourceBarCount,
-            canonicalRowCount: bars.count,
-            sourceHash: sourceHash,
-            mt5SourceSHA256: mt5SourceSHA256,
-            offsetAuthoritySHA256: offsetAuthoritySHA256
-        )
-        let canonicalVerification = try await CanonicalInsertVerifier(clickHouse: clickHouse, insertBuilder: insertBuilder).verify(
-            bars,
-            mt5Start: range.from,
-            mt5EndExclusive: range.toExclusive
-        )
-        try await recordChunkOperation(
-            auditStore: auditStore,
-            mapping: mapping,
-            operationType: operationType,
-            batchId: batchId,
-            range: range,
-            status: .readbackVerified,
-            stage: "canonical_readback_verified",
-            sourceBarCount: sourceBarCount,
-            canonicalRowCount: bars.count,
-            sourceHash: sourceHash,
-            mt5SourceSHA256: mt5SourceSHA256,
-            canonicalReadbackSHA256: canonicalVerification.canonicalReadbackSHA256,
-            offsetAuthoritySHA256: offsetAuthoritySHA256
-        )
-        return canonicalVerification
     }
 
     private func recordChunkOperation(
@@ -583,22 +522,20 @@ public struct BackfillAgent: Sendable {
         offsetAuthoritySHA256: SHA256DigestHex? = nil,
         errorMessage: String? = nil
     ) async throws {
-        let hasSHA256Evidence = mt5SourceSHA256 != nil || canonicalReadbackSHA256 != nil || offsetAuthoritySHA256 != nil
-        try await auditStore.recordOperation(
-            brokerSourceId: config.brokerTime.brokerSourceId,
-            sourceOrigin: mapping.sourceOrigin,
-            logicalSymbol: mapping.logicalSymbol,
-            mt5Symbol: mapping.mt5Symbol,
+        try await IngestionWritePipeline(
+            clickHouse: clickHouse,
+            brokerSourceId: config.brokerTime.brokerSourceId
+        ).recordChunkOperation(
+            auditStore: auditStore,
+            mapping: mapping,
             operationType: operationType,
             batchId: batchId,
-            mt5Start: range.from,
-            mt5EndExclusive: range.toExclusive,
+            range: range,
             status: status,
             stage: stage,
             sourceBarCount: sourceBarCount,
             canonicalRowCount: canonicalRowCount,
             sourceHash: sourceHash,
-            hashSchemaVersion: hasSHA256Evidence ? ChunkHashing.schemaVersion : nil,
             mt5SourceSHA256: mt5SourceSHA256,
             canonicalReadbackSHA256: canonicalReadbackSHA256,
             offsetAuthoritySHA256: offsetAuthoritySHA256,
@@ -705,12 +642,7 @@ public struct BackfillAgent: Sendable {
     }
 
     private func validateClosedBarsInRange(_ bars: [ClosedM1Bar], from: MT5ServerSecond, toExclusive: MT5ServerSecond) throws {
-        for bar in bars {
-            guard bar.mt5ServerTime.rawValue >= from.rawValue,
-                  bar.mt5ServerTime.rawValue < toExclusive.rawValue else {
-                throw IngestError.invalidBridgeResponse("MT5 bar \(bar.mt5ServerTime.rawValue) is outside requested range \(from.rawValue)..<\(toExclusive.rawValue)")
-            }
-        }
+        try IngestionWritePipeline.validateClosedBarsInRange(bars, from: from, toExclusive: toExclusive)
     }
 
     private func ensureHistorySynchronized(mapping: SymbolMapping) async throws {
@@ -746,32 +678,11 @@ public struct BackfillAgent: Sendable {
     }
 
     private func loadTerminalIdentity() throws -> BrokerServerIdentity {
-        let actual = try bridge.terminalInfo()
-        do {
-            return try TerminalIdentityPolicy().resolve(
-                actual: actual,
-                brokerSourceId: config.brokerTime.brokerSourceId,
-                expected: config.brokerTime.expectedTerminalIdentity,
-                logger: logger
-            )
-        } catch let error as TerminalIdentityPolicyError {
-            throw IngestError.terminalIdentityMismatch(error.description)
-        }
-    }
-
-    private func addOneMinute(to value: MT5ServerSecond) throws -> MT5ServerSecond {
-        let result = value.rawValue.addingReportingOverflow(Timeframe.m1.seconds)
-        guard !result.overflow else {
-            throw IngestError.invalidChunk("MT5 server timestamp overflow while advancing one M1 bar")
-        }
-        return MT5ServerSecond(rawValue: result.partialValue)
-    }
-
-    private func addOneMinute(to value: UtcSecond) throws -> UtcSecond {
-        let result = value.rawValue.addingReportingOverflow(Timeframe.m1.seconds)
-        guard !result.overflow else {
-            throw IngestError.invalidChunk("UTC timestamp overflow while advancing one M1 bar")
-        }
-        return UtcSecond(rawValue: result.partialValue)
+        try IngestionWritePipeline.loadTerminalIdentity(
+            bridge: bridge,
+            brokerSourceId: config.brokerTime.brokerSourceId,
+            expected: config.brokerTime.expectedTerminalIdentity,
+            logger: logger
+        )
     }
 }

@@ -5,12 +5,20 @@ import Foundation
 public final class OperationalHealthServer: @unchecked Sendable {
     private let host: String
     private let port: UInt16
+    private let pollTimeoutMilliseconds: Int32
     private let service: OperationalHealthService
     private let logger: Logger
 
-    public init(host: String, port: UInt16, service: OperationalHealthService, logger: Logger) {
+    public init(
+        host: String,
+        port: UInt16,
+        service: OperationalHealthService,
+        logger: Logger,
+        pollTimeoutMilliseconds: Int32 = 100
+    ) {
         self.host = host
         self.port = port
+        self.pollTimeoutMilliseconds = pollTimeoutMilliseconds
         self.service = service
         self.logger = logger
     }
@@ -21,7 +29,7 @@ public final class OperationalHealthServer: @unchecked Sendable {
         logger.ok("FXDatabase health API listening at http://\(host):\(port)/v1/health")
         while !Task.isCancelled {
             var pollFD = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
-            let ready = poll(&pollFD, 1, 1_000)
+            let ready = poll(&pollFD, 1, pollTimeoutMilliseconds)
             if ready < 0 {
                 if errno == EINTR { continue }
                 throw HealthServerError.acceptFailed(errno)

@@ -1,10 +1,10 @@
-# FXAI Bugfix Plan
+# FXAI Bugfix Record
 
 Created: 2026-06-02
 
 Source report: `/Users/andreborchert/.codex/attachments/52495dc1-cf79-43e6-8c89-9fc1991de9a1/pasted-text.txt`
 
-This plan includes only findings that still match the current codebase after validation. Line numbers in the source report were treated as hints and rechecked by symbol/function name.
+This record includes only findings that still matched the current codebase after validation. Line numbers in the source report were treated as hints and rechecked by symbol/function name.
 
 ## Validation Summary
 

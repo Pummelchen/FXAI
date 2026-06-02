@@ -258,7 +258,7 @@ public struct NormalizationCore: Sendable {
         case .robustMedianIQR:
             return (current - stats.median) / max(stats.interquartileRange, 1e-6) / 4.0
         case .quantileToNormal:
-            return quantileToNormal(current, stats: stats) / 6.0
+            return NormalizationFitTools.quantileToNormal(current, quantiles: stats.quantiles) / 6.0
         case .powerYeoJohnson:
             let transformed = NormalizationFitTools.yeoJohnson(current, lambda: stats.yeoJohnsonLambda)
             return (transformed - stats.yeoJohnsonMean) / max(stats.yeoJohnsonStandardDeviation, 1e-6) / 4.0
@@ -273,34 +273,6 @@ public struct NormalizationCore: Sendable {
         let unit = (value - stats.minimum) / span
         let buffered = (unit + buffer) / (1.0 + buffer * 2.0)
         return fxClamp(buffered, 0.0, 1.0)
-    }
-
-    private func quantileToNormal(_ value: Double, stats: NormalizationFitFeatureStats) -> Double {
-        let knots = stats.quantiles
-        guard let first = knots.first, let last = knots.last, knots.count > 1 else { return 0.0 }
-        let current = fxSafeFinite(value)
-        if current <= first {
-            return fxClamp(NormalizationFitTools.inverseNormalCDF(1e-6), -6.0, 6.0)
-        }
-        if current >= last {
-            return fxClamp(NormalizationFitTools.inverseNormalCDF(1.0 - 1e-6), -6.0, 6.0)
-        }
-
-        var q = 0.5
-        for index in 0..<(knots.count - 1) {
-            let q0 = knots[index]
-            let q1 = knots[index + 1]
-            if current > q1 {
-                continue
-            }
-            let p0 = Double(index) / Double(knots.count - 1)
-            let p1 = Double(index + 1) / Double(knots.count - 1)
-            q = abs(q1 - q0) < 1e-9
-                ? 0.5 * (p0 + p1)
-                : p0 + (current - q0) / (q1 - q0) * (p1 - p0)
-            break
-        }
-        return fxClamp(NormalizationFitTools.inverseNormalCDF(fxClamp(q, 1e-6, 1.0 - 1e-6)), -6.0, 6.0)
     }
 
     private func sanitizeInputVector(_ vector: [Double]) -> [Double] {

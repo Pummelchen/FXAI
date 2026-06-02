@@ -233,7 +233,7 @@ public struct BacktestBrokerV2: Sendable {
     }
 
     public var profitFactor: Double {
-        grossLoss == 0 ? (grossProfit > 0 ? Double.infinity : 0) : grossProfit / abs(grossLoss)
+        grossLoss == 0 ? (grossProfit > 0 ? BacktestMetricLimits.maxProfitFactor : 0) : grossProfit / abs(grossLoss)
     }
 
     private mutating func recomputeEquity() {

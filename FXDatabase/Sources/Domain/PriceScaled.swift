@@ -86,11 +86,21 @@ public struct PriceScaled: Codable, Hashable, Sendable, Comparable, CustomString
     }
 
     private static func pow10(_ exponent: Int) -> Int64 {
-        var value: Int64 = 1
-        for _ in 0..<exponent {
-            value *= 10
-        }
-        return value
+        let table: [Int64] = [
+            1,
+            10,
+            100,
+            1_000,
+            10_000,
+            100_000,
+            1_000_000,
+            10_000_000,
+            100_000_000,
+            1_000_000_000,
+            10_000_000_000
+        ]
+        precondition((0..<table.count).contains(exponent), "Digits exponent exceeds PriceScaled pow10 table.")
+        return table[exponent]
     }
 }
 

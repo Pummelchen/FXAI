@@ -52,6 +52,7 @@ public enum DomainError: Error, Equatable, CustomStringConvertible, Sendable {
     case invalidPrice(String)
     case priceScaleOverflow(String)
     case invalidMinuteAlignment(Int64)
+    case timestampOverflow(String, Int64)
     case invalidTimeRange
 
     public var description: String {
@@ -82,6 +83,8 @@ public enum DomainError: Error, Equatable, CustomStringConvertible, Sendable {
             return "Price '\(value)' cannot be represented as a scaled Int64."
         case .invalidMinuteAlignment(let value):
             return "Timestamp \(value) is not aligned to a whole M1 bar."
+        case .timestampOverflow(let label, let value):
+            return "\(label) timestamp overflow while advancing one M1 bar from \(value)."
         case .invalidTimeRange:
             return "Time range is invalid."
         }

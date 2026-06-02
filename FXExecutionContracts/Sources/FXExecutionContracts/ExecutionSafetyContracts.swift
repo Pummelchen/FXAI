@@ -235,6 +235,18 @@ public enum FXExecutionContractError: Error, Equatable, CustomStringConvertible,
     }
 }
 
+public enum FXExecutionValidation {
+    public static func requireNonEmpty<E: Error>(
+        _ value: String,
+        _ field: String,
+        error makeError: (String) -> E
+    ) throws {
+        guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw makeError("\(field) must not be empty")
+        }
+    }
+}
+
 private extension FXExecutionAccountScope {
     static func validateLatest(_ apiVersion: String) throws {
         guard apiVersion == FXExecutionContractsV1.latestVersion else {
@@ -243,8 +255,6 @@ private extension FXExecutionAccountScope {
     }
 
     static func require(_ value: String, _ field: String) throws {
-        guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw FXExecutionContractError.invalidField("\(field) must not be empty")
-        }
+        try FXExecutionValidation.requireNonEmpty(value, field, error: FXExecutionContractError.invalidField)
     }
 }

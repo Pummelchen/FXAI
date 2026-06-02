@@ -234,6 +234,44 @@ final class OperationsConfigTests: XCTestCase {
         }
     }
 
+    func testOperationalHealthServiceClassifiesInvalidScalarAsSchemaError() async throws {
+        let service = try OperationalHealthService(
+            config: makeConfig(),
+            clickHouse: HealthInvalidScalarClickHouse()
+        )
+
+        let snapshot = await service.snapshot()
+
+        XCTAssertFalse(snapshot.clickHouseOk)
+        XCTAssertEqual(snapshot.status, "clickhouse_schema_error")
+        XCTAssertEqual(snapshot.canonicalRows, 0)
+        XCTAssertNil(snapshot.latestCanonicalUtc)
+    }
+
+    func testOperationalHealthServiceClassifiesTransportFailureAsUnavailable() async throws {
+        let service = try OperationalHealthService(
+            config: makeConfig(),
+            clickHouse: HealthTransportFailureClickHouse()
+        )
+
+        let snapshot = await service.snapshot()
+
+        XCTAssertFalse(snapshot.clickHouseOk)
+        XCTAssertEqual(snapshot.status, "clickhouse_unavailable")
+    }
+
+    func testOperationalHealthServiceRejectsUnsafeDatabaseIdentifier() async throws {
+        let service = try OperationalHealthService(
+            config: makeConfig(database: "db;DROP"),
+            clickHouse: HealthRecordingClickHouse()
+        )
+
+        let snapshot = await service.snapshot()
+
+        XCTAssertFalse(snapshot.clickHouseOk)
+        XCTAssertEqual(snapshot.status, "clickhouse_schema_error")
+    }
+
     func testPersistentLogSinkWritesJSONAndRotates() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("FXDatabase-log-test-\(UUID().uuidString)", isDirectory: true)

@@ -71,12 +71,12 @@ public struct FXDemoAgentWorkloadRequest: Codable, Hashable, Sendable {
         guard apiVersion == FXDemoAgentProtocolV1.latestVersion else {
             throw FXDemoAgentError.unsupportedVersion(apiVersion)
         }
-        try require(requestId, "request_id")
-        try require(sourceBacktestRunId, "source_backtest_run_id")
-        try require(lineageId, "lineage_id")
-        try require(pluginId, "plugin_id")
-        try require(acceleratorId, "accelerator_id")
-        try require(parameterSetId, "parameter_set_id")
+        try FXExecutionValidation.requireNonEmpty(requestId, "request_id", error: FXDemoAgentError.invalidRequest)
+        try FXExecutionValidation.requireNonEmpty(sourceBacktestRunId, "source_backtest_run_id", error: FXDemoAgentError.invalidRequest)
+        try FXExecutionValidation.requireNonEmpty(lineageId, "lineage_id", error: FXDemoAgentError.invalidRequest)
+        try FXExecutionValidation.requireNonEmpty(pluginId, "plugin_id", error: FXDemoAgentError.invalidRequest)
+        try FXExecutionValidation.requireNonEmpty(acceleratorId, "accelerator_id", error: FXDemoAgentError.invalidRequest)
+        try FXExecutionValidation.requireNonEmpty(parameterSetId, "parameter_set_id", error: FXDemoAgentError.invalidRequest)
         guard issuedAtUTC > 0 else {
             throw FXDemoAgentError.invalidRequest("issued_at_utc must be positive")
         }
@@ -147,11 +147,5 @@ public enum FXDemoAgentRuntime {
             lineageId: request.lineageId,
             dryRunOnly: dryRunOnly
         )
-    }
-}
-
-private func require(_ value: String, _ field: String) throws {
-    guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-        throw FXDemoAgentError.invalidRequest("\(field) must not be empty")
     }
 }

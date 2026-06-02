@@ -44,23 +44,24 @@ public struct OperationalHealthService: Sendable {
         let now = utcNow().rawValue
         let broker = SQLText.literal(config.brokerTime.brokerSourceId.rawValue)
         do {
+            let database = try Self.validatedDatabaseIdentifier(config.clickHouse.database)
             _ = try await clickHouse.execute(.select("SELECT 1", databaseOverride: "default"))
             let brokerSources = try await scalar("""
             SELECT count()
-            FROM \(config.clickHouse.database).broker_sources
+            FROM \(database).broker_sources
             WHERE broker_source_id = '\(broker)'
               AND is_active = 1
             FORMAT TabSeparated
             """)
             let canonical = try await scalar("""
             SELECT count()
-            FROM \(config.clickHouse.database).ohlc_m1_canonical
+            FROM \(database).ohlc_m1_canonical
             WHERE broker_source_id = '\(broker)'
             FORMAT TabSeparated
             """)
             let latest = try await optionalScalar("""
             SELECT if(count() = 0, NULL, max(ts_utc))
-            FROM \(config.clickHouse.database).ohlc_m1_canonical
+            FROM \(database).ohlc_m1_canonical
             WHERE broker_source_id = '\(broker)'
             FORMAT TabSeparated
             """)
@@ -68,7 +69,7 @@ public struct OperationalHealthService: Sendable {
             SELECT count()
             FROM (
                 SELECT source_origin, operation_type, batch_id, argMax(status, tuple(event_at_utc, status_rank)) AS latest_status
-                FROM \(config.clickHouse.database).ingest_operations
+                FROM \(database).ingest_operations
                 WHERE broker_source_id = '\(broker)'
                 GROUP BY source_origin, operation_type, batch_id
             )
@@ -80,21 +81,21 @@ public struct OperationalHealthService: Sendable {
             """)
             let warningAgents = try await scalar("""
             SELECT count()
-            FROM \(config.clickHouse.database).runtime_agent_state FINAL
+            FROM \(database).runtime_agent_state FINAL
             WHERE broker_source_id = '\(broker)'
               AND status = 'warning'
             FORMAT TabSeparated
             """)
             let failedAgents = try await scalar("""
             SELECT count()
-            FROM \(config.clickHouse.database).runtime_agent_state FINAL
+            FROM \(database).runtime_agent_state FINAL
             WHERE broker_source_id = '\(broker)'
               AND status = 'failed'
             FORMAT TabSeparated
             """)
             let certificates = try await scalar("""
             SELECT count()
-            FROM \(config.clickHouse.database).data_certificates
+            FROM \(database).data_certificates
             WHERE broker_source_id = '\(broker)'
               AND certificate_status = 'valid'
             FORMAT TabSeparated
@@ -114,19 +115,7 @@ public struct OperationalHealthService: Sendable {
                 latestCanonicalUtc: latest
             )
         } catch {
-            return OperationalHealthSnapshot(
-                service: "FXDatabase",
-                status: "clickhouse_unavailable",
-                checkedAtUtc: now,
-                clickHouseOk: false,
-                brokerSourceCount: 0,
-                canonicalRows: 0,
-                unfinishedIngestOperations: 0,
-                warningAgentCount: 0,
-                failedAgentCount: 0,
-                validDataCertificateCount: 0,
-                latestCanonicalUtc: nil
-            )
+            return unavailableSnapshot(status: Self.status(for: error), checkedAtUtc: now)
         }
     }
 
@@ -143,15 +132,66 @@ public struct OperationalHealthService: Sendable {
         let body = try await clickHouse.execute(.select(sql))
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed.uppercased() != "\\N" else { return nil }
-        return Int64(trimmed)
+        guard let value = Int64(trimmed) else {
+            throw OperationalHealthServiceError.invalidScalar(trimmed)
+        }
+        return value
+    }
+
+    private func unavailableSnapshot(status: String, checkedAtUtc: Int64) -> OperationalHealthSnapshot {
+        OperationalHealthSnapshot(
+            service: "FXDatabase",
+            status: status,
+            checkedAtUtc: checkedAtUtc,
+            clickHouseOk: false,
+            brokerSourceCount: 0,
+            canonicalRows: 0,
+            unfinishedIngestOperations: 0,
+            warningAgentCount: 0,
+            failedAgentCount: 0,
+            validDataCertificateCount: 0,
+            latestCanonicalUtc: nil
+        )
+    }
+
+    private static func validatedDatabaseIdentifier(_ database: String) throws -> String {
+        guard !database.isEmpty,
+              database.unicodeScalars.allSatisfy({ scalar in
+                  (scalar.value >= 65 && scalar.value <= 90) ||
+                      (scalar.value >= 97 && scalar.value <= 122) ||
+                      (scalar.value >= 48 && scalar.value <= 57) ||
+                      scalar.value == 95
+              }),
+              database.unicodeScalars.first.map({ !($0.value >= 48 && $0.value <= 57) }) == true else {
+            throw OperationalHealthServiceError.invalidDatabaseName(database)
+        }
+        return database
+    }
+
+    private static func status(for error: Error) -> String {
+        if error is OperationalHealthServiceError {
+            return "clickhouse_schema_error"
+        }
+        if let clickHouseError = error as? ClickHouseError {
+            switch clickHouseError {
+            case .transport, .invalidURL:
+                return "clickhouse_unavailable"
+            case .exception, .httpStatus, .decoding, .nonIdempotentRetryRefused:
+                return "clickhouse_query_error"
+            }
+        }
+        return "clickhouse_unavailable"
     }
 }
 
 public enum OperationalHealthServiceError: Error, CustomStringConvertible, Sendable {
+    case invalidDatabaseName(String)
     case invalidScalar(String)
 
     public var description: String {
         switch self {
+        case .invalidDatabaseName(let value):
+            return "Operational health database name is not a safe ClickHouse identifier: \(value)"
         case .invalidScalar(let value):
             return "Operational health query returned an invalid scalar value: \(value)"
         }

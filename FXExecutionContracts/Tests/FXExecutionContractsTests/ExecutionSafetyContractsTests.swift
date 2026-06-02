@@ -3,6 +3,16 @@ import Testing
 
 @Suite("FXExecution safety contracts")
 struct ExecutionSafetyContractsTests {
+    @Test func sharedValidationRejectsEmptyText() throws {
+        #expect(throws: FXExecutionContractError.self) {
+            try FXExecutionValidation.requireNonEmpty(
+                " ",
+                "lineageId",
+                error: { _ in FXExecutionContractError.invalidField("lineageId") }
+            )
+        }
+    }
+
     @Test func liveOrdersRequirePromotionAndLineage() throws {
         let account = FXExecutionAccountScope(
             environment: .live,

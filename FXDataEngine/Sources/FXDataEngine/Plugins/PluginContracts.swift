@@ -689,14 +689,18 @@ public enum PluginContractTools {
             hash ^= UInt64(byte)
             hash &*= 1_099_511_628_211
         }
-        return Double(hash % 1_000_000) / 1_000_000.0
+        return Double(hash >> 11) / 9_007_199_254_740_992.0
     }
+
+    public static let utcCalendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }()
 
     public static func deriveSessionBucket(timestampUTC: Int64) -> Int {
         guard timestampUTC > 0 else { return 0 }
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        let hour = calendar.component(.hour, from: Date(timeIntervalSince1970: TimeInterval(timestampUTC)))
+        let hour = utcCalendar.component(.hour, from: Date(timeIntervalSince1970: TimeInterval(timestampUTC)))
         switch hour {
         case 0..<4: return 0
         case 4..<8: return 1

@@ -433,7 +433,7 @@ private extension FeatureCore {
 
     func normalizedReturn(_ series: M1OHLCVSeries, _ index: Int, _ lookback: Int) -> Double {
         let prior = index - lookback
-        guard prior >= 0 else { return 0.0 }
+        guard prior >= 0, index >= 0, index < series.count else { return 0.0 }
         let old = Double(series.close[prior])
         let new = Double(series.close[index])
         guard old > 0 else { return 0.0 }
@@ -441,6 +441,7 @@ private extension FeatureCore {
     }
 
     func closeSlope(_ series: M1OHLCVSeries, _ index: Int, window: Int) -> Double {
+        guard index >= 0, index < series.count else { return 0.0 }
         let start = max(0, index - max(1, window) + 1)
         guard index > start else { return 0.0 }
         let first = Double(series.close[start])
@@ -459,7 +460,7 @@ private extension FeatureCore {
     }
 
     func returnStd(_ series: M1OHLCVSeries, _ index: Int, window: Int) -> Double {
-        guard index > 0 else { return 0.0 }
+        guard index > 0, index < series.count else { return 0.0 }
         let start = max(1, index - max(1, window) + 1)
         var returns: [Double] = []
         returns.reserveCapacity(max(0, index - start + 1))
@@ -529,8 +530,8 @@ private extension FeatureCore {
     }
 
     func volumeSessionActivity(_ series: M1OHLCVSeries, index: Int) -> Double {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        guard index >= 0, index < series.count else { return 0.0 }
+        let calendar = PluginContractTools.utcCalendar
         let date = Date(timeIntervalSince1970: TimeInterval(series.utcTimestamps[index]))
         let hour = calendar.component(.hour, from: date)
         let sessionWindow = hour >= 7 && hour <= 20 ? 50 : 120
@@ -571,6 +572,7 @@ private extension FeatureCore {
     }
 
     func timeframeState(_ series: M1OHLCVSeries, index: Int, window: Int, hasVolume: Bool) -> [Double] {
+        guard index >= 0, index < series.count else { return [0.0, 0.0, 0.0, 0.0] }
         let start = max(0, index - max(1, window) + 1)
         let open = Double(series.open[start])
         let high = Double((start...index).map { series.high[$0] }.max() ?? series.high[index])

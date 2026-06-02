@@ -52,6 +52,22 @@ final class ExecutionModelTests: XCTestCase {
         XCTAssertEqual(broker.winRate, 1.0 / 3.0, accuracy: 0.0001)
     }
 
+    func testBacktestBrokerKeepsProfitFactorFiniteForNoLossRuns() throws {
+        let settings = BacktestRunSettings(
+            initialDeposit: 10_000,
+            contractSize: 100_000,
+            lotSize: 1
+        )
+        let context = BacktestContext(settings: settings, digits: 5)
+        var broker = BacktestBroker(context: context)
+
+        broker.openMarket(direction: .long, price: 100_000)
+        broker.closeMarket(price: 101_000)
+
+        XCTAssertTrue(broker.profitFactor.isFinite)
+        XCTAssertEqual(broker.profitFactor, BacktestMetricLimits.maxProfitFactor, accuracy: 0.0)
+    }
+
     func testBacktestBrokerV2TracksBreakEvenTradesWithoutCountingWinsOrLosses() throws {
         let settings = BacktestRunSettings(
             initialDeposit: 10_000,
@@ -72,6 +88,22 @@ final class ExecutionModelTests: XCTestCase {
         XCTAssertEqual(broker.winningTrades, 1)
         XCTAssertEqual(broker.losingTrades, 1)
         XCTAssertEqual(broker.winRate, 1.0 / 3.0, accuracy: 0.0001)
+    }
+
+    func testBacktestBrokerV2KeepsProfitFactorFiniteForNoLossRuns() throws {
+        let settings = BacktestRunSettings(
+            initialDeposit: 10_000,
+            contractSize: 100_000,
+            lotSize: 1
+        )
+        let context = BacktestContext(settings: settings, digits: 5)
+        var broker = BacktestBrokerV2(context: context)
+
+        let positionID = try broker.openMarket(symbol: "EURUSD", side: .buy, midPrice: 100_000, openedAtUtc: 1)
+        try broker.closePosition(id: positionID, midPrice: 101_000, closedAtUtc: 2)
+
+        XCTAssertTrue(broker.profitFactor.isFinite)
+        XCTAssertEqual(broker.profitFactor, BacktestMetricLimits.maxProfitFactor, accuracy: 0.0)
     }
 
     func testBacktestBrokerV2SeparatesRealizedAndEquityNetProfitDuringOpenTrade() throws {

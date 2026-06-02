@@ -44,6 +44,26 @@ public struct UtcSecond: EpochSecond {
     }
 }
 
+public extension MT5ServerSecond {
+    func addingOneMinute() throws -> MT5ServerSecond {
+        let result = rawValue.addingReportingOverflow(Timeframe.m1.seconds)
+        guard !result.overflow else {
+            throw DomainError.timestampOverflow("MT5 server", rawValue)
+        }
+        return MT5ServerSecond(rawValue: result.partialValue)
+    }
+}
+
+public extension UtcSecond {
+    func addingOneMinute() throws -> UtcSecond {
+        let result = rawValue.addingReportingOverflow(Timeframe.m1.seconds)
+        guard !result.overflow else {
+            throw DomainError.timestampOverflow("UTC", rawValue)
+        }
+        return UtcSecond(rawValue: result.partialValue)
+    }
+}
+
 public struct OffsetSeconds: RawRepresentable, Codable, Hashable, Sendable, Comparable, CustomStringConvertible {
     public let rawValue: Int64
 

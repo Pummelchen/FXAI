@@ -69,6 +69,15 @@ final class PluginContractTests: XCTestCase {
         XCTAssertThrowsError(try JSONDecoder().decode(PluginContextV4.self, from: json))
     }
 
+    func testPluginContractToolsHashAndSessionBucketUseStableUTCLogic() {
+        let hash = PluginContractTools.symbolHash01("eurusd")
+
+        XCTAssertGreaterThanOrEqual(hash, 0.0)
+        XCTAssertLessThan(hash, 1.0)
+        XCTAssertEqual(hash, 0.8562530988726493, accuracy: 1e-15)
+        XCTAssertEqual(PluginContractTools.deriveSessionBucket(timestampUTC: 1_704_150_000), 5)
+    }
+
     func testPredictRequestValidationChecksWindowContract() throws {
         let x = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
         let context = PluginContextV4(sequenceBars: 2, dataHasVolume: true)
