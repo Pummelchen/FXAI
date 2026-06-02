@@ -373,15 +373,39 @@ final class FXGUIModel: ObservableObject {
         pasteboard.setString(value, forType: .string)
     }
 
-    func handoffCommandToTerminal(_ command: String) {
-        copyToPasteboard(command)
-
+    func copyCommandToPasteboard(_ command: String) {
         guard let projectRoot else { return }
+        do {
+            let approvedCommand = try FXAICommandSecurityPolicy.approvedCommandForTerminalHandoff(command, projectRoot: projectRoot)
+            copyToPasteboard(approvedCommand)
+            lastErrorMessage = nil
+        } catch {
+            lastErrorMessage = commandSecurityErrorMessage(error)
+        }
+    }
+
+    func handoffCommandToTerminal(_ command: String) {
+        guard let projectRoot else { return }
+        do {
+            let approvedCommand = try FXAICommandSecurityPolicy.approvedCommandForTerminalHandoff(command, projectRoot: projectRoot)
+            copyToPasteboard(approvedCommand)
+            lastErrorMessage = nil
+        } catch {
+            lastErrorMessage = commandSecurityErrorMessage(error)
+            return
+        }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         process.arguments = ["-a", "Terminal", projectRoot.path]
         try? process.run()
+    }
+
+    private func commandSecurityErrorMessage(_ error: Error) -> String {
+        if let error = error as? FXAICommandSecurityError {
+            return error.description
+        }
+        return error.localizedDescription
     }
 
     func saveCurrentView(named proposedName: String? = nil) {

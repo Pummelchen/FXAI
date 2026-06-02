@@ -166,7 +166,7 @@ struct ResearchOSControlView: View {
                 title: "Environment Diagnostics",
                 summary: "Run the same validation and dashboard commands the operators use at the terminal, then inspect the updated Turso-backed operator state.",
                 command: diagnosticsCommand,
-                onCopy: { model.copyToPasteboard(diagnosticsCommand) },
+                onCopy: { model.copyCommandToPasteboard(diagnosticsCommand) },
                 onTerminal: { model.handoffCommandToTerminal(diagnosticsCommand) }
             )
         }
@@ -219,7 +219,7 @@ struct ResearchOSControlView: View {
                             title: "Generated Branch Command",
                             summary: "Create, inventory, restore, or destroy Turso branch surfaces using the exact Offline Lab CLI.",
                             command: branchCommand,
-                            onCopy: { model.copyToPasteboard(branchCommand) },
+                            onCopy: { model.copyCommandToPasteboard(branchCommand) },
                             onTerminal: { model.handoffCommandToTerminal(branchCommand) }
                         )
                     }
@@ -305,7 +305,7 @@ struct ResearchOSControlView: View {
                             title: "Generated Audit Sync Command",
                             summary: "Refresh Turso platform audit events into the Research OS and immediately re-render the operator dashboard.",
                             command: auditCommand,
-                            onCopy: { model.copyToPasteboard(auditCommand) },
+                            onCopy: { model.copyCommandToPasteboard(auditCommand) },
                             onTerminal: { model.handoffCommandToTerminal(auditCommand) }
                         )
                     }
@@ -391,7 +391,7 @@ struct ResearchOSControlView: View {
                         title: "Generated Vector Command",
                         summary: "Refresh native Turso analog vectors and inspect the nearest shadow-state neighbors for the selected symbol.",
                         command: vectorCommand,
-                        onCopy: { model.copyToPasteboard(vectorCommand) },
+                        onCopy: { model.copyCommandToPasteboard(vectorCommand) },
                         onTerminal: { model.handoffCommandToTerminal(vectorCommand) }
                     )
                 }
@@ -477,7 +477,7 @@ struct ResearchOSControlView: View {
                         title: "Generated Recovery Command",
                         summary: "Rebuild promoted artifacts, regenerate lineage, and emit a minimal bundle after Turso state changes or operator recovery work.",
                         command: recoveryCommand,
-                        onCopy: { model.copyToPasteboard(recoveryCommand) },
+                        onCopy: { model.copyCommandToPasteboard(recoveryCommand) },
                         onTerminal: { model.handoffCommandToTerminal(recoveryCommand) }
                     )
                 }

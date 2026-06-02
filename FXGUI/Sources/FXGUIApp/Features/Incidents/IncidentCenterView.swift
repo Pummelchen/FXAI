@@ -31,7 +31,7 @@ struct IncidentCenterView: View {
                                 title: "Full Platform Verification",
                                 summary: "Run the standard full-stack verification path before you trust the platform as production-ready.",
                                 command: verifyCommand,
-                                onCopy: { model.copyToPasteboard(verifyCommand) },
+                                onCopy: { model.copyCommandToPasteboard(verifyCommand) },
                                 onTerminal: { model.handoffCommandToTerminal(verifyCommand) }
                             )
                         }
@@ -46,7 +46,7 @@ struct IncidentCenterView: View {
         guard let projectRoot = model.projectRoot else { return "" }
         let toolRoot = projectRoot.appendingPathComponent("FXDataEngine", isDirectory: true)
         return [
-            "cd '\(toolRoot.path.replacingOccurrences(of: "'", with: "'\"'\"'"))'",
+            "cd \(FXAICommandSecurityPolicy.shellQuoted(toolRoot.path))",
             "python3 Tools/fxai_testlab.py verify-all"
         ].joined(separator: "\n")
     }
@@ -92,7 +92,7 @@ struct IncidentCenterView: View {
                                             title: action.title,
                                             summary: action.summary,
                                             command: action.command,
-                                            onCopy: { model.copyToPasteboard(action.command) },
+                                            onCopy: { model.copyCommandToPasteboard(action.command) },
                                             onTerminal: {
                                                 if let destination = action.destinationSelection,
                                                    let sidebarDestination = SidebarDestination(rawValue: destination) {
@@ -269,7 +269,7 @@ private struct RecoveryWizardView: View {
 
                                 HStack {
                                     Button("Copy") {
-                                        model.copyToPasteboard(step.command)
+                                        model.copyCommandToPasteboard(step.command)
                                     }
                                     .buttonStyle(.bordered)
 

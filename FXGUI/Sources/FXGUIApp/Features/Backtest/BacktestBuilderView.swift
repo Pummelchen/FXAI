@@ -67,7 +67,7 @@ struct BacktestBuilderView: View {
                     title: "Generated Backtest Prep Workflow",
                     summary: "Copy this into Terminal first, then run FXBacktest with the same plugin and symbol configuration.",
                     command: command,
-                    onCopy: { model.copyToPasteboard(command) },
+                    onCopy: { model.copyCommandToPasteboard(command) },
                     onTerminal: { model.handoffCommandToTerminal(command) }
                 )
 

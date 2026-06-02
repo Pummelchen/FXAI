@@ -13,7 +13,7 @@ public enum FXAICommandCatalog {
                 apiVersion: "fxdatabase.fxbacktest.v1",
                 executionPath: .terminalFallback,
                 riskLevel: .localBuild,
-                terminalEquivalent: "cd \(root) && ./fxai certify --all",
+                terminalEquivalent: "cd \(root)\n./fxai certify --all",
                 apiPath: "/v1/certification/evidence",
                 expectedResultType: "FXAICertificationEvidenceRequest",
                 logStreamKey: "certification"
@@ -27,7 +27,7 @@ public enum FXAICommandCatalog {
                 apiVersion: "fxdatabase.fxbacktest.v1",
                 executionPath: .versionedAPI,
                 riskLevel: .readOnly,
-                terminalEquivalent: "curl http://127.0.0.1:5066/v1/status",
+                terminalEquivalent: "FXGUI versioned API action: GET /v1/status",
                 apiPath: "/v1/status",
                 expectedResultType: "FXBacktestAPIStatusResponse",
                 logStreamKey: "fxdatabase"
@@ -45,7 +45,7 @@ public enum FXAICommandCatalog {
                     FXGUICommandParameter(key: "plugin_id", displayName: "Plugin", required: true),
                     FXGUICommandParameter(key: "backend", displayName: "Backend", required: true, defaultValue: "swiftScalar")
                 ],
-                terminalEquivalent: "cd \(root) && swift test --package-path FXBacktest --filter FXBacktestPluginZooBridgeTests",
+                terminalEquivalent: "cd \(root)\nswift test --package-path FXBacktest --filter FXBacktestPluginZooBridgeTests",
                 apiPath: nil,
                 expectedResultType: "BacktestPassResult",
                 logStreamKey: "plugin-test"
@@ -59,7 +59,7 @@ public enum FXAICommandCatalog {
                 apiVersion: "fxbacktest.agent.tcp.v1",
                 executionPath: .terminalFallback,
                 riskLevel: .readOnly,
-                terminalEquivalent: "cd \(root) && swift run --package-path FXBacktestAgent FXBacktestAgent --self-check",
+                terminalEquivalent: "cd \(root)\nswift run --package-path FXBacktestAgent FXBacktestAgent --self-check",
                 apiPath: nil,
                 expectedResultType: "FXBacktestAgentEnvelope",
                 logStreamKey: "agent"
@@ -83,6 +83,6 @@ public enum FXAICommandCatalog {
     }
 
     private static func shellQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
+        FXAICommandSecurityPolicy.shellQuoted(value)
     }
 }

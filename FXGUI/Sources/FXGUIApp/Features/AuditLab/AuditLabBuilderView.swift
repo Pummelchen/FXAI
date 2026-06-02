@@ -90,7 +90,7 @@ struct AuditLabBuilderView: View {
                     title: "Generated Audit Command",
                     summary: "This command matches the actual FXAI Audit Lab CLI and is ready to hand off to Terminal.",
                     command: command,
-                    onCopy: { model.copyToPasteboard(command) },
+                    onCopy: { model.copyCommandToPasteboard(command) },
                     onTerminal: { model.handoffCommandToTerminal(command) }
                 )
             }

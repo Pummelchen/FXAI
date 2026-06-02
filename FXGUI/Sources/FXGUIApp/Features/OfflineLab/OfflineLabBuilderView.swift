@@ -83,7 +83,7 @@ struct OfflineLabBuilderView: View {
                     title: "Generated Offline Lab Workflow",
                     summary: "This is the practical command chain the GUI recommends for the current research OS preset.",
                     command: command,
-                    onCopy: { model.copyToPasteboard(command) },
+                    onCopy: { model.copyCommandToPasteboard(command) },
                     onTerminal: { model.handoffCommandToTerminal(command) }
                 )
             }

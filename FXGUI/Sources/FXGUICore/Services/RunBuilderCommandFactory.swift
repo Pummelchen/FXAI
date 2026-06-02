@@ -116,7 +116,7 @@ public enum RunBuilderCommandFactory {
     }
 
     private static func shellQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
+        FXAICommandSecurityPolicy.shellQuoted(value)
     }
 
     private static func toolProjectRoot(_ projectRoot: URL) -> URL {

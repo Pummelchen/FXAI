@@ -547,6 +547,6 @@ public struct IncidentBuilder {
     }
 
     private func shellQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
+        FXAICommandSecurityPolicy.shellQuoted(value)
     }
 }

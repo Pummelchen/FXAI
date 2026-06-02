@@ -39,6 +39,18 @@ Phase 1 through Phase 6 are implemented here:
 - automatic resource guards that back off glass, Metal, blur, and background polling under memory, thermal, or inactive-app pressure
 - release packaging support for a polished macOS app bundle with configurable minimum-version metadata
 
+## Command Security
+
+FXGUI remains terminal-first, but command cards are not arbitrary shell launchers.
+Generated command previews pass through `FXAICommandSecurityPolicy` before they
+can be copied as commands or handed off to Terminal. The policy requires a
+project-local `cd` context, rejects shell chaining, redirection, expansion,
+backslash escapes, unsupported control characters, and non-approved executables,
+and allows only curated FXAI Swift package checks, approved FXAI Python tool
+entry points, the root `./fxai certify --all` command, BacktestAgent self-check,
+and the GUI release packager. Rejected commands are not copied to the pasteboard
+and are surfaced through the app error message path.
+
 ## Theme Support
 
 The app also ships a shared operator theme under:

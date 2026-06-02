@@ -36,7 +36,7 @@ struct CommandCenterView: View {
                                         Spacer()
                                         HStack(spacing: 8) {
                                             Button("Copy") {
-                                                model.copyToPasteboard(recipe.command)
+                                                model.copyCommandToPasteboard(recipe.command)
                                             }
                                             .buttonStyle(.bordered)
 

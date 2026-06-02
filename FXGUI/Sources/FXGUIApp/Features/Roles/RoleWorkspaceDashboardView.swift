@@ -325,7 +325,7 @@ struct RoleWorkspaceDashboardView: View {
                             title: recipe.title,
                             summary: recipe.summary,
                             command: recipe.command,
-                            onCopy: { model.copyToPasteboard(recipe.command) },
+                            onCopy: { model.copyCommandToPasteboard(recipe.command) },
                             onTerminal: { model.handoffCommandToTerminal(recipe.command) }
                         )
                     }

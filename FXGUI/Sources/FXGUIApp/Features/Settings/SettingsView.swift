@@ -221,7 +221,7 @@ struct SettingsView: View {
 
                 if let projectRoot = model.projectRoot {
                     let packageCommand = [
-                        "cd '\(projectRoot.appendingPathComponent("FXGUI").path.replacingOccurrences(of: "'", with: "'\"'\"'"))'",
+                        "cd \(FXAICommandSecurityPolicy.shellQuoted(projectRoot.appendingPathComponent("FXGUI").path))",
                         "./Tools/package_gui_release.sh"
                     ].joined(separator: "\n")
 
@@ -229,7 +229,7 @@ struct SettingsView: View {
                         title: "Package FXGUI",
                         summary: "Build a release bundle and zip artifact for operator distribution.",
                         command: packageCommand,
-                        onCopy: { model.copyToPasteboard(packageCommand) },
+                        onCopy: { model.copyCommandToPasteboard(packageCommand) },
                         onTerminal: { model.handoffCommandToTerminal(packageCommand) }
                     )
                 }

@@ -122,6 +122,6 @@ public enum CommandFactory {
     }
 
     private static func shellQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
+        FXAICommandSecurityPolicy.shellQuoted(value)
     }
 }
