@@ -429,19 +429,16 @@ public enum WarmupTools {
             validationLength = 240
         }
 
-        let validationStart = startIndex
-        var validationEnd = validationStart + validationLength - 1
-        if validationEnd >= endIndex {
-            validationEnd = endIndex - 1
-        }
-        guard validationEnd > validationStart else { return nil }
-
         var purge = horizonMinutes + 240
         if purge < horizonMinutes + 40 {
             purge = horizonMinutes + 40
         }
-        let trainingStart = validationEnd + purge + 1
-        let trainingEnd = endIndex
+
+        let validationEnd = endIndex
+        let validationStart = max(startIndex, validationEnd - validationLength + 1)
+        let trainingStart = startIndex
+        let trainingEnd = validationStart - purge - 1
+        guard validationEnd > validationStart else { return nil }
         guard trainingEnd - trainingStart >= 100 else { return nil }
 
         return WarmupCandidateSplit(
@@ -473,13 +470,13 @@ public enum WarmupTools {
         var splits: [WarmupCandidateSplit] = []
         splits.reserveCapacity(folds)
         for fold in 0..<folds {
-            var validationStart = startIndex + (fold * foldLength)
+            var validationStart = startIndex + ((fold + 1) * foldLength)
             var validationEnd = validationStart + foldLength - 1
             if validationStart < startIndex {
                 validationStart = startIndex
             }
             if validationEnd >= endIndex {
-                validationEnd = endIndex - 1
+                validationEnd = endIndex
             }
             guard validationEnd > validationStart else { continue }
 
@@ -487,8 +484,8 @@ public enum WarmupTools {
             if purge < horizonMinutes + 40 {
                 purge = horizonMinutes + 40
             }
-            let trainingStart = validationEnd + purge + 1
-            let trainingEnd = endIndex
+            let trainingStart = startIndex
+            let trainingEnd = validationStart - purge - 1
             guard trainingEnd - trainingStart >= 100 else { continue }
 
             splits.append(

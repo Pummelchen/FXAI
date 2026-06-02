@@ -1,5 +1,7 @@
 import FXBacktestCore
 import FXBacktestPlugins
+import FXAIPlugins
+import FXDataEngine
 import XCTest
 
 #if canImport(Metal)
@@ -79,6 +81,35 @@ final class FX7PluginTests: XCTestCase {
 
         XCTAssertGreaterThan(longOnly.totalTrades, 0)
         XCTAssertEqual(noLongs.totalTrades, 0)
+    }
+
+    func testFXAIPluginBacktestAdapterTrainsWithConfiguredHorizonLabel() throws {
+        let plugin = BacktestTrainingLabelSpyPlugin()
+        let runtime = FXAIAcceleratedPluginRuntime(plugin: plugin)
+        let adapter = try FXAIPluginBacktestAdapter(runtime: runtime)
+        let market = try customMarket(closes: [
+            100, 100, 100, 90, 90, 90, 90, 130, 130, 130, 130, 130
+        ])
+        let parameters = ParameterVector(
+            combinationIndex: 0,
+            names: adapter.parameterDefinitions.map { $0.key },
+            values: ContiguousArray(adapter.parameterDefinitions.map { definition in
+                switch definition.key {
+                case "horizon_minutes": return 5.0
+                case "signal_confidence_threshold": return 0.0
+                case "min_move_points": return 0.0
+                default: return definition.defaultValue
+                }
+            })
+        )
+        let context = BacktestContext(settings: BacktestRunSettings(lotSize: 0.01), digits: market.metadata.digits)
+
+        _ = try adapter.runPass(market: market, parameters: parameters, context: context)
+
+        let first = try XCTUnwrap(plugin.trainRequests.first)
+        XCTAssertEqual(first.context.horizonMinutes, 5)
+        XCTAssertEqual(first.labelClass, .buy)
+        XCTAssertEqual(first.movePoints, 30.0, accuracy: 0.0)
     }
 
     func testFX7MetalKernelRunsSingleSymbolPass() async throws {
@@ -173,6 +204,58 @@ final class FX7PluginTests: XCTestCase {
             high: high,
             low: low,
             close: close
+        )
+    }
+
+    private func customMarket(closes: [Int], symbol: String = "EURUSD", digits: Int = 5) throws -> OhlcDataSeries {
+        let start = Int64(1_704_067_200)
+        return try OhlcDataSeries(
+            metadata: FXBacktestMarketMetadata(
+                brokerSourceId: "demo",
+                logicalSymbol: symbol,
+                digits: digits,
+                firstUtc: start,
+                lastUtc: start + Int64(max(closes.count - 1, 0) * 60)
+            ),
+            utcTimestamps: ContiguousArray(closes.indices.map { start + Int64($0 * 60) }),
+            open: ContiguousArray(closes.map(Int64.init)),
+            high: ContiguousArray(closes.map { Int64($0 + 1) }),
+            low: ContiguousArray(closes.map { Int64($0 - 1) }),
+            close: ContiguousArray(closes.map(Int64.init))
+        )
+    }
+}
+
+private final class BacktestTrainingLabelSpyPlugin: FXAIPlannedPlugin, @unchecked Sendable {
+    let manifest = PluginManifestV4(
+        aiID: 1,
+        aiName: "backtest_training_label_spy",
+        family: .linear,
+        capabilityMask: [.selfTest],
+        minHorizonMinutes: 5,
+        maxHorizonMinutes: 5
+    )
+    let accelerationPlan = FXPluginAccelerationPlan(
+        pluginName: "backtest_training_label_spy",
+        primaryBackends: [.swiftScalar],
+        notes: "Test spy for backtest adapter training labels."
+    )
+    private(set) var trainRequests: [TrainRequestV4] = []
+
+    func reset() {
+        trainRequests.removeAll()
+    }
+
+    func train(_ request: TrainRequestV4, hyperParameters: HyperParameters) throws {
+        trainRequests.append(request)
+    }
+
+    func predict(_ request: PredictRequestV4, hyperParameters: HyperParameters) throws -> PredictionV4 {
+        PredictionV4(
+            classProbabilities: [0.05, 0.90, 0.05],
+            moveMeanPoints: 10.0,
+            confidence: 0.90,
+            reliability: 0.80
         )
     }
 }

@@ -252,6 +252,9 @@ public struct PreparedTrainingDataset: Sendable {
     public let startIndex: Int
     public let endIndex: Int
     public let stride: Int
+    public let normalizationFitStartIndex: Int?
+    public let normalizationFitEndIndex: Int?
+    public let normalizationFitSampleCount: Int
     public let payloads: [PreparedTrainingPayload]
 
     public var trainRequests: [TrainRequestV4] {

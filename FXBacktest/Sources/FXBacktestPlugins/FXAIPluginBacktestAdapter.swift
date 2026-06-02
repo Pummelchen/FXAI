@@ -107,21 +107,24 @@ public struct FXAIPluginBacktestAdapter: FXBacktestPluginV1 {
                 }
             }
 
-            let futureDelta = primary.close[executionIndex] - primary.close[sampleIndex]
-            let movePoints = Double(abs(futureDelta))
-            let label: LabelClass = futureDelta > 0 ? .buy : (futureDelta < 0 ? .sell : .skip)
-            let trainRequest = TrainRequestV4(
-                valid: true,
-                context: payload.predictRequest.context,
-                labelClass: label,
-                movePoints: movePoints,
-                sampleWeight: 1.0,
-                windowSize: payload.predictRequest.windowSize,
-                x: payload.predictRequest.x,
-                xWindow: payload.predictRequest.xWindow
-            )
-            try trainRequest.validate()
-            try runtime.train(trainRequest, hyperParameters: hyperParameters)
+            let labelIndex = min(sampleIndex + horizon, primary.count - 1)
+            if labelIndex > sampleIndex {
+                let futureDelta = primary.close[labelIndex] - primary.close[sampleIndex]
+                let movePoints = Double(abs(futureDelta))
+                let label: LabelClass = futureDelta > 0 ? .buy : (futureDelta < 0 ? .sell : .skip)
+                let trainRequest = TrainRequestV4(
+                    valid: true,
+                    context: payload.predictRequest.context,
+                    labelClass: label,
+                    movePoints: movePoints,
+                    sampleWeight: 1.0,
+                    windowSize: payload.predictRequest.windowSize,
+                    x: payload.predictRequest.x,
+                    xWindow: payload.predictRequest.xWindow
+                )
+                try trainRequest.validate()
+                try runtime.train(trainRequest, hyperParameters: hyperParameters)
+            }
             flags |= prediction.confidence >= confidenceThreshold ? 0 : 1
         }
 

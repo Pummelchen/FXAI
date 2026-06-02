@@ -224,6 +224,59 @@ else:
                 "external backend failed: Python bridge module must not be empty"
             )
         }
+
+        let badEnvironmentBridge = PythonMLBackendBridge(
+            framework: .pyTorch,
+            executable: "python3",
+            module: "json",
+            modelIdentifier: "bad_bridge",
+            environment: ["BAD=KEY": "value"]
+        )
+
+        XCTAssertThrowsError(try badEnvironmentBridge.predictSynchronously(payload)) { error in
+            XCTAssertEqual(
+                String(describing: error),
+                "external backend failed: Python bridge environment key is invalid: BAD=KEY"
+            )
+        }
+    }
+
+    func testPythonMLBackendBridgeTerminatesHungProcess() throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("fx-python-bridge-timeout-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let backendURL = temporaryDirectory.appendingPathComponent("backend.py")
+        let backendScript = """
+import time
+
+time.sleep(5)
+"""
+        try backendScript.write(to: backendURL, atomically: true, encoding: .utf8)
+
+        var x = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
+        x[0] = 1.0
+        let payload = MLInferencePayload(
+            modelIdentifier: "timeout_bridge",
+            framework: .pyTorch,
+            dataHasVolume: false,
+            x: x,
+            xWindow: []
+        )
+        let bridge = PythonMLBackendBridge(
+            framework: .pyTorch,
+            executable: "python3",
+            module: backendURL.path,
+            modelIdentifier: "timeout_bridge",
+            timeoutSeconds: 0.20
+        )
+
+        let start = Date()
+        XCTAssertThrowsError(try bridge.predictSynchronously(payload)) { error in
+            XCTAssertTrue(String(describing: error).contains("Python backend timed out"))
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(start), 3.0)
     }
 
     func testMLPayloadRequiresLatestAPIVersion() throws {

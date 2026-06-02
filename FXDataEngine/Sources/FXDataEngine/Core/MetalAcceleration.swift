@@ -202,7 +202,7 @@ public enum MetalKernelCompiler {
             throw FXDataEngineError.externalBackend("Metal command buffer failed: \(error.localizedDescription)")
         }
 
-        let rawPointer = outputBuffer.contents().bindMemory(to: Float.self, capacity: resolvedOutputCount)
+        let rawPointer = outputBuffer.contents().assumingMemoryBound(to: Float.self)
         let output = Array(UnsafeBufferPointer(start: rawPointer, count: resolvedOutputCount))
         return MetalFloatKernelExecutionResult(
             deviceName: device.name,
@@ -340,7 +340,7 @@ public enum MetalKernelCompiler {
         guard case .outputFloat(let outputCount) = arguments[outputArgumentIndex] else {
             throw FXDataEngineError.validation("metal.\(sourceLabel).outputArgument")
         }
-        let rawPointer = resolvedOutputBuffer.contents().bindMemory(to: Float.self, capacity: outputCount)
+        let rawPointer = resolvedOutputBuffer.contents().assumingMemoryBound(to: Float.self)
         let output = Array(UnsafeBufferPointer(start: rawPointer, count: outputCount))
         return MetalFloatKernelExecutionResult(
             deviceName: device.name,

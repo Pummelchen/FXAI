@@ -32,15 +32,15 @@ final class WarmupTests: XCTestCase {
 
         XCTAssertEqual(
             WarmupTools.normalizationCandidateSplit(horizonMinutes: 13, startIndex: 0, endIndex: 599),
-            WarmupCandidateSplit(validationStart: 0, validationEnd: 199, trainingStart: 453, trainingEnd: 599)
+            WarmupCandidateSplit(validationStart: 400, validationEnd: 599, trainingStart: 0, trainingEnd: 146)
         )
         XCTAssertNil(WarmupTools.normalizationCandidateSplit(horizonMinutes: 13, startIndex: 0, endIndex: 239))
 
         XCTAssertEqual(
             WarmupTools.warmupFoldSplits(horizonMinutes: 13, startIndex: 0, endIndex: 999, folds: 3),
             [
-                WarmupCandidateSplit(validationStart: 0, validationEnd: 249, trainingStart: 503, trainingEnd: 999),
-                WarmupCandidateSplit(validationStart: 250, validationEnd: 499, trainingStart: 753, trainingEnd: 999)
+                WarmupCandidateSplit(validationStart: 500, validationEnd: 749, trainingStart: 0, trainingEnd: 246),
+                WarmupCandidateSplit(validationStart: 750, validationEnd: 999, trainingStart: 0, trainingEnd: 496)
             ]
         )
     }

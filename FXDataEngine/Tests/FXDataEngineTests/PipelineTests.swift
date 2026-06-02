@@ -396,6 +396,44 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(first.sample.x[1], first.normalizationFrame.normalized[0], accuracy: 1e-12)
     }
 
+    func testTrainingDatasetFitsNormalizationOnlyOnTemporalTrainingSplit() throws {
+        let series = try makeCurvedSeries(symbol: "EURUSD", count: 760)
+        let universe = try MarketUniverse(primarySymbol: "EURUSD", series: [series])
+        let manifest = PluginManifestV4(
+            aiID: 8,
+            aiName: "DatasetWindow",
+            family: .linear,
+            capabilityMask: [.selfTest, .windowContext],
+            minSequenceBars: 2,
+            maxSequenceBars: 16
+        )
+        let split = try XCTUnwrap(WarmupTools.normalizationCandidateSplit(
+            horizonMinutes: 5,
+            startIndex: 60,
+            endIndex: 599
+        ))
+
+        let dataset = try FXDataEnginePipeline().prepareTrainingDataset(
+            universe: universe,
+            baseRequest: DataCoreRequest(symbol: "EURUSD", neededBars: 50),
+            manifest: manifest,
+            datasetRequest: TrainingDatasetRequest(
+                startIndex: 60,
+                endIndex: 599,
+                stride: 10,
+                maxSamples: 60,
+                horizonMinutes: 5,
+                normalizationMethod: .zScore
+            )
+        )
+
+        XCTAssertTrue(dataset.payloads.contains { $0.dataBundle.sampleIndex >= split.validationStart })
+        XCTAssertEqual(dataset.normalizationFitStartIndex, split.trainingStart)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(dataset.normalizationFitEndIndex), split.trainingEnd)
+        XCTAssertLessThan(try XCTUnwrap(dataset.normalizationFitEndIndex), split.validationStart)
+        XCTAssertGreaterThanOrEqual(dataset.normalizationFitSampleCount, 8)
+    }
+
     private func makeSeries(volumeEnabled: Bool, count: Int) throws -> M1OHLCVSeries {
         let start = Int64(1_704_067_200)
         var utc = ContiguousArray<Int64>()

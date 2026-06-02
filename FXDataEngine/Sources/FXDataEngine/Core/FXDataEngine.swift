@@ -256,6 +256,9 @@ public struct FXDataEnginePipeline: Sendable {
                 startIndex: start,
                 endIndex: end,
                 stride: datasetRequest.stride,
+                normalizationFitStartIndex: nil,
+                normalizationFitEndIndex: nil,
+                normalizationFitSampleCount: 0,
                 payloads: []
             )
         }
@@ -266,13 +269,22 @@ public struct FXDataEnginePipeline: Sendable {
             stride: datasetRequest.stride,
             maxSamples: datasetRequest.maxSamples
         )
-        let fitState = try normalizationFitState(
-            universe: universe,
-            baseRequest: baseRequest,
+        let fitSampleIndices = normalizationFitSampleIndices(
             sampleIndices: sampleIndices,
+            sampleStart: start,
+            sampleEnd: end,
+            stride: datasetRequest.stride,
             horizonMinutes: horizon,
             normalizationMethod: datasetRequest.normalizationMethod
         )
+        let fitState = try normalizationFitState(
+            universe: universe,
+            baseRequest: baseRequest,
+            sampleIndices: fitSampleIndices,
+            horizonMinutes: horizon,
+            normalizationMethod: datasetRequest.normalizationMethod
+        )
+        let hasFit = datasetRequest.normalizationMethod.usesFittedStats && fitState != nil
 
         var payloads: [PreparedTrainingPayload] = []
         payloads.reserveCapacity(sampleIndices.count)
@@ -304,6 +316,9 @@ public struct FXDataEnginePipeline: Sendable {
             startIndex: start,
             endIndex: end,
             stride: datasetRequest.stride,
+            normalizationFitStartIndex: hasFit ? fitSampleIndices.first : nil,
+            normalizationFitEndIndex: hasFit ? fitSampleIndices.last : nil,
+            normalizationFitSampleCount: hasFit ? fitSampleIndices.count : 0,
             payloads: payloads
         )
     }
@@ -356,6 +371,37 @@ public struct FXDataEnginePipeline: Sendable {
             sampleIndex += max(stride, 1)
         }
         return indices
+    }
+
+    private func normalizationFitSampleIndices(
+        sampleIndices: [Int],
+        sampleStart: Int,
+        sampleEnd: Int,
+        stride: Int,
+        horizonMinutes: Int,
+        normalizationMethod: FeatureNormalizationMethod
+    ) -> [Int] {
+        guard normalizationMethod.usesFittedStats else { return sampleIndices }
+        guard let split = WarmupTools.normalizationCandidateSplit(
+            horizonMinutes: horizonMinutes,
+            startIndex: sampleStart,
+            endIndex: sampleEnd
+        ) else {
+            return sampleIndices
+        }
+
+        let trainRange = split.trainingStart...split.trainingEnd
+        let candidateIndices = sampleIndices.filter { trainRange.contains($0) }
+        if candidateIndices.count >= 8 {
+            return candidateIndices
+        }
+
+        return trainingSampleIndices(
+            start: split.trainingStart,
+            end: split.trainingEnd,
+            stride: 1,
+            maxSamples: max(8, min(512, max(sampleIndices.count, 8)))
+        )
     }
 
     private func normalizationFitState(

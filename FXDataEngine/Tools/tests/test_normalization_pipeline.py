@@ -238,9 +238,9 @@ def test_warmup_normalization_fits_candidates_on_train_only_split():
         warmup,
         [
             "public static func normalizationCandidateSplit(",
-            "let validationStart = startIndex",
+            "let validationEnd = endIndex",
             "var purge = horizonMinutes + 240",
-            "let trainingStart = validationEnd + purge + 1",
+            "let trainingEnd = validationStart - purge - 1",
             "guard trainingEnd - trainingStart >= 100 else { return nil }",
         ],
     )

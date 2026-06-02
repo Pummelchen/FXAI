@@ -73,7 +73,7 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
                 try trainCPUFallback(request, hyperParameters: hyperParameters, error: error)
             }
         case .foundationNLP:
-            break
+            try basePlugin.train(request, hyperParameters: hyperParameters)
         case .metal:
             _ = try FXAIPluginMetalBackendDiscovery.executeRuntimeProbe(pluginName: manifest.aiName)
             try basePlugin.train(request, hyperParameters: hyperParameters)

@@ -66,6 +66,7 @@ class MoeConformalModule(nn.Module):
         logits = torch.sum(gates.unsqueeze(-1) * expert_logits, dim=1)
         moves = torch.cat([head(features) for head in self.move_heads], dim=-1)
         return {
+            "class_logits": logits,
             "class_probabilities": torch.softmax(logits, dim=-1),
             "expected_move_points": torch.sum(gates * moves, dim=-1),
             "expert_gates": gates,
@@ -323,10 +324,11 @@ def train_step(
     if state.model is not None and state.optimizer is not None:
         state.model.train()
         neural = state.model(regime.detach(), model_features.detach())
+        neural_logits = neural["class_logits"]
         neural_probs = neural["class_probabilities"].clamp_min(1.0e-6)
         neural_nonconformity = 1.0 - torch.sum(neural_probs * one_hot, dim=-1)
         cutoff = split_conformal_cutoff(neural_nonconformity.detach(), alpha=0.10)
-        loss = F.nll_loss(torch.log(neural_probs), target)
+        loss = F.cross_entropy(neural_logits, target)
         loss = loss + 0.05 * F.smooth_l1_loss(neural["expected_move_points"], moves_tensor)
         loss = loss + 0.03 * torch.relu(neural_nonconformity.mean() - cutoff)
         loss = loss + 0.02 * load_balance_loss(neural["expert_gates"])

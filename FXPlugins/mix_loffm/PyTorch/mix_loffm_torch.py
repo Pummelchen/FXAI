@@ -53,6 +53,7 @@ class LoffmMixtureModule(nn.Module):
         logits = torch.sum(gates.unsqueeze(-1) * expert_logits, dim=1)
         move = torch.sum(gates * self.move_head(derived), dim=-1)
         return {
+            "class_logits": logits,
             "class_probabilities": torch.softmax(logits, dim=-1),
             "expert_gates": gates,
             "expected_move_points": move,
@@ -264,8 +265,9 @@ def train_step(
     if state.model is not None and state.optimizer is not None:
         state.model.train()
         neural = state.model(derived.detach())
+        neural_logits = neural["class_logits"]
         neural_probs = neural["class_probabilities"].clamp_min(1.0e-6)
-        loss = F.nll_loss(torch.log(neural_probs), target)
+        loss = F.cross_entropy(neural_logits, target)
         loss = loss + 0.05 * F.smooth_l1_loss(neural["expected_move_points"], moves_tensor)
         loss = loss + 0.02 * load_balance_loss(neural["expert_gates"])
         state.optimizer.zero_grad(set_to_none=True)

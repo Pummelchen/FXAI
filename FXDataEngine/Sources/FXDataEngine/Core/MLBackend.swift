@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#endif
 
 public enum MLFramework: String, Codable, Hashable, Sendable {
     case nativeSwift
@@ -335,6 +338,7 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
     private let executable: String
     private let module: String
     private let environment: [String: String]
+    private let timeoutSeconds: TimeInterval
     private let configurationError: FXDataEngineError?
 
     public init(
@@ -342,15 +346,18 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
         executable: String = "python3",
         module: String,
         modelIdentifier: String,
-        environment: [String: String] = [:]
+        environment: [String: String] = [:],
+        timeoutSeconds: TimeInterval = 30.0
     ) {
         self.executable = executable
         self.module = module
         self.environment = environment
+        self.timeoutSeconds = timeoutSeconds.isFinite && timeoutSeconds > 0.0 ? timeoutSeconds : 30.0
         self.configurationError = Self.configurationError(
             framework: framework,
             executable: executable,
-            module: module
+            module: module,
+            environment: environment
         )
         self.descriptor = MLBackendDescriptor(
             mode: .externalPython(framework: framework, executable: executable, module: module),
@@ -433,71 +440,48 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
     private static func configurationError(
         framework: MLFramework,
         executable: String,
-        module: String
+        module: String,
+        environment: [String: String]
     ) -> FXDataEngineError? {
         guard framework == .pyTorch || framework == .tensorFlow || framework == .foundationNLP else {
             return .externalBackend(
                 "Python bridge does not support \(framework.rawValue); use pyTorch, tensorFlow, or foundationNLP"
             )
         }
-        guard !executable.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        let trimmedExecutable = executable.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedModule = module.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedExecutable.isEmpty else {
             return .externalBackend("Python bridge executable must not be empty")
         }
-        guard !module.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard trimmedExecutable.rangeOfCharacter(from: .newlines) == nil, !trimmedExecutable.contains("\0") else {
+            return .externalBackend("Python bridge executable contains invalid control characters")
+        }
+        guard !trimmedModule.isEmpty else {
             return .externalBackend("Python bridge module must not be empty")
+        }
+        guard trimmedModule.rangeOfCharacter(from: .newlines) == nil, !trimmedModule.contains("\0") else {
+            return .externalBackend("Python bridge module contains invalid control characters")
+        }
+        if trimmedModule.contains("/") || trimmedModule.hasSuffix(".py") {
+            guard FileManager.default.fileExists(atPath: trimmedModule) else {
+                return .externalBackend("Python bridge module path does not exist: \(trimmedModule)")
+            }
+        }
+        for key in environment.keys.sorted() {
+            let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedKey.isEmpty, trimmedKey == key, !trimmedKey.contains("="), !trimmedKey.contains("\0") else {
+                return .externalBackend("Python bridge environment key is invalid: \(key)")
+            }
+        }
+        for value in environment.values where value.contains("\0") {
+            return .externalBackend("Python bridge environment value contains invalid control characters")
         }
         return nil
     }
 
     private func run(_ command: PythonMLBackendCommand) async throws -> PythonMLBackendResponse {
         try await Task.detached(priority: .utility) {
-            let input = try JSONEncoder().encode(command)
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            if self.module.contains("/") || self.module.hasSuffix(".py") {
-                process.arguments = [self.executable, self.module, command.operation]
-            } else {
-                process.arguments = [self.executable, "-m", self.module, command.operation]
-            }
-            if !self.environment.isEmpty {
-                process.environment = ProcessInfo.processInfo.environment.merging(self.environment) { _, new in new }
-            }
-
-            let stdin = Pipe()
-            let stdout = Pipe()
-            let stderr = Pipe()
-            process.standardInput = stdin
-            process.standardOutput = stdout
-            process.standardError = stderr
-            let stdoutBuffer = PythonProcessOutputBuffer()
-            let stderrBuffer = PythonProcessOutputBuffer()
-            stdout.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                guard !data.isEmpty else { return }
-                stdoutBuffer.append(data)
-            }
-            stderr.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                guard !data.isEmpty else { return }
-                stderrBuffer.append(data)
-            }
-            defer {
-                stdout.fileHandleForReading.readabilityHandler = nil
-                stderr.fileHandleForReading.readabilityHandler = nil
-            }
-
-            try process.run()
-            stdin.fileHandleForWriting.write(input)
-            try stdin.fileHandleForWriting.close()
-            process.waitUntilExit()
-
-            let output = stdoutBuffer.snapshot(appending: stdout.fileHandleForReading.readDataToEndOfFile())
-            let errorData = stderrBuffer.snapshot(appending: stderr.fileHandleForReading.readDataToEndOfFile())
-            guard process.terminationStatus == 0 else {
-                let message = String(data: errorData, encoding: .utf8) ?? "Python backend failed"
-                throw FXDataEngineError.externalBackend(message.trimmingCharacters(in: .whitespacesAndNewlines))
-            }
-            return try JSONDecoder().decode(PythonMLBackendResponse.self, from: output)
+            try self.runProcess(command)
         }.value
     }
 
@@ -510,9 +494,7 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
         } else {
             process.arguments = [executable, "-m", module, command.operation]
         }
-        if !environment.isEmpty {
-            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
-        }
+        process.environment = subprocessEnvironment()
 
         let stdin = Pipe()
         let stdout = Pipe()
@@ -532,15 +514,20 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
             guard !data.isEmpty else { return }
             stderrBuffer.append(data)
         }
+        let termination = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in
+            termination.signal()
+        }
         defer {
             stdout.fileHandleForReading.readabilityHandler = nil
             stderr.fileHandleForReading.readabilityHandler = nil
+            process.terminationHandler = nil
         }
 
         try process.run()
         stdin.fileHandleForWriting.write(input)
         try stdin.fileHandleForWriting.close()
-        process.waitUntilExit()
+        try waitForExit(process, termination: termination)
 
         let output = stdoutBuffer.snapshot(appending: stdout.fileHandleForReading.readDataToEndOfFile())
         let errorData = stderrBuffer.snapshot(appending: stderr.fileHandleForReading.readDataToEndOfFile())
@@ -556,6 +543,44 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
             throw FXDataEngineError.externalBackend(message)
         }
         return try JSONDecoder().decode(PythonMLBackendResponse.self, from: output)
+    }
+
+    private func runProcess(_ command: PythonMLBackendCommand) throws -> PythonMLBackendResponse {
+        try runSynchronously(command)
+    }
+
+    private func subprocessEnvironment() -> [String: String] {
+        let parent = ProcessInfo.processInfo.environment
+        var resolved: [String: String] = [:]
+        for key in ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE"] {
+            if let value = parent[key], !value.isEmpty {
+                resolved[key] = value
+            }
+        }
+        if resolved["PATH"]?.isEmpty != false {
+            resolved["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        }
+        for (key, value) in environment {
+            resolved[key] = value
+        }
+        return resolved
+    }
+
+    private func waitForExit(_ process: Process, termination: DispatchSemaphore) throws {
+        if termination.wait(timeout: .now() + timeoutSeconds) == .success {
+            return
+        }
+
+        process.terminate()
+        if termination.wait(timeout: .now() + 1.0) == .timedOut {
+            #if canImport(Darwin)
+            Darwin.kill(process.processIdentifier, SIGKILL)
+            #endif
+            _ = termination.wait(timeout: .now() + 1.0)
+        }
+        throw FXDataEngineError.externalBackend(
+            "Python backend timed out after \(String(format: "%.2f", timeoutSeconds)) seconds"
+        )
     }
 
     private static func validateLatestAPI(_ response: PythonMLBackendResponse) throws {

@@ -139,8 +139,8 @@ def test_normalization_pipeline_remains_causal_and_train_split_safe():
         warmup,
         [
             "public static func normalizationCandidateSplit(",
-            "let validationStart = startIndex",
-            "let trainingStart = validationEnd + purge + 1",
+            "let validationEnd = endIndex",
+            "let trainingEnd = validationStart - purge - 1",
             "guard trainingEnd - trainingStart >= 100 else { return nil }",
         ],
     )

@@ -228,6 +228,30 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
         XCTAssertEqual(runtime.manifest.aiName, "ai_chronos")
     }
 
+    func testFoundationNLPRuntimeTrainingDelegatesToBasePlugin() throws {
+        let plugin = FoundationTrainingSpyPlugin()
+        var runtime = FXAIAcceleratedPluginRuntime(
+            plugin: plugin,
+            configuration: FXAIPluginRuntimeConfiguration(
+                mode: .foundationNLP,
+                fallbackPolicy: .strict,
+                environment: FXPluginRuntimeEnvironment(
+                    metalDevice: MetalAccelerationDevice(
+                        available: true,
+                        deviceName: "Test GPU",
+                        supportsUnifiedMemory: true,
+                        hardware: Self.appleM2
+                    ),
+                    foundationNLPAvailable: true
+                )
+            )
+        )
+
+        try runtime.train(Self.trainRequest(), hyperParameters: HyperParameters())
+
+        XCTAssertEqual(plugin.trainCount, 1)
+    }
+
     func testAcceleratedRuntimeWrapsPyTorchPluginWhenTorchIsInstalled() throws {
         guard Self.pythonCanImport("torch") else {
             throw XCTSkip("PyTorch is not installed for this runner")
@@ -406,5 +430,31 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
         } catch {
             return false
         }
+    }
+}
+
+private final class FoundationTrainingSpyPlugin: FXAIPlannedPlugin, @unchecked Sendable {
+    let manifest = PluginManifestV4(
+        aiID: 1,
+        aiName: "foundation_training_spy",
+        family: .linear,
+        capabilityMask: [.selfTest]
+    )
+    let accelerationPlan = FXPluginAccelerationPlan(
+        pluginName: "foundation_training_spy",
+        primaryBackends: [.foundationNLP],
+        candidateBackends: [.swiftScalar],
+        notes: "Test spy for FoundationNLP training delegation."
+    )
+    private(set) var trainCount = 0
+
+    func reset() {}
+
+    func train(_ request: TrainRequestV4, hyperParameters: HyperParameters) throws {
+        trainCount += 1
+    }
+
+    func predict(_ request: PredictRequestV4, hyperParameters: HyperParameters) throws -> PredictionV4 {
+        PredictionV4.skip
     }
 }
