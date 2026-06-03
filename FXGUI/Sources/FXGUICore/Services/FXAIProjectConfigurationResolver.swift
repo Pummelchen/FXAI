@@ -74,10 +74,14 @@ enum FXAIProjectConfigurationResolver {
         baseDirectory: URL,
         environment: [String: String]
     ) -> URL? {
-        guard let rawValue, !rawValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard let rawValue else {
             return nil
         }
-        let expanded = expandPathVariables(in: rawValue, environment: environment)
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return nil
+        }
+        let expanded = expandPathVariables(in: trimmed, environment: environment)
         let tildeExpanded = NSString(string: expanded).expandingTildeInPath
         if tildeExpanded.hasPrefix("/") {
             return URL(fileURLWithPath: tildeExpanded, isDirectory: true).standardizedFileURL
@@ -132,10 +136,10 @@ enum FXAIProjectConfigurationResolver {
         projectRoot: URL,
         environment: [String: String]
     ) -> String {
-        if let explicit = nonEmpty(environment["FXAI_TOOLCHAIN_PROFILE"])?.lowercased(), explicit != "auto" {
+        if let explicit = profileToken(environment["FXAI_TOOLCHAIN_PROFILE"]), explicit != "auto" {
             return explicit
         }
-        if let configured = parser?.value(in: ["toolchain"], key: "profile")?.lowercased(), configured != "auto" {
+        if let configured = profileToken(parser?.value(in: ["toolchain"], key: "profile")), configured != "auto" {
             return configured
         }
         if nonEmpty(environment["CI"]) != nil || nonEmpty(environment["GITHUB_ACTIONS"]) != nil {
@@ -182,8 +186,13 @@ enum FXAIProjectConfigurationResolver {
     }
 
     private static func nonEmpty(_ value: String?) -> String? {
-        guard let value, !value.isEmpty else { return nil }
-        return value
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func profileToken(_ value: String?) -> String? {
+        nonEmpty(value)?.lowercased()
     }
 }
 

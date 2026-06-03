@@ -107,4 +107,37 @@ struct RuntimeArtifactPathResolverTests {
 
         #expect(resolved == runtime)
     }
+
+    @Test
+    func configuredPathsPreferProjectRootBeforeConfigDirectory() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let configDirectory = root.appendingPathComponent("Config", isDirectory: true)
+        let projectRuntime = root
+            .appendingPathComponent("SharedRuntime", isDirectory: true)
+            .appendingPathComponent("FXAI", isDirectory: true)
+            .appendingPathComponent("Runtime", isDirectory: true)
+        let configRuntime = configDirectory
+            .appendingPathComponent("SharedRuntime", isDirectory: true)
+            .appendingPathComponent("FXAI", isDirectory: true)
+            .appendingPathComponent("Runtime", isDirectory: true)
+
+        try FileManager.default.createDirectory(at: projectRuntime, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: configRuntime, withIntermediateDirectories: true)
+        try Data(
+            """
+            FXAI_CONFIG=Config/fxai-toolchain.toml
+            """.utf8
+        ).write(to: root.appendingPathComponent(".env"))
+        try Data(
+            """
+            [paths]
+            common_files = "SharedRuntime"
+            """.utf8
+        ).write(to: configDirectory.appendingPathComponent("fxai-toolchain.toml"))
+
+        let resolved = RuntimeArtifactPathResolver.runtimeDirectory(projectRoot: root)
+
+        #expect(resolved == projectRuntime)
+    }
 }

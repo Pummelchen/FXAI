@@ -398,10 +398,10 @@ public struct ProjectScanner {
                 environment: environment
             ) ?? URL(fileURLWithPath: envDefaultDB, isDirectory: false)
         } else if let configuredDefaultDB = FXAIProjectConfigurationResolver.configuredValue(configuration: configuration, key: "default_db") {
-            dbURL = FXAIProjectConfigurationResolver.resolvedPathURL(
+            dbURL = Self.configuredPathURL(
                 rawValue: configuredDefaultDB,
-                baseDirectory: configuration.configDirectory,
-                environment: environment
+                projectRoot: projectRoot,
+                configuration: configuration
             ) ?? URL(fileURLWithPath: configuredDefaultDB, isDirectory: false)
         } else {
             dbURL = toolsURL(projectRoot: projectRoot, relativePath: "OfflineLab/fxai_offline_lab.turso.db")
@@ -435,6 +435,29 @@ public struct ProjectScanner {
             return existing
         }
         return candidates[0]
+    }
+
+    private static func configuredPathURL(
+        rawValue: String,
+        projectRoot: URL,
+        configuration: FXAIProjectConfigurationSnapshot
+    ) -> URL? {
+        var firstResolved: URL?
+        for baseDirectory in [projectRoot, configuration.configDirectory] {
+            if let resolved = FXAIProjectConfigurationResolver.resolvedPathURL(
+                rawValue: rawValue,
+                baseDirectory: baseDirectory,
+                environment: configuration.environment
+            ) {
+                if firstResolved == nil {
+                    firstResolved = resolved
+                }
+                if FileManager.default.fileExists(atPath: resolved.path) {
+                    return resolved
+                }
+            }
+        }
+        return firstResolved
     }
 
     private func recursiveFiles(at root: URL) -> [URL] {

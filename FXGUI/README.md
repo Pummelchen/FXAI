@@ -89,6 +89,13 @@ cd /path/to/FXAI/FXGUI
 
 The GUI release packager reads the repo-root toolchain config, falling back to `../FXDataEngine/fxai.toml` when no root `fxai.toml` exists. It respects `FXGUI_MINIMUM_MACOS` or `FXGUI_RELEASE_ARCHIVE` overrides when you need a different packaging target.
 
+Toolchain and GUI config precedence is defined in the root
+[`CONFIGURATION_SEMANTICS.md`](../CONFIGURATION_SEMANTICS.md). The short version:
+real process environment overrides `.env`, `.env` may select `FXAI_CONFIG`, an
+environment `FXAI_TOOLCHAIN_PROFILE` overrides TOML, profile-specific TOML paths
+override global TOML paths, and explicit path environment variables override all
+TOML paths.
+
 ## GUI Validation
 
 The GUI includes a dedicated validation suite for layout quality, resize behavior, and operator-shell rendering fidelity across multiple desktop sizes.

@@ -239,13 +239,6 @@ def load_toolchain_config(
 ) -> FXAIToolchainConfig:
     env_map = dict(env or os.environ)
     default_project_root = (project_root_hint or _default_project_root()).resolve()
-    config_path = _normalize_path(env_map.get("FXAI_CONFIG"), base_dir=default_project_root)
-    if config_path is None:
-        config_path = _first_existing_path([
-            default_project_root / "fxai.toml",
-            default_project_root.parent / "fxai.toml",
-            default_project_root.parent / "FXAI" / "fxai.toml",
-        ])
     env_path = _normalize_path(env_map.get("FXAI_ENV_FILE"), base_dir=default_project_root)
     if env_path is None:
         env_path = _first_existing_path([
@@ -257,10 +250,21 @@ def load_toolchain_config(
     merged_env = dict(dotenv_values)
     merged_env.update(env_map)
 
+    config_path = _normalize_path(merged_env.get("FXAI_CONFIG"), base_dir=default_project_root)
+    if config_path is None:
+        config_path = _first_existing_path([
+            default_project_root / "fxai.toml",
+            default_project_root.parent / "fxai.toml",
+            default_project_root.parent / "FXAI" / "fxai.toml",
+        ])
+
     raw_config = _read_toml(config_path)
     toolchain_config = _nested_dict(raw_config, "toolchain")
     requested_profile = str(toolchain_config.get("profile", AUTO_PROFILE) or AUTO_PROFILE).strip().lower()
-    if not requested_profile or requested_profile == AUTO_PROFILE:
+    explicit_profile = str(merged_env.get("FXAI_TOOLCHAIN_PROFILE", "") or "").strip().lower()
+    if explicit_profile and explicit_profile != AUTO_PROFILE:
+        profile = explicit_profile
+    elif not requested_profile or requested_profile == AUTO_PROFILE:
         profile = _detect_profile(default_project_root, merged_env)
     else:
         profile = requested_profile
@@ -273,7 +277,15 @@ def load_toolchain_config(
     gui_config = _nested_dict(raw_config, "gui")
     gui_config.update(_nested_dict(profile_block, "gui"))
 
-    source_map: dict[str, str] = {"profile": ("environment" if merged_env.get("FXAI_TOOLCHAIN_PROFILE") else "fxai.toml" if requested_profile != AUTO_PROFILE else "auto_detected")}
+    source_map: dict[str, str] = {
+        "profile": (
+            "environment"
+            if explicit_profile and explicit_profile != AUTO_PROFILE
+            else "fxai.toml"
+            if requested_profile != AUTO_PROFILE
+            else "auto_detected"
+        )
+    }
 
     project_root = _resolve_value(
         name="project_root",

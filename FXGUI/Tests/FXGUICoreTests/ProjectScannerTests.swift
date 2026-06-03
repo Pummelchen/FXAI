@@ -58,6 +58,62 @@ struct ProjectScannerTests {
         #expect(snapshot.tursoSummary.encryptionConfigured)
     }
 
+    @Test
+    func scanPrefersProjectRootDefaultDBBeforeConfigDirectory() throws {
+        let tempRoot = try makeProjectFixture()
+        let configDirectory = tempRoot.appendingPathComponent("Config", isDirectory: true)
+        let projectDB = tempRoot
+            .appendingPathComponent("Shared", isDirectory: true)
+            .appendingPathComponent("fxai.db", isDirectory: false)
+        let configDB = configDirectory
+            .appendingPathComponent("Shared", isDirectory: true)
+            .appendingPathComponent("fxai.db", isDirectory: false)
+
+        try FileManager.default.createDirectory(at: projectDB.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: configDB.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: projectDB)
+        try Data().write(to: configDB)
+        try writeConfigPointer(root: tempRoot, configDirectory: configDirectory, defaultDB: "Shared/fxai.db")
+
+        let snapshot = try ProjectScanner().scan(projectRoot: tempRoot)
+
+        #expect(snapshot.tursoSummary.localDatabasePresent)
+        #expect(snapshot.tursoSummary.localDatabasePath == projectDB)
+    }
+
+    @Test
+    func scanFallsBackToExistingConfigDirectoryDefaultDB() throws {
+        let tempRoot = try makeProjectFixture()
+        let configDirectory = tempRoot.appendingPathComponent("Config", isDirectory: true)
+        let configDB = configDirectory
+            .appendingPathComponent("Shared", isDirectory: true)
+            .appendingPathComponent("fxai.db", isDirectory: false)
+
+        try FileManager.default.createDirectory(at: configDB.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: configDB)
+        try writeConfigPointer(root: tempRoot, configDirectory: configDirectory, defaultDB: "Shared/fxai.db")
+
+        let snapshot = try ProjectScanner().scan(projectRoot: tempRoot)
+
+        #expect(snapshot.tursoSummary.localDatabasePresent)
+        #expect(snapshot.tursoSummary.localDatabasePath == configDB)
+    }
+
+    private func writeConfigPointer(root: URL, configDirectory: URL, defaultDB: String) throws {
+        try FileManager.default.createDirectory(at: configDirectory, withIntermediateDirectories: true)
+        try Data(
+            """
+            FXAI_CONFIG=Config/fxai.toml
+            """.utf8
+        ).write(to: root.appendingPathComponent(".env"))
+        try Data(
+            """
+            [paths]
+            default_db = "\(defaultDB)"
+            """.utf8
+        ).write(to: configDirectory.appendingPathComponent("fxai.toml"))
+    }
+
     private func makeProjectFixture() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

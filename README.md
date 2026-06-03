@@ -208,6 +208,7 @@ User-focused docs live in the GitHub wiki:
 
 Project-local docs remain next to the code they describe:
 
+- [Configuration Semantics](CONFIGURATION_SEMANTICS.md)
 - [FXImporter](FXImporter/README.md)
 - [FXDatabase](FXDatabase/README.md)
 - [FXDataEngine](FXDataEngine/README.md)

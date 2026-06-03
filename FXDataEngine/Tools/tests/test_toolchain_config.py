@@ -42,6 +42,96 @@ def test_toolchain_config_reads_fxai_toml_and_env_override(tmp_path: Path):
     assert config.gui_release_archive == "Custom.zip"
 
 
+def test_toolchain_config_reads_fxai_config_from_dotenv(tmp_path: Path):
+    project_root = tmp_path / "FXDataEngine"
+    config_dir = project_root / "Config"
+    config_dir.mkdir(parents=True)
+    (project_root / ".env").write_text(
+        """
+        FXAI_CONFIG=Config/fxai-toolchain.toml
+        """,
+        encoding="utf-8",
+    )
+    config_path = config_dir / "fxai-toolchain.toml"
+    config_path.write_text(
+        """
+        [toolchain]
+        profile = "headless_ci"
+
+        [paths]
+        runtime_dir = "ConfiguredRuntime"
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_toolchain_config(project_root_hint=project_root, env={})
+
+    assert config.config_path == config_path
+    assert config.profile == "headless_ci"
+    assert config.runtime_dir == project_root / "ConfiguredRuntime"
+    assert config.path_sources["runtime_dir"] == "fxai.toml"
+
+
+def test_toolchain_config_process_env_overrides_dotenv_config_path(tmp_path: Path):
+    project_root = tmp_path / "FXDataEngine"
+    config_dir = project_root / "Config"
+    config_dir.mkdir(parents=True)
+    (project_root / ".env").write_text(
+        """
+        FXAI_CONFIG=Config/dotenv.toml
+        """,
+        encoding="utf-8",
+    )
+    (config_dir / "dotenv.toml").write_text(
+        """
+        [toolchain]
+        profile = "macos_wine"
+        """,
+        encoding="utf-8",
+    )
+    process_config = config_dir / "process.toml"
+    process_config.write_text(
+        """
+        [toolchain]
+        profile = "headless_ci"
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_toolchain_config(
+        project_root_hint=project_root,
+        env={
+            "FXAI_CONFIG": "Config/process.toml",
+        },
+    )
+
+    assert config.config_path == process_config
+    assert config.profile == "headless_ci"
+
+
+def test_toolchain_config_process_profile_overrides_toml_profile(tmp_path: Path):
+    project_root = tmp_path / "FXDataEngine"
+    project_root.mkdir(parents=True)
+    (project_root / "fxai.toml").write_text(
+        """
+        [toolchain]
+        profile = "macos_wine"
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_toolchain_config(
+        project_root_hint=project_root,
+        env={
+            "FXAI_TOOLCHAIN_PROFILE": " headless_ci ",
+        },
+    )
+
+    assert config.profile == "headless_ci"
+    assert config.path_sources["profile"] == "environment"
+    assert not config.uses_wine
+
+
 def test_toolchain_config_supports_headless_swift_offline_profile(tmp_path: Path):
     project_root = tmp_path / "FXDataEngine"
     config = load_toolchain_config(

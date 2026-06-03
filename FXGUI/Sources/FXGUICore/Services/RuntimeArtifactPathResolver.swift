@@ -69,7 +69,7 @@ public enum RuntimeArtifactPathResolver {
             configuration: configuration,
             key: "runtime_dir"
         ) {
-            for baseDirectory in [configuration.configDirectory, projectRoot] {
+            for baseDirectory in [projectRoot, configuration.configDirectory] {
                 let candidate = FXAIProjectConfigurationResolver.resolvedPathURL(
                     rawValue: explicitRuntime,
                     baseDirectory: baseDirectory,
@@ -84,7 +84,7 @@ public enum RuntimeArtifactPathResolver {
             configuration: configuration,
             key: "common_files"
         ) {
-            for baseDirectory in [configuration.configDirectory, projectRoot] {
+            for baseDirectory in [projectRoot, configuration.configDirectory] {
                 let candidate = (FXAIProjectConfigurationResolver.resolvedPathURL(
                     rawValue: commonFiles,
                     baseDirectory: baseDirectory,
@@ -129,7 +129,8 @@ public enum RuntimeArtifactPathResolver {
     }
 
     private static func nonEmpty(_ value: String?) -> String? {
-        guard let value, !value.isEmpty else { return nil }
-        return value
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
