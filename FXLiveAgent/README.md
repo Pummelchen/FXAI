@@ -6,6 +6,8 @@ The current package provides the versioned promoted-workload contract,
 fail-closed safety validation, human-release planning runtime, and tests. Real
 broker/terminal adapters must stay behind this boundary and must not bypass
 promotion evidence, risk limits, or kill-switch controls.
+Live execution changes are governed by the root
+[FXAI Governance](../GOVERNANCE.md) contract.
 
 ## Boundary
 
@@ -25,6 +27,9 @@ promotion evidence, risk limits, or kill-switch controls.
   connector can route real orders.
 - Persist immutable audit events for every decision, order request, broker response,
   and safety intervention.
+- Keep human-release evidence, promotion lineage, account scope, risk validation,
+  stale-data status, and kill-switch state linked before any live connector can
+  route real orders.
 
 ## Verify
 

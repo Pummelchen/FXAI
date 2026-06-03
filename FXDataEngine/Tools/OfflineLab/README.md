@@ -19,6 +19,12 @@
 - Execution-Quality shared execution-intelligence infrastructure for forecasted price-cost widening, slippage stress, fill quality, latency sensitivity, liquidity fragility, and runtime execution-state controls
 - ready-to-use FXDatabase `.set` files so no parameter copy/paste is needed
 
+Offline Lab promotion, drift governance, generated artifact, and incident
+handling rules are governed by the root
+[FXAI Governance](../../../GOVERNANCE.md) contract. Treat Turso/libSQL as the
+authoritative research state and rebuild generated runtime artifacts from that
+state instead of editing deployment outputs by hand.
+
 Main commands from the repo root:
 
 ```bash

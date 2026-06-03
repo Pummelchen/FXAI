@@ -5,6 +5,8 @@ FXDemoAgent is the demo-account execution boundary for FXAI.
 The current package provides the versioned workload contract, fail-closed safety
 validation, dry-run planning runtime, and tests. Broker/terminal adapters must
 plug into this boundary instead of bypassing the shared execution contracts.
+Demo execution changes are governed by the root
+[FXAI Governance](../GOVERNANCE.md) contract.
 
 ## Boundary
 
@@ -20,6 +22,8 @@ plug into this boundary instead of bypassing the shared execution contracts.
 - Require explicit strategy, symbol, risk, and account-scoping inputs from FXBacktest.
 - Prefer dry-run and paper-trade modes in new connectors before allowing order routing.
 - Store audit events through FXDatabase or a future approved agent telemetry API.
+- Keep governance evidence, dry-run output, account scope, and risk validation
+  linked before any demo connector is allowed to route orders.
 
 ## Verify
 

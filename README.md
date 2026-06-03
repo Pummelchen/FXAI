@@ -5,6 +5,7 @@ FXAI is a pure Swift, Metal, PyTorch, and TensorFlow research and execution stac
 FXAI is organized around one strict rule: only FXDatabase may touch ClickHouse directly. Every other project talks to FXDatabase through an API.
 
 Roadmap: [FXAI Roadmap](https://github.com/Pummelchen/FXAI/wiki/Roadmap)
+Governance: [FXAI Governance](GOVERNANCE.md)
 
 ## Project Map
 
@@ -195,6 +196,10 @@ swift build -c release --package-path FXExecutionContracts
 
 The root certification entrypoint is `./fxai certify --all`. Build-only mode checks Swift/package health without requiring optional Python accelerator imports. Full mode runs package tests and treats accelerator environment probes as required. The strongest plugin-specific certification check remains inside the FXPlugins suite. It verifies registry coverage, volume contracts, SineTest runtime behavior, SineTest prediction sync and 95%+ prediction confidence for every plugin and declared accelerator backend, CPU/reference evidence, FXDatabase-only data access, Metal compile/runtime parity, PyTorch/TensorFlow live train-predict-persistence-load, NLP text/no-text behavior, and CoreML exclusion.
 
+## Governance
+
+FXAI governance is documented in [GOVERNANCE.md](GOVERNANCE.md). That contract defines the authoritative owners for data, feature contracts, plugin behavior, Offline Lab promotion state, runtime deployment artifacts, demo/live execution boundaries, documentation, and release evidence. Use it to choose the required verification gate for documentation-only, package-local, plugin, accelerator, data authority, research promotion, execution, and live-release hardening changes.
+
 ## Documentation
 
 User-focused docs live in the GitHub wiki:
@@ -202,12 +207,14 @@ User-focused docs live in the GitHub wiki:
 - [Wiki Home](https://github.com/Pummelchen/FXAI/wiki)
 - [Roadmap](https://github.com/Pummelchen/FXAI/wiki/Roadmap)
 - [Architecture](https://github.com/Pummelchen/FXAI/wiki/Architecture)
+- [Governance](https://github.com/Pummelchen/FXAI/wiki/Governance)
 - [User Roles](https://github.com/Pummelchen/FXAI/wiki/User-Roles)
 - [Installation](https://github.com/Pummelchen/FXAI/wiki/Installation)
 - [Project Map](https://github.com/Pummelchen/FXAI/wiki/Project-Map)
 
 Project-local docs remain next to the code they describe:
 
+- [Governance](GOVERNANCE.md)
 - [Configuration Semantics](CONFIGURATION_SEMANTICS.md)
 - [FXImporter](FXImporter/README.md)
 - [FXDatabase](FXDatabase/README.md)

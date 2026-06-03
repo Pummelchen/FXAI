@@ -14,6 +14,12 @@ Phase 1 covers:
 - conservative demotion, restriction, shadow-only, and disable recommendations
 - challenger promotion eligibility tracking with support gates
 
+The root [FXAI Governance](../../../../GOVERNANCE.md) contract defines when
+drift-governance output can restrict, demote, shadow, disable, or support a
+promotion decision. This subsystem produces evidence; demo/live execution still
+requires the repository release gates, promotion lineage, account scope, risk,
+stale-data, and kill-switch checks.
+
 ## Commands
 
 Validate config:

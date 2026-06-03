@@ -6,6 +6,11 @@ AI plugins own model execution. When a Swift plugin needs tensor training or inf
 
 Converted plugins should consume the Swift FXDataEngine OHLCV contracts and use volume-derived features whenever the loaded dataset has nonzero volume.
 
+Plugin certification and accelerator release evidence are part of the root
+[FXAI Governance](../GOVERNANCE.md) contract. Changes to plugin behavior,
+accelerator runtime paths, checkpoint policy, or SineTest evidence must satisfy
+the governance gate for their change class.
+
 `FXPlugins` does not import FXDatabase, ClickHouse, or FXBacktest database APIs. FXBacktest owns workload scheduling and shared/plugin parameter delivery; plugins receive those values only through the runtime call path after FXDataEngine has built plugin-ready requests.
 
 The shared FXDataEngine/FXPlugins runtime API latest version is `4`, and the tokenizer contract latest version is `fxai-tokenizer-v1`. Plugin manifests, contexts, predictions, and Python accelerator bridge payloads must carry those latest versions. Older versions are rejected instead of being compatibility-shimmed.
