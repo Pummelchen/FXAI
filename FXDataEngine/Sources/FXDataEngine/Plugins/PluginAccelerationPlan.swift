@@ -9,21 +9,23 @@ public enum FXPluginAccelerationBackend: String, Codable, Hashable, Sendable, Ca
     case tensorFlowMetal
     case foundationNLP
     case coreMLNeuralEngine
+    case onnxRuntime
+    case remoteRPC
 
     public var isCPUOnly: Bool {
         switch self {
         case .swiftScalar, .swiftSIMD, .accelerate:
             return true
-        case .metal, .pyTorchMPS, .tensorFlowMetal, .foundationNLP, .coreMLNeuralEngine:
+        case .metal, .pyTorchMPS, .tensorFlowMetal, .foundationNLP, .coreMLNeuralEngine, .onnxRuntime, .remoteRPC:
             return false
         }
     }
 
     public var requiresExternalPython: Bool {
         switch self {
-        case .pyTorchMPS, .tensorFlowMetal:
+        case .pyTorchMPS, .tensorFlowMetal, .onnxRuntime:
             return true
-        case .swiftScalar, .swiftSIMD, .accelerate, .metal, .foundationNLP, .coreMLNeuralEngine:
+        case .swiftScalar, .swiftSIMD, .accelerate, .metal, .foundationNLP, .coreMLNeuralEngine, .remoteRPC:
             return false
         }
     }
@@ -58,7 +60,9 @@ public struct FXPluginAccelerationPlan: Codable, Hashable, Sendable {
             .pyTorchMPS,
             .tensorFlowMetal,
             .foundationNLP,
-            .coreMLNeuralEngine
+            .coreMLNeuralEngine,
+            .onnxRuntime,
+            .remoteRPC
         ]).isEmpty
     }
 

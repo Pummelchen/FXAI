@@ -1,6 +1,6 @@
 # FXAI
 
-FXAI is a pure Swift, Metal, PyTorch, and TensorFlow research and execution stack for FX data, backtesting, plugin evaluation, demo trading, and live trading. MT5 can remain a data or execution endpoint where needed, but the source of truth is the Swift project structure in this repository.
+FXAI is a pure Swift, Metal, PyTorch, TensorFlow, ONNX Runtime, and optional remote inference research/execution stack for FX data, backtesting, plugin evaluation, demo trading, and live trading. MT5 can remain a data or execution endpoint where needed, but the source of truth is the Swift project structure in this repository.
 
 FXAI is organized around one strict rule: only FXDatabase may touch ClickHouse directly. Every other project talks to FXDatabase through an API.
 
@@ -32,7 +32,8 @@ FXDatabase
              Operator UI for runtime state, reports, promotion review, and project workflows.
 
 FXPlugins
-  Flat plugin zoo. Each plugin owns its CPU code and optional Metal, PyTorch, TensorFlow, or NLP code.
+  Flat plugin zoo. Each plugin owns its CPU code and optional Metal, PyTorch, TensorFlow,
+  NLP, ONNX Runtime, or remote RPC inference code/configuration.
 
 Support contracts and tools
   FXExecutionContracts: shared demo/live account, risk, kill-switch, and audit contracts.
@@ -50,7 +51,7 @@ Agents
 - `FXDatabase` is the only database authority. It owns ClickHouse, validation, migrations, ingestion, storage, deletion, and access APIs.
 - `FXBacktest` never reads ClickHouse directly. It asks FXDatabase for history, registers shared/plugin/accelerator configuration through FXDatabase, stores backtest results through FXDatabase, and now exposes the root FXPlugins zoo through a FXDataEngine-backed adapter.
 - `FXDataEngine` turns raw M1 OHLCV into features, labels, context payloads, audit data, and plugin-ready requests.
-- `FXPlugins` is a flat plugin zoo. Plugins do not import FXDatabase, ClickHouse, or FXBacktest database APIs. They consume FXDataEngine plugin contracts for data payloads, while FXBacktest owns workload scheduling plus shared type 1 and plugin/accelerator type 2 parameter delivery.
+- `FXPlugins` is a flat plugin zoo. Plugins do not import FXDatabase, ClickHouse, or FXBacktest database APIs. They consume FXDataEngine plugin contracts for data payloads, while FXBacktest owns workload scheduling plus shared type 1 and plugin/accelerator type 2 parameter delivery. Optional external inference paths use the same FXDataEngine payload contract as local plugin code.
 - `FXBacktestAgent`, `FXDemoAgent`, and `FXLiveAgent` are distributed or execution runtime projects, not data owners. Agent and execution safety contracts fail closed until certification, SineTest, lineage, account scope, risk limits, and kill-switch checks pass.
 
 ## API Version Policy
@@ -89,7 +90,7 @@ The core historical data contract is `M1 OHLCV`.
 | User type | What FXAI gives them |
 | --- | --- |
 | Backtest researcher | A Swift/Metal offline backtest stack that can run many plugin families without depending on MT5 Strategy Tester. |
-| Plugin developer | A clear plugin API, flat plugin folders, CPU references, and optional Metal/PyTorch/TensorFlow/NLP acceleration paths inside each plugin. |
+| Plugin developer | A clear plugin API, flat plugin folders, CPU references, and optional Metal/PyTorch/TensorFlow/NLP/ONNX/remote RPC acceleration paths inside each plugin. |
 | Data operator | One ingestion path into FXDatabase, one ClickHouse authority, and no hidden direct database access from backtests or agents. |
 | Demo trader | A versioned FXDemoAgent contract for applying proven backtest parameters to demo accounts before capital is at risk. |
 | Live trader | A versioned FXLiveAgent contract where live execution is separated from research and gated by FXAI data, plugin, promotion, and risk contracts. |
@@ -123,6 +124,7 @@ FXPlugins/plugin_name/
   PyTorch/
   TensorFlow/
   NLP/
+  ONNX/
   PluginNamePlugin.swift
 ```
 
@@ -142,7 +144,18 @@ FXBacktest is the only project that adapts the root plugin zoo into backtest wor
 - TensorFlow: plugin backends require a TensorFlow Metal GPU device for accelerator runtime paths unless a test explicitly opts into CPU fallback.
 - Python bridge command: FXAI uses `FXAI_PYTHON` when set, otherwise `python3`, for plugin Python bridges. On systems where `python3` is newer than TensorFlow Metal supports, set `FXAI_PYTHON` to a compatible system interpreter such as Homebrew `python3.12`.
 - TensorFlow Metal stack: use `tensorflow==2.18.1` with `tensorflow-metal==1.2.0` on Python 3.12/3.11/3.10. Newer default Python versions, such as Python 3.14, are not a compatible target for this stack.
+- ONNX Runtime: plugin backends may declare `onnxRuntime` for inference-only exported models under `FXPlugins/<plugin>/ONNX/<plugin>.onnx`. Enable with `FXAI_ENABLE_ONNX_RUNTIME=1`; the Python bridge uses `FXAI_ONNX_MODEL_PATH` and `FXAI_ONNX_MANIFEST_PATH` overrides when set.
+- Remote RPC: plugin backends may declare `remoteRPC` for inference-only GPU-backed servers. Enable with `FXAI_ENABLE_REMOTE_RPC=1`, configure `FXAI_REMOTE_INFERENCE_ENDPOINT`, and optionally set `FXAI_REMOTE_INFERENCE_AUTH_TOKEN` plus `FXAI_REMOTE_INFERENCE_TIMEOUT_SECONDS`. The first transport is JSON over HTTP POST behind a Swift transport protocol so a gRPC adapter can be added later without changing plugin semantics.
 - CoreML/Neural Engine: not declared by plugins until real export, load, prediction, and parity tests exist.
+
+## External Inference Bridge
+
+The optional external inference bridge is documented in [EXTERNAL_INFERENCE_BRIDGE.md](EXTERNAL_INFERENCE_BRIDGE.md). The first implementation adds two opt-in inference-only backends:
+
+- `onnxRuntime`: uses the existing Python bridge and `onnxruntime.InferenceSession` to load plugin-local or explicitly configured `.onnx` models.
+- `remoteRPC`: uses a Swift `RemoteRPCMLBackendBridge` and `RemoteRPCMLBackendTransport` to POST the latest FXDataEngine inference payload to an external inference server and validate the returned `PredictionV4`.
+
+Both paths remain inert until a plugin declares the backend and the runtime environment explicitly enables it. Training remains local for this slice, and external inference failures use the existing CPU fallback diagnostics path.
 
 ## Install
 

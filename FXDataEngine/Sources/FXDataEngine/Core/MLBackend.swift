@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 #if canImport(Darwin)
 import Darwin
 #endif
@@ -9,11 +12,14 @@ public enum MLFramework: String, Codable, Hashable, Sendable {
     case pyTorch
     case tensorFlow
     case foundationNLP
+    case onnxRuntime
+    case remoteRPC
 }
 
 public enum MLBackendMode: Codable, Hashable, Sendable {
     case inProcess(MLFramework)
     case externalPython(framework: MLFramework, executable: String, module: String)
+    case remoteRPC(endpoint: String)
 }
 
 public struct MLBackendDescriptor: Codable, Hashable, Sendable {
@@ -333,6 +339,279 @@ public protocol ExternalMLBackend: Sendable {
     func train(_ payload: MLTrainingPayload) async throws
 }
 
+public struct RemoteRPCMLBackendConfiguration: Codable, Hashable, Sendable {
+    public let endpoint: String
+    public let authToken: String?
+    public let timeoutSeconds: TimeInterval
+
+    public init(
+        endpoint: String,
+        authToken: String? = nil,
+        timeoutSeconds: TimeInterval = 10.0
+    ) {
+        self.endpoint = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedToken = authToken?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.authToken = trimmedToken?.isEmpty == false ? trimmedToken : nil
+        self.timeoutSeconds = timeoutSeconds.isFinite && timeoutSeconds > 0.0 ? min(timeoutSeconds, 300.0) : 10.0
+    }
+
+    public func validatedURL() throws -> URL {
+        guard !endpoint.isEmpty else {
+            throw FXDataEngineError.externalBackend("Remote RPC endpoint must not be empty")
+        }
+        guard endpoint.rangeOfCharacter(from: .newlines) == nil, !endpoint.contains("\0") else {
+            throw FXDataEngineError.externalBackend("Remote RPC endpoint contains invalid control characters")
+        }
+        guard let url = URL(string: endpoint), let scheme = url.scheme?.lowercased() else {
+            throw FXDataEngineError.externalBackend("Remote RPC endpoint is not a valid URL")
+        }
+        guard scheme == "https" || scheme == "http" else {
+            throw FXDataEngineError.externalBackend("Remote RPC endpoint must use http or https")
+        }
+        guard url.host?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+            throw FXDataEngineError.externalBackend("Remote RPC endpoint must include a host")
+        }
+        guard url.fragment == nil else {
+            throw FXDataEngineError.externalBackend("Remote RPC endpoint must not include a URL fragment")
+        }
+        return url
+    }
+
+    public func validateAuthToken() throws {
+        guard let authToken else { return }
+        guard authToken.rangeOfCharacter(from: .newlines) == nil, !authToken.contains("\0") else {
+            throw FXDataEngineError.externalBackend("Remote RPC auth token contains invalid control characters")
+        }
+    }
+}
+
+public struct RemoteRPCMLBackendRequest: Codable, Hashable, Sendable {
+    public let apiVersion: Int
+    public let operation: String
+    public let inference: MLInferencePayload
+
+    public init(
+        operation: String = "predict",
+        inference: MLInferencePayload,
+        apiVersion: Int = FXDataEngineConstants.latestPluginAPIVersion
+    ) {
+        self.apiVersion = apiVersion
+        self.operation = operation
+        self.inference = inference
+    }
+}
+
+public struct RemoteRPCMLBackendResponse: Codable, Hashable, Sendable {
+    public let apiVersion: Int
+    public let ok: Bool
+    public let prediction: PredictionV4?
+    public let error: String?
+    public let modelIdentifier: String?
+    public let modelVersion: String?
+    public let modelSha256: String?
+    public let latencyMilliseconds: Double?
+    public let serverTimestampUTC: Int64?
+
+    public init(
+        apiVersion: Int = FXDataEngineConstants.latestPluginAPIVersion,
+        ok: Bool,
+        prediction: PredictionV4?,
+        error: String? = nil,
+        modelIdentifier: String? = nil,
+        modelVersion: String? = nil,
+        modelSha256: String? = nil,
+        latencyMilliseconds: Double? = nil,
+        serverTimestampUTC: Int64? = nil
+    ) {
+        self.apiVersion = apiVersion
+        self.ok = ok
+        self.prediction = prediction
+        self.error = error
+        self.modelIdentifier = modelIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.modelVersion = modelVersion?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.modelSha256 = modelSha256?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.latencyMilliseconds = latencyMilliseconds.map { max(0.0, fxSafeFinite($0)) }
+        self.serverTimestampUTC = serverTimestampUTC
+    }
+}
+
+public protocol RemoteRPCMLBackendTransport: Sendable {
+    func send(
+        _ request: RemoteRPCMLBackendRequest,
+        configuration: RemoteRPCMLBackendConfiguration
+    ) throws -> RemoteRPCMLBackendResponse
+}
+
+public struct URLSessionRemoteRPCMLBackendTransport: RemoteRPCMLBackendTransport {
+    public init() {}
+
+    public func send(
+        _ request: RemoteRPCMLBackendRequest,
+        configuration: RemoteRPCMLBackendConfiguration
+    ) throws -> RemoteRPCMLBackendResponse {
+        let url = try configuration.validatedURL()
+        try configuration.validateAuthToken()
+        let body = try JSONEncoder().encode(request)
+        var urlRequest = URLRequest(url: url, timeoutInterval: configuration.timeoutSeconds)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let authToken = configuration.authToken {
+            urlRequest.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        }
+        urlRequest.httpBody = body
+
+        let resultBox = RemoteRPCTransportResultBox()
+        let termination = DispatchSemaphore(value: 0)
+        let task = URLSession.shared.dataTask(with: urlRequest) { data, response, error in
+            if let error {
+                resultBox.set(.failure(error))
+            } else {
+                resultBox.set(.success((data ?? Data(), response)))
+            }
+            termination.signal()
+        }
+        task.resume()
+        if termination.wait(timeout: .now() + configuration.timeoutSeconds) == .timedOut {
+            task.cancel()
+            throw FXDataEngineError.externalBackend(
+                "Remote RPC inference timed out after \(String(format: "%.2f", configuration.timeoutSeconds)) seconds"
+            )
+        }
+
+        let (responseData, urlResponse) = try resultBox.result().get()
+        guard let httpResponse = urlResponse as? HTTPURLResponse else {
+            throw FXDataEngineError.externalBackend("Remote RPC inference did not return an HTTP response")
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let message = String(data: responseData, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .prefix(512)
+                .description
+                .nilIfEmpty
+                ?? "Remote RPC inference failed with HTTP status \(httpResponse.statusCode)"
+            throw FXDataEngineError.externalBackend(message)
+        }
+        return try JSONDecoder().decode(RemoteRPCMLBackendResponse.self, from: responseData)
+    }
+}
+
+private final class RemoteRPCTransportResultBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: Result<(Data, URLResponse?), Error>?
+
+    func set(_ result: Result<(Data, URLResponse?), Error>) {
+        lock.lock()
+        storage = result
+        lock.unlock()
+    }
+
+    func result() throws -> Result<(Data, URLResponse?), Error> {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let storage else {
+            throw FXDataEngineError.externalBackend("Remote RPC inference did not complete")
+        }
+        return storage
+    }
+}
+
+public struct RemoteRPCMLBackendBridge: ExternalMLBackend {
+    public let descriptor: MLBackendDescriptor
+    private let configuration: RemoteRPCMLBackendConfiguration
+    private let transport: any RemoteRPCMLBackendTransport
+    private let configurationError: FXDataEngineError?
+
+    public init(
+        modelIdentifier: String,
+        configuration: RemoteRPCMLBackendConfiguration,
+        transport: any RemoteRPCMLBackendTransport = URLSessionRemoteRPCMLBackendTransport()
+    ) {
+        self.configuration = configuration
+        self.transport = transport
+        self.configurationError = Self.configurationError(configuration: configuration)
+        self.descriptor = MLBackendDescriptor(
+            mode: .remoteRPC(endpoint: configuration.endpoint),
+            modelIdentifier: modelIdentifier,
+            supportsTraining: false,
+            supportsInference: true,
+            usesVolumeFeatures: true
+        )
+    }
+
+    public func predict(_ payload: MLInferencePayload) async throws -> PredictionV4 {
+        try await Task.detached(priority: .utility) {
+            try self.predictSynchronously(payload)
+        }.value
+    }
+
+    public func train(_ payload: MLTrainingPayload) async throws {
+        try trainSynchronously(payload)
+    }
+
+    public func predictSynchronously(_ payload: MLInferencePayload) throws -> PredictionV4 {
+        try validateConfiguration()
+        try payload.validateLatestAPI()
+        guard payload.framework == .remoteRPC else {
+            throw FXDataEngineError.validation("remoteRPCPayload.framework")
+        }
+        guard payload.modelIdentifier == descriptor.modelIdentifier else {
+            throw FXDataEngineError.validation("remoteRPCPayload.modelIdentifier")
+        }
+        let request = RemoteRPCMLBackendRequest(inference: payload)
+        let response = try transport.send(request, configuration: configuration)
+        try Self.validateLatestAPI(response)
+        guard response.ok else {
+            throw FXDataEngineError.externalBackend(response.error ?? "Remote RPC backend returned failure")
+        }
+        if let error = response.error {
+            throw FXDataEngineError.externalBackend(error)
+        }
+        if let responseModel = response.modelIdentifier, responseModel != descriptor.modelIdentifier {
+            throw FXDataEngineError.externalBackend(
+                "Remote RPC backend returned modelIdentifier \(responseModel); expected \(descriptor.modelIdentifier)"
+            )
+        }
+        guard let prediction = response.prediction else {
+            throw FXDataEngineError.externalBackend("Remote RPC backend did not return a prediction")
+        }
+        try prediction.validate()
+        return prediction
+    }
+
+    public func trainSynchronously(_ payload: MLTrainingPayload) throws {
+        try validateConfiguration()
+        try payload.validateLatestAPI()
+        throw FXDataEngineError.externalBackend("Remote RPC training is not supported")
+    }
+
+    private func validateConfiguration() throws {
+        if let configurationError {
+            throw configurationError
+        }
+    }
+
+    private static func configurationError(configuration: RemoteRPCMLBackendConfiguration) -> FXDataEngineError? {
+        do {
+            _ = try configuration.validatedURL()
+            try configuration.validateAuthToken()
+            return nil
+        } catch let error as FXDataEngineError {
+            return error
+        } catch {
+            return .externalBackend(String(describing: error))
+        }
+    }
+
+    private static func validateLatestAPI(_ response: RemoteRPCMLBackendResponse) throws {
+        guard response.apiVersion == FXDataEngineConstants.latestPluginAPIVersion else {
+            throw FXDataEngineError.externalBackend(
+                "Remote RPC backend API version \(response.apiVersion) is not supported; expected \(FXDataEngineConstants.latestPluginAPIVersion)"
+            )
+        }
+    }
+}
+
 public struct PythonMLBackendBridge: ExternalMLBackend {
     public let descriptor: MLBackendDescriptor
     private let executable: String
@@ -443,9 +722,9 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
         module: String,
         environment: [String: String]
     ) -> FXDataEngineError? {
-        guard framework == .pyTorch || framework == .tensorFlow || framework == .foundationNLP else {
+        guard framework == .pyTorch || framework == .tensorFlow || framework == .foundationNLP || framework == .onnxRuntime else {
             return .externalBackend(
-                "Python bridge does not support \(framework.rawValue); use pyTorch, tensorFlow, or foundationNLP"
+                "Python bridge does not support \(framework.rawValue); use pyTorch, tensorFlow, foundationNLP, or onnxRuntime"
             )
         }
         let trimmedExecutable = executable.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -648,6 +927,8 @@ public enum MLBackendFactory {
             framework = resolved
         case .externalPython(let resolved, _, _):
             framework = resolved
+        case .remoteRPC:
+            framework = .remoteRPC
         }
         return MLInferencePayload(
             modelIdentifier: descriptor.modelIdentifier,
@@ -690,6 +971,14 @@ public enum MLBackendFactory {
             return resolved
         case .externalPython(let resolved, _, _):
             return resolved
+        case .remoteRPC:
+            return .remoteRPC
         }
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }

@@ -54,6 +54,75 @@ final class PluginRuntimeBackendPolicyTests: XCTestCase {
         XCTAssertTrue(resolution.requiresExternalPython)
     }
 
+    func testAutomaticResolutionPrefersDeclaredRemoteRPCWhenConfigured() throws {
+        let plan = FXPluginAccelerationPlan(
+            pluginName: "test_remote",
+            primaryBackends: [.swiftScalar, .onnxRuntime, .remoteRPC, .pyTorchMPS],
+            usesVolumeWhenAvailable: true,
+            notes: "test"
+        )
+        let remoteEndpointKey = "FXAI_REMOTE_INFERENCE_ENDPOINT"
+        let environment = FXPluginRuntimeEnvironment(
+            metalDevice: MetalAccelerationDevice(
+                available: true,
+                deviceName: "Test GPU",
+                supportsUnifiedMemory: true,
+                hardware: appleM2
+            ),
+            pythonExecutable: "python3",
+            pyTorchMPSAvailable: true,
+            onnxRuntimeAvailable: true,
+            remoteInferenceAvailable: true,
+            remoteInferenceEndpoint: "https://inference.example.test/fxai/predict",
+            remoteInferenceAuthToken: "token",
+            remoteInferenceTimeoutSeconds: 4.0
+        )
+
+        let resolution = try FXPluginRuntimeResolver.resolve(plan: plan, environment: environment)
+
+        XCTAssertEqual(remoteEndpointKey, "FXAI_REMOTE_INFERENCE_ENDPOINT")
+        XCTAssertEqual(resolution.selectedBackend, .remoteRPC)
+        XCTAssertEqual(resolution.mlFramework, .remoteRPC)
+        XCTAssertFalse(resolution.requiresExternalPython)
+        XCTAssertEqual(environment.remoteRPCConfiguration()?.endpoint, "https://inference.example.test/fxai/predict")
+        XCTAssertEqual(environment.remoteRPCConfiguration()?.authToken, "token")
+        XCTAssertEqual(environment.remoteRPCConfiguration()?.timeoutSeconds ?? 0.0, 4.0, accuracy: 0.0)
+    }
+
+    func testONNXRuntimeRequiresPythonAndExplicitEnablement() throws {
+        let plan = FXPluginAccelerationPlan(
+            pluginName: "test_onnx",
+            primaryBackends: [.swiftScalar],
+            candidateBackends: [.onnxRuntime],
+            usesVolumeWhenAvailable: true,
+            notes: "test"
+        )
+        let enabledEnvironment = FXPluginRuntimeEnvironment(
+            pythonExecutable: "python3",
+            onnxRuntimeAvailable: true
+        )
+        let missingPythonEnvironment = FXPluginRuntimeEnvironment(
+            pythonExecutable: nil,
+            onnxRuntimeAvailable: true
+        )
+        let disabledEnvironment = FXPluginRuntimeEnvironment(
+            pythonExecutable: "python3",
+            onnxRuntimeAvailable: false
+        )
+        let onnxEnablementKey = "FXAI_ENABLE_ONNX_RUNTIME"
+
+        let enabled = try FXPluginRuntimeResolver.resolve(plan: plan, environment: enabledEnvironment)
+        let missingPython = try FXPluginRuntimeResolver.resolve(plan: plan, environment: missingPythonEnvironment)
+        let disabled = try FXPluginRuntimeResolver.resolve(plan: plan, environment: disabledEnvironment)
+
+        XCTAssertEqual(onnxEnablementKey, "FXAI_ENABLE_ONNX_RUNTIME")
+        XCTAssertEqual(enabled.selectedBackend, .onnxRuntime)
+        XCTAssertEqual(enabled.mlFramework, .onnxRuntime)
+        XCTAssertTrue(enabled.requiresExternalPython)
+        XCTAssertEqual(missingPython.selectedBackend, .swiftScalar)
+        XCTAssertEqual(disabled.selectedBackend, .swiftScalar)
+    }
+
     func testForcedUnavailableBackendFallsBackToCPUWhenAllowed() throws {
         let plan = FXPluginAccelerationPlan(
             pluginName: "test_fallback",

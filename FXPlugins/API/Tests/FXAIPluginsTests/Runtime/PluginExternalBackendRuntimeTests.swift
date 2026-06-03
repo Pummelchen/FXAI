@@ -241,7 +241,7 @@ final class PluginExternalBackendRuntimeTests: XCTestCase {
             environment["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
         case .tensorFlow:
             environment["FXAI_REQUIRE_TENSORFLOW_METAL"] = "1"
-        case .nativeSwift, .metal, .foundationNLP:
+        case .nativeSwift, .metal, .foundationNLP, .onnxRuntime, .remoteRPC:
             break
         }
         return environment

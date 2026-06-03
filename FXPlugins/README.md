@@ -2,7 +2,7 @@
 
 Repository-root plugin zoo shared across FXAI runtimes.
 
-AI plugins own model execution. When a Swift plugin needs tensor training or inference, it should use a plugin-local PyTorch or TensorFlow backend. FXDataEngine remains responsible for deterministic feature and payload contracts.
+AI plugins own model execution. When a Swift plugin needs tensor training or inference, it should use a plugin-local PyTorch or TensorFlow backend. Optional inference-only ONNX Runtime and remote RPC backends are also available for exported or externally hosted models. FXDataEngine remains responsible for deterministic feature and payload contracts.
 
 Converted plugins should consume the Swift FXDataEngine OHLCV contracts and use volume-derived features whenever the loaded dataset has nonzero volume.
 
@@ -67,10 +67,32 @@ contracts:
   one TensorFlow GPU device reported by `tf.config.list_physical_devices("GPU")`.
   Tests that exercise TensorFlow backends resolve that Python 3.12 stack
   directly and fail with diagnostics when it is unavailable.
+- ONNX-backed plugins can declare `onnxRuntime` for inference-only exported
+  models. The default layout is:
+
+  ```text
+  FXPlugins/<plugin_id>/ONNX/<plugin_id>.onnx
+  FXPlugins/<plugin_id>/ONNX/<plugin_id>.manifest.json
+  ```
+
+  The manifest is optional but, when present, may pin `pluginName`,
+  `modelIdentifier`, `modelSha256`, `inputName`, output names, and preferred
+  ONNX providers. Runtime overrides are `FXAI_ONNX_MODEL_PATH`,
+  `FXAI_ONNX_MANIFEST_PATH`, and `FXAI_ONNX_PROVIDERS`. Enable the backend with
+  `FXAI_ENABLE_ONNX_RUNTIME=1` and a configured `FXAI_PYTHON`.
+- Remote RPC-backed plugins can declare `remoteRPC` for inference-only external
+  inference servers. Enable with `FXAI_ENABLE_REMOTE_RPC=1` and configure
+  `FXAI_REMOTE_INFERENCE_ENDPOINT`; optionally set
+  `FXAI_REMOTE_INFERENCE_AUTH_TOKEN` and
+  `FXAI_REMOTE_INFERENCE_TIMEOUT_SECONDS`. The Swift bridge sends a JSON POST
+  request containing the latest `MLInferencePayload` and expects a latest-version
+  response with `ok`, optional `error`, and a valid `PredictionV4`. The default
+  transport is JSON over HTTP behind `RemoteRPCMLBackendTransport`; gRPC can be
+  added later as another transport without changing plugin declarations.
 - `FXPluginRuntimeResolver` selects CPU, Metal, PyTorch, TensorFlow, Foundation NLP,
-  or CoreML/Neural Engine candidates from each plugin acceleration plan. The
+  ONNX Runtime, remote RPC, or CoreML/Neural Engine candidates from each plugin acceleration plan. The
   plugin-local dispatcher `API/Backends/Python/fxai_plugin_module_backend.py`
-  loads a plugin's own `PyTorch/`, `TensorFlow/`, or `NLP/` implementation through
+  loads a plugin's own `PyTorch/`, `TensorFlow/`, `NLP/`, or `ONNX/` implementation through
   the Swift bridge. `FXAIAcceleratedPluginRuntime` can wrap any planned plugin and
   route train/predict through the selected external backend while retaining explicit
   CPU fallback. Runtime wrappers expose a bounded `fallbackDiagnostics` store with

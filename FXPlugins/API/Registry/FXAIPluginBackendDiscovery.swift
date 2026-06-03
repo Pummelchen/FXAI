@@ -30,7 +30,10 @@ public enum FXAIPluginBackendDiscovery {
         case .foundationNLP:
             folder = "NLP"
             suffix = "_nlp.py"
-        case .swiftScalar, .swiftSIMD, .accelerate, .metal, .coreMLNeuralEngine:
+        case .onnxRuntime:
+            folder = "ONNX"
+            suffix = ".onnx"
+        case .swiftScalar, .swiftSIMD, .accelerate, .metal, .coreMLNeuralEngine, .remoteRPC:
             return nil
         }
         return pluginRootURL
@@ -56,7 +59,10 @@ public enum FXAIPluginBackendDiscovery {
         case .foundationNLP:
             framework = .foundationNLP
             supportsTraining = false
-        case .swiftScalar, .swiftSIMD, .accelerate, .metal, .coreMLNeuralEngine:
+        case .onnxRuntime:
+            framework = .onnxRuntime
+            supportsTraining = false
+        case .swiftScalar, .swiftSIMD, .accelerate, .metal, .coreMLNeuralEngine, .remoteRPC:
             return nil
         }
         return MLBackendDescriptor(

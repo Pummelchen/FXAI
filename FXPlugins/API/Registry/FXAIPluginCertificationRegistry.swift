@@ -15,6 +15,10 @@ public enum FXPluginCertificationGate: String, Codable, CaseIterable, Hashable, 
     case tensorFlowLiveTrainPredictPersistence
     case nlpLiveContextPayload
     case coreMLNeuralEngineLiveParity
+    case onnxRuntimeModelDiscovery
+    case onnxRuntimeLivePredict
+    case remoteRPCConfiguration
+    case remoteRPCLivePredict
     case fxDatabaseAPIOnlyDataPath
     case fullVerificationRun
 }
@@ -201,6 +205,10 @@ public enum FXAIPluginCertificationRegistry {
             gates.formUnion([.externalBackendDiscovery, .nlpLiveContextPayload])
         case .coreMLNeuralEngine:
             gates.insert(.coreMLNeuralEngineLiveParity)
+        case .onnxRuntime:
+            gates.formUnion([.externalBackendDiscovery, .onnxRuntimeModelDiscovery, .onnxRuntimeLivePredict])
+        case .remoteRPC:
+            gates.formUnion([.remoteRPCConfiguration, .remoteRPCLivePredict])
         }
         return gates
     }
@@ -252,6 +260,20 @@ public enum FXAIPluginCertificationRegistry {
         case .foundationNLP:
             if hasNLPLiveContextPayloadEvidence(pluginName: plan.pluginName) {
                 gates.insert(.nlpLiveContextPayload)
+            }
+        case .onnxRuntime:
+            if hasONNXModelDiscoveryEvidence(pluginName: plan.pluginName) {
+                gates.insert(.onnxRuntimeModelDiscovery)
+            }
+            if hasONNXRuntimeLivePredictEvidence() {
+                gates.insert(.onnxRuntimeLivePredict)
+            }
+        case .remoteRPC:
+            if hasRemoteRPCConfigurationEvidence() {
+                gates.insert(.remoteRPCConfiguration)
+            }
+            if hasRemoteRPCLivePredictEvidence() {
+                gates.insert(.remoteRPCLivePredict)
             }
         case .swiftScalar, .swiftSIMD, .accelerate, .coreMLNeuralEngine:
             break
@@ -402,6 +424,53 @@ public enum FXAIPluginCertificationRegistry {
         return text.contains("ConsumesTextEventsAndHasNoTextFallback") &&
             text.contains("eventTexts") &&
             text.contains("PluginTextEventV4")
+    }
+
+    private static func hasONNXModelDiscoveryEvidence(pluginName: String) -> Bool {
+        guard let url = FXAIPluginBackendDiscovery.pluginBackendURL(pluginName: pluginName, backend: .onnxRuntime) else {
+            return false
+        }
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
+    private static func hasONNXRuntimeLivePredictEvidence() -> Bool {
+        let testURL = repositoryRootURL
+            .appendingPathComponent("FXDataEngine")
+            .appendingPathComponent("Tests")
+            .appendingPathComponent("FXDataEngineTests")
+            .appendingPathComponent("MLTensorBridgeTests.swift")
+        let backendURL = FXAIPluginBackendDiscovery.moduleBackendURL
+        guard let testText = try? String(contentsOf: testURL, encoding: .utf8),
+              let backendText = try? String(contentsOf: backendURL, encoding: .utf8) else {
+            return false
+        }
+        return testText.contains("onnxRuntime") &&
+            testText.contains("FXAI_ONNX_MODEL_PATH") &&
+            backendText.contains("onnxruntime.InferenceSession")
+    }
+
+    private static func hasRemoteRPCConfigurationEvidence() -> Bool {
+        let testURL = repositoryRootURL
+            .appendingPathComponent("FXDataEngine")
+            .appendingPathComponent("Tests")
+            .appendingPathComponent("FXDataEngineTests")
+            .appendingPathComponent("PluginRuntimeBackendPolicyTests.swift")
+        guard let text = try? String(contentsOf: testURL, encoding: .utf8) else { return false }
+        return text.contains("remoteInferenceEndpoint") &&
+            text.contains("FXAI_REMOTE_INFERENCE_ENDPOINT") &&
+            text.contains("remoteRPC")
+    }
+
+    private static func hasRemoteRPCLivePredictEvidence() -> Bool {
+        let testURL = repositoryRootURL
+            .appendingPathComponent("FXDataEngine")
+            .appendingPathComponent("Tests")
+            .appendingPathComponent("FXDataEngineTests")
+            .appendingPathComponent("MLTensorBridgeTests.swift")
+        guard let text = try? String(contentsOf: testURL, encoding: .utf8) else { return false }
+        return text.contains("RemoteRPCMLBackendBridge") &&
+            text.contains("RemoteRPCMLBackendTransport") &&
+            text.contains("predictSynchronously")
     }
 
     private static func matchingFiles(under root: URL, extensions: Set<String>) -> [URL] {

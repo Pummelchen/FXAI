@@ -180,7 +180,7 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
             } catch {
                 try trainCPUFallback(request, hyperParameters: hyperParameters, resolution: resolution, error: error)
             }
-        case .foundationNLP:
+        case .foundationNLP, .onnxRuntime, .remoteRPC:
             try basePlugin.train(request, hyperParameters: hyperParameters)
         case .metal:
             _ = try FXAIPluginMetalBackendDiscovery.executeRuntimeProbe(pluginName: manifest.aiName)
@@ -197,9 +197,15 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
         let resolution = try resolveRuntimeBackend(operation: .predict, context: request.context)
         let prediction: PredictionV4
         switch resolution.selectedBackend {
-        case .pyTorchMPS, .tensorFlowMetal, .foundationNLP:
+        case .pyTorchMPS, .tensorFlowMetal, .foundationNLP, .onnxRuntime:
             do {
                 prediction = try predictExternal(request, backend: resolution.selectedBackend)
+            } catch {
+                prediction = try predictCPUFallback(request, hyperParameters: hyperParameters, resolution: resolution, error: error)
+            }
+        case .remoteRPC:
+            do {
+                prediction = try predictRemoteRPC(request)
             } catch {
                 prediction = try predictCPUFallback(request, hyperParameters: hyperParameters, resolution: resolution, error: error)
             }
@@ -259,6 +265,18 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
         return try bridge.predictSynchronously(payload)
     }
 
+    private func predictRemoteRPC(_ request: PredictRequestV4) throws -> PredictionV4 {
+        guard let remoteConfiguration = configuration.environment.remoteRPCConfiguration() else {
+            throw FXDataEngineError.externalBackend("remoteRPC is enabled but no remote inference endpoint is configured")
+        }
+        let bridge = RemoteRPCMLBackendBridge(
+            modelIdentifier: manifest.aiName,
+            configuration: remoteConfiguration
+        )
+        let payload = MLBackendFactory.inferencePayload(descriptor: bridge.descriptor, request: request)
+        return try bridge.predictSynchronously(payload)
+    }
+
     private func trainExternal(
         _ request: TrainRequestV4,
         backend: FXPluginAccelerationBackend
@@ -289,6 +307,14 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
            environment["FXAI_ALLOW_CPU_TENSOR_FALLBACK"] != "1",
            environment["FXAI_FORCE_TENSORFLOW_CPU"] != "1" {
             environment["FXAI_REQUIRE_TENSORFLOW_METAL"] = "1"
+        }
+        if backend == .onnxRuntime,
+           let modelURL = FXAIPluginBackendDiscovery.pluginBackendURL(pluginName: manifest.aiName, backend: backend) {
+            environment["FXAI_ONNX_MODEL_PATH"] = environment["FXAI_ONNX_MODEL_PATH"] ?? modelURL.path
+            let manifestURL = modelURL.deletingPathExtension().appendingPathExtension("manifest.json")
+            if FileManager.default.fileExists(atPath: manifestURL.path) {
+                environment["FXAI_ONNX_MANIFEST_PATH"] = environment["FXAI_ONNX_MANIFEST_PATH"] ?? manifestURL.path
+            }
         }
         return PythonMLBackendBridge(
             framework: framework,
@@ -418,7 +444,7 @@ private extension MLBackendDescriptor {
         switch mode {
         case .externalPython(let framework, _, _):
             return framework
-        case .inProcess:
+        case .inProcess, .remoteRPC:
             throw FXDataEngineError.externalBackend("descriptor is not an external Python backend")
         }
     }

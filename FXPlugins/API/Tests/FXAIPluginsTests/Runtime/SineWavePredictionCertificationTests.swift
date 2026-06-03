@@ -752,6 +752,10 @@ final class SineWavePredictionCertificationTests: XCTestCase {
             return .foundationNLP
         case .coreMLNeuralEngine:
             return .coreMLNeuralEngine
+        case .onnxRuntime:
+            return .onnxRuntime
+        case .remoteRPC:
+            return .remoteRPC
         }
     }
 
@@ -761,7 +765,7 @@ final class SineWavePredictionCertificationTests: XCTestCase {
             return try BackendPythonTestSupport.requirePythonImporting("torch")
         case .tensorFlowMetal:
             return try BackendPythonTestSupport.requireTensorFlowMetalPython()
-        case .automatic, .cpuOnly, .swiftScalar, .swiftSIMD, .accelerate, .metal, .foundationNLP, .coreMLNeuralEngine:
+        case .automatic, .cpuOnly, .swiftScalar, .swiftSIMD, .accelerate, .metal, .foundationNLP, .coreMLNeuralEngine, .onnxRuntime, .remoteRPC:
             return try BackendPythonTestSupport.requireAnyPython()
         }
     }
@@ -782,7 +786,9 @@ final class SineWavePredictionCertificationTests: XCTestCase {
             } ?? false,
             tensorFlowMetalAvailable: tensorFlowPython != nil,
             foundationNLPAvailable: metalDevice.optimizedForFXAIAppleSilicon,
-            coreMLNeuralEngineAvailable: false
+            coreMLNeuralEngineAvailable: false,
+            onnxRuntimeAvailable: false,
+            remoteInferenceAvailable: false
         )
     }
 

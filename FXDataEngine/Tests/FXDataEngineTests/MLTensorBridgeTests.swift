@@ -186,7 +186,7 @@ else:
         XCTAssertThrowsError(try unsupportedFrameworkBridge.predictSynchronously(unsupportedFrameworkPayload)) { error in
             XCTAssertEqual(
                 String(describing: error),
-                "external backend failed: Python bridge does not support metal; use pyTorch, tensorFlow, or foundationNLP"
+                "external backend failed: Python bridge does not support metal; use pyTorch, tensorFlow, foundationNLP, or onnxRuntime"
             )
         }
 
@@ -238,6 +238,144 @@ else:
                 String(describing: error),
                 "external backend failed: Python bridge environment key is invalid: BAD=KEY"
             )
+        }
+    }
+
+    func testPythonMLBackendBridgeAcceptsONNXRuntimeFramework() throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("fx-python-bridge-onnx-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let backendURL = temporaryDirectory.appendingPathComponent("backend.py")
+        let backendScript = """
+import json
+import os
+import sys
+
+command = json.loads(sys.stdin.read() or "{}")
+inference = command.get("inference") or {}
+assert inference["framework"] == "onnxRuntime"
+assert os.environ["FXAI_ONNX_MODEL_PATH"].endswith("model.onnx")
+print(json.dumps({
+    "apiVersion": 4,
+    "ok": True,
+    "prediction": {
+        "apiVersion": 4,
+        "classProbabilities": [0.2, 0.7, 0.1],
+        "moveMeanPoints": 3.0,
+        "moveQ25Points": 2.0,
+        "moveQ50Points": 3.0,
+        "moveQ75Points": 4.0,
+        "mfeMeanPoints": 3.2,
+        "maeMeanPoints": 0.8,
+        "hitTimeFraction": 0.4,
+        "pathRisk": 0.1,
+        "fillRisk": 0.0,
+        "confidence": 0.7,
+        "reliability": 0.6
+    },
+    "error": None
+}))
+"""
+        try backendScript.write(to: backendURL, atomically: true, encoding: .utf8)
+
+        let bridge = PythonMLBackendBridge(
+            framework: .onnxRuntime,
+            executable: "python3",
+            module: backendURL.path,
+            modelIdentifier: "onnx_bridge",
+            environment: ["FXAI_ONNX_MODEL_PATH": temporaryDirectory.appendingPathComponent("model.onnx").path]
+        )
+        let payload = Self.inferencePayload(modelIdentifier: "onnx_bridge", framework: .onnxRuntime)
+
+        let prediction = try bridge.predictSynchronously(payload)
+        XCTAssertEqual(prediction.classProbabilities[1], 0.7, accuracy: 0.0001)
+        XCTAssertEqual(prediction.moveMeanPoints, 3.0, accuracy: 0.0001)
+    }
+
+    func testRemoteRPCMLBackendBridgePredictsWithInjectedTransport() throws {
+        let transport = RecordingRemoteRPCTransport(
+            response: RemoteRPCMLBackendResponse(
+                ok: true,
+                prediction: Self.samplePrediction(),
+                modelIdentifier: "remote_bridge",
+                modelVersion: "test-v1",
+                latencyMilliseconds: 12.0
+            )
+        )
+        let bridge = RemoteRPCMLBackendBridge(
+            modelIdentifier: "remote_bridge",
+            configuration: RemoteRPCMLBackendConfiguration(
+                endpoint: "https://inference.example.test/fxai/predict",
+                authToken: "secret",
+                timeoutSeconds: 2.0
+            ),
+            transport: transport
+        )
+        let payload = MLBackendFactory.inferencePayload(
+            descriptor: bridge.descriptor,
+            request: Self.predictRequest()
+        )
+
+        let prediction = try bridge.predictSynchronously(payload)
+
+        XCTAssertEqual(payload.framework, .remoteRPC)
+        XCTAssertEqual(prediction.classProbabilities[1], 0.7, accuracy: 0.0001)
+        XCTAssertEqual(transport.capturedRequest()?.apiVersion, FXDataEngineConstants.latestPluginAPIVersion)
+        XCTAssertEqual(transport.capturedRequest()?.inference.modelIdentifier, "remote_bridge")
+        XCTAssertEqual(transport.capturedConfiguration()?.authToken, "secret")
+    }
+
+    func testRemoteRPCMLBackendBridgeRejectsInvalidEndpointBeforeTransport() {
+        let transport = RecordingRemoteRPCTransport(
+            response: RemoteRPCMLBackendResponse(ok: true, prediction: Self.samplePrediction())
+        )
+        let bridge = RemoteRPCMLBackendBridge(
+            modelIdentifier: "bad_remote",
+            configuration: RemoteRPCMLBackendConfiguration(endpoint: "file:///tmp/fxai.sock"),
+            transport: transport
+        )
+        let payload = Self.inferencePayload(modelIdentifier: "bad_remote", framework: .remoteRPC)
+
+        XCTAssertThrowsError(try bridge.predictSynchronously(payload)) { error in
+            XCTAssertEqual(String(describing: error), "external backend failed: Remote RPC endpoint must use http or https")
+        }
+        XCTAssertNil(transport.capturedRequest())
+    }
+
+    func testRemoteRPCMLBackendBridgeRejectsUnsupportedTrainingAndBadResponseVersion() {
+        let staleTransport = RecordingRemoteRPCTransport(
+            response: RemoteRPCMLBackendResponse(apiVersion: 3, ok: true, prediction: Self.samplePrediction())
+        )
+        let bridge = RemoteRPCMLBackendBridge(
+            modelIdentifier: "remote_bridge",
+            configuration: RemoteRPCMLBackendConfiguration(endpoint: "https://inference.example.test/fxai/predict"),
+            transport: staleTransport
+        )
+        let payload = Self.inferencePayload(modelIdentifier: "remote_bridge", framework: .remoteRPC)
+
+        XCTAssertThrowsError(try bridge.predictSynchronously(payload)) { error in
+            XCTAssertEqual(
+                String(describing: error),
+                "external backend failed: Remote RPC backend API version 3 is not supported; expected 4"
+            )
+        }
+        let wrongModelPayload = Self.inferencePayload(modelIdentifier: "other_remote_bridge", framework: .remoteRPC)
+        XCTAssertThrowsError(try bridge.predictSynchronously(wrongModelPayload)) { error in
+            XCTAssertEqual(String(describing: error), "validation failed: remoteRPCPayload.modelIdentifier")
+        }
+
+        let trainRequest = TrainRequestV4(
+            valid: true,
+            context: PluginContextV4(dataHasVolume: true),
+            labelClass: .buy,
+            movePoints: 1.5,
+            sampleWeight: 1.0,
+            x: payload.x
+        )
+        XCTAssertThrowsError(try bridge.trainSynchronously(MLTrainingPayload(inference: payload, request: trainRequest))) { error in
+            XCTAssertEqual(String(describing: error), "external backend failed: Remote RPC training is not supported")
         }
     }
 
@@ -336,5 +474,93 @@ time.sleep(5)
         """.data(using: .utf8)!
 
         XCTAssertThrowsError(try JSONDecoder().decode(MLInferencePayload.self, from: json))
+    }
+
+    private static func predictRequest() -> PredictRequestV4 {
+        PredictRequestV4(
+            valid: true,
+            context: PluginContextV4(
+                horizonMinutes: 15,
+                sequenceBars: 2,
+                priceCostPoints: 0.7,
+                minMovePoints: 1.5,
+                dataHasVolume: true
+            ),
+            windowSize: 2,
+            x: featureVector(),
+            xWindow: [featureVector()]
+        )
+    }
+
+    private static func inferencePayload(modelIdentifier: String, framework: MLFramework) -> MLInferencePayload {
+        MLInferencePayload(
+            modelIdentifier: modelIdentifier,
+            framework: framework,
+            dataHasVolume: true,
+            horizonMinutes: 15,
+            sequenceBars: 2,
+            priceCostPoints: 0.7,
+            minMovePoints: 1.5,
+            x: featureVector(),
+            xWindow: [featureVector()]
+        )
+    }
+
+    private static func featureVector() -> [Double] {
+        var x = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
+        x[0] = 1.0
+        x[6] = 0.5
+        return x
+    }
+
+    private static func samplePrediction() -> PredictionV4 {
+        PredictionV4(
+            classProbabilities: [0.2, 0.7, 0.1],
+            moveMeanPoints: 2.0,
+            moveQ25Points: 1.0,
+            moveQ50Points: 2.0,
+            moveQ75Points: 3.0,
+            mfeMeanPoints: 2.2,
+            maeMeanPoints: 0.6,
+            hitTimeFraction: 0.5,
+            pathRisk: 0.1,
+            fillRisk: 0.0,
+            confidence: 0.7,
+            reliability: 0.6
+        )
+    }
+}
+
+private final class RecordingRemoteRPCTransport: @unchecked Sendable, RemoteRPCMLBackendTransport {
+    private let lock = NSLock()
+    private let response: RemoteRPCMLBackendResponse
+    private var request: RemoteRPCMLBackendRequest?
+    private var configuration: RemoteRPCMLBackendConfiguration?
+
+    init(response: RemoteRPCMLBackendResponse) {
+        self.response = response
+    }
+
+    func send(
+        _ request: RemoteRPCMLBackendRequest,
+        configuration: RemoteRPCMLBackendConfiguration
+    ) throws -> RemoteRPCMLBackendResponse {
+        lock.lock()
+        self.request = request
+        self.configuration = configuration
+        lock.unlock()
+        return response
+    }
+
+    func capturedRequest() -> RemoteRPCMLBackendRequest? {
+        lock.lock()
+        defer { lock.unlock() }
+        return request
+    }
+
+    func capturedConfiguration() -> RemoteRPCMLBackendConfiguration? {
+        lock.lock()
+        defer { lock.unlock() }
+        return configuration
     }
 }

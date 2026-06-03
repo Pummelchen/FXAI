@@ -132,6 +132,16 @@ public enum FXBacktestPluginConfigurationCatalog {
             return [
                 parameter("coreml_batch_size", "CoreML Batch Size", .integer, 64, 1, 1, 4_096, "samples", "Batch size for CoreML/Neural Engine inference.")
             ]
+        case .onnxRuntime:
+            return [
+                parameter("onnx_batch_size", "ONNX Batch Size", .integer, 64, 1, 1, 4_096, "samples", "Inference batch size for ONNX Runtime."),
+                parameter("onnx_sequence_batch_size", "ONNX Sequence Batch Size", .integer, 16, 1, 1, 512, "windows", "Maximum sequence windows grouped for ONNX Runtime inference.")
+            ]
+        case .remoteRPC:
+            return [
+                parameter("remote_rpc_timeout_seconds", "Remote RPC Timeout", .decimal, 10.0, 0.5, 0.5, 300.0, "seconds", "Inference timeout budget for remote RPC backends."),
+                parameter("remote_rpc_batch_size", "Remote RPC Batch Size", .integer, 32, 1, 1, 2_048, "samples", "Maximum request batch size for remote RPC inference.")
+            ]
         }
     }
 

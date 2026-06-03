@@ -2,8 +2,8 @@
 """FXAI plugin-local Python backend dispatcher.
 
 The Swift bridge sends the same JSON contract used by `fxai_plugin_backend.py`.
-This dispatcher loads the plugin's own PyTorch, TensorFlow, or NLP module from
-its folder and converts the module result back into `PredictionV4` JSON.
+This dispatcher loads the plugin's own PyTorch, TensorFlow, NLP, or ONNX model
+from its folder and converts the result back into `PredictionV4` JSON.
 """
 
 from __future__ import annotations
@@ -91,6 +91,8 @@ def _backend_path(plugin_name: str, framework: str) -> Path:
         return root / plugin_name / "TensorFlow" / f"{plugin_name}_tensorflow.py"
     if framework == "foundationNLP":
         return root / plugin_name / "NLP" / f"{plugin_name}_nlp.py"
+    if framework == "onnxRuntime":
+        return root / plugin_name / "ONNX" / f"{plugin_name}.onnx"
     raise ValueError(f"unsupported framework {framework}")
 
 
@@ -582,6 +584,169 @@ def _nlp_prediction(module: Any, features: list[float], payload: dict[str, Any])
     return _edge_prediction(edge, payload)
 
 
+def _resolve_onnx_model_path(model_identifier: Any) -> tuple[str, Path]:
+    override = os.environ.get("FXAI_ONNX_MODEL_PATH")
+    if override:
+        path = Path(override).expanduser().resolve()
+        if not path.exists():
+            raise FileNotFoundError(f"FXAI_ONNX_MODEL_PATH does not exist: {path}")
+        return _plugin_candidates(model_identifier)[0], path
+    return _resolve_backend_path(model_identifier, "onnxRuntime")
+
+
+def _onnx_manifest_path(model_path: Path) -> Path:
+    override = os.environ.get("FXAI_ONNX_MANIFEST_PATH")
+    if override:
+        return Path(override).expanduser().resolve()
+    return model_path.with_suffix(".manifest.json")
+
+
+def _manifest_string(manifest: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = manifest.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _load_onnx_manifest(plugin_name: str, model_identifier: Any, model_path: Path) -> dict[str, Any]:
+    manifest_path = _onnx_manifest_path(model_path)
+    if not manifest_path.exists():
+        if os.environ.get("FXAI_ONNX_MANIFEST_PATH"):
+            raise FileNotFoundError(f"FXAI_ONNX_MANIFEST_PATH does not exist: {manifest_path}")
+        return {}
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict):
+        raise ValueError(f"ONNX manifest must be a JSON object: {manifest_path}")
+    declared_plugin = _manifest_string(manifest, "pluginName")
+    if declared_plugin is not None and declared_plugin != plugin_name:
+        raise ValueError(f"ONNX manifest pluginName {declared_plugin} does not match {plugin_name}")
+    declared_model = _manifest_string(manifest, "modelIdentifier")
+    if declared_model is not None and declared_model not in {str(model_identifier), _safe_token(model_identifier)}:
+        raise ValueError(f"ONNX manifest modelIdentifier {declared_model} does not match {model_identifier}")
+    declared_sha = _manifest_string(manifest, "modelSha256", "modelSHA256", "sha256")
+    if declared_sha is not None:
+        actual_sha = _sha256_file(model_path)
+        if actual_sha is None or actual_sha.lower() != declared_sha.lower():
+            raise ValueError("ONNX model SHA-256 does not match manifest")
+    return manifest
+
+
+def _onnx_providers(manifest: dict[str, Any], ort: Any) -> list[str]:
+    raw = os.environ.get("FXAI_ONNX_PROVIDERS")
+    if raw:
+        requested = [item.strip() for item in raw.split(",") if item.strip()]
+    else:
+        manifest_providers = manifest.get("providers")
+        requested = manifest_providers if isinstance(manifest_providers, list) else ["CPUExecutionProvider"]
+    available = set(ort.get_available_providers())
+    selected = [str(provider) for provider in requested if str(provider) in available]
+    if selected:
+        return selected
+    if "CPUExecutionProvider" in available:
+        return ["CPUExecutionProvider"]
+    return list(available)
+
+
+def _onnx_input_tensor(payload: dict[str, Any], input_shape: Any) -> Any:
+    import numpy as np
+
+    sequence = _sequence(payload)
+    rank = len(input_shape) if isinstance(input_shape, (list, tuple)) else 3
+    if rank <= 1:
+        return np.asarray(sequence[-1], dtype=np.float32)
+    if rank == 2:
+        return np.asarray([sequence[-1]], dtype=np.float32)
+    return np.asarray([sequence], dtype=np.float32)
+
+
+def _to_python_value(value: Any) -> Any:
+    if hasattr(value, "tolist"):
+        return value.tolist()
+    if isinstance(value, tuple):
+        return [_to_python_value(item) for item in value]
+    if isinstance(value, list):
+        return [_to_python_value(item) for item in value]
+    return value
+
+
+def _output_by_name(outputs: list[Any], output_names: list[str], manifest: dict[str, Any], *keys: str) -> Any | None:
+    name = _manifest_string(manifest, *keys)
+    if name is None:
+        return None
+    try:
+        index = output_names.index(name)
+    except ValueError:
+        return None
+    return outputs[index]
+
+
+def _onnx_probabilities(value: Any) -> list[float]:
+    raw = _first_row(value)[:3]
+    if len(raw) < 3:
+        raw.extend([0.0] * (3 - len(raw)))
+    if any(item < 0.0 for item in raw) or sum(raw) > 1.5:
+        high = max(raw)
+        exps = [math.exp(max(-60.0, min(item - high, 60.0))) for item in raw]
+        total = sum(exps)
+        if total > 1.0e-12:
+            return [item / total for item in exps]
+    return _normalize_probabilities(raw)
+
+
+def _onnx_prediction_from_outputs(outputs: list[Any], output_names: list[str], manifest: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    probabilities_source = (
+        _output_by_name(outputs, output_names, manifest, "classProbabilitiesOutputName", "probabilitiesOutputName")
+        or outputs[0]
+    )
+    move_source = _output_by_name(outputs, output_names, manifest, "moveMeanOutputName", "moveMeanPointsOutputName")
+    quantile_source = _output_by_name(outputs, output_names, manifest, "moveQuantilesOutputName", "quantilesOutputName")
+
+    if move_source is None and len(outputs) > 1:
+        move_source = outputs[1]
+    if quantile_source is None and len(outputs) > 2:
+        quantile_source = outputs[2]
+
+    probabilities = _onnx_probabilities(probabilities_source)
+    row = _first_row(probabilities_source)
+    if move_source is not None:
+        move = max(0.0, _first_number(move_source, 0.0))
+    elif len(row) >= 4:
+        move = max(0.0, _safe_float(row[3]))
+    else:
+        move = max(
+            _safe_float(payload.get("minMovePoints", 0.0)),
+            _safe_float(payload.get("priceCostPoints", 0.0)),
+            0.0,
+        )
+
+    if quantile_source is not None:
+        q25, q50, q75 = _quantiles(quantile_source, move)
+    elif len(row) >= 6:
+        q25, q50, q75 = max(0.0, row[3]), max(0.0, row[4]), max(0.0, row[5])
+    else:
+        q25, q50, q75 = _quantiles([], move)
+    return _prediction(probabilities, move, [q25, q50, q75])
+
+
+def _onnx_prediction(plugin_name: str, model_identifier: Any, model_path: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    import onnxruntime as ort
+
+    manifest = _load_onnx_manifest(plugin_name, model_identifier, model_path)
+    session = ort.InferenceSession(str(model_path), providers=_onnx_providers(manifest, ort))
+    inputs = session.get_inputs()
+    if not inputs:
+        raise ValueError("ONNX model has no inputs")
+    input_name = _manifest_string(manifest, "inputName") or inputs[0].name
+    input_meta = next((item for item in inputs if item.name == input_name), inputs[0])
+    tensor = _onnx_input_tensor(payload, getattr(input_meta, "shape", None))
+    output_values = [_to_python_value(item) for item in session.run(None, {input_name: tensor})]
+    output_names = [item.name for item in session.get_outputs()]
+    if not output_values:
+        raise ValueError("ONNX model returned no outputs")
+    return _onnx_prediction_from_outputs(output_values, output_names, manifest, payload)
+
+
 def _call_train_step(
     module: Any,
     sequence: list[list[float]],
@@ -624,6 +789,12 @@ def _handle_predict(command: dict[str, Any]) -> dict[str, Any]:
     payload = command.get("inference") or {}
     framework = str(payload.get("framework", ""))
     model_identifier = payload.get("modelIdentifier")
+    if framework == "onnxRuntime":
+        plugin_name, model_path = _resolve_onnx_model_path(model_identifier)
+        _configure_deterministic_environment(plugin_name, framework, model_identifier)
+        _seed_framework(plugin_name, framework, model_identifier)
+        prediction = _onnx_prediction(plugin_name, model_identifier, model_path, payload)
+        return {"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": True, "prediction": prediction, "error": None}
     plugin_name, backend_path = _resolve_backend_path(model_identifier, framework)
     _configure_deterministic_environment(plugin_name, framework, model_identifier)
     _prepare_framework(framework)
@@ -653,6 +824,8 @@ def _handle_train(command: dict[str, Any]) -> dict[str, Any]:
     inference = training.get("inference") or {}
     framework = str(inference.get("framework", ""))
     model_identifier = inference.get("modelIdentifier")
+    if framework == "onnxRuntime":
+        return {"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": True, "prediction": None, "error": None}
     plugin_name, backend_path = _resolve_backend_path(model_identifier, framework)
     if framework == "foundationNLP":
         return {"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": True, "prediction": None, "error": None}

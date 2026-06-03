@@ -11,6 +11,8 @@ public enum FXPluginRuntimeMode: String, Codable, Hashable, Sendable, CaseIterab
     case tensorFlowMetal
     case foundationNLP
     case coreMLNeuralEngine
+    case onnxRuntime
+    case remoteRPC
 
     public var forcedBackend: FXPluginAccelerationBackend? {
         switch self {
@@ -32,6 +34,10 @@ public enum FXPluginRuntimeMode: String, Codable, Hashable, Sendable, CaseIterab
             return .foundationNLP
         case .coreMLNeuralEngine:
             return .coreMLNeuralEngine
+        case .onnxRuntime:
+            return .onnxRuntime
+        case .remoteRPC:
+            return .remoteRPC
         }
     }
 }
@@ -48,6 +54,11 @@ public struct FXPluginRuntimeEnvironment: Codable, Hashable, Sendable {
     public var tensorFlowMetalAvailable: Bool
     public var foundationNLPAvailable: Bool
     public var coreMLNeuralEngineAvailable: Bool
+    public var onnxRuntimeAvailable: Bool
+    public var remoteInferenceAvailable: Bool
+    public var remoteInferenceEndpoint: String?
+    public var remoteInferenceAuthToken: String?
+    public var remoteInferenceTimeoutSeconds: TimeInterval
 
     public init(
         metalDevice: MetalAccelerationDevice = .probe(),
@@ -55,7 +66,12 @@ public struct FXPluginRuntimeEnvironment: Codable, Hashable, Sendable {
         pyTorchMPSAvailable: Bool = false,
         tensorFlowMetalAvailable: Bool = false,
         foundationNLPAvailable: Bool = false,
-        coreMLNeuralEngineAvailable: Bool = false
+        coreMLNeuralEngineAvailable: Bool = false,
+        onnxRuntimeAvailable: Bool = false,
+        remoteInferenceAvailable: Bool = false,
+        remoteInferenceEndpoint: String? = nil,
+        remoteInferenceAuthToken: String? = nil,
+        remoteInferenceTimeoutSeconds: TimeInterval = 10.0
     ) {
         self.metalDevice = metalDevice
         self.pythonExecutable = pythonExecutable?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
@@ -63,17 +79,30 @@ public struct FXPluginRuntimeEnvironment: Codable, Hashable, Sendable {
         self.tensorFlowMetalAvailable = tensorFlowMetalAvailable
         self.foundationNLPAvailable = foundationNLPAvailable
         self.coreMLNeuralEngineAvailable = coreMLNeuralEngineAvailable
+        self.onnxRuntimeAvailable = onnxRuntimeAvailable
+        self.remoteInferenceAvailable = remoteInferenceAvailable
+        self.remoteInferenceEndpoint = remoteInferenceEndpoint?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.remoteInferenceAuthToken = remoteInferenceAuthToken?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.remoteInferenceTimeoutSeconds = remoteInferenceTimeoutSeconds.isFinite && remoteInferenceTimeoutSeconds > 0.0
+            ? min(remoteInferenceTimeoutSeconds, 300.0)
+            : 10.0
     }
 
     public static var local: FXPluginRuntimeEnvironment {
         let environment = ProcessInfo.processInfo.environment
+        let remoteTimeout = environment["FXAI_REMOTE_INFERENCE_TIMEOUT_SECONDS"].flatMap(Double.init)
         return FXPluginRuntimeEnvironment(
             metalDevice: .probe(),
             pythonExecutable: environment["FXAI_PYTHON"] ?? "python3",
             pyTorchMPSAvailable: environment["FXAI_ENABLE_PYTORCH_MPS"] == "1",
             tensorFlowMetalAvailable: environment["FXAI_ENABLE_TENSORFLOW_METAL"] == "1",
             foundationNLPAvailable: environment["FXAI_ENABLE_FOUNDATION_NLP"] == "1",
-            coreMLNeuralEngineAvailable: environment["FXAI_ENABLE_COREML_NEURAL_ENGINE"] == "1"
+            coreMLNeuralEngineAvailable: environment["FXAI_ENABLE_COREML_NEURAL_ENGINE"] == "1",
+            onnxRuntimeAvailable: environment["FXAI_ENABLE_ONNX_RUNTIME"] == "1",
+            remoteInferenceAvailable: environment["FXAI_ENABLE_REMOTE_RPC"] == "1",
+            remoteInferenceEndpoint: environment["FXAI_REMOTE_INFERENCE_ENDPOINT"],
+            remoteInferenceAuthToken: environment["FXAI_REMOTE_INFERENCE_AUTH_TOKEN"],
+            remoteInferenceTimeoutSeconds: remoteTimeout ?? 10.0
         )
     }
 
@@ -95,7 +124,20 @@ public struct FXPluginRuntimeEnvironment: Codable, Hashable, Sendable {
             return foundationNLPAvailable && isFXAIAppleSiliconTarget
         case .coreMLNeuralEngine:
             return coreMLNeuralEngineAvailable && isFXAIAppleSiliconTarget
+        case .onnxRuntime:
+            return pythonExecutable != nil && onnxRuntimeAvailable
+        case .remoteRPC:
+            return remoteInferenceAvailable && remoteInferenceEndpoint != nil
         }
+    }
+
+    public func remoteRPCConfiguration() -> RemoteRPCMLBackendConfiguration? {
+        guard remoteInferenceAvailable, let remoteInferenceEndpoint else { return nil }
+        return RemoteRPCMLBackendConfiguration(
+            endpoint: remoteInferenceEndpoint,
+            authToken: remoteInferenceAuthToken,
+            timeoutSeconds: remoteInferenceTimeoutSeconds
+        )
     }
 }
 
@@ -145,12 +187,18 @@ public struct FXPluginRuntimeResolution: Codable, Hashable, Sendable {
             return .foundationNLP
         case .coreMLNeuralEngine:
             return nil
+        case .onnxRuntime:
+            return .onnxRuntime
+        case .remoteRPC:
+            return .remoteRPC
         }
     }
 }
 
 public enum FXPluginRuntimeResolver {
     private static let automaticPreference: [FXPluginAccelerationBackend] = [
+        .remoteRPC,
+        .onnxRuntime,
         .pyTorchMPS,
         .tensorFlowMetal,
         .metal,
@@ -199,7 +247,7 @@ public enum FXPluginRuntimeResolver {
                 usesVolumeWhenAvailable: plan.usesVolumeWhenAvailable
             )
 
-        case .swiftScalar, .swiftSIMD, .accelerate, .metal, .pyTorchMPS, .tensorFlowMetal, .foundationNLP, .coreMLNeuralEngine:
+        case .swiftScalar, .swiftSIMD, .accelerate, .metal, .pyTorchMPS, .tensorFlowMetal, .foundationNLP, .coreMLNeuralEngine, .onnxRuntime, .remoteRPC:
             guard let requested = mode.forcedBackend else {
                 throw FXDataEngineError.validation("runtime.\(plan.pluginName).invalidMode")
             }

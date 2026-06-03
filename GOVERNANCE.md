@@ -11,7 +11,8 @@ Governance applies to:
 
 - Swift packages under `FXImporter`, `FXDatabase`, `FXDataEngine`, `FXPlugins`,
   `FXBacktest`, `FXGUI`, `FXTools`, and the agent packages.
-- Plugin CPU, Metal, PyTorch, TensorFlow, and NLP implementations.
+- Plugin CPU, Metal, PyTorch, TensorFlow, NLP, ONNX Runtime, and remote RPC
+  implementations/configuration.
 - FXDatabase ingestion, canonical storage, migrations, and API contracts.
 - Offline Lab research state, tuning output, drift governance, lineage, and
   generated runtime promotion artifacts.
@@ -41,7 +42,7 @@ inherit the lower-class checks.
 | Documentation only | README, wiki, comments, operator wording | `git diff --check`; docs links point to existing files or pages; no secrets or credentials. |
 | Package-local Swift behavior | Validation, DTOs, GUI services, package internals | Relevant `swift test --package-path <Package>` and `swift build --package-path <Package>` when build coverage is not already included by the tests. |
 | Plugin CPU/reference behavior | Plugin manifests, CPU models, registry, reference equations | `swift test --package-path FXPlugins`; focused tests for changed plugin families; SineTest certification remains green. |
-| Accelerator behavior | Metal kernels, PyTorch/TensorFlow/NLP bridge code, checkpoint policy | `swift test --package-path FXPlugins` with the Apple Silicon accelerator environment available; TensorFlow paths must use the Python 3.12 `tensorflow==2.18.1` and `tensorflow-metal==1.2.0` baseline unless the project baseline changes. |
+| Accelerator or external inference behavior | Metal kernels, PyTorch/TensorFlow/NLP/ONNX bridge code, remote RPC endpoint policy, checkpoint/model-manifest policy | `swift test --package-path FXPlugins` with the Apple Silicon accelerator environment available when local accelerators are part of the claim; TensorFlow paths must use the Python 3.12 `tensorflow==2.18.1` and `tensorflow-metal==1.2.0` baseline unless the project baseline changes. ONNX declarations require model discovery plus live predict evidence. Remote RPC declarations require endpoint configuration plus live predict evidence and must stay inference-only unless a separate training governance ticket is approved. |
 | Data authority behavior | FXDatabase ingestion, ClickHouse schema, canonical rewrite, FXBacktest APIs | `swift test --package-path FXDatabase`; affected importer/backtest/data-engine tests; migration and data repair paths must preserve audit history. |
 | Research or promotion behavior | Offline Lab tuning, drift governance, deployment profiles, lineage, calibration | `python3 FXDataEngine/Tools/fxai_testlab.py verify-all` when Python lab behavior changes; package tests for Swift consumers; generated artifacts must be reproducible from Turso/libSQL or runtime state. |
 | Demo/live execution behavior | Account scoping, order intent, risk, kill switch, human release, broker boundary | `swift test --package-path FXExecutionContracts`, `FXDemoAgent`, and/or `FXLiveAgent`; no live order path may bypass promotion evidence and safety validation. |
@@ -77,6 +78,10 @@ Before a live-release hardening change is considered complete:
 - `./fxai certify --all` must pass for release or live-readiness claims.
 - FXPlugins full certification must not skip declared Apple Silicon accelerator
   checks when those checks are part of the claim.
+- ONNX Runtime and remote RPC inference declarations must have backend-specific
+  certification gates satisfied before release; missing model manifests,
+  invalid model hashes, missing endpoints, stale API versions, or invalid
+  predictions block release.
 - Documentation must name any new operator command, environment variable,
   generated artifact, failure mode, or gate that operators must understand.
 - Known residual risks must be recorded in the relevant README, audit record, or

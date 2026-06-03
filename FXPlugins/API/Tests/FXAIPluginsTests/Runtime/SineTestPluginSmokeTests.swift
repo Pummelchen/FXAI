@@ -22,7 +22,9 @@ final class SineTestPluginSmokeTests: XCTestCase {
             pyTorchMPSAvailable: false,
             tensorFlowMetalAvailable: false,
             foundationNLPAvailable: false,
-            coreMLNeuralEngineAvailable: false
+            coreMLNeuralEngineAvailable: false,
+            onnxRuntimeAvailable: false,
+            remoteInferenceAvailable: false
         )
 
         for var plugin in plugins {
@@ -177,6 +179,10 @@ final class SineTestPluginSmokeTests: XCTestCase {
             return .foundationNLP
         case .coreMLNeuralEngine:
             return .coreMLNeuralEngine
+        case .onnxRuntime:
+            return .onnxRuntime
+        case .remoteRPC:
+            return .remoteRPC
         }
     }
 }
