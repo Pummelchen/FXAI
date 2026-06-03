@@ -117,9 +117,61 @@ final class MixMoeConformalPluginTests: XCTestCase {
         )
 
         XCTAssertGreaterThanOrEqual(coverage, 0.90)
+        XCTAssertEqual(cutoff, 1.0, accuracy: 1.0e-12)
         XCTAssertTrue(MixMoeConformalReference.predictionSet(probabilities: probabilities[0], cutoff: cutoff).classes.contains(1))
         XCTAssertEqual(gates.reduce(0.0, +), 1.0, accuracy: 1.0e-12)
         XCTAssertLessThan(gates[0], gates[1])
+    }
+
+    func testReferenceSplitConformalCutoffUsesFiniteSampleRank() throws {
+        let scores = [0.05, 0.10, 0.20, 0.25, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80]
+        let cutoff = MixMoeConformalReference.splitConformalCutoff(scores: scores, alpha: 0.10)
+        let conservativeCutoff = MixMoeConformalReference.splitConformalCutoff(
+            scores: [0.10, 0.20, 0.30, 0.40],
+            alpha: 0.10
+        )
+        let narrowSet = MixMoeConformalReference.predictionSet(probabilities: [0.08, 0.70, 0.22], cutoff: 0.35)
+        let fallbackSet = MixMoeConformalReference.predictionSet(probabilities: [0.15, 0.45, 0.40], cutoff: 0.20)
+
+        XCTAssertEqual(cutoff, 0.80, accuracy: 1.0e-12)
+        XCTAssertEqual(conservativeCutoff, 1.0, accuracy: 1.0e-12)
+        XCTAssertEqual(narrowSet.classes, Set([LabelClass.buy.rawValue]))
+        XCTAssertEqual(fallbackSet.classes, Set([LabelClass.buy.rawValue]))
+    }
+
+    func testReferenceRouterSpecializesExpertsByRegimeAndPenalizesOveruse() throws {
+        let expertWeights = [
+            [0.0, 1.4, -0.2],
+            [0.0, -1.4, -0.2],
+            [0.0, 0.2, 1.3],
+            [0.0, -0.2, -1.3]
+        ]
+        let uniformUsage = Array(repeating: 0.25, count: 4)
+        let positiveTrend = MixMoeConformalReference.routerGates(
+            regime: [1.0, 1.0, 0.0],
+            expertWeights: expertWeights,
+            usageEMA: uniformUsage,
+            loadBalanceStrength: 0.0
+        )
+        let negativeTrend = MixMoeConformalReference.routerGates(
+            regime: [1.0, -1.0, 0.0],
+            expertWeights: expertWeights,
+            usageEMA: uniformUsage,
+            loadBalanceStrength: 0.0
+        )
+        let overusedPositive = MixMoeConformalReference.routerGates(
+            regime: [1.0, 1.0, 0.0],
+            expertWeights: expertWeights,
+            usageEMA: [0.95, 0.02, 0.02, 0.01],
+            loadBalanceStrength: 0.70
+        )
+
+        XCTAssertGreaterThan(positiveTrend[0], positiveTrend[1])
+        XCTAssertGreaterThan(negativeTrend[1], negativeTrend[0])
+        XCTAssertLessThan(overusedPositive[0], positiveTrend[0])
+        XCTAssertEqual(positiveTrend.reduce(0.0, +), 1.0, accuracy: 1.0e-12)
+        XCTAssertEqual(negativeTrend.reduce(0.0, +), 1.0, accuracy: 1.0e-12)
+        XCTAssertEqual(overusedPositive.reduce(0.0, +), 1.0, accuracy: 1.0e-12)
     }
 
     private static func predictRequest(dataHasVolume: Bool) -> PredictRequestV4 {

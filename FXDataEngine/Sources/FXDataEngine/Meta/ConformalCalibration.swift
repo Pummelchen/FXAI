@@ -96,6 +96,122 @@ public struct ConformalRealizedOutcome: Codable, Hashable, Sendable {
     }
 }
 
+public struct ConformalCalibrationPolicy: Codable, Hashable, Sendable {
+    public var targetCoverage: Double
+    public var minCalibrationCount: Int
+    public var fallbackCutoff: Double
+
+    public init(
+        targetCoverage: Double = 0.90,
+        minCalibrationCount: Int = 16,
+        fallbackCutoff: Double = 0.35
+    ) {
+        self.targetCoverage = fxClamp(fxSafeFinite(targetCoverage, fallback: 0.90), 0.50, 0.995)
+        self.minCalibrationCount = min(
+            max(minCalibrationCount, 1),
+            RuntimeArtifactConstants.conformalDepth
+        )
+        self.fallbackCutoff = fxClamp(fxSafeFinite(fallbackCutoff), 0.0, 6.0)
+    }
+
+    public var alpha: Double {
+        1.0 - targetCoverage
+    }
+}
+
+public struct ConformalCalibrationDiagnostics: Codable, Hashable, Sendable {
+    public var scoreKind: ConformalScoreKind
+    public var sampleCount: Int
+    public var minCalibrationCount: Int
+    public var targetCoverage: Double
+    public var alpha: Double
+    public var finiteSampleRank: Int
+    public var cutoff: Double
+    public var fallbackCutoff: Double
+    public var fallbackUsed: Bool
+    public var conservativeMaximumUsed: Bool
+
+    public init(
+        scoreKind: ConformalScoreKind,
+        sampleCount: Int,
+        minCalibrationCount: Int,
+        targetCoverage: Double,
+        alpha: Double,
+        finiteSampleRank: Int,
+        cutoff: Double,
+        fallbackCutoff: Double,
+        fallbackUsed: Bool,
+        conservativeMaximumUsed: Bool
+    ) {
+        self.scoreKind = scoreKind
+        self.sampleCount = max(0, sampleCount)
+        self.minCalibrationCount = max(1, minCalibrationCount)
+        self.targetCoverage = fxClamp(fxSafeFinite(targetCoverage, fallback: 0.90), 0.50, 0.995)
+        self.alpha = fxClamp(fxSafeFinite(alpha, fallback: 0.10), 0.005, 0.50)
+        self.finiteSampleRank = max(0, finiteSampleRank)
+        self.cutoff = fxSafeFinite(cutoff, fallback: fallbackCutoff)
+        self.fallbackCutoff = fxSafeFinite(fallbackCutoff)
+        self.fallbackUsed = fallbackUsed
+        self.conservativeMaximumUsed = conservativeMaximumUsed
+    }
+
+    public var sufficientSamples: Bool {
+        sampleCount >= minCalibrationCount
+    }
+}
+
+public struct ConformalPredictionSet: Codable, Hashable, Sendable {
+    public var classes: [LabelClass]
+    public var cutoff: Double
+    public var diagnostics: ConformalCalibrationDiagnostics
+    public var usedArgmaxFallback: Bool
+
+    public init(
+        classes: [LabelClass],
+        cutoff: Double,
+        diagnostics: ConformalCalibrationDiagnostics,
+        usedArgmaxFallback: Bool = false
+    ) {
+        self.classes = classes.sorted { $0.rawValue < $1.rawValue }
+        self.cutoff = fxClamp(fxSafeFinite(cutoff, fallback: diagnostics.cutoff), 0.0, 1.0)
+        self.diagnostics = diagnostics
+        self.usedArgmaxFallback = usedArgmaxFallback
+    }
+
+    public func contains(_ label: LabelClass) -> Bool {
+        classes.contains(label)
+    }
+}
+
+public struct ConformalMoveInterval: Codable, Hashable, Sendable {
+    public var lowerPoints: Double
+    public var medianPoints: Double
+    public var upperPoints: Double
+    public var cutoff: Double
+    public var diagnostics: ConformalCalibrationDiagnostics
+
+    public init(
+        lowerPoints: Double,
+        medianPoints: Double,
+        upperPoints: Double,
+        cutoff: Double,
+        diagnostics: ConformalCalibrationDiagnostics
+    ) {
+        let lower = max(0.0, fxSafeFinite(lowerPoints))
+        let median = max(lower, fxSafeFinite(medianPoints, fallback: lower))
+        self.lowerPoints = lower
+        self.medianPoints = median
+        self.upperPoints = max(median, fxSafeFinite(upperPoints, fallback: median))
+        self.cutoff = fxClamp(fxSafeFinite(cutoff, fallback: diagnostics.cutoff), 0.0, 6.0)
+        self.diagnostics = diagnostics
+    }
+
+    public func containsAbsoluteMove(_ movePoints: Double) -> Bool {
+        let move = abs(fxSafeFinite(movePoints))
+        return move >= lowerPoints && move <= upperPoints
+    }
+}
+
 public struct ConformalCalibrationAIState: Codable, Hashable, Sendable {
     public var counts: [Int]
     public var heads: [Int]
@@ -205,6 +321,177 @@ public struct ConformalCalibrationState: Codable, Hashable, Sendable {
 
     public mutating func reset() {
         aiStates = Array(repeating: ConformalCalibrationAIState(), count: FXDataEngineConstants.aiCount)
+    }
+
+    public static func finiteSampleRank(sampleCount: Int, targetCoverage: Double) -> Int {
+        let count = max(0, sampleCount)
+        guard count > 0 else { return 0 }
+        let coverage = fxClamp(fxSafeFinite(targetCoverage, fallback: 0.90), 0.50, 0.995)
+        return max(1, Int(ceil(Double(count + 1) * coverage)))
+    }
+
+    public func scoreSamples(
+        aiIndex: Int,
+        regimeID: Int,
+        horizonSlot: Int,
+        scoreKind: ConformalScoreKind
+    ) -> [Double] {
+        guard aiIndex >= 0, aiIndex < aiStates.count else { return [] }
+        guard regimeID >= 0, regimeID < FXDataEngineConstants.pluginRegimeBuckets else { return [] }
+        guard horizonSlot >= 0, horizonSlot < RuntimeArtifactConstants.maxHorizons else { return [] }
+
+        let state = aiStates[aiIndex]
+        let cell = ConformalCalibrationAIState.cellIndex(regimeID: regimeID, horizonSlot: horizonSlot)
+        let count = min(max(state.counts[cell], 0), RuntimeArtifactConstants.conformalDepth)
+        guard count > 0 else { return [] }
+
+        let upperBound = Self.scoreUpperBound(scoreKind)
+        let scores = scoreArray(for: state, kind: scoreKind)
+        let base = ConformalCalibrationAIState.scoreOffset(cellIndex: cell, depthIndex: 0)
+        return scores[base..<(base + count)].map { fxClamp($0, 0.0, upperBound) }
+    }
+
+    public func calibrationDiagnostics(
+        aiIndex: Int,
+        regimeID: Int,
+        horizonSlot: Int,
+        scoreKind: ConformalScoreKind,
+        policy: ConformalCalibrationPolicy = ConformalCalibrationPolicy()
+    ) -> ConformalCalibrationDiagnostics {
+        let upperBound = Self.scoreUpperBound(scoreKind)
+        let fallback = fxClamp(policy.fallbackCutoff, 0.0, upperBound)
+        let scores = scoreSamples(
+            aiIndex: aiIndex,
+            regimeID: regimeID,
+            horizonSlot: horizonSlot,
+            scoreKind: scoreKind
+        )
+        let rank = Self.finiteSampleRank(sampleCount: scores.count, targetCoverage: policy.targetCoverage)
+        guard scores.count >= policy.minCalibrationCount else {
+            return ConformalCalibrationDiagnostics(
+                scoreKind: scoreKind,
+                sampleCount: scores.count,
+                minCalibrationCount: policy.minCalibrationCount,
+                targetCoverage: policy.targetCoverage,
+                alpha: policy.alpha,
+                finiteSampleRank: rank,
+                cutoff: fallback,
+                fallbackCutoff: fallback,
+                fallbackUsed: true,
+                conservativeMaximumUsed: false
+            )
+        }
+
+        let cutoff: Double
+        let conservativeMaximumUsed: Bool
+        if rank > scores.count {
+            cutoff = upperBound
+            conservativeMaximumUsed = true
+        } else {
+            cutoff = scores.sorted()[max(rank - 1, 0)]
+            conservativeMaximumUsed = false
+        }
+
+        return ConformalCalibrationDiagnostics(
+            scoreKind: scoreKind,
+            sampleCount: scores.count,
+            minCalibrationCount: policy.minCalibrationCount,
+            targetCoverage: policy.targetCoverage,
+            alpha: policy.alpha,
+            finiteSampleRank: rank,
+            cutoff: cutoff,
+            fallbackCutoff: fallback,
+            fallbackUsed: false,
+            conservativeMaximumUsed: conservativeMaximumUsed
+        )
+    }
+
+    public func splitConformalCutoff(
+        aiIndex: Int,
+        regimeID: Int,
+        horizonSlot: Int,
+        scoreKind: ConformalScoreKind,
+        policy: ConformalCalibrationPolicy = ConformalCalibrationPolicy()
+    ) -> Double {
+        calibrationDiagnostics(
+            aiIndex: aiIndex,
+            regimeID: regimeID,
+            horizonSlot: horizonSlot,
+            scoreKind: scoreKind,
+            policy: policy
+        ).cutoff
+    }
+
+    public func predictionSet(
+        aiIndex: Int,
+        regimeID: Int,
+        horizonMinutes: Int,
+        probabilities: [Double],
+        policy: ConformalCalibrationPolicy = ConformalCalibrationPolicy()
+    ) -> ConformalPredictionSet {
+        let horizonSlot = TrainingSampleTools.horizonSlot(horizonMinutes: horizonMinutes)
+        let regime = Int(fxClamp(Double(regimeID), 0.0, Double(FXDataEngineConstants.pluginRegimeBuckets - 1)))
+        let diagnostics = calibrationDiagnostics(
+            aiIndex: aiIndex,
+            regimeID: regime,
+            horizonSlot: horizonSlot,
+            scoreKind: .classScore,
+            policy: policy
+        )
+        let normalized = PluginContextRuntimeTools.normalizeClassDistribution(probabilities)
+        var labels = LabelClass.allCases.filter { label in
+            let index = label.rawValue
+            return index < normalized.count && 1.0 - normalized[index] <= diagnostics.cutoff + 1.0e-12
+        }
+        var usedArgmaxFallback = false
+        if labels.isEmpty,
+           let bestIndex = normalized.indices.max(by: { normalized[$0] < normalized[$1] }),
+           let bestLabel = LabelClass(rawValue: bestIndex) {
+            labels = [bestLabel]
+            usedArgmaxFallback = true
+        }
+        return ConformalPredictionSet(
+            classes: labels,
+            cutoff: diagnostics.cutoff,
+            diagnostics: diagnostics,
+            usedArgmaxFallback: usedArgmaxFallback
+        )
+    }
+
+    public func moveInterval(
+        aiIndex: Int,
+        regimeID: Int,
+        horizonMinutes: Int,
+        minMovePoints: Double,
+        prediction: PredictionV4,
+        policy: ConformalCalibrationPolicy = ConformalCalibrationPolicy(
+            targetCoverage: 0.90,
+            minCalibrationCount: 16,
+            fallbackCutoff: 0.20
+        )
+    ) -> ConformalMoveInterval {
+        let horizonSlot = TrainingSampleTools.horizonSlot(horizonMinutes: horizonMinutes)
+        let regime = Int(fxClamp(Double(regimeID), 0.0, Double(FXDataEngineConstants.pluginRegimeBuckets - 1)))
+        let diagnostics = calibrationDiagnostics(
+            aiIndex: aiIndex,
+            regimeID: regime,
+            horizonSlot: horizonSlot,
+            scoreKind: .moveScore,
+            policy: policy
+        )
+        let minimumMove = max(minMovePoints, 0.10)
+        let rawQ25 = max(0.0, fxSafeFinite(prediction.moveQ25Points))
+        let rawQ50 = max(rawQ25, fxSafeFinite(prediction.moveQ50Points, fallback: rawQ25))
+        let rawQ75 = max(rawQ50, fxSafeFinite(prediction.moveQ75Points, fallback: rawQ50))
+        let moveWidth = max(rawQ75 - rawQ25, max(minimumMove, 0.25))
+        let padding = diagnostics.cutoff * max(0.50 * moveWidth, minimumMove)
+        return ConformalMoveInterval(
+            lowerPoints: max(0.0, rawQ25 - 0.50 * padding),
+            medianPoints: rawQ50,
+            upperPoints: rawQ75 + 0.50 * padding,
+            cutoff: diagnostics.cutoff,
+            diagnostics: diagnostics
+        )
     }
 
     public func quantile(
@@ -424,6 +711,15 @@ public struct ConformalCalibrationState: Codable, Hashable, Sendable {
             state.moveScores
         case .pathScore:
             state.pathScores
+        }
+    }
+
+    private static func scoreUpperBound(_ kind: ConformalScoreKind) -> Double {
+        switch kind {
+        case .classScore, .pathScore:
+            1.0
+        case .moveScore:
+            6.0
         }
     }
 

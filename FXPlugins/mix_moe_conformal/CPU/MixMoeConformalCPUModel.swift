@@ -247,7 +247,7 @@ public struct MixMoeConformalCPUModel: Sendable {
         }
         expectedMove = max(0.0, expectedMove)
 
-        let conformalCutoff = quantile90(bucket: bucketIndex(x: x, context: context))
+        let conformalCutoff = splitConformalCutoff(bucket: bucketIndex(x: x, context: context))
         var buy = tradeProbability * upProbability
         var sell = tradeProbability * (1.0 - upProbability)
         var skip = 1.0 - tradeProbability
@@ -334,14 +334,14 @@ public struct MixMoeConformalCPUModel: Sendable {
         return PluginSupportTools.clipSymmetric(value, limit: 40.0)
     }
 
-    private func quantile90(bucket: Int) -> Double {
+    private func splitConformalCutoff(bucket: Int) -> Double {
         let safeBucket = min(max(bucket, 0), Self.bucketCount - 1)
         let count = min(max(bucketFilled[safeBucket], 0), Self.bucketDepth)
         guard count > 8 else { return 0.40 }
-        var values = Array(bucketScores[safeBucket].prefix(count))
-        values.sort()
-        let index = min(max(Int(floor(0.90 * Double(count - 1))), 0), count - 1)
-        return values[index]
+        return MixMoeConformalReference.splitConformalCutoff(
+            scores: Array(bucketScores[safeBucket].prefix(count)),
+            alpha: 0.10
+        )
     }
 
     private func applyCalibrator(

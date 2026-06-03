@@ -25,6 +25,156 @@ final class ConformalCalibrationTests: XCTestCase {
         XCTAssertEqual(state.aiStates[0].counts[ConformalCalibrationAIState.cellIndex(regimeID: 1, horizonSlot: slot)], 4)
     }
 
+    func testSplitConformalDiagnosticsUseFiniteSampleRankAndFallback() {
+        var state = ConformalCalibrationState()
+        let slot = TrainingSampleTools.horizonSlot(horizonMinutes: 5)
+        let fallbackPolicy = ConformalCalibrationPolicy(
+            targetCoverage: 0.90,
+            minCalibrationCount: 3,
+            fallbackCutoff: 0.35
+        )
+
+        let empty = state.calibrationDiagnostics(
+            aiIndex: 0,
+            regimeID: 1,
+            horizonSlot: slot,
+            scoreKind: .classScore,
+            policy: fallbackPolicy
+        )
+        XCTAssertTrue(empty.fallbackUsed)
+        XCTAssertFalse(empty.sufficientSamples)
+        XCTAssertEqual(empty.sampleCount, 0)
+        XCTAssertEqual(empty.finiteSampleRank, 0)
+        XCTAssertEqual(empty.cutoff, 0.35, accuracy: 1e-12)
+
+        for score in [0.05, 0.10, 0.20, 0.25, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80] {
+            _ = state.pushScore(
+                aiIndex: 0,
+                regimeID: 1,
+                horizonSlot: slot,
+                classScore: score,
+                moveScore: 0.20,
+                pathScore: 0.10
+            )
+        }
+
+        let diagnostics = state.calibrationDiagnostics(
+            aiIndex: 0,
+            regimeID: 1,
+            horizonSlot: slot,
+            scoreKind: .classScore,
+            policy: ConformalCalibrationPolicy(targetCoverage: 0.90, minCalibrationCount: 1, fallbackCutoff: 0.35)
+        )
+        XCTAssertFalse(diagnostics.fallbackUsed)
+        XCTAssertFalse(diagnostics.conservativeMaximumUsed)
+        XCTAssertEqual(diagnostics.sampleCount, 10)
+        XCTAssertEqual(diagnostics.finiteSampleRank, 10)
+        XCTAssertEqual(diagnostics.cutoff, 0.80, accuracy: 1e-12)
+        XCTAssertEqual(
+            state.quantile(aiIndex: 0, regimeID: 1, horizonSlot: slot, scoreKind: .classScore, fallback: 0.0),
+            0.70,
+            accuracy: 1e-12
+        )
+
+        for score in [0.10, 0.20, 0.30, 0.40] {
+            _ = state.pushScore(
+                aiIndex: 0,
+                regimeID: 2,
+                horizonSlot: slot,
+                classScore: score,
+                moveScore: 0.20,
+                pathScore: 0.10
+            )
+        }
+        let smallSample = state.calibrationDiagnostics(
+            aiIndex: 0,
+            regimeID: 2,
+            horizonSlot: slot,
+            scoreKind: .classScore,
+            policy: ConformalCalibrationPolicy(targetCoverage: 0.90, minCalibrationCount: 1, fallbackCutoff: 0.35)
+        )
+        XCTAssertFalse(smallSample.fallbackUsed)
+        XCTAssertTrue(smallSample.conservativeMaximumUsed)
+        XCTAssertEqual(smallSample.finiteSampleRank, 5)
+        XCTAssertEqual(smallSample.cutoff, 1.0, accuracy: 1e-12)
+    }
+
+    func testPredictionSetUsesSplitCalibrationBucketAndArgmaxFallback() {
+        var state = ConformalCalibrationState()
+        let slot = TrainingSampleTools.horizonSlot(horizonMinutes: 8)
+        let policy = ConformalCalibrationPolicy(targetCoverage: 0.60, minCalibrationCount: 1, fallbackCutoff: 0.20)
+
+        for score in [0.05, 0.10, 0.12, 0.15, 0.18, 0.20, 0.35, 0.50, 0.80, 0.90] {
+            _ = state.pushScore(aiIndex: 1, regimeID: 3, horizonSlot: slot, classScore: score, moveScore: 0.20, pathScore: 0.10)
+        }
+        for score in [0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.95, 0.96, 0.97, 0.98] {
+            _ = state.pushScore(aiIndex: 1, regimeID: 4, horizonSlot: slot, classScore: score, moveScore: 0.20, pathScore: 0.10)
+        }
+
+        let narrow = state.predictionSet(
+            aiIndex: 1,
+            regimeID: 3,
+            horizonMinutes: 8,
+            probabilities: [0.08, 0.70, 0.22],
+            policy: policy
+        )
+        XCTAssertEqual(narrow.classes, [.buy])
+        XCTAssertFalse(narrow.usedArgmaxFallback)
+        XCTAssertEqual(narrow.cutoff, 0.35, accuracy: 1e-12)
+
+        let wide = state.predictionSet(
+            aiIndex: 1,
+            regimeID: 4,
+            horizonMinutes: 8,
+            probabilities: [0.08, 0.70, 0.22],
+            policy: policy
+        )
+        XCTAssertEqual(wide.classes, [.sell, .buy, .skip])
+        XCTAssertEqual(wide.diagnostics.sampleCount, 10)
+
+        let fallback = state.predictionSet(
+            aiIndex: 1,
+            regimeID: 5,
+            horizonMinutes: 8,
+            probabilities: [0.15, 0.45, 0.40],
+            policy: policy
+        )
+        XCTAssertEqual(fallback.classes, [.buy])
+        XCTAssertTrue(fallback.usedArgmaxFallback)
+        XCTAssertTrue(fallback.diagnostics.fallbackUsed)
+    }
+
+    func testMoveIntervalUsesConformalDiagnosticsAndContainsAbsoluteMove() {
+        var state = ConformalCalibrationState()
+        let slot = TrainingSampleTools.horizonSlot(horizonMinutes: 13)
+        for score in [0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.00] {
+            _ = state.pushScore(aiIndex: 2, regimeID: 4, horizonSlot: slot, classScore: 0.30, moveScore: score, pathScore: 0.10)
+        }
+
+        let interval = state.moveInterval(
+            aiIndex: 2,
+            regimeID: 4,
+            horizonMinutes: 13,
+            minMovePoints: 1.0,
+            prediction: PredictionV4(
+                classProbabilities: [0.10, 0.70, 0.20],
+                moveQ25Points: 2.0,
+                moveQ50Points: 4.0,
+                moveQ75Points: 6.0
+            ),
+            policy: ConformalCalibrationPolicy(targetCoverage: 0.80, minCalibrationCount: 1, fallbackCutoff: 0.20)
+        )
+
+        XCTAssertFalse(interval.diagnostics.fallbackUsed)
+        XCTAssertEqual(interval.diagnostics.finiteSampleRank, 9)
+        XCTAssertEqual(interval.cutoff, 0.90, accuracy: 1e-12)
+        XCTAssertEqual(interval.lowerPoints, 1.10, accuracy: 1e-12)
+        XCTAssertEqual(interval.medianPoints, 4.0, accuracy: 1e-12)
+        XCTAssertEqual(interval.upperPoints, 6.90, accuracy: 1e-12)
+        XCTAssertTrue(interval.containsAbsoluteMove(6.8))
+        XCTAssertFalse(interval.containsAbsoluteMove(7.1))
+    }
+
     func testConformalPendingQueueReplacesLastSequenceAndKeepsRingOrder() {
         var state = ConformalCalibrationState()
         let first = PredictionV4(

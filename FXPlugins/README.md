@@ -88,6 +88,11 @@ contracts:
   `Wave2StatisticalReferenceTests`, `Wave3FactorTrendReferenceTests`, and
   `Wave4ReferenceParityTests` pin the reference equations and volume-gating
   behavior.
+- `mix_moe_conformal` uses the shared `ConformalCalibrationPolicy` split-conformal
+  contract for calibration diagnostics. The engine exposes finite-sample cutoff,
+  prediction-set, and move-interval APIs with sample-count/fallback flags, while
+  the plugin CPU, Swift reference, and PyTorch helper use the same conservative
+  split-calibration rank rule.
 - Current per-plugin reference implementation percentages are tracked in
   `API/Docs/PLUGIN_REFERENCE_IMPLEMENTATION_SCORECARD.md`; the scorecard covers
   every registered plugin and is checked by `ReferenceScorecardTests`.
