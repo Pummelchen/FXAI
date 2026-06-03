@@ -150,7 +150,7 @@ FXBacktest is the only project that adapts the root plugin zoo into backtest wor
 
 ## External Inference Bridge
 
-The optional external inference bridge is documented in [EXTERNAL_INFERENCE_BRIDGE.md](EXTERNAL_INFERENCE_BRIDGE.md). The first implementation adds two opt-in inference-only backends:
+The optional external inference bridge adds two opt-in inference-only backends:
 
 - `onnxRuntime`: uses the existing Python bridge and `onnxruntime.InferenceSession` to load plugin-local or explicitly configured `.onnx` models.
 - `remoteRPC`: uses a Swift `RemoteRPCMLBackendBridge` and `RemoteRPCMLBackendTransport` to POST the latest FXDataEngine inference payload to an external inference server and validate the returned `PredictionV4`.
