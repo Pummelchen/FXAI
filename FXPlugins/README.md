@@ -12,7 +12,7 @@ The shared FXDataEngine/FXPlugins runtime API latest version is `4`, and the tok
 
 ## Layout
 
-- `API/`: non-plugin package surface only: registry, tests, docs, and backend process hooks. Shared implementation primitives live in `FXDataEngine`; plugin folders should not depend on shared plugin-zoo helpers.
+- `API/`: non-plugin package surface only: registry, tests, docs, and backend process hooks. Broad shared implementation primitives live in `FXDataEngine`; plugin folders should not depend on ad hoc shared plugin-zoo helpers.
 - `<plugin_id>/`: every plugin lives directly under `FXPlugins` in its own folder named after its manifest `aiName`, for example `lin_sgd/`, `ai_lstm/`, `tree_xgb_fast/`, `rule_m1sync/`, `fxbacktest_moving_average_cross/`, and `fx7/`. All plugin-specific Swift, Metal, Python, model assets, and state adapters belong inside that plugin folder.
 - `Package.swift`: SwiftPM boundary for the zoo. There is no longer a root `Sources/`, `Tests/`, or `Python/` staging layout.
 
@@ -33,6 +33,13 @@ contracts:
   remain scalar-only by design.
 - No plugin in `FXPlugins` delegates to `FXAIReferencePluginRuntime`; the transitional wrapper layer
   has been removed from the plugin zoo.
+- The 23 sequence-architecture CPU adapters that previously duplicated the same
+  architecture-switch model body now delegate to
+  `ai_autoformer/CPU/FXAISequenceArchitectureCPUModel.swift`; their
+  plugin-owned CPU files keep only the per-plugin architecture identity, mode,
+  hidden width, and family metadata. `PluginZooLayoutTests` pins this shared
+  runtime exception so duplicate architecture-switch bodies are not
+  reintroduced.
 - Python-backed plugins can use `PythonMLBackendBridge` from `FXDataEngine`.
   The bridge sends OHLCV feature vectors, sequence windows, volume availability,
   horizon, min-move, and price-cost context to plugin-local PyTorch/TensorFlow

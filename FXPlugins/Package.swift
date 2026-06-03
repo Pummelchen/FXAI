@@ -4,6 +4,9 @@ import PackageDescription
 
 let packageDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
 let fxaiPluginImplementationSourceFolders = Set(["CPU", "Metal"])
+let fxaiPinnedSharedRuntimeSources = [
+    "ai_autoformer/CPU/FXAISequenceArchitectureCPUModel.swift"
+]
 
 func fxaiPluginSwiftSources() -> [String] {
     guard let enumerator = FileManager.default.enumerator(
@@ -87,7 +90,7 @@ func fxaiPluginExcludedPaths() -> [String] {
     return excluded.sorted()
 }
 
-let fxaiPluginSources = fxaiPluginSwiftSources()
+let fxaiPluginSources = Array(Set(fxaiPluginSwiftSources()).union(fxaiPinnedSharedRuntimeSources)).sorted()
 precondition(!fxaiPluginSources.isEmpty, "FXPlugins manifest did not discover Swift plugin sources")
 
 let package = Package(

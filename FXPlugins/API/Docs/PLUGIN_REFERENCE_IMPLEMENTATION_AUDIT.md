@@ -24,12 +24,13 @@ actual algorithmic core, not only a generic signal adapter with the right name.
   strongest implementations. They contain real online state, calibration, replay,
   split/search, or distribution logic.
 - The weakest area is the AI sequence/world/RL group. Most of those Swift CPU
-  models share the same 580-line generic architecture-switch template, and the
-  PyTorch/TensorFlow variants are small dense encoders. They do not contain
-  standard layers such as LSTM/GRU cells, temporal convolutions, transformer
-  blocks, attention stacks, S4 state-space kernels, TFT variable selection, PPO
-  clipped policy optimization, or pretrained Chronos/TimesFM style model
-  wrappers.
+  models still use a generic architecture-switch implementation, now centralized
+  behind a shared sequence CPU runtime instead of duplicated in every plugin
+  source file, and the PyTorch/TensorFlow variants are small dense encoders.
+  They do not contain standard layers such as LSTM/GRU cells, temporal
+  convolutions, transformer blocks, attention stacks, S4 state-space kernels,
+  TFT variable selection, PPO clipped policy optimization, or pretrained
+  Chronos/TimesFM style model wrappers.
 - Several statistical plugins are explicitly proxy-level implementations:
   `stat_emd_hht`, `stat_vmd`, `stat_coint_vecm`, and parts of
   `stat_arimax_garch`/`stat_msgarch` need full reference math before they should
