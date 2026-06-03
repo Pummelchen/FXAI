@@ -1,4 +1,4 @@
-import BacktestCore
+import FXDatabaseHistoryCore
 import ClickHouse
 import Config
 import Domain
@@ -29,7 +29,17 @@ public struct FXDatabaseBacktestHistoryService: FXBacktestHistoryProviding {
         }
 
         if SineTestSecurity.matches(logicalSymbol) {
+            guard sourceOrigin == SineTestSecurity.sourceOrigin else {
+                throw FXBacktestAPIServiceError.invalidRequest(
+                    "\(SineTestSecurity.logicalSymbolRawValue) requires \(SineTestSecurity.sourceOrigin.rawValue) source origin."
+                )
+            }
             return try await loadSineTestHistory(request, brokerSourceId: brokerSourceId)
+        }
+        guard sourceOrigin != SineTestSecurity.sourceOrigin else {
+            throw FXBacktestAPIServiceError.invalidRequest(
+                "\(SineTestSecurity.sourceOrigin.rawValue) source origin is reserved for \(SineTestSecurity.logicalSymbolRawValue)."
+            )
         }
 
         guard config.brokerTime.isAutomatic || brokerSourceId == config.brokerTime.brokerSourceId else {

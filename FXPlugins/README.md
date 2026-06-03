@@ -19,7 +19,7 @@ The shared FXDataEngine/FXPlugins runtime API latest version is `4`, and the tok
 
 - `API/`: non-plugin package surface only: registry, tests, docs, and backend process hooks. Broad shared implementation primitives live in `FXDataEngine`; plugin folders should not depend on ad hoc shared plugin-zoo helpers.
 - `<plugin_id>/`: every plugin lives directly under `FXPlugins` in its own folder named after its manifest `aiName`, for example `lin_sgd/`, `ai_lstm/`, `tree_xgb_fast/`, `rule_m1sync/`, `fxbacktest_moving_average_cross/`, and `fx7/`. All plugin-specific Swift, Metal, Python, model assets, and state adapters belong inside that plugin folder.
-- `Package.swift`: SwiftPM boundary for the zoo. There is no longer a root `Sources/`, `Tests/`, or `Python/` staging layout.
+- `Package.swift`: SwiftPM boundary for the zoo. It uses static excludes plus SwiftPM's normal source discovery, not manifest-time filesystem scanning. There is no longer a root `Sources/`, `Tests/`, or `Python/` staging layout.
 
 ## Current Swift Coverage
 
@@ -62,11 +62,12 @@ contracts:
   and `FXAI_REQUIRE_BACKEND_SOURCE_MATCH=1` can require backend source-hash
   parity for stricter replay audits.
   FXAI invokes these plugin-local Python backends with `FXAI_PYTHON` when set,
-  otherwise `python3`. The Phase 0 backend-test baseline for TensorFlow Metal is
-  Python 3.12 with `tensorflow==2.18.1`, `tensorflow-metal==1.2.0`, and at least
-  one TensorFlow GPU device reported by `tf.config.list_physical_devices("GPU")`.
-  Tests that exercise TensorFlow backends resolve that Python 3.12 stack
-  directly and fail with diagnostics when it is unavailable.
+  otherwise it resolves a Python 3.12 executable. The backend-test baseline is
+  pinned by `../requirements/fxai-py312.lock`; TensorFlow Metal requires
+  `tensorflow==2.18.1`, `tensorflow-metal==1.2.0`, and at least one TensorFlow
+  GPU device reported by `tf.config.list_physical_devices("GPU")`. Tests that
+  exercise Python backends resolve that Python 3.12 stack directly and fail with
+  diagnostics when it is unavailable.
 - ONNX-backed plugins can declare `onnxRuntime` for inference-only exported
   models. The default layout is:
 

@@ -5,7 +5,7 @@ FXImporter owns external market-data connectors for FXAI. Connectors translate p
 Current connectors:
 
 - `Connectors/MetaTrader5/EA/FXDatabase.mq5`: the MT5 Expert Advisor copied into the main MT5 Experts folder as `FXDatabase.mq5`.
-- `Sources/MT5Bridge`: the Swift TCP protocol client used by FXDatabase to talk to the MT5 EA.
+- `../FXMT5Bridge/Sources/MT5Bridge`: the standalone Swift TCP protocol client used by FXDatabase and importer connectors to talk to the MT5 EA.
 - `YahooFinanceHistoryConnector`: stateless Yahoo Finance daily-history connector. It uses the public web chart endpoint to fetch D1 OHLCV and adjusted-close data for caller-supplied Yahoo symbols. Yahoo does not provide a contracted official market-data API for this endpoint, so production use must treat provider availability and terms as external risk.
 
 Shared API:

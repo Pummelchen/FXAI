@@ -1,4 +1,4 @@
-import BacktestCore
+import FXDatabaseHistoryCore
 import ClickHouse
 import Domain
 import XCTest
@@ -207,6 +207,55 @@ final class HistoryDataAPITests: XCTestCase {
         XCTAssertTrue(series.volume.allSatisfy { $0 > 0 })
     }
 
+    func testSineWaveAgentRejectsSineTestWithNonSyntheticOrigin() async throws {
+        let request = try HistoricalOhlcRequest(
+            brokerSourceId: BrokerSourceId("demo"),
+            sourceOrigin: .mt5,
+            logicalSymbol: SineTestSecurity.logicalSymbol,
+            utcStartInclusive: UtcSecond(rawValue: 1_704_067_200),
+            utcEndExclusive: UtcSecond(rawValue: 1_704_067_260),
+            expectedMT5Symbol: SineTestSecurity.providerSymbol,
+            expectedDigits: SineTestSecurity.digits
+        )
+
+        do {
+            _ = try await SineWaveAgent().loadM1Ohlc(request)
+            XCTFail("Expected SineTest request with non-synthetic origin to fail closed")
+        } catch let error as HistoryDataError {
+            guard case .invalidRequest(let message) = error else {
+                XCTFail("Expected invalidRequest, got \(error)")
+                return
+            }
+            XCTAssertTrue(message.contains("SINETEST"))
+            XCTAssertTrue(message.contains("SYNTHETIC"))
+        }
+    }
+
+    func testClickHouseProviderRejectsSyntheticOriginForNonSineTestSymbols() async throws {
+        let provider = ClickHouseHistoricalOhlcDataProvider(client: FailingClickHouse(), database: "fxdatabase_test")
+        let request = try HistoricalOhlcRequest(
+            brokerSourceId: BrokerSourceId("configured-broker"),
+            sourceOrigin: .synthetic,
+            logicalSymbol: LogicalSymbol("EURUSD"),
+            utcStartInclusive: UtcSecond(rawValue: 1_704_067_200),
+            utcEndExclusive: UtcSecond(rawValue: 1_704_067_260),
+            expectedMT5Symbol: MT5Symbol("EURUSD"),
+            expectedDigits: Digits(5)
+        )
+
+        do {
+            _ = try await provider.loadM1Ohlc(request)
+            XCTFail("Expected synthetic-origin non-SineTest provider request to fail closed")
+        } catch let error as HistoryDataError {
+            guard case .invalidRequest(let message) = error else {
+                XCTFail("Expected invalidRequest, got \(error)")
+                return
+            }
+            XCTAssertTrue(message.contains("SYNTHETIC"))
+            XCTAssertTrue(message.contains("SINETEST"))
+        }
+    }
+
     func testSineWaveAgentEnforcesRowLimit() async throws {
         let start = UtcSecond(rawValue: 1_704_067_200)
         let request = try SineWaveAgent.request(
@@ -317,6 +366,13 @@ private actor MockHistoryClickHouse: ClickHouseClientProtocol {
 
     func lastSQL() -> String {
         sql
+    }
+}
+
+private actor FailingClickHouse: ClickHouseClientProtocol {
+    func execute(_: ClickHouseQuery) async throws -> String {
+        XCTFail("Synthetic-origin non-SineTest requests must fail before ClickHouse access")
+        return ""
     }
 }
 

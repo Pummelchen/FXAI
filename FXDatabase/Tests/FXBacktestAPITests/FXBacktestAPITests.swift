@@ -507,6 +507,7 @@ final class FXBacktestAPITests: XCTestCase {
         let start = 1_704_067_200
         let response = try await service.loadM1History(FXBacktestM1HistoryRequest(
             brokerSourceId: "any-virtual-broker",
+            sourceOrigin: "SYNTHETIC",
             logicalSymbol: "SINETEST",
             utcStartInclusive: Int64(start),
             utcEndExclusive: Int64(start + 61 * 60),
@@ -523,6 +524,62 @@ final class FXBacktestAPITests: XCTestCase {
         XCTAssertEqual(response.open[30], 1_000)
         XCTAssertEqual(response.open[60], 1_000_000)
         XCTAssertTrue(response.volume.allSatisfy { $0 > 0 })
+        let executeCount = await clickHouse.executeCount()
+        XCTAssertEqual(executeCount, 0)
+    }
+
+    func testHistoryServiceRejectsSineTestWithNonSyntheticOriginBeforeClickHouse() async throws {
+        let clickHouse = NeverCalledClickHouse()
+        let service = FXDatabaseBacktestHistoryService(config: try Self.makeConfig(), clickHouse: clickHouse)
+        let request = FXBacktestM1HistoryRequest(
+            brokerSourceId: "any-virtual-broker",
+            sourceOrigin: "MT5",
+            logicalSymbol: "SINETEST",
+            utcStartInclusive: 1_704_067_200,
+            utcEndExclusive: 1_704_067_260,
+            expectedMT5Symbol: "SineTest",
+            expectedDigits: 6
+        )
+
+        do {
+            _ = try await service.loadM1History(request)
+            XCTFail("Expected SineTest request with non-synthetic origin to fail closed")
+        } catch let error as FXBacktestAPIServiceError {
+            guard case .invalidRequest(let message) = error else {
+                XCTFail("Expected invalidRequest, got \(error)")
+                return
+            }
+            XCTAssertTrue(message.contains("SINETEST"))
+            XCTAssertTrue(message.contains("SYNTHETIC"))
+        }
+        let executeCount = await clickHouse.executeCount()
+        XCTAssertEqual(executeCount, 0)
+    }
+
+    func testHistoryServiceRejectsSyntheticOriginForNonSineTestSymbolsBeforeClickHouse() async throws {
+        let clickHouse = NeverCalledClickHouse()
+        let service = FXDatabaseBacktestHistoryService(config: try Self.makeConfig(), clickHouse: clickHouse)
+        let request = FXBacktestM1HistoryRequest(
+            brokerSourceId: "configured-broker",
+            sourceOrigin: "SYNTHETIC",
+            logicalSymbol: "EURUSD",
+            utcStartInclusive: 1_704_067_200,
+            utcEndExclusive: 1_704_067_260,
+            expectedMT5Symbol: "EURUSD",
+            expectedDigits: 5
+        )
+
+        do {
+            _ = try await service.loadM1History(request)
+            XCTFail("Expected synthetic-origin non-SineTest request to fail closed")
+        } catch let error as FXBacktestAPIServiceError {
+            guard case .invalidRequest(let message) = error else {
+                XCTFail("Expected invalidRequest, got \(error)")
+                return
+            }
+            XCTAssertTrue(message.contains("SYNTHETIC"))
+            XCTAssertTrue(message.contains("SINETEST"))
+        }
         let executeCount = await clickHouse.executeCount()
         XCTAssertEqual(executeCount, 0)
     }

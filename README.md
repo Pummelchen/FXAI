@@ -48,6 +48,7 @@ Agents
 ## Core Boundaries
 
 - `FXImporter` pulls or receives external market data and hands normalized data to FXDatabase.
+- `FXMT5Bridge` owns the standalone MT5 socket protocol used by FXImporter connectors and FXDatabase ingestion.
 - `FXDatabase` is the only database authority. It owns ClickHouse, validation, migrations, ingestion, storage, deletion, and access APIs.
 - `FXBacktest` never reads ClickHouse directly. It asks FXDatabase for history, registers shared/plugin/accelerator configuration through FXDatabase, stores backtest results through FXDatabase, and now exposes the root FXPlugins zoo through a FXDataEngine-backed adapter.
 - `FXDataEngine` turns raw M1 OHLCV into features, labels, context payloads, audit data, and plugin-ready requests.
@@ -57,6 +58,8 @@ Agents
 ## API Version Policy
 
 Every public project boundary carries an explicit latest API version. FXAI does not keep older API versions active. If an API advances from v1 to v2, every caller must be updated to v2 before it can use that API again.
+
+This is an intentional fail-closed policy, not an accidental compatibility gap. N-1 rolling compatibility may be added only through a dedicated design ticket that names the supported old/new version pair, compatibility window, downgrade behavior, telemetry, and tests proving mixed-version callers fail or interoperate exactly as specified.
 
 Current latest versions:
 
@@ -83,7 +86,7 @@ The core historical data contract is `M1 OHLCV`.
 - M1 open, high, low, close are mandatory.
 - Volume is optional by provider, but when `volume > 0` exists, FXDataEngine and plugins must use it.
 - Spread is no longer part of the offline backtest contract.
-- SineTest is a virtual FXDatabase security used by the test suite to prove plugins and accelerators can handle a simple predictable series without crashing. FXDatabase also persists it as canonical synthetic data from `2000-01-01` through runtime-now, with a full-hour peak of `1.000000`, half-hour trough of `0.001000`, and a 10-second sync agent.
+- SineTest is a virtual FXDatabase security used by the test suite to prove plugins and accelerators can handle a simple predictable series without crashing. FXDatabase also persists it as canonical synthetic data from `2000-01-01` through runtime-now, with a full-hour peak of `1.000000`, half-hour trough of `0.001000`, and a 10-second sync agent. API requests must pair logical symbol `SINETEST` with source origin `SYNTHETIC`; `SYNTHETIC` is rejected for any other logical symbol.
 
 ## User Benefits
 
@@ -142,8 +145,9 @@ FXBacktest is the only project that adapts the root plugin zoo into backtest wor
 - Metal: Apple GPU acceleration is validated through runtime compilation and plugin-local buffer parity tests, and only counts as available on unified-memory M2/M3-or-newer hosts.
 - PyTorch: plugin backends require Apple Silicon MPS for accelerator runtime paths unless a test explicitly opts into CPU fallback.
 - TensorFlow: plugin backends require a TensorFlow Metal GPU device for accelerator runtime paths unless a test explicitly opts into CPU fallback.
-- Python bridge command: FXAI uses `FXAI_PYTHON` when set, otherwise `python3`, for plugin Python bridges. On systems where `python3` is newer than TensorFlow Metal supports, set `FXAI_PYTHON` to a compatible system interpreter such as Homebrew `python3.12`.
-- TensorFlow Metal stack: use `tensorflow==2.18.1` with `tensorflow-metal==1.2.0` on Python 3.12/3.11/3.10. Newer default Python versions, such as Python 3.14, are not a compatible target for this stack.
+- Python bridge command: FXAI uses `FXAI_PYTHON` when set, otherwise resolves a Python 3.12 executable such as Homebrew `python3.12`. It must not silently fall back to generic `python3` because Homebrew's default Python can advance beyond TensorFlow Metal support.
+- Python package baseline: `requirements/fxai-py312.lock` pins the backend/test stack for Python 3.12, including `tensorflow==2.18.1`, `tensorflow-metal==1.2.0`, `torch`, `onnxruntime`, `pytest`, `libsql`, and `certifi`.
+- TensorFlow Metal stack: use `tensorflow==2.18.1` with `tensorflow-metal==1.2.0` on Python 3.12. Newer default Python versions, such as Python 3.14, are not a compatible target for this stack.
 - ONNX Runtime: plugin backends may declare `onnxRuntime` for inference-only exported models under `FXPlugins/<plugin>/ONNX/<plugin>.onnx`. Enable with `FXAI_ENABLE_ONNX_RUNTIME=1`; the Python bridge uses `FXAI_ONNX_MODEL_PATH` and `FXAI_ONNX_MANIFEST_PATH` overrides when set.
 - Remote RPC: plugin backends may declare `remoteRPC` for inference-only GPU-backed servers. Enable with `FXAI_ENABLE_REMOTE_RPC=1`, configure `FXAI_REMOTE_INFERENCE_ENDPOINT`, and optionally set `FXAI_REMOTE_INFERENCE_AUTH_TOKEN` plus `FXAI_REMOTE_INFERENCE_TIMEOUT_SECONDS`. The first transport is JSON over HTTP POST behind a Swift transport protocol so a gRPC adapter can be added later without changing plugin semantics.
 - CoreML/Neural Engine: not declared by plugins until real export, load, prediction, and parity tests exist.
@@ -165,7 +169,7 @@ Run the macOS installer from the repo root:
 ./install_fxai.sh
 ```
 
-The installer is Bash 3 compatible for macOS. It rejects Intel x86 and Apple M1 hosts, installs Homebrew dependencies, checks Xcode/Command Line Tools for Swift and Metal, scans this repo for Python imports, and installs matching Python packages. For TensorFlow Metal it prefers a compatible Python 3.12/3.11/3.10 interpreter and pins the verified `tensorflow==2.18.1` plus `tensorflow-metal==1.2.0` pair.
+The installer is Bash 3 compatible for macOS. It rejects Intel x86 and Apple M1 hosts, installs Homebrew dependencies, checks Xcode/Command Line Tools for Swift and Metal, requires Python 3.12, and installs Python packages from `requirements/fxai-py312.lock`. It no longer scans this repo for imports or installs dynamically discovered unpinned packages.
 
 Verify TensorFlow Metal on the same command used by FXAI:
 

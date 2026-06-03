@@ -1,6 +1,29 @@
 import FXDataEngine
 import Foundation
 
+public enum FXAIPluginPythonRuntime {
+    public static let requiredMajorVersion = 3
+    public static let requiredMinorVersion = 12
+
+    public static func defaultExecutable(environment: [String: String] = ProcessInfo.processInfo.environment) -> String {
+        if let configured = environment["FXAI_PYTHON"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !configured.isEmpty {
+            return configured
+        }
+
+        for candidate in [
+            "/opt/homebrew/opt/python@3.12/bin/python3.12",
+            "/opt/homebrew/opt/python@3.12/libexec/bin/python3",
+            "/opt/homebrew/bin/python3.12",
+            "/usr/local/bin/python3.12"
+        ] where FileManager.default.isExecutableFile(atPath: candidate) {
+            return candidate
+        }
+
+        return "python3.12"
+    }
+}
+
 public struct FXAIPluginRuntimeConfiguration: Hashable, Sendable {
     public var mode: FXPluginRuntimeMode
     public var fallbackPolicy: FXPluginRuntimeFallbackPolicy
@@ -12,7 +35,7 @@ public struct FXAIPluginRuntimeConfiguration: Hashable, Sendable {
         mode: FXPluginRuntimeMode = .automatic,
         fallbackPolicy: FXPluginRuntimeFallbackPolicy = .fallBackToCPU,
         environment: FXPluginRuntimeEnvironment = .local,
-        pythonExecutable: String = ProcessInfo.processInfo.environment["FXAI_PYTHON"] ?? "python3",
+        pythonExecutable: String = FXAIPluginPythonRuntime.defaultExecutable(),
         pythonEnvironment: [String: String] = [:]
     ) {
         self.mode = mode

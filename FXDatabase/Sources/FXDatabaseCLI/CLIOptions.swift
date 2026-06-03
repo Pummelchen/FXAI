@@ -1,12 +1,12 @@
 import AppCore
-import BacktestCore
+import FXDatabaseHistoryCore
 import ClickHouse
 import Config
 import Domain
 import Foundation
 import FXBacktestAPIServer
 import Ingestion
-import MetalAccel
+import FXDatabaseHistoryMetal
 import MT5Bridge
 import Operations
 import TimeMapping

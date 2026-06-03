@@ -44,7 +44,7 @@ inherit the lower-class checks.
 | Plugin CPU/reference behavior | Plugin manifests, CPU models, registry, reference equations | `swift test --package-path FXPlugins`; focused tests for changed plugin families; SineTest certification remains green. |
 | Accelerator or external inference behavior | Metal kernels, PyTorch/TensorFlow/NLP/ONNX bridge code, remote RPC endpoint policy, checkpoint/model-manifest policy | `swift test --package-path FXPlugins` with the Apple Silicon accelerator environment available when local accelerators are part of the claim; TensorFlow paths must use the Python 3.12 `tensorflow==2.18.1` and `tensorflow-metal==1.2.0` baseline unless the project baseline changes. ONNX declarations require model discovery plus live predict evidence. Remote RPC declarations require endpoint configuration plus live predict evidence and must stay inference-only unless a separate training governance ticket is approved. |
 | Data authority behavior | FXDatabase ingestion, ClickHouse schema, canonical rewrite, FXBacktest APIs | `swift test --package-path FXDatabase`; affected importer/backtest/data-engine tests; migration and data repair paths must preserve audit history. |
-| Research or promotion behavior | Offline Lab tuning, drift governance, deployment profiles, lineage, calibration | `python3 FXDataEngine/Tools/fxai_testlab.py verify-all` when Python lab behavior changes; package tests for Swift consumers; generated artifacts must be reproducible from Turso/libSQL or runtime state. |
+| Research or promotion behavior | Offline Lab tuning, drift governance, deployment profiles, lineage, calibration | `${FXAI_PYTHON:-python3.12} FXDataEngine/Tools/fxai_testlab.py verify-all` when Python lab behavior changes; package tests for Swift consumers; generated artifacts must be reproducible from Turso/libSQL or runtime state. |
 | Demo/live execution behavior | Account scoping, order intent, risk, kill switch, human release, broker boundary | `swift test --package-path FXExecutionContracts`, `FXDemoAgent`, and/or `FXLiveAgent`; no live order path may bypass promotion evidence and safety validation. |
 | Release or live hardening | Anything intended to support production/live use | `./fxai certify --all` plus package-specific checks above; unresolved required gates block release. |
 
@@ -86,6 +86,23 @@ Before a live-release hardening change is considered complete:
   generated artifact, failure mode, or gate that operators must understand.
 - Known residual risks must be recorded in the relevant README, audit record, or
   issue tracker before release.
+
+## API Version Compatibility
+
+FXAI's default compatibility policy is latest-only and fail-closed. Validators
+must reject stale `api_version` values before database access, execution, or
+external backend calls unless a dedicated compatibility design has been approved.
+
+Any N-1 compatibility change must define:
+
+- the exact old and new versions covered
+- the allowed rollout window and operator rollback behavior
+- telemetry that proves mixed-version traffic is visible
+- negative tests for unsupported older versions
+- positive tests for the supported mixed-version pair
+
+Compatibility shims must be removed or renewed at the end of the approved
+window; they must not become silent permanent behavior.
 
 ## Documentation Governance
 
@@ -136,7 +153,7 @@ swift test --package-path FXBacktest
 swift test --package-path FXExecutionContracts
 swift test --package-path FXDemoAgent
 swift test --package-path FXLiveAgent
-python3 FXDataEngine/Tools/fxai_testlab.py verify-all
+${FXAI_PYTHON:-python3.12} FXDataEngine/Tools/fxai_testlab.py verify-all
 ```
 
 Run only the checks that match the change class during normal development. Run

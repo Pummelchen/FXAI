@@ -73,11 +73,16 @@ public struct SineWaveAgent: HistoricalOhlcDataProviding {
 
     /// Loads synthetic SineTest M1 OHLCV data for a validated history request.
     ///
-    /// Non-SineTest symbols, provider-symbol mismatches, and digit mismatches fail closed.
+    /// Non-SineTest symbols, non-synthetic source origins, provider-symbol mismatches, and digit mismatches fail closed.
     public func loadM1Ohlc(_ request: HistoricalOhlcRequest) async throws -> ColumnarOhlcSeries {
         guard SineTestSecurity.matches(request.logicalSymbol) else {
             throw HistoryDataError.invalidRequest(
                 "SineWaveAgent only serves \(SineTestSecurity.logicalSymbolRawValue)."
+            )
+        }
+        guard request.sourceOrigin == SineTestSecurity.sourceOrigin else {
+            throw HistoryDataError.invalidRequest(
+                "\(SineTestSecurity.logicalSymbolRawValue) requires \(SineTestSecurity.sourceOrigin.rawValue) source origin."
             )
         }
         if let expectedMT5Symbol = request.expectedMT5Symbol,

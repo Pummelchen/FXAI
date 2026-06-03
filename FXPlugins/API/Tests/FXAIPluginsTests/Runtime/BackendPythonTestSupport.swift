@@ -7,7 +7,7 @@ enum BackendPythonTestSupport {
     static func requireAnyPython() throws -> String {
         var attempts: [PythonAttempt] = []
         for candidate in generalPythonCandidates() {
-            let result = runPython(candidate, script: #"import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")"#)
+            let result = runPython(candidate, script: python312ProbeScript)
             attempts.append(PythonAttempt(executable: candidate, result: result))
             if result.succeeded {
                 return candidate
@@ -21,7 +21,7 @@ enum BackendPythonTestSupport {
     static func requirePythonImporting(_ module: String) throws -> String {
         var attempts: [PythonAttempt] = []
         for candidate in generalPythonCandidates() {
-            let result = runPython(candidate, script: "import \(module)")
+            let result = runPython(candidate, script: "\(python312ProbeScript)\nimport \(module)")
             attempts.append(PythonAttempt(executable: candidate, result: result))
             if result.succeeded {
                 return candidate
@@ -64,7 +64,6 @@ enum BackendPythonTestSupport {
     private static func generalPythonCandidates() -> [String] {
         uniqueCandidates([
             ProcessInfo.processInfo.environment["FXAI_PYTHON"],
-            "python3",
             "/opt/homebrew/opt/python@3.12/libexec/bin/python3",
             "/opt/homebrew/opt/python@3.12/bin/python3.12",
             "/opt/homebrew/bin/python3.12",
@@ -86,6 +85,15 @@ enum BackendPythonTestSupport {
             result.append(trimmed)
         }
         return result
+    }
+
+    private static var python312ProbeScript: String {
+        """
+        import sys
+        print(f"python={sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+        if sys.version_info.major != \(tensorFlowMetalPythonMajor) or sys.version_info.minor != \(tensorFlowMetalPythonMinor):
+            raise SystemExit("expected Python \(tensorFlowMetalPythonMajor).\(tensorFlowMetalPythonMinor) for FXAI backend tests")
+        """
     }
 
     private static var tensorFlowMetalProbeScript: String {

@@ -25,7 +25,7 @@ The system has three parts:
    - Sends M1 OHLC only. Swift stores MT5 M1 volume as `0` by policy.
    - Does not make database, checkpoint, UTC, verification, or repair decisions.
 
-2. `../FXImporter/Sources/MT5Bridge`
+2. `../FXMT5Bridge/Sources/MT5Bridge`
    - Owns the MT5 socket protocol, framed JSON codec, request DTOs, and response DTOs.
    - Exposes raw connector data without depending on FXDatabase domain types.
    - Is consumed by FXDatabase through the `MT5Bridge` SwiftPM product.
@@ -38,7 +38,7 @@ The system has three parts:
    - Runs backfill, live updates, MT5 cross-check verification, canonical-only repair, and history-data readiness checks.
    - Serves FXBacktest API v1 on a local HTTP endpoint after the same readiness gates pass.
    - Exposes SwiftPM library products:
-     - `FXDatabaseBacktestCore`: verified backtest-core data contracts plus the deterministic `SineWaveAgent` used by runtime smoke tests.
+     - `FXDatabaseHistoryCore`: verified backtest-core data contracts plus the deterministic `SineWaveAgent` used by runtime smoke tests.
      - `FXDatabaseFXBacktestAPI`: shared v1 request/response DTOs and a small HTTP client for FXBacktest.
 
 Important MT5 socket note: standard EA sockets are client-oriented. The sample EA therefore connects to the Swift listener. The Swift transport also supports outbound client mode for future bridge variants.
@@ -205,7 +205,7 @@ Paths are resolved relative to the package working directory unless absolute. Lo
 
 The program does not guess suffixes or prefixes. If your broker uses `EURUSDm`, configure it explicitly. `source_origin` is stored in ClickHouse and is part of checkpoints, batch IDs, canonical keys, verified coverage, data certificates, verification results, repair logs, and FXBacktest API requests. `startcheck` also syncs the broker-specific `symbol_data_sources` table from this config, keyed by `broker_source_id`, `logical_symbol`, `source_origin`, and priority. MT5 is the first supported origin; future sources can use their own uppercase source origin values.
 
-`SINETEST` is the reserved virtual test security served by FXDatabase without MT5 readiness gates. It uses `source_origin = "SYNTHETIC"`, broker source `virtual-sinetest`, provider symbol `SineTest`, and 6 scaled digits. The generated M1 OHLCV stream is a deterministic one-hour sine/cosine cycle, with open/high at exactly `1.000000` on every full UTC hour and the trough clamped to `0.001000` at the half-hour. Volume is always nonzero, so FXDataEngine and FXPlugins smoke tests exercise the volume-aware code path.
+`SINETEST` is the reserved virtual test security served by FXDatabase without MT5 readiness gates. It must be requested with `source_origin = "SYNTHETIC"`; `SYNTHETIC` is rejected for every non-SineTest logical symbol, and `SINETEST` is rejected with any non-synthetic source origin. It uses broker source `virtual-sinetest`, provider symbol `SineTest`, and 6 scaled digits. The generated M1 OHLCV stream is a deterministic one-hour sine/cosine cycle, with open/high at exactly `1.000000` on every full UTC hour and the trough clamped to `0.001000` at the half-hour. Volume is always nonzero, so FXDataEngine and FXPlugins smoke tests exercise the volume-aware code path.
 
 The production `sinetest_synchronizer` agent keeps the ClickHouse canonical store, verified coverage, data certificates, and ingest checkpoint filled from `2000-01-01 00:00:00 UTC` through runtime-now. It checks every 10 seconds and replaces only uncovered SineTest chunks, so existing canonical rows do not create duplicate keys or confuse the backtest data API. To fill or repair SineTest manually, run:
 
@@ -487,7 +487,7 @@ The public SwiftPM product for clients is:
 .product(name: "FXDatabaseFXBacktestAPI", package: "FXDatabase")
 ```
 
-The client-side module contains only shared DTOs, the v1 constants, validation, and a small HTTP client. It does not expose ClickHouse, `BacktestCore`, FXDatabase's internal data provider, or Metal buffer helpers.
+The client-side module contains only shared DTOs, the v1 constants, validation, and a small HTTP client. It does not expose ClickHouse, `FXDatabaseHistoryCore`, FXDatabase's internal data provider, or Metal buffer helpers.
 
 API identity:
 
@@ -504,7 +504,7 @@ API identity:
 | Result read | `POST /v1/backtest/results/runs/get`, `POST /v1/backtest/results/passes/get` |
 | Transport | Local HTTP, default `http://127.0.0.1:5066` |
 
-Only the latest API version is accepted. Requests with any other `api_version` are rejected before database access.
+Only the latest API version is accepted. Requests with any other `api_version` are rejected before database access. N-1 compatibility requires an explicit mixed-version design and test plan before it can be enabled.
 
 Example history request:
 
@@ -550,6 +550,8 @@ Example history response shape:
 ```
 
 All OHLC arrays use scaled integer prices and M1 volume uses unsigned integer values. MT5-backed rows currently expose `volume = 0`; future data sources can provide real M1 volume without changing the API shape. Canonical reads accept source rows marked as a closed M1 bar (`mt5ClosedBar` for MT5 or `closedM1Bar` for future non-MT5 providers), and reject unresolved or invalid source statuses. The request validator rejects `maximum_rows` values above 5,000,000 so clients must split larger ranges. The response validator rejects mismatched column lengths, malformed source origins, non-M1 metadata, non-minute timestamps, timestamps outside the requested range, unsorted timestamps, invalid OHLC invariants, and mismatched first/last metadata.
+
+SineTest history requests use the same endpoint, but they must set `logical_symbol = "SINETEST"`, `source_origin = "SYNTHETIC"`, `expected_mt5_symbol = "SineTest"`, and `expected_digits = 6`. FXDatabase rejects a synthetic source origin for every other logical symbol before readiness checks or ClickHouse access.
 
 FXDatabase intentionally does not provide spread, swap, commission, slippage, lot constraints, margin, tick value, bid/ask, or other execution-side metadata. Backtest applications receive verified M1 OHLCV history only. Any external simulator that wants execution assumptions must own those assumptions outside FXDatabase.
 

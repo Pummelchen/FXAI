@@ -1,4 +1,4 @@
-import BacktestCore
+import FXDatabaseHistoryCore
 import Config
 import Foundation
 

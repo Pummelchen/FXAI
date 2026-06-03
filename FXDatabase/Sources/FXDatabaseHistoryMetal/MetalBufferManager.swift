@@ -1,4 +1,4 @@
-import BacktestCore
+import FXDatabaseHistoryCore
 import Foundation
 
 #if canImport(Metal)

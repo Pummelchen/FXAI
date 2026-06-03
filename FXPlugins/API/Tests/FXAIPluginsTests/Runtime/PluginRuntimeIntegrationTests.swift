@@ -366,7 +366,7 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
                 mode: .pyTorchMPS,
                 fallbackPolicy: .fallBackToCPU,
                 environment: Self.pyTorchMPSEnvironment(),
-                pythonExecutable: "python3"
+                pythonExecutable: FXAIPluginPythonRuntime.defaultExecutable()
             ),
             fallbackDiagnostics: diagnostics
         )
@@ -395,7 +395,7 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
                 mode: .pyTorchMPS,
                 fallbackPolicy: .strict,
                 environment: Self.pyTorchMPSEnvironment(),
-                pythonExecutable: "python3"
+                pythonExecutable: FXAIPluginPythonRuntime.defaultExecutable()
             ),
             fallbackDiagnostics: diagnostics
         )
@@ -421,7 +421,7 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
                 mode: .pyTorchMPS,
                 fallbackPolicy: .fallBackToCPU,
                 environment: Self.pyTorchMPSEnvironment(),
-                pythonExecutable: "python3"
+                pythonExecutable: FXAIPluginPythonRuntime.defaultExecutable()
             ),
             fallbackDiagnostics: diagnostics
         )
@@ -570,7 +570,7 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
                 supportsUnifiedMemory: true,
                 hardware: Self.appleM2
             ),
-            pythonExecutable: "python3",
+            pythonExecutable: FXAIPluginPythonRuntime.defaultExecutable(),
             pyTorchMPSAvailable: true
         )
     }

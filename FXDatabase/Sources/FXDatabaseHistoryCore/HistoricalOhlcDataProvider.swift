@@ -65,6 +65,11 @@ public struct ClickHouseHistoricalOhlcDataProvider: HistoricalOhlcDataProviding 
     }
 
     public func loadM1Ohlc(_ request: HistoricalOhlcRequest) async throws -> ColumnarOhlcSeries {
+        guard request.sourceOrigin != SineTestSecurity.sourceOrigin || SineTestSecurity.matches(request.logicalSymbol) else {
+            throw HistoryDataError.invalidRequest(
+                "\(SineTestSecurity.sourceOrigin.rawValue) source origin is reserved for \(SineTestSecurity.logicalSymbolRawValue)."
+            )
+        }
         let limit = request.maximumRows ?? defaultMaximumRows
         guard limit > 0 else {
             throw HistoryDataError.invalidRequest("maximumRows must be positive.")

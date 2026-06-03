@@ -1,5 +1,5 @@
 import AppCore
-import BacktestCore
+import FXDatabaseHistoryCore
 import ClickHouse
 import Config
 import Domain

@@ -14,6 +14,7 @@ PRODUCTION_CODE_ROOTS = [
     ROOT / "FXBacktest/Sources",
     ROOT / "FXDataEngine/Sources",
     ROOT / "FXDatabase/Sources",
+    ROOT / "FXMT5Bridge/Sources",
     ROOT / "FXImporter/Sources",
     ROOT / "FXPlugins",
     ROOT / "FXGUI/Sources",
@@ -101,7 +102,7 @@ def test_production_code_has_no_unfinished_markers() -> None:
 
 
 def test_fxplugins_manifest_lists_only_existing_sources() -> None:
-    """Ensure the dynamic FXPlugins SwiftPM manifest never references stale files."""
+    """Ensure the FXPlugins SwiftPM manifest never references stale files."""
     result = subprocess.run(
         ["swift", "package", "--package-path", "FXPlugins", "dump-package"],
         cwd=ROOT,
@@ -125,7 +126,7 @@ def test_fxplugins_manifest_lists_only_existing_sources() -> None:
 def test_sinetest_public_functions_are_documented() -> None:
     """Guard public SineTest helper APIs with operator-readable documentation."""
     _assert_swift_declaration_docs(
-        ROOT / "FXDatabase/Sources/BacktestCore/SineWaveAgent.swift",
+        ROOT / "FXDatabase/Sources/FXDatabaseHistoryCore/SineWaveAgent.swift",
         re.compile(r"^\s+public\s+(static\s+)?(func|init)\b"),
     )
 
@@ -133,7 +134,7 @@ def test_sinetest_public_functions_are_documented() -> None:
 def test_history_data_error_public_description_is_documented() -> None:
     """Guard the public history error description boundary with doc comments."""
     _assert_swift_declaration_docs(
-        ROOT / "FXDatabase/Sources/BacktestCore/HistoryDataError.swift",
+        ROOT / "FXDatabase/Sources/FXDatabaseHistoryCore/HistoryDataError.swift",
         re.compile(r"^\s+public\s+var\s+description\b"),
     )
 

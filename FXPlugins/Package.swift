@@ -1,97 +1,60 @@
 // swift-tools-version: 6.3
-import Foundation
 import PackageDescription
 
-let packageDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-let fxaiPluginImplementationSourceFolders = Set(["CPU", "Metal"])
-let fxaiPinnedSharedRuntimeSources = [
-    "ai_autoformer/CPU/FXAISequenceArchitectureCPUModel.swift"
+let fxaiPluginExcludedPaths = [
+    ".build",
+    "Package.swift",
+    "README.md",
+    "API/Backends",
+    "API/Docs",
+    "API/Tests",
+    "ai_attn_cnn_bilstm/PyTorch",
+    "ai_attn_cnn_bilstm/TensorFlow",
+    "ai_autoformer/PyTorch",
+    "ai_bilstm/PyTorch",
+    "ai_bilstm/TensorFlow",
+    "ai_chronos/NLP",
+    "ai_chronos/PyTorch",
+    "ai_cnn_lstm/PyTorch",
+    "ai_cnn_lstm/TensorFlow",
+    "ai_fewc/PyTorch",
+    "ai_geodesic/PyTorch",
+    "ai_gha/PyTorch",
+    "ai_gru/PyTorch",
+    "ai_gru/TensorFlow",
+    "ai_lstm/PyTorch",
+    "ai_lstm/TensorFlow",
+    "ai_lstm_tcn/PyTorch",
+    "ai_lstm_tcn/TensorFlow",
+    "ai_lstmg/PyTorch",
+    "ai_lstmg/TensorFlow",
+    "ai_mlp/PyTorch",
+    "ai_mlp/TensorFlow",
+    "ai_mythos_rdt/NLP",
+    "ai_mythos_rdt/PyTorch",
+    "ai_patchtst/PyTorch",
+    "ai_qcew/PyTorch",
+    "ai_s4/PyTorch",
+    "ai_stmn/PyTorch",
+    "ai_tcn/PyTorch",
+    "ai_tcn/TensorFlow",
+    "ai_tesseract/PyTorch",
+    "ai_tft/PyTorch",
+    "ai_timesfm/NLP",
+    "ai_timesfm/PyTorch",
+    "ai_trr/PyTorch",
+    "ai_tst/PyTorch",
+    "demo_plugin_template/NLP",
+    "demo_plugin_template/PyTorch",
+    "demo_plugin_template/README.md",
+    "demo_plugin_template/TensorFlow",
+    "fx7/Backtest",
+    "mix_loffm/PyTorch",
+    "mix_moe_conformal/PyTorch",
+    "rl_ppo/PyTorch",
+    "wm_cfx/PyTorch",
+    "wm_graph/PyTorch"
 ]
-
-func fxaiPluginSwiftSources() -> [String] {
-    guard let enumerator = FileManager.default.enumerator(
-        at: packageDirectory,
-        includingPropertiesForKeys: [.isRegularFileKey],
-        options: [.skipsHiddenFiles, .skipsPackageDescendants]
-    ) else {
-        return []
-    }
-
-    var sources: [String] = []
-    let allowedAPIFolders = Set(["Registry", "Runtime"])
-    let packagePathPrefix = packageDirectory.path + "/"
-
-    while let url = enumerator.nextObject() as? URL {
-        guard url.pathExtension == "swift" else { continue }
-        guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
-
-        let path = url.path
-        guard FileManager.default.fileExists(atPath: path) else { continue }
-        guard path.hasPrefix(packagePathPrefix) else { continue }
-        let relativePath = String(path.dropFirst(packagePathPrefix.count))
-        guard relativePath != "Package.swift" else { continue }
-
-        let parts = relativePath.split(separator: "/").map(String.init)
-        guard let top = parts.first else { continue }
-
-        if top == "API" {
-            guard parts.count >= 3, allowedAPIFolders.contains(parts[1]) else { continue }
-            sources.append(relativePath)
-            continue
-        }
-
-        if parts.count == 2 {
-            sources.append(relativePath)
-            continue
-        }
-
-        if parts.count >= 3, fxaiPluginImplementationSourceFolders.contains(parts[1]) {
-            sources.append(relativePath)
-        }
-    }
-
-    return sources.sorted()
-}
-
-func fxaiPluginExcludedPaths() -> [String] {
-    var excluded = Set([
-        "Package.swift",
-        "README.md",
-        "API/Backends",
-        "API/Docs",
-        "API/Tests",
-        "demo_plugin_template/README.md"
-    ])
-
-    guard let rootEntries = try? FileManager.default.contentsOfDirectory(
-        at: packageDirectory,
-        includingPropertiesForKeys: [.isDirectoryKey],
-        options: [.skipsHiddenFiles]
-    ) else {
-        return excluded.sorted()
-    }
-
-    for pluginURL in rootEntries where pluginURL.lastPathComponent != "API" {
-        guard (try? pluginURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
-        guard let children = try? FileManager.default.contentsOfDirectory(
-            at: pluginURL,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            continue
-        }
-        for child in children {
-            guard (try? child.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
-            guard !fxaiPluginImplementationSourceFolders.contains(child.lastPathComponent) else { continue }
-            excluded.insert("\(pluginURL.lastPathComponent)/\(child.lastPathComponent)")
-        }
-    }
-
-    return excluded.sorted()
-}
-
-let fxaiPluginSources = Array(Set(fxaiPluginSwiftSources()).union(fxaiPinnedSharedRuntimeSources)).sorted()
-precondition(!fxaiPluginSources.isEmpty, "FXPlugins manifest did not discover Swift plugin sources")
 
 let package = Package(
     name: "FXPlugins",
@@ -111,8 +74,7 @@ let package = Package(
                 .product(name: "FXDataEngine", package: "FXDataEngine")
             ],
             path: ".",
-            exclude: fxaiPluginExcludedPaths(),
-            sources: fxaiPluginSources
+            exclude: fxaiPluginExcludedPaths
         ),
         .testTarget(
             name: "FXAIPluginsTests",

@@ -8,15 +8,16 @@ let package = Package(
     ],
     products: [
         .library(name: "FXImporter", targets: ["FXImporter"]),
-        .library(name: "FXImporterAPI", targets: ["FXImporterAPI"]),
-        .library(name: "MT5Bridge", targets: ["MT5Bridge"])
+        .library(name: "FXImporterAPI", targets: ["FXImporterAPI"])
+    ],
+    dependencies: [
+        .package(path: "../FXMT5Bridge")
     ],
     targets: [
         .target(name: "FXImporterAPI"),
-        .target(name: "MT5Bridge"),
-        .target(name: "FXImporter", dependencies: ["FXImporterAPI", "MT5Bridge"]),
+        .target(name: "FXImporter", dependencies: ["FXImporterAPI", .product(name: "MT5Bridge", package: "FXMT5Bridge")]),
         .testTarget(name: "FXImporterAPITests", dependencies: ["FXImporter"]),
-        .testTarget(name: "MT5BridgeTests", dependencies: ["MT5Bridge"])
+        .testTarget(name: "MT5BridgeTests", dependencies: [.product(name: "MT5Bridge", package: "FXMT5Bridge")])
     ],
     swiftLanguageModes: [.v6]
 )

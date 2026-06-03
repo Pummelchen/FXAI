@@ -6,6 +6,7 @@ REPO_ROOT="$SCRIPT_DIR"
 DRY_RUN="${DRY_RUN:-0}"
 SKIP_BREW="${SKIP_BREW:-0}"
 SKIP_PYTHON="${SKIP_PYTHON:-0}"
+PYTHON_REQUIREMENTS_LOCK="${FXAI_PYTHON_REQUIREMENTS:-$REPO_ROOT/requirements/fxai-py312.lock}"
 TMP_DIR="${TMPDIR:-/tmp}/fxai-install-$$"
 
 mkdir -p "$TMP_DIR"
@@ -127,7 +128,7 @@ build_brew_formula_list() {
     : > "$brew_file"
 
     append_unique "$brew_file" git
-    append_unique "$brew_file" python
+    append_unique "$brew_file" python@3.12
     append_unique "$brew_file" clickhouse
     append_unique "$brew_file" cmake
     append_unique "$brew_file" pkg-config
@@ -173,130 +174,42 @@ resolve_python() {
         PYTHON_BIN="$FXAI_PYTHON"
     elif have python3.12; then
         PYTHON_BIN="$(command -v python3.12)"
-    elif have python3.11; then
-        PYTHON_BIN="$(command -v python3.11)"
-    elif have python3.10; then
-        PYTHON_BIN="$(command -v python3.10)"
-    elif have python3; then
-        PYTHON_BIN="$(command -v python3)"
     elif have brew; then
-        brew_python_prefix="$(brew --prefix python 2>/dev/null || true)"
-        if [ -n "$brew_python_prefix" ] && [ -x "$brew_python_prefix/bin/python3" ]; then
-            PYTHON_BIN="$brew_python_prefix/bin/python3"
+        brew_python312_prefix="$(brew --prefix python@3.12 2>/dev/null || true)"
+        if [ -n "$brew_python312_prefix" ] && [ -x "$brew_python312_prefix/bin/python3.12" ]; then
+            PYTHON_BIN="$brew_python312_prefix/bin/python3.12"
         else
-            log "python3 is missing. Install Homebrew python and rerun."
+            log "Python 3.12 is missing. Install Homebrew python@3.12 and rerun."
             exit 1
         fi
     else
-        log "python3 is missing. Install Homebrew python and rerun."
+        log "Python 3.12 is missing. Install Homebrew python@3.12 and rerun."
         exit 1
     fi
+    verify_python_312 "$PYTHON_BIN"
     export PYTHON_BIN
 }
 
-scan_python_imports() {
-    imports_file="$1"
-    "$PYTHON_BIN" - "$REPO_ROOT" > "$imports_file" <<'PY'
-import ast
-import pathlib
+verify_python_312() {
+    python_executable="$1"
+    "$python_executable" - <<'PY'
 import sys
-
-root = pathlib.Path(sys.argv[1])
-scan_roots = [
-    root / "FXPlugins",
-    root / "FXDataEngine" / "Tools",
-    root / "FXImporter",
-    root / "FXDatabase",
-    root / "FXBacktest",
-]
-local_modules = {"offline_lab", "testlab", "fxai_testlab", "fxai_offline_lab"}
-stdlib = set(getattr(sys, "stdlib_module_names", ()))
-modules = set()
-
-for scan_root in scan_roots:
-    if not scan_root.exists():
-        continue
-    for path in scan_root.rglob("*.py"):
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    modules.add(alias.name.split(".")[0])
-            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-                modules.add(node.module.split(".")[0])
-
-for name in sorted(modules):
-    if name not in stdlib and name not in local_modules and not name.startswith("_"):
-        print(name)
+if sys.version_info.major != 3 or sys.version_info.minor != 12:
+    raise SystemExit(f"FXAI requires Python 3.12 for tensorflow-metal compatibility; got {sys.version.split()[0]}")
 PY
 }
 
-build_python_package_list() {
-    imports_file="$1"
-    package_file="$2"
-    optional_file="$3"
-    : > "$package_file"
-    : > "$optional_file"
-
-    append_unique "$package_file" pip
-    append_unique "$package_file" setuptools
-    append_unique "$package_file" wheel
-
-    while IFS= read -r module; do
-        case "$module" in
-            torch)
-                append_unique "$package_file" torch
-                ;;
-            tensorflow)
-                append_unique "$package_file" "tensorflow==2.18.1"
-                append_unique "$optional_file" "tensorflow-metal==1.2.0"
-                ;;
-            pytest)
-                append_unique "$package_file" pytest
-                ;;
-            libsql)
-                append_unique "$package_file" libsql
-                ;;
-            certifi)
-                append_unique "$package_file" certifi
-                ;;
-            "")
-                ;;
-            *)
-                append_unique "$package_file" "$module"
-                ;;
-        esac
-    done < "$imports_file"
-
-    sort -u "$package_file" -o "$package_file"
-    sort -u "$optional_file" -o "$optional_file"
-}
-
 install_python_packages() {
-    package_file="$1"
-    optional_file="$2"
+    requirements_file="$1"
     if [ "$SKIP_PYTHON" = "1" ]; then
         log "Skipping Python package setup because SKIP_PYTHON=1."
         return 0
     fi
-
-    while IFS= read -r package_name; do
-        [ -z "$package_name" ] && continue
-        run "$PYTHON_BIN" -m pip install --upgrade "$package_name"
-    done < "$package_file"
-
-    while IFS= read -r package_name; do
-        [ -z "$package_name" ] && continue
-        log "Installing Python accelerator package: $package_name"
-        if [ "$DRY_RUN" = "1" ]; then
-            log "+ $PYTHON_BIN -m pip install --upgrade $package_name"
-        else
-            run "$PYTHON_BIN" -m pip install --upgrade "$package_name"
-        fi
-    done < "$optional_file"
+    if [ ! -f "$requirements_file" ]; then
+        log "Python requirements lock is missing: $requirements_file"
+        exit 1
+    fi
+    run "$PYTHON_BIN" -m pip install --requirement "$requirements_file"
 }
 
 verify_environment() {
@@ -316,11 +229,16 @@ verify_environment() {
     if [ "$SKIP_PYTHON" != "1" ]; then
         run "$PYTHON_BIN" - <<'PY'
 import importlib.util
+import importlib.metadata
 import platform
 import re
 import subprocess
+import sys
 
-required = ["pytest", "libsql", "certifi", "torch", "tensorflow"]
+if sys.version_info.major != 3 or sys.version_info.minor != 12:
+    raise SystemExit(f"FXAI requires Python 3.12; got {sys.version.split()[0]}")
+
+required = ["pytest", "libsql", "certifi", "torch", "tensorflow", "onnxruntime"]
 for name in required:
     if importlib.util.find_spec(name) is None:
         raise SystemExit(f"missing Python package: {name}")
@@ -346,6 +264,10 @@ if not getattr(torch.backends, "mps", None) or not torch.backends.mps.is_availab
 print("torch", torch.__version__, "mps_available", torch.backends.mps.is_available())
 
 import tensorflow as tf
+if tf.__version__ != "2.18.1":
+    raise SystemExit(f"expected tensorflow 2.18.1, got {tf.__version__}")
+if importlib.metadata.version("tensorflow-metal") != "1.2.0":
+    raise SystemExit(f"expected tensorflow-metal 1.2.0, got {importlib.metadata.version('tensorflow-metal')}")
 gpu_devices = tf.config.list_physical_devices("GPU")
 if not gpu_devices:
     raise SystemExit("TensorFlow Metal GPU device is not available")
@@ -369,23 +291,15 @@ main() {
     ensure_xcode_tools
     resolve_python
 
-    imports_file="$TMP_DIR/python-imports.txt"
-    package_file="$TMP_DIR/python-packages.txt"
-    optional_file="$TMP_DIR/python-optional-packages.txt"
-
-    scan_python_imports "$imports_file"
-    build_python_package_list "$imports_file" "$package_file" "$optional_file"
-
-    log "Python imports discovered:"
-    sed 's/^/  - /' "$imports_file"
-    log "Python packages to install:"
-    sed 's/^/  - /' "$package_file"
-    if [ -s "$optional_file" ]; then
-        log "Python accelerator packages:"
-        sed 's/^/  - /' "$optional_file"
+    log "Python requirements lock:"
+    log "  - $PYTHON_REQUIREMENTS_LOCK"
+    if [ ! -f "$PYTHON_REQUIREMENTS_LOCK" ]; then
+        log "Python requirements lock is missing: $PYTHON_REQUIREMENTS_LOCK"
+        exit 1
     fi
+    sed '/^[[:space:]]*#/d;/^[[:space:]]*$/d;s/^/  - /' "$PYTHON_REQUIREMENTS_LOCK"
 
-    install_python_packages "$package_file" "$optional_file"
+    install_python_packages "$PYTHON_REQUIREMENTS_LOCK"
     verify_environment
 
     log "FXAI macOS 26 environment setup complete."

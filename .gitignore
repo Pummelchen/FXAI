@@ -52,6 +52,9 @@ FXBacktest/Package.resolved
 FXImporter/.build/
 FXImporter/.swiftpm/
 FXImporter/Package.resolved
+FXMT5Bridge/.build/
+FXMT5Bridge/.swiftpm/
+FXMT5Bridge/Package.resolved
 FXPlugins/.build/
 FXPlugins/.swiftpm/
 FXPlugins/Package.resolved

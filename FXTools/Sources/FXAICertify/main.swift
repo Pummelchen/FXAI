@@ -55,15 +55,28 @@ struct CertificationRunner {
         components.append(capture("xcode.version", type: "environment", command: ["xcodebuild", "-version"]))
         components.append(capture("macos.version", type: "environment", command: ["sw_vers"]))
         components.append(capture("hardware", type: "environment", command: ["uname", "-m"]))
-        components.append(capture("python.version", type: "environment", command: [pythonExecutable, "--version"]))
+        components.append(capture(
+            "python.version",
+            type: "environment",
+            command: [
+                pythonExecutable, "-c",
+                """
+                import sys
+                print("Python " + sys.version.split()[0])
+                raise SystemExit(0 if sys.version_info.major == 3 and sys.version_info.minor == 12 else 1)
+                """
+            ]
+        ))
         components.append(capture(
             "pytorch.status",
             type: "environment",
             command: [
                 pythonExecutable, "-c",
                 """
+                import sys
                 import torch
                 mps = bool(getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available())
+                print('python=' + sys.version.split()[0])
                 print(torch.__version__)
                 print('mps=' + str(mps))
                 raise SystemExit(0 if mps else 1)
@@ -76,13 +89,23 @@ struct CertificationRunner {
             command: [
                 tensorflowPythonExecutable, "-c",
                 """
+                import importlib.metadata
                 import sys
                 import tensorflow as tf
                 gpu = tf.config.list_physical_devices('GPU')
                 print(sys.executable)
+                print('python=' + sys.version.split()[0])
                 print(tf.__version__)
+                print('tensorflow-metal=' + importlib.metadata.version('tensorflow-metal'))
                 print('gpu=' + str(gpu))
-                raise SystemExit(0 if gpu else 1)
+                ok = (
+                    sys.version_info.major == 3 and
+                    sys.version_info.minor == 12 and
+                    tf.__version__ == '2.18.1' and
+                    importlib.metadata.version('tensorflow-metal') == '1.2.0' and
+                    bool(gpu)
+                )
+                raise SystemExit(0 if ok else 1)
                 """
             ]
         ))
@@ -142,14 +165,28 @@ struct CertificationRunner {
         if let configured = ProcessInfo.processInfo.environment["FXAI_PYTHON"], !configured.isEmpty {
             return configured
         }
-        return "python3"
+        for candidate in [
+            "/opt/homebrew/opt/python@3.12/bin/python3.12",
+            "/opt/homebrew/opt/python@3.12/libexec/bin/python3",
+            "/opt/homebrew/bin/python3.12",
+            "/usr/local/bin/python3.12"
+        ] where FileManager.default.isExecutableFile(atPath: candidate) {
+            return candidate
+        }
+        return "python3.12"
     }
 
     private static func resolveTensorFlowPythonExecutable(fallback: String) -> String {
         if hasTensorFlowMetal(fallback) {
             return fallback
         }
-        for candidate in ["python3.12", "python3.11", "python3.10"] where hasTensorFlowMetal(candidate) {
+        for candidate in [
+            "/opt/homebrew/opt/python@3.12/bin/python3.12",
+            "/opt/homebrew/opt/python@3.12/libexec/bin/python3",
+            "/opt/homebrew/bin/python3.12",
+            "/usr/local/bin/python3.12",
+            "python3.12"
+        ] where hasTensorFlowMetal(candidate) {
             return candidate
         }
         return fallback
@@ -160,8 +197,17 @@ struct CertificationRunner {
             executable,
             "-c",
             """
+            import importlib.metadata
+            import sys
             import tensorflow as tf
-            raise SystemExit(0 if tf.config.list_physical_devices('GPU') else 1)
+            ok = (
+                sys.version_info.major == 3 and
+                sys.version_info.minor == 12 and
+                tf.__version__ == '2.18.1' and
+                importlib.metadata.version('tensorflow-metal') == '1.2.0' and
+                bool(tf.config.list_physical_devices('GPU'))
+            )
+            raise SystemExit(0 if ok else 1)
             """
         ], in: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
         return probe.exitCode == 0
