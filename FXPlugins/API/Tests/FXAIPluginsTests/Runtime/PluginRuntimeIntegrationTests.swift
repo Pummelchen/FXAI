@@ -325,6 +325,141 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
         try runtime.train(Self.trainRequest(), hyperParameters: HyperParameters())
     }
 
+    func testRuntimeRecordsResolverCPUFallbackDiagnostics() throws {
+        let diagnostics = FXAIPluginRuntimeFallbackDiagnostics(capacity: 4)
+        let runtime = FXAIAcceleratedPluginRuntime(
+            plugin: RuntimeFallbackDiagnosticsSpyPlugin(),
+            configuration: FXAIPluginRuntimeConfiguration(
+                mode: .pyTorchMPS,
+                fallbackPolicy: .fallBackToCPU,
+                environment: Self.noAcceleratorEnvironment()
+            ),
+            fallbackDiagnostics: diagnostics
+        )
+
+        let prediction = try runtime.predict(Self.predictRequest(), hyperParameters: HyperParameters())
+
+        try prediction.validate()
+        let event = try XCTUnwrap(diagnostics.latest)
+        XCTAssertEqual(diagnostics.count, 1)
+        XCTAssertEqual(event.sequence, 1)
+        XCTAssertEqual(event.pluginName, "runtime_fallback_diagnostics_spy")
+        XCTAssertEqual(event.operation, .predict)
+        XCTAssertEqual(event.outcome, .resolvedToCPUFallback)
+        XCTAssertEqual(event.requestedMode, .pyTorchMPS)
+        XCTAssertEqual(event.selectedBackend, .swiftScalar)
+        XCTAssertEqual(event.fallbackBackend, .swiftScalar)
+        XCTAssertEqual(event.fallbackPolicy, .fallBackToCPU)
+        XCTAssertTrue(event.reason.contains("pyTorchMPS is not available"))
+        XCTAssertNil(event.underlyingError)
+        XCTAssertEqual(event.horizonMinutes, 15)
+        XCTAssertEqual(event.sequenceBars, 1)
+        XCTAssertTrue(event.dataHasVolume)
+    }
+
+    func testRuntimeRecordsExternalPredictAndTrainFallbackDiagnostics() throws {
+        let diagnostics = FXAIPluginRuntimeFallbackDiagnostics(capacity: 4)
+        let plugin = RuntimeFallbackDiagnosticsSpyPlugin()
+        var runtime = FXAIAcceleratedPluginRuntime(
+            plugin: plugin,
+            configuration: FXAIPluginRuntimeConfiguration(
+                mode: .pyTorchMPS,
+                fallbackPolicy: .fallBackToCPU,
+                environment: Self.pyTorchMPSEnvironment(),
+                pythonExecutable: "python3"
+            ),
+            fallbackDiagnostics: diagnostics
+        )
+
+        let prediction = try runtime.predict(Self.predictRequest(), hyperParameters: HyperParameters())
+        try prediction.validate()
+        try runtime.train(Self.trainRequest(), hyperParameters: HyperParameters())
+
+        let events = diagnostics.snapshot()
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(events.map(\.sequence), [1, 2])
+        XCTAssertEqual(events.map(\.operation), [.predict, .train])
+        XCTAssertEqual(events.map(\.outcome), [.externalBackendFailureFallback, .externalBackendFailureFallback])
+        XCTAssertTrue(events.allSatisfy { $0.selectedBackend == .pyTorchMPS })
+        XCTAssertTrue(events.allSatisfy { $0.fallbackBackend == .swiftScalar })
+        XCTAssertTrue(events.allSatisfy { $0.fallbackPolicy == .fallBackToCPU })
+        XCTAssertTrue(events.allSatisfy { !($0.underlyingError ?? "").isEmpty })
+        XCTAssertEqual(plugin.trainCount, 1)
+    }
+
+    func testStrictExternalFailureRecordsBlockedFallbackDiagnostic() throws {
+        let diagnostics = FXAIPluginRuntimeFallbackDiagnostics(capacity: 4)
+        let runtime = FXAIAcceleratedPluginRuntime(
+            plugin: RuntimeFallbackDiagnosticsSpyPlugin(),
+            configuration: FXAIPluginRuntimeConfiguration(
+                mode: .pyTorchMPS,
+                fallbackPolicy: .strict,
+                environment: Self.pyTorchMPSEnvironment(),
+                pythonExecutable: "python3"
+            ),
+            fallbackDiagnostics: diagnostics
+        )
+
+        XCTAssertThrowsError(try runtime.predict(Self.predictRequest(), hyperParameters: HyperParameters()))
+
+        let event = try XCTUnwrap(diagnostics.latest)
+        XCTAssertEqual(diagnostics.count, 1)
+        XCTAssertEqual(event.operation, .predict)
+        XCTAssertEqual(event.outcome, .strictPolicyBlockedFallback)
+        XCTAssertEqual(event.selectedBackend, .pyTorchMPS)
+        XCTAssertEqual(event.fallbackBackend, .swiftScalar)
+        XCTAssertEqual(event.fallbackPolicy, .strict)
+        XCTAssertTrue(event.reason.contains("strict fallback policy blocked CPU fallback"))
+        XCTAssertFalse((event.underlyingError ?? "").isEmpty)
+    }
+
+    func testExternalFailureRecordsFallbackUnavailableWhenNoCPUBackendIsDeclared() throws {
+        let diagnostics = FXAIPluginRuntimeFallbackDiagnostics(capacity: 4)
+        let runtime = FXAIAcceleratedPluginRuntime(
+            plugin: RuntimeFallbackUnavailableSpyPlugin(),
+            configuration: FXAIPluginRuntimeConfiguration(
+                mode: .pyTorchMPS,
+                fallbackPolicy: .fallBackToCPU,
+                environment: Self.pyTorchMPSEnvironment(),
+                pythonExecutable: "python3"
+            ),
+            fallbackDiagnostics: diagnostics
+        )
+
+        XCTAssertThrowsError(try runtime.predict(Self.predictRequest(), hyperParameters: HyperParameters()))
+
+        let event = try XCTUnwrap(diagnostics.latest)
+        XCTAssertEqual(diagnostics.count, 1)
+        XCTAssertEqual(event.operation, .predict)
+        XCTAssertEqual(event.outcome, .fallbackUnavailable)
+        XCTAssertEqual(event.selectedBackend, .pyTorchMPS)
+        XCTAssertNil(event.fallbackBackend)
+        XCTAssertEqual(event.fallbackPolicy, .fallBackToCPU)
+        XCTAssertTrue(event.reason.contains("no CPU fallback backend is declared"))
+        XCTAssertFalse((event.underlyingError ?? "").isEmpty)
+    }
+
+    func testFallbackDiagnosticsResetWithRuntimeReset() throws {
+        let diagnostics = FXAIPluginRuntimeFallbackDiagnostics(capacity: 4)
+        var runtime = FXAIAcceleratedPluginRuntime(
+            plugin: RuntimeFallbackDiagnosticsSpyPlugin(),
+            configuration: FXAIPluginRuntimeConfiguration(
+                mode: .pyTorchMPS,
+                fallbackPolicy: .fallBackToCPU,
+                environment: Self.noAcceleratorEnvironment()
+            ),
+            fallbackDiagnostics: diagnostics
+        )
+
+        _ = try runtime.predict(Self.predictRequest(), hyperParameters: HyperParameters())
+        XCTAssertEqual(diagnostics.count, 1)
+
+        runtime.reset()
+
+        XCTAssertEqual(diagnostics.count, 0)
+        XCTAssertNil(diagnostics.latest)
+    }
+
     private static func sampleFeatures(volume: Double) -> [Double] {
         var values = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
         values[0] = 0.14
@@ -416,6 +551,30 @@ final class PluginRuntimeIntegrationTests: XCTestCase {
         )
     }
 
+    private static func noAcceleratorEnvironment() -> FXPluginRuntimeEnvironment {
+        FXPluginRuntimeEnvironment(
+            metalDevice: MetalAccelerationDevice(available: false, deviceName: nil, supportsUnifiedMemory: false),
+            pythonExecutable: nil,
+            pyTorchMPSAvailable: false,
+            tensorFlowMetalAvailable: false,
+            foundationNLPAvailable: false,
+            coreMLNeuralEngineAvailable: false
+        )
+    }
+
+    private static func pyTorchMPSEnvironment() -> FXPluginRuntimeEnvironment {
+        FXPluginRuntimeEnvironment(
+            metalDevice: MetalAccelerationDevice(
+                available: true,
+                deviceName: "Test GPU",
+                supportsUnifiedMemory: true,
+                hardware: Self.appleM2
+            ),
+            pythonExecutable: "python3",
+            pyTorchMPSAvailable: true
+        )
+    }
+
     private static func makeTemporaryDirectory() throws -> URL {
         let url = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("fxai-plugin-runtime-\(UUID().uuidString)")
@@ -444,6 +603,57 @@ private final class FoundationTrainingSpyPlugin: FXAIPlannedPlugin, @unchecked S
     func train(_ request: TrainRequestV4, hyperParameters: HyperParameters) throws {
         trainCount += 1
     }
+
+    func predict(_ request: PredictRequestV4, hyperParameters: HyperParameters) throws -> PredictionV4 {
+        PredictionV4.skip
+    }
+}
+
+private final class RuntimeFallbackDiagnosticsSpyPlugin: FXAIPlannedPlugin, @unchecked Sendable {
+    let manifest = PluginManifestV4(
+        aiID: 1,
+        aiName: "runtime_fallback_diagnostics_spy",
+        family: .other,
+        capabilityMask: [.selfTest]
+    )
+    let accelerationPlan = FXPluginAccelerationPlan(
+        pluginName: "runtime_fallback_diagnostics_spy",
+        primaryBackends: [.pyTorchMPS],
+        candidateBackends: [.swiftScalar],
+        notes: "Test spy for runtime fallback diagnostics."
+    )
+    private(set) var trainCount = 0
+    private(set) var resetCount = 0
+
+    func reset() {
+        resetCount += 1
+    }
+
+    func train(_ request: TrainRequestV4, hyperParameters: HyperParameters) throws {
+        trainCount += 1
+    }
+
+    func predict(_ request: PredictRequestV4, hyperParameters: HyperParameters) throws -> PredictionV4 {
+        PredictionV4.skip
+    }
+}
+
+private final class RuntimeFallbackUnavailableSpyPlugin: FXAIPlannedPlugin, @unchecked Sendable {
+    let manifest = PluginManifestV4(
+        aiID: 1,
+        aiName: "runtime_fallback_unavailable_spy",
+        family: .other,
+        capabilityMask: [.selfTest]
+    )
+    let accelerationPlan = FXPluginAccelerationPlan(
+        pluginName: "runtime_fallback_unavailable_spy",
+        primaryBackends: [.pyTorchMPS],
+        notes: "Test spy for missing CPU fallback diagnostics."
+    )
+
+    func reset() {}
+
+    func train(_ request: TrainRequestV4, hyperParameters: HyperParameters) throws {}
 
     func predict(_ request: PredictRequestV4, hyperParameters: HyperParameters) throws -> PredictionV4 {
         PredictionV4.skip

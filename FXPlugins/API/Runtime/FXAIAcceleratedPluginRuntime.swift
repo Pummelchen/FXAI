@@ -28,18 +28,129 @@ public struct FXAIPluginRuntimeConfiguration: Hashable, Sendable {
     }
 }
 
+public enum FXAIPluginRuntimeOperation: String, Codable, Hashable, Sendable, CaseIterable {
+    case predict
+    case train
+}
+
+public enum FXAIPluginRuntimeFallbackOutcome: String, Codable, Hashable, Sendable, CaseIterable {
+    case resolvedToCPUFallback
+    case externalBackendFailureFallback
+    case strictPolicyBlockedFallback
+    case fallbackUnavailable
+}
+
+public struct FXAIPluginRuntimeFallbackDiagnostic: Codable, Hashable, Sendable {
+    public var sequence: Int
+    public var pluginName: String
+    public var operation: FXAIPluginRuntimeOperation
+    public var outcome: FXAIPluginRuntimeFallbackOutcome
+    public var requestedMode: FXPluginRuntimeMode
+    public var selectedBackend: FXPluginAccelerationBackend?
+    public var fallbackBackend: FXPluginAccelerationBackend?
+    public var fallbackPolicy: FXPluginRuntimeFallbackPolicy
+    public var reason: String
+    public var underlyingError: String?
+    public var horizonMinutes: Int
+    public var sequenceBars: Int
+    public var dataHasVolume: Bool
+    public var sampleTimeUTC: Int64
+
+    public init(
+        sequence: Int = 0,
+        pluginName: String,
+        operation: FXAIPluginRuntimeOperation,
+        outcome: FXAIPluginRuntimeFallbackOutcome,
+        requestedMode: FXPluginRuntimeMode,
+        selectedBackend: FXPluginAccelerationBackend?,
+        fallbackBackend: FXPluginAccelerationBackend?,
+        fallbackPolicy: FXPluginRuntimeFallbackPolicy,
+        reason: String,
+        underlyingError: String? = nil,
+        context: PluginContextV4
+    ) {
+        self.sequence = sequence
+        self.pluginName = pluginName
+        self.operation = operation
+        self.outcome = outcome
+        self.requestedMode = requestedMode
+        self.selectedBackend = selectedBackend
+        self.fallbackBackend = fallbackBackend
+        self.fallbackPolicy = fallbackPolicy
+        self.reason = reason.fxaiSingleLineDiagnostic
+        self.underlyingError = underlyingError?.fxaiSingleLineDiagnostic
+        self.horizonMinutes = context.horizonMinutes
+        self.sequenceBars = context.sequenceBars
+        self.dataHasVolume = context.dataHasVolume
+        self.sampleTimeUTC = context.sampleTimeUTC
+    }
+}
+
+public final class FXAIPluginRuntimeFallbackDiagnostics: @unchecked Sendable {
+    private let lock = NSLock()
+    private let capacity: Int
+    private var nextSequence: Int
+    private var events: [FXAIPluginRuntimeFallbackDiagnostic]
+
+    public init(capacity: Int = 64) {
+        self.capacity = max(1, capacity)
+        self.nextSequence = 0
+        self.events = []
+    }
+
+    public func record(_ diagnostic: FXAIPluginRuntimeFallbackDiagnostic) {
+        lock.lock()
+        defer { lock.unlock() }
+        nextSequence += 1
+        var sequenced = diagnostic
+        sequenced.sequence = nextSequence
+        events.append(sequenced)
+        if events.count > capacity {
+            events.removeFirst(events.count - capacity)
+        }
+    }
+
+    public func snapshot() -> [FXAIPluginRuntimeFallbackDiagnostic] {
+        lock.lock()
+        defer { lock.unlock() }
+        return events
+    }
+
+    public var latest: FXAIPluginRuntimeFallbackDiagnostic? {
+        lock.lock()
+        defer { lock.unlock() }
+        return events.last
+    }
+
+    public var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return events.count
+    }
+
+    public func reset() {
+        lock.lock()
+        defer { lock.unlock() }
+        nextSequence = 0
+        events.removeAll(keepingCapacity: true)
+    }
+}
+
 public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
     private var basePlugin: any FXAIPlannedPlugin
     private var cycleAdapter: FXAIIntrahourCycleDirectionAdapter
     public var configuration: FXAIPluginRuntimeConfiguration
+    public let fallbackDiagnostics: FXAIPluginRuntimeFallbackDiagnostics
 
     public init(
         plugin: any FXAIPlannedPlugin,
-        configuration: FXAIPluginRuntimeConfiguration = FXAIPluginRuntimeConfiguration()
+        configuration: FXAIPluginRuntimeConfiguration = FXAIPluginRuntimeConfiguration(),
+        fallbackDiagnostics: FXAIPluginRuntimeFallbackDiagnostics = FXAIPluginRuntimeFallbackDiagnostics()
     ) {
         self.basePlugin = plugin
         self.cycleAdapter = FXAIIntrahourCycleDirectionAdapter()
         self.configuration = configuration
+        self.fallbackDiagnostics = fallbackDiagnostics
     }
 
     public var manifest: PluginManifestV4 {
@@ -53,6 +164,7 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
     public mutating func reset() {
         basePlugin.reset()
         cycleAdapter.reset()
+        fallbackDiagnostics.reset()
     }
 
     public func selfTest() -> Bool {
@@ -60,17 +172,13 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
     }
 
     public mutating func train(_ request: TrainRequestV4, hyperParameters: HyperParameters) throws {
-        let resolution = try resolveRuntimeBackend(
-            mode: configuration.mode,
-            fallbackPolicy: configuration.fallbackPolicy,
-            environment: configuration.environment
-        )
+        let resolution = try resolveRuntimeBackend(operation: .train, context: request.context)
         switch resolution.selectedBackend {
         case .pyTorchMPS, .tensorFlowMetal:
             do {
                 try trainExternal(request, backend: resolution.selectedBackend)
             } catch {
-                try trainCPUFallback(request, hyperParameters: hyperParameters, error: error)
+                try trainCPUFallback(request, hyperParameters: hyperParameters, resolution: resolution, error: error)
             }
         case .foundationNLP:
             try basePlugin.train(request, hyperParameters: hyperParameters)
@@ -86,18 +194,14 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
     }
 
     public func predict(_ request: PredictRequestV4, hyperParameters: HyperParameters) throws -> PredictionV4 {
-        let resolution = try resolveRuntimeBackend(
-            mode: configuration.mode,
-            fallbackPolicy: configuration.fallbackPolicy,
-            environment: configuration.environment
-        )
+        let resolution = try resolveRuntimeBackend(operation: .predict, context: request.context)
         let prediction: PredictionV4
         switch resolution.selectedBackend {
         case .pyTorchMPS, .tensorFlowMetal, .foundationNLP:
             do {
                 prediction = try predictExternal(request, backend: resolution.selectedBackend)
             } catch {
-                prediction = try predictCPUFallback(request, hyperParameters: hyperParameters, error: error)
+                prediction = try predictCPUFallback(request, hyperParameters: hyperParameters, resolution: resolution, error: error)
             }
         case .metal:
             _ = try FXAIPluginMetalBackendDiscovery.executeRuntimeProbe(pluginName: manifest.aiName)
@@ -108,6 +212,42 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
             prediction = try basePlugin.predict(request, hyperParameters: hyperParameters)
         }
         return cycleAdapter.adjustedPrediction(prediction, context: request.context)
+    }
+
+    private func resolveRuntimeBackend(
+        operation: FXAIPluginRuntimeOperation,
+        context: PluginContextV4
+    ) throws -> FXPluginRuntimeResolution {
+        do {
+            let resolution = try resolveRuntimeBackend(
+                mode: configuration.mode,
+                fallbackPolicy: configuration.fallbackPolicy,
+                environment: configuration.environment
+            )
+            if resolution.didFallback {
+                recordFallbackDiagnostic(
+                    operation: operation,
+                    outcome: .resolvedToCPUFallback,
+                    selectedBackend: resolution.selectedBackend,
+                    fallbackBackend: resolution.fallbackBackend,
+                    reason: resolution.fallbackReason ?? "runtime resolver selected CPU fallback",
+                    underlyingError: nil,
+                    context: context
+                )
+            }
+            return resolution
+        } catch {
+            recordFallbackDiagnostic(
+                operation: operation,
+                outcome: configuration.fallbackPolicy == .strict ? .strictPolicyBlockedFallback : .fallbackUnavailable,
+                selectedBackend: configuration.mode.forcedBackend,
+                fallbackBackend: accelerationPlan.cpuFallbackBackend,
+                reason: "runtime resolver could not select requested backend",
+                underlyingError: Self.errorSummary(error),
+                context: context
+            )
+            throw error
+        }
     }
 
     private func predictExternal(
@@ -162,23 +302,114 @@ public struct FXAIAcceleratedPluginRuntime: FXAIPlannedPlugin {
     private mutating func trainCPUFallback(
         _ request: TrainRequestV4,
         hyperParameters: HyperParameters,
+        resolution: FXPluginRuntimeResolution,
         error: Error
     ) throws {
         guard configuration.fallbackPolicy == .fallBackToCPU else {
+            recordFallbackDiagnostic(
+                operation: .train,
+                outcome: .strictPolicyBlockedFallback,
+                selectedBackend: resolution.selectedBackend,
+                fallbackBackend: accelerationPlan.cpuFallbackBackend,
+                reason: "external backend training failed and strict fallback policy blocked CPU fallback",
+                underlyingError: Self.errorSummary(error),
+                context: request.context
+            )
             throw error
         }
+        guard let fallbackBackend = accelerationPlan.cpuFallbackBackend else {
+            recordFallbackDiagnostic(
+                operation: .train,
+                outcome: .fallbackUnavailable,
+                selectedBackend: resolution.selectedBackend,
+                fallbackBackend: nil,
+                reason: "external backend training failed and no CPU fallback backend is declared",
+                underlyingError: Self.errorSummary(error),
+                context: request.context
+            )
+            throw error
+        }
+        recordFallbackDiagnostic(
+            operation: .train,
+            outcome: .externalBackendFailureFallback,
+            selectedBackend: resolution.selectedBackend,
+            fallbackBackend: fallbackBackend,
+            reason: "external backend training failed; using CPU fallback",
+            underlyingError: Self.errorSummary(error),
+            context: request.context
+        )
         try basePlugin.train(request, hyperParameters: hyperParameters)
     }
 
     private func predictCPUFallback(
         _ request: PredictRequestV4,
         hyperParameters: HyperParameters,
+        resolution: FXPluginRuntimeResolution,
         error: Error
     ) throws -> PredictionV4 {
         guard configuration.fallbackPolicy == .fallBackToCPU else {
+            recordFallbackDiagnostic(
+                operation: .predict,
+                outcome: .strictPolicyBlockedFallback,
+                selectedBackend: resolution.selectedBackend,
+                fallbackBackend: accelerationPlan.cpuFallbackBackend,
+                reason: "external backend inference failed and strict fallback policy blocked CPU fallback",
+                underlyingError: Self.errorSummary(error),
+                context: request.context
+            )
             throw error
         }
+        guard let fallbackBackend = accelerationPlan.cpuFallbackBackend else {
+            recordFallbackDiagnostic(
+                operation: .predict,
+                outcome: .fallbackUnavailable,
+                selectedBackend: resolution.selectedBackend,
+                fallbackBackend: nil,
+                reason: "external backend inference failed and no CPU fallback backend is declared",
+                underlyingError: Self.errorSummary(error),
+                context: request.context
+            )
+            throw error
+        }
+        recordFallbackDiagnostic(
+            operation: .predict,
+            outcome: .externalBackendFailureFallback,
+            selectedBackend: resolution.selectedBackend,
+            fallbackBackend: fallbackBackend,
+            reason: "external backend inference failed; using CPU fallback",
+            underlyingError: Self.errorSummary(error),
+            context: request.context
+        )
         return try basePlugin.predict(request, hyperParameters: hyperParameters)
+    }
+
+    private func recordFallbackDiagnostic(
+        operation: FXAIPluginRuntimeOperation,
+        outcome: FXAIPluginRuntimeFallbackOutcome,
+        selectedBackend: FXPluginAccelerationBackend?,
+        fallbackBackend: FXPluginAccelerationBackend?,
+        reason: String,
+        underlyingError: String?,
+        context: PluginContextV4
+    ) {
+        fallbackDiagnostics.record(
+            FXAIPluginRuntimeFallbackDiagnostic(
+                pluginName: manifest.aiName,
+                operation: operation,
+                outcome: outcome,
+                requestedMode: configuration.mode,
+                selectedBackend: selectedBackend,
+                fallbackBackend: fallbackBackend,
+                fallbackPolicy: configuration.fallbackPolicy,
+                reason: reason,
+                underlyingError: underlyingError,
+                context: context
+            )
+        )
+    }
+
+    private static func errorSummary(_ error: Error) -> String {
+        String(describing: error).fxaiSingleLineDiagnostic
     }
 }
 
@@ -960,5 +1191,16 @@ public struct FXAIIntrahourCycleDirectionAdapter: Sendable {
     private static func positiveModulo(_ value: Int64, _ modulus: Int64) -> Int64 {
         let result = value % modulus
         return result >= 0 ? result : result + modulus
+    }
+}
+
+private extension String {
+    var fxaiSingleLineDiagnostic: String {
+        let collapsed = components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        let limit = 800
+        guard collapsed.count > limit else { return collapsed }
+        return String(collapsed.prefix(limit))
     }
 }

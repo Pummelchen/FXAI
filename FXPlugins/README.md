@@ -54,7 +54,11 @@ contracts:
   loads a plugin's own `PyTorch/`, `TensorFlow/`, or `NLP/` implementation through
   the Swift bridge. `FXAIAcceleratedPluginRuntime` can wrap any planned plugin and
   route train/predict through the selected external backend while retaining explicit
-  CPU fallback. Its shared intrahour direction adapter uses
+  CPU fallback. Runtime wrappers expose a bounded `fallbackDiagnostics` store with
+  resolver-level and external-backend fallback events, including operation,
+  requested mode, selected backend, CPU fallback backend, policy, sanitized error
+  summary, horizon, sequence length, volume availability, and sample timestamp.
+  Its shared intrahour direction adapter uses
   `FXAIIntrahourCycleCalibrationPolicy` for confidence and reliability floors so
   minute-of-hour calibration gates are explicit and test-covered. Test runs can
   set `FXAI_FORCE_PYTORCH_CPU=1` or
