@@ -42,6 +42,13 @@ contracts:
   `FXAI_PLUGIN_STATE_DIR`, or `~/.fxai/plugins/state` when the environment
   variable is not set. The backend follows the FXDataEngine volume contract:
   volume-derived features are used only when `dataHasVolume` is true.
+  External backend checkpoints are written atomically and paired with
+  `fxai_backend_checkpoint_v1` manifest sidecars that record plugin, framework,
+  model identifier, stable deterministic seed, backend source hash, state size,
+  and state SHA-256. Manifested checkpoints are validated before load; legacy
+  checkpoints remain readable unless `FXAI_REQUIRE_CHECKPOINT_MANIFEST=1` is set,
+  and `FXAI_REQUIRE_BACKEND_SOURCE_MATCH=1` can require backend source-hash
+  parity for stricter replay audits.
   FXAI invokes these plugin-local Python backends with `FXAI_PYTHON` when set,
   otherwise `python3`. The Phase 0 backend-test baseline for TensorFlow Metal is
   Python 3.12 with `tensorflow==2.18.1`, `tensorflow-metal==1.2.0`, and at least

@@ -9,6 +9,7 @@ its folder and converts the module result back into `PredictionV4` JSON.
 from __future__ import annotations
 
 import importlib.util
+import io
 import hashlib
 import inspect
 import json
@@ -26,6 +27,7 @@ VOLUME_FEATURE_INDEXES = (6, 68, 69, 70, 71, 74, 75, 76, 77, 78, 80, 81, 82, 83)
 FXAI_PLUGIN_API_VERSION = 4
 FXAI_TOKENIZER_API_VERSION = "fxai-tokenizer-v1"
 MAX_SEQUENCE_BARS = 512
+CHECKPOINT_MANIFEST_VERSION = "fxai_backend_checkpoint_v1"
 
 
 def _env_flag(name: str) -> bool:
@@ -144,6 +146,17 @@ def _stable_seed(plugin_name: str, framework: str, model_identifier: Any) -> int
     return seed if seed > 0 else 1
 
 
+def _configure_deterministic_environment(plugin_name: str, framework: str, model_identifier: Any) -> None:
+    seed = _stable_seed(plugin_name, framework, model_identifier)
+    os.environ.setdefault("FXAI_BACKEND_STABLE_SEED", str(seed))
+    os.environ.setdefault("PYTHONHASHSEED", str(seed))
+    if framework == "pyTorch":
+        os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+    elif framework == "tensorFlow":
+        os.environ.setdefault("TF_DETERMINISTIC_OPS", "1")
+        os.environ.setdefault("TF_CUDNN_DETERMINISTIC", "1")
+
+
 def _seed_framework(plugin_name: str, framework: str, model_identifier: Any) -> None:
     seed = _stable_seed(plugin_name, framework, model_identifier)
     random.seed(seed)
@@ -180,6 +193,121 @@ def _seed_framework(plugin_name: str, framework: str, model_identifier: Any) -> 
 def _state_path(plugin_name: str, framework: str, model_identifier: Any) -> Path:
     suffix = "tfstate.pkl" if framework == "tensorFlow" else "pkl"
     return _state_dir() / f"{plugin_name}.{framework}.{_safe_token(model_identifier)}.{suffix}"
+
+
+def _checkpoint_manifest_path(path: Path) -> Path:
+    return path.with_name(f"{path.name}.manifest.json")
+
+
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _sha256_file(path: Path) -> str | None:
+    try:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except OSError:
+        return None
+
+
+def _checkpoint_manifest(
+    path: Path,
+    payload: bytes,
+    plugin_name: str,
+    framework: str,
+    model_identifier: Any,
+    state_format: str,
+) -> dict[str, Any]:
+    backend_path = _backend_path(plugin_name, framework)
+    return {
+        "schemaVersion": CHECKPOINT_MANIFEST_VERSION,
+        "pluginName": plugin_name,
+        "framework": framework,
+        "modelIdentifier": _safe_token(model_identifier),
+        "stateFileName": path.name,
+        "stateFormat": state_format,
+        "stateBytes": len(payload),
+        "stateSha256": _sha256_bytes(payload),
+        "backendPath": str(backend_path),
+        "backendSha256": _sha256_file(backend_path),
+        "stableSeed": _stable_seed(plugin_name, framework, model_identifier),
+        "deterministic": True,
+        "pythonVersion": sys.version.split()[0],
+    }
+
+
+def _atomic_write(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        with temporary_path.open("wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary_path.replace(path)
+    finally:
+        try:
+            temporary_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _write_checkpoint(
+    path: Path,
+    payload: bytes,
+    plugin_name: str,
+    framework: str,
+    model_identifier: Any,
+    state_format: str,
+) -> None:
+    _atomic_write(path, payload)
+    manifest = _checkpoint_manifest(path, payload, plugin_name, framework, model_identifier, state_format)
+    manifest_payload = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    _atomic_write(_checkpoint_manifest_path(path), manifest_payload)
+
+
+def _checkpoint_manifest_valid(path: Path, plugin_name: str, framework: str, model_identifier: Any) -> bool:
+    manifest_path = _checkpoint_manifest_path(path)
+    if not manifest_path.exists():
+        return not _env_flag("FXAI_REQUIRE_CHECKPOINT_MANIFEST")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if manifest.get("schemaVersion") != CHECKPOINT_MANIFEST_VERSION:
+        return False
+    if manifest.get("pluginName") != plugin_name:
+        return False
+    if manifest.get("framework") != framework:
+        return False
+    if manifest.get("modelIdentifier") != _safe_token(model_identifier):
+        return False
+    if manifest.get("stateFileName") != path.name:
+        return False
+    if not path.exists():
+        return False
+    state_hash = _sha256_file(path)
+    if state_hash is None or state_hash != manifest.get("stateSha256"):
+        return False
+    try:
+        state_bytes = path.stat().st_size
+    except OSError:
+        return False
+    try:
+        manifest_bytes = int(manifest.get("stateBytes", -1))
+    except (TypeError, ValueError):
+        return False
+    if manifest_bytes != state_bytes:
+        return False
+    if _env_flag("FXAI_REQUIRE_BACKEND_SOURCE_MATCH"):
+        backend_hash = _sha256_file(_backend_path(plugin_name, framework))
+        if backend_hash is None or backend_hash != manifest.get("backendSha256"):
+            return False
+    return True
 
 
 def _tensorflow_state_class(module: Any, class_name: Any) -> Any | None:
@@ -245,6 +373,8 @@ def _load_state(
     path = _state_path(plugin_name, framework, model_identifier)
     if not path.exists():
         return None
+    if not _checkpoint_manifest_valid(path, plugin_name, framework, model_identifier):
+        return None
     try:
         if framework == "pyTorch":
             import torch
@@ -261,7 +391,7 @@ def _load_state(
         return None
 
 
-def _save_tensorflow_state(path: Path, plugin_name: str, model_identifier: Any, state: Any) -> None:
+def _tensorflow_state_payload(plugin_name: str, model_identifier: Any, state: Any) -> bytes:
     model = getattr(state, "model", None)
     weights = model.get_weights() if model is not None and hasattr(model, "get_weights") else []
     payload = {
@@ -273,10 +403,7 @@ def _save_tensorflow_state(path: Path, plugin_name: str, model_identifier: Any, 
         "learningRate": _optimizer_learning_rate(state),
         "modelWeights": weights,
     }
-    temporary_path = path.with_name(f"{path.name}.tmp")
-    with temporary_path.open("wb") as handle:
-        pickle.dump(payload, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    temporary_path.replace(path)
+    return pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 def _save_state(plugin_name: str, framework: str, model_identifier: Any, state: Any) -> None:
@@ -288,13 +415,16 @@ def _save_state(plugin_name: str, framework: str, model_identifier: Any, state: 
         if framework == "pyTorch":
             import torch
 
-            torch.save(state, path)
+            buffer = io.BytesIO()
+            torch.save(state, buffer)
+            _write_checkpoint(path, buffer.getvalue(), plugin_name, framework, model_identifier, "torch_pickle_state_v1")
             return
         if framework == "tensorFlow":
-            _save_tensorflow_state(path, plugin_name, model_identifier, state)
+            payload = _tensorflow_state_payload(plugin_name, model_identifier, state)
+            _write_checkpoint(path, payload, plugin_name, framework, model_identifier, "tensorflow_weights_pickle_v1")
             return
-        with path.open("wb") as handle:
-            pickle.dump(state, handle)
+        payload = pickle.dumps(state, protocol=pickle.HIGHEST_PROTOCOL)
+        _write_checkpoint(path, payload, plugin_name, framework, model_identifier, "python_pickle_state_v1")
     except Exception:
         # Persistence is best-effort because TensorFlow objects are not always pickle-safe.
         return
@@ -495,6 +625,7 @@ def _handle_predict(command: dict[str, Any]) -> dict[str, Any]:
     framework = str(payload.get("framework", ""))
     model_identifier = payload.get("modelIdentifier")
     plugin_name, backend_path = _resolve_backend_path(model_identifier, framework)
+    _configure_deterministic_environment(plugin_name, framework, model_identifier)
     _prepare_framework(framework)
     _seed_framework(plugin_name, framework, model_identifier)
     module = _load_module(plugin_name, backend_path)
@@ -525,6 +656,7 @@ def _handle_train(command: dict[str, Any]) -> dict[str, Any]:
     plugin_name, backend_path = _resolve_backend_path(model_identifier, framework)
     if framework == "foundationNLP":
         return {"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": True, "prediction": None, "error": None}
+    _configure_deterministic_environment(plugin_name, framework, model_identifier)
     _prepare_framework(framework)
     _seed_framework(plugin_name, framework, model_identifier)
     module = _load_module(plugin_name, backend_path)

@@ -83,6 +83,95 @@ final class PluginExternalBackendRuntimeTests: XCTestCase {
         }
     }
 
+    func testPyTorchCheckpointManifestPinsDeterministicMetadataAndReloadsDeterministically() throws {
+        let pythonExecutable = try BackendPythonTestSupport.requirePythonImporting("torch")
+        let pluginName = "ai_lstm"
+        let temporaryDirectory = try Self.makeTemporaryDirectory(pluginName, suffix: "torch-manifest")
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+        let bridge = Self.bridge(
+            pluginName: pluginName,
+            framework: .pyTorch,
+            executable: pythonExecutable,
+            stateDirectory: temporaryDirectory
+        )
+        let payload = Self.inferencePayload(pluginName: pluginName, framework: .pyTorch, includeText: false)
+
+        try bridge.trainSynchronously(Self.trainingPayload(payload: payload, label: .buy))
+
+        let manifest = try Self.singleCheckpointManifest(in: temporaryDirectory)
+        let stateFileName = try XCTUnwrap(manifest.payload["stateFileName"] as? String)
+        let stateURL = temporaryDirectory.appendingPathComponent(stateFileName)
+        let stateSize = try XCTUnwrap(try stateURL.resourceValues(forKeys: [.fileSizeKey]).fileSize)
+        XCTAssertEqual(manifest.payload["schemaVersion"] as? String, "fxai_backend_checkpoint_v1")
+        XCTAssertEqual(manifest.payload["pluginName"] as? String, pluginName)
+        XCTAssertEqual(manifest.payload["framework"] as? String, "pyTorch")
+        XCTAssertEqual(manifest.payload["modelIdentifier"] as? String, pluginName)
+        XCTAssertEqual(manifest.payload["stateFormat"] as? String, "torch_pickle_state_v1")
+        XCTAssertEqual(Self.intValue(manifest.payload["stateBytes"]), stateSize)
+        XCTAssertEqual((manifest.payload["stateSha256"] as? String)?.count, 64)
+        XCTAssertEqual((manifest.payload["backendSha256"] as? String)?.count, 64)
+        XCTAssertEqual(Self.boolValue(manifest.payload["deterministic"]), true)
+        XCTAssertGreaterThan(Self.intValue(manifest.payload["stableSeed"]) ?? 0, 0)
+
+        let firstReload = try Self.bridge(
+            pluginName: pluginName,
+            framework: .pyTorch,
+            executable: pythonExecutable,
+            stateDirectory: temporaryDirectory
+        ).predictSynchronously(payload)
+        let secondReload = try Self.bridge(
+            pluginName: pluginName,
+            framework: .pyTorch,
+            executable: pythonExecutable,
+            stateDirectory: temporaryDirectory
+        ).predictSynchronously(payload)
+
+        try firstReload.validate()
+        try secondReload.validate()
+        Self.assertPredictionsEqual(firstReload, secondReload, accuracy: 1.0e-10)
+    }
+
+    func testPyTorchCheckpointManifestRejectsCorruptStateAndKeepsPredictionValid() throws {
+        let pythonExecutable = try BackendPythonTestSupport.requirePythonImporting("torch")
+        let pluginName = "ai_lstm"
+        let temporaryDirectory = try Self.makeTemporaryDirectory(pluginName, suffix: "torch-corrupt")
+        let coldDirectory = try Self.makeTemporaryDirectory(pluginName, suffix: "torch-cold")
+        defer {
+            try? FileManager.default.removeItem(at: temporaryDirectory)
+            try? FileManager.default.removeItem(at: coldDirectory)
+        }
+        let payload = Self.inferencePayload(pluginName: pluginName, framework: .pyTorch, includeText: false)
+        let bridge = Self.bridge(
+            pluginName: pluginName,
+            framework: .pyTorch,
+            executable: pythonExecutable,
+            stateDirectory: temporaryDirectory
+        )
+        try bridge.trainSynchronously(Self.trainingPayload(payload: payload, label: .buy))
+
+        let manifest = try Self.singleCheckpointManifest(in: temporaryDirectory)
+        let stateFileName = try XCTUnwrap(manifest.payload["stateFileName"] as? String)
+        let stateURL = temporaryDirectory.appendingPathComponent(stateFileName)
+        try Data("not a valid checkpoint".utf8).write(to: stateURL, options: .atomic)
+
+        let corruptPrediction = try Self.bridge(
+            pluginName: pluginName,
+            framework: .pyTorch,
+            executable: pythonExecutable,
+            stateDirectory: temporaryDirectory
+        ).predictSynchronously(payload)
+        let coldPrediction = try Self.bridge(
+            pluginName: pluginName,
+            framework: .pyTorch,
+            executable: pythonExecutable,
+            stateDirectory: coldDirectory
+        ).predictSynchronously(payload)
+
+        try corruptPrediction.validate()
+        try coldPrediction.validate()
+        Self.assertPredictionsEqual(corruptPrediction, coldPrediction, accuracy: 1.0e-10)
+    }
+
     func testEveryDeclaredNLPBackendConsumesTextEventsAndHasNoTextFallback() throws {
         let pythonExecutable = try BackendPythonTestSupport.requireAnyPython()
         let plans = FXAIPluginRegistry.accelerationPlans().filter { $0.declares(.foundationNLP) }
@@ -231,5 +320,44 @@ final class PluginExternalBackendRuntimeTests: XCTestCase {
             return false
         }
         return contents.contains { !$0.hasDirectoryPath }
+    }
+
+    private static func singleCheckpointManifest(in url: URL) throws -> (url: URL, payload: [String: Any]) {
+        let contents = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
+        let manifests = contents.filter { $0.lastPathComponent.hasSuffix(".manifest.json") }
+        XCTAssertEqual(manifests.count, 1)
+        let manifestURL = try XCTUnwrap(manifests.first)
+        let data = try Data(contentsOf: manifestURL)
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        return (manifestURL, payload)
+    }
+
+    private static func intValue(_ value: Any?) -> Int? {
+        if let number = value as? NSNumber {
+            return number.intValue
+        }
+        return value as? Int
+    }
+
+    private static func boolValue(_ value: Any?) -> Bool? {
+        if let bool = value as? Bool {
+            return bool
+        }
+        if let number = value as? NSNumber {
+            return number.boolValue
+        }
+        return nil
+    }
+
+    private static func assertPredictionsEqual(_ lhs: PredictionV4, _ rhs: PredictionV4, accuracy: Double) {
+        for (left, right) in zip(lhs.classProbabilities, rhs.classProbabilities) {
+            XCTAssertEqual(left, right, accuracy: accuracy)
+        }
+        XCTAssertEqual(lhs.moveMeanPoints, rhs.moveMeanPoints, accuracy: accuracy)
+        XCTAssertEqual(lhs.moveQ25Points, rhs.moveQ25Points, accuracy: accuracy)
+        XCTAssertEqual(lhs.moveQ50Points, rhs.moveQ50Points, accuracy: accuracy)
+        XCTAssertEqual(lhs.moveQ75Points, rhs.moveQ75Points, accuracy: accuracy)
+        XCTAssertEqual(lhs.confidence, rhs.confidence, accuracy: accuracy)
+        XCTAssertEqual(lhs.reliability, rhs.reliability, accuracy: accuracy)
     }
 }

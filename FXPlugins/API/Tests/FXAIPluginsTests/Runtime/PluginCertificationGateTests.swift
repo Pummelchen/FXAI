@@ -144,6 +144,11 @@ final class PluginCertificationGateTests: XCTestCase {
         XCTAssertFalse(externalBackendTests.contains("FXAI_FORCE_PYTORCH_CPU"))
         XCTAssertFalse(externalBackendTests.contains("FXAI_FORCE_TENSORFLOW_CPU"))
         XCTAssertTrue(dispatcher.contains("map_location = torch.device(\"mps\")"))
+        XCTAssertTrue(dispatcher.contains("CHECKPOINT_MANIFEST_VERSION = \"fxai_backend_checkpoint_v1\""))
+        XCTAssertTrue(dispatcher.contains("FXAI_BACKEND_STABLE_SEED"))
+        XCTAssertTrue(dispatcher.contains("_checkpoint_manifest_valid"))
+        XCTAssertTrue(dispatcher.contains("_atomic_write"))
+        XCTAssertTrue(dispatcher.contains("stateSha256"))
     }
 
     private static var repositoryRoot: URL {
