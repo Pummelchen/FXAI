@@ -262,7 +262,7 @@ def build_parser() -> argparse.ArgumentParser:
     tune.add_argument("--wf-embargo-days", type=float, default=0.0)
     tune.add_argument("--wf-window-mode", choices=["rolling", "anchored"], default="rolling")
     tune.add_argument("--wf-bars-per-year", type=int, default=testlab.FX_M1_BARS_PER_TRADING_YEAR)
-    tune.add_argument("--wf-year-presets", default="1,2,3")
+    tune.add_argument("--wf-year-presets", default=",".join(f"{year:g}" for year in testlab.DEFAULT_WALKFORWARD_YEAR_PRESETS))
     tune.add_argument("--seed", type=int, default=42)
     tune.add_argument("--strategy-profile", default="default")
     tune.add_argument("--broker-profile", default="")

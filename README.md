@@ -106,7 +106,10 @@ python3.12 FXDataEngine/Tools/fxai_testlab.py walkforward-analyze \
   --output FXDataEngine/Tools/latest_walkforward_analysis.md
 ```
 
-Use `--wf-train-years 1`, `2`, or `3` for yearly policies, `--wf-test-years`
+The default optimization campaign requests `1,2,3,5,10,15,20,25` training-year
+windows. Year windows are enabled per security only when the available history
+has enough bars for the full train/test/purge/embargo/fold policy; insufficient
+years are recorded as disabled instead of being scheduled. Use `--wf-test-years`
 for the out-of-sample horizon, and `--wf-purge-days` / `--wf-embargo-days` to
 keep leakage buffers in calendar terms. Resolved policies are written into audit
 manifests with the full window plan and minimum bar requirement. When the audit

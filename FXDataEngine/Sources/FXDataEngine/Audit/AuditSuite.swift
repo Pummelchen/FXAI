@@ -14,7 +14,7 @@ public struct AuditSuiteConfiguration: Codable, Hashable, Sendable {
         runner: AuditRunnerConfiguration = AuditRunnerConfiguration(horizonMinutes: 5, priceCostPoints: 2.0),
         stopOnFailure: Bool = false
     ) {
-        self.bars = min(max(2_048, bars), 5_000_000)
+        self.bars = min(max(2_048, bars), 10_000_000)
         self.scenarioList = scenarioList
         self.seed = seed
         self.runner = runner

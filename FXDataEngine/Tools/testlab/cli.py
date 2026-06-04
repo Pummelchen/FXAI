@@ -58,6 +58,7 @@ from .shared import (
 from .strategy_profiles import build_strategy_profile_manifest, compile_strategy_profile
 from .verify import run_verify_all
 from .walkforward import (
+    DEFAULT_WALKFORWARD_YEAR_PRESETS,
     FX_M1_BARS_PER_TRADING_YEAR,
     WalkForwardPolicyError,
     analyze_walkforward_report,
@@ -334,10 +335,26 @@ def cmd_optimize_audit(args):
         return 1
     oracles = load_oracles()
     summary = load_current_summary(report, oracles)
+    available_bars = int(getattr(args, "bars", 0) or 0)
+    manifest_path = report.with_suffix(".manifest.json")
+    if manifest_path.exists():
+        manifest = load_json(manifest_path)
+        walkforward = dict(manifest.get("walkforward", {}))
+        manifest_bars = int(walkforward.get("total_bars", 0) or 0)
+        if manifest_bars > 0:
+            available_bars = manifest_bars
     campaign = build_optimization_campaign(
         summary,
         oracles,
         walkforward_years=parse_walkforward_year_presets(getattr(args, "wf_year_presets", "")),
+        walkforward_available_bars=available_bars,
+        walkforward_test_years=float(getattr(args, "wf_test_years", 0.0) or 0.25),
+        walkforward_folds=int(getattr(args, "wf_folds", 6) or 6),
+        walkforward_bars_per_year=int(getattr(args, "wf_bars_per_year", FX_M1_BARS_PER_TRADING_YEAR) or FX_M1_BARS_PER_TRADING_YEAR),
+        walkforward_purge_days=float(getattr(args, "wf_purge_days", 0.0) or 0.0),
+        walkforward_embargo_days=float(getattr(args, "wf_embargo_days", 0.0) or 0.0),
+        walkforward_purge_bars=int(getattr(args, "wf_purge_bars", 32) or 0),
+        walkforward_embargo_bars=int(getattr(args, "wf_embargo_bars", 24) or 0),
     )
     text = render_optimization_campaign(campaign)
     print(text)
@@ -505,7 +522,7 @@ def main():
     oa.add_argument("--wf-embargo-days", type=float, default=0.0)
     oa.add_argument("--wf-window-mode", choices=["rolling", "anchored"], default="rolling")
     oa.add_argument("--wf-bars-per-year", type=int, default=FX_M1_BARS_PER_TRADING_YEAR)
-    oa.add_argument("--wf-year-presets", default="1,2,3")
+    oa.add_argument("--wf-year-presets", default=",".join(f"{year:g}" for year in DEFAULT_WALKFORWARD_YEAR_PRESETS))
     oa.add_argument("--window-start-unix", type=int, default=0)
     oa.add_argument("--window-end-unix", type=int, default=0)
     oa.add_argument("--seed", type=int, default=42)

@@ -13,23 +13,53 @@ from .shared import (
     load_oracles,
     parse_brace_list,
 )
+from .walkforward import (
+    DEFAULT_WALKFORWARD_YEAR_PRESETS,
+    FX_M1_BARS_PER_TRADING_YEAR,
+    walkforward_year_availability,
+)
 
 
 def parse_walkforward_year_presets(raw: str | None) -> list[float]:
     out: list[float] = []
-    for part in str(raw or "1,2,3").replace(";", ",").split(","):
+    default_raw = ",".join(f"{year:g}" for year in DEFAULT_WALKFORWARD_YEAR_PRESETS)
+    for part in str(raw or default_raw).replace(";", ",").split(","):
         try:
             value = float(part.strip())
         except ValueError:
             continue
         if value > 0.0 and value not in out:
             out.append(value)
-    return out or [1.0, 2.0, 3.0]
+    return out or list(DEFAULT_WALKFORWARD_YEAR_PRESETS)
 
 
-def build_optimization_campaign(summary: dict, oracles: dict, walkforward_years: list[float] | None = None) -> dict:
+def build_optimization_campaign(
+    summary: dict,
+    oracles: dict,
+    walkforward_years: list[float] | None = None,
+    walkforward_available_bars: int | None = None,
+    walkforward_test_years: float = 0.25,
+    walkforward_folds: int = 6,
+    walkforward_bars_per_year: int = FX_M1_BARS_PER_TRADING_YEAR,
+    walkforward_purge_days: float = 0.0,
+    walkforward_embargo_days: float = 0.0,
+    walkforward_purge_bars: int = 32,
+    walkforward_embargo_bars: int = 24,
+) -> dict:
     campaign = {"plugins": {}}
-    year_presets = list(walkforward_years or [1.0, 2.0, 3.0])
+    year_presets = list(walkforward_years or DEFAULT_WALKFORWARD_YEAR_PRESETS)
+    year_availability = walkforward_year_availability(
+        year_presets,
+        walkforward_available_bars,
+        test_years=walkforward_test_years,
+        folds=walkforward_folds,
+        bars_per_year=walkforward_bars_per_year,
+        purge_days=walkforward_purge_days,
+        embargo_days=walkforward_embargo_days,
+        purge_bars=walkforward_purge_bars,
+        embargo_bars=walkforward_embargo_bars,
+    )
+    enabled_years = list(year_availability["enabled_train_years"])
     for name, info in sorted(summary.get("plugins", {}).items()):
         family = int(info.get("family", 11))
         oracle = get_oracle(name, family, oracles)
@@ -127,8 +157,11 @@ def build_optimization_campaign(summary: dict, oracles: dict, walkforward_years:
             "name": "walkforward_gate",
             "focus": ["market_walkforward", "market_session_edges", "market_liquidity_shock", "market_macro_event", "market_adversarial"],
             "train_test_pairs": [(256, 64), (384, 96), (512, 128)],
-            "train_years": year_presets,
-            "test_years": 0.25,
+            "requested_train_years": year_presets,
+            "train_years": enabled_years,
+            "disabled_train_years": list(year_availability["disabled_train_years"]),
+            "available_bars": int(year_availability["available_bars"]),
+            "test_years": walkforward_test_years,
             "window_modes": ["rolling", "anchored"],
         })
 
@@ -182,6 +215,13 @@ def render_optimization_campaign(campaign: dict) -> str:
                         out.append(f"  run: run-audit --plugin-list '{{{name}}}' --scenario-list '{{{', '.join(exp['focus'])}}}' --slippage-points {slip} --fill-penalty-points {fillp}")
             elif exp["name"] == "walkforward_gate":
                 out.append(f"- Walk-forward release gate: {exp['focus']} | year_windows={exp.get('train_years', [])} | bar_windows={exp['train_test_pairs']}")
+                disabled = exp.get("disabled_train_years", [])
+                if disabled:
+                    disabled_text = ", ".join(
+                        f"{float(item.get('train_years', 0.0)):g}y needs {int(item.get('required_bars', 0))} bars"
+                        for item in disabled
+                    )
+                    out.append(f"  disabled_year_windows: {disabled_text} | available_bars={int(exp.get('available_bars', 0) or 0)}")
                 for years in exp.get("train_years", []):
                     for mode in exp.get("window_modes", ["rolling"]):
                         out.append(f"  run: run-audit --plugin-list '{{{name}}}' --scenario-list '{{{', '.join(exp['focus'])}}}' --wf-train-years {years:g} --wf-test-years {float(exp.get('test_years', 0.25)):g} --wf-window-mode {mode}")

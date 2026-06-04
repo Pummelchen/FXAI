@@ -4,6 +4,7 @@ import argparse
 
 from testlab.optimize import build_optimization_campaign, parse_walkforward_year_presets
 from testlab.walkforward import (
+    DEFAULT_WALKFORWARD_YEAR_PRESETS,
     FX_M1_BARS_PER_TRADING_YEAR,
     WalkForwardPolicy,
     analyze_walkforward_report,
@@ -170,3 +171,35 @@ def test_optimization_campaign_uses_configurable_year_presets():
     assert walkforward_gate["train_years"] == [1.0, 2.0]
     assert walkforward_gate["test_years"] == 0.25
     assert walkforward_gate["window_modes"] == ["rolling", "anchored"]
+
+
+def test_optimization_campaign_disables_years_without_enough_security_history():
+    summary = {
+        "plugins": {
+            "ai_mlp": {
+                "family": 2,
+                "score": 72.0,
+                "grade": "C",
+                "issues": ["walkforward unstable"],
+            }
+        }
+    }
+
+    assert parse_walkforward_year_presets("") == list(DEFAULT_WALKFORWARD_YEAR_PRESETS)
+    short_campaign = build_optimization_campaign(
+        summary,
+        {},
+        walkforward_available_bars=2_000_000,
+    )
+    short_gate = next(exp for exp in short_campaign["plugins"]["ai_mlp"]["experiments"] if exp["name"] == "walkforward_gate")
+    assert short_gate["train_years"] == [1.0, 2.0, 3.0]
+    assert [item["train_years"] for item in short_gate["disabled_train_years"]] == [5.0, 10.0, 15.0, 20.0, 25.0]
+
+    long_campaign = build_optimization_campaign(
+        summary,
+        {},
+        walkforward_available_bars=10_000_000,
+    )
+    long_gate = next(exp for exp in long_campaign["plugins"]["ai_mlp"]["experiments"] if exp["name"] == "walkforward_gate")
+    assert long_gate["train_years"] == list(DEFAULT_WALKFORWARD_YEAR_PRESETS)
+    assert long_gate["disabled_train_years"] == []

@@ -33,7 +33,7 @@ python3 FXDataEngine/Tools/fxai_offline_lab.py bootstrap --seed-demo
 python3 FXDataEngine/Tools/fxai_offline_lab.py init-db
 python3 FXDataEngine/Tools/fxai_offline_lab.py export-dataset --symbol-pack majors --months-list 3,6,12
 python3 FXDataEngine/Tools/fxai_offline_lab.py tune-zoo --profile continuous --auto-export --symbol-pack majors --months-list 3,6,12
-python3 FXDataEngine/Tools/fxai_offline_lab.py tune-zoo --profile continuous --auto-export --symbol-pack majors --months-list 24,36,48 --wf-year-presets 1,2,3 --wf-test-years 0.25
+python3 FXDataEngine/Tools/fxai_offline_lab.py tune-zoo --profile continuous --auto-export --symbol-pack majors --months-list 24,36,48 --wf-year-presets 1,2,3,5,10,15,20,25 --wf-test-years 0.25
 python3 FXDataEngine/Tools/fxai_offline_lab.py best-params --profile continuous
 python3 FXDataEngine/Tools/fxai_offline_lab.py turso-branch-create --profile continuous --source-database fxai-main
 python3 FXDataEngine/Tools/fxai_offline_lab.py turso-pitr-restore --profile continuous --source-database fxai-main --timestamp 2026-04-04T00:00:00Z
@@ -123,7 +123,7 @@ Notes:
 - `execution-quality-validate` writes the default execution-quality config and tier-memory exports used by the FXDatabase runtime, validates thresholds, and confirms the execution forecaster can boot cleanly.
 - `execution-quality-replay-report` summarizes recent execution-state transitions, price-cost or slippage stress, liquidity-fragility changes, and execution-quality reasons from append-only runtime history.
 - `fxai_testlab.py verify-all` is the one-command platform verification path: Python tests, deterministic fixture checks, and clean FXDatabase compiles.
-- `tune-zoo` includes walk-forward release-gate experiments. Use `--wf-year-presets 1,2,3` to generate 1-, 2-, and 3-year training windows, `--wf-test-years` for the out-of-sample span, and `--wf-window-mode rolling` or `anchored` for the baseline audit policy. Export enough months to cover the resulting minimum bars.
+- `tune-zoo` includes walk-forward release-gate experiments. The default `--wf-year-presets` is `1,2,3,5,10,15,20,25`; each security only schedules the years whose minimum bar requirement fits its exported dataset, and records the longer insufficient years as disabled. Use `--wf-test-years` for the out-of-sample span, and `--wf-window-mode rolling` or `anchored` for the baseline audit policy. Export enough months to cover the resulting minimum bars.
 - Exact-window datasets store the effective exported first and last bar range, so later tuning and promotion stay aligned to the data that was actually ingested.
 - Turso access uses bounded open retry so overlapping admin and control-loop calls fail cleanly instead of drifting silently.
 

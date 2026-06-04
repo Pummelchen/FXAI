@@ -9,7 +9,8 @@ from typing import Any
 
 
 FX_M1_BARS_PER_TRADING_YEAR = 52 * 5 * 24 * 60
-MAX_AUDIT_BARS = 5_000_000
+DEFAULT_WALKFORWARD_YEAR_PRESETS = (1.0, 2.0, 3.0, 5.0, 10.0, 15.0, 20.0, 25.0)
+MAX_AUDIT_BARS = 10_000_000
 SUPPORTED_WINDOW_MODES = {"rolling", "anchored"}
 
 
@@ -120,6 +121,60 @@ def bars_from_days(days: float) -> int:
     if days <= 0.0:
         return 0
     return max(1, int(math.ceil(days * 24 * 60)))
+
+
+def walkforward_year_availability(
+    years: list[float] | tuple[float, ...],
+    available_bars: int | None,
+    *,
+    test_years: float = 0.25,
+    folds: int = 6,
+    bars_per_year: int = FX_M1_BARS_PER_TRADING_YEAR,
+    purge_days: float = 0.0,
+    embargo_days: float = 0.0,
+    purge_bars: int = 32,
+    embargo_bars: int = 24,
+    mode: str = "rolling",
+) -> dict[str, Any]:
+    total = max(0, int(available_bars or 0))
+    enabled: list[float] = []
+    disabled: list[dict[str, Any]] = []
+    checks: list[dict[str, Any]] = []
+    for value in years:
+        train_years = max(0.0, float(value or 0.0))
+        if train_years <= 0.0:
+            continue
+        policy = WalkForwardPolicy(
+            mode=mode if mode in SUPPORTED_WINDOW_MODES else "rolling",
+            train_bars=bars_from_years(train_years, bars_per_year),
+            test_bars=bars_from_years(test_years, bars_per_year),
+            purge_bars=bars_from_days(purge_days) or max(0, int(purge_bars or 0)),
+            embargo_bars=bars_from_days(embargo_days) or max(0, int(embargo_bars or 0)),
+            folds=max(1, min(int(folds or 1), 64)),
+            bars_per_year=max(1, int(bars_per_year or FX_M1_BARS_PER_TRADING_YEAR)),
+            train_years=train_years,
+            test_years=max(0.0, float(test_years or 0.0)),
+            purge_days=max(0.0, float(purge_days or 0.0)),
+            embargo_days=max(0.0, float(embargo_days or 0.0)),
+        )
+        required = policy.minimum_bars()
+        row = {
+            "train_years": train_years,
+            "required_bars": required,
+            "available_bars": total,
+            "enabled": total <= 0 or required <= total,
+        }
+        checks.append(row)
+        if bool(row["enabled"]):
+            enabled.append(train_years)
+        else:
+            disabled.append(row)
+    return {
+        "available_bars": total,
+        "enabled_train_years": enabled,
+        "disabled_train_years": disabled,
+        "checks": checks,
+    }
 
 
 def resolve_walkforward_policy(args: Any) -> WalkForwardPolicy:

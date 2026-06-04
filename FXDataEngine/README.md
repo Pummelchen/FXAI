@@ -44,3 +44,8 @@ is launched, and the manifest records the resolved bars, minimum required bars,
 and generated window plan. Fold-level Swift evidence is emitted beside the TSV
 as `*.walkforward.json`; `walkforward-analyze` automatically loads that sidecar
 when present and falls back to the aggregate TSV row when it is absent.
+
+Optimization campaigns default to `1,2,3,5,10,15,20,25` training-year presets.
+Campaign generation filters those per security or exact-window dataset: a year
+window is scheduled only when the available bars can cover the full WFO policy,
+and insufficient years are recorded as disabled.
