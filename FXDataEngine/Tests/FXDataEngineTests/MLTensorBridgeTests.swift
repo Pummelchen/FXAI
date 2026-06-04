@@ -114,7 +114,7 @@ else:
 
         let bridge = PythonMLBackendBridge(
             framework: .pyTorch,
-            executable: "python3",
+            executable: "python3.12",
             module: backendURL.path,
             modelIdentifier: "bridge_test"
         )
@@ -178,7 +178,7 @@ else:
         )
         let unsupportedFrameworkBridge = PythonMLBackendBridge(
             framework: .metal,
-            executable: "python3",
+            executable: "python3.12",
             module: "/tmp/fxai-backend-that-must-not-run.py",
             modelIdentifier: "bad_bridge"
         )
@@ -213,7 +213,7 @@ else:
 
         let emptyModuleBridge = PythonMLBackendBridge(
             framework: .pyTorch,
-            executable: "python3",
+            executable: "python3.12",
             module: "\n\t",
             modelIdentifier: "bad_bridge"
         )
@@ -227,7 +227,7 @@ else:
 
         let badEnvironmentBridge = PythonMLBackendBridge(
             framework: .pyTorch,
-            executable: "python3",
+            executable: "python3.12",
             module: "json",
             modelIdentifier: "bad_bridge",
             environment: ["BAD=KEY": "value"]
@@ -282,7 +282,7 @@ print(json.dumps({
 
         let bridge = PythonMLBackendBridge(
             framework: .onnxRuntime,
-            executable: "python3",
+            executable: "python3.12",
             module: backendURL.path,
             modelIdentifier: "onnx_bridge",
             environment: ["FXAI_ONNX_MODEL_PATH": temporaryDirectory.appendingPathComponent("model.onnx").path]
@@ -404,7 +404,7 @@ time.sleep(5)
         )
         let bridge = PythonMLBackendBridge(
             framework: .pyTorch,
-            executable: "python3",
+            executable: "python3.12",
             module: backendURL.path,
             modelIdentifier: "timeout_bridge",
             timeoutSeconds: 0.20

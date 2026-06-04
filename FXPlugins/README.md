@@ -21,6 +21,28 @@ The shared FXDataEngine/FXPlugins runtime API latest version is `4`, and the tok
 - `<plugin_id>/`: every plugin lives directly under `FXPlugins` in its own folder named after its manifest `aiName`, for example `lin_sgd/`, `ai_lstm/`, `tree_xgb_fast/`, `rule_m1sync/`, `fxbacktest_moving_average_cross/`, and `fx7/`. All plugin-specific Swift, Metal, Python, model assets, and state adapters belong inside that plugin folder.
 - `Package.swift`: SwiftPM boundary for the zoo. It uses static excludes plus SwiftPM's normal source discovery, not manifest-time filesystem scanning. There is no longer a root `Sources/`, `Tests/`, or `Python/` staging layout.
 
+## Plugin Template
+
+Use `demo_plugin_template/` as the top-level starting point for new plugins.
+The template is compile-checked, intentionally excluded from
+`FXAIPluginRegistry.availablePlugins()`, and covers the full current runtime
+surface: Swift CPU/reference, Metal, PyTorch MPS, TensorFlow Metal, Foundation
+NLP, ONNX Runtime, and Remote RPC.
+
+The template README documents the copy/rename workflow, required
+`PluginManifestV4` fields, CPU fallback expectations, plugin-local Python file
+names, ONNX manifest layout, Remote RPC response contract, Python 3.12 runtime
+baseline, and verification commands. New production plugins should copy that
+folder, keep only the runtimes they actually implement, and add a backend to
+`accelerationPlan` only after the implementation and certification evidence
+exist.
+
+Runtime entry points are pinned by `PluginBoundaryTests`: PyTorch and
+TensorFlow templates expose `predict_batch` and `train_step`; the Foundation NLP
+template exposes `merge_into_numeric_features` plus bridge-compatible helper
+entry points; ONNX and Remote RPC templates carry schema examples instead of
+live model/server code.
+
 ## Current Swift Coverage
 
 Root `FXPlugins` now exposes all 66 FXAI model IDs through Swift `FXAIPluginV4`

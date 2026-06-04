@@ -90,10 +90,14 @@ public struct FXPluginRuntimeEnvironment: Codable, Hashable, Sendable {
 
     public static var local: FXPluginRuntimeEnvironment {
         let environment = ProcessInfo.processInfo.environment
+        return local(environment: environment)
+    }
+
+    public static func local(environment: [String: String]) -> FXPluginRuntimeEnvironment {
         let remoteTimeout = environment["FXAI_REMOTE_INFERENCE_TIMEOUT_SECONDS"].flatMap(Double.init)
         return FXPluginRuntimeEnvironment(
             metalDevice: .probe(),
-            pythonExecutable: environment["FXAI_PYTHON"] ?? "python3",
+            pythonExecutable: defaultPythonExecutable(environment: environment),
             pyTorchMPSAvailable: environment["FXAI_ENABLE_PYTORCH_MPS"] == "1",
             tensorFlowMetalAvailable: environment["FXAI_ENABLE_TENSORFLOW_METAL"] == "1",
             foundationNLPAvailable: environment["FXAI_ENABLE_FOUNDATION_NLP"] == "1",
@@ -104,6 +108,14 @@ public struct FXPluginRuntimeEnvironment: Codable, Hashable, Sendable {
             remoteInferenceAuthToken: environment["FXAI_REMOTE_INFERENCE_AUTH_TOKEN"],
             remoteInferenceTimeoutSeconds: remoteTimeout ?? 10.0
         )
+    }
+
+    public static func defaultPythonExecutable(environment: [String: String]) -> String {
+        if let configured = environment["FXAI_PYTHON"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !configured.isEmpty {
+            return configured
+        }
+        return "python3.12"
     }
 
     public var isFXAIAppleSiliconTarget: Bool {

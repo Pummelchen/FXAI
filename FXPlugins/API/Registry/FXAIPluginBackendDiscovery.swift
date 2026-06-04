@@ -45,7 +45,7 @@ public enum FXAIPluginBackendDiscovery {
     public static func externalPythonDescriptor(
         pluginName: String,
         backend: FXPluginAccelerationBackend,
-        executable: String = ProcessInfo.processInfo.environment["FXAI_PYTHON"] ?? "python3"
+        executable: String = FXAIPluginPythonRuntime.defaultExecutable()
     ) -> MLBackendDescriptor? {
         let framework: MLFramework
         let supportsTraining: Bool

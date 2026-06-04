@@ -4,6 +4,18 @@ import XCTest
 final class PluginRuntimeBackendPolicyTests: XCTestCase {
     private let appleM2 = AppleSiliconHardware(architecture: "arm64", cpuBrand: "Apple M2 Pro")
 
+    func testLocalRuntimeEnvironmentDefaultsToPython312() {
+        XCTAssertEqual(FXPluginRuntimeEnvironment.defaultPythonExecutable(environment: [:]), "python3.12")
+        XCTAssertEqual(
+            FXPluginRuntimeEnvironment.defaultPythonExecutable(environment: ["FXAI_PYTHON": " /opt/homebrew/bin/python3.12 "]),
+            "/opt/homebrew/bin/python3.12"
+        )
+        XCTAssertEqual(
+            FXPluginRuntimeEnvironment.local(environment: ["FXAI_ENABLE_ONNX_RUNTIME": "1"]).pythonExecutable,
+            "python3.12"
+        )
+    }
+
     func testAutomaticResolutionPrefersAvailableNonCPUBackend() throws {
         let plan = FXPluginAccelerationPlan(
             pluginName: "test_metal",
@@ -43,7 +55,7 @@ final class PluginRuntimeBackendPolicyTests: XCTestCase {
                 supportsUnifiedMemory: true,
                 hardware: appleM2
             ),
-            pythonExecutable: "python3",
+            pythonExecutable: "python3.12",
             pyTorchMPSAvailable: true
         )
 
@@ -69,7 +81,7 @@ final class PluginRuntimeBackendPolicyTests: XCTestCase {
                 supportsUnifiedMemory: true,
                 hardware: appleM2
             ),
-            pythonExecutable: "python3",
+            pythonExecutable: "python3.12",
             pyTorchMPSAvailable: true,
             onnxRuntimeAvailable: true,
             remoteInferenceAvailable: true,
@@ -98,7 +110,7 @@ final class PluginRuntimeBackendPolicyTests: XCTestCase {
             notes: "test"
         )
         let enabledEnvironment = FXPluginRuntimeEnvironment(
-            pythonExecutable: "python3",
+            pythonExecutable: "python3.12",
             onnxRuntimeAvailable: true
         )
         let missingPythonEnvironment = FXPluginRuntimeEnvironment(
@@ -106,7 +118,7 @@ final class PluginRuntimeBackendPolicyTests: XCTestCase {
             onnxRuntimeAvailable: true
         )
         let disabledEnvironment = FXPluginRuntimeEnvironment(
-            pythonExecutable: "python3",
+            pythonExecutable: "python3.12",
             onnxRuntimeAvailable: false
         )
         let onnxEnablementKey = "FXAI_ENABLE_ONNX_RUNTIME"
@@ -165,7 +177,7 @@ final class PluginRuntimeBackendPolicyTests: XCTestCase {
                     supportsUnifiedMemory: true,
                     hardware: host
                 ),
-                pythonExecutable: "python3",
+                pythonExecutable: "python3.12",
                 pyTorchMPSAvailable: true,
                 tensorFlowMetalAvailable: true
             )
@@ -220,7 +232,7 @@ final class PluginRuntimeBackendPolicyTests: XCTestCase {
                         supportsUnifiedMemory: true,
                         hardware: appleM2
                     ),
-                    pythonExecutable: "python3",
+                    pythonExecutable: "python3.12",
                     pyTorchMPSAvailable: true
                 )
             )

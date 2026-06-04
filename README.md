@@ -135,7 +135,11 @@ Only shared API and registry code belongs under `FXPlugins/API/`. Plugin-specifi
 
 FXBacktest is the only project that adapts the root plugin zoo into backtest workloads. It pulls market history through FXDatabase APIs, asks FXDataEngine to build plugin-ready requests, converts ClickHouse-stored type 1 and type 2 configuration into plugin hyperparameters, then calls the plugin runtime. Plugins stay unaware of ClickHouse storage and backtest result persistence.
 
-`FXPlugins/demo_plugin_template/` is a compile-checked template for future plugins. It contains no trading strategy and is intentionally not in the runtime plugin registry.
+`FXPlugins/demo_plugin_template/` is the compile-checked top-level template for
+future plugins. It contains no trading strategy, is intentionally not in the
+runtime plugin registry, and includes authoring surfaces for Swift CPU/reference,
+Metal, PyTorch MPS, TensorFlow Metal, Foundation NLP, ONNX Runtime, and Remote
+RPC.
 
 ## Current Runtime Standard
 

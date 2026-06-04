@@ -622,7 +622,7 @@ public struct PythonMLBackendBridge: ExternalMLBackend {
 
     public init(
         framework: MLFramework,
-        executable: String = "python3",
+        executable: String = "python3.12",
         module: String,
         modelIdentifier: String,
         environment: [String: String] = [:],

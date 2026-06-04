@@ -1,0 +1,25 @@
+{
+  "apiVersion": 4,
+  "ok": true,
+  "prediction": {
+    "apiVersion": 4,
+    "classProbabilities": [0.0, 0.0, 1.0],
+    "moveMeanPoints": 0.0,
+    "moveQ25Points": 0.0,
+    "moveQ50Points": 0.0,
+    "moveQ75Points": 0.0,
+    "mfeMeanPoints": 0.0,
+    "maeMeanPoints": 0.0,
+    "hitTimeFraction": 0.0,
+    "pathRisk": 0.0,
+    "fillRisk": 0.0,
+    "confidence": 1.0,
+    "reliability": 1.0
+  },
+  "error": null,
+  "modelIdentifier": "demo_plugin_template",
+  "modelVersion": "replace_with_model_version",
+  "modelSha256": "replace_with_model_sha256",
+  "latencyMilliseconds": 0.0,
+  "serverTimestampUTC": 0
+}

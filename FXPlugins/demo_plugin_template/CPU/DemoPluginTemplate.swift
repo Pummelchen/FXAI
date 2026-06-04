@@ -119,9 +119,9 @@ public struct DemoPluginTemplate: FXAIPlannedPlugin {
         FXPluginAccelerationPlan(
             pluginName: aiName,
             primaryBackends: [.swiftScalar],
-            candidateBackends: [.metal, .pyTorchMPS, .tensorFlowMetal, .foundationNLP],
+            candidateBackends: [.metal, .pyTorchMPS, .tensorFlowMetal, .foundationNLP, .onnxRuntime, .remoteRPC],
             usesVolumeWhenAvailable: true,
-            notes: "Template only. Replace the no-trade CPU shell with real strategy logic before adding the plugin to FXAIPluginRegistry."
+            notes: "Template only. Replace the no-trade CPU shell and any selected runtime surfaces before adding the plugin to FXAIPluginRegistry."
         )
     }
 
