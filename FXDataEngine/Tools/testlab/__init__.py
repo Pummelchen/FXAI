@@ -3,6 +3,7 @@ from .benchmarks import *
 from .strategy_profiles import *
 from .compile import *
 from .reporting import *
+from .walkforward import *
 from .optimize import *
 from .baseline import *
 from .audit_run import *

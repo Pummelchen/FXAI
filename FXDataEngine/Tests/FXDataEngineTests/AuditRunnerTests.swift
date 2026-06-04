@@ -68,6 +68,37 @@ final class AuditRunnerTests: XCTestCase {
         XCTAssertTrue(metrics.issueFlags.contains(.invalidPrediction))
     }
 
+    func testAuditRunnerRunsWalkForwardFoldsWithOOSAggregateMetrics() throws {
+        var spec = AuditScenarioTools.scenarioSpec(scenarioID: 5)
+        spec.name = "market_walkforward"
+        let generated = try makeGeneratedSeries(spec: spec)
+        var plugin = AlwaysBuyAuditPlugin()
+
+        let metrics = try AuditRunnerTools.runScenario(
+            plugin: &plugin,
+            generated: generated,
+            spec: spec,
+            configuration: AuditRunnerConfiguration(
+                horizonMinutes: 8,
+                pointValue: 0.0001,
+                maxSamples: 1_000,
+                walkForwardTrainBars: 40,
+                walkForwardTestBars: 20,
+                walkForwardPurgeBars: 4,
+                walkForwardEmbargoBars: 2,
+                walkForwardFolds: 3
+            )
+        )
+
+        let evidence = try XCTUnwrap(metrics.walkForwardFoldEvidence)
+        XCTAssertEqual(metrics.walkForwardFolds, 3)
+        XCTAssertEqual(evidence.count, 3)
+        XCTAssertEqual(metrics.samplesTotal, metrics.walkForwardTestSamples)
+        XCTAssertGreaterThan(metrics.walkForwardTrainSamples, metrics.walkForwardTestSamples)
+        XCTAssertEqual(plugin.trainCount, evidence.reduce(0) { $0 + $1.trainSamples })
+        XCTAssertTrue(evidence.allSatisfy { $0.testSamples >= 12 })
+    }
+
     private func makeGeneratedSeries(spec: AuditScenarioSpec) throws -> AuditGeneratedScenarioSeries {
         try XCTUnwrap(AuditScenarioTools.generateSyntheticScenarioSeries(
             spec: spec,

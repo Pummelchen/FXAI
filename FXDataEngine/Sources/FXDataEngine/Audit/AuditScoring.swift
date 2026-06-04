@@ -99,6 +99,37 @@ public struct AuditFoldMetrics: Codable, Hashable, Sendable {
     }
 }
 
+public struct AuditWalkForwardFoldEvidence: Codable, Hashable, Sendable {
+    public var fold: Int
+    public var trainSamples: Int
+    public var testSamples: Int
+    public var trainScore: Double
+    public var testScore: Double
+    public var gap: Double
+    public var passed: Bool
+    public var overfit: Bool
+
+    public init(
+        fold: Int,
+        trainSamples: Int,
+        testSamples: Int,
+        trainScore: Double,
+        testScore: Double,
+        gap: Double,
+        passed: Bool,
+        overfit: Bool
+    ) {
+        self.fold = max(1, fold)
+        self.trainSamples = max(0, trainSamples)
+        self.testSamples = max(0, testSamples)
+        self.trainScore = fxClamp(trainScore, 0.0, 100.0)
+        self.testScore = fxClamp(testScore, 0.0, 100.0)
+        self.gap = fxSafeFinite(gap)
+        self.passed = passed
+        self.overfit = overfit
+    }
+}
+
 public struct AuditIssueFlags: OptionSet, Codable, Hashable, Sendable {
     public let rawValue: Int
 
@@ -186,6 +217,7 @@ public struct AuditScenarioMetrics: Codable, Hashable, Sendable {
     public var walkForwardPBO: Double
     public var walkForwardDSR: Double
     public var walkForwardPassRate: Double
+    public var walkForwardFoldEvidence: [AuditWalkForwardFoldEvidence]?
     public var score: Double
     public var issueFlags: AuditIssueFlags
 
@@ -252,6 +284,7 @@ public struct AuditScenarioMetrics: Codable, Hashable, Sendable {
         walkForwardPBO: Double = 0.0,
         walkForwardDSR: Double = 0.0,
         walkForwardPassRate: Double = 0.0,
+        walkForwardFoldEvidence: [AuditWalkForwardFoldEvidence]? = nil,
         score: Double = 0.0,
         issueFlags: AuditIssueFlags = []
     ) {
@@ -317,6 +350,7 @@ public struct AuditScenarioMetrics: Codable, Hashable, Sendable {
         self.walkForwardPBO = fxClamp(walkForwardPBO, 0.0, 1.0)
         self.walkForwardDSR = fxClamp(walkForwardDSR, 0.0, 1.0)
         self.walkForwardPassRate = fxClamp(walkForwardPassRate, 0.0, 1.0)
+        self.walkForwardFoldEvidence = walkForwardFoldEvidence
         self.score = fxClamp(score, 0.0, 100.0)
         self.issueFlags = issueFlags
     }
@@ -523,6 +557,7 @@ public enum AuditScoringTools {
         var output = scenario
         var trainScores: [Double] = []
         var testScores: [Double] = []
+        var foldEvidence: [AuditWalkForwardFoldEvidence] = []
         var passCount = 0
         var overfitCount = 0
 
@@ -541,12 +576,26 @@ public enum AuditScoringTools {
             trainScores.append(trainScore)
             testScores.append(testScore)
 
-            if testScore + 6.0 < trainScore {
+            let overfit = testScore + 6.0 < trainScore
+            let passed = testScore >= 68.0 && testScore + 8.0 >= trainScore
+            if overfit {
                 overfitCount += 1
             }
-            if testScore >= 68.0 && testScore + 8.0 >= trainScore {
+            if passed {
                 passCount += 1
             }
+            foldEvidence.append(
+                AuditWalkForwardFoldEvidence(
+                    fold: index + 1,
+                    trainSamples: train.samplesTotal,
+                    testSamples: test.samplesTotal,
+                    trainScore: trainScore,
+                    testScore: testScore,
+                    gap: trainScore - testScore,
+                    passed: passed,
+                    overfit: overfit
+                )
+            )
         }
 
         output.walkForwardFolds = testScores.count
@@ -559,6 +608,7 @@ public enum AuditScoringTools {
         output.walkForwardPBO = Double(overfitCount) / Double(output.walkForwardFolds)
         output.walkForwardPassRate = Double(passCount) / Double(output.walkForwardFolds)
         output.walkForwardDSR = deflatedSharpeProxy(scores: testScores, pbo: output.walkForwardPBO)
+        output.walkForwardFoldEvidence = foldEvidence
         return output
     }
 

@@ -175,6 +175,11 @@ final class AuditScoringTests: XCTestCase {
         XCTAssertEqual(metrics.walkForwardPBO, 0.0, accuracy: 0.0)
         XCTAssertEqual(metrics.walkForwardPassRate, 1.0, accuracy: 0.0)
         XCTAssertEqual(metrics.walkForwardDSR, 0.9154201124367981, accuracy: 1e-12)
+        XCTAssertEqual(metrics.walkForwardFoldEvidence?.count, 3)
+        XCTAssertEqual(metrics.walkForwardFoldEvidence?.first?.fold, 1)
+        XCTAssertEqual(metrics.walkForwardFoldEvidence?.first?.testSamples, 20)
+        XCTAssertEqual(metrics.walkForwardFoldEvidence?.first?.passed, true)
+        XCTAssertEqual(metrics.walkForwardFoldEvidence?.first?.overfit, false)
     }
 
     func testAuditScenarioFinalizationAppliesLegacyScoresAndIssueFlags() {

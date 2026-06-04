@@ -24,3 +24,23 @@ swift build -c release
 ```
 
 Learned model execution belongs in FXPlugins through PyTorch or TensorFlow backends; FXDataEngine owns deterministic data preparation and runtime contracts.
+
+## Walk-Forward Audit Controls
+
+TestLab exposes time-series cross-validation controls for `market_walkforward`
+audits:
+
+```bash
+python3.12 FXDataEngine/Tools/fxai_testlab.py run-audit \
+  --wf-train-years 1 --wf-test-years 0.25 --wf-window-mode rolling
+
+python3.12 FXDataEngine/Tools/fxai_testlab.py walkforward-analyze
+```
+
+`--wf-window-mode rolling` advances fixed-size training windows. `anchored`
+keeps the first training bar fixed and expands the training span each fold. The
+year/day options resolve to deterministic M1 bar counts before the Swift audit
+is launched, and the manifest records the resolved bars, minimum required bars,
+and generated window plan. Fold-level Swift evidence is emitted beside the TSV
+as `*.walkforward.json`; `walkforward-analyze` automatically loads that sidecar
+when present and falls back to the aggregate TSV row when it is absent.

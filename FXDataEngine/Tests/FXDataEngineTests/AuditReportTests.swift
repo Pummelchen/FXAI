@@ -104,4 +104,46 @@ final class AuditReportTests: XCTestCase {
         XCTAssertTrue(document.hasSuffix("\r\n"))
         XCTAssertTrue(document.contains("1\tai name\t2\tscenario name\t10\t1"))
     }
+
+    func testWalkForwardDiagnosticsJSONContainsPerFoldEvidence() throws {
+        let metrics = AuditScenarioMetrics(
+            aiID: 4,
+            aiName: "ai_mlp",
+            family: 2,
+            scenario: "market_walkforward",
+            walkForwardFolds: 2,
+            walkForwardFoldEvidence: [
+                AuditWalkForwardFoldEvidence(
+                    fold: 1,
+                    trainSamples: 128,
+                    testSamples: 64,
+                    trainScore: 82.5,
+                    testScore: 78.0,
+                    gap: 4.5,
+                    passed: true,
+                    overfit: false
+                ),
+                AuditWalkForwardFoldEvidence(
+                    fold: 2,
+                    trainSamples: 128,
+                    testSamples: 64,
+                    trainScore: 84.0,
+                    testScore: 66.0,
+                    gap: 18.0,
+                    passed: false,
+                    overfit: true
+                )
+            ]
+        )
+
+        let diagnostics = AuditReportTools.walkForwardDiagnostics([metrics])
+        XCTAssertEqual(diagnostics.schemaVersion, 1)
+        XCTAssertEqual(diagnostics.plugins.count, 1)
+        XCTAssertEqual(diagnostics.plugins[0].windows.count, 2)
+
+        let json = try AuditReportTools.walkForwardDiagnosticsJSON([metrics])
+        XCTAssertTrue(json.contains(#""aiName" : "ai_mlp""#))
+        XCTAssertTrue(json.contains(#""testScore" : 66"#))
+        XCTAssertTrue(json.contains(#""overfit" : true"#))
+    }
 }

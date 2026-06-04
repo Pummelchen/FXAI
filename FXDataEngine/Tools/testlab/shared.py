@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .toolchain import FXAIToolchainConfig, SUPPORTED_TOOLCHAIN_PROFILES, load_toolchain_config
 from .strategy_profiles import compile_strategy_profile
+from .walkforward import apply_walkforward_policy
 
 
 ACTIVE_TOOLCHAIN: FXAIToolchainConfig = load_toolchain_config()
@@ -260,6 +261,7 @@ def build_effective_audit_args(args):
         out.fill_penalty_points = float(profile["fill_penalty_points"])
     if not getattr(args, "symbol_list", None):
         out.symbol_list = "{" + str(getattr(args, "symbol", "EURUSD")) + "}"
+    out = apply_walkforward_policy(out)
     out.strategy_profile_compiled = compile_strategy_profile(
         strategy_profile=out.strategy_profile,
         symbol=str(getattr(out, "symbol", "EURUSD") or "EURUSD"),
@@ -283,6 +285,12 @@ def build_effective_audit_args(args):
             "wf_purge_bars": getattr(out, "wf_purge_bars", None),
             "wf_embargo_bars": getattr(out, "wf_embargo_bars", None),
             "wf_folds": getattr(out, "wf_folds", None),
+            "wf_train_years": getattr(out, "wf_train_years", None),
+            "wf_test_years": getattr(out, "wf_test_years", None),
+            "wf_purge_days": getattr(out, "wf_purge_days", None),
+            "wf_embargo_days": getattr(out, "wf_embargo_days", None),
+            "wf_window_mode": getattr(out, "wf_window_mode", None),
+            "wf_bars_per_year": getattr(out, "wf_bars_per_year", None),
             "seed": getattr(out, "seed", None),
             "window_start_unix": getattr(out, "window_start_unix", None),
             "window_end_unix": getattr(out, "window_end_unix", None),

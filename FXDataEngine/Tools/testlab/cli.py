@@ -22,7 +22,12 @@ from .benchmarks import (
     cmd_publish_benchmarks,
 )
 from .compile import compile_swift_package
-from .optimize import build_optimization_campaign, execute_optimization_campaign, render_optimization_campaign
+from .optimize import (
+    build_optimization_campaign,
+    execute_optimization_campaign,
+    parse_walkforward_year_presets,
+    render_optimization_campaign,
+)
 from .release_gate import cmd_release_gate, DEFAULT_RELEASE_GATE_MIN_SCORE, DEFAULT_RELEASE_GATE_MIN_STABILITY
 from .release_artifacts import cmd_package_swift_release
 from .reporting import build_multisymbol_summary, load_current_summary, load_rows, render_multisymbol_report, render_report, render_summary_report
@@ -52,6 +57,12 @@ from .shared import (
 )
 from .strategy_profiles import build_strategy_profile_manifest, compile_strategy_profile
 from .verify import run_verify_all
+from .walkforward import (
+    FX_M1_BARS_PER_TRADING_YEAR,
+    WalkForwardPolicyError,
+    analyze_walkforward_report,
+    render_walkforward_analysis,
+)
 
 def cmd_compile(_args):
     return compile_swift_package("data_engine")
@@ -80,7 +91,11 @@ def cmd_doctor(_args):
 
 
 def cmd_run_audit(args):
-    args = build_effective_audit_args(args)
+    try:
+        args = build_effective_audit_args(args)
+    except WalkForwardPolicyError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     if not getattr(args, "skip_compile", False) and cmd_compile(args) != 0:
         return 1
 
@@ -147,6 +162,7 @@ def cmd_run_audit(args):
             "purge_bars": args.wf_purge_bars,
             "embargo_bars": args.wf_embargo_bars,
             "folds": args.wf_folds,
+            **getattr(args, "walkforward_policy").as_manifest(int(getattr(args, "bars", 0) or 0)),
         },
         "window": {
             "start_unix": int(getattr(args, "window_start_unix", 0) or 0),
@@ -196,6 +212,12 @@ def cmd_run_audit(args):
                             "wf_purge_bars": getattr(args, "wf_purge_bars", None),
                             "wf_embargo_bars": getattr(args, "wf_embargo_bars", None),
                             "wf_folds": getattr(args, "wf_folds", None),
+                            "wf_train_years": getattr(args, "wf_train_years", None),
+                            "wf_test_years": getattr(args, "wf_test_years", None),
+                            "wf_purge_days": getattr(args, "wf_purge_days", None),
+                            "wf_embargo_days": getattr(args, "wf_embargo_days", None),
+                            "wf_window_mode": getattr(args, "wf_window_mode", None),
+                            "wf_bars_per_year": getattr(args, "wf_bars_per_year", None),
                             "seed": getattr(args, "seed", None),
                             "window_start_unix": getattr(args, "window_start_unix", None),
                             "window_end_unix": getattr(args, "window_end_unix", None),
@@ -249,6 +271,23 @@ def cmd_analyze(args):
     return 0
 
 
+def cmd_walkforward_analyze(args):
+    report = Path(args.report) if args.report else DEFAULT_REPORT
+    if not report.exists():
+        print(f"report not found: {report}", file=sys.stderr)
+        return 1
+    manifest = Path(args.manifest) if args.manifest else report.with_suffix(".manifest.json")
+    diagnostics = Path(args.diagnostics) if getattr(args, "diagnostics", "") else None
+    payload = analyze_walkforward_report(report, manifest if manifest.exists() else None, diagnostics)
+    text = render_walkforward_analysis(payload)
+    print(text)
+    if args.output:
+        Path(args.output).write_text(text, encoding="utf-8")
+    if args.json_output:
+        Path(args.json_output).write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    return 0
+
+
 def cmd_baseline_save(args):
     report = Path(args.report) if args.report else DEFAULT_REPORT
     if not report.exists():
@@ -295,7 +334,11 @@ def cmd_optimize_audit(args):
         return 1
     oracles = load_oracles()
     summary = load_current_summary(report, oracles)
-    campaign = build_optimization_campaign(summary, oracles)
+    campaign = build_optimization_campaign(
+        summary,
+        oracles,
+        walkforward_years=parse_walkforward_year_presets(getattr(args, "wf_year_presets", "")),
+    )
     text = render_optimization_campaign(campaign)
     print(text)
     if args.output:
@@ -372,6 +415,12 @@ def main():
     ra.add_argument("--wf-purge-bars", type=int, default=32)
     ra.add_argument("--wf-embargo-bars", type=int, default=24)
     ra.add_argument("--wf-folds", type=int, default=6)
+    ra.add_argument("--wf-train-years", type=float, default=0.0)
+    ra.add_argument("--wf-test-years", type=float, default=0.0)
+    ra.add_argument("--wf-purge-days", type=float, default=0.0)
+    ra.add_argument("--wf-embargo-days", type=float, default=0.0)
+    ra.add_argument("--wf-window-mode", choices=["rolling", "anchored"], default="rolling")
+    ra.add_argument("--wf-bars-per-year", type=int, default=FX_M1_BARS_PER_TRADING_YEAR)
     ra.add_argument("--window-start-unix", type=int, default=0)
     ra.add_argument("--window-end-unix", type=int, default=0)
     ra.add_argument("--seed", type=int, default=42)
@@ -396,6 +445,14 @@ def main():
     a.add_argument("--report", default=str(DEFAULT_REPORT))
     a.add_argument("--output")
     a.set_defaults(func=cmd_analyze)
+
+    wfa = sub.add_parser("walkforward-analyze", help="Analyze walk-forward OOS stability and edge degradation from an audit report")
+    wfa.add_argument("--report", default=str(DEFAULT_REPORT))
+    wfa.add_argument("--manifest", default="")
+    wfa.add_argument("--diagnostics", default="")
+    wfa.add_argument("--output")
+    wfa.add_argument("--json-output")
+    wfa.set_defaults(func=cmd_walkforward_analyze)
 
     bs = sub.add_parser("baseline-save", help="Save a report as a named regression baseline")
     bs.add_argument("--report", default=str(DEFAULT_REPORT))
@@ -442,6 +499,13 @@ def main():
     oa.add_argument("--wf-purge-bars", type=int, default=32)
     oa.add_argument("--wf-embargo-bars", type=int, default=24)
     oa.add_argument("--wf-folds", type=int, default=6)
+    oa.add_argument("--wf-train-years", type=float, default=0.0)
+    oa.add_argument("--wf-test-years", type=float, default=0.0)
+    oa.add_argument("--wf-purge-days", type=float, default=0.0)
+    oa.add_argument("--wf-embargo-days", type=float, default=0.0)
+    oa.add_argument("--wf-window-mode", choices=["rolling", "anchored"], default="rolling")
+    oa.add_argument("--wf-bars-per-year", type=int, default=FX_M1_BARS_PER_TRADING_YEAR)
+    oa.add_argument("--wf-year-presets", default="1,2,3")
     oa.add_argument("--window-start-unix", type=int, default=0)
     oa.add_argument("--window-end-unix", type=int, default=0)
     oa.add_argument("--seed", type=int, default=42)

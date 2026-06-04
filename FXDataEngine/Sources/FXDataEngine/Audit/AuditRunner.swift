@@ -7,6 +7,12 @@ public struct AuditRunnerConfiguration: Codable, Hashable, Sendable {
     public var evThresholdPoints: Double
     public var normalizationMethod: FeatureNormalizationMethod
     public var maxSamples: Int
+    public var walkForwardTrainBars: Int
+    public var walkForwardTestBars: Int
+    public var walkForwardPurgeBars: Int
+    public var walkForwardEmbargoBars: Int
+    public var walkForwardFolds: Int
+    public var walkForwardAnchored: Bool
 
     public init(
         horizonMinutes: Int,
@@ -14,7 +20,13 @@ public struct AuditRunnerConfiguration: Codable, Hashable, Sendable {
         priceCostPoints: Double = 0.0,
         evThresholdPoints: Double = 0.25,
         normalizationMethod: FeatureNormalizationMethod = .existing,
-        maxSamples: Int = Int.max
+        maxSamples: Int = Int.max,
+        walkForwardTrainBars: Int = 256,
+        walkForwardTestBars: Int = 64,
+        walkForwardPurgeBars: Int = 32,
+        walkForwardEmbargoBars: Int = 24,
+        walkForwardFolds: Int = 6,
+        walkForwardAnchored: Bool = false
     ) {
         self.horizonMinutes = TrainingSampleTools.clampHorizon(horizonMinutes)
         let sanitizedPointValue = fxSafeFinite(pointValue)
@@ -23,6 +35,12 @@ public struct AuditRunnerConfiguration: Codable, Hashable, Sendable {
         self.evThresholdPoints = max(0.0, fxSafeFinite(evThresholdPoints))
         self.normalizationMethod = normalizationMethod
         self.maxSamples = max(0, maxSamples)
+        self.walkForwardTrainBars = max(12, walkForwardTrainBars)
+        self.walkForwardTestBars = max(12, walkForwardTestBars)
+        self.walkForwardPurgeBars = max(0, walkForwardPurgeBars)
+        self.walkForwardEmbargoBars = max(0, walkForwardEmbargoBars)
+        self.walkForwardFolds = min(max(1, walkForwardFolds), 64)
+        self.walkForwardAnchored = walkForwardAnchored
     }
 }
 
@@ -61,6 +79,20 @@ public enum AuditRunnerTools {
         if endIndex <= startIndex { endIndex = generated.primary.count - 2 }
         guard endIndex > startIndex else {
             return AuditScoringTools.finalizeScenarioMetrics(metrics)
+        }
+
+        if spec.name == "market_walkforward" {
+            return try runWalkForwardScenario(
+                plugin: &plugin,
+                generated: generated,
+                spec: spec,
+                configuration: configuration,
+                manifest: manifest,
+                startIndex: startIndex,
+                endIndex: endIndex,
+                hyperParameters: hyperParameters,
+                baseMetrics: metrics
+            )
         }
 
         var heldRequest: PredictRequestV4?
@@ -118,6 +150,242 @@ public enum AuditRunnerTools {
         }
 
         return AuditScoringTools.finalizeScenarioMetrics(metrics)
+    }
+
+    private static func runWalkForwardScenario<Plugin: FXAIPluginV4>(
+        plugin: inout Plugin,
+        generated: AuditGeneratedScenarioSeries,
+        spec: AuditScenarioSpec,
+        configuration: AuditRunnerConfiguration,
+        manifest: PluginManifestV4,
+        startIndex: Int,
+        endIndex: Int,
+        hyperParameters: HyperParameters,
+        baseMetrics: AuditScenarioMetrics
+    ) throws -> AuditScenarioMetrics {
+        let trainBars = max(12, configuration.walkForwardTrainBars)
+        let testBars = max(12, configuration.walkForwardTestBars)
+        let purgeBars = max(0, configuration.walkForwardPurgeBars)
+        let embargoBars = max(0, configuration.walkForwardEmbargoBars)
+        let step = max(1, testBars + embargoBars)
+        var combinedTestMetrics = baseMetrics
+        var trainFolds: [AuditFoldMetrics] = []
+        var testFolds: [AuditFoldMetrics] = []
+        var heldRequest: PredictRequestV4?
+        var processed = 0
+
+        for fold in 0..<configuration.walkForwardFolds {
+            if processed >= configuration.maxSamples { break }
+            plugin.reset()
+
+            let trainStart = configuration.walkForwardAnchored ? startIndex : startIndex + fold * step
+            let trainEnd = (configuration.walkForwardAnchored ? startIndex + trainBars + fold * step : trainStart + trainBars)
+            let testStart = trainEnd + purgeBars
+            let testEnd = testStart + testBars
+            if trainStart < startIndex || trainEnd <= trainStart || testStart < trainEnd || testEnd > endIndex {
+                break
+            }
+
+            var trainMetrics = baseMetrics
+            var testMetrics = baseMetrics
+
+            for index in trainStart..<trainEnd {
+                if processed >= configuration.maxSamples { break }
+                if try processAuditSample(
+                    plugin: &plugin,
+                    generated: generated,
+                    spec: spec,
+                    configuration: configuration,
+                    manifest: manifest,
+                    sampleIndex: index,
+                    hyperParameters: hyperParameters,
+                    metrics: &trainMetrics,
+                    heldRequest: nil,
+                    trainAfterPrediction: true
+                ) {
+                    processed += 1
+                }
+            }
+
+            for index in testStart..<testEnd {
+                if processed >= configuration.maxSamples { break }
+                if try processAuditSample(
+                    plugin: &plugin,
+                    generated: generated,
+                    spec: spec,
+                    configuration: configuration,
+                    manifest: manifest,
+                    sampleIndex: index,
+                    hyperParameters: hyperParameters,
+                    metrics: &testMetrics,
+                    heldRequest: &heldRequest,
+                    trainAfterPrediction: false
+                ) {
+                    processed += 1
+                }
+            }
+
+            mergeScenarioMetrics(testMetrics, into: &combinedTestMetrics)
+            trainFolds.append(foldMetrics(from: trainMetrics))
+            testFolds.append(foldMetrics(from: testMetrics))
+        }
+
+        var output = AuditScoringTools.finalizeWalkForward(
+            scenario: combinedTestMetrics,
+            trainFolds: trainFolds,
+            testFolds: testFolds
+        )
+        if let heldRequest {
+            applyResetAndSequenceChecks(
+                plugin: &plugin,
+                heldRequest: heldRequest,
+                hyperParameters: hyperParameters,
+                metrics: &output
+            )
+        }
+        return AuditScoringTools.finalizeScenarioMetrics(output)
+    }
+
+    private static func processAuditSample<Plugin: FXAIPluginV4>(
+        plugin: inout Plugin,
+        generated: AuditGeneratedScenarioSeries,
+        spec: AuditScenarioSpec,
+        configuration: AuditRunnerConfiguration,
+        manifest: PluginManifestV4,
+        sampleIndex: Int,
+        hyperParameters: HyperParameters,
+        metrics: inout AuditScenarioMetrics,
+        heldRequest: inout PredictRequestV4?,
+        trainAfterPrediction: Bool
+    ) throws -> Bool {
+        let sample: AuditPreparedSample
+        do {
+            sample = try AuditSampleTools.buildSample(
+                generated: generated,
+                sampleIndexAsSeries: sampleIndex,
+                horizonMinutes: configuration.horizonMinutes,
+                manifest: manifest,
+                pointValue: configuration.pointValue,
+                priceCostPoints: configuration.priceCostPoints,
+                evThresholdPoints: configuration.evThresholdPoints,
+                normalizationMethod: configuration.normalizationMethod
+            )
+        } catch {
+            return false
+        }
+
+        recordTruth(sample.payload.sample.labelClass, into: &metrics)
+        let request = sample.predictRequest
+        heldRequest = request
+
+        do {
+            try request.validate()
+            let prediction = try plugin.predict(request, hyperParameters: hyperParameters)
+            try prediction.validate()
+            recordValidPrediction(
+                prediction,
+                sample: sample,
+                spec: spec,
+                into: &metrics
+            )
+        } catch {
+            metrics.invalidPredictions += 1
+        }
+
+        if trainAfterPrediction {
+            try sample.trainRequest.validate()
+            try plugin.train(sample.trainRequest, hyperParameters: hyperParameters)
+        }
+        return true
+    }
+
+    private static func processAuditSample<Plugin: FXAIPluginV4>(
+        plugin: inout Plugin,
+        generated: AuditGeneratedScenarioSeries,
+        spec: AuditScenarioSpec,
+        configuration: AuditRunnerConfiguration,
+        manifest: PluginManifestV4,
+        sampleIndex: Int,
+        hyperParameters: HyperParameters,
+        metrics: inout AuditScenarioMetrics,
+        heldRequest: PredictRequestV4?,
+        trainAfterPrediction: Bool
+    ) throws -> Bool {
+        var mutableHeldRequest = heldRequest
+        return try processAuditSample(
+            plugin: &plugin,
+            generated: generated,
+            spec: spec,
+            configuration: configuration,
+            manifest: manifest,
+            sampleIndex: sampleIndex,
+            hyperParameters: hyperParameters,
+            metrics: &metrics,
+            heldRequest: &mutableHeldRequest,
+            trainAfterPrediction: trainAfterPrediction
+        )
+    }
+
+    private static func mergeScenarioMetrics(_ source: AuditScenarioMetrics, into target: inout AuditScenarioMetrics) {
+        target.samplesTotal += source.samplesTotal
+        target.validPredictions += source.validPredictions
+        target.invalidPredictions += source.invalidPredictions
+        target.buyCount += source.buyCount
+        target.sellCount += source.sellCount
+        target.skipCount += source.skipCount
+        target.trueBuyCount += source.trueBuyCount
+        target.trueSellCount += source.trueSellCount
+        target.trueSkipCount += source.trueSkipCount
+        target.exactMatchCount += source.exactMatchCount
+        target.directionalEvaluationCount += source.directionalEvaluationCount
+        target.directionalCorrectCount += source.directionalCorrectCount
+        target.trendAlignmentSum += source.trendAlignmentSum
+        target.trendAlignmentCount += source.trendAlignmentCount
+        target.confidenceSum += source.confidenceSum
+        target.reliabilitySum += source.reliabilitySum
+        target.moveSum += source.moveSum
+        target.directionalConfidenceSum += source.directionalConfidenceSum
+        target.directionalHitSum += source.directionalHitSum
+        target.brierSum += source.brierSum
+        target.calibrationAbsSum += source.calibrationAbsSum
+        target.pathQualityAbsSum += source.pathQualityAbsSum
+        target.pathQualityCount += source.pathQualityCount
+        target.netSum += source.netSum
+        target.macroEventRate += source.macroEventRate
+        target.macroPreRate += source.macroPreRate
+        target.macroPostRate += source.macroPostRate
+        target.macroImportanceMean += source.macroImportanceMean
+        target.macroSurpriseAbsMean += source.macroSurpriseAbsMean
+        target.macroDataCoverage += source.macroDataCoverage
+        target.macroSurpriseZAbsMean += source.macroSurpriseZAbsMean
+        target.macroRevisionAbsMean += source.macroRevisionAbsMean
+        target.macroCurrencyRelevanceMean += source.macroCurrencyRelevanceMean
+        target.macroProvenanceTrustMean += source.macroProvenanceTrustMean
+        target.macroRatesRate += source.macroRatesRate
+        target.macroInflationRate += source.macroInflationRate
+        target.macroLaborRate += source.macroLaborRate
+        target.macroGrowthRate += source.macroGrowthRate
+    }
+
+    private static func foldMetrics(from metrics: AuditScenarioMetrics) -> AuditFoldMetrics {
+        AuditFoldMetrics(
+            samplesTotal: metrics.samplesTotal,
+            validPredictions: metrics.validPredictions,
+            invalidPredictions: metrics.invalidPredictions,
+            buyCount: metrics.buyCount,
+            sellCount: metrics.sellCount,
+            skipCount: metrics.skipCount,
+            directionalEvaluationCount: metrics.directionalEvaluationCount,
+            directionalCorrectCount: metrics.directionalCorrectCount,
+            confidenceSum: metrics.confidenceSum,
+            reliabilitySum: metrics.reliabilitySum,
+            moveSum: metrics.moveSum,
+            brierSum: metrics.brierSum,
+            calibrationAbsSum: metrics.calibrationAbsSum,
+            pathQualityAbsSum: metrics.pathQualityAbsSum,
+            pathQualityCount: metrics.pathQualityCount,
+            netSum: metrics.netSum
+        )
     }
 
     private static func recordTruth(_ label: LabelClass, into metrics: inout AuditScenarioMetrics) {

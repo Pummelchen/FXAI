@@ -57,11 +57,17 @@
       "audit": {
         "bars": 20000,
         "seed": 42,
+        "wf_bars_per_year": 374400,
         "wf_embargo_bars": 24,
+        "wf_embargo_days": 0.0,
         "wf_folds": 6,
         "wf_purge_bars": 32,
+        "wf_purge_days": 0.0,
         "wf_test_bars": 64,
-        "wf_train_bars": 256
+        "wf_test_years": 0.0,
+        "wf_train_bars": 256,
+        "wf_train_years": 0.0,
+        "wf_window_mode": "rolling"
       },
       "description": "Research runtime posture for audit and promotion workflows.",
       "model": {

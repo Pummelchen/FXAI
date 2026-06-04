@@ -14,8 +14,22 @@ from .shared import (
     parse_brace_list,
 )
 
-def build_optimization_campaign(summary: dict, oracles: dict) -> dict:
+
+def parse_walkforward_year_presets(raw: str | None) -> list[float]:
+    out: list[float] = []
+    for part in str(raw or "1,2,3").replace(";", ",").split(","):
+        try:
+            value = float(part.strip())
+        except ValueError:
+            continue
+        if value > 0.0 and value not in out:
+            out.append(value)
+    return out or [1.0, 2.0, 3.0]
+
+
+def build_optimization_campaign(summary: dict, oracles: dict, walkforward_years: list[float] | None = None) -> dict:
     campaign = {"plugins": {}}
+    year_presets = list(walkforward_years or [1.0, 2.0, 3.0])
     for name, info in sorted(summary.get("plugins", {}).items()):
         family = int(info.get("family", 11))
         oracle = get_oracle(name, family, oracles)
@@ -113,6 +127,9 @@ def build_optimization_campaign(summary: dict, oracles: dict) -> dict:
             "name": "walkforward_gate",
             "focus": ["market_walkforward", "market_session_edges", "market_liquidity_shock", "market_macro_event", "market_adversarial"],
             "train_test_pairs": [(256, 64), (384, 96), (512, 128)],
+            "train_years": year_presets,
+            "test_years": 0.25,
+            "window_modes": ["rolling", "anchored"],
         })
 
         campaign["plugins"][name] = {
@@ -164,7 +181,10 @@ def render_optimization_campaign(campaign: dict) -> str:
                     for fillp in exp["fill_penalty_points"]:
                         out.append(f"  run: run-audit --plugin-list '{{{name}}}' --scenario-list '{{{', '.join(exp['focus'])}}}' --slippage-points {slip} --fill-penalty-points {fillp}")
             elif exp["name"] == "walkforward_gate":
-                out.append(f"- Walk-forward release gate: {exp['focus']} | windows={exp['train_test_pairs']}")
+                out.append(f"- Walk-forward release gate: {exp['focus']} | year_windows={exp.get('train_years', [])} | bar_windows={exp['train_test_pairs']}")
+                for years in exp.get("train_years", []):
+                    for mode in exp.get("window_modes", ["rolling"]):
+                        out.append(f"  run: run-audit --plugin-list '{{{name}}}' --scenario-list '{{{', '.join(exp['focus'])}}}' --wf-train-years {years:g} --wf-test-years {float(exp.get('test_years', 0.25)):g} --wf-window-mode {mode}")
                 for train_bars, test_bars in exp["train_test_pairs"]:
                     out.append(f"  run: run-audit --plugin-list '{{{name}}}' --scenario-list '{{{', '.join(exp['focus'])}}}' --wf-train-bars {train_bars} --wf-test-bars {test_bars}")
                 out.append("  run: release-gate --baseline <baseline-name> --require-market-replay")
@@ -205,6 +225,16 @@ def campaign_runs(campaign: dict, limit_plugins: int | None = None, limit_experi
                             "fill_penalty_points": fillp,
                         })
             elif exp["name"] == "walkforward_gate":
+                for years in exp.get("train_years", []):
+                    for mode in exp.get("window_modes", ["rolling"]):
+                        runs.append({
+                            "plugin": name,
+                            "experiment": exp["name"],
+                            "scenario_list": focus,
+                            "wf_train_years": float(years),
+                            "wf_test_years": float(exp.get("test_years", 0.25)),
+                            "wf_window_mode": mode,
+                        })
                 for train_bars, test_bars in exp.get("train_test_pairs", []):
                     runs.append({
                         "plugin": name,
@@ -226,6 +256,8 @@ def build_run_audit_namespace(base_args, run: dict, output_path: Path):
     symbol_list = run.get("symbol_list", getattr(base_args, "symbol_list", ""))
     symbols = parse_brace_list(symbol_list)
     symbol = run.get("symbol", (symbols[0] if symbols else getattr(base_args, "symbol", "EURUSD")))
+    bar_window_override = "wf_train_bars" in run or "wf_test_bars" in run
+    day_bar_override = "wf_purge_bars" in run or "wf_embargo_bars" in run
     return argparse.Namespace(
         all_plugins=False,
         plugin_id=28,
@@ -247,6 +279,12 @@ def build_run_audit_namespace(base_args, run: dict, output_path: Path):
         wf_purge_bars=run.get("wf_purge_bars", getattr(base_args, "wf_purge_bars", 32)),
         wf_embargo_bars=run.get("wf_embargo_bars", getattr(base_args, "wf_embargo_bars", 24)),
         wf_folds=run.get("wf_folds", getattr(base_args, "wf_folds", 6)),
+        wf_train_years=run.get("wf_train_years", 0.0 if bar_window_override else getattr(base_args, "wf_train_years", 0.0)),
+        wf_test_years=run.get("wf_test_years", 0.0 if bar_window_override else getattr(base_args, "wf_test_years", 0.0)),
+        wf_purge_days=run.get("wf_purge_days", 0.0 if day_bar_override else getattr(base_args, "wf_purge_days", 0.0)),
+        wf_embargo_days=run.get("wf_embargo_days", 0.0 if day_bar_override else getattr(base_args, "wf_embargo_days", 0.0)),
+        wf_window_mode=run.get("wf_window_mode", getattr(base_args, "wf_window_mode", "rolling")),
+        wf_bars_per_year=run.get("wf_bars_per_year", getattr(base_args, "wf_bars_per_year", 374400)),
         seed=base_args.seed,
         symbol=symbol,
         symbol_list=("{" + ", ".join(symbols) + "}" if symbols else "{" + symbol + "}"),

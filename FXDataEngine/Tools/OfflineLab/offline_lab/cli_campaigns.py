@@ -59,6 +59,12 @@ def serious_base_args(args, dataset: dict, output_path: Path) -> argparse.Namesp
         wf_purge_bars=getattr(args, "wf_purge_bars", 32),
         wf_embargo_bars=getattr(args, "wf_embargo_bars", 24),
         wf_folds=getattr(args, "wf_folds", 6),
+        wf_train_years=getattr(args, "wf_train_years", 0.0),
+        wf_test_years=getattr(args, "wf_test_years", 0.0),
+        wf_purge_days=getattr(args, "wf_purge_days", 0.0),
+        wf_embargo_days=getattr(args, "wf_embargo_days", 0.0),
+        wf_window_mode=getattr(args, "wf_window_mode", "rolling"),
+        wf_bars_per_year=getattr(args, "wf_bars_per_year", 374400),
         seed=getattr(args, "seed", 42),
         symbol=str(dataset["symbol"]),
         symbol_list="{" + str(dataset["symbol"]) + "}",
@@ -142,6 +148,16 @@ def campaign_runs_extended(campaign: dict, limit_plugins: int = 0, limit_experim
                             "fill_penalty_points": fillp,
                         })
             elif exp["name"] == "walkforward_gate":
+                for years in exp.get("train_years", []):
+                    for mode in exp.get("window_modes", ["rolling"]):
+                        runs.append({
+                            "plugin": name,
+                            "experiment": exp["name"],
+                            "scenario_list": focus,
+                            "wf_train_years": float(years),
+                            "wf_test_years": float(exp.get("test_years", 0.25)),
+                            "wf_window_mode": mode,
+                        })
                 for train_bars, test_bars in exp.get("train_test_pairs", []):
                     runs.append({
                         "plugin": name,
@@ -418,6 +434,12 @@ def normalize_namespace_parameters(args, plugin_name: str, experiment_name: str,
         "wf_purge_bars": int(getattr(args, "wf_purge_bars", 32)),
         "wf_embargo_bars": int(getattr(args, "wf_embargo_bars", 24)),
         "wf_folds": int(getattr(args, "wf_folds", 6)),
+        "wf_train_years": float(getattr(args, "wf_train_years", 0.0)),
+        "wf_test_years": float(getattr(args, "wf_test_years", 0.0)),
+        "wf_purge_days": float(getattr(args, "wf_purge_days", 0.0)),
+        "wf_embargo_days": float(getattr(args, "wf_embargo_days", 0.0)),
+        "wf_window_mode": str(getattr(args, "wf_window_mode", "rolling") or "rolling"),
+        "wf_bars_per_year": int(getattr(args, "wf_bars_per_year", 374400)),
         "execution_profile": str(getattr(args, "execution_profile", "default")),
         "symbol": str(dataset["symbol"]),
         "window_start_unix": int(dataset["start_unix"]),
@@ -618,7 +640,14 @@ def run_dataset_baseline(conn: libsql.Connection, dataset: dict, profile_name: s
 
 def run_dataset_campaign(conn: libsql.Connection, dataset: dict, profile_name: str, args, out_dir: Path, baseline_summary: dict, base_args) -> list[dict]:
     oracles = testlab.load_oracles()
-    campaign = extend_campaign(testlab.build_optimization_campaign(baseline_summary, oracles), base_args)
+    campaign = extend_campaign(
+        testlab.build_optimization_campaign(
+            baseline_summary,
+            oracles,
+            walkforward_years=testlab.parse_walkforward_year_presets(getattr(args, "wf_year_presets", "")),
+        ),
+        base_args,
+    )
     (out_dir / "campaign.json").write_text(json.dumps(campaign, indent=2, sort_keys=True), encoding="utf-8")
     runs = campaign_runs_extended(campaign, getattr(args, "top_plugins", 0), getattr(args, "limit_experiments", 0))
     group_key = str(getattr(args, "group_key", "") or dataset.get("group_key", "") or "")

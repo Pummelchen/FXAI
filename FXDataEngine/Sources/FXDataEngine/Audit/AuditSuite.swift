@@ -14,7 +14,7 @@ public struct AuditSuiteConfiguration: Codable, Hashable, Sendable {
         runner: AuditRunnerConfiguration = AuditRunnerConfiguration(horizonMinutes: 5, priceCostPoints: 2.0),
         stopOnFailure: Bool = false
     ) {
-        self.bars = min(max(2_048, bars), 100_000)
+        self.bars = min(max(2_048, bars), 5_000_000)
         self.scenarioList = scenarioList
         self.seed = seed
         self.runner = runner
@@ -277,6 +277,12 @@ public enum AuditSuiteTools {
             at: reportURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
+        try writeWalkForwardDiagnostics(
+            metrics: metrics,
+            reportURL: reportURL,
+            resetOutput: resetOutput,
+            fileManager: fileManager
+        )
         let existingSize = try fileManager.fileSize(at: reportURL)
         if resetOutput || existingSize == nil || existingSize == 0 {
             try AuditReportTools.document(metrics).write(to: reportURL, atomically: true, encoding: .utf8)
@@ -289,6 +295,28 @@ public enum AuditSuiteTools {
         defer { try? handle.close() }
         try handle.seekToEnd()
         try handle.write(contentsOf: Data(suffix.utf8))
+    }
+
+    public static func walkForwardDiagnosticsURL(for reportURL: URL) -> URL {
+        reportURL.deletingPathExtension().appendingPathExtension("walkforward.json")
+    }
+
+    private static func writeWalkForwardDiagnostics(
+        metrics: [AuditScenarioMetrics],
+        reportURL: URL,
+        resetOutput: Bool,
+        fileManager: FileManager
+    ) throws {
+        let diagnostics = AuditReportTools.walkForwardDiagnostics(metrics)
+        let diagnosticsURL = walkForwardDiagnosticsURL(for: reportURL)
+        guard !diagnostics.plugins.isEmpty else {
+            if resetOutput, fileManager.fileExists(atPath: diagnosticsURL.path) {
+                try fileManager.removeItem(at: diagnosticsURL)
+            }
+            return
+        }
+        let json = try AuditReportTools.walkForwardDiagnosticsJSON(metrics)
+        try json.write(to: diagnosticsURL, atomically: true, encoding: .utf8)
     }
 
     private static func scenarioSeed(base: UInt64, aiID: Int) -> UInt64 {

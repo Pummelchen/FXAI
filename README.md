@@ -88,6 +88,32 @@ The core historical data contract is `M1 OHLCV`.
 - Spread is no longer part of the offline backtest contract.
 - SineTest is a virtual FXDatabase security used by the test suite to prove plugins and accelerators can handle a simple predictable series without crashing. FXDatabase also persists it as canonical synthetic data from `2000-01-01` through runtime-now, with a full-hour peak of `1.000000`, half-hour trough of `0.001000`, and a 10-second sync agent. API requests must pair logical symbol `SINETEST` with source origin `SYNTHETIC`; `SYNTHETIC` is rejected for any other logical symbol.
 
+## Walk-Forward Optimization
+
+FXAI audit runs support rolling and anchored walk-forward validation for
+time-series cross-validation without random train/test leakage. The user-facing
+policy can be expressed in years and days, then TestLab resolves it to the
+existing bar-based audit contract so the runtime stays deterministic.
+
+Examples:
+
+```bash
+python3.12 FXDataEngine/Tools/fxai_testlab.py run-audit \
+  --scenario-list "{market_walkforward, market_trend, market_chop}" \
+  --wf-train-years 1 --wf-test-years 0.25 --wf-window-mode rolling
+
+python3.12 FXDataEngine/Tools/fxai_testlab.py walkforward-analyze \
+  --output FXDataEngine/Tools/latest_walkforward_analysis.md
+```
+
+Use `--wf-train-years 1`, `2`, or `3` for yearly policies, `--wf-test-years`
+for the out-of-sample horizon, and `--wf-purge-days` / `--wf-embargo-days` to
+keep leakage buffers in calendar terms. Resolved policies are written into audit
+manifests with the full window plan and minimum bar requirement. When the audit
+runner emits `*.walkforward.json` fold diagnostics, `walkforward-analyze` uses
+those per-window OOS scores to flag edge degradation over time; otherwise it
+falls back to the aggregate `market_walkforward` TSV row.
+
 ## User Benefits
 
 | User type | What FXAI gives them |

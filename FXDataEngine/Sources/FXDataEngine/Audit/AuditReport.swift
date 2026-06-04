@@ -1,5 +1,33 @@
 import Foundation
 
+public struct AuditWalkForwardDiagnosticsPlugin: Codable, Hashable, Sendable {
+    public var aiID: Int
+    public var aiName: String
+    public var family: Int
+    public var scenario: String
+    public var folds: Int
+    public var windows: [AuditWalkForwardFoldEvidence]
+
+    public init(metrics: AuditScenarioMetrics) {
+        self.aiID = metrics.aiID
+        self.aiName = metrics.aiName
+        self.family = metrics.family
+        self.scenario = metrics.scenario
+        self.folds = metrics.walkForwardFolds
+        self.windows = metrics.walkForwardFoldEvidence ?? []
+    }
+}
+
+public struct AuditWalkForwardDiagnosticsDocument: Codable, Hashable, Sendable {
+    public var schemaVersion: Int
+    public var plugins: [AuditWalkForwardDiagnosticsPlugin]
+
+    public init(schemaVersion: Int = 1, plugins: [AuditWalkForwardDiagnosticsPlugin]) {
+        self.schemaVersion = schemaVersion
+        self.plugins = plugins
+    }
+}
+
 public enum AuditReportTools {
     public static let headerColumns = [
         "ai_id",
@@ -139,5 +167,24 @@ public enum AuditReportTools {
 
     public static func document(_ metrics: [AuditScenarioMetrics]) -> String {
         RuntimeArtifactTSV.document(header: headerColumns, rows: metrics.map(rowColumns(for:)))
+    }
+
+    public static func walkForwardDiagnostics(_ metrics: [AuditScenarioMetrics]) -> AuditWalkForwardDiagnosticsDocument {
+        let plugins = metrics
+            .filter { $0.scenario == "market_walkforward" }
+            .map(AuditWalkForwardDiagnosticsPlugin.init(metrics:))
+            .filter { !$0.windows.isEmpty }
+            .sorted {
+                if $0.aiName == $1.aiName { return $0.aiID < $1.aiID }
+                return $0.aiName < $1.aiName
+            }
+        return AuditWalkForwardDiagnosticsDocument(plugins: plugins)
+    }
+
+    public static func walkForwardDiagnosticsJSON(_ metrics: [AuditScenarioMetrics]) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        let data = try encoder.encode(walkForwardDiagnostics(metrics))
+        return String(decoding: data, as: UTF8.self) + "\n"
     }
 }
