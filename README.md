@@ -200,6 +200,24 @@ The optional external inference bridge adds two opt-in inference-only backends:
 
 Both paths remain inert until a plugin declares the backend and the runtime environment explicitly enables it. Training remains local for this slice, and external inference failures use the existing CPU fallback diagnostics path.
 
+## Drift Retraining Trigger
+
+FXAI drift governance remains the detector of record. It can now feed a
+research-only retraining queue through Offline Lab:
+
+```bash
+python3 FXDataEngine/Tools/fxai_offline_lab.py drift-governance-run --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py drift-retraining-queue --profile continuous --data-days 90
+python3 FXDataEngine/Tools/fxai_offline_lab.py drift-retraining-report --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py drift-retraining-execute --profile continuous --dry-run
+```
+
+The queue is deliberately conservative. Drift can emit alerts, request a fresh
+research campaign, and preserve required gates, but it cannot auto-promote or
+replace live models. Completed research still has to pass walk-forward,
+calibration, financial-utility, promotion-lineage, account-scope, risk, and
+kill-switch gates before demo or live execution can consume it.
+
 ## Install
 
 Run the macOS installer from the repo root:
@@ -265,6 +283,7 @@ User-focused docs live in the GitHub wiki:
 - [Architecture](https://github.com/Pummelchen/FXAI/wiki/Architecture)
 - [Governance](https://github.com/Pummelchen/FXAI/wiki/Governance)
 - [User Roles](https://github.com/Pummelchen/FXAI/wiki/User-Roles)
+- [Drift Retraining](https://github.com/Pummelchen/FXAI/wiki/Drift-Retraining)
 - [Installation](https://github.com/Pummelchen/FXAI/wiki/Installation)
 - [Project Map](https://github.com/Pummelchen/FXAI/wiki/Project-Map)
 
@@ -275,6 +294,7 @@ Project-local docs remain next to the code they describe:
 - [FXImporter](FXImporter/README.md)
 - [FXDatabase](FXDatabase/README.md)
 - [FXDataEngine](FXDataEngine/README.md)
+- [Offline Lab Drift Retraining](FXDataEngine/Tools/OfflineLab/DriftRetraining/README.md)
 - [FXPlugins](FXPlugins/README.md)
 - [FXBacktest](FXBacktest/README.md)
 - [FXGUI](FXGUI/README.md)

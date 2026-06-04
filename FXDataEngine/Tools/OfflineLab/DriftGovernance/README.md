@@ -13,6 +13,7 @@ Phase 1 covers:
 - performance / utility drift
 - conservative demotion, restriction, shadow-only, and disable recommendations
 - challenger promotion eligibility tracking with support gates
+- handoff into the Drift Retraining research queue when drift is severe enough
 
 The root [FXAI Governance](../../../../GOVERNANCE.md) contract defines when
 drift-governance output can restrict, demote, shadow, disable, or support a
@@ -40,6 +41,12 @@ Rebuild the aggregated report without rerunning the full cycle:
 python3 Tools/fxai_offline_lab.py drift-governance-report --profile continuous
 ```
 
+Queue retraining research requests from current drift-governance state:
+
+```bash
+python3 Tools/fxai_offline_lab.py drift-retraining-queue --profile continuous --data-days 90
+```
+
 ## Artifacts
 
 - Config: `<FXAI_ROOT>/Tools/OfflineLab/DriftGovernance/drift_governance_config.json`
@@ -48,9 +55,17 @@ python3 Tools/fxai_offline_lab.py drift-governance-report --profile continuous
 - History: `<FXAI_ROOT>/Tools/OfflineLab/DriftGovernance/drift_governance_history.ndjson`
 - Runtime summary: `<FXAI_ROOT>/Tools/Runtime/drift_governance_summary.json`
 
+Drift-triggered retraining artifacts are separate:
+
+- Status: `<FXAI_ROOT>/Tools/OfflineLab/DriftRetraining/drift_retraining_status.json`
+- Report: `<FXAI_ROOT>/Tools/OfflineLab/DriftRetraining/Reports/drift_retraining_report.json`
+- History: `<FXAI_ROOT>/Tools/OfflineLab/DriftRetraining/drift_retraining_history.ndjson`
+- Alerts: `<FXAI_ROOT>/Tools/OfflineLab/DriftRetraining/drift_retraining_alerts.jsonl`
+
 ## Notes
 
 - Governance is separate from detection: drift metrics score change, then policy maps that evidence into recommended or applied actions.
 - Promotions remain conservative. Phase 1 does not auto-promote challengers in normal operation.
+- Drift retraining is also conservative. It may request a research campaign, but it does not replace a champion or call promotion automatically.
 - Empty output is valid when no shadow-fleet or registry data is present for the chosen profile. The subsystem keeps writing deterministic empty-state artifacts instead of failing.
 - The GUI drift-governance surface reads only the aggregated report and status artifacts. It does not open the database directly.

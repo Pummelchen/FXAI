@@ -17,6 +17,7 @@
 - Microstructure shared execution-state infrastructure for FXDatabase tick-flow, price-cost/liquidity stress, stop-run proxy detection, session handoff, runtime gating, and replay visibility
 - Probabilistic Calibration shared decision-quality infrastructure for calibrated ensemble probabilities, cost-aware edge filtering, abstention reasons, and replay visibility
 - Execution-Quality shared execution-intelligence infrastructure for forecasted price-cost widening, slippage stress, fill quality, latency sensitivity, liquidity fragility, and runtime execution-state controls
+- Drift Retraining research queue for turning significant drift-governance state into auditable retraining requests without automatic promotion
 - ready-to-use FXDatabase `.set` files so no parameter copy/paste is needed
 
 Offline Lab promotion, drift governance, generated artifact, and incident
@@ -63,6 +64,10 @@ python3 FXDataEngine/Tools/fxai_offline_lab.py prob-calibration-validate
 python3 FXDataEngine/Tools/fxai_offline_lab.py prob-calibration-replay-report --symbol EURUSD --hours-back 72
 python3 FXDataEngine/Tools/fxai_offline_lab.py execution-quality-validate
 python3 FXDataEngine/Tools/fxai_offline_lab.py execution-quality-replay-report --symbol EURUSD --hours-back 72
+python3 FXDataEngine/Tools/fxai_offline_lab.py drift-governance-run --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py drift-retraining-queue --profile continuous --data-days 90
+python3 FXDataEngine/Tools/fxai_offline_lab.py drift-retraining-report --profile continuous
+python3 FXDataEngine/Tools/fxai_offline_lab.py drift-retraining-execute --profile continuous --dry-run
 python3 FXDataEngine/Tools/fxai_offline_lab.py deploy-profiles --profile continuous
 python3 FXDataEngine/Tools/fxai_offline_lab.py supervisor-sync --profile continuous
 python3 FXDataEngine/Tools/fxai_offline_lab.py autonomous-governance --profile continuous
@@ -122,6 +127,9 @@ Notes:
 - `prob-calibration-replay-report` summarizes recent calibrated final actions, tier usage, abstention counts, edge-after-costs ranges, and top abstention reasons from append-only runtime history.
 - `execution-quality-validate` writes the default execution-quality config and tier-memory exports used by the FXDatabase runtime, validates thresholds, and confirms the execution forecaster can boot cleanly.
 - `execution-quality-replay-report` summarizes recent execution-state transitions, price-cost or slippage stress, liquidity-fragility changes, and execution-quality reasons from append-only runtime history.
+- `drift-governance-run` remains the detector of record. Run it before queuing drift-triggered retraining requests.
+- `drift-retraining-queue` creates idempotent research-only retraining requests from degraded drift-governance states, writes local alert JSONL, and records the required WFO/calibration/utility/promotion gates. Low-support drift is skipped unless `--include-low-support` is explicitly set.
+- `drift-retraining-execute` runs an explicit research campaign for queued requests. It does not run `best-params`, does not auto-promote challengers, and records that promotion remains a manual/gated step.
 - `fxai_testlab.py verify-all` is the one-command platform verification path: Python tests, deterministic fixture checks, and clean FXDatabase compiles.
 - `tune-zoo` includes walk-forward release-gate experiments. The default `--wf-year-presets` is `1,2,3,5,10,15,20,25`; each security only schedules the years whose minimum bar requirement fits its exported dataset, and records the longer insufficient years as disabled. Use `--wf-test-years` for the out-of-sample span, and `--wf-window-mode rolling` or `anchored` for the baseline audit policy. Export enough months to cover the resulting minimum bars.
 - Exact-window datasets store the effective exported first and last bar range, so later tuning and promotion stay aligned to the data that was actually ingested.

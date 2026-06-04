@@ -25,6 +25,13 @@ from .drift_governance import (
     run_drift_governance_cycle,
     validate_drift_governance_config,
 )
+from .drift_retraining import (
+    build_drift_retraining_report,
+    build_retraining_campaign_plan,
+    load_retraining_requests_for_execution,
+    mark_retraining_execution,
+    queue_drift_retraining_requests,
+)
 from .dynamic_ensemble_config import load_config as load_dynamic_ensemble_config
 from .dynamic_ensemble_contracts import DYNAMIC_ENSEMBLE_CONFIG_PATH
 from .dynamic_ensemble_replay import build_dynamic_ensemble_replay_report
@@ -294,6 +301,143 @@ def cmd_drift_governance_report(args) -> int:
     try:
         payload = build_drift_governance_report(conn, args.profile)
         print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
+
+
+def cmd_drift_retraining_queue(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        payload = queue_drift_retraining_requests(conn, args)
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
+
+
+def cmd_drift_retraining_report(args) -> int:
+    conn = connect_db(Path(args.db))
+    try:
+        payload = build_drift_retraining_report(conn, args.profile, str(getattr(args, "symbol", "") or ""))
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    finally:
+        close_db(conn)
+
+
+def _namespace_for_retraining_campaign(args, request: dict, group_key: str):
+    plan = build_retraining_campaign_plan(request, args, group_key)
+    return argparse.Namespace(
+        profile=plan["profile"],
+        dataset_keys="",
+        group_key=group_key,
+        auto_export=True,
+        symbol=plan["symbol"],
+        symbol_list="",
+        symbol_pack="",
+        plugin_filter=plan["plugin_filter"],
+        months_list=plan["months_list"],
+        start_unix=0,
+        end_unix=0,
+        replace=bool(getattr(args, "replace", False)),
+        skip_compile=bool(getattr(args, "skip_compile", False)),
+        fxdatabase_api_url=str(getattr(args, "fxdatabase_api_url", "") or ""),
+        broker_source_id=str(getattr(args, "broker_source_id", "") or ""),
+        source_origin=str(getattr(args, "source_origin", "") or ""),
+        top_plugins=max(int(getattr(args, "top_plugins", 1) or 1), 1),
+        limit_experiments=int(getattr(args, "limit_experiments", 0) or 0),
+        limit_runs=int(getattr(args, "limit_runs", 0) or 0),
+        scenario_list=plan["scenario_list"],
+        bars=0,
+        horizon=int(getattr(args, "horizon", 5) or 5),
+        m1sync_bars=int(getattr(args, "m1sync_bars", 3) or 3),
+        normalization=0,
+        sequence_bars=0,
+        schema_id=0,
+        feature_mask=0,
+        commission_per_lot_side=getattr(args, "commission_per_lot_side", None),
+        cost_buffer_points=getattr(args, "cost_buffer_points", None),
+        slippage_points=getattr(args, "slippage_points", None),
+        fill_penalty_points=getattr(args, "fill_penalty_points", None),
+        wf_train_bars=int(getattr(args, "wf_train_bars", 256) or 256),
+        wf_test_bars=int(getattr(args, "wf_test_bars", 64) or 64),
+        wf_purge_bars=int(getattr(args, "wf_purge_bars", 32) or 32),
+        wf_embargo_bars=int(getattr(args, "wf_embargo_bars", 24) or 24),
+        wf_folds=int(getattr(args, "wf_folds", 6) or 6),
+        wf_train_years=0.0,
+        wf_test_years=float(getattr(args, "wf_test_years", 0.25) or 0.25),
+        wf_purge_days=float(getattr(args, "wf_purge_days", 0.0) or 0.0),
+        wf_embargo_days=float(getattr(args, "wf_embargo_days", 0.0) or 0.0),
+        wf_window_mode=str(getattr(args, "wf_window_mode", "rolling") or "rolling"),
+        wf_bars_per_year=int(getattr(args, "wf_bars_per_year", testlab.FX_M1_BARS_PER_TRADING_YEAR) or testlab.FX_M1_BARS_PER_TRADING_YEAR),
+        wf_year_presets=plan["wf_year_presets"],
+        seed=int(getattr(args, "seed", 42) or 42),
+        strategy_profile=str(getattr(args, "strategy_profile", "default") or "default"),
+        broker_profile=str(getattr(args, "broker_profile", "") or ""),
+        runtime_mode="research",
+        execution_profile=str(getattr(args, "execution_profile", "default") or "default"),
+        login=getattr(args, "login", None),
+        server=getattr(args, "server", None),
+        password=getattr(args, "password", None),
+        timeout=int(getattr(args, "timeout", 300) or 300),
+    )
+
+
+def cmd_drift_retraining_execute(args) -> int:
+    conn = connect_db(Path(args.db))
+    executed: list[dict] = []
+    try:
+        requests = load_retraining_requests_for_execution(conn, args)
+        for request in requests:
+            group_key = safe_token(str(getattr(args, "group_key", "") or f"drift_retrain_{request['symbol']}_{request['plugin_name']}_{now_unix()}"))
+            plan = build_retraining_campaign_plan(request, args, group_key)
+            if bool(getattr(args, "dry_run", False)):
+                mark_retraining_execution(
+                    conn,
+                    int(request["id"]),
+                    status=str(request.get("status", "queued") or "queued"),
+                    payload={"dry_run": True, "plan": plan, "promotion_skipped": True},
+                )
+                executed.append({"request_key": request["request_key"], "status": "dry_run", "plan": plan})
+                continue
+
+            mark_retraining_execution(conn, int(request["id"]), status="running", payload={"plan": plan}, started=True)
+            commit_db(conn)
+            try:
+                campaign_args = _namespace_for_retraining_campaign(args, request, group_key)
+                resolve_args = campaign_args
+                if not getattr(campaign_args, "skip_compile", False):
+                    if compile_export_runner() != 0:
+                        raise OfflineLabError("failed to build Swift export support")
+                    resolve_args = argparse.Namespace(**vars(campaign_args))
+                    resolve_args.skip_compile = True
+                datasets = resolve_dataset_rows(conn, resolve_args, True, group_key)
+                if not getattr(campaign_args, "skip_compile", False):
+                    if compile_audit_runner() != 0:
+                        raise OfflineLabError("failed to build Swift audit support")
+                summaries = []
+                for dataset in datasets:
+                    dataset_out_dir = RUNS_DIR / safe_token(campaign_args.profile) / safe_token(dataset["dataset_key"])
+                    ensure_dir(dataset_out_dir)
+                    baseline = run_dataset_baseline(conn, dataset, campaign_args.profile, campaign_args, dataset_out_dir)
+                    results = run_dataset_campaign(conn, dataset, campaign_args.profile, campaign_args, dataset_out_dir, baseline["summary"], baseline["base_args"])
+                    summaries.append({"dataset_key": dataset["dataset_key"], "symbol": dataset["symbol"], "run_count": len(results)})
+                completion = {
+                    "plan": plan,
+                    "datasets": summaries,
+                    "promotion_skipped": True,
+                    "next_manual_gate": "run best-params only after reviewing WFO/calibration/utility evidence",
+                }
+                mark_retraining_execution(conn, int(request["id"]), status="research_completed", payload=completion, completed=True)
+                executed.append({"request_key": request["request_key"], "status": "research_completed", "datasets": summaries})
+            except Exception as exc:
+                mark_retraining_execution(conn, int(request["id"]), status="failed", payload={"plan": plan, "error": str(exc)}, completed=True)
+                commit_db(conn)
+                raise
+        commit_db(conn)
+        report = build_drift_retraining_report(conn, str(getattr(args, "profile", "") or "continuous"))
+        print(json.dumps({"executed": executed, "report": report}, indent=2, sort_keys=True))
         return 0
     finally:
         close_db(conn)

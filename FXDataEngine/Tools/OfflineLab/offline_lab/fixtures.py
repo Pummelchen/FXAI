@@ -52,6 +52,7 @@ PATCH_MODULES = [
     "offline_lab.drift_governance_config",
     "offline_lab.drift_governance_math",
     "offline_lab.drift_governance",
+    "offline_lab.drift_retraining",
     "offline_lab.label_engine_contracts",
     "offline_lab.label_engine_config",
     "offline_lab.label_engine",
@@ -111,6 +112,8 @@ def patched_paths(base_dir: Path):
     drift_governance_dir = offline_dir / "DriftGovernance"
     drift_governance_report_dir = drift_governance_dir / "Reports"
     drift_governance_artifact_dir = drift_governance_dir / "Artifacts"
+    drift_retraining_dir = offline_dir / "DriftRetraining"
+    drift_retraining_report_dir = drift_retraining_dir / "Reports"
     label_engine_dir = offline_dir / "LabelEngine"
     label_engine_report_dir = label_engine_dir / "Reports"
     label_engine_artifact_dir = label_engine_dir / "Artifacts"
@@ -153,6 +156,8 @@ def patched_paths(base_dir: Path):
         drift_governance_dir,
         drift_governance_report_dir,
         drift_governance_artifact_dir,
+        drift_retraining_dir,
+        drift_retraining_report_dir,
         label_engine_dir,
         label_engine_report_dir,
         label_engine_artifact_dir,
@@ -265,6 +270,12 @@ def patched_paths(base_dir: Path):
             "DRIFT_GOVERNANCE_REPORT_PATH": drift_governance_report_dir / "drift_governance_report.json",
             "DRIFT_GOVERNANCE_HISTORY_PATH": drift_governance_dir / "drift_governance_history.ndjson",
             "DRIFT_GOVERNANCE_RUNTIME_SUMMARY_PATH": runtime_dir / "drift_governance_summary.json",
+            "DRIFT_RETRAINING_DIR": drift_retraining_dir,
+            "DRIFT_RETRAINING_REPORT_DIR": drift_retraining_report_dir,
+            "DRIFT_RETRAINING_STATUS_PATH": drift_retraining_dir / "drift_retraining_status.json",
+            "DRIFT_RETRAINING_REPORT_PATH": drift_retraining_report_dir / "drift_retraining_report.json",
+            "DRIFT_RETRAINING_HISTORY_PATH": drift_retraining_dir / "drift_retraining_history.ndjson",
+            "DRIFT_RETRAINING_ALERTS_PATH": drift_retraining_dir / "drift_retraining_alerts.jsonl",
             "LABEL_ENGINE_DIR": label_engine_dir,
             "LABEL_ENGINE_REPORT_DIR": label_engine_report_dir,
             "LABEL_ENGINE_ARTIFACT_DIR": label_engine_artifact_dir,
@@ -334,6 +345,7 @@ def patched_paths(base_dir: Path):
             "cross_asset_dir": cross_asset_dir,
             "label_engine_dir": label_engine_dir,
             "drift_governance_dir": drift_governance_dir,
+            "drift_retraining_dir": drift_retraining_dir,
             "microstructure_dir": microstructure_dir,
         }
     finally:

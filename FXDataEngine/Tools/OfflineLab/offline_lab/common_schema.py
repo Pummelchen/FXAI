@@ -22,7 +22,7 @@ DEFAULT_MONTHS_LIST = [3, 6, 12]
 DEFAULT_HORIZON_CANDIDATES = [3, 5, 8, 13, 21, 34]
 DEFAULT_M1SYNC_CANDIDATES = [2, 3, 5, 8]
 DEFAULT_EXECUTION_PROFILES = ["default", "tight-fx", "prime-ecn", "retail-fx", "stress"]
-OFFLINE_SCHEMA_VERSION = 8
+OFFLINE_SCHEMA_VERSION = 9
 OFFLINE_ARTIFACT_SCHEMA_VERSION = 2
 OFFLINE_MACRO_SCHEMA_MIN = 2
 RESEARCH_VECTOR_DIMS = 16
@@ -618,6 +618,36 @@ CREATE TABLE IF NOT EXISTS plugin_challenger_evaluations (
     UNIQUE(profile_name, symbol, plugin_name, evaluation_scope, challenger_run_id)
 );
 
+CREATE TABLE IF NOT EXISTS drift_retraining_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    plugin_name TEXT NOT NULL,
+    family_id INTEGER NOT NULL DEFAULT 11,
+    request_key TEXT NOT NULL UNIQUE,
+    trigger_source TEXT NOT NULL DEFAULT 'drift_governance',
+    trigger_action TEXT NOT NULL DEFAULT '',
+    trigger_state TEXT NOT NULL DEFAULT '',
+    aggregate_risk_score REAL NOT NULL DEFAULT 0.0,
+    priority INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'queued',
+    requested_data_days INTEGER NOT NULL DEFAULT 90,
+    requested_months_list TEXT NOT NULL DEFAULT '3',
+    requested_wf_train_years TEXT NOT NULL DEFAULT '1,2,3,5',
+    scenario_list TEXT NOT NULL DEFAULT '{market_recent, market_trend, market_chop, market_session_edges, market_liquidity_shock, market_walkforward, market_macro_event, market_adversarial}',
+    required_gates_json TEXT NOT NULL DEFAULT '[]',
+    reason_codes_json TEXT NOT NULL DEFAULT '[]',
+    source_payload_json TEXT NOT NULL DEFAULT '{}',
+    execution_payload_json TEXT NOT NULL DEFAULT '{}',
+    alert_path TEXT NOT NULL DEFAULT '',
+    report_path TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    queued_at INTEGER NOT NULL DEFAULT 0,
+    started_at INTEGER NOT NULL DEFAULT 0,
+    completed_at INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS autonomous_governance_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     profile_name TEXT NOT NULL,
@@ -709,6 +739,7 @@ CREATE INDEX IF NOT EXISTS idx_plugin_drift_lookup ON plugin_drift_snapshots(pro
 CREATE INDEX IF NOT EXISTS idx_plugin_gov_state_lookup ON plugin_governance_states(profile_name, symbol, plugin_name, updated_at);
 CREATE INDEX IF NOT EXISTS idx_plugin_gov_action_lookup ON plugin_governance_actions(profile_name, symbol, plugin_name, created_at);
 CREATE INDEX IF NOT EXISTS idx_plugin_challenger_eval_lookup ON plugin_challenger_evaluations(profile_name, symbol, plugin_name, created_at);
+CREATE INDEX IF NOT EXISTS idx_drift_retraining_lookup ON drift_retraining_requests(profile_name, symbol, plugin_name, status, updated_at);
 CREATE INDEX IF NOT EXISTS idx_governance_runs_lookup ON autonomous_governance_runs(profile_name, created_at);
 CREATE INDEX IF NOT EXISTS idx_turso_branch_lookup ON turso_branch_runs(profile_name, branch_kind, created_at);
 CREATE INDEX IF NOT EXISTS idx_turso_audit_lookup ON turso_audit_log_events(organization_slug, occurred_at);

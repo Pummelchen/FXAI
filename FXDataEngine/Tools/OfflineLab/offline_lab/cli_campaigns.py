@@ -656,6 +656,12 @@ def run_dataset_campaign(conn: libsql.Connection, dataset: dict, profile_name: s
         ),
         base_args,
     )
+    plugin_filter = str(getattr(args, "plugin_filter", "") or "").strip()
+    if plugin_filter:
+        plugins = dict(campaign.get("plugins", {}))
+        if plugin_filter not in plugins:
+            raise OfflineLabError(f"requested retraining plugin {plugin_filter} is not present in baseline campaign")
+        campaign["plugins"] = {plugin_filter: plugins[plugin_filter]}
     (out_dir / "campaign.json").write_text(json.dumps(campaign, indent=2, sort_keys=True), encoding="utf-8")
     runs = campaign_runs_extended(campaign, getattr(args, "top_plugins", 0), getattr(args, "limit_experiments", 0))
     group_key = str(getattr(args, "group_key", "") or dataset.get("group_key", "") or "")
