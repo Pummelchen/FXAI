@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 import torch
 from torch import nn
@@ -117,8 +117,10 @@ def train_step(
     state: Optional[DemoPluginTemplateTorchState] = None,
     lr: float = 3.0e-4,
     data_has_volume: bool = True,
+    financial_targets: Optional[dict[str, Any]] = None,
+    financial_loss_config: Optional[dict[str, Any]] = None,
 ) -> DemoPluginTemplateTorchState:
-    del labels, moves, lr
+    del labels, moves, lr, financial_targets, financial_loss_config
     state = _state_on_preferred_device(state or DemoPluginTemplateTorchState.create())
     _ = predict_batch(features, state=state, data_has_volume=data_has_volume)
     return state

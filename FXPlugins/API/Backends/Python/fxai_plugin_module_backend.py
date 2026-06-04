@@ -755,18 +755,24 @@ def _call_train_step(
     state: Any,
     data_has_volume: bool,
     transaction_cost_points: float | None = None,
+    financial_targets: dict[str, Any] | None = None,
+    financial_loss_config: dict[str, Any] | None = None,
 ) -> Any:
     train_step = module.train_step
     parameters = inspect.signature(train_step).parameters
+    kwargs: dict[str, Any] = {}
+    if "state" in parameters:
+        kwargs["state"] = state
+    if "data_has_volume" in parameters:
+        kwargs["data_has_volume"] = data_has_volume
     if transaction_cost_points is not None and "transaction_cost_points" in parameters:
-        return train_step(
-            [sequence],
-            [label],
-            [move],
-            state=state,
-            data_has_volume=data_has_volume,
-            transaction_cost_points=transaction_cost_points,
-        )
+        kwargs["transaction_cost_points"] = transaction_cost_points
+    if financial_targets is not None and "financial_targets" in parameters:
+        kwargs["financial_targets"] = financial_targets
+    if financial_loss_config is not None and "financial_loss_config" in parameters:
+        kwargs["financial_loss_config"] = financial_loss_config
+    if kwargs:
+        return train_step([sequence], [label], [move], **kwargs)
     try:
         return train_step([sequence], [label], [move], state=state, data_has_volume=data_has_volume)
     except TypeError:
@@ -839,6 +845,12 @@ def _handle_train(command: dict[str, Any]) -> dict[str, Any]:
     sequence = _sequence(inference)
     data_has_volume = bool(inference.get("dataHasVolume", False))
     transaction_cost_points = _safe_float(inference.get("priceCostPoints", 0.0)) if plugin_name == "rl_ppo" else None
+    financial_targets = training.get("financialTargets")
+    if not isinstance(financial_targets, dict):
+        financial_targets = None
+    financial_loss_config = training.get("financialLossSpec")
+    if not isinstance(financial_loss_config, dict):
+        financial_loss_config = None
     state = _load_state(
         plugin_name,
         framework,
@@ -855,6 +867,8 @@ def _handle_train(command: dict[str, Any]) -> dict[str, Any]:
         state,
         data_has_volume,
         transaction_cost_points=transaction_cost_points,
+        financial_targets=financial_targets,
+        financial_loss_config=financial_loss_config,
     )
     _save_state(plugin_name, framework, model_identifier, state)
     return {"apiVersion": FXAI_PLUGIN_API_VERSION, "ok": True, "prediction": None, "error": None}

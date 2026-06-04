@@ -175,13 +175,60 @@ public struct MLTrainingPayload: Codable, Hashable, Sendable {
     public let movePoints: Double
     public let sampleWeight: Double
     public let nextVolumeTarget: Double
+    public let financialTargets: MLFinancialTrainingTargets
+    public let financialLossSpec: MLFinancialLossSpec
 
-    public init(inference: MLInferencePayload, request: TrainRequestV4) {
+    public init(
+        inference: MLInferencePayload,
+        request: TrainRequestV4,
+        financialLossSpec: MLFinancialLossSpec = .defaultFinancialUtility
+    ) {
         self.inference = inference
         self.labelClass = request.labelClass
         self.movePoints = request.movePoints
         self.sampleWeight = request.sampleWeight
         self.nextVolumeTarget = request.nextVolumeTarget
+        self.financialTargets = MLFinancialTrainingTargets(request: request)
+        self.financialLossSpec = financialLossSpec
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case inference
+        case labelClass
+        case movePoints
+        case sampleWeight
+        case nextVolumeTarget
+        case financialTargets
+        case financialLossSpec
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let inference = try container.decode(MLInferencePayload.self, forKey: .inference)
+        let labelClass = try container.decode(LabelClass.self, forKey: .labelClass)
+        let movePoints = try container.decode(Double.self, forKey: .movePoints)
+        let sampleWeight = try container.decode(Double.self, forKey: .sampleWeight)
+        let nextVolumeTarget = try container.decodeIfPresent(Double.self, forKey: .nextVolumeTarget) ?? 0.0
+        self.inference = inference
+        self.labelClass = labelClass
+        self.movePoints = movePoints
+        self.sampleWeight = sampleWeight
+        self.nextVolumeTarget = nextVolumeTarget
+        self.financialTargets = try container.decodeIfPresent(
+            MLFinancialTrainingTargets.self,
+            forKey: .financialTargets
+        ) ?? MLFinancialTrainingTargets(
+            labelClass: labelClass,
+            movePoints: movePoints,
+            sampleWeight: sampleWeight,
+            nextVolumeTarget: nextVolumeTarget,
+            priceCostPoints: inference.priceCostPoints,
+            minMovePoints: inference.minMovePoints
+        )
+        self.financialLossSpec = try container.decodeIfPresent(
+            MLFinancialLossSpec.self,
+            forKey: .financialLossSpec
+        ) ?? .defaultFinancialUtility
     }
 
     public func validateLatestAPI() throws {
@@ -194,6 +241,20 @@ public struct MLTrainingPayload: Codable, Hashable, Sendable {
         }
         guard nextVolumeTarget.isFinite, nextVolumeTarget >= 0 else {
             throw FXDataEngineError.validation("mlTraining.nextVolumeTarget")
+        }
+        try financialTargets.validate()
+        try financialLossSpec.validate()
+        guard financialTargets.labelClass == labelClass else {
+            throw FXDataEngineError.validation("mlTraining.financialTargets.labelClass")
+        }
+        guard abs(financialTargets.movePoints - movePoints) <= 1e-9 else {
+            throw FXDataEngineError.validation("mlTraining.financialTargets.movePoints")
+        }
+        guard abs(financialTargets.sampleWeight - sampleWeight) <= 1e-9 else {
+            throw FXDataEngineError.validation("mlTraining.financialTargets.sampleWeight")
+        }
+        guard abs(financialTargets.nextVolumeTarget - nextVolumeTarget) <= 1e-9 else {
+            throw FXDataEngineError.validation("mlTraining.financialTargets.nextVolumeTarget")
         }
     }
 }

@@ -86,8 +86,8 @@ final class PluginBoundaryTests: XCTestCase {
     func testDemoPluginTemplateDocumentsRuntimeBridgeEntryPoints() throws {
         let root = Self.packageRoot.appendingPathComponent("demo_plugin_template")
         let bridgeExpectations = [
-            ("PyTorch/demo_plugin_template_torch.py", ["def predict_batch(", "def train_step(", "class DemoPluginTemplateTorch"]),
-            ("TensorFlow/demo_plugin_template_tensorflow.py", ["def predict_batch(", "def train_step(", "class DemoPluginTemplateTensorFlow"]),
+            ("PyTorch/demo_plugin_template_torch.py", ["def predict_batch(", "def train_step(", "financial_targets", "financial_loss_config", "class DemoPluginTemplateTorch"]),
+            ("TensorFlow/demo_plugin_template_tensorflow.py", ["def predict_batch(", "def train_step(", "financial_targets", "financial_loss_config", "class DemoPluginTemplateTensorFlow"]),
             ("NLP/demo_plugin_template_nlp.py", ["def merge_into_numeric_features(", "def predict_batch(", "def train_step("]),
             ("RemoteRPC/remote_rpc_response.example.json", ["\"apiVersion\": 4", "\"prediction\"", "\"classProbabilities\""]),
             ("ONNX/demo_plugin_template.manifest.json", ["\"pluginName\"", "\"modelSha256\"", "\"inputName\""])

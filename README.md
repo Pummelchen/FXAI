@@ -178,6 +178,12 @@ RPC.
 - Metal: Apple GPU acceleration is validated through runtime compilation and plugin-local buffer parity tests, and only counts as available on unified-memory M2/M3-or-newer hosts.
 - PyTorch: plugin backends require Apple Silicon MPS for accelerator runtime paths unless a test explicitly opts into CPU fallback.
 - TensorFlow: plugin backends require a TensorFlow Metal GPU device for accelerator runtime paths unless a test explicitly opts into CPU fallback.
+- Financial utility loss: plugin-local PyTorch/TensorFlow training can consume
+  `MLFinancialTrainingTargets` and `MLFinancialLossSpec` from FXDataEngine.
+  The preferred neural objective is a hybrid of classification, move/quantile
+  accuracy, adverse-tail cost, path/fill risk, trade activity discipline, and
+  downside utility. Sharpe/Sortino-style ratios stay in walk-forward audit and
+  promotion gates instead of becoming the primary gradient objective.
 - Python bridge command: FXAI uses `FXAI_PYTHON` when set, otherwise resolves a Python 3.12 executable such as Homebrew `python3.12`. It must not silently fall back to generic `python3` because Homebrew's default Python can advance beyond TensorFlow Metal support.
 - Python package baseline: `requirements/fxai-py312.lock` pins the backend/test stack for Python 3.12, including `tensorflow==2.18.1`, `tensorflow-metal==1.2.0`, `torch`, `onnxruntime`, `pytest`, `libsql`, and `certifi`.
 - TensorFlow Metal stack: use `tensorflow==2.18.1` with `tensorflow-metal==1.2.0` on Python 3.12. Newer default Python versions, such as Python 3.14, are not a compatible target for this stack.

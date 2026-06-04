@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 import tensorflow as tf
 
@@ -96,8 +96,10 @@ def train_step(
     state: Optional[DemoPluginTemplateTensorFlowState] = None,
     lr: float = 3.0e-4,
     data_has_volume: bool = True,
+    financial_targets: Optional[dict[str, Any]] = None,
+    financial_loss_config: Optional[dict[str, Any]] = None,
 ) -> DemoPluginTemplateTensorFlowState:
-    del labels, moves, lr
+    del labels, moves, lr, financial_targets, financial_loss_config
     state = state or DemoPluginTemplateTensorFlowState.create()
     _ = predict_batch(features, state=state, data_has_volume=data_has_volume)
     return state

@@ -45,6 +45,13 @@ that runtime has real implementation logic and passing certification evidence.
    - `ONNX/<plugin_id>.onnx`
    - `ONNX/<plugin_id>.manifest.json`
    PyTorch and TensorFlow modules must expose `predict_batch` and `train_step`.
+   New neural backends should keep `financial_targets` and
+   `financial_loss_config` keyword parameters on `train_step`. The dispatcher
+   passes them only when the backend opts in, and the values map to
+   FXDataEngine's `MLFinancialTrainingTargets` and `MLFinancialLossSpec`.
+   Import `fxai_financial_loss.py` from `FXPlugins/API/Backends/Python/` to use
+   the shared hybrid objective instead of a pure MSE/accuracy or pure
+   Sharpe/Sortino loss.
    Foundation NLP modules must expose `merge_into_numeric_features`; keeping
    `predict_batch` and `train_step` helpers in the module makes the runtime
    surface consistent for future bridge changes.
@@ -79,6 +86,27 @@ current backend baseline is:
 
 Set `FXAI_PYTHON` to the Python 3.12 executable when running plugin tests
 manually. The runtime resolver must not fall back to generic Homebrew `python3`.
+
+## Financial Training Objective
+
+FXDataEngine serializes trading-aware targets into each `MLTrainingPayload`:
+signed realized move, sample weight, MFE/MAE, hit timing, path flags,
+path/fill risk, min-move, and price-cost context. PyTorch and TensorFlow
+plugins that accept `financial_targets` and `financial_loss_config` should use
+the shared helper in `FXPlugins/API/Backends/Python/fxai_financial_loss.py`.
+
+The default objective is intentionally hybrid:
+
+- weighted class CE for direction/skip labels,
+- Huber and pinball losses for expected move and quantiles,
+- high penalty for wrong active direction during large adverse moves,
+- cost, path-risk, and fill-risk penalty on active trade probability,
+- activity discipline to avoid always-trade and always-skip collapse,
+- downside utility regularization.
+
+Sharpe and Sortino remain walk-forward validation and promotion metrics. Do not
+make a pure batch Sharpe/Sortino ratio the primary plugin training loss without
+a separate governance ticket and walk-forward evidence.
 
 ## Verification
 

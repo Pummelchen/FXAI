@@ -7,11 +7,19 @@ the reference accelerator path for training and batched inference on Apple Silic
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from pathlib import Path
+import sys
+from typing import Any, Iterable, Optional
 
 import torch
 from torch import nn
 import torch.nn.functional as F
+
+try:
+    from fxai_financial_loss import financial_utility_loss_torch
+except ModuleNotFoundError:
+    sys.path.append(str(Path(__file__).resolve().parents[2] / "API" / "Backends" / "Python"))
+    from fxai_financial_loss import financial_utility_loss_torch
 
 PLUGIN_NAME = "ai_mlp"
 ARCHITECTURE_MODE = "MLP"
@@ -515,17 +523,33 @@ def predict_batch(batch: Iterable[Iterable[float]] | torch.Tensor, state: Option
     }
 
 
-def train_step(batch: Iterable[Iterable[float]] | torch.Tensor, labels: Iterable[int], moves: Iterable[float], state: Optional[AIMLPReferenceState] = None, lr: float = 3.0e-4, data_has_volume: bool = True) -> AIMLPReferenceState:
+def train_step(
+    batch: Iterable[Iterable[float]] | torch.Tensor,
+    labels: Iterable[int],
+    moves: Iterable[float],
+    state: Optional[AIMLPReferenceState] = None,
+    lr: float = 3.0e-4,
+    data_has_volume: bool = True,
+    financial_targets: Optional[dict[str, Any]] = None,
+    financial_loss_config: Optional[dict[str, Any]] = None,
+) -> AIMLPReferenceState:
     state = state or AIMLPReferenceState.create(lr=lr)
     state.model.train()
     device = next(state.model.parameters()).device
     x = _to_sequence(batch, device=device, data_has_volume=data_has_volume)
-    y = _targets(labels, x.shape[0], device)
-    m = _moves(moves, x.shape[0], device)
     state.optimizer.zero_grad(set_to_none=True)
     encoded = state.model.encode(x)
     logits, move, quantiles = state.model.heads(encoded)
-    loss = F.cross_entropy(logits, y) + 0.05 * F.smooth_l1_loss(move, m) + 0.02 * _pinball_loss(quantiles, m)
+    loss = financial_utility_loss_torch(
+        logits,
+        labels,
+        move,
+        moves,
+        quantile_prediction=quantiles,
+        financial_targets=financial_targets,
+        financial_loss_config=financial_loss_config,
+        quantiles=QUANTILES,
+    )
     loss = loss + 0.01 * state.model.ewc_penalty(encoded)
     loss.backward()
     torch.nn.utils.clip_grad_norm_(state.model.parameters(), 1.0)

@@ -76,6 +76,15 @@ if command.get("operation") == "train":
     assert abs(inference["minMovePoints"] - 1.5) < 0.0001
     assert inference["eventTexts"][0].startswith("USD growth")
     assert inference["tokenizerContract"]["version"] == "fxai-tokenizer-v1"
+    financial = training["financialTargets"]
+    assert financial["labelClass"] == 1
+    assert abs(financial["movePoints"] - 2.0) < 0.0001
+    assert abs(financial["mfePoints"] - 3.4) < 0.0001
+    assert abs(financial["maePoints"] - 0.9) < 0.0001
+    assert abs(financial["pathRisk"] - 0.35) < 0.0001
+    assert abs(financial["fillRisk"] - 0.20) < 0.0001
+    assert abs(financial["priceCostPoints"] - 0.7) < 0.0001
+    assert training["financialLossSpec"]["version"] == "fxai-financial-loss-v1"
     print(json.dumps({"apiVersion": 4, "ok": True, "prediction": None, "error": None}))
 else:
     inference = command.get("inference") or {}
@@ -157,6 +166,13 @@ else:
             labelClass: .buy,
             movePoints: 2.0,
             sampleWeight: 1.0,
+            mfePoints: 3.4,
+            maePoints: 0.9,
+            timeToHitFraction: 0.45,
+            pathFlags: SamplePathFlags.dualHit.rawValue,
+            pathRisk: 0.35,
+            fillRisk: 0.20,
+            nextVolumeTarget: 1.25,
             x: x
         )
         try await bridge.train(MLTrainingPayload(inference: payload, request: trainRequest))
@@ -164,6 +180,58 @@ else:
         let syncPrediction = try bridge.predictSynchronously(payload)
         XCTAssertEqual(syncPrediction.classProbabilities[1], 0.8, accuracy: 0.0001)
         try bridge.trainSynchronously(MLTrainingPayload(inference: payload, request: trainRequest))
+    }
+
+    func testMLTrainingPayloadCarriesFinancialLossTargets() throws {
+        var x = Array(repeating: 0.0, count: FXDataEngineConstants.aiWeights)
+        x[0] = 0.2
+        let context = PluginContextV4(
+            horizonMinutes: 30,
+            priceCostPoints: 0.8,
+            minMovePoints: 1.6,
+            dataHasVolume: false
+        )
+        let request = TrainRequestV4(
+            valid: true,
+            context: context,
+            labelClass: .sell,
+            movePoints: -4.2,
+            sampleWeight: 1.75,
+            mfePoints: 5.0,
+            maePoints: 1.1,
+            timeToHitFraction: 0.30,
+            pathFlags: SamplePathFlags.liquidityStress.rawValue,
+            pathRisk: 0.42,
+            fillRisk: 0.25,
+            regimeShiftTarget: 0.20,
+            contextLeadTarget: 0.65,
+            x: x
+        )
+        let inference = MLBackendFactory.inferencePayload(
+            descriptor: MLBackendDescriptor(
+                mode: .externalPython(framework: .pyTorch, executable: "python3.12", module: "backend.py"),
+                modelIdentifier: "ai_mlp"
+            ),
+            request: PredictRequestV4(valid: true, context: context, x: x)
+        )
+        let payload = MLTrainingPayload(inference: inference, request: request)
+
+        try payload.validateLatestAPI()
+        XCTAssertEqual(payload.financialLossSpec.version, MLFinancialLossSpec.defaultVersion)
+        XCTAssertEqual(payload.financialTargets.labelClass, .sell)
+        XCTAssertEqual(payload.financialTargets.movePoints, -4.2, accuracy: 0.0001)
+        XCTAssertEqual(payload.financialTargets.maePoints, 1.1, accuracy: 0.0001)
+        XCTAssertEqual(payload.financialTargets.pathRisk, 0.42, accuracy: 0.0001)
+        XCTAssertEqual(payload.financialTargets.priceCostPoints, 0.8, accuracy: 0.0001)
+
+        let encoded = try JSONEncoder().encode(payload)
+        let encodedText = String(data: encoded, encoding: .utf8) ?? ""
+        XCTAssertTrue(encodedText.contains("\"financialTargets\""))
+        XCTAssertTrue(encodedText.contains("\"financialLossSpec\""))
+
+        let decoded = try JSONDecoder().decode(MLTrainingPayload.self, from: encoded)
+        XCTAssertEqual(decoded.financialTargets.fillRisk, 0.25, accuracy: 0.0001)
+        XCTAssertNoThrow(try decoded.validateLatestAPI())
     }
 
     func testPythonMLBackendBridgeReportsConfigurationErrorsWithoutLaunchingProcess() {

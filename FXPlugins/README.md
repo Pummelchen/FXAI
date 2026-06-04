@@ -69,13 +69,20 @@ contracts:
   reintroduced.
 - Python-backed plugins can use `PythonMLBackendBridge` from `FXDataEngine`.
   The bridge sends OHLCV feature vectors, sequence windows, volume availability,
-  horizon, min-move, and price-cost context to plugin-local PyTorch/TensorFlow
-  code. The included backend has a pure-Python fallback for contract tests and
+  horizon, min-move, price-cost context, and financial training targets to
+  plugin-local PyTorch/TensorFlow code. The included backend has a pure-Python fallback for contract tests and
   requires PyTorch MPS or TensorFlow Metal acceleration for live accelerator
   runtime paths on Apple Silicon M2/M3-class hosts. Training calls persist lightweight online state under
   `FXAI_PLUGIN_STATE_DIR`, or `~/.fxai/plugins/state` when the environment
   variable is not set. The backend follows the FXDataEngine volume contract:
   volume-derived features are used only when `dataHasVolume` is true.
+  Backends that declare `financial_targets` and `financial_loss_config` in
+  `train_step` receive `MLFinancialTrainingTargets` and `MLFinancialLossSpec`.
+  The shared `fxai_financial_loss.py` helpers implement the preferred hybrid
+  utility objective: class CE, move Huber, quantile pinball, adverse-tail
+  penalty, cost/path/fill-risk penalty, activity discipline, and downside
+  utility. Walk-forward Sharpe/Sortino metrics remain validation and promotion
+  gates, not the primary training loss.
   External backend checkpoints are written atomically and paired with
   `fxai_backend_checkpoint_v1` manifest sidecars that record plugin, framework,
   model identifier, stable deterministic seed, backend source hash, state size,

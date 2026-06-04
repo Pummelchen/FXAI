@@ -2,9 +2,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from pathlib import Path
+import sys
+from typing import Any, Iterable, Optional
 
 import tensorflow as tf
+
+try:
+    from fxai_financial_loss import financial_utility_loss_tensorflow
+except ModuleNotFoundError:
+    sys.path.append(str(Path(__file__).resolve().parents[2] / "API" / "Backends" / "Python"))
+    from fxai_financial_loss import financial_utility_loss_tensorflow
 
 PLUGIN_NAME = "ai_mlp"
 ARCHITECTURE_MODE = "MLP"
@@ -130,19 +138,30 @@ def predict_batch(batch: Iterable[Iterable[float]], state: Optional[AIMLPTensorF
     return {"plugin": PLUGIN_NAME, "architecture": ARCHITECTURE_MODE, "class_probabilities": tf.nn.softmax(logits, axis=-1).numpy().tolist(), "move_mean_points": move.numpy().tolist(), "move_quantiles": quantiles.numpy().tolist()}
 
 
-def train_step(batch: Iterable[Iterable[float]], labels: Iterable[int], moves: Iterable[float], state: Optional[AIMLPTensorFlowState] = None, lr: float = 3.0e-4, data_has_volume: bool = True) -> AIMLPTensorFlowState:
+def train_step(
+    batch: Iterable[Iterable[float]],
+    labels: Iterable[int],
+    moves: Iterable[float],
+    state: Optional[AIMLPTensorFlowState] = None,
+    lr: float = 3.0e-4,
+    data_has_volume: bool = True,
+    financial_targets: Optional[dict[str, Any]] = None,
+    financial_loss_config: Optional[dict[str, Any]] = None,
+) -> AIMLPTensorFlowState:
     state = state or AIMLPTensorFlowState.create(lr=lr)
     x = _to_sequence(batch, data_has_volume=data_has_volume)
-    y = tf.convert_to_tensor((list(labels) or [2] * int(x.shape[0]))[: int(x.shape[0])], dtype=tf.int32)
-    m = tf.abs(tf.convert_to_tensor((list(moves) or [1.0] * int(x.shape[0]))[: int(x.shape[0])], dtype=tf.float32))
     with tf.GradientTape() as tape:
         logits, move, quantiles = state.model(x, training=True)
-        ce = tf.reduce_mean(tf.keras.losses.sparse_categorical_crossentropy(y, logits, from_logits=True))
-        move_loss = tf.reduce_mean(tf.keras.losses.huber(m, move))
-        q = tf.reshape(tf.constant(QUANTILES, dtype=tf.float32), (1, -1))
-        error = tf.reshape(m, (-1, 1)) - quantiles
-        pinball = tf.reduce_mean(tf.maximum(q * error, (q - 1.0) * error))
-        loss = ce + 0.05 * move_loss + 0.02 * pinball
+        loss = financial_utility_loss_tensorflow(
+            logits,
+            labels,
+            move,
+            moves,
+            quantile_prediction=quantiles,
+            financial_targets=financial_targets,
+            financial_loss_config=financial_loss_config,
+            quantiles=QUANTILES,
+        )
     grads = tape.gradient(loss, state.model.trainable_variables)
     state.optimizer.apply_gradients(zip(grads, state.model.trainable_variables))
     return state
