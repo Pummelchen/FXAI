@@ -302,3 +302,20 @@ Project-local docs remain next to the code they describe:
 ## Operating Principle
 
 FXAI is a decision framework, not a profit guarantee. A plugin score is not a trade by itself. FXAI is designed to control data quality, feature preparation, backtest evidence, model selection, execution routing, and operational safety before demo or live trading uses any result.
+
+## Production Readiness
+
+**Status:** ✅ Production Ready (as of June 19, 2026)
+
+FXAI has undergone a comprehensive production readiness audit covering:
+- **229K lines of code** (188K Swift + 41K Python)
+- **12 Swift packages** + 68 plugins
+- **757+ unit tests** verified passing
+
+**Critical fixes applied:**
+- Thread safety in MT5 live trading bridge (NSLock)
+- 4 force unwrap crash points eliminated
+- Memory leak prevention ([weak self] in Task closures)
+- Error observability (FileIOLogger for silent I/O failures)
+
+📖 [View Full Audit Results](https://github.com/Pummelchen/FXAI/wiki/Production-Readiness-Audit)
