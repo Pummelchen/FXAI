@@ -4,8 +4,46 @@ FXAI is a pure Swift, Metal, PyTorch, TensorFlow, ONNX Runtime, and optional rem
 
 FXAI is organized around one strict rule: only FXDatabase may touch ClickHouse directly. Every other project talks to FXDatabase through an API.
 
-Roadmap: [FXAI Roadmap](https://github.com/Pummelchen/FXAI/wiki/Roadmap)
-Governance: [FXAI Governance](GOVERNANCE.md)
+**Production Status:** ✅ Production Ready (June 2026 audit, 757+ tests passing) — [View Details](https://github.com/Pummelchen/FXAI/wiki/Production-Readiness-Audit)
+
+**Documentation:** [Wiki](https://github.com/Pummelchen/FXAI/wiki) · [Roadmap](https://github.com/Pummelchen/FXAI/wiki/Roadmap) · [Governance](GOVERNANCE.md) · [Architecture](https://github.com/Pummelchen/FXAI/wiki/Architecture)
+
+## Quick Start
+
+### Installation
+```bash
+./install_fxai.sh
+```
+
+Dry run to see what will be installed:
+```bash
+DRY_RUN=1 ./install_fxai.sh
+```
+
+### Verification
+```bash
+# Build all packages
+./fxai certify --build-only
+
+# Run test suites
+swift test --package-path FXDatabase
+swift test --package-path FXDataEngine
+FXAI_PYTHON=/opt/homebrew/bin/python3.12 swift test --package-path FXPlugins
+swift test --package-path FXBacktest
+
+# Run full certification
+./fxai certify --all
+```
+
+### First Backtest
+```bash
+# Run a sample audit with walk-forward validation
+python3.12 FXDataEngine/Tools/fxai_testlab.py run-audit \
+  --scenario-list "{market_walkforward, market_trend, market_chop}" \
+  --wf-train-years 1 --wf-test-years 0.25 --wf-window-mode rolling
+```
+
+For detailed setup instructions, see [Installation Guide](https://github.com/Pummelchen/FXAI/wiki/Installation).
 
 ## Project Map
 
@@ -319,3 +357,17 @@ FXAI has undergone a comprehensive production readiness audit covering:
 - Error observability (FileIOLogger for silent I/O failures)
 
 📖 [View Full Audit Results](https://github.com/Pummelchen/FXAI/wiki/Production-Readiness-Audit)
+
+## Documentation
+
+The wiki provides comprehensive documentation for all user roles:
+
+| Audience | Key Pages |
+|----------|-----------|
+| **New Users** | [Installation](https://github.com/Pummelchen/FXAI/wiki/Installation) → [User Roles](https://github.com/Pummelchen/FXAI/wiki/User-Roles) → [Project Map](https://github.com/Pummelchen/FXAI/wiki/Project-Map) |
+| **Developers** | [Architecture](https://github.com/Pummelchen/FXAI/wiki/Architecture) → [Plugin Template](https://github.com/Pummelchen/FXAI/wiki/Plugin-Template) → [Governance](https://github.com/Pummelchen/FXAI/wiki/Governance) |
+| **Operators** | [Walk-Forward Optimization](https://github.com/Pummelchen/FXAI/wiki/Walk-Forward-Optimization) → [Drift Retraining](https://github.com/Pummelchen/FXAI/wiki/Drift-Retraining) → [Roadmap](https://github.com/Pummelchen/FXAI/wiki/Roadmap) |
+
+## Operating Principle
+
+FXAI is a decision framework, not a profit guarantee. A plugin score is not a trade by itself. FXAI is designed to control data quality, feature preparation, backtest evidence, model selection, execution routing, and operational safety before demo or live trading uses any result.
