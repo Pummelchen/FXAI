@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 
 public enum ProjectScannerError: Error, LocalizedError {
     case invalidProjectRoot(URL)
@@ -118,7 +119,7 @@ public struct ProjectScanner {
     }
 
     private func swiftPluginDescriptors(sourceFile: URL, sourceRoot: URL) -> [PluginDescriptor] {
-        guard let source = try? String(contentsOf: sourceFile, encoding: .utf8) else {
+        guard let source = loggedTry({ try String(contentsOf: sourceFile, encoding: .utf8) }, "swift source read") else {
             return []
         }
 
@@ -217,7 +218,7 @@ public struct ProjectScanner {
     }
 
     private func regexCaptures(pattern: String, text: String) -> [String] {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+        guard let regex = loggedTry({ try NSRegularExpression(pattern: pattern) }, "regex compile") else {
             return []
         }
         let nsText = text as NSString
@@ -230,7 +231,7 @@ public struct ProjectScanner {
     }
 
     private func regexCapturePairs(pattern: String, text: String) -> [(first: String, second: String)] {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+        guard let regex = loggedTry({ try NSRegularExpression(pattern: pattern) }, "regex compile") else {
             return []
         }
         let nsText = text as NSString
@@ -260,7 +261,7 @@ public struct ProjectScanner {
 
     private func buildTarget(named: String, relativePath: String, projectRoot: URL) -> BuildTargetStatus {
         let url = projectRoot.appendingPathComponent(relativePath)
-        let metadata = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
+        let metadata = loggedTry({ try url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey]) }, "target metadata")
 
         return BuildTargetStatus(
             name: named,
@@ -284,7 +285,7 @@ public struct ProjectScanner {
 
         for (category, root) in roots {
             for fileURL in recursiveFiles(at: root) where allowedExtensions.contains(fileURL.pathExtension.lowercased()) {
-                let metadata = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey])
+                let metadata = loggedTry({ try fileURL.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]) }, "source metadata")
                 guard metadata?.isRegularFile == true else { continue }
 
                 artifacts.append(
@@ -313,10 +314,13 @@ public struct ProjectScanner {
         var profiles: [RuntimeProfileSummary] = []
 
         for fileURL in candidateFiles {
-            guard
-                let data = try? Data(contentsOf: fileURL),
-                let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            else {
+            guard let data = loggedTry({ try Data(contentsOf: fileURL) }, "artifact read") else { continue }
+            let payload: [String: Any]
+            do {
+                guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+                payload = parsed
+            } catch {
+                FileIOLogger.shared.warning("artifact parse: \(error, privacy: .public)")
                 continue
             }
 
@@ -359,11 +363,28 @@ public struct ProjectScanner {
             modificationDate(for: lhs) < modificationDate(for: rhs)
         }
 
-        guard
-            let dashboardURL = latestFile,
-            let data = try? Data(contentsOf: dashboardURL),
-            let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
+        guard let dashboardURL = latestFile, let data = loggedTry({ try Data(contentsOf: dashboardURL) }, "dashboard read") else {
+            return OperatorSummary(
+                profileName: nil,
+                championCount: 0,
+                deploymentCount: 0,
+                latestReviewedAt: nil
+            )
+        }
+
+        let payload: [String: Any]
+        do {
+            guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return OperatorSummary(
+                    profileName: nil,
+                    championCount: 0,
+                    deploymentCount: 0,
+                    latestReviewedAt: nil
+                )
+            }
+            payload = parsed
+        } catch {
+            FileIOLogger.shared.warning("dashboard parse: \(error, privacy: .public)")
             return OperatorSummary(
                 profileName: nil,
                 championCount: 0,
@@ -487,11 +508,11 @@ public struct ProjectScanner {
     }
 
     private func isDirectory(_ url: URL) -> Bool {
-        (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+        loggedTry({ try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory }, "isDir check") == true
     }
 
     private func isRegularFile(_ url: URL) -> Bool {
-        (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+        loggedTry({ try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile }, "isFile check") == true
     }
 
     private func symbolFrom(_ filename: String) -> String {

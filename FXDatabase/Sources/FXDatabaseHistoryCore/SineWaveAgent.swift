@@ -13,6 +13,10 @@ public enum SineTestSecurity {
     public static let minimumNormalizedValue = 0.001
     public static let syncIntervalSeconds = 10
 
+    // NOTE: The four validated* helpers below enforce compile-time invariants on hardcoded literals.
+    // preconditionFailure is intentional — these validate source-code constants, not runtime input.
+    // Converting to throw would require changing all static let properties to throwing functions.
+
     /// Returns true when a logical symbol refers to the virtual SineTest market.
     ///
     /// FXDatabase uses this to route SineTest requests away from real providers.

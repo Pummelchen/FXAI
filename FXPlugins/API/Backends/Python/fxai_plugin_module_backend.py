@@ -135,8 +135,9 @@ def _prepare_framework(framework: str) -> None:
         for device in devices:
             try:
                 tf.config.experimental.set_memory_growth(device, True)
-            except Exception:
-                pass
+            except Exception as _e:
+                import logging
+                logging.warning(f"TensorFlow memory growth failed for {device.device_type}:{device.name}: {_e}")
         if _env_flag("FXAI_REQUIRE_TENSORFLOW_METAL") and not devices:
             raise RuntimeError("TensorFlow Metal GPU device is required for this FXAI accelerator runtime")
 
@@ -733,6 +734,7 @@ def _onnx_prediction(plugin_name: str, model_identifier: Any, model_path: Path, 
     import onnxruntime as ort
 
     manifest = _load_onnx_manifest(plugin_name, model_identifier, model_path)
+    # Create onnxruntime.InferenceSession via the ort alias for ONNX model inference
     session = ort.InferenceSession(str(model_path), providers=_onnx_providers(manifest, ort))
     inputs = session.get_inputs()
     if not inputs:

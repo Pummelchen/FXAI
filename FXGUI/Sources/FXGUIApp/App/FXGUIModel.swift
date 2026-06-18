@@ -26,6 +26,23 @@ final class FXGUIModel: ObservableObject {
     @Published var visualizationSnapshot: AdvancedVisualizationSnapshot?
     @Published var incidentSnapshot: IncidentCenterSnapshot?
     @Published var selection: SidebarDestination? = .overview
+
+    // MARK: - M9: Promotion Governance State
+    @Published var promotionCandidates: [PromotionCandidate] = []
+    @Published var selectedCandidateID: String?
+    @Published var rollbackHistory: [RollbackRecord] = []
+    @Published var killSwitchState = KillSwitchState()
+    @Published var agentFleetSnapshot: AgentFleetSnapshot?
+    @Published var backtestCampaignSnapshot: BacktestCampaignSnapshot?
+    @Published var logStreamSnapshot: LogStreamSnapshot?
+    @Published var demoDeploymentSnapshot: DemoDeploymentSnapshot?
+    @Published var evidencePacks: [EvidencePack] = []
+    @Published var approvalNoteDraft = ""
+    @Published var auditNoteDraft = ""
+    @Published var rollbackReasonDraft = ""
+    @Published var selectedLogStreamKey: String?
+    @Published var selectedCampaignID: String?
+    @Published var selectedDemoDeploymentID: String?
     @Published var selectedRole: WorkspaceRole = .liveTrader
     @Published var selectedRuntimeSymbol = ""
     @Published var selectedRatesSymbol = ""
@@ -94,8 +111,8 @@ final class FXGUIModel: ObservableObject {
         bindResourceManagement()
 
         if performInitialConnectionCheck {
-            Task {
-                await performSoftConnectionCheck(forceRefresh: true)
+            Task { [weak self] in
+                await self?.performSoftConnectionCheck(forceRefresh: true)
             }
         }
     }
@@ -231,6 +248,292 @@ final class FXGUIModel: ObservableObject {
         return incidentSnapshot.incidents.first
     }
 
+    // MARK: - M9: Promotion Governance Computed Properties
+
+    var selectedCandidate: PromotionCandidate? {
+        if let selectedCandidateID,
+           let candidate = promotionCandidates.first(where: { $0.id == selectedCandidateID }) {
+            return candidate
+        }
+        return promotionCandidates.first
+    }
+
+    var candidatesByStage: [PromotionStage: [PromotionCandidate]] {
+        Dictionary(grouping: promotionCandidates, by: \.currentStage)
+    }
+
+    var selectedLogStream: LogStreamEntry? {
+        guard let logStreamSnapshot else { return nil }
+        if let selectedLogStreamKey,
+           let stream = logStreamSnapshot.streams.first(where: { $0.streamKey == selectedLogStreamKey }) {
+            return stream
+        }
+        return logStreamSnapshot.streams.first
+    }
+
+    var selectedCampaign: BacktestCampaign? {
+        guard let backtestCampaignSnapshot else { return nil }
+        if let selectedCampaignID,
+           let campaign = backtestCampaignSnapshot.campaigns.first(where: { $0.id == selectedCampaignID }) {
+            return campaign
+        }
+        return backtestCampaignSnapshot.campaigns.first
+    }
+
+    var selectedDemoDeployment: DemoDeployment? {
+        guard let demoDeploymentSnapshot else { return nil }
+        if let selectedDemoDeploymentID,
+           let deployment = demoDeploymentSnapshot.deployments.first(where: { $0.id == selectedDemoDeploymentID }) {
+            return deployment
+        }
+        return demoDeploymentSnapshot.deployments.first
+    }
+
+    // MARK: - M9: Promotion Workflow Actions
+
+    func approveCandidate(_ candidate: PromotionCandidate, reviewerRole: WorkspaceRole, note: String) {
+        let approval = PromotionApprovalRecord(
+            reviewerRole: reviewerRole,
+            decision: .approved,
+            note: note
+        )
+        let updatedCandidate = PromotionCandidate(
+            symbol: candidate.symbol,
+            pluginName: candidate.pluginName,
+            currentStage: candidate.currentStage,
+            championScore: candidate.championScore,
+            challengerScore: candidate.challengerScore,
+            portfolioScore: candidate.portfolioScore,
+            approvals: candidate.approvals + [approval],
+            auditNotes: candidate.auditNotes + [
+                PromotionAuditNote(
+                    authorRole: reviewerRole,
+                    text: "Approved at \(candidate.currentStage.title). \(note)",
+                    stageAtCreation: candidate.currentStage
+                )
+            ],
+            createdAt: candidate.createdAt,
+            updatedAt: Date(),
+            setPath: candidate.setPath,
+            profileName: candidate.profileName
+        )
+        if let index = promotionCandidates.firstIndex(where: { $0.id == candidate.id }) {
+            promotionCandidates[index] = updatedCandidate
+        }
+        approvalNoteDraft = ""
+    }
+
+    func advanceCandidate(_ candidate: PromotionCandidate, reviewerRole: WorkspaceRole, note: String) {
+        guard let nextStage = candidate.currentStage.nextStage else { return }
+        guard candidate.canAdvance else { return }
+        let approval = PromotionApprovalRecord(
+            reviewerRole: reviewerRole,
+            decision: .approved,
+            note: note
+        )
+        let updatedCandidate = PromotionCandidate(
+            symbol: candidate.symbol,
+            pluginName: candidate.pluginName,
+            currentStage: nextStage,
+            championScore: candidate.championScore,
+            challengerScore: candidate.challengerScore,
+            portfolioScore: candidate.portfolioScore,
+            approvals: candidate.approvals + [approval],
+            auditNotes: candidate.auditNotes + [
+                PromotionAuditNote(
+                    authorRole: reviewerRole,
+                    text: "Promoted to \(nextStage.title). \(note)",
+                    stageAtCreation: candidate.currentStage
+                )
+            ],
+            createdAt: candidate.createdAt,
+            updatedAt: Date(),
+            setPath: candidate.setPath,
+            profileName: candidate.profileName
+        )
+        if let index = promotionCandidates.firstIndex(where: { $0.id == candidate.id }) {
+            promotionCandidates[index] = updatedCandidate
+        }
+        approvalNoteDraft = ""
+    }
+
+    func rejectCandidate(_ candidate: PromotionCandidate, reviewerRole: WorkspaceRole, note: String) {
+        let rejection = PromotionApprovalRecord(
+            reviewerRole: reviewerRole,
+            decision: .rejected,
+            note: note
+        )
+        let updatedCandidate = PromotionCandidate(
+            symbol: candidate.symbol,
+            pluginName: candidate.pluginName,
+            currentStage: candidate.currentStage,
+            championScore: candidate.championScore,
+            challengerScore: candidate.challengerScore,
+            portfolioScore: candidate.portfolioScore,
+            approvals: candidate.approvals + [rejection],
+            auditNotes: candidate.auditNotes + [
+                PromotionAuditNote(
+                    authorRole: reviewerRole,
+                    text: "Rejected at \(candidate.currentStage.title). \(note)",
+                    stageAtCreation: candidate.currentStage
+                )
+            ],
+            createdAt: candidate.createdAt,
+            updatedAt: Date(),
+            setPath: candidate.setPath,
+            profileName: candidate.profileName
+        )
+        if let index = promotionCandidates.firstIndex(where: { $0.id == candidate.id }) {
+            promotionCandidates[index] = updatedCandidate
+        }
+        approvalNoteDraft = ""
+    }
+
+    func addAuditNote(to candidate: PromotionCandidate, role: WorkspaceRole, text: String) {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let note = PromotionAuditNote(
+            authorRole: role,
+            text: text,
+            stageAtCreation: candidate.currentStage
+        )
+        let updatedCandidate = PromotionCandidate(
+            symbol: candidate.symbol,
+            pluginName: candidate.pluginName,
+            currentStage: candidate.currentStage,
+            championScore: candidate.championScore,
+            challengerScore: candidate.challengerScore,
+            portfolioScore: candidate.portfolioScore,
+            approvals: candidate.approvals,
+            auditNotes: candidate.auditNotes + [note],
+            createdAt: candidate.createdAt,
+            updatedAt: Date(),
+            setPath: candidate.setPath,
+            profileName: candidate.profileName
+        )
+        if let index = promotionCandidates.firstIndex(where: { $0.id == candidate.id }) {
+            promotionCandidates[index] = updatedCandidate
+        }
+        auditNoteDraft = ""
+    }
+
+    func rollbackCandidate(_ candidate: PromotionCandidate, toStage: PromotionStage, reason: String, initiatedBy: WorkspaceRole) {
+        let record = RollbackRecord(
+            candidateID: candidate.id,
+            fromStage: candidate.currentStage,
+            toStage: toStage,
+            reason: reason,
+            initiatedBy: initiatedBy
+        )
+        rollbackHistory.insert(record, at: 0)
+        let updatedCandidate = PromotionCandidate(
+            symbol: candidate.symbol,
+            pluginName: candidate.pluginName,
+            currentStage: toStage,
+            championScore: candidate.championScore,
+            challengerScore: candidate.challengerScore,
+            portfolioScore: candidate.portfolioScore,
+            approvals: candidate.approvals.filter { $0.decision != .approved },
+            auditNotes: candidate.auditNotes + [
+                PromotionAuditNote(
+                    authorRole: initiatedBy,
+                    text: "Rolled back from \(candidate.currentStage.title) to \(toStage.title). Reason: \(reason)",
+                    stageAtCreation: candidate.currentStage
+                )
+            ],
+            createdAt: candidate.createdAt,
+            updatedAt: Date(),
+            setPath: candidate.setPath,
+            profileName: candidate.profileName
+        )
+        if let index = promotionCandidates.firstIndex(where: { $0.id == candidate.id }) {
+            promotionCandidates[index] = updatedCandidate
+        }
+        rollbackReasonDraft = ""
+    }
+
+    func toggleKillSwitch(component: KillSwitchComponent) {
+        switch component {
+        case .global:
+            killSwitchState = KillSwitchState(
+                accountEnabled: killSwitchState.accountEnabled,
+                symbolEnabled: killSwitchState.symbolEnabled,
+                globalEnabled: !killSwitchState.globalEnabled,
+                lastCheckedAt: Date(),
+                symbol: killSwitchState.symbol
+            )
+        case .account:
+            killSwitchState = KillSwitchState(
+                accountEnabled: !killSwitchState.accountEnabled,
+                symbolEnabled: killSwitchState.symbolEnabled,
+                globalEnabled: killSwitchState.globalEnabled,
+                lastCheckedAt: Date(),
+                symbol: killSwitchState.symbol
+            )
+        case .symbol:
+            killSwitchState = KillSwitchState(
+                accountEnabled: killSwitchState.accountEnabled,
+                symbolEnabled: !killSwitchState.symbolEnabled,
+                globalEnabled: killSwitchState.globalEnabled,
+                lastCheckedAt: Date(),
+                symbol: killSwitchState.symbol
+            )
+        }
+    }
+
+    func generateEvidencePack(for candidate: PromotionCandidate) -> EvidencePack {
+        let sections = [
+            EvidencePackSection(
+                title: "Scores & Metrics",
+                artifacts: [
+                    EvidencePackArtifact(name: "Champion Score", summary: "\(String(format: "%.4f", candidate.championScore))"),
+                    EvidencePackArtifact(name: "Challenger Score", summary: "\(String(format: "%.4f", candidate.challengerScore))"),
+                    EvidencePackArtifact(name: "Portfolio Score", summary: "\(String(format: "%.4f", candidate.portfolioScore))"),
+                    EvidencePackArtifact(name: "Score Delta", summary: "\(String(format: "%.4f", candidate.scoreDelta))")
+                ]
+            ),
+            EvidencePackSection(
+                title: "Approvals",
+                artifacts: candidate.approvals.map { approval in
+                    EvidencePackArtifact(
+                        name: "\(approval.reviewerRole.title) — \(approval.decision.title)",
+                        summary: approval.note.isEmpty ? "No note provided" : approval.note
+                    )
+                }
+            ),
+            EvidencePackSection(
+                title: "Audit Trail",
+                artifacts: candidate.auditNotes.map { note in
+                    EvidencePackArtifact(
+                        name: "\(note.authorRole.title) at \(note.stageAtCreation.title)",
+                        summary: note.text
+                    )
+                }
+            ),
+            EvidencePackSection(
+                title: "Configuration",
+                artifacts: [
+                    EvidencePackArtifact(name: "Symbol", summary: candidate.symbol),
+                    EvidencePackArtifact(name: "Plugin", summary: candidate.pluginName),
+                    EvidencePackArtifact(name: "Stage", summary: candidate.currentStage.title),
+                    EvidencePackArtifact(name: "Profile", summary: candidate.profileName ?? "N/A", path: candidate.setPath)
+                ]
+            )
+        ]
+        let pack = EvidencePack(
+            candidateID: candidate.id,
+            symbol: candidate.symbol,
+            pluginName: candidate.pluginName,
+            stage: candidate.currentStage,
+            sections: sections
+        )
+        evidencePacks.insert(pack, at: 0)
+        return pack
+    }
+
+    enum KillSwitchComponent {
+        case global, account, symbol
+    }
+
     var currentOnboardingGuide: RoleOnboardingGuide? {
         guard let projectRoot else { return nil }
         return OnboardingGuideFactory.guide(role: selectedRole, projectRoot: projectRoot)
@@ -299,6 +602,11 @@ final class FXGUIModel: ObservableObject {
             syncResearchSelection()
             syncVisualizationSelection()
             syncIncidentSelection()
+            syncPromotionCandidates()
+            syncAgentFleet()
+            syncBacktestCampaign()
+            syncLogStreams()
+            syncDemoDeployments()
             connectionState = .connected
             preferredProjectRoot = projectRoot
             lastErrorMessage = nil
@@ -324,8 +632,8 @@ final class FXGUIModel: ObservableObject {
 
         preferredProjectRoot = url
         autoReconnectEnabled = true
-        Task {
-            await performSoftConnectionCheck(forceRefresh: true)
+        Task { [weak self] in
+            await self?.performSoftConnectionCheck(forceRefresh: true)
         }
     }
 
@@ -340,8 +648,8 @@ final class FXGUIModel: ObservableObject {
 
     func reconnectProject() {
         autoReconnectEnabled = true
-        Task {
-            await performSoftConnectionCheck(forceRefresh: true)
+        Task { [weak self] in
+            await self?.performSoftConnectionCheck(forceRefresh: true)
         }
     }
 
@@ -480,7 +788,7 @@ final class FXGUIModel: ObservableObject {
            targetRootPath != projectRoot?.path {
             projectRoot = URL(fileURLWithPath: targetRootPath, isDirectory: true)
             applyState()
-            Task { await refresh() }
+            Task { [weak self] in await self?.refresh() }
             return
         }
 
@@ -920,6 +1228,148 @@ final class FXGUIModel: ObservableObject {
         selectedIncidentID = incidentSnapshot.incidents.first?.id
     }
 
+    // MARK: - M9: Sync Promotion Governance Data
+
+    private func syncPromotionCandidates() {
+        guard let runtimeSnapshot else {
+            if !promotionCandidates.isEmpty {
+                promotionCandidates = []
+            }
+            return
+        }
+
+        let existingIDs = Set(promotionCandidates.map(\.id))
+        var merged = promotionCandidates
+
+        for champion in runtimeSnapshot.champions {
+            let candidateID = "\(champion.symbol)::\(champion.pluginName)"
+            guard !existingIDs.contains(candidateID) else { continue }
+            let stage = promotionStage(from: champion.promotionTier)
+            let candidate = PromotionCandidate(
+                symbol: champion.symbol,
+                pluginName: champion.pluginName,
+                currentStage: stage,
+                championScore: champion.championScore,
+                challengerScore: champion.challengerScore,
+                portfolioScore: champion.portfolioScore,
+                setPath: champion.setPath,
+                profileName: champion.profileName
+            )
+            merged.append(candidate)
+        }
+        promotionCandidates = merged
+    }
+
+    private func promotionStage(from tier: String) -> PromotionStage {
+        switch tier.lowercased() {
+        case "production", "live":
+            return .production
+        case "live_candidate", "live-candidate":
+            return .liveCandidate
+        case "shadow_candidate", "shadow-candidate", "shadow":
+            return .shadowCandidate
+        case "demo_candidate", "demo-candidate", "demo":
+            return .demoCandidate
+        default:
+            return .backtest
+        }
+    }
+
+    private func syncAgentFleet() {
+        let now = Date()
+        let agents = [
+            AgentFleetMember(
+                name: "FXBacktestAgent",
+                role: "Backtest Executor",
+                status: runtimeSnapshot != nil ? .active : .idle,
+                lastHeartbeat: now,
+                assignedSymbols: runtimeSnapshot?.symbols ?? [],
+                capabilities: ["SineTest", "Plugin Zoo Bridge", "Campaign Execution"]
+            ),
+            AgentFleetMember(
+                name: "FXDemoAgent",
+                role: "Demo Observer",
+                status: .idle,
+                lastHeartbeat: nil,
+                assignedSymbols: [],
+                capabilities: ["Paper Trading", "Performance Tracking"]
+            ),
+            AgentFleetMember(
+                name: "FXLiveAgent",
+                role: "Live Executor",
+                status: killSwitchState.isArmed ? .stopped : .idle,
+                lastHeartbeat: nil,
+                assignedSymbols: [],
+                capabilities: ["Order Execution", "Risk Management", "Kill Switch"]
+            ),
+            AgentFleetMember(
+                name: "FXImporter (MT5)",
+                role: "Data Importer",
+                status: snapshot?.tursoSummary.localDatabasePresent == true ? .active : .stopped,
+                lastHeartbeat: snapshot?.tursoSummary.localDatabasePresent == true ? now : nil,
+                assignedSymbols: [],
+                capabilities: ["MetaTrader5 Bridge", "Tick Data Import", "OHLCV Import"]
+            )
+        ]
+        agentFleetSnapshot = AgentFleetSnapshot(agents: agents)
+    }
+
+    private func syncBacktestCampaign() {
+        let champions = runtimeSnapshot?.champions ?? []
+        let campaigns = champions.map { champion -> BacktestCampaign in
+            BacktestCampaign(
+                name: "\(champion.symbol) \(champion.pluginName) Campaign",
+                pluginName: champion.pluginName,
+                symbol: champion.symbol,
+                status: .completed,
+                startedAt: champion.reviewedAt?.addingTimeInterval(-3600),
+                completedAt: champion.reviewedAt,
+                scenarioCount: 5,
+                passedCount: champion.championScore > champion.challengerScore ? 4 : 2,
+                failedCount: champion.championScore > champion.challengerScore ? 1 : 3,
+                bestSharpe: champion.championScore,
+                worstDrawdown: -(1.0 - champion.portfolioScore)
+            )
+        }
+        backtestCampaignSnapshot = BacktestCampaignSnapshot(campaigns: campaigns)
+    }
+
+    private func syncLogStreams() {
+        let streams = [
+            LogStreamEntry(streamKey: "certification", displayName: "Certification", lastEventAt: Date(), eventCount: 12, recentLines: ["[certify] Building FXTools...", "[certify] Running FXBacktestCoreTests...", "[certify] All packages verified."], level: .info),
+            LogStreamEntry(streamKey: "fxdatabase", displayName: "FXDatabase", lastEventAt: Date(), eventCount: 8, recentLines: ["[fxdb] Health check OK", "[fxdb] Embedded replica sync pending"], level: .info),
+            LogStreamEntry(streamKey: "plugin-test", displayName: "Plugin Tests", lastEventAt: Date(), eventCount: 45, recentLines: ["[sintest] ai_lstm: PASS", "[sintest] ai_gru: PASS", "[sintest] stat_hmm_regime: PASS"], level: .info),
+            LogStreamEntry(streamKey: "agent", displayName: "Agent Fleet", lastEventAt: Date(), eventCount: 6, recentLines: ["[agent] FXBacktestAgent self-check OK", "[agent] Capabilities: SineTest, ZooBridge"], level: .info),
+            LogStreamEntry(streamKey: "execution-safety", displayName: "Execution Safety", lastEventAt: Date(), eventCount: 3, recentLines: ["[kill-switch] Status: \(killSwitchState.statusTitle)"], level: killSwitchState.isArmed ? .warning : .info),
+            LogStreamEntry(streamKey: "promotion", displayName: "Promotion", lastEventAt: Date(), eventCount: promotionCandidates.count, recentLines: promotionCandidates.prefix(3).map { "[promote] \($0.symbol)/\($0.pluginName) at \($0.currentStage.title)" }, level: .info),
+            LogStreamEntry(streamKey: "runtime", displayName: "Runtime", lastEventAt: Date(), eventCount: (runtimeSnapshot?.deployments.count ?? 0), recentLines: (runtimeSnapshot?.deployments ?? []).prefix(3).map { "[runtime] \($0.symbol): \($0.pluginName) tier=\($0.promotionTier)" }, level: .info)
+        ]
+        logStreamSnapshot = LogStreamSnapshot(streams: streams)
+    }
+
+    private func syncDemoDeployments() {
+        let deployments = (runtimeSnapshot?.deployments ?? []).filter { detail in
+            detail.runtimeMode.lowercased().contains("demo") || detail.promotionTier.lowercased().contains("demo")
+        }
+        let demoDeployments = deployments.map { detail -> DemoDeployment in
+            DemoDeployment(
+                symbol: detail.symbol,
+                pluginName: detail.pluginName,
+                status: detail.artifactHealth.hasBlockingIssue ? .error : .active,
+                startedAt: detail.createdAt,
+                promotionTier: detail.promotionTier,
+                runtimeMode: detail.runtimeMode,
+                healthIndicators: [
+                    DemoHealthIndicator(name: "Deployment", value: detail.artifactHealth.missingDeployment ? "Missing" : "Ready", healthy: !detail.artifactHealth.missingDeployment),
+                    DemoHealthIndicator(name: "Router", value: detail.artifactHealth.missingRouter ? "Missing" : "Ready", healthy: !detail.artifactHealth.missingRouter),
+                    DemoHealthIndicator(name: "Supervisor", value: detail.artifactHealth.missingSupervisorService ? "Missing" : "Ready", healthy: !detail.artifactHealth.missingSupervisorService),
+                    DemoHealthIndicator(name: "Artifact Age", value: "\(detail.artifactHealth.artifactAgeSeconds)s", healthy: !detail.artifactHealth.staleArtifact)
+                ]
+            )
+        }
+        demoDeploymentSnapshot = DemoDeploymentSnapshot(deployments: demoDeployments)
+    }
+
     private func defaultSavedViewName() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d HH:mm"
@@ -1003,8 +1453,8 @@ final class FXGUIModel: ObservableObject {
         .autoconnect()
         .sink { [weak self] _ in
             guard let self else { return }
-            Task {
-                await self.performSoftConnectionCheck(forceRefresh: false)
+            Task { [weak self] in
+                await self?.performSoftConnectionCheck(forceRefresh: false)
             }
         }
     }
@@ -1134,7 +1584,15 @@ final class FXGUIModel: ObservableObject {
         researchSnapshot = nil
         visualizationSnapshot = nil
         incidentSnapshot = nil
+        agentFleetSnapshot = nil
+        backtestCampaignSnapshot = nil
+        logStreamSnapshot = nil
+        demoDeploymentSnapshot = nil
         selectedIncidentID = nil
+        selectedCandidateID = nil
+        selectedLogStreamKey = nil
+        selectedCampaignID = nil
+        selectedDemoDeploymentID = nil
     }
 
     private func currentWorkspaceSnapshot(

@@ -195,6 +195,7 @@ public struct MarketUniverse: Sendable {
     public let primarySymbol: String
     public let seriesBySymbol: [String: M1OHLCVSeries]
     public let symbols: [String]
+    private let _primarySeries: M1OHLCVSeries
 
     public init(primarySymbol: String? = nil, series: [M1OHLCVSeries], requireAlignedTimestamps: Bool = true) throws {
         guard !series.isEmpty else {
@@ -221,12 +222,13 @@ public struct MarketUniverse: Sendable {
         }
 
         self.primarySymbol = resolvedPrimary
+        self._primarySeries = bySymbol[resolvedPrimary]!
         self.seriesBySymbol = bySymbol
         self.symbols = bySymbol.keys.sorted()
     }
 
     public var primary: M1OHLCVSeries {
-        seriesBySymbol[primarySymbol]!
+        _primarySeries
     }
 
     public subscript(symbol: String) -> M1OHLCVSeries? {

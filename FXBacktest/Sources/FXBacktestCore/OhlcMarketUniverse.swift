@@ -4,6 +4,7 @@ public struct OhlcMarketUniverse: Sendable {
     public let primarySymbol: String
     public let seriesBySymbol: [String: OhlcDataSeries]
     public let symbols: [String]
+    private let _primarySeries: OhlcDataSeries
 
     public init(primarySymbol: String? = nil, series: [OhlcDataSeries], requireAlignedTimestamps: Bool = true) throws {
         guard !series.isEmpty else {
@@ -30,6 +31,7 @@ public struct OhlcMarketUniverse: Sendable {
         }
 
         self.primarySymbol = requestedPrimary
+        self._primarySeries = bySymbol[requestedPrimary]!
         self.seriesBySymbol = bySymbol
         self.symbols = bySymbol.keys.sorted()
     }
@@ -37,12 +39,13 @@ public struct OhlcMarketUniverse: Sendable {
     public init(single series: OhlcDataSeries) {
         let symbol = series.metadata.logicalSymbol.uppercased()
         self.primarySymbol = symbol
+        self._primarySeries = series
         self.seriesBySymbol = [symbol: series]
         self.symbols = [symbol]
     }
 
     public var primary: OhlcDataSeries {
-        seriesBySymbol[primarySymbol]!
+        _primarySeries
     }
 
     public var count: Int {

@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 
 public struct ProbCalibrationArtifactReader {
     public init() {}
@@ -19,7 +20,7 @@ public struct ProbCalibrationArtifactReader {
             }
         )
 
-        let stateFiles = ((try? FileManager.default.contentsOfDirectory(at: runtimeDirectory, includingPropertiesForKeys: nil)) ?? [])
+        let stateFiles = ((loggedTry({ try FileManager.default.contentsOfDirectory(at: runtimeDirectory, includingPropertiesForKeys: nil) }, "contents")) ?? [])
             .filter { url in
                 let name = url.lastPathComponent
                 return name.hasPrefix("fxai_prob_calibration_")
@@ -133,12 +134,17 @@ public struct ProbCalibrationArtifactReader {
     }
 
     private func parseJSON(_ url: URL) -> [String: Any]? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        guard let data = loggedTry({ try Data(contentsOf: url) }, "cal json read") else { return nil }
+        do {
+            return try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        } catch {
+            FileIOLogger.shared.warning("cal json parse: \(error, privacy: .public)")
+            return nil
+        }
     }
 
     private func parseTSVMap(_ url: URL) -> [String: String]? {
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        guard let text = loggedTry({ try String(contentsOf: url, encoding: .utf8) }, "cal tsv read") else { return nil }
         var values: [String: String] = [:]
         for line in text.split(whereSeparator: \.isNewline) {
             let parts = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false)

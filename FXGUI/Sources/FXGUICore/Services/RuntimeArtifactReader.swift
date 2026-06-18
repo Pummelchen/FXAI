@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 
 public struct RuntimeArtifactReader {
     public init() {}
@@ -125,10 +126,13 @@ public struct RuntimeArtifactReader {
     }
 
     private func parseChampions(_ url: URL) -> [PromotionChampionRecord] {
-        guard
-            let data = try? Data(contentsOf: url),
-            let raw = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
-        else {
+        guard let data = loggedTry({ try Data(contentsOf: url) }, "champions.json") else { return [] }
+        let raw: [[String: Any]]
+        do {
+            guard let parsed = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+            raw = parsed
+        } catch {
+            FileIOLogger.shared.warning("champions parse: \(error, privacy: .public)")
             return []
         }
 
@@ -182,7 +186,7 @@ public struct RuntimeArtifactReader {
 
     private func parseTSV(_ url: URL?) -> [String: String]? {
         guard let url else { return nil }
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        guard let text = loggedTry({ try String(contentsOf: url, encoding: .utf8) }, "tsv read") else { return nil }
         var values: [String: String] = [:]
         for line in text.split(whereSeparator: \.isNewline) {
             let parts = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false)
@@ -218,13 +222,13 @@ public struct RuntimeArtifactReader {
     }
 
     private func parseJSON(_ url: URL) -> [String: Any]? {
-        guard
-            let data = try? Data(contentsOf: url),
-            let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
+        guard let data = loggedTry({ try Data(contentsOf: url) }, "json read") else { return nil }
+        do {
+            return try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        } catch {
+            FileIOLogger.shared.warning("json parse: \(error, privacy: .public)")
             return nil
         }
-        return raw
     }
 
     private func extractPluginName(from entry: [String: Any]) -> String {
@@ -276,7 +280,7 @@ public struct RuntimeArtifactReader {
 
         var results: [URL] = []
         for case let url as URL in enumerator {
-            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+            guard (loggedTry({ try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile }, "file check")) == true else { continue }
             results.append(url)
         }
         return results

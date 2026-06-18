@@ -456,7 +456,8 @@ private extension FeatureCore {
         let mean = values.mean
         let std = values.standardDeviation
         guard std > 0 else { return 0.0 }
-        return fxClampSignedUnit((values.last! - mean) / std / 4.0)
+        guard let lastValue = values.last else { return 0.0 }
+        return fxClampSignedUnit((lastValue - mean) / std / 4.0)
     }
 
     func returnStd(_ series: M1OHLCVSeries, _ index: Int, window: Int) -> Double {

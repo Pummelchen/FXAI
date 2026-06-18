@@ -51,7 +51,14 @@ public enum MT5BridgeError: Error, CustomStringConvertible, Sendable {
 public final class MT5Connection: @unchecked Sendable {
     private let fd: Int32
     private let maxFrameBytes: Int
-    private var isClosed = false
+    private let closeLock = NSLock()
+    private var _isClosed = false
+
+    private var isClosed: Bool {
+        closeLock.lock()
+        defer { closeLock.unlock() }
+        return _isClosed
+    }
 
     private init(fd: Int32, maxFrameBytes: Int) {
         self.fd = fd
@@ -156,8 +163,13 @@ public final class MT5Connection: @unchecked Sendable {
     }
 
     public func close() {
-        guard !isClosed else { return }
-        isClosed = true
+        closeLock.lock()
+        guard !_isClosed else {
+            closeLock.unlock()
+            return
+        }
+        _isClosed = true
+        closeLock.unlock()
         Darwin.close(fd)
     }
 

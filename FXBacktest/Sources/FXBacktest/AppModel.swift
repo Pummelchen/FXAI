@@ -21,6 +21,9 @@ private enum StatusLogMode {
 }
 
 @MainActor
+// @unchecked Sendable is required here because TerminalCommandSession (Sendable) stores
+// a reference to AppModel. All state mutations are confined to @MainActor; cross-isolation
+// callers use `await MainActor.run { ... }` to hop back safely.
 final class AppModel: ObservableObject, @unchecked Sendable {
     let plugins = FXBacktestPluginRegistry.availablePlugins
 
@@ -61,7 +64,9 @@ final class AppModel: ObservableObject, @unchecked Sendable {
     private var lastRunSettings: BacktestRunSettings?
 
     init() {
-        let first = FXBacktestPluginRegistry.availablePlugins.first!
+        guard let first = FXBacktestPluginRegistry.availablePlugins.first else {
+            fatalError("FXBacktestPluginRegistry returned zero plugins. Cannot initialize AppModel.")
+        }
         self.selectedPluginID = first.id
         self.parameterRows = Self.rows(for: first)
         self.market = try? OhlcDataSeries.demoEURUSD()
