@@ -1,0 +1,10 @@
+{
+  "pluginName": "ai_nhits",
+  "modelIdentifier": "ai_nhits",
+  "modelSha256": "replace_with_exported_onnx_sha256",
+  "inputName": "features",
+  "classProbabilitiesOutputName": "class_probabilities",
+  "moveMeanOutputName": "move_mean_points",
+  "moveQuantilesOutputName": "move_quantiles",
+  "providers": ["CPUExecutionProvider"]
+}

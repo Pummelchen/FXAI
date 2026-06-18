@@ -43,6 +43,8 @@ public enum FXAIPluginRegistry {
             AIBiLSTMPlugin(),
             AILSTMTCNPlugin(),
             AIMythosRDTPlugin(),
+            AINbeatsPlugin(),
+            AINhitsPlugin(),
             StatMSGARCHPlugin(),
             StatARIMAXGARCHPlugin(),
             StatCointVECMPlugin(),

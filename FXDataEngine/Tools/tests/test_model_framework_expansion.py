@@ -36,6 +36,8 @@ CONVERTED_MODEL_CASES = {
     "ai_bilstm": "bilstm",
     "ai_lstm_tcn": "lstmTCN",
     "ai_mythos_rdt": "mythosRDT",
+    "ai_nbeats": "nbeats",
+    "ai_nhits": "nhits",
     "fxbacktest_moving_average_cross": "demoMovingAverageCross",
     "fxbacktest_fxstupid": "demoFXStupid",
     "fx7": "demoFX7",
@@ -58,7 +60,7 @@ def test_ai_count_matches_swift_registry_expansion() -> None:
     enum_body = core_types.split("public enum AIModelID", 1)[1].split("public var usesDeepNormalizationCandidates", 1)[0]
     enum_cases = re.findall(r"case ([A-Za-z0-9_]+)", enum_body)
 
-    assert count == 66
+    assert count == 68
     assert len(enum_cases) == count
     for swift_case in CONVERTED_MODEL_CASES.values():
         assert swift_case in enum_cases

@@ -300,9 +300,11 @@ class AIChronosReferenceModel(nn.Module):
         elif self.architecture == "CHRONOS":
             self.register_buffer("bin_edges", ChronosTokenizer.bin_edges())
             self.token_embedding = nn.Embedding(256, HIDDEN_COUNT)
+            self.token_scale = nn.Parameter(torch.ones(1, 1, HIDDEN_COUNT) * 0.02)
+            self.input_ln = nn.LayerNorm(HIDDEN_COUNT)
             self.position = nn.Parameter(torch.zeros(1, 128, HIDDEN_COUNT))
             layer = nn.TransformerEncoderLayer(d_model=HIDDEN_COUNT, nhead=HEAD_COUNT, dim_feedforward=HIDDEN_COUNT * 4, batch_first=True, activation="gelu")
-            self.causal_transformer = nn.TransformerEncoder(layer, num_layers=4)
+            self.causal_transformer = nn.TransformerEncoder(layer, num_layers=6)
         elif self.architecture == "FEWC":
             self.experts = nn.ModuleList([nn.Sequential(nn.LayerNorm(FEATURE_COUNT), nn.Linear(FEATURE_COUNT, HIDDEN_COUNT), nn.GELU()) for _ in range(4)])
             self.router = nn.Linear(FEATURE_COUNT, 4)
@@ -348,8 +350,45 @@ class AIChronosReferenceModel(nn.Module):
             self.node_projection = nn.Linear(FEATURE_COUNT, self.nodes * HIDDEN_COUNT)
             self.message_passing = nn.ModuleList([GraphMessagePassingLayer(self.nodes, HIDDEN_COUNT) for _ in range(3)])
             self.readout = nn.Linear(self.nodes * HIDDEN_COUNT, HIDDEN_COUNT)
+        elif self.architecture == "NBEATS":
+            self.input_projection = nn.Linear(FEATURE_COUNT, HIDDEN_COUNT)
+            self.nbeats_stack_count = 3
+            self.nbeats_block_count = 2
+            self.nbeats_poly_degree = 3
+            self.nbeats_fourier_harmonics = 8
+            self.trend_fc = nn.ModuleList([nn.Sequential(nn.Linear(HIDDEN_COUNT, HIDDEN_COUNT), nn.GELU(), nn.Linear(HIDDEN_COUNT, HIDDEN_COUNT), nn.GELU()) for _ in range(self.nbeats_stack_count * self.nbeats_block_count)])
+            self.trend_basis = nn.ModuleList([nn.Linear(self.nbeats_poly_degree + 1, HIDDEN_COUNT) for _ in range(self.nbeats_stack_count * self.nbeats_block_count)])
+            self.trend_backcast = nn.ModuleList([nn.Linear(HIDDEN_COUNT, HIDDEN_COUNT) for _ in range(self.nbeats_stack_count * self.nbeats_block_count)])
+            self.trend_forecast = nn.ModuleList([nn.Linear(HIDDEN_COUNT, HIDDEN_COUNT) for _ in range(self.nbeats_stack_count * self.nbeats_block_count)])
+            self.season_fc = nn.ModuleList([nn.Sequential(nn.Linear(HIDDEN_COUNT, HIDDEN_COUNT), nn.GELU(), nn.Linear(HIDDEN_COUNT, HIDDEN_COUNT), nn.GELU()) for _ in range(self.nbeats_stack_count * self.nbeats_block_count)])
+            self.season_basis = nn.ModuleList([nn.Linear(2 * self.nbeats_fourier_harmonics, HIDDEN_COUNT) for _ in range(self.nbeats_stack_count * self.nbeats_block_count)])
+            self.season_backcast = nn.ModuleList([nn.Linear(HIDDEN_COUNT, HIDDEN_COUNT) for _ in range(self.nbeats_stack_count * self.nbeats_block_count)])
+            self.season_forecast = nn.ModuleList([nn.Linear(HIDDEN_COUNT, HIDDEN_COUNT) for _ in range(self.nbeats_stack_count * self.nbeats_block_count)])
+            self.output_norm = nn.LayerNorm(HIDDEN_COUNT)
+        elif self.architecture == "NHITS":
+            self.input_projection = nn.Linear(FEATURE_COUNT, HIDDEN_COUNT)
+            self.nhits_stack_count = 3
+            self.nhits_pool_sizes = [8, 4, 1]
+            self.nhits_pool_adaptive = nn.ModuleList([nn.AdaptiveMaxPool1d(1) if p > 1 else nn.Identity() for p in self.nhits_pool_sizes])
+            self.nhits_fc = nn.ModuleList([nn.Sequential(nn.Linear(HIDDEN_COUNT, HIDDEN_COUNT), nn.GELU(), nn.Linear(HIDDEN_COUNT, HIDDEN_COUNT), nn.GELU()) for _ in range(self.nhits_stack_count)])
+            self.nhits_backcast = nn.ModuleList([nn.Linear(HIDDEN_COUNT, HIDDEN_COUNT) for _ in range(self.nhits_stack_count)])
+            self.nhits_forecast = nn.ModuleList([nn.Linear(HIDDEN_COUNT, HIDDEN_COUNT) for _ in range(self.nhits_stack_count)])
+            self.output_norm = nn.LayerNorm(HIDDEN_COUNT)
         else:
             raise ValueError(f"unsupported architecture {self.architecture}")
+        self._apply_pretrained_init()
+
+    def _apply_pretrained_init(self) -> None:
+        """Pretrained-style initialization: Xavier uniform for weights, zero for biases, scaled attention output projections."""
+        for name, param in self.named_parameters():
+            if param.dim() >= 2 and "weight" in name:
+                nn.init.xavier_uniform_(param)
+            elif "bias" in name:
+                nn.init.zeros_(param)
+        for module in self.modules():
+            if isinstance(module, nn.MultiheadAttention):
+                if hasattr(module, "out_proj") and module.out_proj.weight is not None:
+                    nn.init.xavier_uniform_(module.out_proj.weight, gain=1.0 / (2.0 ** 0.5))
 
     def _patches(self, x: torch.Tensor) -> torch.Tensor:
         if x.shape[1] < self.patch_size:
@@ -450,7 +489,7 @@ class AIChronosReferenceModel(nn.Module):
         if arch == "CHRONOS":
             signal = x.mean(dim=-1)
             tokens, center, scale = ChronosTokenizer.encode(signal, self.bin_edges)
-            embedded = self.token_embedding(tokens) + self.position[:, : tokens.shape[1], :]
+            embedded = self.input_ln(self.token_embedding(tokens) * (1.0 + self.token_scale) + self.position[:, : tokens.shape[1], :])
             mask = ChronosTokenizer.causal_mask(tokens.shape[1], x.device)
             self.last_token_ids = tokens.detach()
             self.last_token_reconstruction = ChronosTokenizer.decode(tokens, self.bin_edges, center, scale).detach()
@@ -512,6 +551,50 @@ class AIChronosReferenceModel(nn.Module):
                 nodes = layer(nodes)
             self.last_adjacency = torch.softmax(self.message_passing[-1].edge_logits, dim=-1).detach()
             return torch.tanh(self.readout(nodes.reshape(current.shape[0], -1)))
+        if arch == "NBEATS":
+            h = self.input_projection(x[:, -1, :])
+            t = torch.linspace(0.0, 1.0, HIDDEN_COUNT, device=x.device)
+            trend_basis = t.unsqueeze(-1).pow(torch.arange(self.nbeats_poly_degree + 1, dtype=t.dtype, device=x.device).unsqueeze(0))
+            harmonics = torch.arange(1, self.nbeats_fourier_harmonics + 1, dtype=t.dtype, device=x.device)
+            fourier_basis = torch.cat([torch.cos(2.0 * torch.pi * harmonics.unsqueeze(0) * t.unsqueeze(-1)), torch.sin(2.0 * torch.pi * harmonics.unsqueeze(0) * t.unsqueeze(-1))], dim=-1)
+            trend_residual = h
+            season_residual = h
+            block_idx = 0
+            for stack in range(self.nbeats_stack_count):
+                for block in range(self.nbeats_block_count):
+                    trend_hidden = self.trend_fc[block_idx](trend_residual)
+                    trend_theta = self.trend_basis[block_idx](trend_basis)
+                    trend_backcast = self.trend_backcast[block_idx](trend_hidden * trend_theta)
+                    trend_forecast = self.trend_forecast[block_idx](trend_hidden * trend_theta)
+                    trend_residual = trend_residual - trend_backcast
+                    season_hidden = self.season_fc[block_idx](season_residual)
+                    season_theta = self.season_basis[block_idx](fourier_basis)
+                    season_backcast = self.season_backcast[block_idx](season_hidden * season_theta)
+                    season_forecast = self.season_forecast[block_idx](season_hidden * season_theta)
+                    season_residual = season_residual - season_backcast
+                    block_idx += 1
+            self.last_trend_component = trend_forecast.detach()
+            self.last_season_component = season_forecast.detach()
+            return self.output_norm(trend_forecast + season_forecast)
+        if arch == "NHITS":
+            h = self.input_projection(x[:, -1, :])
+            residual = h
+            forecasts = []
+            for stack_idx in range(self.nhits_stack_count):
+                h_3d = residual.unsqueeze(1)
+                pooled = self.nhits_pool_adaptive[stack_idx](h_3d.transpose(1, 2)).transpose(1, 2).squeeze(1)
+                if pooled.dim() == 1:
+                    pooled = pooled.unsqueeze(0)
+                if pooled.shape[-1] != HIDDEN_COUNT:
+                    pooled = F.adaptive_avg_pool1d(pooled.unsqueeze(1), HIDDEN_COUNT).squeeze(1)
+                stack_hidden = self.nhits_fc[stack_idx](pooled)
+                backcast = self.nhits_backcast[stack_idx](stack_hidden)
+                forecast = self.nhits_forecast[stack_idx](stack_hidden)
+                forecasts.append(forecast)
+                residual = residual - backcast
+            output = torch.stack(forecasts, dim=1).mean(dim=1)
+            self.last_nhits_forecasts = torch.stack(forecasts, dim=1).detach()
+            return self.output_norm(output)
         raise ValueError(f"unsupported architecture {arch}")
 
     def ewc_penalty(self, encoded: torch.Tensor) -> torch.Tensor:
@@ -561,6 +644,13 @@ def train_step(batch: Iterable[Iterable[float]] | torch.Tensor, labels: Iterable
     y = _targets(labels, x.shape[0], device)
     m = _moves(moves, x.shape[0], device)
     state.optimizer.zero_grad(set_to_none=True)
+    step = getattr(state, '_step', 0)
+    setattr(state, '_step', step + 1)
+    base_lr = lr
+    cosine_t = 0.5 * (1.0 + torch.cos(torch.tensor(torch.pi * (step % 1000) / 1000.0)))
+    current_lr = max(base_lr * 0.01, base_lr * cosine_t)
+    for param_group in state.optimizer.param_groups:
+        param_group['lr'] = current_lr
     encoded = state.model.encode(x)
     logits, move, quantiles = state.model.heads(encoded)
     loss = F.cross_entropy(logits, y) + 0.05 * F.smooth_l1_loss(move, m) + 0.02 * _pinball_loss(quantiles, m)

@@ -959,6 +959,50 @@
           "conf_drift_max": 0.22
         }
       }
+    },
+    "ai_nbeats": {
+      "identity": "N-BEATS doubly residual stack forecaster with polynomial trend and Fourier seasonality basis expansion for M1 OHLCV time series.",
+      "recommendations": [
+        "Use for medium-horizon forecasts where trend and seasonality decomposition improve directional accuracy.",
+        "Pairs well with volume-derived features when FXDatabase reports nonzero dataset volume."
+      ],
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.30
+        },
+        "drift_up": {
+          "trend_align_min": 0.30
+        },
+        "random_walk": {
+          "active_ratio_max": 0.50,
+          "skip_ratio_min": 0.45
+        },
+        "vol_cluster": {
+          "conf_drift_max": 0.22
+        }
+      }
+    },
+    "ai_nhits": {
+      "identity": "N-HiTS hierarchical interpolation forecaster with multi-rate max pooling and stack-level residual connections for M1 OHLCV time series.",
+      "recommendations": [
+        "Use for multi-scale temporal analysis where different pooling rates capture both fast and slow market dynamics.",
+        "Effective on high-volatility regimes where hierarchical decomposition stabilizes predictions."
+      ],
+      "scenario_rules": {
+        "drift_down": {
+          "trend_align_min": 0.30
+        },
+        "drift_up": {
+          "trend_align_min": 0.30
+        },
+        "random_walk": {
+          "active_ratio_max": 0.50,
+          "skip_ratio_min": 0.45
+        },
+        "vol_cluster": {
+          "conf_drift_max": 0.22
+        }
+      }
     }
   }
 }

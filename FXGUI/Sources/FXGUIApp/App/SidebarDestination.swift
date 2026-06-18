@@ -9,6 +9,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
     case incidents
     case auditLab
     case backtestBuilder
+    case backtestCampaigns
     case offlineLab
     case researchWorkspace
     case labelEngine
@@ -24,6 +25,11 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
     case executionQuality
     case runtimeMonitor
     case promotionCenter
+    case evidencePacks
+    case killSwitch
+    case agentFleet
+    case demoDeployments
+    case logStreams
     case platformControl
     case researchControl
     case advancedVisuals
@@ -44,6 +50,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .incidents: "Incident Center"
         case .auditLab: "Audit Lab"
         case .backtestBuilder: "Backtests"
+        case .backtestCampaigns: "Campaigns"
         case .offlineLab: "Offline Lab"
         case .researchWorkspace: "Research Workspace"
         case .labelEngine: "Label Engine"
@@ -59,6 +66,11 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .executionQuality: "Execution Quality"
         case .runtimeMonitor: "Runtime Monitor"
         case .promotionCenter: "Promotion Center"
+        case .evidencePacks: "Evidence Packs"
+        case .killSwitch: "Kill Switch"
+        case .agentFleet: "Agent Fleet"
+        case .demoDeployments: "Demo Deployments"
+        case .logStreams: "Log Streams"
         case .platformControl: "Platform Control"
         case .researchControl: "Research OS"
         case .advancedVisuals: "Visual Analysis"
@@ -79,6 +91,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .incidents: "exclamationmark.triangle.fill"
         case .auditLab: "checklist.checked"
         case .backtestBuilder: "gauge.with.needle.fill"
+        case .backtestCampaigns: "flag.checkered"
         case .offlineLab: "gearshape.2.fill"
         case .researchWorkspace: "brain.head.profile"
         case .labelEngine: "target"
@@ -94,6 +107,11 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .executionQuality: "speedometer"
         case .runtimeMonitor: "waveform.path.ecg.rectangle.fill"
         case .promotionCenter: "rosette"
+        case .evidencePacks: "doc.badge.arrow.up.fill"
+        case .killSwitch: "power.circle.fill"
+        case .agentFleet: "cpu.fill"
+        case .demoDeployments: "play.rectangle.fill"
+        case .logStreams: "text.alignleft"
         case .platformControl: "server.rack"
         case .researchControl: "server.rack"
         case .advancedVisuals: "sparkles.tv"

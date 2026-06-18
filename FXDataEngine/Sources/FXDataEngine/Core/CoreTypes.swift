@@ -70,6 +70,8 @@ public enum AIModelID: Int, Codable, Sendable, CaseIterable {
     case bilstm
     case lstmTCN
     case mythosRDT
+    case nbeats
+    case nhits
     case demoMovingAverageCross
     case demoFXStupid
     case demoFX7
@@ -79,7 +81,8 @@ public enum AIModelID: Int, Codable, Sendable, CaseIterable {
         case .lstm, .lstmg, .tcn, .tft, .tst,
              .autoformer, .patchTST, .stmn, .s4,
              .chronos, .timesfm, .geodesicAttention,
-             .qcew, .fewc, .gha, .tesseract:
+             .qcew, .fewc, .gha, .tesseract,
+             .nbeats, .nhits:
             true
         default:
             false

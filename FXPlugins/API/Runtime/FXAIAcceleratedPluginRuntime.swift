@@ -596,6 +596,42 @@ enum FXAISequenceReferenceEncoders {
                 architectureID: architectureID
             )
             weight = 0.60
+        case "nbeats":
+            let trendComponent = dense(
+                temporalMean(sequence, featureCount: featureCount),
+                hiddenBias: hiddenBias,
+                hiddenWeights: hiddenWeights,
+                hiddenCount: hiddenCount,
+                featureCount: featureCount
+            )
+            let seasonalComponent = recurrent(
+                sequence,
+                recurrentState: recurrentState,
+                hiddenCount: hiddenCount,
+                featureCount: featureCount,
+                architectureID: architectureID + 37,
+                gated: false
+            )
+            encoded = blend(trendComponent, seasonalComponent, weight: 0.58)
+            weight = 0.58
+        case "nhits":
+            let coarseScale = dense(
+                temporalMean(sequence, featureCount: featureCount),
+                hiddenBias: hiddenBias,
+                hiddenWeights: hiddenWeights,
+                hiddenCount: hiddenCount,
+                featureCount: featureCount
+            )
+            let fineScale = recurrent(
+                sequence,
+                recurrentState: recurrentState,
+                hiddenCount: hiddenCount,
+                featureCount: featureCount,
+                architectureID: architectureID + 41,
+                gated: true
+            )
+            encoded = blend(coarseScale, fineScale, weight: 0.56)
+            weight = 0.56
         default:
             encoded = dense(
                 temporalMean(sequence, featureCount: featureCount),

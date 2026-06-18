@@ -7,8 +7,9 @@ struct FXAIRootView: View {
     private let sidebarSections: [(title: String?, destinations: [SidebarDestination])] = [
         (nil, [.liveOverview, .demoOverview, .researchWorkspace, .platformControl, .roles, .onboarding, .incidents]),
         ("Overview", [.overview]),
-        ("Build", [.auditLab, .backtestBuilder, .offlineLab, .labelEngine]),
-        ("Operate", [.newsPulse, .ratesEngine, .crossAsset, .pairNetwork, .microstructure, .adaptiveRouter, .driftGovernance, .dynamicEnsemble, .probCalibration, .executionQuality, .runtimeMonitor, .promotionCenter, .researchControl]),
+        ("Build", [.auditLab, .backtestBuilder, .backtestCampaigns, .offlineLab, .labelEngine]),
+        ("Govern", [.promotionCenter, .evidencePacks, .killSwitch, .agentFleet]),
+        ("Operate", [.newsPulse, .ratesEngine, .crossAsset, .pairNetwork, .microstructure, .adaptiveRouter, .driftGovernance, .dynamicEnsemble, .probCalibration, .executionQuality, .runtimeMonitor, .demoDeployments, .logStreams, .researchControl]),
         ("Inspect", [.plugins, .reports, .commands, .advancedVisuals]),
         ("System", [.settings])
     ]
@@ -227,6 +228,18 @@ struct FXAIRootView: View {
             RuntimeMonitorView()
         case .promotionCenter:
             PromotionCenterView()
+        case .evidencePacks:
+            EvidencePackView()
+        case .killSwitch:
+            KillSwitchView()
+        case .agentFleet:
+            AgentFleetView()
+        case .backtestCampaigns:
+            BacktestCampaignView()
+        case .demoDeployments:
+            DemoDeploymentView()
+        case .logStreams:
+            LogStreamView()
         case .platformControl:
             RoleWorkspaceDashboardView(role: .architect)
         case .researchControl:

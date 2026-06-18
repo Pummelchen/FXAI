@@ -99,6 +99,8 @@ final class PluginZooLayoutTests: XCTestCase {
             "ai_lstm_tcn/CPU/AILSTMTCNCPUModel.swift",
             "ai_lstmg/CPU/AILSTMGCPUModel.swift",
             "ai_mythos_rdt/CPU/AIMythosRDTCPUModel.swift",
+            "ai_nbeats/CPU/AINbeatsCPUModel.swift",
+            "ai_nhits/CPU/AINhitsCPUModel.swift",
             "ai_patchtst/CPU/AIPatchtstCPUModel.swift",
             "ai_qcew/CPU/AIQCEWCPUModel.swift",
             "ai_s4/CPU/AIS4CPUModel.swift",

@@ -56,7 +56,8 @@ public enum PluginPersistenceTools {
              .factorPCAPanel, .factorPPPValue, .factorCarry,
              .factorCMVPanel, .trendTSMOMVol, .trendXSMOMRank,
              .trendVolBreakout, .statXRateConsistency, .gru,
-             .bilstm, .lstmTCN, .mythosRDT:
+             .bilstm, .lstmTCN, .mythosRDT,
+             .nbeats, .nhits:
             return .compressedNative
         case .ftrlLogit, .paLinear, .sgdLogit, .linElasticLogit, .linProfitLogit:
             return .fullNative

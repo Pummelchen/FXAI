@@ -117,7 +117,9 @@ final class WarmupTests: XCTestCase {
             AIModelID.tesseract.rawValue,
             AIModelID.graphWM.rawValue,
             AIModelID.lightgbm.rawValue,
-            AIModelID.xgbFast.rawValue
+            AIModelID.xgbFast.rawValue,
+            AIModelID.nbeats.rawValue,
+            AIModelID.nhits.rawValue
         ]
         XCTAssertEqual(WarmupTools.seriousNativeAIIDs, expectedSeriousNativeIDs)
         XCTAssertFalse(WarmupTools.isSeriousNativeAI(aiID: AIModelID.sgdLogit.rawValue))

@@ -226,7 +226,9 @@ public enum WarmupTools {
         AIModelID.tesseract.rawValue,
         AIModelID.graphWM.rawValue,
         AIModelID.lightgbm.rawValue,
-        AIModelID.xgbFast.rawValue
+        AIModelID.xgbFast.rawValue,
+        AIModelID.nbeats.rawValue,
+        AIModelID.nhits.rawValue
     ]
 
     public static func isSeriousNativeAI(aiID: Int) -> Bool {
