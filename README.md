@@ -1,5 +1,13 @@
 # FXAI
 
+> **AI agents: start here**
+>
+> Before making changes, read [`AI_INDEX.md`](./AI_INDEX.md), then [`AGENTS.md`](./AGENTS.md).
+> The generic first-session prompt is in [`.ai/START_HERE.md`](./.ai/START_HERE.md).
+>
+> These files summarize the repository architecture, commands, conventions, risks, and recommended reading order for a fresh AI session.
+> They are vendor-neutral and intended for any high-end AI coding agent.
+
 FXAI is a pure Swift, Metal, PyTorch, TensorFlow, ONNX Runtime, and optional remote inference research/execution stack for FX data, backtesting, plugin evaluation, demo trading, and live trading. MT5 can remain a data or execution endpoint where needed, but the source of truth is the Swift project structure in this repository.
 
 FXAI is organized around one strict rule: only FXDatabase may touch ClickHouse directly. Every other project talks to FXDatabase through an API.
